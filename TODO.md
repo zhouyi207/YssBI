@@ -305,8 +305,8 @@ src/app/appConfig/appLinks.ts
 - [x] **横切清理：删除 localization compatibility 双接口。** 合并 `LocalizationLookup`/`LocalizationBundle`，移除标注为 `Compatibility boundary` 的 blanket bridge，保持 0.x 项目单一路径。
 - [x] **Phase 4/横切清理：删除 History legacy 默认解码。** `ProjectHistoryTransaction.persistence` 等字段仍通过 `#[serde(default)]` 接受旧 wire，且存在专门的 `legacy_history_transaction_defaults_to_in_memory_until_save` 测试；项目未发布，不保留迁移 shim。
 - [x] **协议契约：补齐 execution 与 project-event 的 Rust↔TS golden coverage。** 冻结全部 `ExecutionDemandDto`、`RunEventKindDto`、`ExecuteGraphResultDto`、`GraphDelta`/resource mutation event envelope，并在前端增加严格 wire parser，避免手写 TS union 与 Rust enum 漂移。
-- [ ] 工作表中的 worksheet 的存储形式是使用目前这种形式好还是使用 event, function 形式要好，请分析：在这里我可以要求 name 禁止使用特殊符号
-- [ ] 测试中我认为不应该有软件的版本号信息，因为软件版本号会更新，请分析
+- [x] **已完成——graph 与 worksheet 已在正确的资源架构层面统一**: 工作表中的 worksheet 的存储形式是使用目前这种形式好还是使用 event, function 形式要好，请分析：在这里我可以要求 name 禁止使用特殊符号
+- [x] 测试中我认为不应该有软件的版本号信息，因为软件版本号会更新，请分析
 - [ ] worksheet 中的图表中的数据比如轴标可以被复制，请去掉这里的复制样式；同时日志中的文本请加上复制样式，包括点击日志中的 item 中在 detail 组件中出现的 消息里面的字符也需要可以拖动鼠标复制文本，方便 debug
 - [ ] 在这里 activitybar 为 图时 sidebar 中的函数列表中的item，activitybar 为节点时的 sidebar 中的节点 item，还有 acitvitity 为变量的局部和全局 item 还有数据中的数据 item 应该都是可以拖动的，可以拖动到 graph 中并创建相关的节点
 - [ ] 在更改 graph 的时候 tabbar 中的样式并没有其他变化，如果在更改后不保存关闭，那么下次打开打开的时候还是更改前的状态，这里明显是不符合逻辑的，除此之外还有其他的需要检查；同时磁盘上以及更新的符号和标签我感觉可以去掉，可以学习 vscode 的 tabbar 处理

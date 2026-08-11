@@ -4,16 +4,22 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::database::{DatabaseDecl, DatabaseEngine};
-use crate::project::GraphResourcePath;
+use crate::project::{GraphResourcePath, WorksheetResourcePath};
 
-use super::{ProjectError, ProjectState, worksheet_relative_path};
+use super::{ProjectError, ProjectState};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum RevealProjectResourceRequest {
-    Graph { graph_path: String },
-    Database { database_id: String },
-    Worksheet { worksheet_id: String },
+    Graph {
+        graph_path: String,
+    },
+    Database {
+        database_id: String,
+    },
+    Worksheet {
+        worksheet_path: WorksheetResourcePath,
+    },
 }
 
 impl RevealProjectResourceRequest {
@@ -25,9 +31,9 @@ impl RevealProjectResourceRequest {
             "database" => Ok(Self::Database {
                 database_id: resource_id,
             }),
-            "worksheet" => Ok(Self::Worksheet {
-                worksheet_id: resource_id,
-            }),
+            "worksheet" => WorksheetResourcePath::parse(&resource_id)
+                .map(|worksheet_path| Self::Worksheet { worksheet_path })
+                .map_err(|error| error.to_string()),
             other => Err(format!("Unknown resource kind: {other}")),
         }
     }
@@ -58,12 +64,15 @@ pub fn resolve_reveal_path(
         RevealProjectResourceRequest::Database { database_id } => {
             absolute_path_for_database(root, &data.databases, &database_id)
         }
-        RevealProjectResourceRequest::Worksheet { worksheet_id } => data
+        RevealProjectResourceRequest::Worksheet { worksheet_path } => data
             .worksheets
-            .get(&worksheet_id)
-            .map(|document| root.join(worksheet_relative_path(document)))
+            .contains_key(&worksheet_path)
+            .then(|| root.join(worksheet_path.relative_path()))
             .ok_or_else(|| {
-                ProjectError::InvalidProjectFormat(format!("Worksheet '{worksheet_id}' not found"))
+                ProjectError::InvalidProjectFormat(format!(
+                    "Worksheet '{}' not found",
+                    worksheet_path.as_str()
+                ))
             }),
     }
 }

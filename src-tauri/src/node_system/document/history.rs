@@ -2,6 +2,7 @@ use super::{
     DocumentError, FunctionParameterId, GraphDocument, GraphDocumentPatch, GraphResourcePath,
     GraphRevision, HistoryEntryId, OperationId, ProjectRevision, ResourceRevision,
 };
+use crate::project::WorksheetDocument;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -139,25 +140,27 @@ impl VariableDocumentPatch {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum GraphResourceLifecycleKind {
+pub enum ResourceLifecycleKind {
     Event,
     Function,
+    Worksheet,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GraphResourceLifecycleState {
+pub struct ResourceLifecycleState {
     pub revision: ResourceRevision,
     pub path: Box<str>,
-    pub kind: GraphResourceLifecycleKind,
+    pub kind: ResourceLifecycleKind,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GraphResourceLifecyclePatch {
-    pub before: Option<GraphResourceLifecycleState>,
-    pub after: Option<GraphResourceLifecycleState>,
+pub struct ResourceLifecyclePatch {
+    pub before: Option<ResourceLifecycleState>,
+    pub after: Option<ResourceLifecycleState>,
 }
 
-impl GraphResourceLifecyclePatch {
+impl ResourceLifecyclePatch {
     pub fn inverse(&self) -> Self {
         Self {
             before: self.after.clone(),
@@ -181,6 +184,29 @@ impl ResourcePathMovePatch {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorksheetDocumentState {
+    pub database_id: String,
+    pub chart_type: String,
+    pub encodings: crate::project::WorksheetEncodings,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorksheetDocumentPatch {
+    pub before: WorksheetDocumentState,
+    pub after: WorksheetDocumentState,
+}
+
+impl WorksheetDocumentPatch {
+    pub fn inverse(&self) -> Self {
+        Self {
+            before: self.after.clone(),
+            after: self.before.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DatabaseDocumentPatch {
     pub before: Option<crate::database::DatabaseDecl>,
@@ -200,9 +226,10 @@ impl DatabaseDocumentPatch {
 #[serde(tag = "kind", content = "patch", rename_all = "snake_case")]
 pub enum ResourceDocumentPatch {
     Graph(GraphDocumentPatch),
-    GraphResourceLifecycle(GraphResourceLifecyclePatch),
-    GraphResourceMove(ResourcePathMovePatch),
     Function(FunctionDocumentPatch),
+    Worksheet(WorksheetDocumentPatch),
+    ResourceLifecycle(ResourceLifecyclePatch),
+    ResourceMove(ResourcePathMovePatch),
     Variable(VariableDocumentPatch),
     VariableScopeMove(ResourcePathMovePatch),
     Database(DatabaseDocumentPatch),
@@ -211,10 +238,11 @@ pub enum ResourceDocumentPatch {
 impl ResourceDocumentPatch {
     pub const fn kind(&self) -> ResourceKind {
         match self {
-            Self::Graph(_) | Self::GraphResourceLifecycle(_) | Self::GraphResourceMove(_) => {
+            Self::Graph(_) | Self::ResourceLifecycle(_) | Self::ResourceMove(_) => {
                 ResourceKind::Graph
             }
             Self::Function(_) => ResourceKind::Function,
+            Self::Worksheet(_) => ResourceKind::Worksheet,
             Self::Variable(_) | Self::VariableScopeMove(_) => ResourceKind::Variable,
             Self::Database(_) => ResourceKind::Database,
         }
@@ -223,9 +251,10 @@ impl ResourceDocumentPatch {
     pub fn inverse(&self) -> Self {
         match self {
             Self::Graph(patch) => Self::Graph(patch.inverse()),
-            Self::GraphResourceLifecycle(patch) => Self::GraphResourceLifecycle(patch.inverse()),
-            Self::GraphResourceMove(patch) => Self::GraphResourceMove(patch.inverse()),
             Self::Function(patch) => Self::Function(patch.inverse()),
+            Self::Worksheet(patch) => Self::Worksheet(patch.inverse()),
+            Self::ResourceLifecycle(patch) => Self::ResourceLifecycle(patch.inverse()),
+            Self::ResourceMove(patch) => Self::ResourceMove(patch.inverse()),
             Self::Variable(patch) => Self::Variable(patch.inverse()),
             Self::VariableScopeMove(patch) => Self::VariableScopeMove(patch.inverse()),
             Self::Database(patch) => Self::Database(patch.inverse()),
@@ -287,6 +316,21 @@ impl ResourcePatch {
             inverse: ResourceDocumentPatch::Variable(inverse),
         }
     }
+
+    pub fn worksheet(
+        worksheet_key: WorksheetResourceKey,
+        before_revision: ResourceRevision,
+        forward: WorksheetDocumentPatch,
+    ) -> Self {
+        let inverse = forward.inverse();
+        Self {
+            resource: ResourceKey::Worksheet(worksheet_key),
+            before_revision,
+            after_revision: before_revision.next(),
+            forward: ResourceDocumentPatch::Worksheet(forward),
+            inverse: ResourceDocumentPatch::Worksheet(inverse),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -299,11 +343,32 @@ pub struct HistoryStatusDto {
     pub can_redo: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GraphResourceMoveHistoryPatch {
-    pub from: GraphResourcePath,
-    pub to: GraphResourcePath,
-    pub payload: Value,
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ResourceLifecycleHistoryPayload {
+    Graph { persisted_document: Value },
+    Worksheet { document: WorksheetDocument },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceLifecycleHistoryPatch {
+    pub forward: ResourceLifecyclePatch,
+    pub payload: ResourceLifecycleHistoryPayload,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ResourceMoveHistoryPayload {
+    Graph { persisted_move_payload: Value },
+    Worksheet { document: WorksheetDocument },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceMoveHistoryPatch {
+    pub from: Box<str>,
+    pub to: Box<str>,
+    pub kind: ResourceLifecycleKind,
+    pub payload: ResourceMoveHistoryPayload,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -329,8 +394,8 @@ pub struct ProjectHistoryTransaction {
     pub persistence: HistoryPersistencePolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub variable_effect_snapshots: Option<VariableEffectHistorySnapshots>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub graph_resource_move: Option<GraphResourceMoveHistoryPatch>,
+    pub resource_lifecycle: Option<ResourceLifecycleHistoryPatch>,
+    pub resource_move: Option<ResourceMoveHistoryPatch>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -351,7 +416,8 @@ impl ProjectHistoryTransaction {
             changes: changes.into(),
             persistence: HistoryPersistencePolicy::InMemoryUntilSave,
             variable_effect_snapshots: None,
-            graph_resource_move: None,
+            resource_lifecycle: None,
+            resource_move: None,
         }
     }
 
@@ -378,15 +444,32 @@ impl ProjectHistoryTransaction {
             changes: changes.into(),
             persistence: HistoryPersistencePolicy::DurableVariableEffects,
             variable_effect_snapshots: Some(snapshots),
-            graph_resource_move: None,
+            resource_lifecycle: None,
+            resource_move: None,
         }
     }
 
-    pub fn graph_resource_move(
+    pub fn resource_lifecycle(
         caused_by: OperationId,
-        from: GraphResourcePath,
-        to: GraphResourcePath,
-        payload: Value,
+        forward: ResourceLifecyclePatch,
+        payload: ResourceLifecycleHistoryPayload,
+    ) -> Self {
+        Self {
+            history_id: HistoryEntryId::new(),
+            caused_by,
+            changes: Vec::new(),
+            persistence: HistoryPersistencePolicy::InMemoryUntilSave,
+            variable_effect_snapshots: None,
+            resource_lifecycle: Some(ResourceLifecycleHistoryPatch { forward, payload }),
+            resource_move: None,
+        }
+    }
+
+    pub fn worksheet_resource_move(
+        caused_by: OperationId,
+        from: impl Into<Box<str>>,
+        to: impl Into<Box<str>>,
+        document: WorksheetDocument,
     ) -> Self {
         Self {
             history_id: HistoryEntryId::new(),
@@ -394,7 +477,42 @@ impl ProjectHistoryTransaction {
             changes: Vec::new(),
             persistence: HistoryPersistencePolicy::DurableResourceMove,
             variable_effect_snapshots: None,
-            graph_resource_move: Some(GraphResourceMoveHistoryPatch { from, to, payload }),
+            resource_lifecycle: None,
+            resource_move: Some(ResourceMoveHistoryPatch {
+                from: from.into(),
+                to: to.into(),
+                kind: ResourceLifecycleKind::Worksheet,
+                payload: ResourceMoveHistoryPayload::Worksheet { document },
+            }),
+        }
+    }
+
+    pub fn graph_move(
+        caused_by: OperationId,
+        from: GraphResourcePath,
+        to: GraphResourcePath,
+        payload: Value,
+    ) -> Self {
+        let kind = if from.0.starts_with("functions/") {
+            ResourceLifecycleKind::Function
+        } else {
+            ResourceLifecycleKind::Event
+        };
+        Self {
+            history_id: HistoryEntryId::new(),
+            caused_by,
+            changes: Vec::new(),
+            persistence: HistoryPersistencePolicy::DurableResourceMove,
+            variable_effect_snapshots: None,
+            resource_lifecycle: None,
+            resource_move: Some(ResourceMoveHistoryPatch {
+                from: from.0,
+                to: to.0,
+                kind,
+                payload: ResourceMoveHistoryPayload::Graph {
+                    persisted_move_payload: payload,
+                },
+            }),
         }
     }
 }
@@ -405,6 +523,8 @@ pub struct ProjectDocumentState {
     pub graphs: BTreeMap<GraphResourcePath, GraphDocument>,
     pub functions: BTreeMap<FunctionResourceKey, FunctionDocument>,
     pub variables: BTreeMap<VariableResourceKey, VariableDocument>,
+    pub worksheets: BTreeMap<WorksheetResourceKey, WorksheetDocument>,
+    pub worksheet_revisions: BTreeMap<WorksheetResourceKey, ResourceRevision>,
 }
 
 impl Default for ProjectDocumentState {
@@ -414,6 +534,8 @@ impl Default for ProjectDocumentState {
             graphs: BTreeMap::new(),
             functions: BTreeMap::new(),
             variables: BTreeMap::new(),
+            worksheets: BTreeMap::new(),
+            worksheet_revisions: BTreeMap::new(),
         }
     }
 }
@@ -429,6 +551,8 @@ impl ProjectDocumentState {
             graphs,
             functions,
             variables,
+            worksheets: BTreeMap::new(),
+            worksheet_revisions: BTreeMap::new(),
         }
     }
 }
@@ -580,7 +704,8 @@ impl ProjectHistory {
         transaction: ProjectHistoryTransaction,
     ) -> Result<(), HistoryError> {
         validate_new_transaction(state, &transaction)?;
-        let staged = apply_changes(state, transaction.changes.iter(), PatchDirection::Forward)?;
+        let mut staged = apply_changes(state, transaction.changes.iter(), PatchDirection::Forward)?;
+        apply_specialized_history(&mut staged, &transaction, PatchDirection::Forward)?;
         *state = staged;
         self.undo.push(transaction);
         self.redo.clear();
@@ -592,11 +717,12 @@ impl ProjectHistory {
         state: &mut ProjectDocumentState,
     ) -> Result<ProjectHistoryTransaction, HistoryError> {
         let transaction = self.undo.last().ok_or(HistoryError::NothingToUndo)?;
-        let staged = apply_changes(
+        let mut staged = apply_changes(
             state,
             transaction.changes.iter().rev(),
             PatchDirection::Inverse,
         )?;
+        apply_specialized_history(&mut staged, transaction, PatchDirection::Inverse)?;
         let transaction = self.undo.pop().expect("undo entry checked");
         *state = staged;
         self.redo.push(transaction.clone());
@@ -611,7 +737,7 @@ impl ProjectHistory {
         self.redo.last()
     }
 
-    pub fn move_graph_resource_head(
+    pub fn move_resource_head(
         &mut self,
         undo: bool,
         expected_history_id: &HistoryEntryId,
@@ -622,9 +748,7 @@ impl ProjectHistory {
         } else {
             HistoryError::NothingToRedo
         })?;
-        if &transaction.history_id != expected_history_id
-            || transaction.graph_resource_move.is_none()
-        {
+        if &transaction.history_id != expected_history_id || transaction.resource_move.is_none() {
             return Err(HistoryError::HistoryHeadChanged);
         }
         let transaction = source.pop().expect("history head checked");
@@ -641,7 +765,8 @@ impl ProjectHistory {
         state: &mut ProjectDocumentState,
     ) -> Result<ProjectHistoryTransaction, HistoryError> {
         let transaction = self.redo.last().ok_or(HistoryError::NothingToRedo)?;
-        let staged = apply_changes(state, transaction.changes.iter(), PatchDirection::Forward)?;
+        let mut staged = apply_changes(state, transaction.changes.iter(), PatchDirection::Forward)?;
+        apply_specialized_history(&mut staged, transaction, PatchDirection::Forward)?;
         let transaction = self.redo.pop().expect("redo entry checked");
         *state = staged;
         self.undo.push(transaction.clone());
@@ -653,10 +778,12 @@ fn validate_new_transaction(
     state: &ProjectDocumentState,
     transaction: &ProjectHistoryTransaction,
 ) -> Result<(), HistoryError> {
-    if transaction.changes.is_empty() && transaction.graph_resource_move.is_none() {
+    let specialized_count = usize::from(transaction.resource_lifecycle.is_some())
+        + usize::from(transaction.resource_move.is_some());
+    if transaction.changes.is_empty() && specialized_count == 0 {
         return Err(HistoryError::EmptyTransaction);
     }
-    if transaction.graph_resource_move.is_some() && !transaction.changes.is_empty() {
+    if specialized_count > 1 || (specialized_count != 0 && !transaction.changes.is_empty()) {
         return Err(HistoryError::EmptyTransaction);
     }
 
@@ -722,6 +849,73 @@ fn apply_changes<'a>(
     Ok(staged)
 }
 
+fn apply_specialized_history(
+    state: &mut ProjectDocumentState,
+    transaction: &ProjectHistoryTransaction,
+    direction: PatchDirection,
+) -> Result<(), HistoryError> {
+    if let Some(lifecycle) = &transaction.resource_lifecycle {
+        let ResourceLifecycleHistoryPayload::Worksheet { document } = &lifecycle.payload else {
+            return Ok(());
+        };
+        let patch = match direction {
+            PatchDirection::Forward => lifecycle.forward.clone(),
+            PatchDirection::Inverse => lifecycle.forward.inverse(),
+        };
+        let lifecycle_state = patch
+            .before
+            .as_ref()
+            .or(patch.after.as_ref())
+            .ok_or(HistoryError::EmptyTransaction)?;
+        let key = WorksheetResourceKey(lifecycle_state.path.clone());
+        let revision = state
+            .worksheet_revisions
+            .get(&key)
+            .copied()
+            .or_else(|| state.worksheets.get(&key).map(|document| document.revision))
+            .unwrap_or(lifecycle_state.revision)
+            .next();
+        if patch.after.is_some() {
+            let mut restored = document.clone();
+            restored.revision = revision;
+            state.worksheets.insert(key.clone(), restored);
+        } else {
+            state.worksheets.remove(&key);
+        }
+        state.worksheet_revisions.insert(key, revision);
+    }
+    if let Some(resource_move) = &transaction.resource_move {
+        let ResourceMoveHistoryPayload::Worksheet { document } = &resource_move.payload else {
+            return Ok(());
+        };
+        let (from, to) = match direction {
+            PatchDirection::Forward => (&resource_move.from, &resource_move.to),
+            PatchDirection::Inverse => (&resource_move.to, &resource_move.from),
+        };
+        let from = WorksheetResourceKey(from.clone());
+        let to = WorksheetResourceKey(to.clone());
+        let revision = state
+            .worksheet_revisions
+            .get(&from)
+            .copied()
+            .or_else(|| {
+                state
+                    .worksheets
+                    .get(&from)
+                    .map(|document| document.revision)
+            })
+            .ok_or_else(|| HistoryError::ResourceNotFound(ResourceKey::Worksheet(from.clone())))?
+            .next();
+        state.worksheets.remove(&from);
+        let mut moved = document.clone();
+        moved.revision = revision;
+        state.worksheets.insert(to.clone(), moved);
+        state.worksheet_revisions.insert(from, revision);
+        state.worksheet_revisions.insert(to, revision);
+    }
+    Ok(())
+}
+
 fn apply_resource_patch(
     state: &mut ProjectDocumentState,
     resource: &ResourceKey,
@@ -760,6 +954,25 @@ fn apply_resource_patch(
                 .apply_patch(patch);
             Ok(())
         }
+        (ResourceKey::Worksheet(key), ResourceDocumentPatch::Worksheet(patch)) => {
+            let revision = state
+                .worksheet_revisions
+                .get(key)
+                .copied()
+                .or_else(|| state.worksheets.get(key).map(|document| document.revision))
+                .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone()))?
+                .next();
+            let document = state
+                .worksheets
+                .get_mut(key)
+                .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone()))?;
+            document.database_id = patch.after.database_id.clone();
+            document.chart_type = patch.after.chart_type.clone();
+            document.encodings = patch.after.encodings.clone();
+            document.revision = revision;
+            state.worksheet_revisions.insert(key.clone(), revision);
+            Ok(())
+        }
         _ => Err(HistoryError::ResourceKindMismatch {
             resource: resource.clone(),
             patch_kind: patch.kind(),
@@ -787,9 +1000,13 @@ fn resource_revision(
             .get(key)
             .map(|document| document.revision)
             .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone())),
-        ResourceKey::Database(_) | ResourceKey::Worksheet(_) => {
-            Err(HistoryError::ResourceNotFound(resource.clone()))
-        }
+        ResourceKey::Worksheet(key) => state
+            .worksheet_revisions
+            .get(key)
+            .copied()
+            .or_else(|| state.worksheets.get(key).map(|document| document.revision))
+            .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone())),
+        ResourceKey::Database(_) => Err(HistoryError::ResourceNotFound(resource.clone())),
     }
 }
 

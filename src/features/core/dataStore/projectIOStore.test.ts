@@ -7,6 +7,7 @@ import { useDatabaseStore } from './databaseStore';
 import { initProjectSync } from './projectHelpers';
 import { useGraphDataStore } from './graphDataStore';
 import {
+  commitPreparedAuthoritativeProjectLoad,
   loadActivatedProject,
   prepareAuthoritativeProjectLoad,
   useProjectIOStore,
@@ -28,6 +29,7 @@ import { ProjectService } from '@/services/project/projectService';
 import { captureProjectIdentity } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
+import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 
 vi.mock('@/services/project/projectService', () => ({
   ProjectService: {
@@ -239,6 +241,35 @@ describe('useProjectIOStore snapshot paths', () => {
     expect(useEditorTabStore.getState()).toBe(before.tabs);
     expect(useLayoutStore.getState()).toBe(before.layout);
     expect(projectPublicationCoordinator.getSnapshotForTests()).toEqual(before.coordinator);
+  });
+
+  it('commits reconciled detail focus instead of leaking the previous project focus', async () => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000605';
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    useProjectIOStore.setState({ projectInstanceId });
+    useEditorStore.getState().setDetailFocus({
+      kind: 'node',
+      id: 'node-old',
+      graphPath: 'events/Old.yssbi-event',
+    });
+    vi.mocked(ProjectService.getProjectPath).mockResolvedValue('/tmp/replacement.yssbi');
+    vi.mocked(ProjectService.getDatabasesVariables).mockResolvedValue({ databases: {}, variables: {} });
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
+      projectInstanceId,
+      publicationRevision: 3,
+      history: { canUndo: false, canRedo: false },
+      projectName: 'Replacement',
+      graphs: [],
+      variables: [],
+      worksheets: [],
+      databases: [],
+      exportTime: '',
+    });
+
+    const plan = await prepareAuthoritativeProjectLoad(captureProjectIdentity());
+    commitPreparedAuthoritativeProjectLoad(plan);
+
+    expect(useEditorStore.getState().detailFocus).toBeNull();
   });
 
   it('prepares project load with authoritative function editor projection pins', async () => {

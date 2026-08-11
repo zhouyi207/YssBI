@@ -11,7 +11,7 @@ export type SidebarContextMenuTarget =
   | { type: "database"; id: string; name: string }
   | { type: "dataSection" }
   | { type: "worksheetSection" }
-  | { type: "worksheet"; id: string; name: string };
+  | { type: "worksheet"; worksheetPath: string; name: string };
 
 export type SidebarContextMenuState = PositionedContextMenuState<SidebarContextMenuTarget>;
 
@@ -38,9 +38,10 @@ export interface SidebarContextMenuActions {
   renameDatabaseItem: (id: string, name: string) => void;
   deleteDatabaseItem: (id: string, name: string) => unknown | Promise<unknown>;
   importData: () => void;
-  openWorksheet: (id: string, name: string) => unknown | Promise<unknown>;
-  renameWorksheet: (id: string, name: string) => void;
-  deleteWorksheet: (id: string) => unknown | Promise<unknown>;
+  openWorksheet: (worksheetPath: string, name: string) => unknown | Promise<unknown>;
+  renameWorksheetItem: (worksheetPath: string, name: string) => void;
+  duplicateWorksheet: (worksheetPath: string) => unknown | Promise<unknown>;
+  deleteWorksheet: (worksheetPath: string) => unknown | Promise<unknown>;
   addWorksheet: () => unknown | Promise<unknown>;
   revealInExplorer: (request: RevealProjectResourceRequest) => unknown | Promise<unknown>;
 }

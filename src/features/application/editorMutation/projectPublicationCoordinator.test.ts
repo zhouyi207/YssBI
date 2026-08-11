@@ -3,6 +3,8 @@ import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFix
 import { useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
+import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import {
   buildGraphResourceMeta,
   markResourceLoaded,
@@ -42,8 +44,6 @@ const afterPath = 'events/After.yssbi-event';
 const worksheet: WorksheetDocument = {
   schemaVersion: 3,
   revision: 0,
-  id: 'worksheet-1',
-  name: 'Worksheet',
   databaseId: 'sales',
   chartType: 'scatter',
   encodings: { x: 'x', y: 'y' },
@@ -83,7 +83,7 @@ function publication(
     toRevision: 1,
     causedBy: null,
     payload: {
-      kind: 'graph_resource_move',
+      kind: 'resource_move',
       patch: { from: move.from, to: move.to },
     },
   }));
@@ -116,6 +116,64 @@ function publication(
       ? { status: 'complete', expectedGraphPaths: projectionPaths }
       : { status: 'incomplete', invalidatedGraphPaths: options.invalidatedGraphPaths ?? [] },
     history: options.history ?? { canUndo: true, canRedo: false },
+  };
+}
+
+function worksheetCreatePublication(
+  publicationRevision: number,
+  worksheetPath: string,
+): ResourceMutationResultDto {
+  return {
+    operationId: `00000000-0000-0000-0000-${publicationRevision.toString().padStart(12, '0')}`,
+    projectInstanceId,
+    publicationRevision,
+    moves: [],
+    deltas: [{
+      resource: { kind: 'worksheet', key: worksheetPath },
+      fromRevision: 0,
+      toRevision: 0,
+      causedBy: `00000000-0000-0000-0000-${publicationRevision.toString().padStart(12, '0')}`,
+      payload: {
+        kind: 'resource_lifecycle',
+        patch: {
+          before: null,
+          after: {
+            revision: 0,
+            path: worksheetPath,
+            kind: 'worksheet',
+            name: 'Recovered worksheet',
+          },
+        },
+      },
+    }],
+    projectionReplacements: [],
+    projectionStatus: { status: 'complete', expectedGraphPaths: [] },
+    history: { canUndo: true, canRedo: false },
+  };
+}
+
+function worksheetMovePublication(
+  publicationRevision: number,
+  from: string,
+  to: string,
+  fromRevision: number,
+): ResourceMutationResultDto {
+  const operationId = `00000000-0000-0000-0000-${publicationRevision.toString().padStart(12, '0')}`;
+  return {
+    operationId,
+    projectInstanceId,
+    publicationRevision,
+    moves: [{ from, to, kind: 'worksheet', name: `Worksheet ${to}` }],
+    deltas: [{
+      resource: { kind: 'worksheet', key: to },
+      fromRevision,
+      toRevision: fromRevision + 1,
+      causedBy: operationId,
+      payload: { kind: 'resource_move', patch: { from, to } },
+    }],
+    projectionReplacements: [],
+    projectionStatus: { status: 'complete', expectedGraphPaths: [] },
+    history: { canUndo: true, canRedo: false },
   };
 }
 
@@ -273,6 +331,7 @@ function createHarness() {
       fingerprint: context.fingerprint,
       affectedGraphPaths: context.affectedGraphPaths,
       moves: context.moves,
+      removedWorksheetPaths: new Set<string>(),
       graphProjectionPlan: { graphPaths: [], graphEntities: {} },
       projectionReplacements: result.projectionReplacements,
       functionInstalls: result.deltas.flatMap((delta) =>
@@ -286,11 +345,6 @@ function createHarness() {
             }]
           : []),
       variableInstalls: [],
-      worksheetInstalls: [],
-      worksheetState: {
-        index: [], documents: {}, resources: {}, documentStates: {},
-        tabs: { registry: {}, placements: {} },
-      },
       storeState: {
         resources: {}, graphOrder: [], documents: {}, graphMeta: {}, databases: {},
         databaseRevisions: {}, variables: {}, variableRevisions: {}, worksheetIndex: [],
@@ -407,11 +461,20 @@ describe('ProjectPublicationCoordinator', () => {
   it('synchronously clears worksheet previews on every project lifecycle reset', async () => {
     clearWorksheetPreviewCache();
     const harness = createHarness();
-    await getWorksheetPreview(projectInstanceId, worksheet, async () => ({ kind: 'empty' }));
+    await getWorksheetPreview(
+      projectInstanceId,
+      'worksheets/Worksheet.yssbi-worksheet',
+      worksheet,
+      async () => ({ kind: 'empty' }),
+    );
 
     harness.coordinator.startProject(replacementProjectInstanceId, 0);
 
-    expect(getCachedWorksheetPreview(projectInstanceId, worksheet)).toBeUndefined();
+    expect(getCachedWorksheetPreview(
+      projectInstanceId,
+      'worksheets/Worksheet.yssbi-worksheet',
+      worksheet,
+    )).toBeUndefined();
   });
 
   it('validates a new project baseline before cancelling the current coordinator', () => {
@@ -470,6 +533,141 @@ describe('ProjectPublicationCoordinator', () => {
 
     await expect(revision1).resolves.toMatchObject({ status: 'applied' });
     await expect(revision2).resolves.toMatchObject({ status: 'applied' });
+  });
+
+  it('recovers an unloaded worksheet create without graph hydration or graph notifications', async () => {
+    const harness = createHarness();
+    harness.state.projections = [];
+    const worksheetPath = 'opaque worksheet recovery::created';
+    const submitted = harness.coordinator.submit({
+      result: worksheetCreatePublication(2, worksheetPath),
+    });
+    await waitForSnapshot(harness);
+
+    harness.snapshotRequests[0].resolve(index(2, [], {
+      worksheets: [{
+        worksheetPath,
+        name: 'Recovered worksheet',
+        databaseId: 'sales',
+        chartType: 'scatter',
+        revision: 0,
+      }],
+    }));
+
+    await expect(submitted).resolves.toEqual({
+      status: 'recovered',
+      affectedGraphPaths: new Set(),
+    });
+    expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
+    expect(harness.dependencies.prepareMove).not.toHaveBeenCalled();
+    expect(harness.dependencies.commitPublication).not.toHaveBeenCalled();
+    const recovery = vi.mocked(harness.dependencies.prepareRecovery).mock.calls[0][0];
+    expect(recovery.projections.size).toBe(0);
+    expect(recovery.graphPathsLoadedAtStart.size).toBe(0);
+    expect([...(recovery.worksheetPathRemaps ?? [])]).toEqual([]);
+  });
+
+  it('recovers an A to B to C worksheet chain without graph work or notifications', async () => {
+    const harness = createHarness();
+    harness.state.projections = [];
+    vi.mocked(harness.dependencies.prepareRecovery).mockImplementation(prepareProjectRecoveryCommit);
+    vi.mocked(harness.dependencies.commitRecovery).mockImplementation(commitPreparedProjectRecovery);
+    const [pathA, pathB, pathC] = [
+      'opaque coordinator worksheet::A',
+      'opaque coordinator worksheet::B',
+      'opaque coordinator worksheet::C',
+    ];
+    const documentA = { ...worksheet, revision: 1, encodings: { x: 'old-x', y: 'old-y' } };
+    const documentB = { ...worksheet, revision: 2, encodings: { x: 'new-x', y: 'new-y' } };
+    useResourceStore.getState().clear();
+    useDocumentStateStore.getState().clear();
+    useWorksheetStore.setState({
+      index: [
+        { worksheetPath: pathA, name: 'A', databaseId: 'sales', chartType: 'scatter', revision: 1 },
+        { worksheetPath: pathB, name: 'B', databaseId: 'sales', chartType: 'scatter', revision: 2 },
+      ],
+      documents: { [pathA]: documentA, [pathB]: documentB },
+    });
+    for (const [path, name, dirty, stale, conflict, version] of [
+      [pathA, 'A', false, true, false, 3],
+      [pathB, 'B', true, false, true, 8],
+    ] as const) {
+      const key = resourceKey({ id: path, kind: 'worksheet' });
+      useResourceStore.getState().upsertResource({
+        id: path,
+        kind: 'worksheet',
+        name,
+        uri: key,
+        exists: true,
+        loaded: true,
+        hasDirtyDocument: dirty,
+        hasStaleDocument: stale,
+        hasConflictDocument: conflict,
+      });
+      useDocumentStateStore.getState().upsertDocument({
+        resourceKey: key,
+        loaded: true,
+        dirty,
+        stale,
+        missing: false,
+        conflict,
+        version,
+      });
+    }
+    useEditorTabStore.setState({ registry: {}, placements: {} });
+    useEditorTabStore.getState().initGroupPlacement('editor', [
+      { id: pathA, component: 'WorksheetEditor', type: 'worksheet' },
+      { id: pathB, component: 'WorksheetEditor', type: 'worksheet' },
+    ], pathB);
+    useEditorTabStore.getState().setSelectedTabIds('editor', [pathA, pathB]);
+    useEditorStore.getState().setDetailFocus({ kind: 'worksheet', worksheetPath: pathA });
+
+    const first = harness.coordinator.submit({
+      result: worksheetMovePublication(2, pathA, pathB, 0),
+    });
+    await waitForSnapshot(harness);
+    const second = harness.coordinator.submit({
+      result: worksheetMovePublication(3, pathB, pathC, 1),
+    });
+    harness.snapshotRequests[0].resolve(index(3, [], {
+      worksheets: [{
+        worksheetPath: pathC,
+        name: 'C',
+        databaseId: 'sales',
+        chartType: 'scatter',
+        revision: 3,
+      }],
+    }));
+
+    await expect(first).resolves.toEqual({ status: 'recovered', affectedGraphPaths: new Set() });
+    await expect(second).resolves.toEqual({ status: 'recovered', affectedGraphPaths: new Set() });
+    expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
+    expect(harness.dependencies.markProjectProjectionStale).not.toHaveBeenCalled();
+    expect(useWorksheetStore.getState()).toMatchObject({
+      index: [{ worksheetPath: pathC, name: 'C' }],
+      documents: { [pathC]: documentB },
+    });
+    expect(useDocumentStateStore.getState().documents[
+      resourceKey({ id: pathC, kind: 'worksheet' })
+    ]).toMatchObject({ dirty: true, stale: false, conflict: true, version: 8 });
+    expect(useResourceStore.getState().resources[
+      resourceKey({ id: pathC, kind: 'worksheet' })
+    ]).toMatchObject({
+      id: pathC,
+      name: 'C',
+      hasDirtyDocument: true,
+      hasStaleDocument: false,
+      hasConflictDocument: true,
+    });
+    expect(useEditorTabStore.getState().getPlacement('editor')).toMatchObject({
+      tabIds: [pathC],
+      selectedTabIds: [pathC],
+      activeTabId: pathC,
+    });
+    expect(useEditorStore.getState().detailFocus).toEqual({
+      kind: 'worksheet',
+      worksheetPath: pathC,
+    });
   });
 
   it('settles late recovery joiners from one stable snapshot attempt', async () => {
@@ -1197,6 +1395,46 @@ describe('ProjectPublicationCoordinator', () => {
       projectInstanceId: replacementProjectInstanceId,
     }));
     await expect(replacementWaiter).resolves.toMatchObject({ status: 'recovered' });
+  });
+
+  it('recovers worksheet moves without requesting graph projection hydration', async () => {
+    const harness = createHarness();
+    const from = 'opaque worksheet coordinator::before';
+    const to = 'opaque worksheet coordinator::after';
+    const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000124',
+      projectInstanceId,
+      publicationRevision: 1,
+      moves: [{ from, to, kind: 'worksheet', name: 'After' }],
+      deltas: [{
+        resource: { kind: 'worksheet', key: to },
+        fromRevision: 3,
+        toRevision: 4,
+        causedBy: null,
+        payload: { kind: 'resource_move', patch: { from, to } },
+      }],
+      projectionReplacements: [],
+      projectionStatus: { status: 'incomplete', invalidatedGraphPaths: [] },
+      history: { canUndo: true, canRedo: false },
+    };
+
+    const submitted = harness.coordinator.submit({ result });
+    await waitForSnapshot(harness);
+    harness.snapshotRequests[0].resolve(index(1, [], {
+      worksheets: [{
+        worksheetPath: to,
+        name: 'After',
+        databaseId: 'database-1',
+        chartType: 'line',
+        revision: 4,
+      }],
+    }));
+
+    await expect(submitted).resolves.toMatchObject({ status: 'recovered' });
+    const preparation = vi.mocked(harness.dependencies.prepareRecovery).mock.calls[0][0];
+    expect([...preparation.pathRemaps]).toEqual([]);
+    expect([...(preparation.worksheetPathRemaps ?? [])]).toEqual([[from, to]]);
+    expect(harness.dependencies.prepareGraphProjection).not.toHaveBeenCalled();
   });
 
   it('rejects queued and recovering work when the project lifecycle changes', async () => {

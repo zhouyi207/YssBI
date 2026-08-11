@@ -1,5 +1,6 @@
 use super::{
     GraphDocumentKind, GraphResourcePath, ProjectError, ProjectMetadata, WorksheetDocument,
+    WorksheetResourcePath,
 };
 use crate::database::DatabaseDecl;
 use crate::node_system::document::{
@@ -41,7 +42,7 @@ pub struct ProjectData {
     pub variables: HashMap<VariableId, VariableInstance>,
     pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>,
     #[serde(default)]
-    pub worksheets: HashMap<String, WorksheetDocument>,
+    pub worksheets: HashMap<WorksheetResourcePath, WorksheetDocument>,
     pub databases: HashMap<String, DatabaseDecl>,
     pub metadata: ProjectMetadata,
 }

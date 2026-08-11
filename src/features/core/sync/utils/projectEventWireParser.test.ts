@@ -32,6 +32,32 @@ const resourceResult = {
   history: { canUndo: false, canRedo: false },
 };
 
+function worksheetDocumentState() {
+  return {
+    databaseId: 'database-1',
+    chartType: 'scatter',
+    encodings: { x: 'region', y: 'revenue' },
+  };
+}
+
+function worksheetResourceResult(
+  payload: Record<string, unknown>,
+  resourceKey = 'opaque worksheet / 路径',
+  fromRevision = 0,
+  toRevision = 1,
+) {
+  return {
+    ...resourceResult,
+    deltas: [{
+      resource: { kind: 'worksheet', key: resourceKey },
+      fromRevision,
+      toRevision,
+      causedBy: operationId,
+      payload,
+    }],
+  };
+}
+
 function functionResourceResult(functionRevision = 1) {
   const projection = structuredClone(editorProjection) as Record<string, unknown>;
   projection.graphPath = functionPath;
@@ -71,8 +97,25 @@ function functionResourceResult(functionRevision = 1) {
 }
 
 describe('project event wire parser', () => {
-  it('parses each complete Rust-generated project mutation event envelope', () => {
+  it('parses every semantic Rust-generated worksheet direct result and event envelope', () => {
+    expect(projectEvents.resourceMutationResults.map(({ scenario, result }) => ({
+      scenario,
+      parsed: parseResourceMutationCommittedPayload({ result }).result,
+    }))).toEqual(projectEvents.resourceMutationResults.map(({ scenario, result }) => ({
+      scenario,
+      parsed: result,
+    })));
     expect(projectEvents.events.map(parseProjectMutationEvent)).toEqual(projectEvents.events);
+    expect(projectEvents.resourceMutationResults.map(({ scenario }) => scenario)).toEqual([
+      'create',
+      'save',
+      'rename',
+      'remove',
+      'undo',
+      'redo',
+    ]);
+    expect(projectEvents.events.slice(1).map((event) => event.payload.payload.result))
+      .toEqual(projectEvents.resourceMutationResults.map(({ result }) => result));
   });
 
   it('rejects extra and unknown outer or inner project event envelope fields', () => {
@@ -101,6 +144,56 @@ describe('project event wire parser', () => {
     expect(() => parseGraphDeltaEventPayload({ projectInstanceId, delta, extra: true })).toThrow(
       'exact',
     );
+  });
+
+  it.each([
+    ['document', worksheetResourceResult({
+      kind: 'worksheet',
+      patch: { before: worksheetDocumentState(), after: worksheetDocumentState() },
+    })],
+    ['lifecycle', worksheetResourceResult({
+      kind: 'resource_lifecycle',
+      patch: {
+        before: null,
+        after: {
+          revision: 0,
+          path: 'worksheets/Sales Report.yssbi-worksheet',
+          kind: 'worksheet',
+          name: 'Sales Report',
+        },
+      },
+    }, 'worksheets/Sales Report.yssbi-worksheet', 0, 0)],
+    ['move', {
+      ...worksheetResourceResult({
+        kind: 'resource_move',
+        patch: { from: 'opaque source', to: 'opaque destination' },
+      }, 'opaque destination'),
+      moves: [{
+        from: 'opaque source',
+        to: 'opaque destination',
+        kind: 'worksheet',
+        name: 'Destination',
+      }],
+    }],
+  ])('parses an exact canonical worksheet %s envelope', (_kind, result) => {
+    expect(parseResourceMutationCommittedPayload({ result })).toEqual({ result });
+  });
+
+  it('rejects removed worksheet side-channel and legacy document identity fields', () => {
+    expect(() => parseResourceMutationCommittedPayload({
+      result: { ...resourceResult, worksheetDeltas: [] },
+    })).toThrow();
+
+    for (const legacy of [{ id: 'legacy-id' }, { name: 'persisted document name' }]) {
+      const result = worksheetResourceResult({
+        kind: 'worksheet',
+        patch: {
+          before: worksheetDocumentState(),
+          after: { ...worksheetDocumentState(), ...legacy },
+        },
+      });
+      expect(() => parseResourceMutationCommittedPayload({ result })).toThrow();
+    }
   });
 
   it('parses an exact function replacement with Rust-resolved editor pins', () => {
@@ -157,23 +250,13 @@ describe('project event wire parser', () => {
       ...resourceResult,
       projectionStatus: { ...resourceResult.projectionStatus, extra: true },
     }],
-    ['worksheet delta', {
-      ...resourceResult,
-      worksheetDeltas: [{
-        id: 'worksheet-1',
-        before: null,
-        after: {
-          schemaVersion: 1,
-          revision: 1,
-          id: 'worksheet-1',
-          name: 'Worksheet',
-          databaseId: 'database-1',
-          chartType: 'line',
-          encodings: {},
-        },
-        extra: true,
-      }],
-    }],
+    ['worksheet document', worksheetResourceResult({
+      kind: 'worksheet',
+      patch: {
+        before: worksheetDocumentState(),
+        after: { ...worksheetDocumentState(), extra: true },
+      },
+    })],
     ['projection replacement', {
       ...resourceResult,
       projectionReplacements: [{

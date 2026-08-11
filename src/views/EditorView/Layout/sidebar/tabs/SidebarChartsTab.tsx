@@ -17,9 +17,13 @@ export function SidebarChartsTab({
   onWorksheetContextMenu,
 }: {
   onAddWorksheet: () => void;
-  onOpenWorksheet: (id: string, name: string) => void;
+  onOpenWorksheet: (worksheetPath: string, name: string) => void;
   onSectionContextMenu: (e: React.MouseEvent) => void;
-  onWorksheetContextMenu: (e: React.MouseEvent, id: string, name: string) => void;
+  onWorksheetContextMenu: (
+    e: React.MouseEvent,
+    worksheetPath: string,
+    name: string,
+  ) => void;
 }) {
   const { t } = useTranslation();
   const worksheets = useWorksheetStore((s) => s.index);

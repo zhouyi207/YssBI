@@ -8,11 +8,13 @@ import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import {
   isResourceDocumentDirty,
   markResourceDirty,
+  resourceKey,
   useDocumentStateStore,
   useResourceStore,
 } from '@/features/core/resource';
 
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';
+const worksheetPath = 'worksheets/Report.yssbi-worksheet';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -20,15 +22,64 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function worksheet(revision: number, name: string): WorksheetDocument {
+function worksheet(revision: number, chartType: WorksheetDocument['chartType']): WorksheetDocument {
   return {
     schemaVersion: 3,
     revision,
-    id: 'worksheet-1',
-    name,
     databaseId: 'database-1',
-    chartType: 'scatter',
+    chartType,
     encodings: { x: 'x', y: 'y' },
+  };
+}
+
+function registerWorksheetResource(): void {
+  useResourceStore.getState().upsertResource({
+    id: worksheetPath,
+    kind: 'worksheet',
+    name: 'Report',
+    uri: `yssbi://worksheet/${worksheetPath}`,
+    exists: true,
+    loaded: true,
+    hasDirtyDocument: false,
+    hasStaleDocument: false,
+    hasConflictDocument: false,
+  });
+}
+
+function worksheetResult(
+  operationId: string,
+  before: WorksheetDocument,
+  after: WorksheetDocument,
+) {
+  return {
+    operationId,
+    projectInstanceId,
+    publicationRevision: 1,
+    moves: [],
+    deltas: [{
+      resource: { kind: 'worksheet' as const, key: worksheetPath },
+      fromRevision: before.revision,
+      toRevision: after.revision,
+      causedBy: operationId,
+      payload: {
+        kind: 'worksheet' as const,
+        patch: {
+          before: {
+            databaseId: before.databaseId,
+            chartType: before.chartType,
+            encodings: before.encodings,
+          },
+          after: {
+            databaseId: after.databaseId,
+            chartType: after.chartType,
+            encodings: after.encodings,
+          },
+        },
+      },
+    }],
+    projectionReplacements: [],
+    projectionStatus: { status: 'complete' as const, expectedGraphPaths: [] },
+    history: { canUndo: true, canRedo: false },
   };
 }
 
@@ -43,33 +94,32 @@ describe('worksheet authoritative mutation results', () => {
     useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false });
   });
 
+  it('keys documents explicitly without synthesizing index rows', () => {
+    const document = worksheet(3, 'scatter');
+
+    useWorksheetStore.getState().upsertDocument(worksheetPath, document);
+
+    expect(useWorksheetStore.getState().documents).toEqual({ [worksheetPath]: document });
+    expect(useWorksheetStore.getState().index).toEqual([]);
+  });
+
   it('ignores a delayed save completion from a replaced project', async () => {
-    const draft = worksheet(3, 'Draft');
-    useWorksheetStore.getState().upsertDocument(draft);
-    markResourceDirty({ id: draft.id, kind: 'worksheet' }, true);
+    const draft = worksheet(3, 'scatter');
+    useWorksheetStore.getState().upsertDocument(worksheetPath, draft);
+    markResourceDirty({ id: worksheetPath, kind: 'worksheet' }, true);
     const request = deferred<Awaited<ReturnType<typeof WorksheetService.saveWorksheet>>>();
     vi.spyOn(WorksheetService, 'saveWorksheet').mockReturnValue(request.promise);
 
-    const completion = useWorksheetStore.getState().saveDocument(draft.id);
+    const completion = useWorksheetStore.getState().saveDocument(worksheetPath);
     await vi.waitFor(() => expect(WorksheetService.saveWorksheet).toHaveBeenCalled());
     useProjectIOStore.setState({ projectInstanceId: 'project-b' });
     projectPublicationCoordinator.startProject('project-b', 0);
     useWorksheetStore.getState().clear();
-    request.resolve({
-      operationId: '00000000-0000-0000-0000-000000000502',
-      document: worksheet(4, 'Saved in project A'),
-      result: {
-        operationId: '00000000-0000-0000-0000-000000000502',
-        projectInstanceId,
-        publicationRevision: 1,
-        moves: [],
-        deltas: [],
-        worksheetDeltas: [{ id: draft.id, before: draft, after: worksheet(4, 'Saved in project A') }],
-        projectionReplacements: [],
-        projectionStatus: { status: 'complete', expectedGraphPaths: [] },
-        history: { canUndo: true, canRedo: false },
-      },
-    });
+    request.resolve(worksheetResult(
+      '00000000-0000-0000-0000-000000000502',
+      draft,
+      worksheet(4, 'line'),
+    ));
 
     await expect(completion).resolves.toBe(false);
     expect(useWorksheetStore.getState().documents).toEqual({});
@@ -80,69 +130,62 @@ describe('worksheet authoritative mutation results', () => {
   });
 
   it('preserves a newer dirty edit while applying the save publication revision', async () => {
-    const draft = worksheet(3, 'Draft');
-    const saved = worksheet(4, 'Draft');
-    useWorksheetStore.getState().upsertDocument(draft);
-    markResourceDirty({ id: draft.id, kind: 'worksheet' }, true);
+    const draft = worksheet(3, 'scatter');
+    const saved = worksheet(4, 'scatter');
+    registerWorksheetResource();
+    useWorksheetStore.getState().upsertDocument(worksheetPath, draft);
+    markResourceDirty({ id: worksheetPath, kind: 'worksheet' }, true);
     const request = deferred<Awaited<ReturnType<typeof WorksheetService.saveWorksheet>>>();
     vi.spyOn(WorksheetService, 'saveWorksheet').mockReturnValue(request.promise);
 
-    const completion = useWorksheetStore.getState().saveDocument(draft.id);
+    const completion = useWorksheetStore.getState().saveDocument(worksheetPath);
     await vi.waitFor(() => expect(WorksheetService.saveWorksheet).toHaveBeenCalled());
-    useWorksheetStore.getState().updateDocument(draft.id, { name: 'Edited while saving' });
-    request.resolve({
-      operationId: '00000000-0000-0000-0000-000000000503',
-      document: saved,
-      result: {
-        operationId: '00000000-0000-0000-0000-000000000503',
-        projectInstanceId,
-        publicationRevision: 1,
-        moves: [],
-        deltas: [],
-        worksheetDeltas: [{ id: draft.id, before: draft, after: saved }],
-        projectionReplacements: [],
-        projectionStatus: { status: 'complete', expectedGraphPaths: [] },
-        history: { canUndo: true, canRedo: false },
-      },
-    });
+    useWorksheetStore.getState().updateDocument(worksheetPath, { chartType: 'line' });
+    request.resolve(worksheetResult(
+      '00000000-0000-0000-0000-000000000503',
+      draft,
+      saved,
+    ));
 
     await expect(completion).resolves.toBe(false);
-    expect(useWorksheetStore.getState().documents[draft.id]).toMatchObject({
-      name: 'Edited while saving',
+    expect(useWorksheetStore.getState().documents[worksheetPath]).toMatchObject({
+      chartType: 'line',
       revision: 4,
     });
-    expect(isResourceDocumentDirty({ id: draft.id, kind: 'worksheet' })).toBe(true);
+    const key = resourceKey({ id: worksheetPath, kind: 'worksheet' });
+    expect(isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' })).toBe(true);
+    expect(useDocumentStateStore.getState().documents[key]?.dirty).toBe(true);
+    expect(useResourceStore.getState().resources[key]?.hasDirtyDocument).toBe(true);
     expect(projectPublicationCoordinator.getSnapshotForTests().appliedRevision).toBe(1);
   });
 
-  it('installs the authoritative document returned by save', async () => {
-    const draft = worksheet(3, 'Draft');
-    const authoritative = worksheet(4, 'Canonical');
-    useWorksheetStore.getState().upsertDocument(draft);
-    vi.spyOn(WorksheetService, 'saveWorksheet').mockResolvedValue({
-      operationId: '00000000-0000-0000-0000-000000000501',
-      document: authoritative,
-      result: {
-        operationId: '00000000-0000-0000-0000-000000000501',
-        projectInstanceId,
-        publicationRevision: 1,
-        moves: [],
-        deltas: [],
-        worksheetDeltas: [{ id: draft.id, before: draft, after: authoritative }],
-        projectionReplacements: [],
-        projectionStatus: { status: 'complete', expectedGraphPaths: [] },
-        history: { canUndo: true, canRedo: false },
-      },
-    });
+  it('clears both dirty projections after a matching authoritative save', async () => {
+    const draft = worksheet(3, 'scatter');
+    const authoritative = worksheet(4, 'line');
+    registerWorksheetResource();
+    useWorksheetStore.getState().upsertDocument(worksheetPath, draft);
+    markResourceDirty({ id: worksheetPath, kind: 'worksheet' }, true);
+    vi.spyOn(WorksheetService, 'saveWorksheet').mockImplementation(
+      async (_projectInstanceId, operationId) => worksheetResult(
+        operationId,
+        draft,
+        authoritative,
+      ),
+    );
 
-    await expect(useWorksheetStore.getState().saveDocument(draft.id)).resolves.toBe(true);
+    await expect(useWorksheetStore.getState().saveDocument(worksheetPath)).resolves.toBe(true);
 
     expect(WorksheetService.saveWorksheet).toHaveBeenCalledWith(
       projectInstanceId,
       expect.any(String),
+      worksheetPath,
+      3,
       draft,
     );
-    expect(useWorksheetStore.getState().documents[draft.id]).toEqual(authoritative);
+    const key = resourceKey({ id: worksheetPath, kind: 'worksheet' });
+    expect(useWorksheetStore.getState().documents[worksheetPath]).toEqual(authoritative);
+    expect(useDocumentStateStore.getState().documents[key]?.dirty).toBe(false);
+    expect(useResourceStore.getState().resources[key]?.hasDirtyDocument).toBe(false);
     expect(useHistoryStore.getState()).toMatchObject({ canUndo: true, canRedo: false });
   });
 });

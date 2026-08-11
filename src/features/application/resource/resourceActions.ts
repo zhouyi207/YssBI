@@ -7,10 +7,15 @@ import { getGraphProjectionBasis } from '@/features/core/dataStore/graphEntityAc
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
+import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { beginGraphRenameLifecycle } from '@/features/application/editorProjection/graphProjectionCoordinator';
+import {
+  beginWorksheetRenameLifecycle,
+  isWorksheetLifecycleCurrent,
+} from '@/features/application/editor/worksheetLifecycleCoordinator';
 import type { ResourceMutationResultDto } from '@/shared/types/dto';
 
 import type { GraphResourceKind } from '@/shared/types/domain/graphResourcePath';
@@ -32,6 +37,15 @@ function graphRevision(graphPath: string): number {
   return resource.revision;
 }
 
+function worksheetRevision(worksheetPath: string): number {
+  const resource = Object.values(useResourceStore.getState().resources)
+    .find((candidate) => candidate.id === worksheetPath && candidate.kind === 'worksheet');
+  if (resource?.revision == null) {
+    throw new Error(`Worksheet resource '${worksheetPath}' has no authoritative revision`);
+  }
+  return resource.revision;
+}
+
 function mutationGraphPath(result: ResourceMutationResultDto): string {
   const paths = result.projectionStatus.status === 'complete'
     ? result.projectionStatus.expectedGraphPaths
@@ -48,7 +62,7 @@ async function submitCurrentResult(
 ): Promise<void> {
   context.assertCurrent();
   if (result.projectInstanceId !== context.projectInstanceId) {
-    throw new Error('stale project lifecycle for graph resource mutation');
+    throw new Error('stale project lifecycle for resource mutation');
   }
   await projectPublicationCoordinator.submit({ result });
   context.assertCurrent();
@@ -59,8 +73,8 @@ export async function commitFileFirstResourceIndex(): Promise<boolean> {
 }
 
 export async function renameResource(ref: ResourceRef, nextName: string): Promise<void> {
-  const name = nextName.trim();
-  if (!name) return;
+  if (!nextName) return;
+  const name = nextName;
 
   if (ref.kind === 'event' || ref.kind === 'function') {
     const context = captureProjectCommandContext();
@@ -74,6 +88,29 @@ export async function renameResource(ref: ResourceRef, nextName: string): Promis
       lifecycleToken,
       context.operationId,
     );
+    await submitCurrentResult(context, result);
+    return;
+  }
+
+  if (ref.kind === 'worksheet') {
+    const context = captureProjectCommandContext();
+    const expectedRevision = worksheetRevision(ref.id);
+    const lifecycleToken = beginWorksheetRenameLifecycle(context.projectInstanceId, ref.id);
+    const result = await WorksheetService.renameWorksheet(
+      context.projectInstanceId,
+      context.operationId,
+      ref.id,
+      expectedRevision,
+      name,
+      lifecycleToken,
+    );
+    context.assertCurrent();
+    if (!isWorksheetLifecycleCurrent(context.projectInstanceId, ref.id, lifecycleToken)) {
+      throw Object.assign(
+        new Error(`stale resource lifecycle for worksheet '${ref.id}'`),
+        { code: 'stale_resource_lifecycle' },
+      );
+    }
     await submitCurrentResult(context, result);
     return;
   }

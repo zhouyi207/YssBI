@@ -5,21 +5,23 @@ export interface WorksheetEncodings {
   y?: string;
 }
 
-export interface WorksheetDocument {
-  schemaVersion: number;
-  revision: number;
-  id: string;
-  name: string;
+export interface WorksheetDocumentState {
   databaseId: string;
   chartType: WorksheetChartType;
   encodings: WorksheetEncodings;
 }
 
+export interface WorksheetDocument extends WorksheetDocumentState {
+  schemaVersion: number;
+  revision: number;
+}
+
 export interface WorksheetIndexEntry {
-  id: string;
+  worksheetPath: string;
   name: string;
   databaseId: string;
   chartType: WorksheetChartType;
+  revision: number;
 }
 
 export interface PlotColumnPairPayload {

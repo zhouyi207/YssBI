@@ -29,8 +29,6 @@ const projectB = '00000000-0000-0000-0000-000000000602';
 const worksheet: WorksheetDocument = {
   schemaVersion: 3,
   revision: 0,
-  id: 'worksheet-1',
-  name: 'Worksheet',
   databaseId: 'sales',
   chartType: 'scatter',
   encodings: { x: 'x', y: 'y' },
@@ -198,7 +196,12 @@ describe('production project lifecycle hydration dependency', () => {
 
   it('synchronously clears worksheet preview cache before replacement hydration commits', async () => {
     const oldPreview = { kind: 'empty' as const };
-    await getWorksheetPreview(projectA, worksheet, async () => oldPreview);
+    await getWorksheetPreview(
+      projectA,
+      'worksheets/Worksheet.yssbi-worksheet',
+      worksheet,
+      async () => oldPreview,
+    );
     vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue(index(projectB, 0));
     const pending = registerPendingProjectLifecycleOperation({ kind: 'saveAs' });
 
@@ -208,7 +211,11 @@ describe('production project lifecycle hydration dependency', () => {
       createProjectLifecycleReceiptDependencies(),
     );
 
-    expect(getCachedWorksheetPreview(projectA, worksheet)).toBeUndefined();
+    expect(getCachedWorksheetPreview(
+      projectA,
+      'worksheets/Worksheet.yssbi-worksheet',
+      worksheet,
+    )).toBeUndefined();
   });
 
   it.each([

@@ -8,7 +8,7 @@ export type DetailTarget =
   | { kind: 'log' }
   | { kind: 'event'; path: string }
   | { kind: 'function'; path: string }
-  | { kind: 'worksheet'; id: string };
+  | { kind: 'worksheet'; worksheetPath: string };
 
 /** Explicit user selection for the Detail panel — no derived priority chain. */
 export type DetailFocus = DetailTarget;

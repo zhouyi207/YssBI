@@ -30,6 +30,7 @@ struct ProjectFilesystemTestControls {
     rollback_fault: Mutex<bool>,
     rollback_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
     before_remove_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
+    before_move_target_delete_hook: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
 }
 
 #[derive(Clone, Default)]
@@ -173,6 +174,18 @@ impl ProjectFilesystemCoordinator {
     }
 
     #[cfg(test)]
+    pub(crate) fn set_before_move_target_delete_hook(
+        &self,
+        hook: Option<Arc<dyn Fn() + Send + Sync>>,
+    ) {
+        *self
+            .test_controls
+            .before_move_target_delete_hook
+            .lock()
+            .unwrap() = hook;
+    }
+
+    #[cfg(test)]
     fn take_fault(&self, point: super::ProjectFilesystemFaultPoint) -> bool {
         let mut fault = self.test_controls.fault.lock().unwrap();
         if *fault == Some(point) {
@@ -199,6 +212,19 @@ impl ProjectFilesystemCoordinator {
     #[cfg(test)]
     fn run_before_remove_hook(&self) {
         let hook = self.test_controls.before_remove_hook.lock().unwrap().take();
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+
+    #[cfg(test)]
+    fn run_before_move_target_delete_hook(&self) {
+        let hook = self
+            .test_controls
+            .before_move_target_delete_hook
+            .lock()
+            .unwrap()
+            .take();
         if let Some(hook) = hook {
             hook();
         }
@@ -276,6 +302,11 @@ impl ProjectFilesystemLeaseSet {
     #[cfg(test)]
     pub(super) fn run_before_remove_hook(&self) {
         self.coordinator.run_before_remove_hook();
+    }
+
+    #[cfg(test)]
+    pub(super) fn run_before_move_target_delete_hook(&self) {
+        self.coordinator.run_before_move_target_delete_hook();
     }
 
     pub fn roots(&self) -> &[NormalizedProjectRoot] {

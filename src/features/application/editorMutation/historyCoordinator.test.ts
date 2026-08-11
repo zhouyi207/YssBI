@@ -225,7 +225,7 @@ describe('executeHistoryMutation', () => {
         toRevision: 1,
         causedBy: operationId,
         payload: {
-          kind: 'graph_resource_move',
+          kind: 'resource_move',
           patch: { from: functionPath, to: restoredPath },
         },
       }],

@@ -77,7 +77,10 @@ describe('Rust-generated node-system golden contracts', () => {
     expect(projectEvents.format).toBe('yssbi.project-events.v1');
     expect(projectEvents.events.map((event) => [event.type, event.payload.type])).toEqual([
       ['Project', 'GraphDelta'],
-      ['Project', 'ResourceMutationCommitted'],
+      ...projectEvents.resourceMutationResults.map(() => ['Project', 'ResourceMutationCommitted']),
+    ]);
+    expect(projectEvents.resourceMutationResults.map(({ scenario }) => scenario)).toEqual([
+      'create', 'save', 'rename', 'remove', 'undo', 'redo',
     ]);
     expect(projectEvents.events.map(parseProjectMutationEvent)).toEqual(projectEvents.events);
   });

@@ -1,11 +1,11 @@
 use crate::node_system::document::{
     HistoryEntryId, HistoryMutation, MutationConflict, MutationRequest, ProjectDocumentState,
     ProjectHistory, ProjectHistoryTransaction, ResourceDocumentPatch, ResourceKey,
-    ResourceRevision, VariableDocument, VariableResourceKey,
+    ResourceRevision, VariableDocument, VariableResourceKey, WorksheetResourceKey,
 };
 use crate::project::{
     GraphDocumentKind, GraphResourcePath, ProjectData, ProjectFilesystemCoordinator,
-    ProjectFilesystemLeaseSet, ProjectSession,
+    ProjectFilesystemLeaseSet, ProjectSession, WorksheetResourcePath,
 };
 use crate::variable::{VariableInstance, VariableScope};
 use std::collections::{BTreeMap, BTreeSet};
@@ -41,6 +41,8 @@ pub(super) struct PreparedHistoryDocuments {
         crate::variable::VariableId,
         super::project_state::VariableRevisionEntry,
     >,
+    pub after_worksheet_revisions:
+        std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
     pub transaction: ProjectHistoryTransaction,
     pub proposed_history: ProjectHistory,
     pub touched_graphs: BTreeSet<GraphResourcePath>,
@@ -65,6 +67,7 @@ pub(super) struct HistoryPreparationSnapshot {
         crate::variable::VariableId,
         super::project_state::VariableRevisionEntry,
     >,
+    worksheet_revisions: std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
     history: ProjectHistory,
     data: ProjectData,
     documents: ProjectDocumentState,
@@ -76,6 +79,7 @@ pub(super) struct TouchedHistoryResources {
     pub graphs: BTreeMap<GraphResourcePath, HistoryGraphResidency>,
     pub local_variable_owners: BTreeMap<VariableResourceKey, GraphResourcePath>,
     pub global_variables: BTreeSet<VariableResourceKey>,
+    pub worksheets: BTreeSet<WorksheetResourceKey>,
 }
 
 pub(super) fn discover_touched_resources(
@@ -88,6 +92,7 @@ pub(super) fn discover_touched_resources(
         graphs: BTreeMap::new(),
         local_variable_owners: BTreeMap::new(),
         global_variables: BTreeSet::new(),
+        worksheets: BTreeSet::new(),
     };
 
     for change in &transaction.changes {
@@ -138,7 +143,24 @@ pub(super) fn discover_touched_resources(
                     }
                 }
             }
-            ResourceKey::Database(_) | ResourceKey::Worksheet(_) => {}
+            ResourceKey::Worksheet(key) => {
+                touched.worksheets.insert(key.clone());
+            }
+            ResourceKey::Database(_) => {}
+        }
+    }
+    if let Some(lifecycle) = &transaction.resource_lifecycle {
+        let state = lifecycle
+            .forward
+            .before
+            .as_ref()
+            .or(lifecycle.forward.after.as_ref());
+        if let Some(state) = state.filter(|state| {
+            state.kind == crate::node_system::document::ResourceLifecycleKind::Worksheet
+        }) {
+            touched
+                .worksheets
+                .insert(WorksheetResourceKey(state.path.clone()));
         }
     }
 
@@ -158,11 +180,16 @@ pub(super) fn capture_history_preparation_snapshot(
         crate::variable::VariableId,
         super::project_state::VariableRevisionEntry,
     >,
+    worksheet_revisions: std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
     history: ProjectHistory,
 ) -> Result<HistoryPreparationSnapshot, String> {
     let known_graphs = graph_revisions.keys().cloned().collect();
     let touched = discover_touched_resources(&transaction, undo, &data, &known_graphs)?;
     let mut documents = super::project_state::project_documents(&data, &variable_revisions);
+    documents.worksheet_revisions = worksheet_revisions
+        .iter()
+        .map(|(path, revision)| (WorksheetResourceKey(path.as_str().into()), *revision))
+        .collect();
     retain_required_documents(&mut documents, &transaction, anchor, &touched.graphs);
     let graph_revisions = graph_revisions
         .into_iter()
@@ -175,6 +202,7 @@ pub(super) fn capture_history_preparation_snapshot(
         transaction,
         graph_revisions,
         variable_revisions,
+        worksheet_revisions,
         history,
         data,
         documents,
@@ -215,6 +243,20 @@ fn retain_required_documents(
                 .and_then(|variable| variable_owner_path(&variable))
                 .is_some_and(|path| touched_graphs.contains_key(&path))
     });
+    documents.worksheets.retain(|key, _| {
+        required.contains(&ResourceKey::Worksheet(key.clone()))
+            || transaction
+                .resource_lifecycle
+                .as_ref()
+                .is_some_and(|lifecycle| {
+                    lifecycle
+                        .forward
+                        .before
+                        .as_ref()
+                        .or(lifecycle.forward.after.as_ref())
+                        .is_some_and(|state| state.path.as_ref() == key.0.as_ref())
+                })
+    });
 }
 
 fn variable_owner_path(variable: &VariableInstance) -> Option<GraphResourcePath> {
@@ -249,6 +291,7 @@ pub(super) fn hydrate_history_preparation(
     }
     validate_loaded_graph_revisions(&snapshot)?;
     install_touched_variable_tombstones(&mut snapshot)?;
+    install_touched_worksheet_tombstone(&mut snapshot)?;
     let expected_revisions = expected_revisions(&snapshot)?;
     let current_revision =
         document_revision(&snapshot.documents, &request.resource).ok_or_else(|| {
@@ -280,6 +323,25 @@ pub(super) fn hydrate_history_preparation(
         return Err(MutationConflict::History(
             "history head changed during preparation".into(),
         ));
+    }
+    let mut after_worksheet_revisions = snapshot.worksheet_revisions.clone();
+    for key in &snapshot.touched.worksheets {
+        let path = WorksheetResourcePath::parse(key.0.as_ref())
+            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        let revision = snapshot
+            .worksheet_revisions
+            .get(&path)
+            .copied()
+            .ok_or_else(|| {
+                MutationConflict::History(
+                    format!("Worksheet '{}' has no revision authority", key.0).into(),
+                )
+            })?
+            .next();
+        after_worksheet_revisions.insert(path, revision);
+        if let Some(document) = after.worksheets.get_mut(key) {
+            document.revision = revision;
+        }
     }
 
     let mut after_data = snapshot.data;
@@ -322,6 +384,7 @@ pub(super) fn hydrate_history_preparation(
         after_data,
         loaded_after_data,
         after_variable_revisions: snapshot.variable_revisions,
+        after_worksheet_revisions,
         transaction,
         proposed_history,
         touched_graphs,
@@ -534,23 +597,77 @@ fn install_touched_variable_tombstones(
     Ok(())
 }
 
+fn install_touched_worksheet_tombstone(
+    snapshot: &mut HistoryPreparationSnapshot,
+) -> Result<(), MutationConflict> {
+    let Some(lifecycle) = &snapshot.transaction.resource_lifecycle else {
+        return Ok(());
+    };
+    let crate::node_system::document::ResourceLifecycleHistoryPayload::Worksheet { document } =
+        &lifecycle.payload
+    else {
+        return Ok(());
+    };
+    let state = lifecycle
+        .forward
+        .before
+        .as_ref()
+        .or(lifecycle.forward.after.as_ref())
+        .ok_or_else(|| MutationConflict::History("resource lifecycle patch is empty".into()))?;
+    if state.kind != crate::node_system::document::ResourceLifecycleKind::Worksheet {
+        return Err(MutationConflict::History(
+            "worksheet lifecycle payload has a non-worksheet kind".into(),
+        ));
+    }
+    let key = WorksheetResourceKey(state.path.clone());
+    if snapshot.documents.worksheets.contains_key(&key) {
+        return Ok(());
+    }
+    let path = WorksheetResourcePath::parse(state.path.as_ref())
+        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+    let revision = snapshot
+        .worksheet_revisions
+        .get(&path)
+        .copied()
+        .ok_or_else(|| {
+            MutationConflict::History(
+                format!("Worksheet '{}' has no tombstone revision", state.path).into(),
+            )
+        })?;
+    let mut document = document.clone();
+    document.revision = revision;
+    snapshot.documents.worksheets.insert(key, document);
+    Ok(())
+}
+
 fn expected_revisions(
     snapshot: &HistoryPreparationSnapshot,
 ) -> Result<BTreeMap<ResourceKey, ResourceRevision>, MutationConflict> {
-    snapshot
-        .transaction
-        .changes
-        .iter()
-        .map(|change| {
-            let revision =
-                document_revision(&snapshot.documents, &change.resource).ok_or_else(|| {
-                    MutationConflict::History(
-                        format!("touched resource {:?} was not hydrated", change.resource).into(),
-                    )
-                })?;
-            Ok((change.resource.clone(), revision))
-        })
-        .collect()
+    let mut revisions = BTreeMap::new();
+    for change in &snapshot.transaction.changes {
+        let revision =
+            document_revision(&snapshot.documents, &change.resource).ok_or_else(|| {
+                MutationConflict::History(
+                    format!("touched resource {:?} was not hydrated", change.resource).into(),
+                )
+            })?;
+        revisions.insert(change.resource.clone(), revision);
+    }
+    for key in &snapshot.touched.worksheets {
+        let path = WorksheetResourcePath::parse(key.0.as_ref())
+            .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        let revision = snapshot
+            .worksheet_revisions
+            .get(&path)
+            .copied()
+            .ok_or_else(|| {
+                MutationConflict::History(
+                    format!("Worksheet '{}' has no revision authority", key.0).into(),
+                )
+            })?;
+        revisions.insert(ResourceKey::Worksheet(key.clone()), revision);
+    }
+    Ok(revisions)
 }
 
 fn document_revision(
@@ -567,7 +684,11 @@ fn document_revision(
             .variables
             .get(key)
             .map(|document| document.revision),
-        ResourceKey::Database(_) | ResourceKey::Worksheet(_) => None,
+        ResourceKey::Worksheet(key) => documents
+            .worksheets
+            .get(key)
+            .map(|document| document.revision),
+        ResourceKey::Database(_) => None,
     }
 }
 
@@ -583,6 +704,37 @@ pub(super) fn durable_filesystem_mutations(
             relative_path,
             contents,
         });
+    }
+    for key in &prepared
+        .transaction
+        .changes
+        .iter()
+        .filter_map(|change| {
+            let ResourceKey::Worksheet(key) = &change.resource else {
+                return None;
+            };
+            Some(key.clone())
+        })
+        .collect::<BTreeSet<_>>()
+    {
+        push_worksheet_filesystem_mutation(&mut mutations, &prepared.after, key)?;
+    }
+    if let Some(lifecycle) = &prepared.transaction.resource_lifecycle {
+        if let crate::node_system::document::ResourceLifecycleHistoryPayload::Worksheet { .. } =
+            lifecycle.payload
+        {
+            let state = lifecycle
+                .forward
+                .before
+                .as_ref()
+                .or(lifecycle.forward.after.as_ref())
+                .ok_or_else(|| history_conflict("resource lifecycle patch is empty"))?;
+            push_worksheet_filesystem_mutation(
+                &mut mutations,
+                &prepared.after,
+                &WorksheetResourceKey(state.path.clone()),
+            )?;
+        }
     }
     if prepared.transaction.changes.iter().any(|change| {
         let ResourceKey::Variable(key) = &change.resource else {
@@ -607,10 +759,41 @@ pub(super) fn durable_filesystem_mutations(
     Ok(mutations)
 }
 
+fn push_worksheet_filesystem_mutation(
+    mutations: &mut Vec<crate::project::StagedFilesystemMutation>,
+    documents: &ProjectDocumentState,
+    key: &WorksheetResourceKey,
+) -> Result<(), MutationConflict> {
+    let path = WorksheetResourcePath::parse(key.0.as_ref())
+        .map_err(|error| history_conflict(error.to_string()))?;
+    if let Some(document) = documents.worksheets.get(key) {
+        let (relative_path, contents) =
+            crate::project::serialize_worksheet(&path, document).map_err(history_conflict)?;
+        mutations.push(crate::project::StagedFilesystemMutation::Write {
+            relative_path,
+            contents,
+        });
+    } else {
+        mutations.push(crate::project::StagedFilesystemMutation::RemoveFile {
+            relative_path: path.relative_path().to_path_buf(),
+        });
+    }
+    Ok(())
+}
+
 pub(super) fn validate_durable_history_document(
     relative_path: &Path,
     contents: &[u8],
 ) -> Result<(), String> {
+    if relative_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        == Some(crate::project::WORKSHEET_EXTENSION)
+    {
+        return serde_json::from_slice::<crate::project::WorksheetDocument>(contents)
+            .map(|_| ())
+            .map_err(|error| error.to_string());
+    }
     if relative_path == Path::new(super::project_io::GLOBAL_VARIABLES_FILE) {
         return super::project_io::parse_global_variables_document(contents)
             .map(|_| ())

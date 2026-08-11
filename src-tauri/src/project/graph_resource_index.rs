@@ -1,9 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use super::graph_resource_path::{GraphResourcePath, normalize_graph_resource_path};
 use super::project_error::ProjectError;
-use super::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind};
+use super::{
+    EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind, ResourceName,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScannedGraphEntry {
@@ -31,8 +33,22 @@ impl GraphResourceIndex {
 pub fn scan_graph_resource_index(root: &Path) -> Result<GraphResourceIndex, ProjectError> {
     let files = collect_graph_resource_files(root)?;
     let mut entries = Vec::with_capacity(files.len());
+    let mut portable_paths = HashSet::new();
     for (path, kind) in files {
         let path = GraphResourcePath::new(path)?;
+        let name = ResourceName::parse(path.display_name()).map_err(|error| {
+            ProjectError::InvalidProjectFormat(format!(
+                "invalid graph resource name in '{}': {error}",
+                path.as_str()
+            ))
+        })?;
+        let portable_path = format!("{kind:?}:{}", name.portable_key());
+        if !portable_paths.insert(portable_path) {
+            return Err(ProjectError::InvalidProjectFormat(format!(
+                "portable graph path collision at '{}'",
+                path.as_str()
+            )));
+        }
         entries.push(ScannedGraphEntry { path, kind });
     }
     entries.sort_by(|a, b| a.path.as_str().cmp(b.path.as_str()));
@@ -195,6 +211,19 @@ mod tests {
     #[cfg(unix)]
     fn link_file(link: &std::path::Path, target: &std::path::Path) {
         std::os::unix::fs::symlink(target, link).unwrap();
+    }
+
+    #[test]
+    fn graph_discovery_rejects_portable_casefold_collisions() {
+        let tree = TestTree::new("casefold-collision");
+        std::fs::write(tree.root.join("events/Straße.yssbi-event"), b"{}").unwrap();
+        std::fs::write(tree.root.join("events/STRASSE.yssbi-event"), b"{}").unwrap();
+
+        let error = scan_graph_resource_index(&tree.root)
+            .unwrap_err()
+            .to_string();
+
+        assert!(error.contains("portable graph path collision"), "{error}");
     }
 
     #[test]

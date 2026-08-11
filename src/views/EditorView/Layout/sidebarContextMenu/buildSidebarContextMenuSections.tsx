@@ -137,14 +137,15 @@ export function buildSidebarContextMenuSections(
     return [
       {
         items: [
-          { id: "open", label: t("contextMenu.sidebar.open"), icon: <VscChevronRight size={12} />, onClick: () => actions.openWorksheet(target.id, target.name) },
-          { id: "reveal-in-explorer", label: t("contextMenu.sidebar.revealInExplorer"), icon: <VscFolderOpened size={12} />, onClick: () => void actions.revealInExplorer({ kind: "worksheet", resourceId: target.id }) },
-          { id: "rename", label: t("contextMenu.sidebar.rename"), icon: <VscEdit size={12} />, onClick: () => actions.renameWorksheet(target.id, target.name) },
+          { id: "open", label: t("contextMenu.sidebar.open"), icon: <VscChevronRight size={12} />, onClick: () => actions.openWorksheet(target.worksheetPath, target.name) },
+          { id: "reveal-in-explorer", label: t("contextMenu.sidebar.revealInExplorer"), icon: <VscFolderOpened size={12} />, onClick: () => void actions.revealInExplorer({ kind: "worksheet", resourceId: target.worksheetPath }) },
+          { id: "rename", label: t("contextMenu.sidebar.rename"), icon: <VscEdit size={12} />, onClick: () => actions.renameWorksheetItem(target.worksheetPath, target.name) },
+          { id: "duplicate", label: t("contextMenu.sidebar.duplicate"), icon: <VscCopy size={12} />, onClick: () => void actions.duplicateWorksheet(target.worksheetPath) },
         ],
       },
       {
         items: [
-          { id: "delete", label: t("contextMenu.sidebar.delete"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteWorksheet(target.id) },
+          { id: "delete", label: t("contextMenu.sidebar.delete"), icon: <VscTrash size={12} />, danger: true, onClick: () => void actions.deleteWorksheet(target.worksheetPath) },
         ],
       },
     ];

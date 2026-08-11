@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
@@ -16,12 +16,22 @@ import {
   useDocumentStateStore,
   useResourceStore,
 } from '@/features/core/resource';
-import { prepareGraphResourceMove } from './projectPublicationMovePlan';
+import {
+  prepareGraphResourceMove,
+  prepareResourceMove,
+} from './projectPublicationMovePlan';
 import {
   commitPreparedPublication,
   prepareSynchronousPublicationCommit,
 } from './resourceMutationResult';
-import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
+import type { ResourceMoveDto, ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
+import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
+import {
+  clearWorksheetPreviewCache,
+  getCachedWorksheetPreview,
+  getWorksheetPreview,
+} from '@/services/worksheet/worksheetPreviewCache';
 
 const from = 'events/Old.yssbi-event';
 const to = 'events/New.yssbi-event';
@@ -98,6 +108,9 @@ describe('project publication graph resource move plan', () => {
     useGraphSessionStore.getState().reset();
     useEditorTabStore.setState({ registry: {}, placements: {} });
     useViewportStore.getState().clear();
+    useWorksheetStore.getState().clear();
+    useEditorStore.setState({ detailFocus: null, variablesGraphScopePath: null });
+    clearWorksheetPreviewCache();
     seedSource();
   });
 
@@ -159,7 +172,7 @@ describe('project publication graph resource move plan', () => {
         fromRevision: 0,
         toRevision: 1,
         causedBy: null,
-        payload: { kind: 'graph_resource_move', patch: { from, to } },
+        payload: { kind: 'resource_move', patch: { from, to } },
       }],
       projectionReplacements: [{ graphPath: to, projection: destination }],
       projectionStatus: { status: 'complete', expectedGraphPaths: [to] },
@@ -269,7 +282,7 @@ describe('project publication graph resource move plan', () => {
         fromRevision: 0,
         toRevision: 1,
         causedBy: null,
-        payload: { kind: 'graph_resource_move', patch: { from, to } },
+        payload: { kind: 'resource_move', patch: { from, to } },
       }],
       projectionReplacements: [
         { graphPath: to, projection: destination },
@@ -294,6 +307,237 @@ describe('project publication graph resource move plan', () => {
       title: 'Authoritative caller replacement',
     });
     expect(installed).not.toHaveProperty('subGraphPath');
+  });
+
+  it('moves opaque worksheet-owned state without requiring or changing graph state', async () => {
+    const worksheetFrom = 'opaque worksheet::old';
+    const worksheetTo = 'opaque worksheet::new';
+    const worksheetDocument = {
+      schemaVersion: 1,
+      revision: 3,
+      databaseId: 'database-1',
+      chartType: 'scatter' as const,
+      encodings: { x: 'x', y: 'y' },
+    };
+    const worksheetKey = resourceKey({ id: worksheetFrom, kind: 'worksheet' });
+    useResourceStore.getState().upsertResource({
+      id: worksheetFrom,
+      kind: 'worksheet',
+      name: 'Old worksheet',
+      uri: worksheetKey,
+      revision: 3,
+      exists: true,
+      loaded: true,
+      hasDirtyDocument: true,
+      hasStaleDocument: true,
+      hasConflictDocument: true,
+    });
+    useDocumentStateStore.getState().upsertDocument({
+      resourceKey: worksheetKey,
+      loaded: true,
+      dirty: true,
+      stale: true,
+      missing: false,
+      conflict: true,
+      version: 7,
+    });
+    useWorksheetStore.setState({
+      index: [{
+        worksheetPath: worksheetFrom,
+        name: 'Old worksheet',
+        databaseId: worksheetDocument.databaseId,
+        chartType: worksheetDocument.chartType,
+        revision: worksheetDocument.revision,
+      }],
+      documents: { [worksheetFrom]: worksheetDocument },
+    });
+    useEditorTabStore.getState().initGroupPlacement('worksheet-editor', [{
+      id: worksheetFrom,
+      component: 'WorksheetEditor',
+      type: 'worksheet',
+    }], worksheetFrom);
+    useEditorTabStore.getState().setSelectedTabIds('worksheet-editor', [worksheetFrom]);
+    useEditorStore.getState().setDetailFocus({
+      kind: 'worksheet',
+      worksheetPath: worksheetFrom,
+    });
+    await getWorksheetPreview(
+      '00000000-0000-0000-0000-000000000901',
+      worksheetFrom,
+      worksheetDocument,
+      async () => ({ kind: 'empty' }),
+    );
+    const graphStateBefore = structuredClone({
+      entities: useGraphDataStore.getState().graphEntities,
+      metadata: useGraphMetaStore.getState().graphs,
+      session: useGraphSessionStore.getState().focusedSession,
+      viewports: useViewportStore.getState().viewports,
+    });
+    const graphNotifications = { data: 0, meta: 0, session: 0, viewport: 0 };
+    const unsubscribers = [
+      useGraphDataStore.subscribe(() => { graphNotifications.data += 1; }),
+      useGraphMetaStore.subscribe(() => { graphNotifications.meta += 1; }),
+      useGraphSessionStore.subscribe(() => { graphNotifications.session += 1; }),
+      useViewportStore.subscribe(() => { graphNotifications.viewport += 1; }),
+    ];
+    const graphReads = {
+      data: vi.spyOn(useGraphDataStore, 'getState'),
+      meta: vi.spyOn(useGraphMetaStore, 'getState'),
+      session: vi.spyOn(useGraphSessionStore, 'getState'),
+      viewport: vi.spyOn(useViewportStore, 'getState'),
+    };
+    const move: ResourceMoveDto = {
+      from: worksheetFrom,
+      to: worksheetTo,
+      kind: 'worksheet',
+      name: 'New worksheet',
+    };
+    const preparedMove = prepareResourceMove(move, false);
+    const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000903',
+      projectInstanceId: '00000000-0000-0000-0000-000000000901',
+      publicationRevision: 1,
+      moves: [move],
+      deltas: [{
+        resource: { kind: 'worksheet', key: worksheetTo },
+        fromRevision: 3,
+        toRevision: 4,
+        causedBy: null,
+        payload: { kind: 'resource_move', patch: { from: worksheetFrom, to: worksheetTo } },
+      }],
+      projectionReplacements: [],
+      projectionStatus: { status: 'complete', expectedGraphPaths: [] },
+      history: { canUndo: true, canRedo: false },
+    };
+
+    const plan = prepareSynchronousPublicationCommit(result, {
+      projectInstanceId: result.projectInstanceId,
+      epoch: 1,
+      fingerprint: 'worksheet-move',
+      affectedGraphPaths: new Set(),
+      moves: [preparedMove],
+    });
+    commitPreparedPublication(plan);
+    unsubscribers.forEach((unsubscribe) => unsubscribe());
+
+    expect(plan.graphProjectionPlan).toBeUndefined();
+    expect(plan.storeState).not.toHaveProperty('graphMeta');
+    expect(plan.storeState).not.toHaveProperty('focusedSession');
+    expect(plan.storeState).not.toHaveProperty('viewports');
+    expect(graphNotifications).toEqual({ data: 0, meta: 0, session: 0, viewport: 0 });
+    expect(graphReads.data).not.toHaveBeenCalled();
+    expect(graphReads.meta).not.toHaveBeenCalled();
+    expect(graphReads.session).not.toHaveBeenCalled();
+    expect(graphReads.viewport).not.toHaveBeenCalled();
+    Object.values(graphReads).forEach((spy) => spy.mockRestore());
+
+    expect(useWorksheetStore.getState()).toMatchObject({
+      index: [{ worksheetPath: worksheetTo, name: 'New worksheet', revision: 4 }],
+      documents: { [worksheetTo]: { ...worksheetDocument, revision: 4 } },
+    });
+    expect(useResourceStore.getState().resources[
+      resourceKey({ id: worksheetTo, kind: 'worksheet' })
+    ]).toMatchObject({
+      id: worksheetTo,
+      name: 'New worksheet',
+      hasDirtyDocument: true,
+      hasStaleDocument: true,
+      hasConflictDocument: true,
+    });
+    expect(useDocumentStateStore.getState().documents[
+      resourceKey({ id: worksheetTo, kind: 'worksheet' })
+    ]).toMatchObject({ dirty: true, stale: true, conflict: true, version: 7 });
+    expect(useEditorTabStore.getState().getPlacement('worksheet-editor')).toMatchObject({
+      tabIds: [worksheetTo],
+      selectedTabIds: [worksheetTo],
+      activeTabId: worksheetTo,
+    });
+    expect(useEditorStore.getState().detailFocus).toEqual({
+      kind: 'worksheet',
+      worksheetPath: worksheetTo,
+    });
+    expect(getCachedWorksheetPreview(result.projectInstanceId, worksheetFrom, worksheetDocument))
+      .toBeUndefined();
+    expect({
+      entities: useGraphDataStore.getState().graphEntities,
+      metadata: useGraphMetaStore.getState().graphs,
+      session: useGraphSessionStore.getState().focusedSession,
+      viewports: useViewportStore.getState().viewports,
+    }).toEqual(graphStateBefore);
+  });
+
+  it.each([
+    ['loaded document', 2, 3],
+    ['resource metadata', 3, 2],
+  ])('rejects stale worksheet move %s revisions with zero effects', (_owner, documentRevision, resourceRevision) => {
+    const worksheetFrom = 'opaque worksheet::stale-old';
+    const worksheetTo = 'opaque worksheet::stale-new';
+    const worksheetKey = resourceKey({ id: worksheetFrom, kind: 'worksheet' });
+    useResourceStore.getState().upsertResource({
+      id: worksheetFrom,
+      kind: 'worksheet',
+      name: 'Stale worksheet',
+      uri: worksheetKey,
+      revision: resourceRevision,
+      exists: true,
+      loaded: true,
+      hasDirtyDocument: false,
+      hasStaleDocument: false,
+      hasConflictDocument: false,
+    });
+    useWorksheetStore.setState({
+      index: [{
+        worksheetPath: worksheetFrom,
+        name: 'Stale worksheet',
+        databaseId: 'database-1',
+        chartType: 'scatter',
+        revision: resourceRevision,
+      }],
+      documents: {
+        [worksheetFrom]: {
+          schemaVersion: 1,
+          revision: documentRevision,
+          databaseId: 'database-1',
+          chartType: 'scatter',
+          encodings: { x: 'x', y: 'y' },
+        },
+      },
+    });
+    const move: ResourceMoveDto = {
+      from: worksheetFrom,
+      to: worksheetTo,
+      kind: 'worksheet',
+      name: 'Renamed worksheet',
+    };
+    const preparedMove = prepareResourceMove(move, false);
+    const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000905',
+      projectInstanceId: '00000000-0000-0000-0000-000000000901',
+      publicationRevision: 1,
+      moves: [move],
+      deltas: [{
+        resource: { kind: 'worksheet', key: worksheetTo },
+        fromRevision: 3,
+        toRevision: 4,
+        causedBy: null,
+        payload: { kind: 'resource_move', patch: { from: worksheetFrom, to: worksheetTo } },
+      }],
+      projectionReplacements: [],
+      projectionStatus: { status: 'complete', expectedGraphPaths: [] },
+      history: { canUndo: true, canRedo: false },
+    };
+    const before = snapshotPathOwnedState();
+
+    expect(() => prepareSynchronousPublicationCommit(result, {
+      projectInstanceId: result.projectInstanceId,
+      epoch: 1,
+      fingerprint: `stale-worksheet-${_owner}`,
+      affectedGraphPaths: new Set(),
+      moves: [preparedMove],
+    })).toThrow(/worksheet move.*revision/i);
+    expect(snapshotPathOwnedState()).toEqual(before);
+    expect(useWorksheetStore.getState().documents[worksheetFrom]?.revision).toBe(documentRevision);
+    expect(useWorksheetStore.getState().documents[worksheetTo]).toBeUndefined();
   });
 
   it('rejects replacement residency mismatches and conflicting destinations before commit', () => {

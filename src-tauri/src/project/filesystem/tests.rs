@@ -4,7 +4,8 @@ use super::{
 };
 use crate::node_system::document::OperationId;
 use crate::project::{
-    PROJECT_METADATA_FILE, ProjectInstanceId, ProjectSession, ProjectTransactionContext,
+    PROJECT_METADATA_FILE, ProjectInstanceId, ProjectRecoveryMarker, ProjectSession,
+    ProjectTransactionContext,
 };
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -83,6 +84,61 @@ fn prepare_json_transaction(
     mutations: Vec<StagedFilesystemMutation>,
 ) -> Result<super::PreparedProjectFilesystemTransaction, super::ProjectFilesystemError> {
     prepare_json_transaction_with_coordinator(temporary.coordinator(), temporary, mutations)
+}
+
+fn prepare_json_transaction_with_recovery_marker(
+    temporary: &TestDirectory,
+    mutations: Vec<StagedFilesystemMutation>,
+    marker: ProjectRecoveryMarker,
+) -> Result<super::PreparedProjectFilesystemTransaction, super::ProjectFilesystemError> {
+    let root = normalized(temporary.path());
+    let lease = temporary.coordinator().acquire(root.clone()).unwrap();
+    let mut context = transaction_context(root);
+    context.recovery_marker = Some(marker);
+    ProjectFilesystemTransaction::prepare_with_validator(
+        context,
+        lease,
+        mutations,
+        |_, contents| {
+            serde_json::from_slice::<serde_json::Value>(contents)
+                .map(|_| ())
+                .map_err(|error| error.to_string())
+        },
+    )
+}
+
+fn move_recovery_copies(temporary: &TestDirectory) -> Vec<PathBuf> {
+    std::fs::read_dir(temporary.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            path.file_name()
+                .is_some_and(|name| name.to_string_lossy().contains("yssbi-move-recovery"))
+        })
+        .collect()
+}
+
+fn longest_creatable_json_filename(directory: &Path) -> String {
+    let suffix = ".json";
+    let mut longest = None;
+    for length in suffix.len() + 1..=512 {
+        let name = format!("{}{}", "s".repeat(length - suffix.len()), suffix);
+        let path = directory.join(&name);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(file) => {
+                drop(file);
+                std::fs::remove_file(&path).unwrap();
+                longest = Some(name);
+            }
+            Err(_) if longest.is_some() => break,
+            Err(_) => continue,
+        }
+    }
+    longest.expect("temporary project root must accept a source filename")
 }
 
 #[test]
@@ -471,6 +527,1072 @@ fn lifecycle_drain_waits_for_previously_admitted_multi_root_operation() {
 }
 
 #[test]
+fn file_move_commits_source_to_destination_atomically() {
+    let temporary = TestDirectory::new("transaction-file-move-commit");
+    std::fs::write(temporary.path().join("source.json"), br#"{"source":1}"#).unwrap();
+    let committed = prepare_json_transaction(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "source.json".into(),
+            to: "destination.json".into(),
+        }],
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+
+    assert!(!temporary.path().join("source.json").exists());
+    assert_eq!(
+        std::fs::read(temporary.path().join("destination.json")).unwrap(),
+        br#"{"source":1}"#
+    );
+    committed.finalize();
+}
+
+#[test]
+fn file_move_rollback_restores_source_but_retains_target_for_recovery() {
+    let temporary = TestDirectory::new("transaction-file-move-rollback");
+    let source = temporary.path().join("source.json");
+    let target = temporary.path().join("destination.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "source.json".into(),
+            to: "destination.json".into(),
+        }],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+
+    let error = committed.rollback().unwrap_err();
+
+    assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"source":1}"#);
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+}
+
+#[test]
+fn long_source_filename_does_not_expand_recovery_artifact_component() {
+    let temporary = TestDirectory::new("transaction-long-source-recovery-name");
+    let normalized_root = normalized(temporary.path());
+    let source_name = longest_creatable_json_filename(normalized_root.as_path());
+    let source = normalized_root.as_path().join(&source_name);
+    let target = normalized_root.as_path().join("target.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: PathBuf::from(&source_name),
+            to: "target.json".into(),
+        }],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+    std::fs::remove_file(&target).unwrap();
+    std::fs::write(&target, br#"{"external":1}"#).unwrap();
+
+    let error = committed.rollback().unwrap_err();
+
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+    let artifact_name = copies[0].file_name().unwrap().to_string_lossy();
+    assert!(!artifact_name.contains(&source_name));
+    assert_eq!(
+        artifact_name.len(),
+        ".yssbi-move-recovery-0-".len() + uuid::Uuid::nil().to_string().len()
+    );
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+}
+
+#[test]
+fn nested_move_always_places_recovery_artifact_in_project_root() {
+    let temporary = TestDirectory::new("transaction-nested-move-root-recovery");
+    let source_directory = temporary.path().join("dir");
+    let source = source_directory.join("source.json");
+    let target = temporary.path().join("target.json");
+    std::fs::create_dir(&source_directory).unwrap();
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "dir/source.json".into(),
+            to: "target.json".into(),
+        }],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+
+    let error = committed.rollback().unwrap_err();
+
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+    assert!(
+        !std::fs::read_dir(&source_directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .any(|name| name.to_string_lossy().contains("yssbi-move-recovery"))
+    );
+    assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"source":1}"#);
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+}
+
+#[test]
+fn mixed_move_explicit_rollback_falls_back_to_root_recovery_copy() {
+    let temporary = TestDirectory::new("transaction-mixed-move-explicit-rollback-fallback");
+    let source_directory = temporary.path().join("dir");
+    let source = source_directory.join("source.json");
+    let target = temporary.path().join("target.json");
+    std::fs::create_dir(&source_directory).unwrap();
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::MoveFile {
+                from: "dir/source.json".into(),
+                to: "target.json".into(),
+            },
+            StagedFilesystemMutation::RemoveDirectoryIfEmpty {
+                relative_path: "dir".into(),
+            },
+        ],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+    assert!(!source_directory.exists());
+    let external_child = source_directory.join("external.json");
+    std::fs::create_dir(&source_directory).unwrap();
+    std::fs::write(&external_child, br#"{"external":1}"#).unwrap();
+
+    let error = committed.rollback().unwrap_err();
+
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+    assert!(!source.exists());
+    assert_eq!(
+        std::fs::read(&external_child).unwrap(),
+        br#"{"external":1}"#
+    );
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"source":1}"#);
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+}
+
+#[test]
+fn mixed_move_commit_failure_retains_root_recovery_copy_for_applied_prefix() {
+    let temporary = TestDirectory::new("transaction-mixed-move-commit-failure-fallback");
+    let source_directory = temporary.path().join("dir");
+    let source = source_directory.join("source.json");
+    let target = temporary.path().join("target.json");
+    std::fs::create_dir(&source_directory).unwrap();
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let prepared = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::MoveFile {
+                from: "dir/source.json".into(),
+                to: "target.json".into(),
+            },
+            StagedFilesystemMutation::RemoveDirectoryIfEmpty {
+                relative_path: "dir".into(),
+            },
+            StagedFilesystemMutation::Write {
+                relative_path: "after.json".into(),
+                contents: br#"{"after":1}"#.to_vec(),
+            },
+        ],
+        marker.clone(),
+    )
+    .unwrap();
+    std::fs::remove_file(prepared.staging_root().join("prepared/after.json")).unwrap();
+
+    let error = prepared.commit().unwrap_err();
+
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+    assert!(!source.exists());
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"source":1}"#);
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+}
+
+#[test]
+fn mixed_move_drop_unwind_marks_recovery_and_retains_root_copy() {
+    let temporary = TestDirectory::new("transaction-mixed-move-drop-fallback");
+    let source_directory = temporary.path().join("dir");
+    let source = source_directory.join("source.json");
+    let target = temporary.path().join("target.json");
+    std::fs::create_dir(&source_directory).unwrap();
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::MoveFile {
+                from: "dir/source.json".into(),
+                to: "target.json".into(),
+            },
+            StagedFilesystemMutation::RemoveDirectoryIfEmpty {
+                relative_path: "dir".into(),
+            },
+        ],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+    assert!(!source_directory.exists());
+    let external_child = source_directory.join("external.json");
+    std::fs::create_dir(&source_directory).unwrap();
+    std::fs::write(&external_child, br#"{"external":1}"#).unwrap();
+
+    drop(committed);
+
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+    assert!(!source.exists());
+    assert_eq!(
+        std::fs::read(&external_child).unwrap(),
+        br#"{"external":1}"#
+    );
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"source":1}"#);
+    assert!(marker.error().is_some());
+}
+
+#[test]
+fn file_move_publication_rollback_preserves_replaced_target_and_marks_recovery() {
+    let temporary = TestDirectory::new("transaction-file-move-publication-rollback-race");
+    let source = temporary.path().join("source.json");
+    let target = temporary.path().join("destination.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "source.json".into(),
+            to: "destination.json".into(),
+        }],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+    let target_for_hook = target.clone();
+    temporary
+        .coordinator()
+        .set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
+            std::fs::remove_file(&target_for_hook).unwrap();
+            std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
+        })));
+
+    let error = committed.rollback().unwrap_err();
+
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
+    assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
+    assert_eq!(error.code(), "transaction_rollback_failed");
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+}
+
+#[test]
+fn file_move_rollback_does_not_overwrite_existing_source() {
+    let temporary = TestDirectory::new("transaction-file-move-existing-source");
+    let source = temporary.path().join("source.json");
+    let target = temporary.path().join("destination.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "source.json".into(),
+            to: "destination.json".into(),
+        }],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+    std::fs::write(&source, br#"{"external":1}"#).unwrap();
+
+    let error = committed.rollback().unwrap_err();
+
+    assert_eq!(std::fs::read(&source).unwrap(), br#"{"external":1}"#);
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"source":1}"#);
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+}
+
+#[test]
+fn file_move_rollback_fault_retains_original_bytes_in_recovery_copy() {
+    let temporary = TestDirectory::new("transaction-file-move-rollback-fault-copy");
+    let source = temporary.path().join("source.json");
+    let target = temporary.path().join("destination.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "source.json".into(),
+            to: "destination.json".into(),
+        }],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+    let target_for_hook = target.clone();
+    temporary
+        .coordinator()
+        .set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
+            std::fs::remove_file(&target_for_hook).unwrap();
+            std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
+        })));
+    temporary
+        .coordinator()
+        .set_project_filesystem_rollback_fault(true);
+
+    let error = committed.rollback().unwrap_err();
+
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
+    assert!(!source.exists());
+    assert_eq!(error.code(), "transaction_rollback_failed");
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+}
+
+#[test]
+fn case_only_file_move_rollback_retains_target_and_recovery_copy() {
+    let temporary = TestDirectory::new("transaction-case-only-file-move-rollback");
+    let source = temporary.path().join("Report.json");
+    let target = temporary.path().join("report.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "Report.json".into(),
+            to: "report.json".into(),
+        }],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+
+    let journal = format!("{committed:?}");
+    let error = committed.rollback().unwrap_err();
+
+    assert!(journal.contains("Report.json"));
+    assert!(journal.contains("report.json"));
+    assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"source":1}"#);
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+}
+
+#[test]
+fn case_only_publication_rollback_preserves_replaced_target() {
+    let temporary = TestDirectory::new("transaction-case-only-publication-rollback-race");
+    let source = temporary.path().join("Report.json");
+    let target = temporary.path().join("report.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let case_sensitive = !target.exists();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "Report.json".into(),
+            to: "report.json".into(),
+        }],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+    let target_for_hook = target.clone();
+    temporary
+        .coordinator()
+        .set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
+            std::fs::remove_file(&target_for_hook).unwrap();
+            std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
+        })));
+
+    let error = committed.rollback().unwrap_err();
+
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
+    if case_sensitive {
+        assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
+    } else {
+        assert_eq!(std::fs::read(&source).unwrap(), br#"{"external":1}"#);
+    }
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+    let copies = move_recovery_copies(&temporary);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
+}
+
+#[test]
+fn case_only_file_move_failed_restoration_preserves_external_paths_for_recovery() {
+    let temporary = TestDirectory::new("transaction-case-only-file-move-second-leg");
+    let source = temporary.path().join("Report.json");
+    let target = temporary.path().join("report.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let hook_source = source.clone();
+    let hook_target = target.clone();
+    temporary
+        .coordinator()
+        .set_before_remove_mutation_hook(Some(Arc::new(move || {
+            std::fs::create_dir(&hook_source).unwrap();
+            if !hook_target.exists() {
+                std::fs::create_dir(&hook_target).unwrap();
+            }
+        })));
+
+    let error = prepare_json_transaction(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "Report.json".into(),
+            to: "report.json".into(),
+        }],
+    )
+    .unwrap()
+    .commit()
+    .unwrap_err();
+
+    assert_eq!(error.code(), "transaction_rollback_failed");
+    assert!(error.recovery_required());
+    assert!(source.is_dir());
+    assert!(target.is_dir());
+    let temporary_move = std::fs::read_dir(temporary.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            path.file_name()
+                .is_some_and(|name| name.to_string_lossy().contains("yssbi-move"))
+        })
+        .expect("recovery must retain the internal source file");
+    assert_eq!(std::fs::read(temporary_move).unwrap(), br#"{"source":1}"#);
+}
+
+#[test]
+fn case_only_file_move_uses_internal_temporary_path() {
+    let temporary = TestDirectory::new("transaction-case-only-file-move");
+    std::fs::write(temporary.path().join("Report.json"), br#"{"source":1}"#).unwrap();
+    let mutation = StagedFilesystemMutation::MoveFile {
+        from: "Report.json".into(),
+        to: "report.json".into(),
+    };
+    let public_debug = format!("{mutation:?}");
+    let committed = prepare_json_transaction(&temporary, vec![mutation])
+        .unwrap()
+        .commit()
+        .unwrap();
+    committed.finalize();
+
+    let names = std::fs::read_dir(temporary.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    assert!(names.iter().any(|name| name == "report.json"));
+    assert!(!names.iter().any(|name| name == "Report.json"));
+    assert!(!names.iter().any(|name| name.contains("yssbi-move")));
+    assert_eq!(
+        public_debug,
+        "MoveFile { from: \"Report.json\", to: \"report.json\" }"
+    );
+}
+
+#[test]
+fn file_move_preserves_target_created_after_prepare_and_restores_source() {
+    let temporary = TestDirectory::new("transaction-file-move-commit-target-race");
+    let source = temporary.path().join("source.json");
+    let target = temporary.path().join("destination.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let prepared = prepare_json_transaction(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "source.json".into(),
+            to: "destination.json".into(),
+        }],
+    )
+    .unwrap();
+    let target_for_hook = target.clone();
+    temporary
+        .coordinator()
+        .set_before_remove_mutation_hook(Some(Arc::new(move || {
+            std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
+        })));
+
+    let error = prepared.commit().unwrap_err();
+
+    assert_eq!(error.code(), "transaction_commit_failed");
+    assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
+}
+
+#[test]
+fn case_only_file_move_preserves_target_created_between_temporary_legs() {
+    let temporary = TestDirectory::new("transaction-case-only-file-move-target-race");
+    let source = temporary.path().join("Report.json");
+    let target = temporary.path().join("report.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    if target.exists() {
+        return;
+    }
+    let prepared = prepare_json_transaction(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "Report.json".into(),
+            to: "report.json".into(),
+        }],
+    )
+    .unwrap();
+    let target_for_hook = target.clone();
+    temporary
+        .coordinator()
+        .set_before_remove_mutation_hook(Some(Arc::new(move || {
+            std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
+        })));
+
+    let error = prepared.commit().unwrap_err();
+
+    assert_eq!(error.code(), "transaction_commit_failed");
+    assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
+    let names = std::fs::read_dir(temporary.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    assert!(!names.iter().any(|name| name.contains("yssbi-move")));
+}
+
+#[test]
+fn file_move_source_removal_failure_retains_target_and_marks_recovery() {
+    let temporary = TestDirectory::new("transaction-file-move-source-removal-failure");
+    let source = temporary.path().join("source.json");
+    let target = temporary.path().join("destination.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let prepared = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "source.json".into(),
+            to: "destination.json".into(),
+        }],
+        marker.clone(),
+    )
+    .unwrap();
+    temporary
+        .coordinator()
+        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::MoveSourceRemoval));
+
+    let error = prepared.commit().unwrap_err();
+
+    assert_eq!(error.code(), "transaction_rollback_failed");
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
+    assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"source":1}"#);
+}
+
+#[test]
+fn file_move_cleanup_never_deletes_target_replaced_after_identity_check() {
+    let temporary = TestDirectory::new("transaction-file-move-cleanup-target-race");
+    let source = temporary.path().join("source.json");
+    let target = temporary.path().join("destination.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let prepared = prepare_json_transaction(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "source.json".into(),
+            to: "destination.json".into(),
+        }],
+    )
+    .unwrap();
+    temporary
+        .coordinator()
+        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::MoveSourceRemoval));
+    let target_for_hook = target.clone();
+    temporary
+        .coordinator()
+        .set_before_move_target_delete_hook(Some(Arc::new(move || {
+            std::fs::remove_file(&target_for_hook).unwrap();
+            std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
+        })));
+
+    let error = prepared.commit().unwrap_err();
+
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
+    assert_eq!(error.code(), "transaction_rollback_failed");
+    assert!(error.recovery_required());
+    assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
+}
+
+#[test]
+fn file_move_target_cleanup_failure_requires_recovery() {
+    let temporary = TestDirectory::new("transaction-file-move-target-cleanup-failure");
+    let source = temporary.path().join("source.json");
+    let target = temporary.path().join("destination.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    let prepared = prepare_json_transaction(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "source.json".into(),
+            to: "destination.json".into(),
+        }],
+    )
+    .unwrap();
+    temporary
+        .coordinator()
+        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::MoveTargetCleanup));
+
+    let error = prepared.commit().unwrap_err();
+
+    assert_eq!(error.code(), "transaction_rollback_failed");
+    assert!(error.recovery_required());
+    assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"source":1}"#);
+}
+
+#[test]
+fn case_only_move_restoration_failure_preserves_external_target_and_requires_recovery() {
+    let temporary = TestDirectory::new("transaction-case-only-move-restoration-failure");
+    let source = temporary.path().join("Report.json");
+    let target = temporary.path().join("report.json");
+    std::fs::write(&source, br#"{"source":1}"#).unwrap();
+    if target.exists() {
+        return;
+    }
+    let prepared = prepare_json_transaction(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "Report.json".into(),
+            to: "report.json".into(),
+        }],
+    )
+    .unwrap();
+    let target_for_hook = target.clone();
+    temporary
+        .coordinator()
+        .set_before_remove_mutation_hook(Some(Arc::new(move || {
+            std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
+        })));
+    temporary
+        .coordinator()
+        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::MoveRestoration));
+
+    let error = prepared.commit().unwrap_err();
+
+    assert_eq!(error.code(), "transaction_rollback_failed");
+    assert!(error.recovery_required());
+    assert!(!source.exists());
+    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
+    let temporary_move = std::fs::read_dir(temporary.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| {
+            path.file_name()
+                .is_some_and(|name| name.to_string_lossy().contains("yssbi-move"))
+        })
+        .expect("recovery must retain the internal source file");
+    assert_eq!(std::fs::read(temporary_move).unwrap(), br#"{"source":1}"#);
+}
+
+#[test]
+fn file_move_rejects_existing_portable_conflict() {
+    let temporary = TestDirectory::new("transaction-file-move-portable-conflict");
+    std::fs::write(temporary.path().join("source.json"), br#"{"source":1}"#).unwrap();
+    std::fs::write(temporary.path().join("report.json"), br#"{"conflict":1}"#).unwrap();
+
+    let error = prepare_json_transaction(
+        &temporary,
+        vec![StagedFilesystemMutation::MoveFile {
+            from: "source.json".into(),
+            to: "Report.json".into(),
+        }],
+    )
+    .unwrap_err();
+
+    assert_eq!(error.code(), "transaction_prepare_failed");
+    assert!(error.to_string().contains("portable conflict"));
+    assert!(temporary.path().join("source.json").is_file());
+    assert!(temporary.path().join("report.json").is_file());
+}
+
+#[test]
+fn prepare_rejects_generic_portable_alias_of_move_target() {
+    let temporary = TestDirectory::new("transaction-move-target-generic-portable-alias");
+    std::fs::write(temporary.path().join("source.json"), br#"{"source":1}"#).unwrap();
+
+    let error = prepare_json_transaction(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::MoveFile {
+                from: "source.json".into(),
+                to: "Report.json".into(),
+            },
+            StagedFilesystemMutation::RemoveFile {
+                relative_path: "report.json".into(),
+            },
+        ],
+    )
+    .unwrap_err();
+
+    assert_eq!(error.code(), "transaction_prepare_failed");
+    assert!(error.to_string().contains("portable path"));
+    assert_eq!(
+        std::fs::read(temporary.path().join("source.json")).unwrap(),
+        br#"{"source":1}"#
+    );
+}
+
+#[test]
+fn prepare_rejects_generic_portable_alias_of_move_source() {
+    let temporary = TestDirectory::new("transaction-move-source-generic-portable-alias");
+    std::fs::write(temporary.path().join("Report.json"), br#"{"source":1}"#).unwrap();
+
+    let error = prepare_json_transaction(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::MoveFile {
+                from: "Report.json".into(),
+                to: "destination.json".into(),
+            },
+            StagedFilesystemMutation::Write {
+                relative_path: "report.json".into(),
+                contents: br#"{"generic":1}"#.to_vec(),
+            },
+        ],
+    )
+    .unwrap_err();
+
+    assert_eq!(error.code(), "transaction_prepare_failed");
+    assert!(error.to_string().contains("portable path"));
+    assert_eq!(
+        std::fs::read(temporary.path().join("Report.json")).unwrap(),
+        br#"{"source":1}"#
+    );
+}
+
+#[test]
+fn prepare_allows_one_case_only_portable_rewrite_pair() {
+    let temporary = TestDirectory::new("transaction-case-only-portable-rewrite-pair");
+    std::fs::write(temporary.path().join("report.json"), br#"{"source":1}"#).unwrap();
+
+    let prepared = prepare_json_transaction(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::Write {
+                relative_path: "Report.json".into(),
+                contents: br#"{"rewritten":1}"#.to_vec(),
+            },
+            StagedFilesystemMutation::Write {
+                relative_path: "unrelated.json".into(),
+                contents: br#"{"unrelated":1}"#.to_vec(),
+            },
+            StagedFilesystemMutation::RemoveFile {
+                relative_path: "report.json".into(),
+            },
+        ],
+    )
+    .unwrap();
+
+    assert!(
+        prepared
+            .staging_root()
+            .join("prepared/Report.json")
+            .is_file()
+    );
+    assert!(
+        prepared
+            .staging_root()
+            .join("prepared/unrelated.json")
+            .is_file()
+    );
+}
+
+#[test]
+fn prepare_rejects_other_portable_rewrite_pair_shapes() {
+    let cases = [
+        (
+            "same-path",
+            vec![
+                StagedFilesystemMutation::Write {
+                    relative_path: "report.json".into(),
+                    contents: br#"{"rewritten":1}"#.to_vec(),
+                },
+                StagedFilesystemMutation::RemoveFile {
+                    relative_path: "report.json".into(),
+                },
+            ],
+        ),
+        (
+            "reverse-order",
+            vec![
+                StagedFilesystemMutation::RemoveFile {
+                    relative_path: "report.json".into(),
+                },
+                StagedFilesystemMutation::Write {
+                    relative_path: "Report.json".into(),
+                    contents: br#"{"rewritten":1}"#.to_vec(),
+                },
+            ],
+        ),
+        (
+            "two-writes",
+            vec![
+                StagedFilesystemMutation::Write {
+                    relative_path: "Report.json".into(),
+                    contents: br#"{"rewritten":1}"#.to_vec(),
+                },
+                StagedFilesystemMutation::Write {
+                    relative_path: "report.json".into(),
+                    contents: br#"{"rewritten":2}"#.to_vec(),
+                },
+            ],
+        ),
+        (
+            "two-removes",
+            vec![
+                StagedFilesystemMutation::RemoveFile {
+                    relative_path: "Report.json".into(),
+                },
+                StagedFilesystemMutation::RemoveFile {
+                    relative_path: "report.json".into(),
+                },
+            ],
+        ),
+        (
+            "third-owner",
+            vec![
+                StagedFilesystemMutation::Write {
+                    relative_path: "Report.json".into(),
+                    contents: br#"{"rewritten":1}"#.to_vec(),
+                },
+                StagedFilesystemMutation::RemoveFile {
+                    relative_path: "report.json".into(),
+                },
+                StagedFilesystemMutation::CreateDirectory {
+                    relative_path: "REPORT.JSON".into(),
+                },
+            ],
+        ),
+    ];
+
+    for (name, mutations) in cases {
+        let temporary =
+            TestDirectory::new(&format!("transaction-portable-rewrite-pair-reject-{name}"));
+        std::fs::write(temporary.path().join("report.json"), br#"{"source":1}"#).unwrap();
+
+        let error = prepare_json_transaction(&temporary, mutations).unwrap_err();
+
+        assert_eq!(error.code(), "transaction_prepare_failed", "{name}");
+        assert!(error.to_string().contains("portable path"), "{name}");
+    }
+}
+
+#[test]
+fn portable_owner_matrix_rejects_generic_alias_before_move() {
+    let temporary = TestDirectory::new("transaction-portable-owner-generic-before-move");
+    std::fs::write(temporary.path().join("source.json"), br#"{"source":1}"#).unwrap();
+
+    let error = prepare_json_transaction(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::Write {
+                relative_path: "Report.json".into(),
+                contents: br#"{"generic":1}"#.to_vec(),
+            },
+            StagedFilesystemMutation::MoveFile {
+                from: "source.json".into(),
+                to: "report.json".into(),
+            },
+        ],
+    )
+    .unwrap_err();
+
+    assert_eq!(error.code(), "transaction_prepare_failed");
+    assert!(error.to_string().contains("portable path"));
+}
+
+#[test]
+fn portable_owner_matrix_rejects_move_after_completed_rewrite_pair() {
+    let temporary = TestDirectory::new("transaction-portable-owner-pair-before-move");
+    std::fs::write(temporary.path().join("report.json"), br#"{"old":1}"#).unwrap();
+    std::fs::write(temporary.path().join("source.json"), br#"{"source":1}"#).unwrap();
+
+    let error = prepare_json_transaction(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::Write {
+                relative_path: "Report.json".into(),
+                contents: br#"{"rewritten":1}"#.to_vec(),
+            },
+            StagedFilesystemMutation::RemoveFile {
+                relative_path: "report.json".into(),
+            },
+            StagedFilesystemMutation::MoveFile {
+                from: "source.json".into(),
+                to: "REPORT.JSON".into(),
+            },
+        ],
+    )
+    .unwrap_err();
+
+    assert_eq!(error.code(), "transaction_prepare_failed");
+    assert!(error.to_string().contains("portable path"));
+}
+
+#[test]
+fn portable_owner_matrix_allows_two_independent_rewrite_pairs() {
+    let temporary = TestDirectory::new("transaction-portable-owner-two-pairs");
+    std::fs::write(temporary.path().join("report.json"), br#"{"old":1}"#).unwrap();
+    std::fs::write(temporary.path().join("budget.json"), br#"{"old":2}"#).unwrap();
+
+    let prepared = prepare_json_transaction(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::Write {
+                relative_path: "Report.json".into(),
+                contents: br#"{"rewritten":1}"#.to_vec(),
+            },
+            StagedFilesystemMutation::Write {
+                relative_path: "Budget.json".into(),
+                contents: br#"{"rewritten":2}"#.to_vec(),
+            },
+            StagedFilesystemMutation::RemoveFile {
+                relative_path: "report.json".into(),
+            },
+            StagedFilesystemMutation::RemoveFile {
+                relative_path: "budget.json".into(),
+            },
+        ],
+    )
+    .unwrap();
+
+    assert!(
+        prepared
+            .staging_root()
+            .join("prepared/Report.json")
+            .is_file()
+    );
+    assert!(
+        prepared
+            .staging_root()
+            .join("prepared/Budget.json")
+            .is_file()
+    );
+}
+
+#[test]
+fn portable_owner_matrix_allows_unicode_full_casefold_rewrite_pair() {
+    let temporary = TestDirectory::new("transaction-portable-owner-unicode-pair");
+    std::fs::write(temporary.path().join("STRASSE.json"), br#"{"source":1}"#).unwrap();
+
+    let prepared = prepare_json_transaction(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::Write {
+                relative_path: "Straße.json".into(),
+                contents: br#"{"rewritten":1}"#.to_vec(),
+            },
+            StagedFilesystemMutation::RemoveFile {
+                relative_path: "STRASSE.json".into(),
+            },
+        ],
+    )
+    .unwrap();
+
+    assert!(
+        prepared
+            .staging_root()
+            .join("prepared/Straße.json")
+            .is_file()
+    );
+}
+
+#[test]
+fn portable_owner_matrix_rejects_unicode_move_alias_in_both_orders() {
+    let cases = [
+        (
+            "generic-before-move",
+            vec![
+                StagedFilesystemMutation::Write {
+                    relative_path: "Straße.json".into(),
+                    contents: br#"{"generic":1}"#.to_vec(),
+                },
+                StagedFilesystemMutation::MoveFile {
+                    from: "source.json".into(),
+                    to: "STRASSE.json".into(),
+                },
+            ],
+        ),
+        (
+            "move-before-generic",
+            vec![
+                StagedFilesystemMutation::MoveFile {
+                    from: "source.json".into(),
+                    to: "Straße.json".into(),
+                },
+                StagedFilesystemMutation::RemoveFile {
+                    relative_path: "STRASSE.json".into(),
+                },
+            ],
+        ),
+    ];
+
+    for (name, mutations) in cases {
+        let temporary =
+            TestDirectory::new(&format!("transaction-portable-owner-unicode-move-{name}"));
+        std::fs::write(temporary.path().join("source.json"), br#"{"source":1}"#).unwrap();
+
+        let error = prepare_json_transaction(&temporary, mutations).unwrap_err();
+
+        assert_eq!(error.code(), "transaction_prepare_failed", "{name}");
+        assert!(error.to_string().contains("portable path"), "{name}");
+    }
+}
+
+#[test]
 fn prepare_serializes_every_document_before_touching_live_files() {
     let temporary = TestDirectory::new("transaction-prepare-atomic");
     std::fs::write(temporary.path().join("first.json"), br#"{"live":1}"#).unwrap();
@@ -541,6 +1663,45 @@ fn commit_failure_restores_only_touched_files_and_directory_topology() {
         std::fs::read(temporary.path().join("unrelated.txt")).unwrap(),
         b"preserve"
     );
+}
+
+#[test]
+fn generic_directory_topology_check_precedes_destructive_child_restore() {
+    let temporary = TestDirectory::new("transaction-generic-directory-topology-order");
+    let directory = temporary.path().join("dir");
+    let child = directory.join("child.json");
+    let external = directory.join("external.json");
+    std::fs::create_dir(&directory).unwrap();
+    std::fs::write(&child, br#"{"original":1}"#).unwrap();
+    let marker = ProjectRecoveryMarker::default();
+    let committed = prepare_json_transaction_with_recovery_marker(
+        &temporary,
+        vec![
+            StagedFilesystemMutation::RemoveFile {
+                relative_path: "dir/child.json".into(),
+            },
+            StagedFilesystemMutation::RemoveDirectoryIfEmpty {
+                relative_path: "dir".into(),
+            },
+        ],
+        marker.clone(),
+    )
+    .unwrap()
+    .commit()
+    .unwrap();
+    std::fs::create_dir(&directory).unwrap();
+    std::fs::write(&child, br#"{"external_child":1}"#).unwrap();
+    std::fs::write(&external, br#"{"external_extra":1}"#).unwrap();
+
+    let error = committed.rollback().unwrap_err();
+
+    assert_eq!(std::fs::read(&child).unwrap(), br#"{"external_child":1}"#);
+    assert_eq!(
+        std::fs::read(&external).unwrap(),
+        br#"{"external_extra":1}"#
+    );
+    assert!(error.recovery_required());
+    assert!(marker.error().is_some());
 }
 
 #[test]

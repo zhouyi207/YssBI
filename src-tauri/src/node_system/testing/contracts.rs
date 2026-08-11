@@ -3,7 +3,9 @@ use crate::commands::command_trace::TraceSpanDto;
 use crate::commands::node_system_execution_dto::{
     EXECUTION_DEMAND_DTO_WIRE_TYPES, ExecutionDemandDto, RUN_EVENT_KIND_DTO_WIRE_TYPES, RunEventDto,
 };
-use crate::event::{Event, EventProject, ProjectionStatusDto, ResourceMutationResultDto};
+use crate::event::{
+    Event, EventProject, ProjectionStatusDto, ResourceMoveDto, ResourceMutationResultDto,
+};
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CorrelationContext, EditorGraphProjectionDto, MonotonicTimestamp,
     ProjectSessionId, ResourceVersionSet, RunId, SpanId, SpanKind, SpanOutcome, TraceSpan,
@@ -17,7 +19,9 @@ use crate::node_system::document::{
     DocumentNode, FunctionDocument, FunctionDocumentPatch, FunctionParameter, FunctionParameterId,
     FunctionResourceKey, FunctionSignature, GraphDeltaEvent, GraphDocument, GraphDocumentPatch,
     GraphResourcePath, GraphRevision, HistoryStatusDto, MutationRequest, NodeId, NodePosition,
-    OperationId, PortAddress, PortInstanceId, ResourceKey, ResourceRevision,
+    OperationId, PortAddress, PortInstanceId, ResourceDocumentPatch, ResourceKey,
+    ResourceLifecycleKind, ResourceLifecyclePatch, ResourceLifecycleState, ResourcePathMovePatch,
+    ResourceRevision, WorksheetDocumentPatch, WorksheetDocumentState, WorksheetResourceKey,
 };
 use crate::node_system::plan::{EXECUTION_DEMAND_VARIANT_COUNT, ExecutionDemand, GraphOutputRef};
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
@@ -379,6 +383,43 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
     })
 }
 
+fn worksheet_state(
+    database_id: &str,
+    chart_type: &str,
+    x: &str,
+    y: &str,
+) -> WorksheetDocumentState {
+    WorksheetDocumentState {
+        database_id: database_id.into(),
+        chart_type: chart_type.into(),
+        encodings: crate::project::WorksheetEncodings {
+            x: Some(x.into()),
+            y: Some(y.into()),
+        },
+    }
+}
+
+fn worksheet_result(
+    operation: u128,
+    publication_revision: u64,
+    moves: Vec<ResourceMoveDto>,
+    deltas: Vec<crate::node_system::document::ResourceDeltaEvent>,
+    history: HistoryStatusDto,
+) -> ResourceMutationResultDto {
+    ResourceMutationResultDto {
+        operation_id: OperationId::from_uuid(Uuid::from_u128(operation)),
+        project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
+        publication_revision,
+        moves,
+        deltas,
+        projection_replacements: Vec::new(),
+        projection_status: ProjectionStatusDto::Complete {
+            expected_graph_paths: Vec::new(),
+        },
+        history,
+    }
+}
+
 fn project_events_contract() -> Value {
     let operation_id = OperationId::from_uuid(Uuid::from_u128(4));
     let graph_delta = Event::Project(EventProject::GraphDelta {
@@ -391,32 +432,192 @@ fn project_events_contract() -> Value {
             payload: GraphDocumentPatch::new([]),
         },
     });
-    let resource_mutation = Event::Project(EventProject::ResourceMutationCommitted {
-        result: ResourceMutationResultDto {
-            operation_id,
-            project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
-            publication_revision: 11,
-            moves: Vec::new(),
-            deltas: Vec::new(),
-            worksheet_deltas: Vec::new(),
-            projection_replacements: Vec::new(),
-            projection_status: ProjectionStatusDto::Complete {
-                expected_graph_paths: Vec::new(),
-            },
-            history: HistoryStatusDto {
-                can_undo: true,
-                can_redo: false,
-            },
-        },
-    });
+    let created_path = "worksheets/Sales Overview.yssbi-worksheet";
+    let renamed_path = "worksheets/Regional Sales.yssbi-worksheet";
+    let initial = worksheet_state("database-sales", "scatter", "region", "revenue");
+    let saved = worksheet_state("database-sales", "line", "month", "revenue");
+    let create_operation = OperationId::from_uuid(Uuid::from_u128(0x901));
+    let save_operation = OperationId::from_uuid(Uuid::from_u128(0x902));
+    let rename_operation = OperationId::from_uuid(Uuid::from_u128(0x903));
+    let remove_operation = OperationId::from_uuid(Uuid::from_u128(0x904));
+    let undo_operation = OperationId::from_uuid(Uuid::from_u128(0x905));
+    let redo_operation = OperationId::from_uuid(Uuid::from_u128(0x906));
+    let lifecycle_state = |revision, path: &str, name: &str| ResourceLifecycleState {
+        revision: ResourceRevision::new(revision),
+        path: path.into(),
+        kind: ResourceLifecycleKind::Worksheet,
+        name: name.into(),
+    };
+    let delta = |operation_id, key: &str, from_revision, to_revision, payload| {
+        crate::node_system::document::ResourceDeltaEvent {
+            resource: ResourceKey::Worksheet(WorksheetResourceKey(key.into())),
+            from_revision: ResourceRevision::new(from_revision),
+            to_revision: ResourceRevision::new(to_revision),
+            caused_by: Some(operation_id),
+            payload,
+        }
+    };
+    let results = vec![
+        (
+            "create",
+            worksheet_result(
+                0x901,
+                1,
+                Vec::new(),
+                vec![delta(
+                    create_operation,
+                    created_path,
+                    0,
+                    0,
+                    ResourceDocumentPatch::ResourceLifecycle(ResourceLifecyclePatch {
+                        before: None,
+                        after: Some(lifecycle_state(0, created_path, "Sales Overview")),
+                    }),
+                )],
+                HistoryStatusDto {
+                    can_undo: true,
+                    can_redo: false,
+                },
+            ),
+        ),
+        (
+            "save",
+            worksheet_result(
+                0x902,
+                2,
+                Vec::new(),
+                vec![delta(
+                    save_operation,
+                    created_path,
+                    0,
+                    1,
+                    ResourceDocumentPatch::Worksheet(WorksheetDocumentPatch {
+                        before: initial.clone(),
+                        after: saved.clone(),
+                    }),
+                )],
+                HistoryStatusDto {
+                    can_undo: true,
+                    can_redo: false,
+                },
+            ),
+        ),
+        (
+            "rename",
+            worksheet_result(
+                0x903,
+                3,
+                vec![ResourceMoveDto {
+                    from: created_path.into(),
+                    to: renamed_path.into(),
+                    kind: ResourceLifecycleKind::Worksheet,
+                    name: "Regional Sales".into(),
+                }],
+                vec![delta(
+                    rename_operation,
+                    renamed_path,
+                    1,
+                    2,
+                    ResourceDocumentPatch::ResourceMove(ResourcePathMovePatch {
+                        from: created_path.into(),
+                        to: renamed_path.into(),
+                    }),
+                )],
+                HistoryStatusDto {
+                    can_undo: true,
+                    can_redo: false,
+                },
+            ),
+        ),
+        (
+            "remove",
+            worksheet_result(
+                0x904,
+                4,
+                Vec::new(),
+                vec![delta(
+                    remove_operation,
+                    renamed_path,
+                    2,
+                    3,
+                    ResourceDocumentPatch::ResourceLifecycle(ResourceLifecyclePatch {
+                        before: Some(lifecycle_state(2, renamed_path, "Regional Sales")),
+                        after: None,
+                    }),
+                )],
+                HistoryStatusDto {
+                    can_undo: true,
+                    can_redo: false,
+                },
+            ),
+        ),
+        (
+            "undo",
+            worksheet_result(
+                0x905,
+                5,
+                Vec::new(),
+                vec![delta(
+                    undo_operation,
+                    renamed_path,
+                    3,
+                    4,
+                    ResourceDocumentPatch::ResourceLifecycle(ResourceLifecyclePatch {
+                        before: None,
+                        after: Some(lifecycle_state(4, renamed_path, "Regional Sales")),
+                    }),
+                )],
+                HistoryStatusDto {
+                    can_undo: true,
+                    can_redo: true,
+                },
+            ),
+        ),
+        (
+            "redo",
+            worksheet_result(
+                0x906,
+                6,
+                Vec::new(),
+                vec![delta(
+                    redo_operation,
+                    renamed_path,
+                    4,
+                    5,
+                    ResourceDocumentPatch::ResourceLifecycle(ResourceLifecyclePatch {
+                        before: Some(lifecycle_state(4, renamed_path, "Regional Sales")),
+                        after: None,
+                    }),
+                )],
+                HistoryStatusDto {
+                    can_undo: true,
+                    can_redo: false,
+                },
+            ),
+        ),
+    ];
+    let direct_results = results
+        .iter()
+        .map(|(scenario, result)| json!({ "scenario": scenario, "result": result }))
+        .collect::<Vec<_>>();
+    let mutation_events = results
+        .into_iter()
+        .map(|(_, result)| {
+            serde_json::to_value(Event::Project(EventProject::ResourceMutationCommitted {
+                result,
+            }))
+            .expect("production ResourceMutationCommitted event must serialize")
+        })
+        .collect::<Vec<_>>();
+    let mut events = vec![
+        serde_json::to_value(graph_delta).expect("production GraphDelta event must serialize"),
+    ];
+    events.extend(mutation_events);
 
     json!({
         "format": "yssbi.project-events.v1",
-        "events": [
-            serde_json::to_value(graph_delta).expect("production GraphDelta event must serialize"),
-            serde_json::to_value(resource_mutation)
-                .expect("production ResourceMutationCommitted event must serialize"),
-        ],
+        "resourceMutationResults": direct_results,
+        "events": events,
     })
 }
 
@@ -768,10 +969,43 @@ fn execution_and_project_event_contract_inventories_are_complete() {
     }
 
     let project_events = project_events_contract();
+    let direct_results = project_events["resourceMutationResults"]
+        .as_array()
+        .unwrap();
+    assert_eq!(
+        direct_results
+            .iter()
+            .map(|entry| entry["scenario"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["create", "save", "rename", "remove", "undo", "redo"],
+    );
+    assert_eq!(
+        direct_results
+            .iter()
+            .map(|entry| entry["result"]["deltas"][0]["payload"]["kind"]
+                .as_str()
+                .unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "resource_lifecycle",
+            "worksheet",
+            "resource_move",
+            "resource_lifecycle",
+            "resource_lifecycle",
+            "resource_lifecycle",
+        ],
+    );
+    assert_eq!(direct_results[2]["result"]["moves"][0]["kind"], "worksheet");
+    assert_eq!(direct_results[4]["result"]["history"]["canRedo"], true);
+    assert_eq!(direct_results[5]["result"]["history"]["canRedo"], false);
+
     let events = project_events["events"].as_array().unwrap();
-    assert_eq!(events.len(), 2);
+    assert_eq!(events.len(), 7);
     assert_eq!(events[0]["payload"]["type"], "GraphDelta");
-    assert_eq!(events[1]["payload"]["type"], "ResourceMutationCommitted");
+    for (event, direct) in events[1..].iter().zip(direct_results) {
+        assert_eq!(event["payload"]["type"], "ResourceMutationCommitted");
+        assert_eq!(event["payload"]["payload"]["result"], direct["result"]);
+    }
 }
 
 #[test]

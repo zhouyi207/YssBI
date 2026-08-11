@@ -25,6 +25,14 @@ function remapEditorGraphPaths(from: string, to: string): void {
   }
 }
 
+export function remapWorksheetNonViewportUiState(from: string, to: string): void {
+  if (from === to) return;
+  const store = useEditorStore.getState();
+  if (store.detailFocus?.kind === 'worksheet' && store.detailFocus.worksheetPath === from) {
+    store.setDetailFocus({ kind: 'worksheet', worksheetPath: to });
+  }
+}
+
 /** Migrate non-viewport editor UI state after the prepared viewport snapshot commits. */
 export function remapGraphNonViewportUiState(from: string, to: string): void {
   if (pathsEqual(from, to)) return;

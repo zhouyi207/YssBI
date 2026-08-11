@@ -246,28 +246,62 @@ function isVariableResourceKey(value: unknown): value is string {
   return prefix === 'variables' && rest.length === 0 && isUuid(id);
 }
 
-function isResourcePathMovePatch(value: unknown): boolean {
+function isNonEmptyPath(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function isResourcePathMovePatch(value: unknown, graphPath: boolean): boolean {
   return isRecord(value)
-    && isGraphResourcePath(value.from)
-    && isGraphResourcePath(value.to)
+    && hasExactKeys(value, ['from', 'to'])
+    && (graphPath ? isGraphResourcePath(value.from) : isNonEmptyPath(value.from))
+    && (graphPath ? isGraphResourcePath(value.to) : isNonEmptyPath(value.to))
     && value.from !== value.to;
 }
 
-function isGraphResourceLifecycleState(value: unknown, path: string): boolean {
-  if (!isRecord(value)
-    || !Number.isSafeInteger(value.revision)
-    || (value.revision as number) < 0
-    || value.path !== path) return false;
-  return value.kind === inferGraphResourceKind(path);
+function isWorksheetDocumentState(value: unknown): boolean {
+  return isRecord(value)
+    && hasExactKeys(value, ['databaseId', 'chartType', 'encodings'])
+    && typeof value.databaseId === 'string'
+    && (value.chartType === 'histogram' || value.chartType === 'scatter' || value.chartType === 'line')
+    && isRecord(value.encodings)
+    && Object.keys(value.encodings).every((key) => key === 'x' || key === 'y')
+    && Object.values(value.encodings).every((entry) => typeof entry === 'string');
 }
 
-function isGraphResourceLifecyclePatch(value: unknown, path: string): boolean {
+function isWorksheetPatch(value: unknown): boolean {
+  return isRecord(value)
+    && hasExactKeys(value, ['before', 'after'])
+    && isWorksheetDocumentState(value.before)
+    && isWorksheetDocumentState(value.after);
+}
+
+function isResourceLifecycleState(
+  value: unknown,
+  path: string,
+  resourceKind: 'graph' | 'worksheet',
+): boolean {
   if (!isRecord(value)
-    || Object.keys(value).length !== 2
-    || !hasOwn(value, 'before')
-    || !hasOwn(value, 'after')) return false;
-  const beforeValid = value.before === null || isGraphResourceLifecycleState(value.before, path);
-  const afterValid = value.after === null || isGraphResourceLifecycleState(value.after, path);
+    || !hasExactKeys(value, ['revision', 'path', 'kind', 'name'])
+    || !Number.isSafeInteger(value.revision)
+    || (value.revision as number) < 0
+    || value.path !== path
+    || typeof value.name !== 'string'
+    || value.name.length === 0) return false;
+  return resourceKind === 'worksheet'
+    ? value.kind === 'worksheet'
+    : value.kind === inferGraphResourceKind(path);
+}
+
+function isResourceLifecyclePatch(
+  value: unknown,
+  path: string,
+  resourceKind: 'graph' | 'worksheet',
+): boolean {
+  if (!isRecord(value) || !hasExactKeys(value, ['before', 'after'])) return false;
+  const beforeValid = value.before === null
+    || isResourceLifecycleState(value.before, path, resourceKind);
+  const afterValid = value.after === null
+    || isResourceLifecycleState(value.after, path, resourceKind);
   return beforeValid && afterValid && (value.before === null) !== (value.after === null);
 }
 
@@ -276,15 +310,18 @@ function isOperationCorrelation(value: unknown): value is string | null {
 }
 
 function isResourceAndPayload(value: UnknownRecord): boolean {
-  if (!isRecord(value.resource) || !isRecord(value.payload)) return false;
+  if (!isRecord(value.resource)
+    || !hasExactKeys(value.resource, ['kind', 'key'])
+    || !isRecord(value.payload)
+    || !hasExactKeys(value.payload, ['kind', 'patch'])) return false;
   const { kind, key } = value.resource;
   if (kind === 'graph') {
     return isGraphResourcePath(key)
       && ((value.payload.kind === 'graph' && isGraphPatch(value.payload.patch))
-        || (value.payload.kind === 'graph_resource_lifecycle'
-          && isGraphResourceLifecyclePatch(value.payload.patch, key))
-        || (value.payload.kind === 'graph_resource_move'
-          && isResourcePathMovePatch(value.payload.patch)));
+        || (value.payload.kind === 'resource_lifecycle'
+          && isResourceLifecyclePatch(value.payload.patch, key, 'graph'))
+        || (value.payload.kind === 'resource_move'
+          && isResourcePathMovePatch(value.payload.patch, true)));
   }
   if (kind === 'function') {
     return isGraphResourcePath(key)
@@ -295,13 +332,19 @@ function isResourceAndPayload(value: UnknownRecord): boolean {
     return isVariableResourceKey(key)
       && ((value.payload.kind === 'variable' && isVariablePatch(value.payload.patch))
         || (value.payload.kind === 'variable_scope_move'
-          && isResourcePathMovePatch(value.payload.patch)));
+          && isResourcePathMovePatch(value.payload.patch, true)));
+  }
+  if (kind === 'worksheet') {
+    return isNonEmptyPath(key)
+      && ((value.payload.kind === 'worksheet' && isWorksheetPatch(value.payload.patch))
+        || (value.payload.kind === 'resource_lifecycle'
+          && isResourceLifecyclePatch(value.payload.patch, key, 'worksheet'))
+        || (value.payload.kind === 'resource_move'
+          && isResourcePathMovePatch(value.payload.patch, false)));
   }
   return kind === 'database'
-    && hasExactKeys(value.resource, ['kind', 'key'])
     && typeof key === 'string'
     && key.length > 0
-    && hasExactKeys(value.payload, ['kind', 'patch'])
     && value.payload.kind === 'database'
     && isDatabasePatch(value.payload.patch);
 }
@@ -313,16 +356,20 @@ function isResourceDelta(value: unknown): value is ResourceDeltaDto {
   if (!Number.isSafeInteger(value.fromRevision)
     || !Number.isSafeInteger(value.toRevision)
     || (value.fromRevision as number) < 0
-    || value.toRevision !== (value.fromRevision as number) + 1
+    || (value.toRevision as number) < 0
     || !isOperationCorrelation(value.causedBy)) return false;
-  if (isRecord(value.payload) && value.payload.kind === 'graph_resource_lifecycle') {
+  if (isRecord(value.payload) && value.payload.kind === 'resource_lifecycle') {
     const patch = value.payload.patch as UnknownRecord;
-    const present = patch.before ?? patch.after;
-    return isUuid(value.causedBy)
-      && isRecord(present)
-      && present.revision === value.fromRevision;
+    if (!isUuid(value.causedBy)) return false;
+    if (isRecord(patch.after)) {
+      return patch.after.revision === value.toRevision
+        && (value.fromRevision as number) <= (value.toRevision as number);
+    }
+    return isRecord(patch.before)
+      && patch.before.revision === value.fromRevision
+      && value.toRevision === (value.fromRevision as number) + 1;
   }
-  return true;
+  return value.toRevision === (value.fromRevision as number) + 1;
 }
 
 function deltaTarget(delta: ResourceDeltaDto): string {

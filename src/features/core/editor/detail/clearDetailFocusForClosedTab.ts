@@ -16,7 +16,7 @@ function shouldClearFocus(focus: DetailFocus, tabId: string): boolean {
     return focus.path === tabId;
   }
   if (focus.kind === 'worksheet') {
-    return focus.id === tabId;
+    return focus.worksheetPath === tabId;
   }
   return false;
 }

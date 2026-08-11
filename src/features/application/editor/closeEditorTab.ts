@@ -17,15 +17,15 @@ import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clea
 import { resolveTabDisplayName } from './resolveTabDisplayName';
 
 export async function closeWorksheetTab(
-  worksheetId: string,
+  worksheetPath: string,
   nodeId?: string,
   skipDirtyPrompt = false,
 ): Promise<boolean> {
-  const located = locateLayoutTab(worksheetId, nodeId);
+  const located = locateLayoutTab(worksheetPath, nodeId);
   if (!located?.tab) return false;
 
-  if (isResourceDocumentDirty({ id: worksheetId, kind: 'worksheet' }) && !skipDirtyPrompt) {
-    const displayName = resolveTabDisplayName(layoutTabResourceRef(located.tab), worksheetId);
+  if (isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' }) && !skipDirtyPrompt) {
+    const displayName = resolveTabDisplayName(layoutTabResourceRef(located.tab), worksheetPath);
     const context = captureProjectCommandContext();
     const shouldSave = await uiStore.confirm({
       title: '保存更改？',
@@ -37,7 +37,7 @@ export async function closeWorksheetTab(
     if (!context.isCurrent()) return false;
     if (shouldSave) {
       try {
-        const saved = await useWorksheetStore.getState().saveDocument(worksheetId);
+        const saved = await useWorksheetStore.getState().saveDocument(worksheetPath);
         if (!saved || !context.isCurrent()) return false;
       } catch (error) {
         if (!context.isCurrent()) return false;
@@ -51,8 +51,8 @@ export async function closeWorksheetTab(
     }
   }
 
-  useLayoutStore.getState().removeTab(located.nodeId, worksheetId);
-  clearDetailFocusForClosedTab(worksheetId);
+  useLayoutStore.getState().removeTab(located.nodeId, worksheetPath);
+  clearDetailFocusForClosedTab(worksheetPath);
   return true;
 }
 
@@ -79,25 +79,25 @@ export async function closeEditorTab(
 }
 
 export async function performWorksheetDelete(
-  worksheetId: string,
+  worksheetPath: string,
   context: ProjectCommandContext = captureProjectCommandContext(),
 ): Promise<boolean> {
-  const committed = await WorksheetService.deleteWorksheet(
+  const document = useWorksheetStore.getState().documents[worksheetPath]
+    ?? await WorksheetService.loadWorksheet(context.projectInstanceId, worksheetPath);
+  if (!context.isCurrent()) return false;
+  const committed = await WorksheetService.removeWorksheet(
     context.projectInstanceId,
     context.operationId,
-    worksheetId,
+    worksheetPath,
+    document.revision,
   );
   if (!context.isCurrent()) return false;
-  if (committed.document.id !== worksheetId) {
-    throw new Error('worksheet delete result does not match the requested worksheet');
-  }
-  await projectPublicationCoordinator.submit({ result: committed.result });
+  await projectPublicationCoordinator.submit({ result: committed });
   return context.isCurrent();
 }
 
-export async function deleteWorksheetWithConfirm(worksheetId: string): Promise<boolean> {
-  const doc = useWorksheetStore.getState().documents[worksheetId];
-  const name = doc?.name ?? worksheetId;
+export async function deleteWorksheetWithConfirm(worksheetPath: string): Promise<boolean> {
+  const name = resolveTabDisplayName({ id: worksheetPath, kind: 'worksheet' }, worksheetPath);
   const context = captureProjectCommandContext();
   const confirmed = await uiStore.confirm({
     title: '删除工作表',
@@ -109,7 +109,7 @@ export async function deleteWorksheetWithConfirm(worksheetId: string): Promise<b
   if (!confirmed || !context.isCurrent()) return false;
 
   try {
-    return await performWorksheetDelete(worksheetId, context);
+    return await performWorksheetDelete(worksheetPath, context);
   } catch (error) {
     if (!context.isCurrent()) return false;
     uiStore.showToast(

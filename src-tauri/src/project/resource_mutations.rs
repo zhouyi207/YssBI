@@ -476,8 +476,7 @@ impl ProjectState {
         let reservation = self.reserve_resource_operation(&session.instance_id, operation_id)?;
         let planning_data = self.get_data()?;
         let (_planned, _) =
-            Self::allocate_graph_path_from_snapshot(None, &planning_data, name, kind)
-                .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
+            Self::allocate_graph_path_from_snapshot(None, &planning_data, name, kind)?;
         #[cfg(test)]
         self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Planned, Some(&_planned));
         let lease = self.filesystem().acquire(session.root.clone())?;
@@ -488,8 +487,7 @@ impl ProjectState {
             &current_data,
             name,
             kind,
-        )
-        .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
+        )?;
         let mut resource = build_graph_shell(&path, unique_name, kind)?;
         let retained_revision = self.graph_revisions.read().unwrap().get(&path).copied();
         crate::project::project_state::normalize_function_resource_revision(
@@ -587,8 +585,7 @@ impl ProjectState {
             &planning_data,
             &source_name,
             source_kind,
-        )
-        .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
+        )?;
         #[cfg(test)]
         self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Planned, Some(&_planned));
         let lease = self.filesystem().acquire(session.root.clone())?;
@@ -651,8 +648,7 @@ impl ProjectState {
             &current_data,
             &source_document.name,
             source_document.kind,
-        )
-        .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
+        )?;
         let duplicate = rebind_duplicate(source_document, source, &target, unique_name);
         let contents = serde_json::to_vec_pretty(&duplicate).map_err(|error| {
             ProjectFilesystemError::TransactionPrepareFailed {
@@ -989,7 +985,7 @@ impl ProjectState {
                 OperationId::new(),
             ) {
                 Ok(publication) => break publication,
-                Err(ProjectFilesystemError::StaleProjectLifecycle { .. })
+                Err(ProjectFilesystemError::StaleResourceLifecycle { .. })
                     if self.project_instance_id() == expected_project_instance_id.as_str()
                         && token < 16 =>
                 {
@@ -1073,7 +1069,7 @@ mod tests {
     use crate::node_system::protocol::NodeTypeId;
     use crate::project::{
         GraphDocument, GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
-        ProjectState,
+        ProjectFilesystemError, ProjectState, ResourceNameError,
     };
     use crate::variable::{VariableId, VariableInstance, VariableScope};
     use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1209,6 +1205,108 @@ mod tests {
         document.document.revision = graph_revision;
         document.function.as_mut().unwrap().revision = embedded_revision;
         std::fs::write(path, serde_json::to_vec_pretty(&document).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn graph_rename_preserves_case_only_target_without_suffixing() {
+        let source = graph_path("events/Sales.yssbi-event");
+        let mut data = ProjectData::new();
+        data.graphs.insert(
+            source.clone(),
+            GraphResourceDocument::new("Sales", GraphDocumentKind::Event),
+        );
+        let project = TestProject::new("case-only-rename-allocation");
+        let state = project.state(data);
+
+        let renamed = state
+            .rename_graph_resource_fixture(&state.project_instance_id(), &source, "sales")
+            .unwrap();
+
+        assert_eq!(renamed.path.as_str(), "events/sales.yssbi-event");
+    }
+
+    #[test]
+    fn graph_rename_rejects_exact_portable_conflict_without_suffixing() {
+        let source = graph_path("events/Sales.yssbi-event");
+        let existing = graph_path("events/Report.yssbi-event");
+        let mut data = ProjectData::new();
+        data.graphs.insert(
+            source.clone(),
+            GraphResourceDocument::new("Sales", GraphDocumentKind::Event),
+        );
+        data.graphs.insert(
+            existing.clone(),
+            GraphResourceDocument::new("Report", GraphDocumentKind::Event),
+        );
+        let project = TestProject::new("rename-portable-conflict");
+        let state = project.state(data);
+        let before = serde_json::to_value(state.get_data().unwrap()).unwrap();
+
+        let error = state
+            .rename_graph_resource_fixture(&state.project_instance_id(), &source, "report")
+            .unwrap_err();
+
+        assert_eq!(error.code(), "resource_name_conflict");
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            before
+        );
+        assert!(project.root.join(source.as_str()).is_file());
+        assert!(project.root.join(existing.as_str()).is_file());
+        assert!(!project.root.join("events/report 1.yssbi-event").exists());
+    }
+
+    #[test]
+    fn graph_rename_still_rejects_invalid_resource_name() {
+        let source = graph_path("events/Sales.yssbi-event");
+        let mut data = ProjectData::new();
+        data.graphs.insert(
+            source.clone(),
+            GraphResourceDocument::new("Sales", GraphDocumentKind::Event),
+        );
+        let project = TestProject::new("invalid-rename-name");
+        let state = project.state(data);
+
+        let error = state
+            .rename_graph_resource_fixture(&state.project_instance_id(), &source, "Sales/Report")
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            ProjectFilesystemError::InvalidResourceName(ResourceNameError::ForbiddenCharacter('/'))
+        );
+    }
+
+    #[test]
+    fn graph_create_rejects_invalid_resource_name_without_effects() {
+        let project = TestProject::new("invalid-create-name");
+        let state = project.state(ProjectData::new());
+        let session = state.capture_project_session().unwrap();
+        let before = serde_json::to_value(state.get_data().unwrap()).unwrap();
+
+        let error = state
+            .create_graph_resource_transaction(
+                &session.instance_id,
+                "Sales/Report",
+                GraphDocumentKind::Event,
+                OperationId::new(),
+            )
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            ProjectFilesystemError::InvalidResourceName(ResourceNameError::ForbiddenCharacter('/'))
+        );
+        assert_eq!(
+            serde_json::to_value(state.get_data().unwrap()).unwrap(),
+            before
+        );
+        assert!(
+            !project
+                .root
+                .join("events/Sales_Report.yssbi-event")
+                .exists()
+        );
     }
 
     #[test]

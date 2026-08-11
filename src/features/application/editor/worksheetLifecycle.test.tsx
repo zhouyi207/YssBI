@@ -8,18 +8,27 @@ import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { buildWorksheetLayoutTab } from '@/features/core/layout/layoutTabModel';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
-import { useDocumentStateStore, useResourceStore } from '@/features/core/resource';
+import {
+  resourceKey,
+  useDocumentStateStore,
+  useResourceStore,
+} from '@/features/core/resource';
+import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import {
-  WorksheetService,
-  type WorksheetMutationResultDto,
-} from '@/services/worksheet/worksheetService';
+import { WorksheetService } from '@/services/worksheet/worksheetService';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
+import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { performWorksheetDelete } from './closeEditorTab';
 import { useWorksheetManagement } from './useWorksheetManagement';
 import { useProjectOperations } from './useProjectOperations';
+import { resolveTabDisplayName } from './resolveTabDisplayName';
 import { commitFileFirstResourceIndex } from '@/features/application/resource/resourceActions';
+import {
+  beginWorksheetRenameLifecycle,
+  clearWorksheetLifecycleProjects,
+  isWorksheetLifecycleCurrent,
+} from '@/features/application/editor/worksheetLifecycleCoordinator';
 
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-i18next')>()),
@@ -48,6 +57,7 @@ vi.mock('./openEditorTab', () => ({ openEditorTab: vi.fn() }));
   .IS_REACT_ACT_ENVIRONMENT = true;
 
 const projectA = '00000000-0000-0000-0000-000000000601';
+const worksheetPath = 'worksheets/Worksheet.yssbi-worksheet';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -59,29 +69,51 @@ function worksheet(revision = 0): WorksheetDocument {
   return {
     schemaVersion: 3,
     revision,
-    id: 'worksheet-1',
-    name: 'Worksheet',
     databaseId: 'database-1',
     chartType: 'scatter',
     encodings: { x: 'x', y: 'y' },
   };
 }
 
-function mutation(document: WorksheetDocument, publicationRevision = 1): WorksheetMutationResultDto {
+function worksheetLifecycleDelta(
+  document: WorksheetDocument,
+  removing = false,
+  path = worksheetPath,
+  name = 'Worksheet',
+  operationId = '00000000-0000-0000-0000-000000000501',
+) {
+  const state = {
+    revision: document.revision,
+    path,
+    kind: 'worksheet' as const,
+    name,
+  };
   return {
-    operationId: '00000000-0000-0000-0000-000000000501',
-    document,
-    result: {
-      operationId: '00000000-0000-0000-0000-000000000501',
-      projectInstanceId: projectA,
-      publicationRevision,
-      moves: [],
-      deltas: [],
-      worksheetDeltas: [{ id: document.id, before: null, after: document }],
-      projectionReplacements: [],
-      projectionStatus: { status: 'complete', expectedGraphPaths: [] },
-      history: { canUndo: true, canRedo: false },
+    resource: { kind: 'worksheet' as const, key: path },
+    fromRevision: document.revision,
+    toRevision: removing ? document.revision + 1 : document.revision,
+    causedBy: operationId,
+    payload: {
+      kind: 'resource_lifecycle' as const,
+      patch: removing ? { before: state, after: null } : { before: null, after: state },
     },
+  };
+}
+
+function mutation(
+  document: WorksheetDocument,
+  publicationRevision = 1,
+  operationId = '00000000-0000-0000-0000-000000000501',
+): ResourceMutationResultDto {
+  return {
+    operationId,
+    projectInstanceId: projectA,
+    publicationRevision,
+    moves: [],
+    deltas: [worksheetLifecycleDelta(document, false, worksheetPath, 'Worksheet', operationId)],
+    projectionReplacements: [],
+    projectionStatus: { status: 'complete', expectedGraphPaths: [] },
+    history: { canUndo: true, canRedo: false },
   };
 }
 
@@ -90,6 +122,48 @@ function replaceProject(): void {
   projectPublicationCoordinator.startProject('project-b', 0);
   useWorksheetStore.getState().clear();
 }
+
+describe('worksheet rename lifecycle coordinator', () => {
+  beforeEach(() => clearWorksheetLifecycleProjects());
+
+  it('owns monotonic tokens independently by project instance and opaque worksheet path', () => {
+    const first = beginWorksheetRenameLifecycle(projectA, worksheetPath);
+    const second = beginWorksheetRenameLifecycle(projectA, worksheetPath);
+    const otherPath = beginWorksheetRenameLifecycle(
+      projectA,
+      'worksheets/Other Name.yssbi-worksheet',
+    );
+    const otherProject = beginWorksheetRenameLifecycle('project-b', worksheetPath);
+
+    expect(second).toBeGreaterThan(first);
+    expect(otherPath).toBeGreaterThan(second);
+    expect(otherProject).toBeGreaterThan(otherPath);
+    expect(isWorksheetLifecycleCurrent(projectA, worksheetPath, first)).toBe(false);
+    expect(isWorksheetLifecycleCurrent(projectA, worksheetPath, second)).toBe(true);
+    expect(isWorksheetLifecycleCurrent(
+      projectA,
+      'worksheets/Other Name.yssbi-worksheet',
+      otherPath,
+    )).toBe(true);
+    expect(isWorksheetLifecycleCurrent('project-b', worksheetPath, otherProject)).toBe(true);
+  });
+
+  it('clears project/path entries on replacement without resetting the monotonic counter', () => {
+    projectPublicationCoordinator.cancelProject();
+    const beforeReplacement = beginWorksheetRenameLifecycle(projectA, worksheetPath);
+
+    projectPublicationCoordinator.startProject('project-b', 0);
+    expect(isWorksheetLifecycleCurrent(projectA, worksheetPath, beforeReplacement)).toBe(false);
+
+    const afterReplacement = beginWorksheetRenameLifecycle('project-b', worksheetPath);
+    expect(afterReplacement).toBeGreaterThan(beforeReplacement);
+    projectPublicationCoordinator.cancelProject();
+    expect(isWorksheetLifecycleCurrent('project-b', worksheetPath, afterReplacement)).toBe(false);
+
+    const afterCancellation = beginWorksheetRenameLifecycle(projectA, worksheetPath);
+    expect(afterCancellation).toBeGreaterThan(afterReplacement);
+  });
+});
 
 describe('worksheet command lifecycle guards', () => {
   let host: HTMLDivElement;
@@ -100,10 +174,12 @@ describe('worksheet command lifecycle guards', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.clearAllMocks();
     vi.mocked(commitFileFirstResourceIndex).mockResolvedValue(true);
     useWorksheetStore.getState().clear();
     useDocumentStateStore.getState().clear();
     useResourceStore.getState().clear();
+    useEditorStore.setState({ detailFocus: null });
     useProjectIOStore.setState({ projectInstanceId: projectA, currentPath: 'C:/project-a' });
     projectPublicationCoordinator.startProject(projectA, 0);
     host = document.createElement('div');
@@ -121,8 +197,209 @@ describe('worksheet command lifecycle guards', () => {
     host.remove();
   });
 
+  it('opens create using the Rust lifecycle path and name', async () => {
+    const opaquePath = 'worksheets/Path Does Not Reveal Label.yssbi-worksheet';
+    vi.spyOn(WorksheetService, 'loadWorksheet').mockResolvedValue(worksheet());
+    vi.spyOn(WorksheetService, 'createWorksheet').mockImplementation(
+      async (_projectInstanceId, operationId) => ({
+        ...mutation(worksheet(), 1, operationId),
+        deltas: [worksheetLifecycleDelta(
+          worksheet(),
+          false,
+          opaquePath,
+          'Rust supplied label',
+          operationId,
+        )],
+      }),
+    );
+
+    await management.addWorksheet();
+
+    expect(openWorksheet).toHaveBeenCalledWith(opaquePath, 'Rust supplied label');
+  });
+
+  it('formats structured worksheet command errors without object coercion', async () => {
+    vi.spyOn(WorksheetService, 'createWorksheet').mockRejectedValue({
+      code: 'filesystem_commit_failed',
+      message: 'Worksheet file commit failed',
+      resourceKind: 'worksheet',
+      resourcePath: 'worksheets/Report With Spaces.yssbi-worksheet',
+    });
+    const toast = vi.spyOn(uiStore, 'showToast');
+
+    await management.addWorksheet();
+
+    expect(toast).toHaveBeenCalledWith(
+      'worksheet.createFailed: Worksheet file commit failed',
+      'error',
+      4000,
+    );
+  });
+
+  it('resolves display names only from authoritative worksheet metadata', () => {
+    const opaquePath = 'worksheets/Path Does Not Reveal Label.yssbi-worksheet';
+    useWorksheetStore.getState().setIndex([{
+      worksheetPath: opaquePath,
+      name: 'Rust supplied label',
+      databaseId: 'database-1',
+      chartType: 'scatter',
+      revision: 7,
+    }]);
+
+    expect(resolveTabDisplayName({ kind: 'worksheet', id: opaquePath }, 'fallback'))
+      .toBe('Rust supplied label');
+  });
+
+  it('loads and installs a worksheet by opaque worksheetPath', async () => {
+    const opaquePath = 'worksheets/Path With Spaces.yssbi-worksheet';
+    vi.spyOn(WorksheetService, 'loadWorksheet').mockResolvedValue(worksheet(7));
+
+    await expect(management.ensureWorksheetLoaded(opaquePath)).resolves.toEqual(worksheet(7));
+
+    expect(WorksheetService.loadWorksheet).toHaveBeenCalledWith(projectA, opaquePath);
+    expect(useWorksheetStore.getState().documents[opaquePath]).toEqual(worksheet(7));
+  });
+
+  it('duplicates with authoritative revision and opens only the Rust lifecycle destination', async () => {
+    const destinationPath = 'worksheets/Destination Opaque.yssbi-worksheet';
+    useWorksheetStore.getState().setIndex([{
+      worksheetPath,
+      name: 'Source label',
+      databaseId: 'database-1',
+      chartType: 'scatter',
+      revision: 7,
+    }]);
+    vi.spyOn(WorksheetService, 'loadWorksheet').mockResolvedValue(worksheet());
+    vi.spyOn(WorksheetService, 'duplicateWorksheet').mockImplementation(
+      async (_projectInstanceId, operationId) => ({
+        ...mutation(worksheet(), 1, operationId),
+        deltas: [worksheetLifecycleDelta(
+          worksheet(),
+          false,
+          destinationPath,
+          'Rust allocated copy label',
+          operationId,
+        )],
+      }),
+    );
+
+    await management.duplicateWorksheet(worksheetPath);
+
+    expect(WorksheetService.duplicateWorksheet).toHaveBeenCalledWith(
+      projectA,
+      expect.any(String),
+      worksheetPath,
+      7,
+    );
+    expect(openWorksheet).toHaveBeenCalledWith(destinationPath, 'Rust allocated copy label');
+  });
+
+  it('restores the prior destination document when create publication rejects', async () => {
+    const destinationPath = 'worksheets/Create Rollback.yssbi-worksheet';
+    const prior = worksheet(5);
+    const staged = worksheet(0);
+    useWorksheetStore.getState().upsertDocument(destinationPath, prior);
+    const priorDocumentState = useDocumentStateStore.getState().documents[
+      resourceKey({ id: destinationPath, kind: 'worksheet' })
+    ];
+    vi.spyOn(WorksheetService, 'loadWorksheet').mockResolvedValue(staged);
+    vi.spyOn(WorksheetService, 'createWorksheet').mockImplementation(
+      async (_projectInstanceId, operationId) => ({
+        ...mutation(staged, 1, operationId),
+        deltas: [worksheetLifecycleDelta(
+          staged,
+          false,
+          destinationPath,
+          'Create rollback',
+          operationId,
+        )],
+      }),
+    );
+    vi.spyOn(projectPublicationCoordinator, 'submit').mockRejectedValue(
+      new Error('publication recovery failed'),
+    );
+
+    await management.addWorksheet();
+
+    expect(useWorksheetStore.getState().documents[destinationPath]).toBe(prior);
+    expect(useDocumentStateStore.getState().documents[
+      resourceKey({ id: destinationPath, kind: 'worksheet' })
+    ]).toBe(priorDocumentState);
+    expect(openWorksheet).not.toHaveBeenCalled();
+  });
+
+  it('removes the exact staged duplicate document when publication rejects', async () => {
+    const destinationPath = 'worksheets/Duplicate Rollback.yssbi-worksheet';
+    const staged = worksheet(0);
+    useWorksheetStore.getState().setIndex([{
+      worksheetPath,
+      name: 'Source label',
+      databaseId: 'database-1',
+      chartType: 'scatter',
+      revision: 7,
+    }]);
+    vi.spyOn(WorksheetService, 'loadWorksheet').mockResolvedValue(staged);
+    vi.spyOn(WorksheetService, 'duplicateWorksheet').mockImplementation(
+      async (_projectInstanceId, operationId) => ({
+        ...mutation(staged, 1, operationId),
+        deltas: [worksheetLifecycleDelta(
+          staged,
+          false,
+          destinationPath,
+          'Duplicate rollback',
+          operationId,
+        )],
+      }),
+    );
+    vi.spyOn(projectPublicationCoordinator, 'submit').mockRejectedValue(
+      new Error('publication recovery failed'),
+    );
+
+    await management.duplicateWorksheet(worksheetPath);
+
+    expect(useWorksheetStore.getState().documents[destinationPath]).toBeUndefined();
+    expect(useDocumentStateStore.getState().documents[
+      resourceKey({ id: destinationPath, kind: 'worksheet' })
+    ]).toBeUndefined();
+    expect(openWorksheet).not.toHaveBeenCalled();
+  });
+
+  it('preserves a newer concurrent duplicate document when publication rejects', async () => {
+    const destinationPath = 'worksheets/Concurrent Destination.yssbi-worksheet';
+    const staged = worksheet(0);
+    const concurrent = worksheet(2);
+    useWorksheetStore.getState().setIndex([{
+      worksheetPath,
+      name: 'Source label',
+      databaseId: 'database-1',
+      chartType: 'scatter',
+      revision: 7,
+    }]);
+    vi.spyOn(WorksheetService, 'loadWorksheet').mockResolvedValue(staged);
+    vi.spyOn(WorksheetService, 'duplicateWorksheet').mockImplementation(
+      async (_projectInstanceId, operationId) => ({
+        ...mutation(staged, 1, operationId),
+        deltas: [worksheetLifecycleDelta(
+          staged,
+          false,
+          destinationPath,
+          'Concurrent destination',
+          operationId,
+        )],
+      }),
+    );
+    vi.spyOn(projectPublicationCoordinator, 'submit').mockImplementation(async () => {
+      useWorksheetStore.getState().upsertDocument(destinationPath, concurrent);
+      throw new Error('publication recovery failed');
+    });
+
+    await management.duplicateWorksheet(worksheetPath);
+
+    expect(useWorksheetStore.getState().documents[destinationPath]).toBe(concurrent);
+  });
+
   it('gives a stale create completion zero follow-up effects in the replacement project', async () => {
-    const request = deferred<WorksheetMutationResultDto>();
+    const request = deferred<ResourceMutationResultDto>();
     vi.spyOn(WorksheetService, 'createWorksheet').mockReturnValue(request.promise);
     const toast = vi.spyOn(uiStore, 'showToast');
 
@@ -184,20 +461,90 @@ describe('worksheet command lifecycle guards', () => {
     expect(toast).not.toHaveBeenCalled();
   });
 
-  it('gives a stale delete completion zero effects in the replacement project', async () => {
-    const request = deferred<WorksheetMutationResultDto>();
-    vi.spyOn(WorksheetService, 'deleteWorksheet').mockReturnValue(request.promise);
+  it('keeps the tab and document until successful remove publication settles', async () => {
+    const request = deferred<ResourceMutationResultDto>();
+    useWorksheetStore.getState().setIndex([{
+      worksheetPath,
+      name: 'Rust supplied label',
+      databaseId: 'database-1',
+      chartType: 'scatter',
+      revision: 0,
+    }]);
+    useResourceStore.setState({
+      resources: {
+        [`yssbi://worksheet/${worksheetPath}`]: {
+          id: worksheetPath,
+          kind: 'worksheet',
+          name: 'Rust supplied label',
+          uri: `yssbi://worksheet/${worksheetPath}`,
+          revision: 0,
+          exists: true,
+          loaded: true,
+          hasDirtyDocument: false,
+          hasStaleDocument: false,
+          hasConflictDocument: false,
+        },
+      },
+      graphOrder: [],
+    });
+    useWorksheetStore.getState().upsertDocument(worksheetPath, worksheet());
+    useEditorTabStore.setState({ registry: {}, placements: {} });
+    useEditorTabStore.getState().initGroupPlacement(
+      'editor',
+      [buildWorksheetLayoutTab(worksheetPath)],
+      worksheetPath,
+    );
+    vi.spyOn(WorksheetService, 'removeWorksheet').mockReturnValue(request.promise);
 
-    const completion = performWorksheetDelete('worksheet-1');
-    await vi.waitFor(() => expect(WorksheetService.deleteWorksheet).toHaveBeenCalled());
+    const completion = performWorksheetDelete(worksheetPath);
+    await vi.waitFor(() => expect(WorksheetService.removeWorksheet).toHaveBeenCalled());
+    expect(useEditorTabStore.getState().resolveTab(worksheetPath)).toBeDefined();
+    expect(useWorksheetStore.getState().documents[worksheetPath]).toBeDefined();
+
+    const deleted = worksheet(0);
+    request.resolve({
+      ...mutation(deleted),
+      deltas: [worksheetLifecycleDelta(deleted, true)],
+    });
+    await expect(completion).resolves.toBe(true);
+
+    expect(useEditorTabStore.getState().resolveTab(worksheetPath)).toBeNull();
+    expect(useWorksheetStore.getState().documents[worksheetPath]).toBeUndefined();
+  });
+
+  it('preserves the tab document and detail focus when remove fails', async () => {
+    useWorksheetStore.getState().upsertDocument(worksheetPath, worksheet());
+    useEditorStore.getState().setDetailFocus({ kind: 'worksheet', worksheetPath });
+    useEditorTabStore.setState({ registry: {}, placements: {} });
+    useEditorTabStore.getState().initGroupPlacement(
+      'editor',
+      [buildWorksheetLayoutTab(worksheetPath)],
+      worksheetPath,
+    );
+    vi.spyOn(WorksheetService, 'removeWorksheet').mockRejectedValue(new Error('remove failed'));
+
+    await expect(performWorksheetDelete(worksheetPath)).rejects.toThrow('remove failed');
+
+    expect(useEditorTabStore.getState().resolveTab(worksheetPath)).toBeDefined();
+    expect(useWorksheetStore.getState().documents[worksheetPath]).toEqual(worksheet());
+    expect(useEditorStore.getState().detailFocus).toEqual({
+      kind: 'worksheet',
+      worksheetPath,
+    });
+  });
+
+  it('gives a stale remove completion zero effects in the replacement project', async () => {
+    const request = deferred<ResourceMutationResultDto>();
+    useWorksheetStore.getState().upsertDocument(worksheetPath, worksheet());
+    vi.spyOn(WorksheetService, 'removeWorksheet').mockReturnValue(request.promise);
+
+    const completion = performWorksheetDelete(worksheetPath);
+    await vi.waitFor(() => expect(WorksheetService.removeWorksheet).toHaveBeenCalled());
     replaceProject();
     const deleted = worksheet(1);
     request.resolve({
       ...mutation(deleted),
-      result: {
-        ...mutation(deleted).result,
-        worksheetDeltas: [{ id: deleted.id, before: deleted, after: null }],
-      },
+      deltas: [worksheetLifecycleDelta(deleted, true)],
     });
 
     await expect(completion).resolves.toBe(false);

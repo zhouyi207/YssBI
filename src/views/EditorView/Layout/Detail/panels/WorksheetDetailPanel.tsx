@@ -53,10 +53,18 @@ function isNumericType(type: string): boolean {
 }
 
 interface WorksheetDetailPanelProps {
+  worksheetPath: string;
+  name: string;
   document: WorksheetDocument;
+  onRename: (name: string) => void | Promise<void>;
 }
 
-export function WorksheetDetailPanel({ document }: WorksheetDetailPanelProps) {
+export function WorksheetDetailPanel({
+  worksheetPath,
+  name,
+  document,
+  onRename,
+}: WorksheetDetailPanelProps) {
   const { t } = useTranslation();
   const { dataframes } = useEditorSessionResources();
   const updateDocument = useWorksheetStore((s) => s.updateDocument);
@@ -94,19 +102,18 @@ export function WorksheetDetailPanel({ document }: WorksheetDetailPanelProps) {
   const numericColumnOptions = numericColumns.map((c) => ({ label: c.name, value: c.name }));
 
   const patch = (changes: Parameters<typeof updateDocument>[1]) => {
-    updateDocument(document.id, changes);
+    updateDocument(worksheetPath, changes);
   };
 
   const encodingLabelClass = 'align-top pt-2';
 
   return (
-    <DetailPanelShell title={t('detail.titleWithName', { name: document.name })}>
+    <DetailPanelShell title={t('detail.titleWithName', { name })}>
       <DetailForm>
         <DetailNameField
           label={t('detail.fields.name')}
-          labelWidth="wide"
-          value={document.name}
-          onCommit={(name) => patch({ name })}
+          value={name}
+          onCommit={onRename}
         />
         <DetailFieldRow
           label={t('chartsSidebar.dataset')}

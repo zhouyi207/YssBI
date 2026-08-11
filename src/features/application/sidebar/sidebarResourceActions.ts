@@ -1,9 +1,10 @@
 import { i18n } from '@/app/i18n';
 import { uiStore } from '@/features/core/ui/UIStore';
-import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+
 import { ProjectService, type RevealProjectResourceRequest } from '@/services/project/projectService';
-import { WorksheetService } from '@/services/worksheet/worksheetService';
+
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
+import { renameResource } from '@/features/application/resource/resourceActions';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 
 export async function revealProjectResourceInExplorer(
@@ -24,14 +25,13 @@ export async function revealProjectResourceInExplorer(
   }
 }
 
-export async function renameWorksheetResource(id: string, nextName: string): Promise<void> {
-  const store = useWorksheetStore.getState();
-  if (!store.documents[id]) {
-    const context = captureProjectCommandContext();
-    const document = await WorksheetService.loadWorksheet(context.projectInstanceId, id);
-    if (!context.isCurrent()) return;
-    store.upsertDocument(document);
+export async function renameWorksheetResource(
+  worksheetPath: string,
+  nextName: string,
+): Promise<void> {
+  try {
+    await renameResource({ id: worksheetPath, kind: 'worksheet' }, nextName);
+  } catch (error) {
+    throw new Error(formatErrorMessage(error, 'Worksheet rename failed'));
   }
-  store.updateDocument(id, { name: nextName });
-  await store.saveDocument(id);
 }

@@ -1,14 +1,41 @@
 use crate::project::{ProjectError, ProjectFilesystemError};
-use serde::Serialize;
+use serde::ser::{Serialize, SerializeMap, Serializer};
 use serde_json::Value;
 use std::fmt;
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Clone)]
 pub struct AppError {
     pub code: String,
     pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub details: Option<Value>,
+}
+
+impl Serialize for AppError {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let resource_context = self
+            .details
+            .as_ref()
+            .and_then(Value::as_object)
+            .filter(|details| {
+                details.get("resourceKind").is_some() && details.get("resourcePath").is_some()
+            });
+        let mut map = serializer.serialize_map(None)?;
+        map.serialize_entry("code", &self.code)?;
+        map.serialize_entry("message", &self.message)?;
+        if let Some(context) = resource_context {
+            map.serialize_entry("resourceKind", &context["resourceKind"])?;
+            map.serialize_entry("resourcePath", &context["resourcePath"])?;
+            if let Some(recovery_required) = context.get("recoveryRequired") {
+                map.serialize_entry("recoveryRequired", recovery_required)?;
+            }
+        } else if let Some(details) = &self.details {
+            map.serialize_entry("details", details)?;
+        }
+        map.end()
+    }
 }
 
 impl AppError {

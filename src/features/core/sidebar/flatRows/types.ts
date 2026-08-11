@@ -47,7 +47,7 @@ export interface SidebarWorksheetItemRow {
   kind: 'worksheet';
   rowKey: string;
   level: number;
-  id: string;
+  worksheetPath: string;
   name: string;
 }
 

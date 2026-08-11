@@ -19,6 +19,8 @@ import {
 import { parseViewportScopeKey, viewportScopeKey } from '@/features/core/viewport/viewportScope';
 import { useViewportStore } from '@/features/core/viewport/useViewportStore';
 import type { EditorViewport } from '@/features/core/viewport/editorViewport';
+import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
 
 
 export interface PreparedResourceMoveSnapshot {
@@ -75,7 +77,23 @@ export interface PreparedGraphResourceMove {
   readonly viewportSnapshot: PreparedViewportMoveSnapshot;
 }
 
-function assertMove(move: ResourceMoveDto): void {
+export interface PreparedWorksheetResourceMove {
+  readonly kind: 'worksheet';
+  readonly from: string;
+  readonly to: string;
+  readonly name: string;
+  readonly documents: Record<string, WorksheetDocument>;
+  readonly index: WorksheetIndexEntry[];
+  readonly resources: Record<ResourceKey, ProjectResourceMeta>;
+  readonly documentStates: Record<ResourceKey, DocumentState>;
+  readonly tabs: EditorTabMemento;
+}
+
+export type PreparedResourceMove = PreparedGraphResourceMove | PreparedWorksheetResourceMove;
+
+function assertMove(
+  move: ResourceMoveDto,
+): asserts move is ResourceMoveDto & { kind: 'event' | 'function' } {
   if (!move.from || !move.to || move.from === move.to
     || (move.kind !== 'event' && move.kind !== 'function')
     || !move.name.trim()) {
@@ -113,6 +131,77 @@ function prepareViewport(from: string, to: string): PreparedViewportMoveSnapshot
   return { before, after };
 }
 
+
+function prepareWorksheetResourceMove(move: ResourceMoveDto): PreparedWorksheetResourceMove {
+  if (!move.from || !move.to || move.from === move.to
+    || move.kind !== 'worksheet' || !move.name.trim()) {
+    throw new Error('worksheet resource move is malformed');
+  }
+  const fromKey = resourceKey({ id: move.from, kind: 'worksheet' });
+  const toKey = resourceKey({ id: move.to, kind: 'worksheet' });
+  const resources = structuredClone(useResourceStore.getState().resources) as Record<
+    ResourceKey,
+    ProjectResourceMeta
+  >;
+  const source = resources[fromKey];
+  if (!source || source.id !== move.from || source.kind !== 'worksheet') {
+    throw new Error(`missing source resource identity '${move.from}'`);
+  }
+  if (resources[toKey]) throw new Error(`destination resource '${move.to}' already exists`);
+  resources[toKey] = { ...source, id: move.to, name: move.name, uri: toKey };
+  delete resources[fromKey];
+
+  const worksheet = useWorksheetStore.getState();
+  const documents = structuredClone(worksheet.documents);
+  if (documents[move.to]) throw new Error(`destination worksheet document '${move.to}' already exists`);
+  if (documents[move.from]) {
+    documents[move.to] = documents[move.from];
+    delete documents[move.from];
+  }
+  if (worksheet.index.some((entry) => entry.worksheetPath === move.to)) {
+    throw new Error(`destination worksheet index '${move.to}' already exists`);
+  }
+  const sourceIndex = worksheet.index.find((entry) => entry.worksheetPath === move.from);
+  if (!sourceIndex) throw new Error(`missing source worksheet index '${move.from}'`);
+  const index = worksheet.index.map((entry) => entry.worksheetPath === move.from
+    ? { ...entry, worksheetPath: move.to, name: move.name }
+    : structuredClone(entry));
+
+  const documentStates = structuredClone(useDocumentStateStore.getState().documents) as Record<
+    ResourceKey,
+    DocumentState
+  >;
+  if (documentStates[toKey]) throw new Error(`destination document '${move.to}' already exists`);
+  if (documentStates[fromKey]) {
+    documentStates[toKey] = { ...documentStates[fromKey], resourceKey: toKey };
+    delete documentStates[fromKey];
+  }
+
+  return Object.freeze({
+    kind: 'worksheet',
+    from: move.from,
+    to: move.to,
+    name: move.name,
+    documents,
+    index,
+    resources,
+    documentStates,
+    tabs: prepareTabs(move.from, move.to).after,
+  });
+}
+
+export function prepareResourceMove(
+  move: ResourceMoveDto,
+  hasAuthoritativeDestinationReplacement: boolean,
+): PreparedResourceMove {
+  if (move.kind === 'worksheet') {
+    if (hasAuthoritativeDestinationReplacement) {
+      throw new Error(`worksheet move '${move.from}' cannot own a graph projection replacement`);
+    }
+    return prepareWorksheetResourceMove(move);
+  }
+  return prepareGraphResourceMove(move, hasAuthoritativeDestinationReplacement);
+}
 
 export function prepareGraphResourceMove(
   move: ResourceMoveDto,

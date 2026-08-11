@@ -12,12 +12,12 @@ use crate::node_system::document::{
 #[cfg(test)]
 use crate::node_system::document::{GraphMutation, RevisionedGraphStore};
 use crate::project::{
-    GraphLifecycleIntent, GraphLifecycleOperation, GraphLifecycleRegistry,
-    GraphRenameOwnershipLease, GraphResourceDocument, GraphResourcePath, NormalizedProjectRoot,
-    PreparedProjectActivation, ProjectData, ProjectFilesystemCoordinator, ProjectFilesystemError,
+    GraphResourceDocument, GraphResourcePath, NormalizedProjectRoot, PreparedProjectActivation,
+    ProjectData, ProjectFilesystemCoordinator, ProjectFilesystemError,
     ProjectFilesystemTransaction, ProjectInstanceId, ProjectSession, ProjectStore,
-    ProjectTransactionContext, ResourceDocumentPatch, StagedFilesystemMutation,
-    load_project_graph_from_file,
+    ProjectTransactionContext, ResourceDocumentPatch, ResourceLifecycleIntent,
+    ResourceLifecycleOperation, ResourceLifecycleRegistry, ResourceRenameOwnershipLease,
+    StagedFilesystemMutation, WorksheetResourcePath, load_project_graph_from_file,
 };
 use crate::tabular::{normalize_variable_tabular, sync_variable_cache};
 use std::collections::BTreeMap;
@@ -187,7 +187,7 @@ impl VariableRevisionEntry {
 struct ActivationGarbage {
     _publication_project_instance_id: String,
     _path: Option<String>,
-    _lifecycle: super::graph_lifecycle::GraphLifecycleState,
+    _lifecycle: super::resource_lifecycle::ResourceLifecycleState,
     _data: ProjectData,
     _store: ProjectStore,
     _graph_revisions: std::collections::HashMap<
@@ -196,8 +196,10 @@ struct ActivationGarbage {
     >,
     _variable_revisions:
         std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
-    _worksheet_revisions:
-        std::collections::HashMap<String, crate::node_system::document::ResourceRevision>,
+    _worksheet_revisions: std::collections::HashMap<
+        WorksheetResourcePath,
+        crate::node_system::document::ResourceRevision,
+    >,
     _database_authority_revisions: std::collections::HashMap<String, u64>,
     _identity: ProjectionEnvironmentExpectation,
     _recovery_message: Option<String>,
@@ -605,7 +607,7 @@ pub(super) fn validate_context_revisions(
         VariableRevisionEntry,
     >,
     worksheet_revisions: &std::collections::HashMap<
-        String,
+        WorksheetResourcePath,
         crate::node_system::document::ResourceRevision,
     >,
 ) -> Result<(), ProjectFilesystemError> {
@@ -639,7 +641,9 @@ pub(super) fn validate_context_revisions(
                 .map(crate::variable::VariableId::from)
                 .and_then(|id| variable_revisions.get(&id).map(|entry| entry.revision)),
             ResourceKey::Database(_) => None,
-            ResourceKey::Worksheet(path) => worksheet_revisions.get(path.0.as_ref()).copied(),
+            ResourceKey::Worksheet(path) => WorksheetResourcePath::parse(path.0.as_ref())
+                .ok()
+                .and_then(|path| worksheet_revisions.get(&path).copied()),
         };
         if actual != Some(*expected) {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
@@ -673,13 +677,33 @@ pub(super) fn validate_context_revisions(
                 .0
                 .strip_prefix("databases/")
                 .is_some_and(|id| data.databases.contains_key(id)),
-            ResourceKey::Worksheet(path) => data.worksheets.contains_key(path.0.as_ref()),
+            ResourceKey::Worksheet(path) => WorksheetResourcePath::parse(path.0.as_ref())
+                .ok()
+                .is_some_and(|path| data.worksheets.contains_key(&path)),
         };
         if present {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
                 message: format!("expected {resource:?} to remain absent"),
             });
         }
+    }
+    Ok(())
+}
+
+fn validate_worksheet_path_insertion(
+    data: &ProjectData,
+    worksheet_path: &WorksheetResourcePath,
+) -> Result<(), ProjectFilesystemError> {
+    let portable_key = worksheet_path.display_name().portable_key();
+    if data.worksheets.keys().any(|existing| {
+        existing != worksheet_path && existing.display_name().portable_key() == portable_key
+    }) {
+        return Err(ProjectFilesystemError::ResourceRevisionConflict {
+            message: format!(
+                "worksheet path '{}' conflicts with an existing portable name",
+                worksheet_path.as_str()
+            ),
+        });
     }
     Ok(())
 }
@@ -795,22 +819,177 @@ fn normalize_function_patch_revisions(
         ResourceDocumentPatch::UnloadGraph { .. }
         | ResourceDocumentPatch::PatchVariables { .. }
         | ResourceDocumentPatch::UpsertWorksheet { .. }
-        | ResourceDocumentPatch::RemoveWorksheet { .. } => {}
+        | ResourceDocumentPatch::RemoveWorksheet { .. }
+        | ResourceDocumentPatch::MoveWorksheet { .. } => {}
     }
     Ok(())
 }
 
-fn canonical_graph_lifecycle_events(
+fn worksheet_document_state(
+    document: &crate::project::WorksheetDocument,
+) -> crate::node_system::document::WorksheetDocumentState {
+    crate::node_system::document::WorksheetDocumentState {
+        database_id: document.database_id.clone(),
+        chart_type: document.chart_type.clone(),
+        encodings: document.encodings.clone(),
+    }
+}
+
+fn worksheet_lifecycle_state(
+    path: &WorksheetResourcePath,
+    revision: ResourceRevision,
+) -> crate::node_system::document::ResourceLifecycleState {
+    crate::node_system::document::ResourceLifecycleState {
+        revision,
+        path: path.as_str().into(),
+        kind: crate::node_system::document::ResourceLifecycleKind::Worksheet,
+        name: path.display_name().as_str().to_string(),
+    }
+}
+
+fn worksheet_history_publication(
+    operation_id: OperationId,
+    patch: &ResourceDocumentPatch,
+    data: &ProjectData,
+    revisions: &std::collections::HashMap<WorksheetResourcePath, ResourceRevision>,
+) -> Result<
+    (
+        Vec<crate::node_system::document::ResourceDeltaEvent>,
+        Option<ProjectHistoryTransaction>,
+    ),
+    ProjectFilesystemError,
+> {
+    let worksheet_key = |path: &WorksheetResourcePath| {
+        ResourceKey::Worksheet(crate::node_system::document::WorksheetResourceKey(
+            path.as_str().into(),
+        ))
+    };
+    match patch {
+        ResourceDocumentPatch::UpsertWorksheet { path, document } => {
+            let before = data.worksheets.get(path);
+            let retained = revisions.get(path).copied();
+            let revision = retained
+                .map(ResourceRevision::next)
+                .unwrap_or(ResourceRevision::INITIAL);
+            let mut after = document.clone();
+            after.revision = revision;
+            let (from_revision, payload, transaction) = if let Some(before) = before {
+                let forward = crate::node_system::document::WorksheetDocumentPatch {
+                    before: worksheet_document_state(before),
+                    after: worksheet_document_state(&after),
+                };
+                (
+                    before.revision,
+                    crate::node_system::document::ResourceDocumentPatch::Worksheet(forward.clone()),
+                    ProjectHistoryTransaction::new(
+                        operation_id,
+                        vec![crate::node_system::document::ResourcePatch::worksheet(
+                            crate::node_system::document::WorksheetResourceKey(
+                                path.as_str().into(),
+                            ),
+                            before.revision,
+                            forward,
+                        )],
+                    ),
+                )
+            } else {
+                let forward = crate::node_system::document::ResourceLifecyclePatch {
+                    before: None,
+                    after: Some(worksheet_lifecycle_state(path, revision)),
+                };
+                (
+                    retained.unwrap_or(revision),
+                    crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+                        forward.clone(),
+                    ),
+                    ProjectHistoryTransaction::resource_lifecycle(
+                        operation_id,
+                        forward,
+                        crate::node_system::document::ResourceLifecycleHistoryPayload::Worksheet {
+                            document: after.clone(),
+                        },
+                    ),
+                )
+            };
+            Ok((
+                vec![crate::node_system::document::ResourceDeltaEvent {
+                    resource: worksheet_key(path),
+                    from_revision,
+                    to_revision: revision,
+                    caused_by: Some(operation_id),
+                    payload,
+                }],
+                Some(transaction),
+            ))
+        }
+        ResourceDocumentPatch::RemoveWorksheet { path, revision } => {
+            let document = data.worksheets.get(path).cloned().ok_or_else(|| {
+                ProjectFilesystemError::ResourceRevisionConflict {
+                    message: format!("worksheet '{}' is absent", path.as_str()),
+                }
+            })?;
+            let forward = crate::node_system::document::ResourceLifecyclePatch {
+                before: Some(worksheet_lifecycle_state(path, *revision)),
+                after: None,
+            };
+            Ok((
+                vec![crate::node_system::document::ResourceDeltaEvent {
+                    resource: worksheet_key(path),
+                    from_revision: *revision,
+                    to_revision: revision.next(),
+                    caused_by: Some(operation_id),
+                    payload: crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+                        forward.clone(),
+                    ),
+                }],
+                Some(ProjectHistoryTransaction::resource_lifecycle(
+                    operation_id,
+                    forward,
+                    crate::node_system::document::ResourceLifecycleHistoryPayload::Worksheet {
+                        document,
+                    },
+                )),
+            ))
+        }
+        ResourceDocumentPatch::MoveWorksheet { from, to, moved } => Ok((
+            vec![crate::node_system::document::ResourceDeltaEvent {
+                resource: worksheet_key(to),
+                from_revision: revisions.get(from).copied().unwrap_or(moved.revision),
+                to_revision: moved.revision,
+                caused_by: Some(operation_id),
+                payload: crate::node_system::document::ResourceDocumentPatch::ResourceMove(
+                    crate::node_system::document::ResourcePathMovePatch {
+                        from: from.as_str().into(),
+                        to: to.as_str().into(),
+                    },
+                ),
+            }],
+            Some(ProjectHistoryTransaction::worksheet_resource_move(
+                operation_id,
+                from.as_str(),
+                to.as_str(),
+                moved.clone(),
+            )),
+        )),
+        _ => Ok((Vec::new(), None)),
+    }
+}
+
+fn canonical_resource_lifecycle_events(
     context: &ProjectTransactionContext,
     patch: &ResourceDocumentPatch,
+    graph_revisions: &std::collections::HashMap<
+        GraphResourcePath,
+        crate::node_system::document::ResourceRevision,
+    >,
 ) -> Vec<crate::node_system::document::ResourceDeltaEvent> {
     let graph_key = |path: &GraphResourcePath| {
         ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
             path.as_str().into(),
         ))
     };
-    let lifecycle_state = |path: &GraphResourcePath, revision| {
-        crate::node_system::document::GraphResourceLifecycleState {
+    let lifecycle_state =
+        |path: &GraphResourcePath, revision| crate::node_system::document::ResourceLifecycleState {
             revision,
             path: path.as_str().into(),
             kind: match path
@@ -818,46 +997,41 @@ fn canonical_graph_lifecycle_events(
                 .expect("validated graph resource path must have a kind")
             {
                 crate::project::GraphDocumentKind::Event => {
-                    crate::node_system::document::GraphResourceLifecycleKind::Event
+                    crate::node_system::document::ResourceLifecycleKind::Event
                 }
                 crate::project::GraphDocumentKind::Function => {
-                    crate::node_system::document::GraphResourceLifecycleKind::Function
+                    crate::node_system::document::ResourceLifecycleKind::Function
                 }
             },
-        }
-    };
-    let lifecycle_delta = |path: &GraphResourcePath, revision, before, after| {
+            name: path.display_name().to_string(),
+        };
+    let lifecycle_delta = |path: &GraphResourcePath, from_revision, to_revision, before, after| {
         crate::node_system::document::ResourceDeltaEvent {
             resource: graph_key(path),
-            from_revision: revision,
-            to_revision: revision.next(),
+            from_revision,
+            to_revision,
             caused_by: Some(context.operation_id),
-            payload: crate::node_system::document::ResourceDocumentPatch::GraphResourceLifecycle(
-                crate::node_system::document::GraphResourceLifecyclePatch { before, after },
+            payload: crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+                crate::node_system::document::ResourceLifecyclePatch { before, after },
             ),
         }
     };
     match patch {
         ResourceDocumentPatch::InsertGraph { path, resource } => {
             let revision = resource.document.revision;
-            return vec![crate::node_system::document::ResourceDeltaEvent {
-                resource: graph_key(path),
-                from_revision: revision,
-                to_revision: revision,
-                caused_by: Some(context.operation_id),
-                payload:
-                    crate::node_system::document::ResourceDocumentPatch::GraphResourceLifecycle(
-                        crate::node_system::document::GraphResourceLifecyclePatch {
-                            before: None,
-                            after: Some(lifecycle_state(path, revision)),
-                        },
-                    ),
-            }];
+            return vec![lifecycle_delta(
+                path,
+                graph_revisions.get(path).copied().unwrap_or(revision),
+                revision,
+                None,
+                Some(lifecycle_state(path, revision)),
+            )];
         }
         ResourceDocumentPatch::UnloadGraph { path } => {
             let revision = context.expected_revisions[&graph_key(path)];
             return vec![lifecycle_delta(
                 path,
+                revision,
                 revision,
                 None,
                 Some(lifecycle_state(path, revision)),
@@ -868,6 +1042,7 @@ fn canonical_graph_lifecycle_events(
             return vec![lifecycle_delta(
                 path,
                 revision,
+                revision.next(),
                 Some(lifecycle_state(path, revision)),
                 None,
             )];
@@ -875,7 +1050,8 @@ fn canonical_graph_lifecycle_events(
         ResourceDocumentPatch::MoveGraph { .. } => {}
         ResourceDocumentPatch::PatchVariables { .. }
         | ResourceDocumentPatch::UpsertWorksheet { .. }
-        | ResourceDocumentPatch::RemoveWorksheet { .. } => return Vec::new(),
+        | ResourceDocumentPatch::RemoveWorksheet { .. }
+        | ResourceDocumentPatch::MoveWorksheet { .. } => return Vec::new(),
     }
     let ResourceDocumentPatch::MoveGraph {
         from,
@@ -889,7 +1065,7 @@ fn canonical_graph_lifecycle_events(
         unreachable!("non-move graph lifecycle patches returned above")
     };
     let graph_move_patch = || {
-        crate::node_system::document::ResourceDocumentPatch::GraphResourceMove(
+        crate::node_system::document::ResourceDocumentPatch::ResourceMove(
             crate::node_system::document::ResourcePathMovePatch {
                 from: from.as_str().into(),
                 to: to.as_str().into(),
@@ -960,7 +1136,8 @@ fn patch_projection_paths(patch: &ResourceDocumentPatch, data: &ProjectData) -> 
         }
         ResourceDocumentPatch::PatchVariables { .. }
         | ResourceDocumentPatch::UpsertWorksheet { .. }
-        | ResourceDocumentPatch::RemoveWorksheet { .. } => {}
+        | ResourceDocumentPatch::RemoveWorksheet { .. }
+        | ResourceDocumentPatch::MoveWorksheet { .. } => {}
     }
     paths.into_iter().collect()
 }
@@ -1000,7 +1177,8 @@ fn compile_product_invalidation_for_resource_patch(
         }
         ResourceDocumentPatch::PatchVariables { .. } => CompileProductInvalidation::None,
         ResourceDocumentPatch::UpsertWorksheet { .. }
-        | ResourceDocumentPatch::RemoveWorksheet { .. } => CompileProductInvalidation::None,
+        | ResourceDocumentPatch::RemoveWorksheet { .. }
+        | ResourceDocumentPatch::MoveWorksheet { .. } => CompileProductInvalidation::None,
     }
 }
 
@@ -1038,7 +1216,8 @@ fn preflight_resource_patch_graphs(
         | ResourceDocumentPatch::UnloadGraph { .. }
         | ResourceDocumentPatch::PatchVariables { .. }
         | ResourceDocumentPatch::UpsertWorksheet { .. }
-        | ResourceDocumentPatch::RemoveWorksheet { .. } => {}
+        | ResourceDocumentPatch::RemoveWorksheet { .. }
+        | ResourceDocumentPatch::MoveWorksheet { .. } => {}
     }
     Ok(())
 }
@@ -1155,7 +1334,7 @@ pub struct ProjectState {
     pub(super) compile_coordinator:
         Arc<RwLock<Arc<crate::node_system::compiler::ProjectCompileCoordinator>>>,
     filesystem: ProjectFilesystemCoordinator,
-    graph_lifecycle: GraphLifecycleRegistry,
+    resource_lifecycle: ResourceLifecycleRegistry,
     pub(super) resource_operations:
         Arc<Mutex<crate::project::resource_mutations::ResourceOperationLedger>>,
     recovery_marker: crate::project::ProjectRecoveryMarker,
@@ -1172,7 +1351,12 @@ pub struct ProjectState {
     pub(super) variable_revisions:
         Arc<RwLock<std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>>>,
     pub(super) worksheet_revisions: Arc<
-        RwLock<std::collections::HashMap<String, crate::node_system::document::ResourceRevision>>,
+        RwLock<
+            std::collections::HashMap<
+                WorksheetResourcePath,
+                crate::node_system::document::ResourceRevision,
+            >,
+        >,
     >,
     pub(super) database_authority_revisions: Arc<RwLock<std::collections::HashMap<String, u64>>>,
 
@@ -1352,7 +1536,6 @@ impl CommittedResourceMutation {
                 publication_revision,
                 moves,
                 deltas,
-                worksheet_deltas: Vec::new(),
                 projection_replacements,
                 projection_status: crate::event::ProjectionStatusDto::Complete {
                     expected_graph_paths,
@@ -1369,7 +1552,6 @@ impl CommittedResourceMutation {
                     publication_revision,
                     moves,
                     deltas,
-                    worksheet_deltas: Vec::new(),
                     projection_replacements: Vec::new(),
                     projection_status: crate::event::ProjectionStatusDto::Incomplete {
                         invalidated_graph_paths: expected_graph_paths,
@@ -1440,7 +1622,7 @@ impl ProjectState {
                 crate::node_system::compiler::ProjectCompileCoordinator::new(),
             ))),
             filesystem,
-            graph_lifecycle: GraphLifecycleRegistry::default(),
+            resource_lifecycle: ResourceLifecycleRegistry::default(),
             resource_operations: Arc::new(Mutex::new(
                 crate::project::resource_mutations::ResourceOperationLedger::new(
                     activation_identity.project_instance_id.clone(),
@@ -1647,7 +1829,7 @@ impl ProjectState {
         Ok(expected)
     }
 
-    fn capture_projection_environment_for_session(
+    pub(super) fn capture_projection_environment_for_session(
         &self,
         session: &ProjectSession,
     ) -> Result<ProjectionEnvironmentSnapshot, String> {
@@ -2367,7 +2549,7 @@ impl ProjectState {
             "events/ConcurrentHistory.yssbi-event".into(),
         );
         self.history.write().unwrap().record_committed_transaction(
-            ProjectHistoryTransaction::graph_resource_move(
+            ProjectHistoryTransaction::graph_move(
                 crate::node_system::document::OperationId::new(),
                 path.clone(),
                 path,
@@ -2505,7 +2687,10 @@ impl ProjectState {
             crate::variable::VariableId,
             crate::node_system::document::ResourceRevision,
         >,
-        std::collections::HashMap<String, crate::node_system::document::ResourceRevision>,
+        std::collections::HashMap<
+            WorksheetResourcePath,
+            crate::node_system::document::ResourceRevision,
+        >,
     ) {
         (
             self.graph_revisions.read().unwrap().clone(),
@@ -2576,15 +2761,15 @@ impl ProjectState {
     }
 
     #[cfg(test)]
-    pub(crate) fn graph_lifecycle_entry_count(&self) -> usize {
-        self.graph_lifecycle.entry_count()
+    pub(crate) fn resource_lifecycle_entry_count(&self) -> usize {
+        self.resource_lifecycle.entry_count()
     }
 
     #[cfg(test)]
     pub(crate) fn activation_publication_guards_are_available_for_test(&self) -> bool {
         self.mutation_publication.try_lock().is_ok()
             && self.project_path.try_write().is_ok()
-            && self.graph_lifecycle.boundary_is_available()
+            && self.resource_lifecycle.boundary_is_available()
             && self.project_data.try_write().is_ok()
             && self.project_store.try_write().is_ok()
             && self.graph_revisions.try_write().is_ok()
@@ -2706,7 +2891,8 @@ impl ProjectState {
                 Ok(guard) => (guard, false),
                 Err(error) => (error.into_inner(), true),
             };
-            let (mut lifecycle, lifecycle_recovered) = self.graph_lifecycle.boundary_recovering();
+            let (mut lifecycle, lifecycle_recovered) =
+                self.resource_lifecycle.boundary_recovering();
             let (mut current_data, data_recovered) = match self.project_data.write() {
                 Ok(guard) => (guard, false),
                 Err(error) => (error.into_inner(), true),
@@ -2809,7 +2995,7 @@ impl ProjectState {
                     self.project_path.clear_poison();
                 }
                 if lifecycle_recovered {
-                    self.graph_lifecycle.clear_poison();
+                    self.resource_lifecycle.clear_poison();
                 }
                 if data_recovered {
                     self.project_data.clear_poison();
@@ -2904,9 +3090,12 @@ impl ProjectState {
     }
 
     #[cfg(test)]
-    pub(crate) fn initialize_worksheet_revision_for_test(&self, worksheet_id: &str) {
+    pub(crate) fn initialize_worksheet_revision_for_test(
+        &self,
+        worksheet_path: &WorksheetResourcePath,
+    ) {
         self.worksheet_revisions.write().unwrap().insert(
-            worksheet_id.to_string(),
+            worksheet_path.clone(),
             crate::node_system::document::ResourceRevision::INITIAL,
         );
     }
@@ -3077,12 +3266,12 @@ impl ProjectState {
             .map(|receipt| receipt.complete("en-US"))
     }
 
-    fn apply_resource_document_patch_with_environment(
+    pub(super) fn apply_resource_document_patch_with_environment(
         &self,
         context: &ProjectTransactionContext,
         patch: ResourceDocumentPatch,
         projection_environment: ProjectionEnvironmentSnapshot,
-        rename_ownership: Option<&mut GraphRenameOwnershipLease>,
+        rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
     ) -> Result<crate::event::ResourceMutationResultDto, ProjectFilesystemError> {
         self.apply_resource_document_patch_internal(
             context,
@@ -3100,7 +3289,7 @@ impl ProjectState {
         mut patch: ResourceDocumentPatch,
         history_head: Option<(bool, HistoryEntryId)>,
         projection_environment: Option<ProjectionEnvironmentSnapshot>,
-        mut rename_ownership: Option<&mut GraphRenameOwnershipLease>,
+        mut rename_ownership: Option<&mut ResourceRenameOwnershipLease>,
     ) -> Result<CommittedResourceMutation, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         self.validate_project_session(&context.session)?;
@@ -3122,7 +3311,7 @@ impl ProjectState {
                     message: "projection environment changed before patch publication".into(),
                 });
             }
-            let mut lifecycle = self.graph_lifecycle.boundary();
+            let mut lifecycle = self.resource_lifecycle.boundary();
             let mut data = self.project_data.write().unwrap();
             let mut graph_revisions = self.graph_revisions.write().unwrap();
             let mut variable_revisions = self.variable_revisions.write().unwrap();
@@ -3137,7 +3326,14 @@ impl ProjectState {
                 &worksheet_revisions,
             )?;
             normalize_function_patch_revisions(&mut patch, &data, &graph_revisions)?;
-            let deltas = canonical_graph_lifecycle_events(context, &patch);
+            let (worksheet_deltas, worksheet_history) = worksheet_history_publication(
+                context.operation_id,
+                &patch,
+                &data,
+                &worksheet_revisions,
+            )?;
+            let mut deltas = canonical_resource_lifecycle_events(context, &patch, &graph_revisions);
+            deltas.extend(worksheet_deltas);
             let moves = match &patch {
                 ResourceDocumentPatch::MoveGraph {
                     from, to, moved, ..
@@ -3145,15 +3341,26 @@ impl ProjectState {
                     from: from.as_str().to_string(),
                     to: to.as_str().to_string(),
                     kind: match moved.kind {
-                        crate::project::GraphDocumentKind::Event => "event",
-                        crate::project::GraphDocumentKind::Function => "function",
-                    }
-                    .into(),
+                        crate::project::GraphDocumentKind::Event => {
+                            crate::node_system::document::ResourceLifecycleKind::Event
+                        }
+                        crate::project::GraphDocumentKind::Function => {
+                            crate::node_system::document::ResourceLifecycleKind::Function
+                        }
+                    },
                     name: moved.name.clone(),
                 }],
+                ResourceDocumentPatch::MoveWorksheet { from, to, .. } => {
+                    vec![crate::event::ResourceMoveDto {
+                        from: from.as_str().to_string(),
+                        to: to.as_str().to_string(),
+                        kind: crate::node_system::document::ResourceLifecycleKind::Worksheet,
+                        name: to.display_name().as_str().to_string(),
+                    }]
+                }
                 _ => Vec::new(),
             };
-            let move_history = match &patch {
+            let resource_history = match &patch {
                 ResourceDocumentPatch::MoveGraph {
                     from,
                     to,
@@ -3165,7 +3372,7 @@ impl ProjectState {
                     referenced_variables,
                     ..
                 } => Some(
-                    crate::node_system::document::ProjectHistoryTransaction::graph_resource_move(
+                    crate::node_system::document::ProjectHistoryTransaction::graph_move(
                         context.operation_id,
                         crate::node_system::document::GraphResourcePath(from.as_str().into()),
                         crate::node_system::document::GraphResourcePath(to.as_str().into()),
@@ -3184,7 +3391,7 @@ impl ProjectState {
                         })?,
                     ),
                 ),
-                _ => None,
+                _ => worksheet_history,
             };
             let projection_paths = patch_projection_paths(&patch, &data);
             let compile_invalidation =
@@ -3317,34 +3524,57 @@ impl ProjectState {
                         variable_revisions.insert(id, VariableRevisionEntry::present(revision));
                     }
                 }
-                ResourceDocumentPatch::UpsertWorksheet { id, mut document } => {
-                    let revision = worksheet_revisions
-                        .get(&id)
-                        .copied()
-                        .map(|revision| revision.next())
-                        .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                ResourceDocumentPatch::UpsertWorksheet { path, mut document } => {
+                    validate_worksheet_path_insertion(&data, &path)?;
+                    let retained_revision = worksheet_revisions.get(&path).copied();
+                    let revision = retained_revision
+                        .map(ResourceRevision::next)
+                        .unwrap_or(ResourceRevision::INITIAL);
+                    if document.revision != revision && Some(document.revision) != retained_revision
+                    {
+                        return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                            message: format!(
+                                "worksheet '{}' submitted revision {} but authority requires {}",
+                                path.as_str(),
+                                document.revision.get(),
+                                revision.get()
+                            ),
+                        });
+                    }
                     document.revision = revision;
-                    data.worksheets.insert(id.clone(), document);
-                    worksheet_revisions.insert(id, revision);
+                    data.worksheets.insert(path.clone(), document);
+                    worksheet_revisions.insert(path, revision);
                 }
-                ResourceDocumentPatch::RemoveWorksheet { id } => {
-                    data.worksheets.remove(&id);
-                    worksheet_revisions.remove(&id);
+                ResourceDocumentPatch::RemoveWorksheet { path, revision } => {
+                    data.worksheets.remove(&path);
+                    worksheet_revisions.insert(path, revision.next());
+                }
+                ResourceDocumentPatch::MoveWorksheet {
+                    from,
+                    to,
+                    mut moved,
+                } => {
+                    let revision = moved.revision;
+                    data.worksheets.remove(&from);
+                    moved.revision = revision;
+                    data.worksheets.insert(to.clone(), moved);
+                    worksheet_revisions.insert(from, revision);
+                    worksheet_revisions.insert(to, revision);
                 }
             }
 
             if let Some((undo, expected_history_id)) = history_head {
                 history
-                    .move_graph_resource_head(undo, &expected_history_id)
+                    .move_resource_head(undo, &expected_history_id)
                     .map_err(|error| ProjectFilesystemError::TransactionCommitFailed {
                         message: error.to_string(),
                     })?;
-            } else if let Some(transaction) = move_history {
+            } else if let Some(transaction) = resource_history {
                 history.record_committed_transaction(transaction);
             } else if deltas.iter().any(|delta| {
                 !matches!(
                     &delta.payload,
-                    crate::node_system::document::ResourceDocumentPatch::GraphResourceLifecycle(_)
+                    crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(_)
                 )
             }) {
                 let changes = deltas
@@ -3352,7 +3582,9 @@ impl ProjectState {
                     .filter(|delta| {
                         !matches!(
                             &delta.payload,
-                            crate::node_system::document::ResourceDocumentPatch::GraphResourceLifecycle(_)
+                            crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+                                _
+                            )
                         )
                     })
                     .map(|delta| crate::node_system::document::ResourcePatch {
@@ -3412,204 +3644,11 @@ impl ProjectState {
         let data = self.project_data.read().unwrap();
         Ok((
             data.worksheets
-                .values()
-                .map(|worksheet| worksheet.name.clone())
+                .keys()
+                .map(|path| path.display_name().as_str().to_string())
                 .collect(),
             data.databases.keys().next().cloned(),
         ))
-    }
-
-    pub fn upsert_worksheet_document(
-        &self,
-        document: crate::project::WorksheetDocument,
-    ) -> Result<
-        (
-            crate::event::ResourceMutationResultDto,
-            crate::project::WorksheetDocument,
-        ),
-        ProjectFilesystemError,
-    > {
-        let session = self.capture_project_session()?;
-        let old = self
-            .project_data
-            .read()
-            .unwrap()
-            .worksheets
-            .get(&document.id)
-            .cloned();
-        let worksheet_key = ResourceKey::Worksheet(
-            crate::node_system::document::WorksheetResourceKey(document.id.clone().into()),
-        );
-        let current_revision = self
-            .worksheet_revisions
-            .read()
-            .unwrap()
-            .get(&document.id)
-            .copied();
-        if current_revision.is_none()
-            && document.revision != crate::node_system::document::ResourceRevision::INITIAL
-        {
-            return Err(ProjectFilesystemError::ResourceRevisionConflict {
-                message: format!(
-                    "new worksheet '{}' has non-initial revision {}",
-                    document.id,
-                    document.revision.get()
-                ),
-            });
-        }
-        let submitted_revision = document.revision;
-        let mut committed_document = document;
-        committed_document.revision = current_revision
-            .map(|_| submitted_revision.next())
-            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
-        let context = ProjectTransactionContext {
-            session: session.clone(),
-            operation_id: crate::node_system::document::OperationId::new(),
-            affected_resources: current_revision
-                .map(|_| worksheet_key.clone())
-                .into_iter()
-                .collect(),
-            expected_revisions: current_revision
-                .map(|_| (worksheet_key.clone(), submitted_revision))
-                .into_iter()
-                .collect(),
-            expected_absent_resources: current_revision
-                .is_none()
-                .then_some(worksheet_key)
-                .into_iter()
-                .collect(),
-            recovery_marker: Some(self.project_recovery_marker()),
-        };
-
-        let next_path = crate::project::worksheet_relative_path(&committed_document);
-        let mut mutations = Vec::new();
-        if let Some(old) = old {
-            let old_path = crate::project::worksheet_relative_path(&old);
-            if old_path != next_path {
-                mutations.push(StagedFilesystemMutation::RemoveFile {
-                    relative_path: old_path,
-                });
-            }
-        }
-        let contents = serde_json::to_vec_pretty(&committed_document).map_err(|error| {
-            ProjectFilesystemError::TransactionPrepareFailed {
-                message: error.to_string(),
-            }
-        })?;
-        mutations.push(StagedFilesystemMutation::Write {
-            relative_path: next_path,
-            contents,
-        });
-        let lease = self.filesystem.acquire(session.root.clone())?;
-        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context.clone(),
-            lease,
-            mutations,
-            |_, contents| {
-                serde_json::from_slice::<crate::project::WorksheetDocument>(contents)
-                    .map(|_| ())
-                    .map_err(|error| error.to_string())
-            },
-        )?;
-        self.validate_project_session(&session)?;
-        let projection_environment = self
-            .capture_projection_environment_for_session(&session)
-            .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
-        let committed = prepared.commit()?;
-        let authoritative_document = committed_document.clone();
-        let publication = match self.apply_resource_document_patch_with_environment(
-            &context,
-            ResourceDocumentPatch::UpsertWorksheet {
-                id: committed_document.id.clone(),
-                document: committed_document,
-            },
-            projection_environment,
-            None,
-        ) {
-            Ok(publication) => publication,
-            Err(publication_error) => {
-                return match committed.rollback() {
-                    Ok(()) => Err(publication_error),
-                    Err(rollback_error) => Err(rollback_error),
-                };
-            }
-        };
-        committed.finalize();
-        Ok((publication, authoritative_document))
-    }
-
-    pub fn remove_worksheet_document(
-        &self,
-        worksheet_id: &str,
-    ) -> Result<
-        (
-            crate::event::ResourceMutationResultDto,
-            crate::project::WorksheetDocument,
-        ),
-        ProjectFilesystemError,
-    > {
-        let session = self.capture_project_session()?;
-        let document = self
-            .project_data
-            .read()
-            .unwrap()
-            .worksheets
-            .get(worksheet_id)
-            .cloned()
-            .ok_or_else(|| ProjectFilesystemError::TransactionPrepareFailed {
-                message: format!("worksheet '{worksheet_id}' not found"),
-            })?;
-        let worksheet_key = ResourceKey::Worksheet(
-            crate::node_system::document::WorksheetResourceKey(worksheet_id.into()),
-        );
-        let expected_revision = self
-            .worksheet_revisions
-            .read()
-            .unwrap()
-            .get(worksheet_id)
-            .copied()
-            .ok_or_else(|| ProjectFilesystemError::ResourceRevisionConflict {
-                message: format!("worksheet '{worksheet_id}' has no authoritative revision"),
-            })?;
-        let context = ProjectTransactionContext {
-            session: session.clone(),
-            operation_id: crate::node_system::document::OperationId::new(),
-            affected_resources: vec![worksheet_key.clone()],
-            expected_revisions: [(worksheet_key, expected_revision)].into_iter().collect(),
-            expected_absent_resources: Default::default(),
-            recovery_marker: Some(self.project_recovery_marker()),
-        };
-        let lease = self.filesystem.acquire(session.root.clone())?;
-        let prepared = ProjectFilesystemTransaction::prepare(
-            context.clone(),
-            lease,
-            vec![StagedFilesystemMutation::RemoveFile {
-                relative_path: crate::project::worksheet_relative_path(&document),
-            }],
-        )?;
-        self.validate_project_session(&session)?;
-        let projection_environment = self
-            .capture_projection_environment_for_session(&session)
-            .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
-        let committed = prepared.commit()?;
-        let publication = match self.apply_resource_document_patch_with_environment(
-            &context,
-            ResourceDocumentPatch::RemoveWorksheet {
-                id: worksheet_id.to_string(),
-            },
-            projection_environment,
-            None,
-        ) {
-            Ok(publication) => publication,
-            Err(publication_error) => {
-                return match committed.rollback() {
-                    Ok(()) => Err(publication_error),
-                    Err(rollback_error) => Err(rollback_error),
-                };
-            }
-        };
-        committed.finalize();
-        Ok((publication, document))
     }
 
     pub(super) fn allocate_graph_path_from_snapshot(
@@ -3617,62 +3656,90 @@ impl ProjectState {
         data: &ProjectData,
         name: &str,
         kind: crate::project::GraphDocumentKind,
-    ) -> Result<(GraphResourcePath, String), String> {
+    ) -> Result<(GraphResourcePath, String), ProjectFilesystemError> {
         let persisted = if let Some(path) = project_path {
             let root = crate::project::project_root_from_path(path);
             crate::project::scan_graph_resource_index(&root)
-                .map_err(|error| error.to_string())?
+                .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                    message: error.to_string(),
+                })?
                 .entries()
                 .iter()
                 .filter(|entry| entry.kind == kind)
-                .map(|entry| {
-                    crate::project::load_project_graph_from_file(path, &entry.path)
-                        .map(|resource| (entry.path.as_str().to_string(), resource.name))
-                        .map_err(|error| error.to_string())
-                })
-                .collect::<Result<Vec<_>, _>>()?
+                .map(|entry| entry.path.clone())
+                .collect::<Vec<_>>()
         } else {
             Vec::new()
         };
         let existing_names = data
             .graphs
-            .values()
-            .filter(|graph| graph.kind == kind)
-            .map(|graph| graph.name.clone())
-            .chain(persisted.iter().map(|(_, name)| name.clone()))
+            .iter()
+            .filter(|(_, graph)| graph.kind == kind)
+            .map(|(path, _)| path)
+            .chain(persisted.iter())
+            .map(|path| {
+                crate::project::ResourceName::parse(path.display_name())
+                    .expect("validated graph paths have validated display names")
+            })
             .collect::<Vec<_>>();
-        let unique_name = crate::project::unique_name::unique_name(name.trim(), existing_names);
-        let stem = sanitize_graph_name(&unique_name);
-        let (directory, extension) = match kind {
-            crate::project::GraphDocumentKind::Event => {
-                (crate::project::EVENTS_DIR, crate::project::EVENT_EXTENSION)
-            }
-            crate::project::GraphDocumentKind::Function => (
-                crate::project::FUNCTIONS_DIR,
-                crate::project::FUNCTION_EXTENSION,
-            ),
+        let requested = crate::project::ResourceName::parse(name)?;
+        let allocated =
+            crate::project::allocate_unique_resource_name(&requested, existing_names.iter());
+        let path = match kind {
+            crate::project::GraphDocumentKind::Event => GraphResourcePath::event(&allocated),
+            crate::project::GraphDocumentKind::Function => GraphResourcePath::function(&allocated),
         };
-        let used = data
+
+        Ok((path, allocated.as_str().to_owned()))
+    }
+
+    fn allocate_graph_rename_path_from_snapshot(
+        project_path: &str,
+        data: &ProjectData,
+        source: &GraphResourcePath,
+        name: &str,
+        kind: crate::project::GraphDocumentKind,
+    ) -> Result<(GraphResourcePath, String), ProjectFilesystemError> {
+        let requested = crate::project::ResourceName::parse(name)?;
+        let root = crate::project::project_root_from_path(project_path);
+        let persisted = crate::project::scan_graph_resource_index(&root)
+            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                message: error.to_string(),
+            })?
+            .entries()
+            .iter()
+            .filter(|entry| entry.kind == kind)
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>();
+        let conflicts = data
             .graphs
-            .keys()
-            .map(|path| path.as_str().to_string())
-            .chain(persisted.into_iter().map(|(path, _)| path))
-            .collect::<std::collections::HashSet<_>>();
-        for suffix in 0.. {
-            let file_name = if suffix == 0 {
-                format!("{stem}.{extension}")
-            } else {
-                format!("{stem} {suffix}.{extension}")
-            };
-            let candidate = format!("{directory}/{file_name}");
-            if !used.contains(&candidate) {
-                return Ok((
-                    GraphResourcePath::new(candidate).map_err(|error| error.to_string())?,
-                    unique_name,
-                ));
-            }
+            .iter()
+            .filter(|(path, graph)| *path != source && graph.kind == kind)
+            .map(|(path, _)| path)
+            .chain(persisted.iter().filter(|path| *path != source))
+            .any(|path| {
+                crate::project::ResourceName::parse(path.display_name())
+                    .expect("validated graph paths have validated display names")
+                    .portable_key()
+                    == requested.portable_key()
+            });
+        if conflicts {
+            return Err(ProjectFilesystemError::ResourceNameConflict {
+                message: format!(
+                    "a {} named '{}' already exists",
+                    match kind {
+                        crate::project::GraphDocumentKind::Event => "event",
+                        crate::project::GraphDocumentKind::Function => "function",
+                    },
+                    requested.as_str()
+                ),
+            });
         }
-        unreachable!("graph path allocation always finds a suffix")
+        let target = match kind {
+            crate::project::GraphDocumentKind::Event => GraphResourcePath::event(&requested),
+            crate::project::GraphDocumentKind::Function => GraphResourcePath::function(&requested),
+        };
+        Ok((target, requested.as_str().to_owned()))
     }
 
     pub fn unload_graph_resource(
@@ -3723,7 +3790,7 @@ impl ProjectState {
         let root = ownership.session.root.clone();
         let project_path = root.as_path().to_string_lossy().into_owned();
         let filesystem_lease = self.filesystem().acquire(root.clone())?;
-        self.validate_graph_lifecycle_operation(&ownership)?;
+        self.validate_resource_lifecycle_operation(&ownership)?;
 
         let (loaded_source, loaded_source_variables, loaded_metadata) = {
             let data = self.project_data.read().unwrap();
@@ -3769,7 +3836,7 @@ impl ProjectState {
         let (mut moved, mut moved_local_variables) = match source_result {
             Ok(resource) => resource,
             Err(error) => {
-                self.validate_graph_lifecycle_operation(&ownership)?;
+                self.validate_resource_lifecycle_operation(&ownership)?;
                 return Err(ProjectFilesystemError::TransactionPrepareFailed {
                     message: error.to_string(),
                 });
@@ -3781,17 +3848,18 @@ impl ProjectState {
                 .graphs
                 .insert(path, GraphResourceDocument::new(name, kind));
         }
-        let allocation = Self::allocate_graph_path_from_snapshot(
-            Some(&project_path),
+        let allocation = Self::allocate_graph_rename_path_from_snapshot(
+            &project_path,
             &allocation_data,
+            graph_path,
             new_name,
             moved.kind,
         );
         let (target, unique_name) = match allocation {
             Ok(value) => value,
-            Err(message) => {
-                self.validate_graph_lifecycle_operation(&ownership)?;
-                return Err(ProjectFilesystemError::TransactionPrepareFailed { message });
+            Err(error) => {
+                self.validate_resource_lifecycle_operation(&ownership)?;
+                return Err(error);
             }
         };
         let moved_before = moved.clone();
@@ -3910,7 +3978,7 @@ impl ProjectState {
         ) {
             Ok(plan) => plan,
             Err(message) => {
-                self.validate_graph_lifecycle_operation(&ownership)?;
+                self.validate_resource_lifecycle_operation(&ownership)?;
                 return Err(ProjectFilesystemError::TransactionPrepareFailed { message });
             }
         };
@@ -3958,7 +4026,7 @@ impl ProjectState {
                 contents,
             });
         }
-        self.validate_graph_lifecycle_operation(&ownership)?;
+        self.validate_resource_lifecycle_operation(&ownership)?;
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
             context.clone(),
             filesystem_lease,
@@ -3977,7 +4045,7 @@ impl ProjectState {
                 }
             },
         )?;
-        self.validate_graph_lifecycle_operation(&ownership)?;
+        self.validate_resource_lifecycle_operation(&ownership)?;
         let projection_environment = self
             .capture_projection_environment_for_session(&context.session)
             .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
@@ -4002,7 +4070,7 @@ impl ProjectState {
             Some(&target),
         );
         let publication = self
-            .validate_graph_lifecycle_operation(&ownership)
+            .validate_resource_lifecycle_operation(&ownership)
             .and_then(|_| {
                 self.apply_resource_document_patch_with_environment(
                     &context,
@@ -4156,34 +4224,56 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         lifecycle_token: u64,
-    ) -> Result<GraphRenameOwnershipLease, ProjectFilesystemError> {
+    ) -> Result<ResourceRenameOwnershipLease, ProjectFilesystemError> {
+        self.acquire_resource_rename_ownership(
+            expected_project_instance_id,
+            crate::project::LifecycleResourcePath::Graph(graph_path.clone()),
+            lifecycle_token,
+        )
+    }
+
+    pub(super) fn acquire_resource_rename_ownership(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        resource_path: crate::project::LifecycleResourcePath,
+        lifecycle_token: u64,
+    ) -> Result<ResourceRenameOwnershipLease, ProjectFilesystemError> {
         let session = self.capture_project_session()?;
         let publication = self.mutation_publication.lock().unwrap();
-        if publication.project_instance_id != expected_project_instance_id.as_str() {
+        if publication.project_instance_id != expected_project_instance_id.as_str()
+            || session.instance_id != *expected_project_instance_id
+        {
             return Err(ProjectFilesystemError::StaleProjectLifecycle {
                 message: format!(
-                    "graph '{}' belongs to a different project instance",
-                    graph_path
+                    "resource '{}' belongs to a different project instance",
+                    resource_path
                 ),
             });
         }
-        let guard = self.graph_lifecycle.register(
+        let guard = self.resource_lifecycle.register(
             &session,
-            graph_path,
+            &resource_path,
             lifecycle_token,
-            GraphLifecycleIntent::Rename,
+            ResourceLifecycleIntent::Rename,
         )?;
         drop(publication);
-        let operation = GraphLifecycleOperation::from_guard(session, &guard);
-        Ok(GraphRenameOwnershipLease::new(operation, guard))
+        let operation = ResourceLifecycleOperation::from_guard(session, &guard);
+        Ok(ResourceRenameOwnershipLease::new(operation, guard))
     }
 
     fn validate_graph_lifecycle_operation(
         &self,
-        operation: &GraphLifecycleOperation,
+        operation: &ResourceLifecycleOperation,
+    ) -> Result<(), ProjectFilesystemError> {
+        self.validate_resource_lifecycle_operation(operation)
+    }
+
+    pub(super) fn validate_resource_lifecycle_operation(
+        &self,
+        operation: &ResourceLifecycleOperation,
     ) -> Result<(), ProjectFilesystemError> {
         self.validate_project_session(&operation.session)?;
-        self.graph_lifecycle.validate(&operation.owner)
+        self.resource_lifecycle.validate(&operation.owner)
     }
 
     fn register_graph_load_intent(
@@ -4193,8 +4283,8 @@ impl ProjectState {
         token: u64,
     ) -> Result<
         (
-            GraphLifecycleOperation,
-            crate::project::GraphLifecycleGuard,
+            ResourceLifecycleOperation,
+            crate::project::ResourceLifecycleGuard,
             Option<GraphResourceDocument>,
         ),
         ProjectFilesystemError,
@@ -4208,13 +4298,13 @@ impl ProjectState {
                 ),
             });
         }
-        let guard = self.graph_lifecycle.register(
+        let guard = self.resource_lifecycle.register(
             &session,
             graph_path,
             token,
-            GraphLifecycleIntent::Load,
+            ResourceLifecycleIntent::Load,
         )?;
-        let operation = GraphLifecycleOperation::from_guard(session, &guard);
+        let operation = ResourceLifecycleOperation::from_guard(session, &guard);
         let cached = self
             .project_data
             .read()
@@ -4227,8 +4317,8 @@ impl ProjectState {
 
     fn complete_graph_load(
         &self,
-        operation: &GraphLifecycleOperation,
-        guard: &mut crate::project::GraphLifecycleGuard,
+        operation: &ResourceLifecycleOperation,
+        guard: &mut crate::project::ResourceLifecycleGuard,
         mut resource: GraphResourceDocument,
         local_variables: Option<
             std::collections::HashMap<
@@ -4272,7 +4362,7 @@ impl ProjectState {
                         .into(),
             });
         }
-        let mut lifecycle = self.graph_lifecycle.boundary();
+        let mut lifecycle = self.resource_lifecycle.boundary();
         lifecycle.validate(&operation.owner)?;
         self.ensure_project_operational()?;
         let invalidate_all = resource.kind == crate::project::GraphDocumentKind::Function
@@ -4283,13 +4373,13 @@ impl ProjectState {
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         let mut variable_revisions = self.variable_revisions.write().unwrap();
         let revision = normalize_loaded_function_resource_revision(
-            &operation.owner.graph_path,
+            operation.owner.graph_path(),
             &mut resource,
-            graph_revisions.get(&operation.owner.graph_path).copied(),
+            graph_revisions.get(operation.owner.graph_path()).copied(),
         )?;
         let inserted =
-            Self::insert_graph_locked(&mut data, operation.owner.graph_path.clone(), resource)?;
-        graph_revisions.insert(operation.owner.graph_path.clone(), revision);
+            Self::insert_graph_locked(&mut data, operation.owner.graph_path().clone(), resource)?;
+        graph_revisions.insert(operation.owner.graph_path().clone(), revision);
         if let Some(local_variables) = local_variables {
             for (id, variable) in local_variables {
                 match variable_revisions.get(&id).copied() {
@@ -4309,10 +4399,10 @@ impl ProjectState {
                 }
             }
         }
-        lifecycle.commit_guard(guard, GraphLifecycleIntent::Load)?;
+        lifecycle.commit_guard(guard, ResourceLifecycleIntent::Load)?;
         publication.advance_authority_generation();
         let _ = invalidate_all;
-        self.invalidate_graph_compile_products(&operation.owner.graph_path);
+        self.invalidate_graph_compile_products(operation.owner.graph_path());
         let projection_source = include_projection.then(|| {
             self.projection_source_snapshot(
                 &data,
@@ -4360,8 +4450,8 @@ impl ProjectState {
 
     fn load_graph_for_registered_lifecycle_commit(
         &self,
-        operation: GraphLifecycleOperation,
-        mut guard: crate::project::GraphLifecycleGuard,
+        operation: ResourceLifecycleOperation,
+        mut guard: crate::project::ResourceLifecycleGuard,
         cached: Option<GraphResourceDocument>,
         include_projection: bool,
         before_commit: Option<&dyn Fn() -> Result<(), ProjectFilesystemError>>,
@@ -4380,18 +4470,18 @@ impl ProjectState {
         }
 
         let filesystem_lease = self.filesystem().acquire(operation.session.root.clone())?;
-        self.validate_graph_lifecycle_operation(&operation)?;
+        self.validate_resource_lifecycle_operation(&operation)?;
         let loaded = crate::project::project_io::load_project_graph_document_from_file(
             operation.session.root.as_path().to_string_lossy().as_ref(),
-            &operation.owner.graph_path,
+            operation.owner.graph_path(),
         );
         if loaded.is_err() {
-            self.validate_graph_lifecycle_operation(&operation)?;
+            self.validate_resource_lifecycle_operation(&operation)?;
         }
         let loaded = loaded.map_err(|error| match error {
             crate::project::ProjectError::InvalidGraphDocument { source, .. } => {
                 ProjectFilesystemError::InvalidGraphDocument {
-                    path: operation.owner.graph_path.clone(),
+                    path: operation.owner.graph_path().clone(),
                     source,
                 }
             }
@@ -4474,13 +4564,13 @@ impl ProjectState {
                 ),
             });
         }
-        let mut guard = self.graph_lifecycle.register(
+        let mut guard = self.resource_lifecycle.register(
             &session,
             graph_path,
             token,
-            GraphLifecycleIntent::Unload,
+            ResourceLifecycleIntent::Unload,
         )?;
-        let operation = GraphLifecycleOperation::from_guard(session, &guard);
+        let operation = ResourceLifecycleOperation::from_guard(session, &guard);
         let mut publication = self.mutation_publication.lock().unwrap();
         let path = self.project_path.read().unwrap();
         if publication.project_instance_id != operation.session.instance_id.as_str()
@@ -4488,7 +4578,7 @@ impl ProjectState {
         {
             return Err(operation.stale_error());
         }
-        let mut lifecycle = self.graph_lifecycle.boundary();
+        let mut lifecycle = self.resource_lifecycle.boundary();
         lifecycle.validate(&operation.owner)?;
         self.ensure_project_operational()?;
         let graph_path_text = graph_path.as_str();
@@ -4503,7 +4593,7 @@ impl ProjectState {
                 function_path != graph_path_text
             }
         });
-        lifecycle.commit_guard(&mut guard, GraphLifecycleIntent::Unload)?;
+        lifecycle.commit_guard(&mut guard, ResourceLifecycleIntent::Unload)?;
         let variables_removed = data.variables.len() != variable_count;
         let changed = graph_removed || variables_removed;
         if changed {
@@ -5072,6 +5162,7 @@ impl ProjectState {
             let data = self.project_data.read().unwrap().clone();
             let graph_revisions = self.graph_revisions.read().unwrap().clone();
             let variable_revisions = self.variable_revisions.read().unwrap().clone();
+            let worksheet_revisions = self.worksheet_revisions.read().unwrap().clone();
             let history = self.history.read().unwrap().clone();
             let transaction = if undo {
                 history.next_undo()
@@ -5107,6 +5198,7 @@ impl ProjectState {
                 data,
                 graph_revisions,
                 variable_revisions,
+                worksheet_revisions,
                 history,
             )
             .map_err(|error| MutationConflict::History(error.into()))?
@@ -5207,12 +5299,31 @@ impl ProjectState {
         })?;
         match transaction.persistence {
             crate::node_system::document::HistoryPersistencePolicy::DurableResourceMove => {
-                return self.commit_graph_move_history_direction(
-                    project_instance_id,
-                    undo,
-                    request,
-                    transaction,
-                );
+                return match transaction
+                    .resource_move
+                    .as_ref()
+                    .map(|patch| &patch.payload)
+                {
+                    Some(crate::node_system::document::ResourceMoveHistoryPayload::Graph {
+                        ..
+                    }) => self.commit_graph_move_history_direction(
+                        project_instance_id,
+                        undo,
+                        request,
+                        transaction,
+                    ),
+                    Some(crate::node_system::document::ResourceMoveHistoryPayload::Worksheet {
+                        ..
+                    }) => self.commit_worksheet_move_history_direction(
+                        project_instance_id,
+                        undo,
+                        request,
+                        transaction,
+                    ),
+                    None => Err(MutationConflict::History(
+                        "resource move history patch is missing".into(),
+                    )),
+                };
             }
             crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects => {
                 return self.commit_variable_effect_history_direction(
@@ -5224,7 +5335,22 @@ impl ProjectState {
             }
             crate::node_system::document::HistoryPersistencePolicy::InMemoryUntilSave => {
                 self.run_history_after_routing_test_hook();
-                if self.history_transaction_contains_unloaded_graph(&transaction, undo)? {
+                let touches_worksheet = transaction.resource_lifecycle.as_ref().is_some_and(
+                    |patch| {
+                        matches!(
+                            patch.payload,
+                            crate::node_system::document::ResourceLifecycleHistoryPayload::Worksheet {
+                                ..
+                            }
+                        )
+                    },
+                ) || transaction
+                    .changes
+                    .iter()
+                    .any(|change| matches!(change.resource, ResourceKey::Worksheet(_)));
+                if touches_worksheet
+                    || self.history_transaction_contains_unloaded_graph(&transaction, undo)?
+                {
                     let prepared = self.prepare_history_documents(
                         project_instance_id,
                         undo,
@@ -5232,7 +5358,7 @@ impl ProjectState {
                         &transaction.history_id,
                         transaction.persistence,
                     )?;
-                    debug_assert!(prepared.contains_unloaded_graph);
+                    debug_assert!(touches_worksheet || prepared.contains_unloaded_graph);
                     return self.commit_durable_history_documents(prepared, request);
                 }
             }
@@ -5386,7 +5512,7 @@ impl ProjectState {
                     })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let deltas = prepared
+        let mut deltas = prepared
             .transaction
             .changes
             .iter()
@@ -5402,6 +5528,43 @@ impl ProjectState {
                 },
             })
             .collect::<Vec<_>>();
+        if let Some(lifecycle) = &prepared.transaction.resource_lifecycle {
+            if let crate::node_system::document::ResourceLifecycleHistoryPayload::Worksheet {
+                ..
+            } = lifecycle.payload
+            {
+                let mut forward = if prepared.basis.undo {
+                    lifecycle.forward.inverse()
+                } else {
+                    lifecycle.forward.clone()
+                };
+                let state = forward
+                    .before
+                    .as_ref()
+                    .or(forward.after.as_ref())
+                    .expect("validated lifecycle History has one state");
+                let worksheet_key =
+                    crate::node_system::document::WorksheetResourceKey(state.path.clone());
+                let resource = ResourceKey::Worksheet(worksheet_key.clone());
+                let from_revision = prepared.before.worksheet_revisions[&worksheet_key];
+                let to_revision = prepared.after.worksheet_revisions[&worksheet_key];
+                if let Some(before) = forward.before.as_mut() {
+                    before.revision = from_revision;
+                }
+                if let Some(after) = forward.after.as_mut() {
+                    after.revision = to_revision;
+                }
+                deltas.push(crate::node_system::document::ResourceDeltaEvent {
+                    from_revision,
+                    to_revision,
+                    resource,
+                    caused_by: Some(request.operation_id),
+                    payload: crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+                        forward,
+                    ),
+                });
+            }
+        }
         let mut expected_graph_paths =
             affected_projection_paths(&deltas, &prepared.loaded_after_data);
         expected_graph_paths.retain(|path| {
@@ -5462,6 +5625,7 @@ impl ProjectState {
             let mut data = self.project_data.write().unwrap();
             let mut graph_revisions = self.graph_revisions.write().unwrap();
             let mut variable_revisions = self.variable_revisions.write().unwrap();
+            let mut worksheet_revisions = self.worksheet_revisions.write().unwrap();
             let mut history = self.history.write().unwrap();
             let current_head = if prepared.basis.undo {
                 history.next_undo()
@@ -5530,7 +5694,39 @@ impl ProjectState {
                                 .is_some_and(|document| document.value.is_some());
                             (entry.is_present() == expected_present).then_some(entry.revision)
                         }),
-                    ResourceKey::Database(_) | ResourceKey::Worksheet(_) => None,
+                    ResourceKey::Worksheet(key) => {
+                        let path = WorksheetResourcePath::parse(key.0.as_ref()).ok();
+                        let revision = path
+                            .as_ref()
+                            .and_then(|path| worksheet_revisions.get(path).copied());
+                        let expected_present = prepared
+                            .transaction
+                            .resource_lifecycle
+                            .as_ref()
+                            .filter(|lifecycle| {
+                                lifecycle
+                                    .forward
+                                    .before
+                                    .as_ref()
+                                    .or(lifecycle.forward.after.as_ref())
+                                    .is_some_and(|state| state.path.as_ref() == key.0.as_ref())
+                            })
+                            .map(|lifecycle| {
+                                if prepared.basis.undo {
+                                    lifecycle.forward.after.is_some()
+                                } else {
+                                    lifecycle.forward.before.is_some()
+                                }
+                            })
+                            .unwrap_or_else(|| prepared.before.worksheets.contains_key(key));
+                        let actual_present = path
+                            .as_ref()
+                            .is_some_and(|path| data.worksheets.contains_key(path));
+                        (expected_present == actual_present)
+                            .then_some(revision)
+                            .flatten()
+                    }
+                    ResourceKey::Database(_) => None,
                 };
                 if actual != Some(*expected) {
                     return Err(MutationConflict::History(
@@ -5545,6 +5741,7 @@ impl ProjectState {
                 graph_revisions.insert(path, revision);
             }
             *variable_revisions = prepared.after_variable_revisions;
+            *worksheet_revisions = prepared.after_worksheet_revisions;
             *history = prepared.proposed_history;
             let publication_revision = publication.allocate_resource_revision();
             debug_assert_eq!(publication.authority_generation(), projected_generation);
@@ -5856,6 +6053,154 @@ impl ProjectState {
         }
     }
 
+    fn commit_worksheet_move_history_direction(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+        undo: bool,
+        request: MutationRequest<HistoryMutation>,
+        transaction: ProjectHistoryTransaction,
+    ) -> Result<CommittedResourceMutation, MutationConflict> {
+        let history_id = transaction.history_id;
+        let move_patch = transaction.resource_move.ok_or_else(|| {
+            MutationConflict::History("resource move history patch is missing".into())
+        })?;
+        if move_patch.kind != crate::node_system::document::ResourceLifecycleKind::Worksheet {
+            return Err(MutationConflict::History(
+                "worksheet move history has a non-worksheet kind".into(),
+            ));
+        }
+        let crate::node_system::document::ResourceMoveHistoryPayload::Worksheet { document } =
+            move_patch.payload
+        else {
+            return Err(MutationConflict::History(
+                "worksheet move history has a non-worksheet payload".into(),
+            ));
+        };
+        let source = WorksheetResourcePath::parse(if undo {
+            move_patch.to.as_ref()
+        } else {
+            move_patch.from.as_ref()
+        })
+        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        let target = WorksheetResourcePath::parse(if undo {
+            move_patch.from.as_ref()
+        } else {
+            move_patch.to.as_ref()
+        })
+        .map_err(|error| MutationConflict::History(error.to_string().into()))?;
+        let session = self
+            .capture_project_session()
+            .map_err(history_project_error)?;
+        if session.instance_id != *project_instance_id {
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "caller project changed before worksheet move History preparation".into(),
+            ));
+        }
+        let projection_environment = self.capture_history_projection_environment(&session)?;
+        let lease = self
+            .filesystem()
+            .acquire(session.root.clone())
+            .map_err(history_project_error)?;
+        self.validate_project_session(&session)
+            .map_err(history_project_error)?;
+        let current = self
+            .project_data
+            .read()
+            .unwrap()
+            .worksheets
+            .get(&source)
+            .cloned()
+            .ok_or_else(|| {
+                MutationConflict::History(
+                    format!("worksheet '{}' is absent", source.as_str()).into(),
+                )
+            })?;
+        let current_revision = self
+            .worksheet_revisions
+            .read()
+            .unwrap()
+            .get(&source)
+            .copied()
+            .ok_or_else(|| {
+                MutationConflict::History(
+                    format!("worksheet '{}' has no revision authority", source.as_str()).into(),
+                )
+            })?;
+        let expected_resource = ResourceKey::Worksheet(
+            crate::node_system::document::WorksheetResourceKey(source.as_str().into()),
+        );
+        if request.resource != expected_resource {
+            return Err(MutationConflict::ResourceMismatch {
+                requested: request.resource,
+                store: expected_resource,
+            });
+        }
+        if request.base_revision != current_revision {
+            return Err(MutationConflict::StaleRevision {
+                base_revision: request.base_revision,
+                current_revision,
+            });
+        }
+        let mut moved = document;
+        moved.revision = current_revision.next();
+        let context = ProjectTransactionContext {
+            session,
+            operation_id: request.operation_id,
+            affected_resources: vec![ResourceKey::Worksheet(
+                crate::node_system::document::WorksheetResourceKey(source.as_str().into()),
+            )],
+            expected_revisions: [(
+                ResourceKey::Worksheet(crate::node_system::document::WorksheetResourceKey(
+                    source.as_str().into(),
+                )),
+                current_revision,
+            )]
+            .into_iter()
+            .collect(),
+            expected_absent_resources: [ResourceKey::Worksheet(
+                crate::node_system::document::WorksheetResourceKey(target.as_str().into()),
+            )]
+            .into_iter()
+            .collect(),
+            recovery_marker: Some(self.project_recovery_marker()),
+        };
+        let prepared = ProjectFilesystemTransaction::prepare(
+            context.clone(),
+            lease,
+            vec![StagedFilesystemMutation::MoveFile {
+                from: source.relative_path().to_path_buf(),
+                to: target.relative_path().to_path_buf(),
+            }],
+        )
+        .map_err(history_project_error)?;
+        let committed_filesystem = prepared.commit().map_err(history_project_error)?;
+        self.run_history_after_disk_commit_test_hook();
+        let publication = self.apply_resource_document_patch_internal(
+            &context,
+            ResourceDocumentPatch::MoveWorksheet {
+                from: source,
+                to: target,
+                moved: {
+                    let _ = current;
+                    moved
+                },
+            },
+            Some((undo, history_id)),
+            Some(projection_environment),
+            None,
+        );
+        match publication {
+            Ok(receipt) => {
+                committed_filesystem.finalize();
+                Ok(receipt)
+            }
+            Err(error) => Err(resolve_history_rollback(
+                history_project_error(error),
+                committed_filesystem.rollback(),
+            )),
+        }
+    }
+
     fn commit_graph_move_history_direction(
         &self,
         project_instance_id: &ProjectInstanceId,
@@ -5864,21 +6209,29 @@ impl ProjectState {
         transaction: ProjectHistoryTransaction,
     ) -> Result<CommittedResourceMutation, MutationConflict> {
         let history_id = transaction.history_id.clone();
-        let move_patch = transaction.graph_resource_move.ok_or_else(|| {
-            MutationConflict::History("graph move history patch is missing".into())
+        let move_patch = transaction.resource_move.ok_or_else(|| {
+            MutationConflict::History("resource move history patch is missing".into())
         })?;
-        let payload: GraphMoveHistoryPayload = serde_json::from_value(move_patch.payload)
+        let crate::node_system::document::ResourceMoveHistoryPayload::Graph {
+            persisted_move_payload,
+        } = move_patch.payload
+        else {
+            return Err(MutationConflict::History(
+                "graph move history has a non-graph payload".into(),
+            ));
+        };
+        let payload: GraphMoveHistoryPayload = serde_json::from_value(persisted_move_payload)
             .map_err(|error| MutationConflict::History(error.to_string().into()))?;
         let source = GraphResourcePath::new(if undo {
-            move_patch.to.0.as_ref()
+            move_patch.to.as_ref()
         } else {
-            move_patch.from.0.as_ref()
+            move_patch.from.as_ref()
         })
         .map_err(|error| MutationConflict::History(error.to_string().into()))?;
         let target = GraphResourcePath::new(if undo {
-            move_patch.from.0.as_ref()
+            move_patch.from.as_ref()
         } else {
-            move_patch.to.0.as_ref()
+            move_patch.to.as_ref()
         })
         .map_err(|error| MutationConflict::History(error.to_string().into()))?;
         let mut desired_moved = if undo {
@@ -6169,10 +6522,10 @@ impl ProjectState {
             }
             cancellation.check().map_err(|error| error.to_string())?;
             let guard = self
-                .graph_lifecycle
-                .allocate_and_register(&session, &path, GraphLifecycleIntent::Load)
+                .resource_lifecycle
+                .allocate_and_register(&session, &path, ResourceLifecycleIntent::Load)
                 .map_err(|error| error.to_string())?;
-            let operation = GraphLifecycleOperation::from_guard(session.clone(), &guard);
+            let operation = ResourceLifecycleOperation::from_guard(session.clone(), &guard);
             let cached = self.project_data.read().unwrap().graphs.get(&path).cloned();
             let before_commit = || {
                 cancellation.check().map_err(|error| {
@@ -8018,7 +8371,7 @@ pub(super) fn project_documents(
         VariableRevisionEntry,
     >,
 ) -> ProjectDocumentState {
-    ProjectDocumentState::new(
+    let mut documents = ProjectDocumentState::new(
         data.graphs
             .iter()
             .map(|(path, graph)| {
@@ -8061,7 +8414,23 @@ pub(super) fn project_documents(
                 ))
             })
             .collect(),
-    )
+    );
+    documents.worksheets = data
+        .worksheets
+        .iter()
+        .map(|(path, document)| {
+            (
+                crate::node_system::document::WorksheetResourceKey(path.as_str().into()),
+                document.clone(),
+            )
+        })
+        .collect();
+    documents.worksheet_revisions = documents
+        .worksheets
+        .iter()
+        .map(|(key, document)| (key.clone(), document.revision))
+        .collect();
+    documents
 }
 
 fn try_project_document_revision(
@@ -8078,7 +8447,11 @@ fn try_project_document_revision(
             .variables
             .get(key)
             .map(|document| document.revision),
-        ResourceKey::Database(_) | ResourceKey::Worksheet(_) => None,
+        ResourceKey::Worksheet(key) => documents
+            .worksheets
+            .get(key)
+            .map(|document| document.revision),
+        ResourceKey::Database(_) => None,
     }
 }
 
@@ -8108,6 +8481,15 @@ pub(super) fn replace_project_documents(
             graph.function = Some(function);
         }
     }
+    data.worksheets = documents
+        .worksheets
+        .into_iter()
+        .map(|(key, document)| {
+            let path = WorksheetResourcePath::parse(key.0.as_ref())
+                .expect("history retains valid Worksheet resource paths");
+            (path, document)
+        })
+        .collect();
     for (key, document) in documents.variables {
         let Some(id) = key.0.strip_prefix("variables/") else {
             continue;
@@ -8216,30 +8598,6 @@ pub(super) fn publish_function_plans(
             entries,
         )
         .map_err(|error| ProjectExecutionError::message(error.to_string()))
-}
-
-fn sanitize_graph_name(name: &str) -> String {
-    let sanitized = name
-        .chars()
-        .map(|character| {
-            if character.is_control()
-                || matches!(
-                    character,
-                    '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*'
-                )
-            {
-                '_'
-            } else {
-                character
-            }
-        })
-        .collect::<String>();
-    let sanitized = sanitized.trim_matches([' ', '.']).trim();
-    if sanitized.is_empty() {
-        "Untitled".into()
-    } else {
-        sanitized.into()
-    }
 }
 
 fn build_run_parameters(

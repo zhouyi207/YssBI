@@ -18,6 +18,7 @@ import type { GraphMeta } from './graphMetaStore';
 import type { WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
 import type { EditorTabMemento } from '@/features/core/layout/editorTabStore';
 import type { LayoutTree } from '@/shared/types/ui';
+import type { DetailFocus } from '@/features/core/editor/detail/types';
 import {
   clearEditorGroupMaximizedHidden,
   listEditorGroupIds,
@@ -57,6 +58,7 @@ export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLo
     readonly resources: Record<ResourceKey, ProjectResourceMeta>;
     readonly graphOrder: string[];
     readonly layout: PreparedLayoutState;
+    readonly detailFocus: DetailFocus | null;
     readonly history: { canUndo: boolean; canRedo: boolean; pending: false };
     readonly projectIO: {
       projectInstanceId: string;
@@ -72,6 +74,7 @@ export interface AuthoritativeProjectLoadPlanContext {
   readonly layoutNodes: LayoutTree;
   readonly editorTabs: EditorTabMemento;
   readonly recentEditorGroupIds: string[];
+  readonly detailFocus: DetailFocus | null;
 }
 
 export interface AuthoritativeProjectLoadPlanDependencies {
@@ -90,7 +93,10 @@ export interface AuthoritativeProjectLoadPlanDependencies {
     variables: Record<string, Variable>;
     databases: Record<string, DatabaseRecord>;
   }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] };
-  prepareLayoutState(context: AuthoritativeProjectLoadPlanContext): PreparedLayoutState;
+  prepareLayoutState(
+    context: AuthoritativeProjectLoadPlanContext,
+    authoritativeWorksheetPaths: ReadonlySet<string>,
+  ): PreparedLayoutState;
   validateCoordinatorStart(projectInstanceId: string, publicationRevision: number): void;
 }
 
@@ -122,18 +128,19 @@ export function buildProjectResourceState(input: {
   worksheets: WorksheetIndexEntry[];
   variables: Record<string, Variable>;
   databases: Record<string, DatabaseRecord>;
-  loadedWorksheetIds?: ReadonlySet<string>;
+  loadedWorksheetPaths?: ReadonlySet<string>;
 }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] } {
   const resources: ProjectResourceMeta[] = input.graphs.map((graph) =>
     buildGraphResourceMeta(graph.type, graph.path, graph.name, { revision: graph.revision }));
   for (const worksheet of input.worksheets) {
     resources.push({
-      id: worksheet.id,
+      id: worksheet.worksheetPath,
       kind: 'worksheet',
       name: worksheet.name,
-      uri: `yssbi://worksheet/${worksheet.id}`,
+      uri: `yssbi://worksheet/${worksheet.worksheetPath}`,
+      revision: worksheet.revision,
       exists: true,
-      loaded: input.loadedWorksheetIds?.has(worksheet.id) ?? false,
+      loaded: input.loadedWorksheetPaths?.has(worksheet.worksheetPath) ?? false,
       hasDirtyDocument: false,
       hasStaleDocument: false,
       hasConflictDocument: false,
@@ -174,34 +181,54 @@ function collectDescendants(nodes: LayoutTree, rootId: string, skipId: string): 
   return result;
 }
 
-function prepareTabs(memento: EditorTabMemento): EditorTabMemento {
+function prepareTabs(
+  memento: EditorTabMemento,
+  authoritativeWorksheetPaths: ReadonlySet<string>,
+): EditorTabMemento {
   const tabs = structuredClone(memento);
   for (const [tabId, tab] of Object.entries(tabs.registry)) {
-    if (tab.type === 'event' || tab.type === 'function' || tab.type === 'worksheet') {
-      delete tabs.registry[tabId];
-    }
+    const staleProjectTab = tab.type === 'event'
+      || tab.type === 'function'
+      || (tab.type === 'worksheet' && !authoritativeWorksheetPaths.has(tab.id));
+    if (staleProjectTab) delete tabs.registry[tabId];
   }
+
   const mergedIds: string[] = [];
-  const seen = new Set<string>();
+  const selectedTabIds: string[] = [];
+  const seenTabs = new Set<string>();
+  const seenSelectedTabs = new Set<string>();
+  let activeTabId: string | null = null;
   for (const placement of Object.values(tabs.placements)) {
     for (const tabId of placement.tabIds) {
-      if (!tabs.registry[tabId] || seen.has(tabId)) continue;
-      seen.add(tabId);
+      if (!tabs.registry[tabId] || seenTabs.has(tabId)) continue;
+      seenTabs.add(tabId);
       mergedIds.push(tabId);
+    }
+    if (placement.activeTabId && tabs.registry[placement.activeTabId]) {
+      activeTabId ??= placement.activeTabId;
+    }
+
+    for (const tabId of placement.selectedTabIds) {
+      if (!tabs.registry[tabId] || seenSelectedTabs.has(tabId)) continue;
+      seenSelectedTabs.add(tabId);
+      selectedTabIds.push(tabId);
     }
   }
   tabs.placements = mergedIds.length === 0 ? {} : {
     [DEFAULT_EDITOR_GROUP_ID]: {
       tabIds: mergedIds,
-      activeTabId: mergedIds[mergedIds.length - 1] ?? null,
+      activeTabId: activeTabId ?? mergedIds[mergedIds.length - 1] ?? null,
       selectedNodeIds: [],
-      selectedTabIds: [],
+      selectedTabIds,
     },
   };
   return tabs;
 }
 
-function prepareLayout(context: AuthoritativeProjectLoadPlanContext): PreparedLayoutState {
+function prepareLayout(
+  context: AuthoritativeProjectLoadPlanContext,
+  authoritativeWorksheetPaths: ReadonlySet<string>,
+): PreparedLayoutState {
   const nodes = structuredClone(context.layoutNodes);
   const editorArea = nodes[EDITOR_AREA_ID];
   if (!editorArea?.children) throw new Error('Project layout is missing the editor area');
@@ -227,7 +254,7 @@ function prepareLayout(context: AuthoritativeProjectLoadPlanContext): PreparedLa
       ...context.recentEditorGroupIds.filter((id) =>
         id !== DEFAULT_EDITOR_GROUP_ID && listEditorGroupIds(nodes).includes(id)),
     ],
-    tabs: prepareTabs(context.editorTabs),
+    tabs: prepareTabs(context.editorTabs, authoritativeWorksheetPaths),
   };
 }
 
@@ -261,10 +288,11 @@ export function buildAuthoritativeProjectLoadPlan(
   ]));
   const variableState = dependencies.normalizeVariables(source.index);
   const worksheetIndex = source.index.worksheets.map((worksheet) => ({
-    id: worksheet.id,
+    worksheetPath: worksheet.worksheetPath,
     name: worksheet.name,
     databaseId: worksheet.databaseId,
     chartType: worksheet.chartType as WorksheetIndexEntry['chartType'],
+    revision: worksheet.revision,
   }));
   const graphMeta = dependencies.prepareFunctionState(source.index.graphs);
   const resourceState = dependencies.prepareResourceState({
@@ -273,7 +301,14 @@ export function buildAuthoritativeProjectLoadPlan(
     variables: variableState.variables,
     databases,
   });
-  const layout = dependencies.prepareLayoutState(context);
+  const authoritativeWorksheetPaths = new Set(
+    worksheetIndex.map((worksheet) => worksheet.worksheetPath),
+  );
+  const layout = dependencies.prepareLayoutState(context, authoritativeWorksheetPaths);
+  const detailFocus = context.detailFocus?.kind === 'worksheet'
+    && authoritativeWorksheetPaths.has(context.detailFocus.worksheetPath)
+    ? structuredClone(context.detailFocus)
+    : null;
   dependencies.validateCoordinatorStart(
     source.index.projectInstanceId,
     source.index.publicationRevision,
@@ -299,6 +334,7 @@ export function buildAuthoritativeProjectLoadPlan(
       resources: resourceState.resources,
       graphOrder: resourceState.graphOrder,
       layout,
+      detailFocus,
       history: {
         canUndo: source.index.history.canUndo,
         canRedo: source.index.history.canRedo,

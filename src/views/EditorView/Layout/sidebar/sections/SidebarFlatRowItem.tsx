@@ -95,12 +95,17 @@ export const SidebarFlatRowItem = memo(function SidebarFlatRowItem({
     case 'worksheet':
       return (
         <SidebarWorksheetRow
-          id={row.id}
+          worksheetPath={row.worksheetPath}
           name={row.name}
           indentDepth={row.level}
-          isSelected={ctx.detailTarget?.kind === 'worksheet' && ctx.detailTarget.id === row.id}
+          isSelected={ctx.detailTarget?.kind === 'worksheet'
+            && ctx.detailTarget.worksheetPath === row.worksheetPath}
           onOpen={ctx.onOpenWorksheet ?? (() => undefined)}
-          onContextMenu={(e) => ctx.onWorksheetContextMenu?.(e, row.id, row.name)}
+          onContextMenu={(e) => ctx.onWorksheetContextMenu?.(
+            e,
+            row.worksheetPath,
+            row.name,
+          )}
         />
       );
     case 'node':

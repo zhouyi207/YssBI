@@ -2,9 +2,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
-use super::{ProjectError, SCHEMA_VERSION};
+use super::{ProjectError, SCHEMA_VERSION, WorksheetResourcePath};
 
 pub const WORKSHEETS_DIR: &str = "worksheets";
 pub const WORKSHEET_EXTENSION: &str = "yssbi-worksheet";
@@ -19,13 +18,10 @@ pub struct WorksheetEncodings {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorksheetDocument {
     pub schema_version: u32,
-    #[serde(default)]
     pub revision: crate::node_system::document::ResourceRevision,
-    pub id: String,
-    pub name: String,
     pub database_id: String,
     pub chart_type: String,
     pub encodings: WorksheetEncodings,
@@ -34,19 +30,18 @@ pub struct WorksheetDocument {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectWorksheetIndexEntry {
-    pub id: String,
+    pub worksheet_path: WorksheetResourcePath,
     pub name: String,
     pub database_id: String,
     pub chart_type: String,
+    pub revision: crate::node_system::document::ResourceRevision,
 }
 
 impl WorksheetDocument {
-    pub fn new(name: impl Into<String>, database_id: impl Into<String>) -> Self {
+    pub fn new(database_id: impl Into<String>) -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
             revision: crate::node_system::document::ResourceRevision::INITIAL,
-            id: Uuid::new_v4().to_string(),
-            name: name.into(),
             database_id: database_id.into(),
             chart_type: "histogram".to_string(),
             encodings: WorksheetEncodings { x: None, y: None },
@@ -65,80 +60,71 @@ pub fn read_worksheet_index_entries(
 ) -> Result<Vec<ProjectWorksheetIndexEntry>, ProjectError> {
     let mut entries = scan_worksheet_documents(root)?
         .into_iter()
-        .map(|(_, document)| ProjectWorksheetIndexEntry {
-            id: document.id,
-            name: document.name,
+        .map(|(worksheet_path, document)| ProjectWorksheetIndexEntry {
+            name: worksheet_path.display_name().as_str().to_string(),
+            worksheet_path,
             database_id: document.database_id,
             chart_type: document.chart_type,
+            revision: document.revision,
         })
         .collect::<Vec<_>>();
-    entries.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    entries.sort_by(|a, b| {
+        a.worksheet_path
+            .display_name()
+            .portable_key()
+            .cmp(&b.worksheet_path.display_name().portable_key())
+    });
     Ok(entries)
 }
 
 pub fn load_worksheet_from_file(
     root: &Path,
-    worksheet_id: &str,
+    worksheet_path: &WorksheetResourcePath,
 ) -> Result<WorksheetDocument, ProjectError> {
-    load_worksheet_from_root_readonly(root, worksheet_id)
+    load_worksheet_from_root_readonly(root, worksheet_path)
 }
 
 pub(crate) fn load_worksheet_from_root_readonly(
     root: &Path,
-    worksheet_id: &str,
+    worksheet_path: &WorksheetResourcePath,
 ) -> Result<WorksheetDocument, ProjectError> {
     scan_worksheet_documents(root)?
         .into_iter()
-        .find_map(|(_, document)| (document.id == worksheet_id).then_some(document))
+        .find_map(|(path, document)| (path == *worksheet_path).then_some(document))
         .ok_or_else(|| {
-            ProjectError::InvalidProjectFormat(format!("worksheet '{worksheet_id}' not found"))
+            ProjectError::InvalidProjectFormat(format!(
+                "worksheet '{}' not found",
+                worksheet_path.as_str()
+            ))
         })
 }
 
 pub fn serialize_worksheet(
+    path: &WorksheetResourcePath,
     document: &WorksheetDocument,
 ) -> Result<(PathBuf, Vec<u8>), ProjectError> {
     let contents = serde_json::to_vec_pretty(document).map_err(ProjectError::Serialize)?;
-    Ok((worksheet_relative_path(document), contents))
-}
-
-pub fn existing_worksheet_names(
-    root: &Path,
-    excluded_id: Option<&str>,
-) -> Result<Vec<String>, ProjectError> {
-    let mut names = HashSet::new();
-    for (_, document) in scan_worksheet_documents(root)? {
-        if excluded_id.is_some_and(|id| id == document.id) {
-            continue;
-        }
-        names.insert(document.name);
-    }
-    let mut out = names.into_iter().collect::<Vec<_>>();
-    out.sort();
-    Ok(out)
+    Ok((path.relative_path().to_path_buf(), contents))
 }
 
 pub(crate) fn load_worksheets_from_root(
     root: &Path,
-) -> Result<HashMap<String, WorksheetDocument>, ProjectError> {
-    Ok(scan_worksheet_documents(root)?
-        .into_iter()
-        .map(|(_, document)| (document.id.clone(), document))
-        .collect())
+) -> Result<HashMap<WorksheetResourcePath, WorksheetDocument>, ProjectError> {
+    Ok(scan_worksheet_documents(root)?.into_iter().collect())
 }
 
 pub fn worksheet_absolute_path(
     root: &Path,
-    worksheet_id: &str,
+    worksheet_path: &WorksheetResourcePath,
 ) -> Result<Option<PathBuf>, ProjectError> {
     Ok(scan_worksheet_documents(root)?
         .into_iter()
-        .find_map(|(path, document)| (document.id == worksheet_id).then_some(path)))
+        .find_map(|(path, _)| (path == *worksheet_path).then(|| root.join(path.relative_path()))))
 }
 
 fn scan_worksheet_documents(
     root: &Path,
-) -> Result<Vec<(PathBuf, WorksheetDocument)>, ProjectError> {
+) -> Result<Vec<(WorksheetResourcePath, WorksheetDocument)>, ProjectError> {
     let worksheets_dir = root.join(WORKSHEETS_DIR);
     let metadata = match std::fs::symlink_metadata(&worksheets_dir) {
         Ok(metadata) => metadata,
@@ -156,13 +142,22 @@ fn scan_worksheet_documents(
     let mut documents = Vec::new();
     walk_worksheet_directory(&worksheets_dir, &worksheets_dir, &mut documents)?;
     documents.sort_by(|(left, _), (right, _)| left.cmp(right));
+    let mut portable_paths = HashSet::new();
+    for (path, _) in &documents {
+        if !portable_paths.insert(path.display_name().portable_key()) {
+            return Err(ProjectError::InvalidProjectFormat(format!(
+                "portable worksheet path collision at '{}'",
+                path.as_str()
+            )));
+        }
+    }
     Ok(documents)
 }
 
 fn walk_worksheet_directory(
     worksheets_dir: &Path,
     directory: &Path,
-    documents: &mut Vec<(PathBuf, WorksheetDocument)>,
+    documents: &mut Vec<(WorksheetResourcePath, WorksheetDocument)>,
 ) -> Result<(), ProjectError> {
     for entry in std::fs::read_dir(directory)? {
         let path = entry?.path();
@@ -172,7 +167,7 @@ fn walk_worksheet_directory(
             walk_worksheet_directory(worksheets_dir, &path, documents)?;
             continue;
         }
-        if !metadata.is_file() || !has_worksheet_extension(&path) {
+        if !metadata.is_file() {
             continue;
         }
 
@@ -188,15 +183,29 @@ fn walk_worksheet_directory(
                 "nested worksheet files are not supported",
             ));
         }
-        let document = read_worksheet_document_path(&path)?;
-        let expected = PathBuf::from(format!("{}.{}", document.id, WORKSHEET_EXTENSION));
-        if relative != expected {
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| invalid_layout(&path, "worksheet path is not valid Unicode"))?;
+        let relative_path = format!("{WORKSHEETS_DIR}/{file_name}");
+        let relative_path = relative_path.as_str();
+        let worksheet_path = WorksheetResourcePath::parse(relative_path).map_err(|error| {
+            invalid_layout(&path, &format!("invalid worksheet resource path: {error}"))
+        })?;
+        if uuid::Uuid::parse_str(worksheet_path.display_name().as_str()).is_ok() {
             return Err(invalid_layout(
                 &path,
-                "worksheet filename must be its stable document ID",
+                "invalid worksheet resource path: UUID filenames are forbidden",
             ));
         }
-        documents.push((path, document));
+        if worksheet_path.relative_path() != relative_path {
+            return Err(invalid_layout(
+                &path,
+                "invalid worksheet resource path: path is not canonical",
+            ));
+        }
+        let document = read_worksheet_document_path(&path)?;
+        documents.push((worksheet_path, document));
     }
     Ok(())
 }
@@ -222,24 +231,15 @@ fn invalid_layout(path: &Path, reason: &str) -> ProjectError {
     ProjectError::InvalidProjectFormat(format!("{reason}: '{}'", path.display()))
 }
 
-fn has_worksheet_extension(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| extension.eq_ignore_ascii_case(WORKSHEET_EXTENSION))
-}
-
 fn read_worksheet_document_path(path: &Path) -> Result<WorksheetDocument, ProjectError> {
     let content = std::fs::read_to_string(path).map_err(ProjectError::Io)?;
     serde_json::from_str(&content).map_err(ProjectError::Deserialize)
 }
 
-pub(crate) fn worksheet_relative_path(document: &WorksheetDocument) -> PathBuf {
-    PathBuf::from(WORKSHEETS_DIR).join(format!("{}.{}", document.id, WORKSHEET_EXTENSION))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::project::{ResourceName, WorksheetResourcePath};
 
     fn temp_project_dir() -> PathBuf {
         let path = std::env::temp_dir().join(format!("yssbi-worksheet-{}", uuid::Uuid::new_v4()));
@@ -252,36 +252,49 @@ mod tests {
         std::fs::write(path, serde_json::to_vec_pretty(document).unwrap()).unwrap();
     }
 
-    fn assert_all_read_entries_reject(root: &Path, worksheet_id: &str) {
+    fn worksheet_path(name: &str) -> WorksheetResourcePath {
+        WorksheetResourcePath::from_name(&ResourceName::parse(name).unwrap())
+    }
+
+    fn document(revision: u64) -> WorksheetDocument {
+        serde_json::from_value(serde_json::json!({
+            "schemaVersion": SCHEMA_VERSION,
+            "revision": revision,
+            "databaseId": "db-1",
+            "chartType": "histogram",
+            "encodings": { "x": null, "y": null }
+        }))
+        .unwrap()
+    }
+
+    fn assert_all_read_entries_reject(root: &Path, worksheet_path: &WorksheetResourcePath) {
         assert!(load_worksheets_from_root(root).is_err());
         assert!(read_worksheet_index_entries(root).is_err());
-        assert!(load_worksheet_from_file(root, worksheet_id).is_err());
+        assert!(load_worksheet_from_file(root, worksheet_path).is_err());
     }
 
     #[test]
-    fn canonical_id_path_is_shared_by_activation_index_and_direct_load() {
+    fn canonical_name_path_is_shared_by_activation_index_and_direct_load() {
         let root = temp_project_dir();
-        let document = WorksheetDocument::new("Root Sheet", "db-1");
-        crate::project::fixtures::write_worksheet(root.as_path(), &document).unwrap();
-        let canonical = root.join(worksheet_relative_path(&document));
+        let path = worksheet_path("Root Sheet");
+        let document = document(3);
+        crate::project::fixtures::write_worksheet(root.as_path(), &path, &document).unwrap();
+        let canonical = root.join(path.relative_path());
 
         assert!(canonical.is_file());
-        let expected_file_name = format!("{}.{}", document.id, WORKSHEET_EXTENSION);
-        assert_eq!(
-            canonical.file_name().and_then(|name| name.to_str()),
-            Some(expected_file_name.as_str())
-        );
         assert_eq!(
             load_worksheets_from_root(root.as_path())
                 .unwrap()
-                .get(&document.id),
+                .get(&path),
             Some(&document)
         );
         let entries = read_worksheet_index_entries(root.as_path()).unwrap();
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].id, document.id);
+        assert_eq!(entries[0].worksheet_path, path);
+        assert_eq!(entries[0].name, "Root Sheet");
+        assert_eq!(entries[0].revision.get(), 3);
         assert_eq!(
-            load_worksheet_from_file(root.as_path(), &document.id).unwrap(),
+            load_worksheet_from_file(root.as_path(), &path).unwrap(),
             document
         );
 
@@ -289,17 +302,100 @@ mod tests {
     }
 
     #[test]
-    fn legacy_name_based_worksheet_is_rejected_by_every_read_entry() {
-        let root = temp_project_dir();
-        let document = WorksheetDocument::new("Legacy Name", "db-1");
-        let legacy = root
-            .join(WORKSHEETS_DIR)
-            .join(format!("Legacy Name.{WORKSHEET_EXTENSION}"));
-        write_document_at(&legacy, &document);
+    fn worksheet_document_rejects_legacy_identity_fields() {
+        for field in ["id", "name"] {
+            let mut value = serde_json::to_value(document(0)).unwrap();
+            value.as_object_mut().unwrap().insert(
+                field.into(),
+                serde_json::Value::String("legacy-identity".into()),
+            );
 
-        assert_all_read_entries_reject(root.as_path(), &document.id);
-        assert!(legacy.is_file(), "read paths must not migrate legacy files");
-        assert!(!root.join(worksheet_relative_path(&document)).exists());
+            assert!(serde_json::from_value::<WorksheetDocument>(value).is_err());
+        }
+    }
+
+    #[test]
+    fn worksheet_document_requires_revision() {
+        let mut value = serde_json::to_value(document(4)).unwrap();
+        value.as_object_mut().unwrap().remove("revision");
+
+        assert!(serde_json::from_value::<WorksheetDocument>(value).is_err());
+    }
+
+    #[test]
+    fn worksheet_activation_rejects_uuid_filename() {
+        let root = temp_project_dir();
+        let uuid = uuid::Uuid::new_v4().to_string();
+        let file = root
+            .join(WORKSHEETS_DIR)
+            .join(format!("{uuid}.{WORKSHEET_EXTENSION}"));
+        write_document_at(&file, &document(0));
+
+        let error = load_worksheets_from_root(&root).unwrap_err().to_string();
+        assert!(error.contains("invalid worksheet resource path"), "{error}");
+        assert!(file.is_file(), "activation must not migrate invalid files");
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn worksheet_activation_rejects_noncanonical_and_casefold_duplicate_paths() {
+        let noncanonical_root = temp_project_dir();
+        let noncanonical = noncanonical_root
+            .join(WORKSHEETS_DIR)
+            .join(format!("Report.{}", WORKSHEET_EXTENSION.to_uppercase()));
+        write_document_at(&noncanonical, &document(0));
+        let error = load_worksheets_from_root(&noncanonical_root)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("invalid worksheet resource path"), "{error}");
+
+        let wrong_extension_root = temp_project_dir();
+        let wrong_extension = wrong_extension_root
+            .join(WORKSHEETS_DIR)
+            .join("Report.json");
+        write_document_at(&wrong_extension, &document(0));
+        let error = load_worksheets_from_root(&wrong_extension_root)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("invalid worksheet resource path"), "{error}");
+
+        let duplicate_root = temp_project_dir();
+        for name in ["Straße", "STRASSE"] {
+            write_document_at(
+                &duplicate_root
+                    .join(WORKSHEETS_DIR)
+                    .join(format!("{name}.{WORKSHEET_EXTENSION}")),
+                &document(0),
+            );
+        }
+        let error = load_worksheets_from_root(&duplicate_root)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("portable worksheet path collision"),
+            "{error}"
+        );
+
+        let _ = std::fs::remove_dir_all(noncanonical_root);
+        let _ = std::fs::remove_dir_all(wrong_extension_root);
+        let _ = std::fs::remove_dir_all(duplicate_root);
+    }
+
+    #[test]
+    fn worksheet_index_derives_name_from_path_and_includes_revision() {
+        let root = temp_project_dir();
+        let path = worksheet_path("销售分析 2");
+        crate::project::fixtures::write_worksheet(&root, &path, &document(9)).unwrap();
+
+        let entries = read_worksheet_index_entries(&root).unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].worksheet_path, path);
+        assert_eq!(entries[0].name, "销售分析 2");
+        assert_eq!(entries[0].database_id, "db-1");
+        assert_eq!(entries[0].chart_type, "histogram");
+        assert_eq!(entries[0].revision.get(), 9);
 
         let _ = std::fs::remove_dir_all(root);
     }
@@ -307,16 +403,16 @@ mod tests {
     #[test]
     fn nested_canonical_worksheet_is_rejected_without_flattening() {
         let root = temp_project_dir();
-        let document = WorksheetDocument::new("Nested", "db-1");
+        let path = worksheet_path("Nested");
         let nested = root
             .join(WORKSHEETS_DIR)
             .join("nested")
-            .join(format!("{}.{}", document.id, WORKSHEET_EXTENSION));
-        write_document_at(&nested, &document);
+            .join(format!("Nested.{WORKSHEET_EXTENSION}"));
+        write_document_at(&nested, &document(0));
 
-        assert_all_read_entries_reject(root.as_path(), &document.id);
+        assert_all_read_entries_reject(root.as_path(), &path);
         assert!(nested.is_file(), "read paths must not flatten nested files");
-        assert!(!root.join(worksheet_relative_path(&document)).exists());
+        assert!(!root.join(path.relative_path()).exists());
 
         let _ = std::fs::remove_dir_all(root);
     }
@@ -328,14 +424,15 @@ mod tests {
 
         let root = temp_project_dir();
         let external_root = temp_project_dir();
-        let document = WorksheetDocument::new("External", "db-1");
-        let external = external_root.join(format!("{}.{}", document.id, WORKSHEET_EXTENSION));
+        let path = worksheet_path("External");
+        let document = document(0);
+        let external = external_root.join(format!("External.{WORKSHEET_EXTENSION}"));
         write_document_at(&external, &document);
-        let link = root.join(worksheet_relative_path(&document));
+        let link = root.join(path.relative_path());
         std::fs::create_dir_all(link.parent().unwrap()).unwrap();
         symlink(&external, &link).unwrap();
 
-        assert_all_read_entries_reject(root.as_path(), &document.id);
+        assert_all_read_entries_reject(root.as_path(), &path);
         assert!(external.is_file());
 
         let _ = std::fs::remove_dir_all(root);
@@ -361,8 +458,10 @@ mod tests {
     fn external_directory_junction_is_rejected_by_every_read_entry_before_reading() {
         let root = temp_project_dir();
         let external_root = temp_project_dir();
-        let document = WorksheetDocument::new("External", "db-1");
-        crate::project::fixtures::write_worksheet(external_root.as_path(), &document).unwrap();
+        let path = worksheet_path("External");
+        let document = document(0);
+        crate::project::fixtures::write_worksheet(external_root.as_path(), &path, &document)
+            .unwrap();
         let worksheets = root.join(WORKSHEETS_DIR);
         std::fs::create_dir_all(&worksheets).unwrap();
         if !create_test_junction(
@@ -373,7 +472,7 @@ mod tests {
             return;
         }
 
-        assert_all_read_entries_reject(root.as_path(), &document.id);
+        assert_all_read_entries_reject(root.as_path(), &path);
 
         let _ = std::fs::remove_dir_all(root);
         let _ = std::fs::remove_dir_all(external_root);
@@ -390,7 +489,7 @@ mod tests {
             return;
         }
 
-        assert_all_read_entries_reject(root.as_path(), "missing");
+        assert_all_read_entries_reject(root.as_path(), &worksheet_path("Missing"));
 
         let _ = std::fs::remove_dir_all(root);
     }

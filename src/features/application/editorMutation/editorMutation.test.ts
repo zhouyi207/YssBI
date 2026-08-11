@@ -256,6 +256,33 @@ describe('mutation and history services', () => {
     });
   });
 
+  it('models worksheet content through the common resource delta contract', () => {
+    const result: ResourceMutationResultDto = {
+      operationId: '00000000-0000-0000-0000-000000000389',
+      projectInstanceId: '00000000-0000-0000-0000-000000000601',
+      publicationRevision: 3,
+      moves: [],
+      deltas: [{
+        resource: { kind: 'worksheet', key: 'opaque worksheet / 路径' },
+        fromRevision: 4,
+        toRevision: 5,
+        causedBy: '00000000-0000-0000-0000-000000000389',
+        payload: {
+          kind: 'worksheet',
+          patch: {
+            before: { databaseId: 'before', chartType: 'histogram', encodings: {} },
+            after: { databaseId: 'after', chartType: 'scatter', encodings: { x: 'region' } },
+          },
+        },
+      }],
+      projectionReplacements: [],
+      projectionStatus: { status: 'complete', expectedGraphPaths: [] },
+      history: { canUndo: true, canRedo: false },
+    };
+
+    expect(JSON.parse(JSON.stringify(result))).not.toHaveProperty('worksheetDeltas');
+  });
+
   it('sends revisioned function signature requests through the thin node-system service', async () => {
     const request = {
       resource: { kind: 'function' as const, key: graphPath },

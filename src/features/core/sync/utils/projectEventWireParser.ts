@@ -3,7 +3,7 @@ import type {
   ResourceMutationCommittedPayload,
 } from '../types';
 import { parseGraphDeltaDto } from '@/shared/types/dto/editorMutationWireParser';
-import { parseResourceMutationResultDto } from './resourceMutationResultWireParser';
+import { parseResourceMutationResultDto } from '@/shared/types/dto/resourceMutationResultWireParser';
 
 type UnknownRecord = Record<string, unknown>;
 

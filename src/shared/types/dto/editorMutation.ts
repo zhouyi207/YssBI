@@ -1,4 +1,4 @@
-import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
+import type { WorksheetDocumentState } from '@/shared/types/domain/worksheet';
 import type { DatabaseDocumentDto } from './database';
 import type { NodeCreationDescriptorDto } from './nodeCreationDescriptor';
 import type {
@@ -155,12 +155,8 @@ export interface DatabaseDocumentPatchDto {
 }
 
 export interface WorksheetDocumentPatchDto {
-  before: WorksheetDocument | null;
-  after: WorksheetDocument | null;
-}
-
-export interface WorksheetDeltaDto extends WorksheetDocumentPatchDto {
-  id: string;
+  before: WorksheetDocumentState;
+  after: WorksheetDocumentState;
 }
 
 export interface ResourcePathMovePatchDto {
@@ -168,22 +164,26 @@ export interface ResourcePathMovePatchDto {
   to: string;
 }
 
-export interface GraphResourceLifecycleStateDto {
+export type ResourceLifecycleKindDto = 'event' | 'function' | 'worksheet';
+
+export interface ResourceLifecycleStateDto {
   revision: number;
   path: string;
-  kind: 'event' | 'function';
+  kind: ResourceLifecycleKindDto;
+  name: string;
 }
 
-export interface GraphResourceLifecyclePatchDto {
-  before: GraphResourceLifecycleStateDto | null;
-  after: GraphResourceLifecycleStateDto | null;
+export interface ResourceLifecyclePatchDto {
+  before: ResourceLifecycleStateDto | null;
+  after: ResourceLifecycleStateDto | null;
 }
 
 export type ResourceDocumentPatchDto =
   | { kind: 'graph'; patch: GraphDocumentPatchDto }
-  | { kind: 'graph_resource_lifecycle'; patch: GraphResourceLifecyclePatchDto }
-  | { kind: 'graph_resource_move'; patch: ResourcePathMovePatchDto }
   | { kind: 'function'; patch: FunctionDocumentPatchDto }
+  | { kind: 'worksheet'; patch: WorksheetDocumentPatchDto }
+  | { kind: 'resource_lifecycle'; patch: ResourceLifecyclePatchDto }
+  | { kind: 'resource_move'; patch: ResourcePathMovePatchDto }
   | { kind: 'variable'; patch: VariableDocumentPatchDto }
   | { kind: 'variable_scope_move'; patch: ResourcePathMovePatchDto }
   | { kind: 'database'; patch: DatabaseDocumentPatchDto };
@@ -218,7 +218,7 @@ export type ProjectionStatusDto =
 export interface ResourceMoveDto {
   from: string;
   to: string;
-  kind: 'event' | 'function';
+  kind: ResourceLifecycleKindDto;
   name: string;
 }
 
@@ -228,7 +228,6 @@ export interface ResourceMutationResultDto {
   publicationRevision: number;
   moves: ResourceMoveDto[];
   deltas: ResourceDeltaDto[];
-  worksheetDeltas?: WorksheetDeltaDto[];
   projectionReplacements: GraphProjectionReplacementDto[];
   projectionStatus: ProjectionStatusDto;
   history: HistoryStatusDto;

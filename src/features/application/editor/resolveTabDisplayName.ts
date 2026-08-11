@@ -12,9 +12,10 @@ export function resolveTabDisplayName(ref: ResourceRef | null, fallbackId = ''):
   }
 
   if (ref.kind === 'worksheet') {
-    const doc = useWorksheetStore.getState().documents[ref.id];
-    const indexEntry = useWorksheetStore.getState().index.find((ws) => ws.id === ref.id);
-    return doc?.name ?? indexEntry?.name ?? fallbackId ?? ref.id;
+    const indexEntry = useWorksheetStore.getState().index.find(
+      (worksheet) => worksheet.worksheetPath === ref.id,
+    );
+    return indexEntry?.name ?? fallbackId ?? ref.id;
   }
 
   return fallbackId ?? ref.id;

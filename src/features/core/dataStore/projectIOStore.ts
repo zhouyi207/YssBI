@@ -39,6 +39,7 @@ import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useViewportStore } from '@/features/core/viewport';
 import { useGraphInteractionStore } from '@/features/core/graphInteraction';
+import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useEditStateStore } from './editStateStore';
 import { useColumnStatsStore } from './columnStatsStore';
 import { useColumnDistributionStore } from './columnDistributionStore';
@@ -101,7 +102,13 @@ function normalizeVariables(
 
 function buildResourceIndex(params: {
   graphs: Array<{ path: string; name: string; type: 'event' | 'function'; revision?: number }>;
-  worksheets: Array<{ id: string; name: string; databaseId: string; chartType: import('@/shared/types/domain/worksheet').WorksheetChartType }>;
+  worksheets: Array<{
+    worksheetPath: string;
+    name: string;
+    databaseId: string;
+    chartType: import('@/shared/types/domain/worksheet').WorksheetChartType;
+    revision: number;
+  }>;
   variables: Record<string, Variable>;
   databases: Record<string, DatabaseRecord>;
 }): ProjectResourceMeta[] {
@@ -113,12 +120,13 @@ function buildResourceIndex(params: {
   }
   for (const worksheet of params.worksheets) {
     resources.push({
-      id: worksheet.id,
+      id: worksheet.worksheetPath,
       kind: 'worksheet',
       name: worksheet.name,
-      uri: `yssbi://worksheet/${worksheet.id}`,
+      uri: `yssbi://worksheet/${worksheet.worksheetPath}`,
+      revision: worksheet.revision,
       exists: true,
-      loaded: Boolean(useWorksheetStore.getState().documents[worksheet.id]),
+      loaded: Boolean(useWorksheetStore.getState().documents[worksheet.worksheetPath]),
       hasDirtyDocument: false,
       hasStaleDocument: false,
       hasConflictDocument: false,
@@ -193,11 +201,12 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
 
     const graphOrder = index.graphs.map((graph) => graph.path);
 
-    const worksheetIndex = index.worksheets.map((ws) => ({
-      id: ws.id,
-      name: ws.name,
-      databaseId: ws.databaseId,
-      chartType: ws.chartType as import('@/shared/types/domain/worksheet').WorksheetChartType,
+    const worksheetIndex = index.worksheets.map((worksheet) => ({
+      worksheetPath: worksheet.worksheetPath,
+      name: worksheet.name,
+      databaseId: worksheet.databaseId,
+      chartType: worksheet.chartType as import('@/shared/types/domain/worksheet').WorksheetChartType,
+      revision: worksheet.revision,
     }));
     useWorksheetStore.getState().setIndex(worksheetIndex);
 
@@ -255,6 +264,7 @@ export async function prepareAuthoritativeProjectLoad(
       layoutNodes: useLayoutStore.getState().nodes,
       editorTabs: useEditorTabStore.getState().snapshotMemento(),
       recentEditorGroupIds: useLayoutStore.getState().recentEditorGroupIds,
+      detailFocus: useEditorStore.getState().detailFocus,
     },
     {
       ...defaultAuthoritativeProjectLoadPlanDependencies,
@@ -301,6 +311,9 @@ export function commitPreparedAuthoritativeProjectLoad(
   commitProjectLoadStep('editor tabs', () => useEditorTabStore.setState(
     prepared.storeState.layout.tabs,
   ));
+  commitProjectLoadStep('detail focus', () => useEditorStore.setState({
+    detailFocus: prepared.storeState.detailFocus,
+  }));
   commitProjectLoadStep('viewport', () => useViewportStore.setState({ viewports: {} }));
   commitProjectLoadStep('graph interaction', () => useGraphInteractionStore.setState({
     positionOverrides: {},

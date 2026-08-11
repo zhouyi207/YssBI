@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useEditorSessionDetailActions } from '@/features/application/editor';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { renameWorksheetResource } from '@/features/application/sidebar/sidebarResourceActions';
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { renameResource } from '@/features/application/resource/resourceActions';
 import { updateFunctionSignature } from '@/features/application/graphDocument/graphDocumentActions';
@@ -23,18 +24,20 @@ import { useDetailPanelModel } from './useDetailPanelModel';
 export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useTranslation();
   const { updateVariable, updateDataFrame } = useEditorSessionDetailActions();
-  const { model, worksheetTargetId, worksheetDocument } = useDetailPanelModel();
+  const { model, worksheetPath, worksheetName, worksheetDocument } = useDetailPanelModel();
 
 
   useEffect(() => {
-    if (!worksheetTargetId || worksheetDocument) return;
+    if (!worksheetPath || worksheetDocument) return;
     const context = captureProjectCommandContext();
-    void WorksheetService.loadWorksheet(context.projectInstanceId, worksheetTargetId)
+    void WorksheetService.loadWorksheet(context.projectInstanceId, worksheetPath)
       .then((loaded) => {
-        if (context.isCurrent()) useWorksheetStore.getState().upsertDocument(loaded);
+        if (context.isCurrent()) {
+          useWorksheetStore.getState().upsertDocument(worksheetPath, loaded);
+        }
       })
       .catch(() => undefined);
-  }, [worksheetTargetId, worksheetDocument]);
+  }, [worksheetPath, worksheetDocument]);
 
   const content = (() => {
     switch (model.kind) {
@@ -82,7 +85,14 @@ export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
           />
         );
       case 'worksheet':
-        return <WorksheetDetailPanel document={model.document} />;
+        return (
+          <WorksheetDetailPanel
+            worksheetPath={worksheetPath!}
+            name={worksheetName ?? ''}
+            document={model.document}
+            onRename={(name) => void renameWorksheetResource(worksheetPath!, name)}
+          />
+        );
       case 'data':
         return (
           <DataDetailPanel

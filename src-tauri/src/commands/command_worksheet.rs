@@ -1,9 +1,11 @@
 use crate::database::DatabaseInstance;
 use crate::error::AppError;
-use crate::event::{Event, EventProject, emit_project_event};
-use crate::node_system::document::OperationId;
-use crate::project::project_writers::WorksheetMutationResultDto;
-use crate::project::{ProjectInstanceId, ProjectState, WorksheetDocument};
+use crate::event::{Event, EventProject, ResourceMutationResultDto, emit_project_event};
+use crate::node_system::document::{OperationId, ResourceRevision};
+use crate::project::{
+    ProjectFilesystemError, ProjectInstanceId, ProjectState, ResourceName, WorksheetDocument,
+    WorksheetResourcePath,
+};
 use polars::prelude::{DataType as PDataType, Series};
 use serde::Serialize;
 use tauri::{AppHandle, State};
@@ -139,26 +141,59 @@ fn compute_plot_column_pair(
 
 fn emit_worksheet_result(
     mut emit: impl FnMut(Event),
-    result: WorksheetMutationResultDto,
-) -> WorksheetMutationResultDto {
+    result: ResourceMutationResultDto,
+) -> ResourceMutationResultDto {
     emit(Event::Project(EventProject::ResourceMutationCommitted {
-        result: result.result.clone(),
+        result: result.clone(),
     }));
     result
+}
+
+fn worksheet_app_error(
+    worksheet_path: &WorksheetResourcePath,
+    error: ProjectFilesystemError,
+) -> AppError {
+    let code = match &error {
+        ProjectFilesystemError::TransactionPrepareFailed { .. } => "filesystem_prepare_failed",
+        ProjectFilesystemError::TransactionCommitFailed { .. } => "filesystem_commit_failed",
+        ProjectFilesystemError::TransactionRollbackFailed { .. }
+        | ProjectFilesystemError::ProjectRecoveryRequired { .. } => "publication_recovery_required",
+        _ => error.code(),
+    };
+    let recovery_required = error.recovery_required();
+    let mut details = serde_json::json!({
+        "resourceKind": "worksheet",
+        "resourcePath": worksheet_path.as_str(),
+    });
+    if recovery_required {
+        details["recoveryRequired"] = serde_json::Value::Bool(true);
+    }
+    let mut app_error = AppError::new(code, error.to_string());
+    app_error.details = Some(details);
+    app_error
 }
 
 fn create_worksheet_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
-    name: Option<String>,
+    name: String,
     database_id: Option<String>,
     emit: impl FnMut(Event),
-) -> Result<WorksheetMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, AppError> {
+    let name = ResourceName::parse(&name)
+        .map_err(ProjectFilesystemError::from)
+        .map_err(AppError::from)?;
+    let requested_path = WorksheetResourcePath::from_name(&name);
     state
-        .create_worksheet_document(&project_instance_id, name, database_id, operation_id)
+        .create_worksheet_resource_transaction(
+            &project_instance_id,
+            &name,
+            database_id,
+            operation_id,
+        )
         .map(|result| emit_worksheet_result(emit, result))
-        .map_err(AppError::from)
+        .map_err(|error| worksheet_app_error(&requested_path, error))
 }
 
 #[tauri::command]
@@ -167,9 +202,9 @@ pub fn create_worksheet(
     state: State<ProjectState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
-    name: Option<String>,
+    name: String,
     database_id: Option<String>,
-) -> Result<WorksheetMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, AppError> {
     create_worksheet_with_emitter(
         state.inner(),
         project_instance_id,
@@ -180,29 +215,75 @@ pub fn create_worksheet(
     )
 }
 
+fn duplicate_worksheet_with_emitter(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
+    worksheet_path: WorksheetResourcePath,
+    expected_revision: ResourceRevision,
+    emit: impl FnMut(Event),
+) -> Result<ResourceMutationResultDto, AppError> {
+    state
+        .duplicate_worksheet_resource_transaction(
+            &project_instance_id,
+            &worksheet_path,
+            expected_revision,
+            operation_id,
+        )
+        .map(|result| emit_worksheet_result(emit, result))
+        .map_err(|error| worksheet_app_error(&worksheet_path, error))
+}
+
+#[tauri::command]
+pub fn duplicate_worksheet(
+    app: AppHandle,
+    state: State<ProjectState>,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
+    worksheet_path: WorksheetResourcePath,
+    expected_revision: ResourceRevision,
+) -> Result<ResourceMutationResultDto, AppError> {
+    duplicate_worksheet_with_emitter(
+        state.inner(),
+        project_instance_id,
+        operation_id,
+        worksheet_path,
+        expected_revision,
+        |event| emit_project_event(&app, event),
+    )
+}
+
 #[tauri::command]
 pub fn load_worksheet(
     state: State<ProjectState>,
     project_instance_id: String,
-    worksheet_id: String,
+    worksheet_path: WorksheetResourcePath,
 ) -> Result<WorksheetDocument, AppError> {
     let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
     state
-        .load_worksheet_document(&project_instance_id, &worksheet_id)
-        .map_err(AppError::from)
+        .load_worksheet_document(&project_instance_id, &worksheet_path)
+        .map_err(|error| worksheet_app_error(&worksheet_path, error))
 }
 
 fn save_worksheet_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
+    worksheet_path: WorksheetResourcePath,
+    expected_revision: ResourceRevision,
     document: WorksheetDocument,
     emit: impl FnMut(Event),
-) -> Result<WorksheetMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, AppError> {
     state
-        .save_worksheet_document(&project_instance_id, document, operation_id)
+        .save_worksheet_document(
+            &project_instance_id,
+            &worksheet_path,
+            expected_revision,
+            operation_id,
+            document,
+        )
         .map(|result| emit_worksheet_result(emit, result))
-        .map_err(AppError::from)
+        .map_err(|error| worksheet_app_error(&worksheet_path, error))
 }
 
 #[tauri::command]
@@ -211,43 +292,104 @@ pub fn save_worksheet(
     state: State<ProjectState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
+    worksheet_path: WorksheetResourcePath,
+    expected_revision: ResourceRevision,
     document: WorksheetDocument,
-) -> Result<WorksheetMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, AppError> {
     save_worksheet_with_emitter(
         state.inner(),
         project_instance_id,
         operation_id,
+        worksheet_path,
+        expected_revision,
         document,
         |event| emit_project_event(&app, event),
     )
 }
 
-fn delete_worksheet_with_emitter(
+fn rename_worksheet_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
-    worksheet_id: &str,
+    worksheet_path: WorksheetResourcePath,
+    expected_revision: ResourceRevision,
+    new_name: String,
+    lifecycle_token: u64,
     emit: impl FnMut(Event),
-) -> Result<WorksheetMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, AppError> {
+    let new_name = ResourceName::parse(&new_name)
+        .map_err(ProjectFilesystemError::from)
+        .map_err(AppError::from)?;
     state
-        .delete_worksheet_document(&project_instance_id, worksheet_id, operation_id)
+        .rename_worksheet_resource_transaction(
+            &project_instance_id,
+            &worksheet_path,
+            expected_revision,
+            &new_name,
+            lifecycle_token,
+            operation_id,
+        )
         .map(|result| emit_worksheet_result(emit, result))
-        .map_err(AppError::from)
+        .map_err(|error| worksheet_app_error(&worksheet_path, error))
 }
 
 #[tauri::command]
-pub fn delete_worksheet(
+pub fn rename_worksheet_resource(
     app: AppHandle,
     state: State<ProjectState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
-    worksheet_id: String,
-) -> Result<WorksheetMutationResultDto, AppError> {
-    delete_worksheet_with_emitter(
+    worksheet_path: WorksheetResourcePath,
+    expected_revision: ResourceRevision,
+    new_name: String,
+    lifecycle_token: u64,
+) -> Result<ResourceMutationResultDto, AppError> {
+    rename_worksheet_with_emitter(
         state.inner(),
         project_instance_id,
         operation_id,
-        &worksheet_id,
+        worksheet_path,
+        expected_revision,
+        new_name,
+        lifecycle_token,
+        |event| emit_project_event(&app, event),
+    )
+}
+
+fn remove_worksheet_with_emitter(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
+    worksheet_path: WorksheetResourcePath,
+    expected_revision: ResourceRevision,
+    emit: impl FnMut(Event),
+) -> Result<ResourceMutationResultDto, AppError> {
+    state
+        .remove_worksheet_resource_transaction(
+            &project_instance_id,
+            &worksheet_path,
+            expected_revision,
+            operation_id,
+        )
+        .map(|result| emit_worksheet_result(emit, result))
+        .map_err(|error| worksheet_app_error(&worksheet_path, error))
+}
+
+#[tauri::command]
+pub fn remove_worksheet(
+    app: AppHandle,
+    state: State<ProjectState>,
+    project_instance_id: ProjectInstanceId,
+    operation_id: OperationId,
+    worksheet_path: WorksheetResourcePath,
+    expected_revision: ResourceRevision,
+) -> Result<ResourceMutationResultDto, AppError> {
+    remove_worksheet_with_emitter(
+        state.inner(),
+        project_instance_id,
+        operation_id,
+        worksheet_path,
+        expected_revision,
         |event| emit_project_event(&app, event),
     )
 }
@@ -348,7 +490,71 @@ mod tests {
     }
 
     #[test]
-    fn worksheet_commands_preserve_identity_operation_emit_once_and_reject_stale() {
+    fn worksheet_ipc_errors_serialize_the_approved_resource_contract() {
+        let worksheet_path =
+            WorksheetResourcePath::parse("worksheets/Sales Report.yssbi-worksheet").unwrap();
+        for (source, expected_code) in [
+            (
+                ProjectFilesystemError::WorksheetNotFound {
+                    path: worksheet_path.clone(),
+                },
+                "resource_not_found",
+            ),
+            (
+                ProjectFilesystemError::ResourceNameConflict {
+                    message: "a worksheet named 'Sales Report' already exists".into(),
+                },
+                "resource_name_conflict",
+            ),
+            (
+                ProjectFilesystemError::ResourceRevisionConflict {
+                    message: "worksheet revision changed".into(),
+                },
+                "resource_revision_conflict",
+            ),
+            (
+                ProjectFilesystemError::TransactionPrepareFailed {
+                    message: "prepare fault".into(),
+                },
+                "filesystem_prepare_failed",
+            ),
+            (
+                ProjectFilesystemError::TransactionCommitFailed {
+                    message: "commit fault".into(),
+                },
+                "filesystem_commit_failed",
+            ),
+        ] {
+            let error = worksheet_app_error(&worksheet_path, source);
+            let serialized = serde_json::to_value(error).unwrap();
+            assert_eq!(serialized["code"], expected_code);
+            assert_eq!(serialized["resourceKind"], "worksheet");
+            assert_eq!(serialized["resourcePath"], worksheet_path.as_str());
+            assert!(serialized.get("details").is_none());
+            assert!(serialized.get("recoveryRequired").is_none());
+        }
+
+        let recovery = worksheet_app_error(
+            &worksheet_path,
+            ProjectFilesystemError::TransactionRollbackFailed {
+                message: "restore fault".into(),
+                recovery_required: true,
+            },
+        );
+        assert_eq!(
+            serde_json::to_value(recovery).unwrap(),
+            serde_json::json!({
+                "code": "publication_recovery_required",
+                "message": "failed to roll back project filesystem transaction: restore fault",
+                "resourceKind": "worksheet",
+                "resourcePath": worksheet_path.as_str(),
+                "recoveryRequired": true,
+            })
+        );
+    }
+
+    #[test]
+    fn worksheet_commands_publish_create_duplicate_save_rename_and_remove_once() {
         let root = std::env::temp_dir().join(format!(
             "yssbi-worksheet-command-publication-{}",
             uuid::Uuid::new_v4()
@@ -359,51 +565,69 @@ mod tests {
         state.set_projection_test_hook(std::sync::Arc::new(|| {
             panic!("worksheet mutations must not build graph projection snapshots")
         }));
-        let (names, default_database_id) = state.worksheet_creation_snapshot().unwrap();
-        assert!(names.is_empty());
-        assert_eq!(default_database_id, None);
         let project_instance_id = state.capture_project_session().unwrap().instance_id;
-        let create_operation_id = crate::node_system::document::OperationId::new();
-        let save_operation_id = crate::node_system::document::OperationId::new();
-        let delete_operation_id = crate::node_system::document::OperationId::new();
+        let worksheet_path =
+            WorksheetResourcePath::parse("worksheets/Canonical.yssbi-worksheet").unwrap();
+        let duplicate_path =
+            WorksheetResourcePath::parse("worksheets/Canonical 2.yssbi-worksheet").unwrap();
         let mut events = Vec::new();
 
         let created = create_worksheet_with_emitter(
             &state,
             project_instance_id.clone(),
-            create_operation_id,
-            Some("Canonical".into()),
+            OperationId::new(),
+            "Canonical".into(),
             None,
             |event| events.push(event),
         )
         .unwrap();
-        let worksheet = created.document.clone();
-        let saved = save_worksheet_with_emitter(
+        let duplicated = duplicate_worksheet_with_emitter(
             &state,
             project_instance_id.clone(),
-            save_operation_id,
-            worksheet.clone(),
+            OperationId::new(),
+            worksheet_path.clone(),
+            crate::node_system::document::ResourceRevision::INITIAL,
             |event| events.push(event),
         )
         .unwrap();
-        let deleted = delete_worksheet_with_emitter(
+        let mut document = state.get_data().unwrap().worksheets[&worksheet_path].clone();
+        document.chart_type = "line".into();
+        let saved = save_worksheet_with_emitter(
             &state,
             project_instance_id.clone(),
-            delete_operation_id,
-            &worksheet.id,
+            OperationId::new(),
+            worksheet_path.clone(),
+            crate::node_system::document::ResourceRevision::INITIAL,
+            document,
+            |event| events.push(event),
+        )
+        .unwrap();
+        let renamed = rename_worksheet_with_emitter(
+            &state,
+            project_instance_id.clone(),
+            OperationId::new(),
+            worksheet_path,
+            crate::node_system::document::ResourceRevision::new(1),
+            "Renamed".into(),
+            1,
+            |event| events.push(event),
+        )
+        .unwrap();
+        let removed = remove_worksheet_with_emitter(
+            &state,
+            project_instance_id.clone(),
+            OperationId::new(),
+            duplicate_path,
+            crate::node_system::document::ResourceRevision::INITIAL,
             |event| events.push(event),
         )
         .unwrap();
 
-        assert_eq!(events.len(), 3);
-        assert_eq!(created.document.name, "Canonical");
-        assert_eq!(created.document.revision.get(), 0);
-        assert_eq!(saved.document.id, worksheet.id);
-        assert_eq!(saved.document.revision.get(), 1);
-        assert_eq!(deleted.document, saved.document);
-        for (event, result) in events
-            .iter()
-            .zip([&created.result, &saved.result, &deleted.result])
+        assert_eq!(events.len(), 5);
+        for (event, result) in
+            events
+                .iter()
+                .zip([&created, &duplicated, &saved, &renamed, &removed])
         {
             assert!(matches!(
                 event,
@@ -411,15 +635,10 @@ mod tests {
                     if emitted == result
             ));
         }
-        assert_eq!(
-            created.result.project_instance_id,
-            project_instance_id.as_str()
-        );
-        assert_eq!(created.operation_id, create_operation_id);
-        assert_eq!(saved.operation_id, save_operation_id);
-        assert_eq!(deleted.operation_id, delete_operation_id);
-        assert!(created.result.publication_revision < saved.result.publication_revision);
-        assert!(saved.result.publication_revision < deleted.result.publication_revision);
+        assert!(created.publication_revision < duplicated.publication_revision);
+        assert!(duplicated.publication_revision < saved.publication_revision);
+        assert!(saved.publication_revision < renamed.publication_revision);
+        assert!(renamed.publication_revision < removed.publication_revision);
 
         let stale = project_instance_id;
         state.activate_project_fixture(
@@ -430,8 +649,8 @@ mod tests {
         let error = create_worksheet_with_emitter(
             &state,
             stale,
-            crate::node_system::document::OperationId::new(),
-            Some("Stale".into()),
+            OperationId::new(),
+            "Stale".into(),
             None,
             |event| events.push(event),
         )

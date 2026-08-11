@@ -22,7 +22,9 @@ export function WorksheetEditor() {
     const context = captureProjectCommandContext();
     void WorksheetService.loadWorksheet(context.projectInstanceId, activeTabId)
       .then((loaded) => {
-        if (context.isCurrent()) useWorksheetStore.getState().upsertDocument(loaded);
+        if (context.isCurrent()) {
+          useWorksheetStore.getState().upsertDocument(activeTabId, loaded);
+        }
       })
       .catch(() => undefined);
   }, [activeTabId]);
@@ -37,7 +39,7 @@ export function WorksheetEditor() {
 
   return (
     <div className="flex h-full w-full min-h-0 flex-col">
-      <WorksheetChartPreview document={document} />
+      <WorksheetChartPreview worksheetPath={activeTabId} document={document} />
     </div>
   );
 }

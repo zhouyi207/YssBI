@@ -1836,31 +1836,41 @@ mod tests {
     #[test]
     fn filesystem_publication_callers_capture_projection_environment_before_commit() {
         let project_source = include_str!("../project/project_state.rs");
-        for (caller, start, end) in [
+        let writer_source = include_str!("../project/project_writers.rs");
+        for (caller, source_file, start, end) in [
             (
                 "rename",
+                project_source,
                 "    pub(super) fn rename_graph_resource_transaction_impl(",
                 "\n    fn graph_rename_mutations(",
             ),
             (
                 "worksheet upsert",
-                "    pub fn upsert_worksheet_document(",
-                "\n    pub fn remove_worksheet_document(",
+                writer_source,
+                "    fn write_worksheet_patch(",
+                "\n    pub fn save_worksheet_document(",
+            ),
+            (
+                "worksheet rename",
+                writer_source,
+                "    pub fn rename_worksheet_resource_transaction(",
+                "\n    pub fn remove_worksheet_resource_transaction(",
             ),
             (
                 "worksheet removal",
-                "    pub fn remove_worksheet_document(",
-                "\n    pub(super) fn allocate_graph_path_from_snapshot(",
+                writer_source,
+                "    pub fn remove_worksheet_resource_transaction(",
+                "#[cfg(test)]",
             ),
         ] {
-            let caller_start = project_source
+            let caller_start = source_file
                 .find(start)
                 .unwrap_or_else(|| panic!("{caller} caller must exist"));
-            let caller_end = project_source[caller_start..]
+            let caller_end = source_file[caller_start..]
                 .find(end)
                 .map(|offset| caller_start + offset)
                 .unwrap_or_else(|| panic!("{caller} caller region must be isolated"));
-            let source = &project_source[caller_start..caller_end];
+            let source = &source_file[caller_start..caller_end];
             let capture = source
                 .find("capture_projection_environment_for_session(")
                 .unwrap_or_else(|| panic!("{caller} must capture projection environment"));
@@ -2116,7 +2126,6 @@ mod tests {
             publication_revision: 7,
             moves: Vec::new(),
             deltas: vec![delta],
-            worksheet_deltas: Vec::new(),
             projection_replacements: Vec::new(),
             projection_status: crate::event::ProjectionStatusDto::Complete {
                 expected_graph_paths: Vec::new(),
@@ -2244,7 +2253,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(state.graph_lifecycle_entry_count(), 0);
+        assert_eq!(state.resource_lifecycle_entry_count(), 0);
         assert!(events.is_empty());
         assert!(root.join(old_path.as_str()).exists());
         assert!(!root.join("events/New.yssbi-event").exists());
@@ -2419,18 +2428,19 @@ mod tests {
             ))
         );
         assert_eq!(created.deltas[0].from_revision, ResourceRevision::INITIAL);
-        assert_eq!(created.deltas[0].to_revision, ResourceRevision::new(1));
+        assert_eq!(created.deltas[0].to_revision, ResourceRevision::INITIAL);
         assert_eq!(created.deltas[0].caused_by, Some(create_operation_id));
         assert_eq!(
             serde_json::to_value(&created.deltas[0].payload).unwrap(),
             serde_json::json!({
-                "kind": "graph_resource_lifecycle",
+                "kind": "resource_lifecycle",
                 "patch": {
                     "before": null,
                     "after": {
                         "revision": 0,
                         "path": "events/Created.yssbi-event",
-                        "kind": "event"
+                        "kind": "event",
+                        "name": "Created"
                     }
                 }
             })
@@ -2502,12 +2512,19 @@ mod tests {
                 );
                 let delta = &result.deltas[0];
                 assert_eq!(delta.from_revision, ResourceRevision::INITIAL);
-                assert_eq!(delta.to_revision, ResourceRevision::new(1));
+                assert_eq!(
+                    delta.to_revision,
+                    if operation == "duplicate" {
+                        ResourceRevision::INITIAL
+                    } else {
+                        ResourceRevision::new(1)
+                    }
+                );
                 assert_eq!(delta.caused_by, Some(operation_id));
-                let expected_path = if operation == "remove" {
-                    "events/Source.yssbi-event"
+                let (expected_path, expected_name) = if operation == "remove" {
+                    ("events/Source.yssbi-event", "Source")
                 } else {
-                    "events/Source 1.yssbi-event"
+                    ("events/Source 2.yssbi-event", "Source 2")
                 };
                 assert_eq!(
                     delta.resource,
@@ -2518,7 +2535,8 @@ mod tests {
                 let state = serde_json::json!({
                     "revision": 0,
                     "path": expected_path,
-                    "kind": "event"
+                    "kind": "event",
+                    "name": expected_name
                 });
                 let (before, after) = if operation == "remove" {
                     (state, serde_json::Value::Null)
@@ -2528,7 +2546,7 @@ mod tests {
                 assert_eq!(
                     serde_json::to_value(&delta.payload).unwrap(),
                     serde_json::json!({
-                        "kind": "graph_resource_lifecycle",
+                        "kind": "resource_lifecycle",
                         "patch": { "before": before, "after": after }
                     })
                 );

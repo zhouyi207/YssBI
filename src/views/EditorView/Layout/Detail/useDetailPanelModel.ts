@@ -8,18 +8,23 @@ import type { DetailPanelModel } from './resolveDetailPanelModel';
 
 export function useDetailPanelModel(): {
   model: DetailPanelModel;
-  worksheetTargetId: string | null;
+  worksheetPath: string | null;
+  worksheetName: string | null;
   worksheetDocument: ReturnType<typeof useWorksheetStore.getState>['documents'][string] | null;
 } {
   const { variables, events, functions, dataframes } = useEditorSessionResources();
   const target = useDetailTarget();
   const selectedLog = useLogStore((s) => s.selectedLog);
 
-  const worksheetTargetId =
-    target?.kind === 'worksheet' && 'id' in target ? target.id : null;
+  const worksheetPath = target?.kind === 'worksheet' ? target.worksheetPath : null;
 
-  const worksheetDocument = useWorksheetStore((s) =>
-    worksheetTargetId ? s.documents[worksheetTargetId] ?? null : null,
+  const worksheetDocument = useWorksheetStore((state) =>
+    worksheetPath ? state.documents[worksheetPath] ?? null : null,
+  );
+  const worksheetName = useWorksheetStore((state) =>
+    worksheetPath
+      ? state.index.find((worksheet) => worksheet.worksheetPath === worksheetPath)?.name ?? null
+      : null,
   );
 
   const model = useMemo(
@@ -36,5 +41,5 @@ export function useDetailPanelModel(): {
     [target, selectedLog, variables, events, functions, dataframes, worksheetDocument],
   );
 
-  return { model, worksheetTargetId, worksheetDocument };
+  return { model, worksheetPath, worksheetName, worksheetDocument };
 }

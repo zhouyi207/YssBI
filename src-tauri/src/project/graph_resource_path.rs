@@ -7,11 +7,13 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use super::project_error::ProjectError;
-use super::{EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind};
+use super::{
+    EVENT_EXTENSION, EVENTS_DIR, FUNCTION_EXTENSION, FUNCTIONS_DIR, GraphDocumentKind, ResourceName,
+};
 
 /// 规范化相对路径，例如 `events/MyEvent.yssbi-event`。
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
+#[serde(try_from = "String", into = "String")]
 pub struct GraphResourcePath(String);
 
 impl GraphResourcePath {
@@ -21,8 +23,15 @@ impl GraphResourcePath {
         Ok(Self(normalized))
     }
 
-    pub fn from_normalized_unchecked(path: String) -> Self {
-        Self(path)
+    pub fn event(name: &ResourceName) -> Self {
+        Self(format!("{EVENTS_DIR}/{}.{EVENT_EXTENSION}", name.as_str()))
+    }
+
+    pub fn function(name: &ResourceName) -> Self {
+        Self(format!(
+            "{FUNCTIONS_DIR}/{}.{FUNCTION_EXTENSION}",
+            name.as_str()
+        ))
     }
 
     pub fn as_str(&self) -> &str {
@@ -68,6 +77,20 @@ impl fmt::Display for GraphResourcePath {
     }
 }
 
+impl TryFrom<String> for GraphResourcePath {
+    type Error = ProjectError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl From<GraphResourcePath> for String {
+    fn from(value: GraphResourcePath) -> Self {
+        value.0
+    }
+}
+
 impl FromStr for GraphResourcePath {
     type Err = ProjectError;
 
@@ -97,7 +120,20 @@ pub fn validate_graph_resource_path(path: &str) -> Result<(), ProjectError> {
             "graph resource path cannot be empty".into(),
         ));
     }
-    graph_kind_from_path(path)?;
+    let kind = graph_kind_from_path(path)?;
+    let file_name = path.rsplit('/').next().unwrap_or(path);
+    let extension = match kind {
+        GraphDocumentKind::Event => EVENT_EXTENSION,
+        GraphDocumentKind::Function => FUNCTION_EXTENSION,
+    };
+    let stem = file_name
+        .strip_suffix(&format!(".{extension}"))
+        .expect("graph kind validation checks the matching extension");
+    ResourceName::parse(stem).map_err(|error| {
+        ProjectError::InvalidProjectFormat(format!(
+            "invalid graph resource name in '{path}': {error}"
+        ))
+    })?;
     Ok(())
 }
 
@@ -133,6 +169,7 @@ pub fn to_graph_resource_uri(kind: GraphDocumentKind, path: &GraphResourcePath) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::project::{ResourceName, WorksheetResourcePath};
 
     #[test]
     fn normalizes_and_validates_event_path() {
@@ -162,5 +199,29 @@ mod tests {
     #[test]
     fn rejects_untitled_graph_path() {
         assert!(GraphResourcePath::new("untitled:function:Untitled-1").is_err());
+    }
+
+    #[test]
+    fn all_resource_path_kinds_use_shared_name_validation() {
+        let name = ResourceName::parse("Revenue (Net)").unwrap();
+
+        assert_eq!(
+            GraphResourcePath::event(&name).as_str(),
+            "events/Revenue (Net).yssbi-event"
+        );
+        assert_eq!(
+            GraphResourcePath::function(&name).as_str(),
+            "functions/Revenue (Net).yssbi-function"
+        );
+        assert_eq!(
+            WorksheetResourcePath::from_name(&name).as_str(),
+            "worksheets/Revenue (Net).yssbi-worksheet"
+        );
+    }
+
+    #[test]
+    fn graph_path_parsing_does_not_sanitize_invalid_names() {
+        assert!(GraphResourcePath::new("events/Sales?.yssbi-event").is_err());
+        assert!(GraphResourcePath::new("functions/Sales📊.yssbi-function").is_err());
     }
 }

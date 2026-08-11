@@ -3,7 +3,10 @@ import { useTranslation } from 'react-i18next';
 import { useEditorSessionCommandsContext } from '@/features/application/editor';
 import { updateVariableAction } from '@/features/application/dataManagement/variableActions';
 import { renameResource } from '@/features/application/resource/resourceActions';
-import { renameWorksheetResource, revealProjectResourceInExplorer } from '@/features/application/sidebar/sidebarResourceActions';
+import {
+  renameWorksheetResource,
+  revealProjectResourceInExplorer,
+} from '@/features/application/sidebar/sidebarResourceActions';
 import { deleteWorksheetWithConfirm } from '@/features/application/editor/closeEditorTab';
 import { openDatabaseEditorWindow } from '@/features/application/window';
 import { uiStore } from '@/features/core/ui/UIStore';
@@ -35,6 +38,7 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     createGraph,
     openGraph,
     openWorksheet,
+    duplicateWorksheet,
     addWorksheet,
     triggerImportData,
   } = useEditorSessionCommandsContext();
@@ -109,15 +113,15 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     await deleteDataFrame(id);
   }, [deleteDataFrame, t]);
 
-  const deleteWorksheetItem = useCallback(async (id: string) => {
-    await deleteWorksheetWithConfirm(id);
-  }, []);
-
-  const renameWorksheetItem = useCallback((id: string, name: string) => {
+  const renameWorksheetItem = useCallback((worksheetPath: string, name: string) => {
     openInputDialog(t('contextMenu.dialog.renameWorksheetTitle'), name, async (nextName) => {
-      await renameWorksheetResource(id, nextName);
+      await renameWorksheetResource(worksheetPath, nextName);
     }, t('contextMenu.dialog.renameSubmit'));
   }, [openInputDialog, t]);
+
+  const deleteWorksheetItem = useCallback(async (worksheetPath: string) => {
+    await deleteWorksheetWithConfirm(worksheetPath);
+  }, []);
 
   const revealInExplorer = useCallback(async (request: Parameters<typeof revealProjectResourceInExplorer>[0]) => {
     await revealProjectResourceInExplorer(request);
@@ -143,8 +147,8 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     demoteVariable,
     renameDatabaseItem,
     deleteDatabaseItem,
-    deleteWorksheetItem,
     renameWorksheetItem,
+    deleteWorksheetItem,
     revealInExplorer,
     openVariableContextMenuTarget,
     resolveDatabaseName,
@@ -154,6 +158,7 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     createGraph,
     openGraph,
     openWorksheet,
+    duplicateWorksheet,
     addWorksheet,
     triggerImportData,
     openDatabaseEditorWindow,

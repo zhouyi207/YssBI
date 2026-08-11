@@ -5,6 +5,7 @@ import { startProjectLifecycle } from '@/features/core/projectLifecycle/projectL
 import { useResourceStore } from '@/features/core/resource';
 import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
+import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
@@ -65,7 +66,7 @@ function deleteResult(projectInstanceId: string) {
       toRevision: 1,
       causedBy: '00000000-0000-0000-0000-000000000123',
       payload: {
-        kind: 'graph_resource_lifecycle' as const,
+        kind: 'resource_lifecycle' as const,
         patch: {
           before: {
             path: 'events/Old.yssbi-event',
@@ -86,6 +87,39 @@ function deleteResult(projectInstanceId: string) {
   };
 }
 
+function worksheetRenameResult(projectInstanceId: string, publicationRevision = 1) {
+  return {
+    operationId: '00000000-0000-0000-0000-000000000124',
+    projectInstanceId,
+    publicationRevision,
+    moves: [{
+      from: 'worksheets/Report.yssbi-worksheet',
+      to: 'worksheets/Renamed Report.yssbi-worksheet',
+      kind: 'worksheet' as const,
+      name: 'Renamed Report',
+    }],
+    deltas: [{
+      resource: { kind: 'worksheet' as const, key: 'worksheets/Renamed Report.yssbi-worksheet' },
+      fromRevision: 4,
+      toRevision: 5,
+      causedBy: '00000000-0000-0000-0000-000000000124',
+      payload: {
+        kind: 'resource_move' as const,
+        patch: {
+          from: 'worksheets/Report.yssbi-worksheet',
+          to: 'worksheets/Renamed Report.yssbi-worksheet',
+        },
+      },
+    }],
+    projectionReplacements: [],
+    projectionStatus: {
+      status: 'complete' as const,
+      expectedGraphPaths: [],
+    },
+    history: { canUndo: false, canRedo: false },
+  };
+}
+
 function renameResult(projectInstanceId: string, publicationRevision = 1) {
   return {
     operationId: '00000000-0000-0000-0000-000000000123',
@@ -103,7 +137,7 @@ function renameResult(projectInstanceId: string, publicationRevision = 1) {
       toRevision: 1,
       causedBy: '00000000-0000-0000-0000-000000000123',
       payload: {
-        kind: 'graph_resource_move' as const,
+        kind: 'resource_move' as const,
         patch: {
           from: 'events/Old.yssbi-event',
           to: 'events/New.yssbi-event',
@@ -126,18 +160,32 @@ describe('renameResource project ownership', () => {
     useResourceStore.getState().clear();
     useGraphDataStore.setState({ graphEntities: {} });
     useResourceStore.getState().setSnapshot({
-      resources: [{
-        id: 'events/Old.yssbi-event',
-        kind: 'event',
-        name: 'Old',
-        uri: 'yssbi://event/events/Old.yssbi-event',
-        revision: 0,
-        exists: true,
-        loaded: false,
-        hasDirtyDocument: false,
-        hasStaleDocument: false,
-        hasConflictDocument: false,
-      }],
+      resources: [
+        {
+          id: 'events/Old.yssbi-event',
+          kind: 'event',
+          name: 'Old',
+          uri: 'yssbi://event/events/Old.yssbi-event',
+          revision: 0,
+          exists: true,
+          loaded: false,
+          hasDirtyDocument: false,
+          hasStaleDocument: false,
+          hasConflictDocument: false,
+        },
+        {
+          id: 'worksheets/Report.yssbi-worksheet',
+          kind: 'worksheet',
+          name: 'Report',
+          uri: 'yssbi://worksheet/worksheets/Report.yssbi-worksheet',
+          revision: 4,
+          exists: true,
+          loaded: true,
+          hasDirtyDocument: false,
+          hasStaleDocument: false,
+          hasConflictDocument: false,
+        },
+      ],
       graphOrder: ['events/Old.yssbi-event'],
     });
     useGraphMetaStore.getState().clear();
@@ -220,6 +268,69 @@ describe('renameResource project ownership', () => {
       expect.any(String),
     );
     expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
+  });
+
+  it('renames a worksheet from captured revision and token without load or save fallback', async () => {
+    const committed = worksheetRenameResult('project-instance-current');
+    vi.spyOn(WorksheetService, 'renameWorksheet').mockImplementation(async () => {
+      useResourceStore.getState().patchResource(
+        { id: 'worksheets/Report.yssbi-worksheet', kind: 'worksheet' },
+        { revision: 99 },
+      );
+      return committed;
+    });
+    const load = vi.spyOn(WorksheetService, 'loadWorksheet');
+    const save = vi.spyOn(WorksheetService, 'saveWorksheet');
+
+    await renameResource(
+      { id: 'worksheets/Report.yssbi-worksheet', kind: 'worksheet' },
+      'Renamed Report',
+    );
+
+    expect(WorksheetService.renameWorksheet).toHaveBeenCalledWith(
+      'project-instance-current',
+      expect.any(String),
+      'worksheets/Report.yssbi-worksheet',
+      4,
+      'Renamed Report',
+      expect.any(Number),
+    );
+    expect(load).not.toHaveBeenCalled();
+    expect(save).not.toHaveBeenCalled();
+    expect(projectPublicationCoordinator.submit).toHaveBeenCalledWith({ result: committed });
+  });
+
+  it('rejects stale worksheet project and lifecycle ownership before publication', async () => {
+    vi.spyOn(WorksheetService, 'renameWorksheet')
+      .mockResolvedValueOnce(worksheetRenameResult('project-instance-stale'));
+
+    await expect(renameResource(
+      { id: 'worksheets/Report.yssbi-worksheet', kind: 'worksheet' },
+      'Renamed Report',
+    )).rejects.toThrow('stale project lifecycle');
+    expect(projectPublicationCoordinator.submit).not.toHaveBeenCalled();
+
+    let resolveFirst!: (result: ReturnType<typeof worksheetRenameResult>) => void;
+    let resolveSecond!: (result: ReturnType<typeof worksheetRenameResult>) => void;
+    vi.mocked(WorksheetService.renameWorksheet)
+      .mockReset()
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }))
+      .mockReturnValueOnce(new Promise((resolve) => { resolveSecond = resolve; }));
+
+    const first = renameResource(
+      { id: 'worksheets/Report.yssbi-worksheet', kind: 'worksheet' },
+      'Renamed Report',
+    );
+    await vi.waitFor(() => expect(WorksheetService.renameWorksheet).toHaveBeenCalledTimes(1));
+    const second = renameResource(
+      { id: 'worksheets/Report.yssbi-worksheet', kind: 'worksheet' },
+      'Renamed Report',
+    );
+    await vi.waitFor(() => expect(WorksheetService.renameWorksheet).toHaveBeenCalledTimes(2));
+    resolveFirst(worksheetRenameResult('project-instance-current', 1));
+    await expect(first).rejects.toMatchObject({ code: 'stale_resource_lifecycle' });
+    resolveSecond(worksheetRenameResult('project-instance-current', 2));
+    await expect(second).resolves.toBeUndefined();
   });
 
   it('rejects a stale rename receipt before coordinator submission', async () => {

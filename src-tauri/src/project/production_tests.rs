@@ -3,7 +3,7 @@ use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentError, DocumentNode, EditorGraphMutationDto,
     GraphDocumentOperation, GraphDocumentPatch, GraphMutation, GraphRevision, HistoryMutation,
     MutationConflict, MutationRequest, NodeId, OperationId, ParameterValues, PortAddress,
-    ResourceKey,
+    ResourceKey, ResourceRevision,
 };
 use crate::node_system::protocol::{NodeTypeId, PortKey};
 use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
@@ -1164,11 +1164,18 @@ fn worksheet_upsert_environment_failure_never_changes_filesystem_target() {
     std::fs::create_dir_all(invalid_database.parent().unwrap()).unwrap();
     std::fs::write(&invalid_database, b"not a DuckDB database").unwrap();
     insert_uncached_duckdb_declaration(&upsert_state, "database/invalid.duckdb");
-    let worksheet = WorksheetDocument::new("Uncommitted", "database");
-    let worksheet_file = upsert_root.join(crate::project::worksheet_relative_path(&worksheet));
+    let worksheet_path =
+        WorksheetResourcePath::parse("worksheets/Uncommitted.yssbi-worksheet").unwrap();
+    let worksheet_file = upsert_root.join(worksheet_path.relative_path());
+    let session = upsert_state.capture_project_session().unwrap();
 
     upsert_state.set_project_filesystem_rollback_fault(true);
-    let upsert_result = upsert_state.upsert_worksheet_document(worksheet.clone());
+    let upsert_result = upsert_state.create_worksheet_resource_transaction(
+        &session.instance_id,
+        &crate::project::ResourceName::parse("Uncommitted").unwrap(),
+        Some("database".into()),
+        OperationId::new(),
+    );
     upsert_state.set_project_filesystem_rollback_fault(false);
 
     assert!(upsert_result.is_err());
@@ -1179,7 +1186,7 @@ fn worksheet_upsert_environment_failure_never_changes_filesystem_target() {
             .read()
             .unwrap()
             .worksheets
-            .contains_key(&worksheet.id)
+            .contains_key(&worksheet_path)
     );
     std::fs::remove_dir_all(upsert_root).unwrap();
 }
@@ -1191,21 +1198,27 @@ fn worksheet_removal_environment_failure_never_changes_filesystem_target() {
     let invalid_database = remove_root.join("database/invalid.duckdb");
     std::fs::create_dir_all(invalid_database.parent().unwrap()).unwrap();
     std::fs::write(&invalid_database, b"not a DuckDB database").unwrap();
-    let worksheet = WorksheetDocument::new("Preserved", "database");
+    let (worksheet_path, worksheet) = fixtures::worksheet("Preserved", "database");
     remove_state
         .project_data
         .write()
         .unwrap()
         .worksheets
-        .insert(worksheet.id.clone(), worksheet.clone());
-    remove_state.initialize_worksheet_revision_for_test(&worksheet.id);
-    crate::project::fixtures::write_worksheet(&remove_root, &worksheet).unwrap();
+        .insert(worksheet_path.clone(), worksheet.clone());
+    remove_state.initialize_worksheet_revision_for_test(&worksheet_path);
+    fixtures::write_worksheet(&remove_root, &worksheet_path, &worksheet).unwrap();
     insert_uncached_duckdb_declaration(&remove_state, "database/invalid.duckdb");
-    let worksheet_file = remove_root.join(crate::project::worksheet_relative_path(&worksheet));
+    let worksheet_file = remove_root.join(worksheet_path.relative_path());
     let worksheet_before = std::fs::read(&worksheet_file).unwrap();
 
+    let session = remove_state.capture_project_session().unwrap();
     remove_state.set_project_filesystem_rollback_fault(true);
-    let remove_result = remove_state.remove_worksheet_document(&worksheet.id);
+    let remove_result = remove_state.remove_worksheet_resource_transaction(
+        &session.instance_id,
+        &worksheet_path,
+        ResourceRevision::INITIAL,
+        OperationId::new(),
+    );
     remove_state.set_project_filesystem_rollback_fault(false);
 
     assert!(remove_result.is_err());
@@ -1216,7 +1229,7 @@ fn worksheet_removal_environment_failure_never_changes_filesystem_target() {
             .read()
             .unwrap()
             .worksheets
-            .contains_key(&worksheet.id)
+            .contains_key(&worksheet_path)
     );
     std::fs::remove_dir_all(remove_root).unwrap();
 }
@@ -1276,14 +1289,14 @@ fn recovery_required_gate_blocks_project_authority_until_activation() {
     let graph = graph_path();
     let resource = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
     state.insert_graph(graph.clone(), resource).unwrap();
-    let worksheet = WorksheetDocument::new("Recovery", "database");
+    let (worksheet_path, worksheet) = fixtures::worksheet("Recovery", "database");
     state
         .project_data
         .write()
         .unwrap()
         .worksheets
-        .insert(worksheet.id.clone(), worksheet.clone());
-    state.initialize_worksheet_revision_for_test(&worksheet.id);
+        .insert(worksheet_path.clone(), worksheet.clone());
+    state.initialize_worksheet_revision_for_test(&worksheet_path);
     let context = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
         operation_id: OperationId::new(),
@@ -1368,7 +1381,7 @@ fn recovery_required_gate_blocks_project_authority_until_activation() {
     );
     assert_eq!(
         state
-            .load_worksheet_document(&context.session.instance_id, &worksheet.id)
+            .load_worksheet_document(&context.session.instance_id, &worksheet_path)
             .unwrap_err()
             .code(),
         "project_recovery_required"
@@ -1382,7 +1395,8 @@ fn recovery_required_gate_blocks_project_authority_until_activation() {
             .apply_resource_document_patch(
                 &context,
                 ResourceDocumentPatch::RemoveWorksheet {
-                    id: worksheet.id.clone(),
+                    path: worksheet_path.clone(),
+                    revision: ResourceRevision::INITIAL,
                 },
             )
             .unwrap_err()
@@ -1404,16 +1418,16 @@ fn recovery_required_gate_blocks_project_authority_until_activation() {
 #[test]
 fn worksheet_revision_conflict_has_zero_authoritative_effects() {
     let (state, root) = state_with_project_path("worksheet-revision-conflict");
-    let worksheet = WorksheetDocument::new("Original", "database");
+    let (worksheet_path, worksheet) = fixtures::worksheet("Original", "database");
     state
         .project_data
         .write()
         .unwrap()
         .worksheets
-        .insert(worksheet.id.clone(), worksheet.clone());
-    state.initialize_worksheet_revision_for_test(&worksheet.id);
+        .insert(worksheet_path.clone(), worksheet.clone());
+    state.initialize_worksheet_revision_for_test(&worksheet_path);
     let key = ResourceKey::Worksheet(crate::node_system::document::WorksheetResourceKey(
-        worksheet.id.clone().into(),
+        worksheet_path.as_str().into(),
     ));
     let stale = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
@@ -1434,24 +1448,24 @@ fn worksheet_revision_conflict_has_zero_authoritative_effects() {
         recovery_marker: Some(state.project_recovery_marker()),
     };
     let mut concurrent = worksheet.clone();
-    concurrent.name = "Concurrent".into();
+    concurrent.chart_type = "line".into();
     state
         .apply_resource_document_patch(
             &current,
             ResourceDocumentPatch::UpsertWorksheet {
-                id: concurrent.id.clone(),
+                path: worksheet_path.clone(),
                 document: concurrent,
             },
         )
         .unwrap();
     let mut stale_document = worksheet.clone();
-    stale_document.name = "Stale".into();
+    stale_document.chart_type = "area".into();
 
     let error = state
         .apply_resource_document_patch(
             &stale,
             ResourceDocumentPatch::UpsertWorksheet {
-                id: stale_document.id.clone(),
+                path: worksheet_path.clone(),
                 document: stale_document,
             },
         )
@@ -1459,42 +1473,112 @@ fn worksheet_revision_conflict_has_zero_authoritative_effects() {
 
     assert_eq!(error.code(), "resource_revision_conflict");
     assert_eq!(
-        state.get_data().unwrap().worksheets[&worksheet.id].name,
-        "Concurrent"
+        state.get_data().unwrap().worksheets[&worksheet_path].chart_type,
+        "line"
     );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn worksheet_upsert_rejects_portable_path_collision_without_effects() {
+    let (state, root) = state_with_project_path("worksheet-portable-collision");
+    let (existing_path, existing) = fixtures::worksheet("Straße", "database");
+    let (colliding_path, colliding) = fixtures::worksheet("STRASSE", "database");
+    state
+        .project_data
+        .write()
+        .unwrap()
+        .worksheets
+        .insert(existing_path.clone(), existing.clone());
+    state.initialize_worksheet_revision_for_test(&existing_path);
+    fixtures::write_worksheet(&root, &existing_path, &existing).unwrap();
+    let existing_file = root.join(existing_path.relative_path());
+    let colliding_file = root.join(colliding_path.relative_path());
+    let existing_bytes = std::fs::read(&existing_file).unwrap();
+    let authority_before = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let revisions_before = state.revision_state_for_test();
+    let generation_before = state.authority_generation_for_test();
+
+    let colliding_key = ResourceKey::Worksheet(crate::node_system::document::WorksheetResourceKey(
+        colliding_path.as_str().into(),
+    ));
+    let direct_context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: Vec::new(),
+        expected_revisions: Default::default(),
+        expected_absent_resources: [colliding_key].into_iter().collect(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+    let error = state
+        .apply_resource_document_patch(
+            &direct_context,
+            ResourceDocumentPatch::UpsertWorksheet {
+                path: colliding_path.clone(),
+                document: colliding,
+            },
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), "resource_revision_conflict");
+
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        authority_before
+    );
+    assert_eq!(state.revision_state_for_test(), revisions_before);
+    assert_eq!(state.authority_generation_for_test(), generation_before);
+    assert_eq!(std::fs::read(existing_file).unwrap(), existing_bytes);
+    assert!(!colliding_file.exists());
     std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
 fn stale_worksheet_save_is_rejected_without_disk_or_authoritative_effects() {
     let (state, root) = state_with_project_path("worksheet-stale-save");
-    let worksheet = WorksheetDocument::new("Original", "database");
+    let (worksheet_path, worksheet) = fixtures::worksheet("Original", "database");
     state
         .project_data
         .write()
         .unwrap()
         .worksheets
-        .insert(worksheet.id.clone(), worksheet.clone());
-    state.initialize_worksheet_revision_for_test(&worksheet.id);
-    crate::project::fixtures::write_worksheet(&root, &worksheet).unwrap();
+        .insert(worksheet_path.clone(), worksheet.clone());
+    state.initialize_worksheet_revision_for_test(&worksheet_path);
+    fixtures::write_worksheet(&root, &worksheet_path, &worksheet).unwrap();
     let mut current = worksheet.clone();
-    current.name = "Current".into();
-    state.upsert_worksheet_document(current).unwrap();
+    current.chart_type = "line".into();
+    let session = state.capture_project_session().unwrap();
+    state
+        .save_worksheet_document(
+            &session.instance_id,
+            &worksheet_path,
+            ResourceRevision::INITIAL,
+            OperationId::new(),
+            current,
+        )
+        .unwrap();
     let mut stale = worksheet.clone();
-    stale.name = "Stale".into();
+    stale.chart_type = "area".into();
 
-    let error = state.upsert_worksheet_document(stale).unwrap_err();
+    let error = state
+        .save_worksheet_document(
+            &session.instance_id,
+            &worksheet_path,
+            ResourceRevision::INITIAL,
+            OperationId::new(),
+            stale,
+        )
+        .unwrap_err();
 
     assert_eq!(error.code(), "resource_revision_conflict");
     assert_eq!(
-        state.get_data().unwrap().worksheets[&worksheet.id].name,
-        "Current"
+        state.get_data().unwrap().worksheets[&worksheet_path].chart_type,
+        "line"
     );
     assert_eq!(
-        crate::project::load_worksheet_from_file(&root, &worksheet.id)
+        crate::project::load_worksheet_from_file(&root, &worksheet_path)
             .unwrap()
-            .name,
-        "Current"
+            .chart_type,
+        "line"
     );
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -1502,13 +1586,13 @@ fn stale_worksheet_save_is_rejected_without_disk_or_authoritative_effects() {
 #[test]
 fn unwind_rollback_failure_blocks_mutations_until_activation() {
     let (state, root) = state_with_project_path("recovery-boundary");
-    let worksheet = WorksheetDocument::new("Blocked Read", "database");
+    let (worksheet_path, worksheet) = fixtures::worksheet("Blocked Read", "database");
     state
         .project_data
         .write()
         .unwrap()
         .worksheets
-        .insert(worksheet.id.clone(), worksheet.clone());
+        .insert(worksheet_path.clone(), worksheet.clone());
     let session = state.capture_project_session().unwrap();
     let context = ProjectTransactionContext {
         session: session.clone(),
@@ -1545,7 +1629,7 @@ fn unwind_rollback_failure_blocks_mutations_until_activation() {
     assert_eq!(blocked.code(), "project_recovery_required");
     assert!(blocked.recovery_required());
     let blocked_read = state
-        .load_worksheet_document(&context.session.instance_id, &worksheet.id)
+        .load_worksheet_document(&context.session.instance_id, &worksheet_path)
         .unwrap_err();
     assert_eq!(blocked_read.code(), "project_recovery_required");
 
@@ -1753,7 +1837,7 @@ fn rename_remains_committed_when_project_replacement_runs_during_receipt_complet
     assert_eq!(result.publication.project_instance_id, project_instance_id);
     assert!(!root.join(source.as_str()).exists());
     assert!(root.join(target.as_str()).is_file());
-    assert_eq!(state.graph_lifecycle_entry_count(), 0);
+    assert_eq!(state.resource_lifecycle_entry_count(), 0);
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -1894,20 +1978,20 @@ fn worksheet_patch_preserves_unrelated_concurrent_project_data() {
         .unwrap()
         .variables
         .insert(concurrent_id, concurrent);
-    let worksheet = WorksheetDocument::new("Authoritative", "database");
+    let (worksheet_path, worksheet) = fixtures::worksheet("Authoritative", "database");
 
     state
         .apply_resource_document_patch(
             &context,
             ResourceDocumentPatch::UpsertWorksheet {
-                id: worksheet.id.clone(),
+                path: worksheet_path.clone(),
                 document: worksheet.clone(),
             },
         )
         .unwrap();
 
     let data = state.get_data().unwrap();
-    assert_eq!(data.worksheets[&worksheet.id].name, "Authoritative");
+    assert_eq!(data.worksheets[&worksheet_path], worksheet);
     assert_eq!(
         data.variables[&concurrent_id].name,
         "Concurrent Worksheet Variable"
@@ -2766,6 +2850,315 @@ fn history_request(
     MutationRequest::new(resource, revision, OperationId::new(), HistoryMutation {})
 }
 
+fn worksheet_history_key(path: &WorksheetResourcePath) -> ResourceKey {
+    ResourceKey::Worksheet(crate::node_system::document::WorksheetResourceKey(
+        path.as_str().into(),
+    ))
+}
+
+fn worksheet_revision(state: &ProjectState, path: &WorksheetResourcePath) -> GraphRevision {
+    state.worksheet_revisions.read().unwrap()[path]
+}
+
+fn apply_worksheet_history(
+    state: &ProjectState,
+    project: &ProjectInstanceId,
+    path: &WorksheetResourcePath,
+    undo: bool,
+) -> crate::event::ResourceMutationResultDto {
+    let request = history_request(worksheet_history_key(path), worksheet_revision(state, path));
+    if undo {
+        state
+            .undo_last_transaction_observed(project, "en-US", request, |_| {})
+            .unwrap()
+    } else {
+        state
+            .redo_last_transaction_observed(project, "en-US", request, |_| {})
+            .unwrap()
+    }
+}
+
+fn assert_strict_resource_mutation_wire_coherent(result: &crate::event::ResourceMutationResultDto) {
+    let wire = serde_json::to_value(result).unwrap();
+    assert_eq!(
+        serde_json::from_value::<crate::event::ResourceMutationResultDto>(wire).unwrap(),
+        *result
+    );
+    for delta in &result.deltas {
+        let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
+            &delta.payload
+        else {
+            continue;
+        };
+        if let Some(before) = &lifecycle.before {
+            assert_eq!(
+                before.revision, delta.from_revision,
+                "lifecycle before revision must match the delta envelope"
+            );
+        }
+        if let Some(after) = &lifecycle.after {
+            assert_eq!(
+                after.revision, delta.to_revision,
+                "lifecycle after revision must match the delta envelope"
+            );
+        }
+    }
+}
+
+fn create_worksheet_history_fixture(
+    label: &str,
+) -> (
+    ProjectState,
+    std::path::PathBuf,
+    ProjectInstanceId,
+    WorksheetResourcePath,
+) {
+    let (state, root) = state_with_project_path(label);
+    let project = state.capture_project_session().unwrap().instance_id;
+    let name = crate::project::ResourceName::parse("Durable History").unwrap();
+    state
+        .create_worksheet_resource_transaction(
+            &project,
+            &name,
+            Some("database".into()),
+            OperationId::new(),
+        )
+        .unwrap();
+    let path = WorksheetResourcePath::from_name(&name);
+    (state, root, project, path)
+}
+
+#[test]
+fn worksheet_create_delete_save_and_rename_undo_redo_are_durable() {
+    let (state, root, project, source) =
+        create_worksheet_history_fixture("worksheet-history-durable");
+    assert_eq!(state.project_instance_id(), project.as_str());
+    assert!(state.history_status().can_undo);
+    assert!(root.join(source.relative_path()).is_file());
+
+    let undo_create = apply_worksheet_history(&state, &project, &source, true);
+    assert_eq!(undo_create.project_instance_id, project.as_str());
+    assert!(!root.join(source.relative_path()).exists());
+    assert!(!state.get_data().unwrap().worksheets.contains_key(&source));
+    assert!(undo_create.history.can_redo);
+    let redo_create = apply_worksheet_history(&state, &project, &source, false);
+    assert_eq!(redo_create.project_instance_id, project.as_str());
+    let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+        redo_create_lifecycle,
+    ) = &redo_create.deltas[0].payload
+    else {
+        panic!("create redo must publish a lifecycle delta");
+    };
+    assert_eq!(
+        redo_create_lifecycle.after.as_ref().unwrap().revision,
+        redo_create.deltas[0].to_revision
+    );
+    assert_strict_resource_mutation_wire_coherent(&redo_create);
+    assert!(root.join(source.relative_path()).is_file());
+    assert!(state.get_data().unwrap().worksheets.contains_key(&source));
+
+    let revision = worksheet_revision(&state, &source);
+    let mut saved = state.get_data().unwrap().worksheets[&source].clone();
+    saved.chart_type = "line".into();
+    state
+        .save_worksheet_document(&project, &source, revision, OperationId::new(), saved)
+        .unwrap();
+    assert_eq!(
+        crate::project::load_worksheet_from_file(&root, &source)
+            .unwrap()
+            .chart_type,
+        "line"
+    );
+    apply_worksheet_history(&state, &project, &source, true);
+    assert_eq!(
+        crate::project::load_worksheet_from_file(&root, &source)
+            .unwrap()
+            .chart_type,
+        "histogram"
+    );
+    apply_worksheet_history(&state, &project, &source, false);
+    assert_eq!(
+        state.get_data().unwrap().worksheets[&source].chart_type,
+        "line"
+    );
+
+    let target_name = crate::project::ResourceName::parse("Renamed History").unwrap();
+    let target = WorksheetResourcePath::from_name(&target_name);
+    state
+        .rename_worksheet_resource_transaction(
+            &project,
+            &source,
+            worksheet_revision(&state, &source),
+            &target_name,
+            1,
+            OperationId::new(),
+        )
+        .unwrap();
+    assert!(!root.join(source.relative_path()).exists());
+    assert!(root.join(target.relative_path()).is_file());
+    let undo_move = apply_worksheet_history(&state, &project, &target, true);
+    assert_eq!(undo_move.moves[0].from, target.as_str());
+    assert_eq!(undo_move.moves[0].to, source.as_str());
+    assert!(root.join(source.relative_path()).is_file());
+    let redo_move = apply_worksheet_history(&state, &project, &source, false);
+    assert_eq!(redo_move.moves[0].from, source.as_str());
+    assert_eq!(redo_move.moves[0].to, target.as_str());
+    assert!(root.join(target.relative_path()).is_file());
+
+    state
+        .remove_worksheet_resource_transaction(
+            &project,
+            &target,
+            worksheet_revision(&state, &target),
+            OperationId::new(),
+        )
+        .unwrap();
+    assert!(!root.join(target.relative_path()).exists());
+    let undo_delete = apply_worksheet_history(&state, &project, &target, true);
+    let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+        undo_delete_lifecycle,
+    ) = &undo_delete.deltas[0].payload
+    else {
+        panic!("delete undo must publish a lifecycle delta");
+    };
+    assert_eq!(
+        undo_delete_lifecycle.after.as_ref().unwrap().revision,
+        undo_delete.deltas[0].to_revision
+    );
+    assert_strict_resource_mutation_wire_coherent(&undo_delete);
+    assert!(root.join(target.relative_path()).is_file());
+    assert!(state.get_data().unwrap().worksheets.contains_key(&target));
+    let redo_delete = apply_worksheet_history(&state, &project, &target, false);
+    let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+        redo_delete_lifecycle,
+    ) = &redo_delete.deltas[0].payload
+    else {
+        panic!("delete redo must publish a lifecycle delta");
+    };
+    assert_eq!(
+        redo_delete_lifecycle.before.as_ref().unwrap().revision,
+        redo_delete.deltas[0].from_revision
+    );
+    assert_strict_resource_mutation_wire_coherent(&redo_delete);
+    assert!(!root.join(target.relative_path()).exists());
+    assert!(!state.get_data().unwrap().worksheets.contains_key(&target));
+    assert_eq!(state.project_instance_id(), project.as_str());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn worksheet_history_rejects_stale_project_before_filesystem_commit() {
+    let (state, root, project, path) =
+        create_worksheet_history_fixture("worksheet-history-stale-project");
+    let file_before = std::fs::read(root.join(path.relative_path())).unwrap();
+    state.set_history_after_preparation_test_hook(publish_empty_replacement_hook(&state, &root));
+
+    let error = state
+        .undo_last_transaction_observed(
+            &project,
+            "en-US",
+            history_request(
+                worksheet_history_key(&path),
+                worksheet_revision(&state, &path),
+            ),
+            |_| {},
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, MutationConflict::StaleProjectLifecycle(_)));
+    assert_eq!(
+        std::fs::read(root.join(path.relative_path())).unwrap(),
+        file_before
+    );
+    assert_empty_replacement_authority(&state, &project);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn worksheet_history_filesystem_failure_has_zero_authoritative_effects() {
+    let (state, root, project, path) =
+        create_worksheet_history_fixture("worksheet-history-filesystem-failure");
+    let revision = worksheet_revision(&state, &path);
+    let mut saved = state.get_data().unwrap().worksheets[&path].clone();
+    saved.chart_type = "line".into();
+    state
+        .save_worksheet_document(&project, &path, revision, OperationId::new(), saved)
+        .unwrap();
+    let data_before = serde_json::to_value(state.get_data().unwrap()).unwrap();
+    let revisions_before = state.revision_state_for_test();
+    let publication_before = state.publication_state_for_test();
+    let history_before = state.history_status();
+    let file_before = std::fs::read(root.join(path.relative_path())).unwrap();
+    state.set_project_filesystem_fault(Some(
+        crate::project::ProjectFilesystemFaultPoint::StagedSerialization,
+    ));
+
+    let error = state
+        .undo_last_transaction_observed(
+            &project,
+            "en-US",
+            history_request(
+                worksheet_history_key(&path),
+                worksheet_revision(&state, &path),
+            ),
+            |_| {},
+        )
+        .unwrap_err();
+    state.set_project_filesystem_fault(None);
+
+    assert!(matches!(error, MutationConflict::History(_)));
+    assert_eq!(
+        serde_json::to_value(state.get_data().unwrap()).unwrap(),
+        data_before
+    );
+    assert_eq!(state.revision_state_for_test(), revisions_before);
+    assert_eq!(state.publication_state_for_test(), publication_before);
+    assert_eq!(state.history_status(), history_before);
+    assert_eq!(
+        std::fs::read(root.join(path.relative_path())).unwrap(),
+        file_before
+    );
+    assert_eq!(state.project_instance_id(), project.as_str());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn worksheet_history_publication_failure_enters_authoritative_recovery() {
+    let (state, root, project, path) =
+        create_worksheet_history_fixture("worksheet-history-publication-recovery");
+    let hook_state = state.clone();
+    let hook_path = path.clone();
+    state.set_history_after_disk_commit_test_hook(std::sync::Arc::new(move || {
+        hook_state
+            .worksheet_revisions
+            .write()
+            .unwrap()
+            .insert(hook_path.clone(), GraphRevision::new(99));
+    }));
+    state.set_project_filesystem_rollback_fault(true);
+
+    let error = state
+        .undo_last_transaction_observed(
+            &project,
+            "en-US",
+            history_request(
+                worksheet_history_key(&path),
+                worksheet_revision(&state, &path),
+            ),
+            |_| {},
+        )
+        .unwrap_err();
+
+    assert!(matches!(error, MutationConflict::RecoveryRequired(_)));
+    assert_eq!(
+        state.get_data().unwrap_err().code(),
+        "project_recovery_required"
+    );
+    assert_eq!(state.project_instance_id(), project.as_str());
+    state.set_project_filesystem_rollback_fault(false);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 fn run_history_direction(
     state: &ProjectState,
     project: &ProjectInstanceId,
@@ -3381,20 +3774,24 @@ fn loaded_only_history_routing_rejects_specialized_policy_races() {
         match policy {
             crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects => {
                 specialized_head.variable_effect_snapshots = Some(Default::default());
-                specialized_head.graph_resource_move = None;
+                specialized_head.resource_lifecycle = None;
+                specialized_head.resource_move = None;
             }
             crate::node_system::document::HistoryPersistencePolicy::DurableResourceMove => {
                 let ResourceKey::Graph(path) = resource.clone() else {
                     unreachable!();
                 };
                 specialized_head.variable_effect_snapshots = None;
-                specialized_head.graph_resource_move = Some(
-                    crate::node_system::document::GraphResourceMoveHistoryPatch {
-                        from: path.clone(),
-                        to: path,
-                        payload: serde_json::Value::Null,
-                    },
-                );
+                specialized_head.resource_lifecycle = None;
+                specialized_head.resource_move =
+                    Some(crate::node_system::document::ResourceMoveHistoryPatch {
+                        from: path.0.clone(),
+                        to: path.0,
+                        kind: crate::node_system::document::ResourceLifecycleKind::Event,
+                        payload: crate::node_system::document::ResourceMoveHistoryPayload::Graph {
+                            persisted_move_payload: serde_json::Value::Null,
+                        },
+                    });
             }
             crate::node_system::document::HistoryPersistencePolicy::InMemoryUntilSave => {
                 unreachable!();
@@ -6001,7 +6398,93 @@ fn history_status_waits_for_authoritative_publication() {
 }
 
 #[test]
-fn normalized_graph_lifecycle_routes_every_insert_through_project_state() {
+fn canonical_graph_insert_lifecycle_publication_preserves_fresh_revision() {
+    let (state, root) = state_with_project_path("graph-insert-lifecycle-wire-revision");
+    let path = GraphResourcePath::new("events/Inserted.yssbi-event").unwrap();
+    let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        path.as_str().into(),
+    ));
+    let operation_id = OperationId::from_uuid(uuid::Uuid::from_u128(0x803));
+    let context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id,
+        affected_resources: Vec::new(),
+        expected_revisions: Default::default(),
+        expected_absent_resources: [key].into_iter().collect(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+
+    let result = state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::InsertGraph {
+                path: path.clone(),
+                resource: GraphResourceDocument::new("Inserted", GraphDocumentKind::Event),
+            },
+        )
+        .unwrap();
+
+    let wire = serde_json::to_value(&result).unwrap();
+    let delta = &wire["deltas"][0];
+    assert_eq!(delta["payload"]["kind"], "resource_lifecycle");
+    assert_eq!(delta["fromRevision"], 0);
+    assert_eq!(delta["toRevision"], 0);
+    assert_eq!(delta["payload"]["patch"]["after"]["revision"], 0);
+    assert_eq!(
+        state.get_data().unwrap().graphs[&path].document.revision,
+        GraphRevision::INITIAL
+    );
+
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn canonical_graph_unload_lifecycle_preserves_authoritative_revision() {
+    let (state, root) = state_with_project_path("graph-unload-lifecycle-wire-revision");
+    let path = GraphResourcePath::new("events/Unloaded.yssbi-event").unwrap();
+    let mut resource = GraphResourceDocument::new("Unloaded", GraphDocumentKind::Event);
+    resource.document.revision = GraphRevision::new(4);
+    state.insert_graph(path.clone(), resource).unwrap();
+    let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
+        path.as_str().into(),
+    ));
+    let context = ProjectTransactionContext {
+        session: state.capture_project_session().unwrap(),
+        operation_id: OperationId::new(),
+        affected_resources: vec![key.clone()],
+        expected_revisions: [(key, GraphRevision::new(4))].into_iter().collect(),
+        expected_absent_resources: Default::default(),
+        recovery_marker: Some(state.project_recovery_marker()),
+    };
+
+    let result = state
+        .apply_resource_document_patch(
+            &context,
+            ResourceDocumentPatch::UnloadGraph { path: path.clone() },
+        )
+        .unwrap();
+    let delta = &result.deltas[0];
+
+    assert_eq!(delta.from_revision, GraphRevision::new(4));
+    assert_eq!(delta.to_revision, GraphRevision::new(4));
+    let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
+        &delta.payload
+    else {
+        panic!("expected resource lifecycle delta");
+    };
+    assert_eq!(
+        lifecycle.after.as_ref().unwrap().revision,
+        GraphRevision::new(4)
+    );
+    assert_eq!(
+        state.graph_revisions.read().unwrap()[&path],
+        GraphRevision::new(4)
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn normalized_resource_lifecycle_routes_every_insert_through_project_state() {
     let root = std::env::temp_dir().join(format!(
         "yssbi-production-lifecycle-{}",
         uuid::Uuid::new_v4()
@@ -10251,7 +10734,17 @@ fn function_patch_remove_and_reinsert_keep_authoritative_revisions_coherent() {
             },
         )
         .unwrap();
+    assert_eq!(removed.deltas[0].from_revision, GraphRevision::new(4));
     assert_eq!(removed.deltas[0].to_revision, GraphRevision::new(5));
+    let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(removed_lifecycle) =
+        &removed.deltas[0].payload
+    else {
+        panic!("expected removal lifecycle delta");
+    };
+    assert_eq!(
+        removed_lifecycle.before.as_ref().unwrap().revision,
+        GraphRevision::new(4)
+    );
     assert_eq!(
         state.graph_revisions.read().unwrap()[&path],
         GraphRevision::new(5)
@@ -10286,7 +10779,17 @@ fn function_patch_remove_and_reinsert_keep_authoritative_revisions_coherent() {
         revision
     );
     assert_eq!(state.graph_revisions.read().unwrap()[&path], revision);
+    assert_eq!(inserted.deltas[0].from_revision, GraphRevision::new(5));
     assert_eq!(inserted.deltas[0].to_revision, revision);
+    let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(inserted_lifecycle) =
+        &inserted.deltas[0].payload
+    else {
+        panic!("expected insertion lifecycle delta");
+    };
+    assert_eq!(
+        inserted_lifecycle.after.as_ref().unwrap().revision,
+        revision
+    );
     assert_eq!(
         inserted.projection_replacements[0]
             .projection

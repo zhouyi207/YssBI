@@ -31,8 +31,9 @@ describe('layoutTabModel', () => {
       id: 'functions/Helper.yssbi-function',
       type: 'function',
     });
-    expect(buildWorksheetLayoutTab('w1')).toMatchObject({
-      id: 'w1',
+    const worksheetPath = 'worksheets/Opaque Path With Spaces.yssbi-worksheet';
+    expect(buildWorksheetLayoutTab(worksheetPath)).toMatchObject({
+      id: worksheetPath,
       type: 'worksheet',
       component: 'WorksheetEditor',
     });

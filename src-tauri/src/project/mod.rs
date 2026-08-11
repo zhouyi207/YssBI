@@ -2,13 +2,14 @@
 
 mod compile_publication;
 pub mod filesystem;
-pub mod graph_lifecycle;
 pub mod graph_resource_index;
 pub mod graph_resource_path;
 mod history_hydration;
 pub mod path_format;
 pub mod project_data;
 pub mod project_error;
+pub mod resource_lifecycle;
+pub mod resource_name;
 
 pub mod project_activation;
 pub mod project_io;
@@ -33,14 +34,16 @@ pub mod resource_patch;
 pub mod resource_reveal;
 pub mod unique_name;
 pub mod worksheet_io;
+pub mod worksheet_resource_path;
 
 pub use filesystem::*;
-pub use graph_lifecycle::*;
 pub use graph_resource_index::*;
 pub use graph_resource_path::*;
 pub use path_format::*;
 pub use project_data::*;
 pub use project_error::*;
+pub use resource_lifecycle::*;
+pub use resource_name::*;
 
 pub use project_activation::*;
 pub use project_io::*;
@@ -61,10 +64,13 @@ pub use project_watcher::*;
 pub use resource_patch::*;
 pub use resource_reveal::*;
 pub use worksheet_io::*;
+pub use worksheet_resource_path::*;
 
 #[cfg(test)]
 pub(crate) mod fixtures {
-    use super::{GraphResourcePath, ProjectData, ProjectError, WorksheetDocument};
+    use super::{
+        GraphResourcePath, ProjectData, ProjectError, WorksheetDocument, WorksheetResourcePath,
+    };
     use std::path::{Path, PathBuf};
 
     pub(crate) struct TempProject {
@@ -123,11 +129,23 @@ pub(crate) mod fixtures {
         Ok(relative_path.to_string_lossy().replace('\\', "/"))
     }
 
+    pub(crate) fn worksheet(
+        name: &str,
+        database_id: &str,
+    ) -> (WorksheetResourcePath, WorksheetDocument) {
+        let name = super::ResourceName::parse(name).unwrap();
+        (
+            WorksheetResourcePath::from_name(&name),
+            WorksheetDocument::new(database_id),
+        )
+    }
+
     pub(crate) fn write_worksheet(
         root: &Path,
+        path: &WorksheetResourcePath,
         document: &WorksheetDocument,
     ) -> Result<(), ProjectError> {
-        let (relative_path, contents) = super::worksheet_io::serialize_worksheet(document)?;
+        let (relative_path, contents) = super::worksheet_io::serialize_worksheet(path, document)?;
         let target = root.join(relative_path);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;

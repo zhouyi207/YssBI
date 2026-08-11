@@ -10,6 +10,7 @@ import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionS
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import {
   buildGraphResourceMeta,
+  markResourceDirty,
   markResourceLoaded,
   resourceKey,
   useDocumentStateStore,
@@ -41,7 +42,7 @@ const projectInstanceId = '00000000-0000-0000-0000-000000000901';
 const firstPath = 'events/First.yssbi-event';
 const secondPath = 'events/Second.yssbi-event';
 const destinationPath = 'events/Merged.yssbi-event';
-const worksheetId = 'worksheet-1';
+const worksheetPath = 'worksheets/Quarterly Sales Report.yssbi-worksheet';
 
 function databaseIndexRow(
   overrides: Partial<ProjectDatabaseIndexRow> = {},
@@ -72,24 +73,22 @@ function recoveryIndex(databases: ProjectDatabaseIndexRow[] = []): ProjectIndexR
   };
 }
 
-function worksheet(name = 'Worksheet'): WorksheetDocument {
+function worksheet(_name = 'Worksheet'): WorksheetDocument {
   return {
     schemaVersion: 1,
     revision: 1,
-    id: worksheetId,
-    name,
     databaseId: 'database-1',
     chartType: 'scatter',
     encodings: { x: 'x', y: 'y' },
   };
 }
 
-function worksheetResource(document: WorksheetDocument) {
+function worksheetResource(_document: WorksheetDocument) {
   return {
-    id: document.id,
+    id: worksheetPath,
     kind: 'worksheet' as const,
-    name: document.name,
-    uri: `yssbi://worksheet/${document.id}`,
+    name: 'Worksheet',
+    uri: `yssbi://worksheet/${worksheetPath}`,
     exists: true,
     loaded: true,
     hasDirtyDocument: false,
@@ -109,7 +108,7 @@ function moveDelta(resourceMove: ResourceMoveDto): ResourceMutationResultDto['de
     toRevision: 1,
     causedBy: null,
     payload: {
-      kind: 'graph_resource_move',
+      kind: 'resource_move',
       patch: { from: resourceMove.from, to: resourceMove.to },
     },
   };
@@ -805,13 +804,14 @@ describe('project publication production stores', () => {
       version: 1,
     });
     useWorksheetStore.setState({ index: [{
-      id: document.id,
-      name: document.name,
+      worksheetPath,
+      name: 'Worksheet',
       databaseId: document.databaseId,
       chartType: document.chartType,
-    }], documents: { [document.id]: document } });
+      revision: document.revision,
+    }], documents: { [worksheetPath]: document } });
     useDocumentStateStore.getState().upsertDocument({
-      resourceKey: resourceKey({ id: document.id, kind: 'worksheet' }),
+      resourceKey: resourceKey({ id: worksheetPath, kind: 'worksheet' }),
       loaded: true,
       dirty: false,
       stale: false,
@@ -828,7 +828,7 @@ describe('project publication production stores', () => {
     useGraphSessionStore.getState().setFocusedSession('editor', firstPath);
     useEditorTabStore.getState().initGroupPlacement('editor', [
       { id: firstPath, component: 'GraphEditor', type: 'event' },
-      { id: document.id, component: 'WorksheetEditor', type: 'worksheet' },
+      { id: worksheetPath, component: 'WorksheetEditor', type: 'worksheet' },
     ], firstPath);
 
     const plan = prepareProjectRecoveryCommit({
@@ -864,13 +864,46 @@ describe('project publication production stores', () => {
 
   it('applies a matching event and direct worksheet delta exactly once inside publication', async () => {
     const document = worksheet('Created');
+    const authoritative = { ...document, revision: 2, chartType: 'line' as const };
+    useWorksheetStore.getState().setIndex([{
+      worksheetPath,
+      name: 'Created',
+      databaseId: document.databaseId,
+      chartType: document.chartType,
+      revision: document.revision,
+    }]);
+    useResourceStore.getState().upsertResource({
+      ...worksheetResource(document),
+      revision: 1,
+    });
+    useWorksheetStore.getState().upsertDocument(worksheetPath, document);
+    markResourceDirty({ id: worksheetPath, kind: 'worksheet' }, true);
     const result = {
       operationId: '00000000-0000-0000-0000-000000000904',
       projectInstanceId,
       publicationRevision: 1,
       moves: [],
-      deltas: [],
-      worksheetDeltas: [{ id: worksheetId, before: null, after: document }],
+      deltas: [{
+        resource: { kind: 'worksheet', key: worksheetPath },
+        fromRevision: 1,
+        toRevision: 2,
+        causedBy: '00000000-0000-0000-0000-000000000904',
+        payload: {
+          kind: 'worksheet',
+          patch: {
+            before: {
+              databaseId: document.databaseId,
+              chartType: document.chartType,
+              encodings: document.encodings,
+            },
+            after: {
+              databaseId: authoritative.databaseId,
+              chartType: authoritative.chartType,
+              encodings: authoritative.encodings,
+            },
+          },
+        },
+      }],
       projectionReplacements: [],
       projectionStatus: { status: 'complete', expectedGraphPaths: [] },
       history: { canUndo: true, canRedo: false },
@@ -889,21 +922,46 @@ describe('project publication production stores', () => {
     const coordinator = new ProjectPublicationCoordinator(dependencies);
     coordinator.startProject(projectInstanceId, 0);
     let worksheetStoreCommits = 0;
-    const unsubscribe = useWorksheetStore.subscribe(() => { worksheetStoreCommits += 1; });
+    let resourceStoreCommits = 0;
+    let documentStateCommits = 0;
+    const graphNotifications = { data: 0, meta: 0, session: 0, viewport: 0 };
+    const unsubscribeWorksheet = useWorksheetStore.subscribe(() => { worksheetStoreCommits += 1; });
+    const unsubscribeResource = useResourceStore.subscribe(() => { resourceStoreCommits += 1; });
+    const unsubscribeDocument = useDocumentStateStore.subscribe(() => { documentStateCommits += 1; });
+    const unsubscribeGraphData = useGraphDataStore.subscribe(() => { graphNotifications.data += 1; });
+    const unsubscribeGraphMeta = useGraphMetaStore.subscribe(() => { graphNotifications.meta += 1; });
+    const unsubscribeGraphSession = useGraphSessionStore.subscribe(() => { graphNotifications.session += 1; });
+    const unsubscribeViewport = useViewportStore.subscribe(() => { graphNotifications.viewport += 1; });
 
     const event = coordinator.submit({ result });
     const direct = coordinator.submit({ result: structuredClone(result) });
 
     await expect(event).resolves.toMatchObject({ status: 'applied' });
     await expect(direct).resolves.toMatchObject({ status: 'duplicate' });
-    unsubscribe();
-    expect(useWorksheetStore.getState().documents).toEqual({ [worksheetId]: document });
+    unsubscribeWorksheet();
+    unsubscribeResource();
+    unsubscribeDocument();
+    unsubscribeGraphData();
+    unsubscribeGraphMeta();
+    unsubscribeGraphSession();
+    unsubscribeViewport();
+    expect(useWorksheetStore.getState().documents).toEqual({ [worksheetPath]: authoritative });
     expect(useWorksheetStore.getState().index).toEqual([{
-      id: worksheetId,
+      worksheetPath,
       name: 'Created',
       databaseId: 'database-1',
-      chartType: 'scatter',
+      chartType: 'line',
+      revision: 2,
     }]);
+    expect(useResourceStore.getState().resources[
+      resourceKey({ id: worksheetPath, kind: 'worksheet' })
+    ]).toMatchObject({ revision: 2, hasDirtyDocument: false });
+    expect(useDocumentStateStore.getState().documents[
+      resourceKey({ id: worksheetPath, kind: 'worksheet' })
+    ]).toMatchObject({ dirty: false });
     expect(worksheetStoreCommits).toBe(1);
+    expect(resourceStoreCommits).toBe(1);
+    expect(documentStateCommits).toBe(1);
+    expect(graphNotifications).toEqual({ data: 0, meta: 0, session: 0, viewport: 0 });
   });
 });

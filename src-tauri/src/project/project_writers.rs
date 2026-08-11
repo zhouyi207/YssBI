@@ -1,4 +1,4 @@
-use crate::event::{ResourceMutationResultDto, WorksheetDeltaDto};
+use crate::event::ResourceMutationResultDto;
 use crate::graph::value::{DataType, DataValue};
 use crate::node_system::document::{
     FunctionResourceKey, OperationId, ResourceKey, ResourceRevision, VariableResourceKey,
@@ -7,7 +7,8 @@ use crate::node_system::document::{
 use crate::project::{
     GraphDocument, GraphResourcePath, ProjectData, ProjectFilesystemError,
     ProjectFilesystemTransaction, ProjectInstanceId, ProjectSession, ProjectState,
-    ProjectTransactionContext, ResourceDocumentPatch, StagedFilesystemMutation, WorksheetDocument,
+    ProjectTransactionContext, ResourceDocumentPatch, ResourceName, StagedFilesystemMutation,
+    WorksheetDocument, WorksheetResourcePath, allocate_unique_resource_name,
 };
 use crate::tabular::VariableTabularCache;
 use crate::variable::{VariableId, VariableInstance, VariableScope};
@@ -31,12 +32,96 @@ pub struct GlobalVariableMutationResult {
     pub result: ResourceMutationResultDto,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorksheetMutationResultDto {
-    pub operation_id: OperationId,
-    pub result: ResourceMutationResultDto,
-    pub document: WorksheetDocument,
+fn worksheet_document_state(
+    document: &WorksheetDocument,
+) -> crate::node_system::document::WorksheetDocumentState {
+    crate::node_system::document::WorksheetDocumentState {
+        database_id: document.database_id.clone(),
+        chart_type: document.chart_type.clone(),
+        encodings: document.encodings.clone(),
+    }
+}
+
+fn worksheet_lifecycle_state(
+    path: &WorksheetResourcePath,
+    revision: ResourceRevision,
+) -> crate::node_system::document::ResourceLifecycleState {
+    crate::node_system::document::ResourceLifecycleState {
+        revision,
+        path: path.as_str().into(),
+        kind: crate::node_system::document::ResourceLifecycleKind::Worksheet,
+        name: path.display_name().as_str().to_string(),
+    }
+}
+
+fn worksheet_move_delta(
+    from: &WorksheetResourcePath,
+    to: &WorksheetResourcePath,
+    operation_id: OperationId,
+    from_revision: ResourceRevision,
+    to_revision: ResourceRevision,
+) -> crate::node_system::document::ResourceDeltaEvent {
+    crate::node_system::document::ResourceDeltaEvent {
+        resource: worksheet_key(to),
+        from_revision,
+        to_revision,
+        caused_by: Some(operation_id),
+        payload: crate::node_system::document::ResourceDocumentPatch::ResourceMove(
+            crate::node_system::document::ResourcePathMovePatch {
+                from: from.as_str().into(),
+                to: to.as_str().into(),
+            },
+        ),
+    }
+}
+
+fn worksheet_resource_delta(
+    path: &WorksheetResourcePath,
+    operation_id: OperationId,
+    retained_revision: Option<ResourceRevision>,
+    before: Option<&WorksheetDocument>,
+    after: Option<&WorksheetDocument>,
+) -> crate::node_system::document::ResourceDeltaEvent {
+    let (from_revision, to_revision, payload) = match (before, after) {
+        (Some(before), Some(after)) => (
+            before.revision,
+            after.revision,
+            crate::node_system::document::ResourceDocumentPatch::Worksheet(
+                crate::node_system::document::WorksheetDocumentPatch {
+                    before: worksheet_document_state(before),
+                    after: worksheet_document_state(after),
+                },
+            ),
+        ),
+        (None, Some(after)) => (
+            retained_revision.unwrap_or(after.revision),
+            after.revision,
+            crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+                crate::node_system::document::ResourceLifecyclePatch {
+                    before: None,
+                    after: Some(worksheet_lifecycle_state(path, after.revision)),
+                },
+            ),
+        ),
+        (Some(before), None) => (
+            before.revision,
+            before.revision.next(),
+            crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
+                crate::node_system::document::ResourceLifecyclePatch {
+                    before: Some(worksheet_lifecycle_state(path, before.revision)),
+                    after: None,
+                },
+            ),
+        ),
+        (None, None) => unreachable!("a worksheet resource delta must change a document"),
+    };
+    crate::node_system::document::ResourceDeltaEvent {
+        resource: worksheet_key(path),
+        from_revision,
+        to_revision,
+        caused_by: Some(operation_id),
+        payload,
+    }
 }
 
 #[cfg(test)]
@@ -130,8 +215,8 @@ fn variable_key(id: &crate::variable::VariableId) -> ResourceKey {
     ResourceKey::Variable(VariableResourceKey(format!("variables/{id}").into()))
 }
 
-fn worksheet_key(id: &str) -> ResourceKey {
-    ResourceKey::Worksheet(WorksheetResourceKey(id.into()))
+fn worksheet_key(path: &WorksheetResourcePath) -> ResourceKey {
+    ResourceKey::Worksheet(WorksheetResourceKey(path.as_str().into()))
 }
 
 fn context(
@@ -180,21 +265,6 @@ fn validate_document(path: &Path, contents: &[u8]) -> Result<(), String> {
             path.display()
         )),
     }
-}
-
-fn unique_worksheet_name(existing: impl Iterator<Item = String>, requested: &str) -> String {
-    let existing = existing.collect::<BTreeSet<_>>();
-    let base = match requested.trim() {
-        "" => "New Worksheet",
-        value => value,
-    };
-    if !existing.contains(base) {
-        return base.to_string();
-    }
-    (2..)
-        .map(|index| format!("{base} {index}"))
-        .find(|candidate| !existing.contains(candidate))
-        .expect("worksheet name sequence is unbounded")
 }
 
 impl ProjectState {
@@ -351,6 +421,18 @@ impl ProjectState {
             let (relative_path, contents) =
                 crate::project::serialize_graph_document(&snapshot.data, &path)
                     .map_err(prepare_error)?;
+            mutations.push(StagedFilesystemMutation::Write {
+                relative_path,
+                contents,
+            });
+        }
+        let mut worksheet_paths = snapshot.data.worksheets.keys().cloned().collect::<Vec<_>>();
+        worksheet_paths.sort();
+        for path in worksheet_paths {
+            let document = &snapshot.data.worksheets[&path];
+            expected.insert(worksheet_key(&path), document.revision);
+            let (relative_path, contents) =
+                crate::project::serialize_worksheet(&path, document).map_err(prepare_error)?;
             mutations.push(StagedFilesystemMutation::Write {
                 relative_path,
                 contents,
@@ -840,7 +922,6 @@ impl ProjectState {
                 caused_by: Some(context.operation_id),
                 payload: history_patch.forward.clone(),
             }],
-            worksheet_deltas: Vec::new(),
             projection_replacements: Vec::new(),
             projection_status: crate::event::ProjectionStatusDto::Complete {
                 expected_graph_paths: Vec::new(),
@@ -1206,162 +1287,298 @@ impl ProjectState {
         )
     }
 
-    pub fn create_worksheet_document(
+    pub fn create_worksheet_resource_transaction(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
-        name: Option<String>,
+        name: &ResourceName,
         database_id: Option<String>,
         operation_id: OperationId,
-    ) -> Result<WorksheetMutationResultDto, ProjectFilesystemError> {
+    ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
         let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let reservation =
+            self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
+        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let empty_context = context(
+            self,
+            snapshot.session.clone(),
+            operation_id,
+            BTreeMap::new(),
+            BTreeSet::new(),
+        );
+        self.validate_writer_context(&empty_context, snapshot.authority_generation)?;
+        let current = self.project_data.read().unwrap().clone();
+        let existing = current
+            .worksheets
+            .keys()
+            .map(WorksheetResourcePath::display_name)
+            .collect::<Vec<_>>();
+        let unique = allocate_unique_resource_name(name, existing);
+        let worksheet_path = WorksheetResourcePath::from_name(&unique);
+        let mut document = WorksheetDocument::new(
+            database_id
+                .or_else(|| current.databases.keys().min().cloned())
+                .unwrap_or_default(),
+        );
+        document.revision = self
+            .worksheet_revisions
+            .read()
+            .unwrap()
+            .get(&worksheet_path)
+            .copied()
+            .map(ResourceRevision::next)
+            .unwrap_or(ResourceRevision::INITIAL);
+        let mutation_context = context(
+            self,
+            snapshot.session.clone(),
+            operation_id,
+            BTreeMap::new(),
+            BTreeSet::from([worksheet_key(&worksheet_path)]),
+        );
+        let result = self.write_worksheet_patch(
+            &snapshot,
+            mutation_context,
+            lease,
+            worksheet_path,
+            None,
+            document,
+        );
+        if result.is_ok() {
+            reservation.complete();
+        }
+        result
+    }
+
+    pub fn duplicate_worksheet_resource_transaction(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        source: &WorksheetResourcePath,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+    ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let reservation =
+            self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
+        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let current = self.project_data.read().unwrap().clone();
+        let source_document = current.worksheets.get(source).cloned().ok_or_else(|| {
+            ProjectFilesystemError::WorksheetNotFound {
+                path: source.clone(),
+            }
+        })?;
+        let existing = current
+            .worksheets
+            .keys()
+            .map(WorksheetResourcePath::display_name)
+            .collect::<Vec<_>>();
+        let unique = allocate_unique_resource_name(source.display_name(), existing);
+        let target = WorksheetResourcePath::from_name(&unique);
+        let mut duplicate = source_document;
+        duplicate.revision = self
+            .worksheet_revisions
+            .read()
+            .unwrap()
+            .get(&target)
+            .copied()
+            .map(ResourceRevision::next)
+            .unwrap_or(ResourceRevision::INITIAL);
+        let mutation_context = context(
+            self,
+            snapshot.session.clone(),
+            operation_id,
+            BTreeMap::from([(worksheet_key(source), expected_revision)]),
+            BTreeSet::from([worksheet_key(&target)]),
+        );
+        let result =
+            self.write_worksheet_patch(&snapshot, mutation_context, lease, target, None, duplicate);
+        if result.is_ok() {
+            reservation.complete();
+        }
+        result
+    }
+
+    fn write_worksheet_patch(
+        &self,
+        snapshot: &WriterSnapshot,
+        context: ProjectTransactionContext,
+        lease: crate::project::ProjectFilesystemLeaseSet,
+        worksheet_path: WorksheetResourcePath,
+        before: Option<WorksheetDocument>,
+        document: WorksheetDocument,
+    ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+        self.validate_writer_context(&context, snapshot.authority_generation)?;
+        let retained_revision = self
+            .worksheet_revisions
+            .read()
+            .unwrap()
+            .get(&worksheet_path)
+            .copied();
+        let (new_path, contents) = crate::project::serialize_worksheet(&worksheet_path, &document)
+            .map_err(prepare_error)?;
+        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+            context.clone(),
+            lease,
+            vec![StagedFilesystemMutation::Write {
+                relative_path: new_path,
+                contents,
+            }],
+            validate_document,
+        )?;
+        self.validate_writer_context(&context, snapshot.authority_generation)?;
+        let projection_environment = self
+            .capture_projection_environment_for_session(&snapshot.session)
+            .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
+        let committed = prepared.commit()?;
+        let mut result = match self.apply_resource_document_patch_with_environment(
+            &context,
+            ResourceDocumentPatch::UpsertWorksheet {
+                path: worksheet_path.clone(),
+                document: document.clone(),
+            },
+            projection_environment,
+            None,
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                return match committed.rollback() {
+                    Ok(()) => Err(error),
+                    Err(rollback_error) => Err(rollback_error),
+                };
+            }
+        };
+        committed.finalize();
+        result.deltas = vec![worksheet_resource_delta(
+            &worksheet_path,
+            context.operation_id,
+            retained_revision,
+            before.as_ref(),
+            Some(&document),
+        )];
+        Ok(result)
+    }
+
+    pub fn save_worksheet_document(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        worksheet_path: &WorksheetResourcePath,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+        mut document: WorksheetDocument,
+    ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let reservation =
+            self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
+        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let before = self
+            .project_data
+            .read()
+            .unwrap()
+            .worksheets
+            .get(worksheet_path)
+            .cloned()
+            .ok_or_else(|| ProjectFilesystemError::WorksheetNotFound {
+                path: worksheet_path.clone(),
+            })?;
+        document.revision = expected_revision.next();
+        let mutation_context = context(
+            self,
+            snapshot.session.clone(),
+            operation_id,
+            BTreeMap::from([(worksheet_key(worksheet_path), expected_revision)]),
+            BTreeSet::new(),
+        );
+        let result = self.write_worksheet_patch(
+            &snapshot,
+            mutation_context,
+            lease,
+            worksheet_path.clone(),
+            Some(before),
+            document,
+        );
+        if result.is_ok() {
+            reservation.complete();
+        }
+        result
+    }
+
+    pub fn rename_worksheet_resource_transaction(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        worksheet_path: &WorksheetResourcePath,
+        expected_revision: ResourceRevision,
+        new_name: &ResourceName,
+        lifecycle_token: u64,
+        operation_id: OperationId,
+    ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let reservation =
+            self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
+        let mut ownership = self.acquire_resource_rename_ownership(
+            expected_project_instance_id,
+            crate::project::LifecycleResourcePath::Worksheet(worksheet_path.clone()),
+            lifecycle_token,
+        )?;
         let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
         self.validate_writer_context(
             &context(
                 self,
                 snapshot.session.clone(),
                 operation_id,
-                BTreeMap::new(),
+                BTreeMap::from([(worksheet_key(worksheet_path), expected_revision)]),
                 BTreeSet::new(),
             ),
             snapshot.authority_generation,
         )?;
+        self.validate_resource_lifecycle_operation(&ownership.operation)?;
+
+        let target = WorksheetResourcePath::from_name(new_name);
         let current = self.project_data.read().unwrap().clone();
-        let unique = unique_worksheet_name(
-            current
-                .worksheets
-                .values()
-                .map(|worksheet| worksheet.name.clone()),
-            name.as_deref().unwrap_or("New Worksheet"),
-        );
-        let default_database = database_id
-            .or_else(|| current.databases.keys().min().cloned())
-            .unwrap_or_default();
-        let document = WorksheetDocument::new(unique, default_database);
-        let key = worksheet_key(&document.id);
-        let context = context(
-            self,
-            snapshot.session.clone(),
-            operation_id,
-            BTreeMap::new(),
-            BTreeSet::from([key]),
-        );
-        self.write_worksheet_patch(snapshot, context, lease, None, document)
-    }
-
-    fn write_worksheet_patch(
-        &self,
-        snapshot: WriterSnapshot,
-        context: ProjectTransactionContext,
-        lease: crate::project::ProjectFilesystemLeaseSet,
-        before: Option<WorksheetDocument>,
-        document: WorksheetDocument,
-    ) -> Result<WorksheetMutationResultDto, ProjectFilesystemError> {
-        self.validate_writer_context(&context, snapshot.authority_generation)?;
-        let (new_path, contents) =
-            crate::project::serialize_worksheet(&document).map_err(prepare_error)?;
-        let mutations = vec![StagedFilesystemMutation::Write {
-            relative_path: new_path,
-            contents,
-        }];
-        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context.clone(),
-            lease,
-            mutations,
-            validate_document,
-        )?;
-        self.validate_writer_context(&context, snapshot.authority_generation)?;
-        let committed = prepared.commit()?;
-        let mut result = match self.apply_resource_document_patch(
-            &context,
-            ResourceDocumentPatch::UpsertWorksheet {
-                id: document.id.clone(),
-                document: document.clone(),
-            },
-        ) {
-            Ok(result) => result,
-            Err(error) => {
-                return match committed.rollback() {
-                    Ok(()) => Err(error),
-                    Err(rollback_error) => Err(rollback_error),
-                };
-            }
-        };
-        committed.finalize();
-        result.worksheet_deltas = vec![WorksheetDeltaDto {
-            id: document.id.clone(),
-            before,
-            after: Some(document.clone()),
-        }];
-        Ok(WorksheetMutationResultDto {
-            operation_id: context.operation_id,
-            result,
-            document,
-        })
-    }
-
-    pub fn save_worksheet_document(
-        &self,
-        expected_project_instance_id: &ProjectInstanceId,
-        mut document: WorksheetDocument,
-        operation_id: OperationId,
-    ) -> Result<WorksheetMutationResultDto, ProjectFilesystemError> {
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
-        let before = snapshot.data.worksheets.get(&document.id).cloned();
-        let expected = before
-            .as_ref()
-            .map(|_| document.revision)
-            .ok_or_else(|| prepare_error(format!("worksheet '{}' does not exist", document.id)))?;
-        document.revision = expected.next();
-        let key = worksheet_key(&document.id);
-        let context = context(
-            self,
-            snapshot.session.clone(),
-            operation_id,
-            BTreeMap::from([(key, expected)]),
-            BTreeSet::new(),
-        );
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
-        self.write_worksheet_patch(snapshot, context, lease, before, document)
-    }
-
-    pub fn delete_worksheet_document(
-        &self,
-        expected_project_instance_id: &ProjectInstanceId,
-        worksheet_id: &str,
-        operation_id: OperationId,
-    ) -> Result<WorksheetMutationResultDto, ProjectFilesystemError> {
-        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
-        let document = snapshot
-            .data
+        let mut moved = current
             .worksheets
-            .get(worksheet_id)
+            .get(worksheet_path)
             .cloned()
-            .ok_or_else(|| prepare_error(format!("worksheet '{worksheet_id}' does not exist")))?;
-        let key = worksheet_key(worksheet_id);
-        let context = context(
+            .ok_or_else(|| ProjectFilesystemError::WorksheetNotFound {
+                path: worksheet_path.clone(),
+            })?;
+        if current.worksheets.keys().any(|existing| {
+            existing != worksheet_path
+                && existing.display_name().portable_key() == new_name.portable_key()
+        }) {
+            return Err(ProjectFilesystemError::ResourceNameConflict {
+                message: format!("a worksheet named '{}' already exists", new_name.as_str()),
+            });
+        }
+        moved.revision = expected_revision.next();
+        let mutation_context = context(
             self,
             snapshot.session.clone(),
             operation_id,
-            BTreeMap::from([(key, document.revision)]),
-            BTreeSet::new(),
+            BTreeMap::from([(worksheet_key(worksheet_path), expected_revision)]),
+            BTreeSet::from([worksheet_key(&target)]),
         );
-        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
-        self.validate_writer_context(&context, snapshot.authority_generation)?;
-        let path = crate::project::worksheet_relative_path(&document);
+        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
         let prepared = ProjectFilesystemTransaction::prepare(
-            context.clone(),
+            mutation_context.clone(),
             lease,
-            vec![StagedFilesystemMutation::RemoveFile {
-                relative_path: path,
+            vec![StagedFilesystemMutation::MoveFile {
+                from: worksheet_path.relative_path().to_path_buf(),
+                to: target.relative_path().to_path_buf(),
             }],
         )?;
-        self.validate_writer_context(&context, snapshot.authority_generation)?;
+        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        self.validate_resource_lifecycle_operation(&ownership.operation)?;
+        let projection_environment = self
+            .capture_projection_environment_for_session(&snapshot.session)
+            .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
         let committed = prepared.commit()?;
-        let mut result = match self.apply_resource_document_patch(
-            &context,
-            ResourceDocumentPatch::RemoveWorksheet {
-                id: worksheet_id.into(),
+        let mut result = match self.apply_resource_document_patch_with_environment(
+            &mutation_context,
+            ResourceDocumentPatch::MoveWorksheet {
+                from: worksheet_path.clone(),
+                to: target.clone(),
+                moved: moved.clone(),
             },
+            projection_environment,
+            Some(&mut ownership),
         ) {
             Ok(result) => result,
             Err(error) => {
@@ -1372,16 +1589,85 @@ impl ProjectState {
             }
         };
         committed.finalize();
-        result.worksheet_deltas = vec![WorksheetDeltaDto {
-            id: worksheet_id.into(),
-            before: Some(document.clone()),
-            after: None,
-        }];
-        Ok(WorksheetMutationResultDto {
-            operation_id: context.operation_id,
-            result,
-            document,
-        })
+        result.deltas = vec![worksheet_move_delta(
+            worksheet_path,
+            &target,
+            operation_id,
+            expected_revision,
+            moved.revision,
+        )];
+        reservation.complete();
+        Ok(result)
+    }
+
+    pub fn remove_worksheet_resource_transaction(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        worksheet_path: &WorksheetResourcePath,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+    ) -> Result<ResourceMutationResultDto, ProjectFilesystemError> {
+        let snapshot = self.capture_writer_snapshot(expected_project_instance_id)?;
+        let reservation =
+            self.reserve_resource_operation(expected_project_instance_id, operation_id)?;
+        let lease = self.filesystem().acquire(snapshot.session.root.clone())?;
+        let document = self
+            .project_data
+            .read()
+            .unwrap()
+            .worksheets
+            .get(worksheet_path)
+            .cloned()
+            .ok_or_else(|| ProjectFilesystemError::WorksheetNotFound {
+                path: worksheet_path.clone(),
+            })?;
+        let mutation_context = context(
+            self,
+            snapshot.session.clone(),
+            operation_id,
+            BTreeMap::from([(worksheet_key(worksheet_path), expected_revision)]),
+            BTreeSet::new(),
+        );
+        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        let prepared = ProjectFilesystemTransaction::prepare(
+            mutation_context.clone(),
+            lease,
+            vec![StagedFilesystemMutation::RemoveFile {
+                relative_path: worksheet_path.relative_path().to_path_buf(),
+            }],
+        )?;
+        self.validate_writer_context(&mutation_context, snapshot.authority_generation)?;
+        let projection_environment = self
+            .capture_projection_environment_for_session(&snapshot.session)
+            .map_err(|message| ProjectFilesystemError::TransactionPrepareFailed { message })?;
+        let committed = prepared.commit()?;
+        let mut result = match self.apply_resource_document_patch_with_environment(
+            &mutation_context,
+            ResourceDocumentPatch::RemoveWorksheet {
+                path: worksheet_path.clone(),
+                revision: expected_revision,
+            },
+            projection_environment,
+            None,
+        ) {
+            Ok(result) => result,
+            Err(error) => {
+                return match committed.rollback() {
+                    Ok(()) => Err(error),
+                    Err(rollback_error) => Err(rollback_error),
+                };
+            }
+        };
+        committed.finalize();
+        result.deltas = vec![worksheet_resource_delta(
+            worksheet_path,
+            operation_id,
+            Some(document.revision),
+            Some(&document),
+            None,
+        )];
+        reservation.complete();
+        Ok(result)
     }
 }
 
@@ -1394,7 +1680,8 @@ mod tests {
     };
     use crate::project::{
         GraphDocument, GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
-        ProjectFilesystemFaultPoint, ProjectState, WorksheetDocument,
+        ProjectFilesystemFaultPoint, ProjectState, ResourceName, WorksheetDocument,
+        WorksheetResourcePath, fixtures,
     };
     use crate::variable::VariableScope;
     use std::collections::BTreeMap;
@@ -1402,8 +1689,10 @@ mod tests {
 
     fn worksheet_files(project: &TestProject) -> Vec<std::path::PathBuf> {
         let worksheets = project.root.join(crate::project::WORKSHEETS_DIR);
-        let mut paths = std::fs::read_dir(worksheets)
-            .unwrap()
+        let Ok(entries) = std::fs::read_dir(worksheets) else {
+            return Vec::new();
+        };
+        let mut paths = entries
             .map(|entry| entry.unwrap().path())
             .filter(|path| {
                 path.extension().and_then(|value| value.to_str()) == Some("yssbi-worksheet")
@@ -1415,8 +1704,8 @@ mod tests {
 
     fn assert_two_distinct_worksheets_on_disk(
         project: &TestProject,
-        first_id: &str,
-        second_id: &str,
+        first: &WorksheetResourcePath,
+        second: &WorksheetResourcePath,
     ) {
         let files = worksheet_files(project);
         assert_eq!(
@@ -1424,18 +1713,8 @@ mod tests {
             2,
             "each authoritative worksheet needs its own file"
         );
-        let ids = files
-            .iter()
-            .map(|path| {
-                serde_json::from_slice::<WorksheetDocument>(&std::fs::read(path).unwrap())
-                    .unwrap()
-                    .id
-            })
-            .collect::<std::collections::BTreeSet<_>>();
-        assert_eq!(
-            ids,
-            std::collections::BTreeSet::from([first_id.to_string(), second_id.to_string(),])
-        );
+        assert!(project.root.join(first.relative_path()).is_file());
+        assert!(project.root.join(second.relative_path()).is_file());
     }
 
     struct TestProject {
@@ -1677,25 +1956,30 @@ mod tests {
         let worker_state = Arc::clone(&state);
         let worker_session = session.clone();
         let worker = std::thread::spawn(move || {
-            worker_state.create_worksheet_document(
+            worker_state.create_worksheet_resource_transaction(
                 &worker_session.instance_id,
-                Some("Analysis".into()),
+                &ResourceName::parse("Analysis").unwrap(),
                 None,
                 OperationId::new(),
             )
         });
 
-        let existing = WorksheetDocument::new("Analysis", "");
+        let (existing_path, existing) = fixtures::worksheet("Analysis", "");
         state
             .project_data
             .write()
             .unwrap()
             .worksheets
-            .insert(existing.id.clone(), existing);
+            .insert(existing_path, existing);
         drop(lease);
 
         let created = worker.join().unwrap().unwrap();
-        assert_eq!(created.document.name, "Analysis 2");
+        assert_eq!(
+            worksheet_path_from_lifecycle_result(&created)
+                .display_name()
+                .as_str(),
+            "Analysis 2"
+        );
     }
 
     #[test]
@@ -1705,144 +1989,245 @@ mod tests {
         let session = state.capture_project_session().unwrap();
 
         let first = state
-            .create_worksheet_document(
+            .create_worksheet_resource_transaction(
                 &session.instance_id,
-                Some("Report".into()),
+                &ResourceName::parse("Report").unwrap(),
                 None,
                 OperationId::new(),
             )
             .unwrap();
         let second = state
-            .create_worksheet_document(
+            .create_worksheet_resource_transaction(
                 &session.instance_id,
-                Some("Report".into()),
+                &ResourceName::parse("Report").unwrap(),
                 None,
                 OperationId::new(),
             )
             .unwrap();
+        let first_path = worksheet_path_from_lifecycle_result(&first);
+        let second_path = worksheet_path_from_lifecycle_result(&second);
 
-        assert_ne!(first.document.id, second.document.id);
-        assert_two_distinct_worksheets_on_disk(&project, &first.document.id, &second.document.id);
+        assert_ne!(first_path, second_path);
+        assert_two_distinct_worksheets_on_disk(&project, &first_path, &second_path);
     }
 
     #[test]
-    fn worksheet_save_duplicate_name_never_overwrites_another_worksheet() {
-        let project = TestProject::new("worksheet-save-duplicate");
-        let mut first = WorksheetDocument::new("Report", "database");
-        let mut second = WorksheetDocument::new("Other", "database");
-        let first_id = first.id.clone();
-        let second_id = second.id.clone();
+    fn worksheet_rename_moves_authority_file_revision_and_common_publication() {
+        let project = TestProject::new("worksheet-rename-authority");
+        let (source, document) = fixtures::worksheet("Report", "database");
+        let target = WorksheetResourcePath::parse("worksheets/Renamed.yssbi-worksheet").unwrap();
         let mut data = ProjectData::new();
-        data.worksheets.insert(first_id.clone(), first.clone());
-        data.worksheets.insert(second_id.clone(), second.clone());
+        data.worksheets.insert(source.clone(), document.clone());
         let state = active_state(&project, data);
-        crate::project::fixtures::write_worksheet(&project.root, &first).unwrap();
-        crate::project::fixtures::write_worksheet(&project.root, &second).unwrap();
-        state.initialize_worksheet_revision_for_test(&first_id);
-        state.initialize_worksheet_revision_for_test(&second_id);
+        fixtures::write_worksheet(&project.root, &source, &document).unwrap();
+        state.initialize_worksheet_revision_for_test(&source);
         let session = state.capture_project_session().unwrap();
+        let operation_id = OperationId::new();
 
-        second.name = first.name.clone();
-        state
-            .save_worksheet_document(&session.instance_id, second, OperationId::new())
+        let result = state
+            .rename_worksheet_resource_transaction(
+                &session.instance_id,
+                &source,
+                ResourceRevision::INITIAL,
+                &ResourceName::parse("Renamed").unwrap(),
+                1,
+                operation_id,
+            )
             .unwrap();
 
-        assert_two_distinct_worksheets_on_disk(&project, &first_id, &second_id);
-        let first_path = crate::project::worksheet_relative_path(&first);
-        first =
-            serde_json::from_slice(&std::fs::read(project.root.join(first_path)).unwrap()).unwrap();
-        assert_eq!(first.id, first_id);
-        assert_eq!(first.name, "Report");
+        let authority = state.get_data().unwrap();
+        assert!(!authority.worksheets.contains_key(&source));
+        assert_eq!(
+            authority.worksheets[&target].revision,
+            ResourceRevision::new(1)
+        );
+        assert!(!project.root.join(source.relative_path()).exists());
+        assert!(project.root.join(target.relative_path()).is_file());
+        assert_eq!(result.moves.len(), 1);
+        assert_eq!(result.moves[0].from, source.as_str());
+        assert_eq!(result.moves[0].to, target.as_str());
+        assert_eq!(result.moves[0].name, "Renamed");
+        assert_eq!(
+            result.moves[0].kind,
+            crate::node_system::document::ResourceLifecycleKind::Worksheet
+        );
+        assert_eq!(result.deltas.len(), 1);
+        assert_eq!(result.deltas[0].resource, super::worksheet_key(&target));
+        assert_eq!(result.deltas[0].from_revision, ResourceRevision::INITIAL);
+        assert_eq!(result.deltas[0].to_revision, ResourceRevision::new(1));
+        assert_eq!(result.deltas[0].caused_by, Some(operation_id));
+        assert_eq!(
+            result.history,
+            crate::node_system::document::HistoryStatusDto {
+                can_undo: true,
+                can_redo: false,
+            }
+        );
     }
 
     #[test]
-    fn worksheet_delete_removes_only_its_canonical_id_path() {
+    fn worksheet_rename_rejects_exact_portable_conflict_without_suffixing() {
+        let project = TestProject::new("worksheet-rename-conflict");
+        let (source, source_document) = fixtures::worksheet("Source", "database");
+        let (conflict, conflict_document) = fixtures::worksheet("Report", "database");
+        let mut data = ProjectData::new();
+        data.worksheets
+            .insert(source.clone(), source_document.clone());
+        data.worksheets
+            .insert(conflict.clone(), conflict_document.clone());
+        let state = active_state(&project, data);
+        fixtures::write_worksheet(&project.root, &source, &source_document).unwrap();
+        fixtures::write_worksheet(&project.root, &conflict, &conflict_document).unwrap();
+        state.initialize_worksheet_revision_for_test(&source);
+        state.initialize_worksheet_revision_for_test(&conflict);
+        let session = state.capture_project_session().unwrap();
+
+        let error = state
+            .rename_worksheet_resource_transaction(
+                &session.instance_id,
+                &source,
+                ResourceRevision::INITIAL,
+                &ResourceName::parse("report").unwrap(),
+                1,
+                OperationId::new(),
+            )
+            .unwrap_err();
+
+        assert_eq!(error.code(), "resource_name_conflict");
+        let authority = state.get_data().unwrap();
+        assert!(authority.worksheets.contains_key(&source));
+        assert!(authority.worksheets.contains_key(&conflict));
+        assert_eq!(worksheet_files(&project).len(), 2);
+    }
+
+    #[test]
+    fn worksheet_save_never_overwrites_another_path() {
+        let project = TestProject::new("worksheet-save-distinct-path");
+        let (first_path, first) = fixtures::worksheet("Report", "database");
+        let (second_path, mut second) = fixtures::worksheet("Other", "database");
+        let mut data = ProjectData::new();
+        data.worksheets.insert(first_path.clone(), first.clone());
+        data.worksheets.insert(second_path.clone(), second.clone());
+        let state = active_state(&project, data);
+        fixtures::write_worksheet(&project.root, &first_path, &first).unwrap();
+        fixtures::write_worksheet(&project.root, &second_path, &second).unwrap();
+        state.initialize_worksheet_revision_for_test(&first_path);
+        state.initialize_worksheet_revision_for_test(&second_path);
+        let session = state.capture_project_session().unwrap();
+
+        second.chart_type = "line".into();
+        state
+            .save_worksheet_document(
+                &session.instance_id,
+                &second_path,
+                ResourceRevision::INITIAL,
+                OperationId::new(),
+                second,
+            )
+            .unwrap();
+
+        assert_two_distinct_worksheets_on_disk(&project, &first_path, &second_path);
+        let persisted: WorksheetDocument = serde_json::from_slice(
+            &std::fs::read(project.root.join(first_path.relative_path())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(persisted, first);
+    }
+
+    #[test]
+    fn worksheet_delete_removes_only_its_canonical_path() {
         let project = TestProject::new("worksheet-delete-canonical");
-        let first = WorksheetDocument::new("Same", "database");
-        let second = WorksheetDocument::new("Same", "database");
-        let first_path = project
-            .root
-            .join(crate::project::worksheet_relative_path(&first));
-        let second_path = project
-            .root
-            .join(crate::project::worksheet_relative_path(&second));
+        let (first_path, first) = fixtures::worksheet("First", "database");
+        let (second_path, second) = fixtures::worksheet("Second", "database");
+        let first_file = project.root.join(first_path.relative_path());
+        let second_file = project.root.join(second_path.relative_path());
         let mut data = ProjectData::new();
-        data.worksheets.insert(first.id.clone(), first.clone());
-        data.worksheets.insert(second.id.clone(), second.clone());
-        crate::project::fixtures::write_worksheet(&project.root, &first).unwrap();
-        crate::project::fixtures::write_worksheet(&project.root, &second).unwrap();
+        data.worksheets.insert(first_path.clone(), first.clone());
+        data.worksheets.insert(second_path.clone(), second.clone());
+        fixtures::write_worksheet(&project.root, &first_path, &first).unwrap();
+        fixtures::write_worksheet(&project.root, &second_path, &second).unwrap();
         let state = active_state(&project, data);
-        state.initialize_worksheet_revision_for_test(&first.id);
-        state.initialize_worksheet_revision_for_test(&second.id);
+        state.initialize_worksheet_revision_for_test(&first_path);
+        state.initialize_worksheet_revision_for_test(&second_path);
         let session = state.capture_project_session().unwrap();
 
         state
-            .delete_worksheet_document(&session.instance_id, &first.id, OperationId::new())
+            .remove_worksheet_resource_transaction(
+                &session.instance_id,
+                &first_path,
+                ResourceRevision::INITIAL,
+                OperationId::new(),
+            )
             .unwrap();
 
-        assert!(!first_path.exists());
-        assert!(second_path.is_file());
-        assert!(!state.get_data().unwrap().worksheets.contains_key(&first.id));
+        assert!(!first_file.exists());
+        assert!(second_file.is_file());
+        assert!(
+            !state
+                .get_data()
+                .unwrap()
+                .worksheets
+                .contains_key(&first_path)
+        );
         assert!(
             state
                 .get_data()
                 .unwrap()
                 .worksheets
-                .contains_key(&second.id)
+                .contains_key(&second_path)
         );
     }
 
     #[test]
-    fn worksheet_sanitized_name_collision_never_overwrites_another_worksheet() {
-        let project = TestProject::new("worksheet-sanitize-collision");
+    fn worksheet_create_rejects_invalid_resource_names_without_writing() {
+        let project = TestProject::new("worksheet-invalid-name");
         let state = active_state(&project, ProjectData::new());
         let session = state.capture_project_session().unwrap();
 
-        let first = state
-            .create_worksheet_document(
-                &session.instance_id,
-                Some("A/B".into()),
-                None,
-                OperationId::new(),
-            )
-            .unwrap();
-        let second = state
-            .create_worksheet_document(
-                &session.instance_id,
-                Some("A\\B".into()),
-                None,
-                OperationId::new(),
-            )
-            .unwrap();
+        for name in ["A/B", "A\\B"] {
+            assert!(
+                ResourceName::parse(name).is_err()
+                    || state
+                        .create_worksheet_resource_transaction(
+                            &session.instance_id,
+                            &ResourceName::parse(name).unwrap(),
+                            None,
+                            OperationId::new(),
+                        )
+                        .is_err()
+            );
+        }
 
-        assert_two_distinct_worksheets_on_disk(&project, &first.document.id, &second.document.id);
+        assert!(worksheet_files(&project).is_empty());
     }
 
-    #[cfg(windows)]
     #[test]
-    fn worksheet_windows_casefold_collision_never_overwrites_another_worksheet() {
+    fn worksheet_casefold_collision_uses_portable_unique_suffix() {
         let project = TestProject::new("worksheet-casefold-collision");
         let state = active_state(&project, ProjectData::new());
         let session = state.capture_project_session().unwrap();
 
         let first = state
-            .create_worksheet_document(
+            .create_worksheet_resource_transaction(
                 &session.instance_id,
-                Some("Report".into()),
+                &ResourceName::parse("Report").unwrap(),
                 None,
                 OperationId::new(),
             )
             .unwrap();
         let second = state
-            .create_worksheet_document(
+            .create_worksheet_resource_transaction(
                 &session.instance_id,
-                Some("report".into()),
+                &ResourceName::parse("report").unwrap(),
                 None,
                 OperationId::new(),
             )
             .unwrap();
+        let first_path = worksheet_path_from_lifecycle_result(&first);
+        let second_path = worksheet_path_from_lifecycle_result(&second);
 
-        assert_two_distinct_worksheets_on_disk(&project, &first.document.id, &second.document.id);
+        assert_eq!(second_path.display_name().as_str(), "report 2");
+        assert_two_distinct_worksheets_on_disk(&project, &first_path, &second_path);
     }
 
     #[test]
@@ -1852,23 +2237,27 @@ mod tests {
         std::fs::create_dir_all(&nested).unwrap();
         let sentinel = nested.join("sentinel.txt");
         std::fs::write(&sentinel, b"untouched").unwrap();
-        let mut document = WorksheetDocument::new("Original", "database");
-        crate::project::fixtures::write_worksheet(&project.root, &document).unwrap();
-        let canonical_path = project
-            .root
-            .join(crate::project::worksheet_relative_path(&document));
+        let (worksheet_path, mut document) = fixtures::worksheet("Original", "database");
+        fixtures::write_worksheet(&project.root, &worksheet_path, &document).unwrap();
+        let canonical_path = project.root.join(worksheet_path.relative_path());
         let original_bytes = std::fs::read(&canonical_path).unwrap();
         let mut data = ProjectData::new();
         data.worksheets
-            .insert(document.id.clone(), document.clone());
+            .insert(worksheet_path.clone(), document.clone());
         let state = active_state(&project, data);
-        state.initialize_worksheet_revision_for_test(&document.id);
+        state.initialize_worksheet_revision_for_test(&worksheet_path);
         let session = state.capture_project_session().unwrap();
-        document.name = "Renamed".into();
+        document.chart_type = "line".into();
         state.set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::FirstLiveReplacement));
 
         let error = state
-            .save_worksheet_document(&session.instance_id, document, OperationId::new())
+            .save_worksheet_document(
+                &session.instance_id,
+                &worksheet_path,
+                ResourceRevision::INITIAL,
+                OperationId::new(),
+                document,
+            )
             .unwrap_err();
         state.set_project_filesystem_fault(None);
 
@@ -1876,6 +2265,263 @@ mod tests {
         assert_eq!(std::fs::read(canonical_path).unwrap(), original_bytes);
         assert_eq!(std::fs::read(sentinel).unwrap(), b"untouched");
         assert!(nested.is_dir());
+    }
+
+    fn worksheet_path_from_lifecycle_result(
+        result: &crate::event::ResourceMutationResultDto,
+    ) -> WorksheetResourcePath {
+        let delta = result.deltas.first().expect("worksheet lifecycle delta");
+        let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(patch) =
+            &delta.payload
+        else {
+            panic!("expected worksheet lifecycle delta");
+        };
+        WorksheetResourcePath::parse(
+            patch
+                .after
+                .as_ref()
+                .expect("created worksheet lifecycle state")
+                .path
+                .as_ref(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn worksheet_create_publishes_resource_lifecycle_delta() {
+        let project = TestProject::new("worksheet-authoritative-create");
+        let state = active_state(&project, ProjectData::new());
+        let session = state.capture_project_session().unwrap();
+        let operation_id = OperationId::new();
+        let name = ResourceName::parse("Report").unwrap();
+
+        let result = state
+            .create_worksheet_resource_transaction(
+                &session.instance_id,
+                &name,
+                Some("database".into()),
+                operation_id,
+            )
+            .unwrap();
+
+        let path = WorksheetResourcePath::parse("worksheets/Report.yssbi-worksheet").unwrap();
+        assert_eq!(worksheet_path_from_lifecycle_result(&result), path);
+        assert_eq!(result.operation_id, operation_id);
+        assert_eq!(result.deltas[0].from_revision, ResourceRevision::INITIAL);
+        assert_eq!(result.deltas[0].to_revision, ResourceRevision::INITIAL);
+        let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
+            &result.deltas[0].payload
+        else {
+            panic!("expected worksheet lifecycle delta");
+        };
+        assert_eq!(
+            lifecycle.after.as_ref().unwrap().revision,
+            ResourceRevision::INITIAL
+        );
+        assert!(state.get_data().unwrap().worksheets.contains_key(&path));
+        assert!(project.root.join(path.relative_path()).is_file());
+    }
+
+    #[test]
+    fn worksheet_duplicate_allocates_first_free_authoritative_path() {
+        let project = TestProject::new("worksheet-authoritative-duplicate");
+        let state = active_state(&project, ProjectData::new());
+        let session = state.capture_project_session().unwrap();
+        let name = ResourceName::parse("Report").unwrap();
+        let first = state
+            .create_worksheet_resource_transaction(
+                &session.instance_id,
+                &name,
+                Some("database".into()),
+                OperationId::new(),
+            )
+            .unwrap();
+        let first_path = worksheet_path_from_lifecycle_result(&first);
+        let second = state
+            .duplicate_worksheet_resource_transaction(
+                &session.instance_id,
+                &first_path,
+                ResourceRevision::INITIAL,
+                OperationId::new(),
+            )
+            .unwrap();
+        let second_path = worksheet_path_from_lifecycle_result(&second);
+        let third = state
+            .duplicate_worksheet_resource_transaction(
+                &session.instance_id,
+                &first_path,
+                ResourceRevision::INITIAL,
+                OperationId::new(),
+            )
+            .unwrap();
+        let third_path = worksheet_path_from_lifecycle_result(&third);
+
+        assert_eq!(first_path.display_name().as_str(), "Report");
+        assert_eq!(second_path.display_name().as_str(), "Report 2");
+        assert_eq!(third_path.display_name().as_str(), "Report 3");
+        assert_eq!(state.get_data().unwrap().worksheets.len(), 3);
+        assert_eq!(worksheet_files(&project).len(), 3);
+    }
+
+    #[test]
+    fn worksheet_save_publishes_document_delta() {
+        let project = TestProject::new("worksheet-authoritative-save");
+        let state = active_state(&project, ProjectData::new());
+        let session = state.capture_project_session().unwrap();
+        let created = state
+            .create_worksheet_resource_transaction(
+                &session.instance_id,
+                &ResourceName::parse("Report").unwrap(),
+                Some("database".into()),
+                OperationId::new(),
+            )
+            .unwrap();
+        let path = worksheet_path_from_lifecycle_result(&created);
+        let mut document = state.get_data().unwrap().worksheets[&path].clone();
+        document.chart_type = "line".into();
+        let operation_id = OperationId::new();
+
+        let result = state
+            .save_worksheet_document(
+                &session.instance_id,
+                &path,
+                ResourceRevision::INITIAL,
+                operation_id,
+                document,
+            )
+            .unwrap();
+
+        assert_eq!(result.operation_id, operation_id);
+        assert!(matches!(
+            result.deltas.as_slice(),
+            [crate::node_system::document::ResourceDeltaEvent {
+                from_revision,
+                to_revision,
+                payload: crate::node_system::document::ResourceDocumentPatch::Worksheet(_),
+                ..
+            }] if *from_revision == ResourceRevision::INITIAL
+                && *to_revision == ResourceRevision::new(1)
+        ));
+        assert_eq!(
+            state.get_data().unwrap().worksheets[&path].revision,
+            ResourceRevision::new(1)
+        );
+    }
+
+    #[test]
+    fn worksheet_remove_publishes_resource_lifecycle_delta() {
+        let project = TestProject::new("worksheet-authoritative-remove");
+        let state = active_state(&project, ProjectData::new());
+        let session = state.capture_project_session().unwrap();
+        let created = state
+            .create_worksheet_resource_transaction(
+                &session.instance_id,
+                &ResourceName::parse("Report").unwrap(),
+                None,
+                OperationId::new(),
+            )
+            .unwrap();
+        let path = worksheet_path_from_lifecycle_result(&created);
+        let operation_id = OperationId::new();
+
+        let result = state
+            .remove_worksheet_resource_transaction(
+                &session.instance_id,
+                &path,
+                ResourceRevision::INITIAL,
+                operation_id,
+            )
+            .unwrap();
+
+        assert_eq!(result.operation_id, operation_id);
+        assert_eq!(result.deltas[0].from_revision, ResourceRevision::INITIAL);
+        assert_eq!(result.deltas[0].to_revision, ResourceRevision::new(1));
+        let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
+            &result.deltas[0].payload
+        else {
+            panic!("expected worksheet lifecycle delta");
+        };
+        assert_eq!(
+            lifecycle.before.as_ref().unwrap().revision,
+            ResourceRevision::INITIAL
+        );
+        assert!(lifecycle.after.is_none());
+        assert!(!state.get_data().unwrap().worksheets.contains_key(&path));
+        assert!(!project.root.join(path.relative_path()).exists());
+    }
+
+    #[test]
+    fn worksheet_delete_recreate_preserves_tombstone_revision() {
+        let project = TestProject::new("worksheet-authoritative-aba");
+        let state = active_state(&project, ProjectData::new());
+        let session = state.capture_project_session().unwrap();
+        let name = ResourceName::parse("Reusable").unwrap();
+        let created = state
+            .create_worksheet_resource_transaction(
+                &session.instance_id,
+                &name,
+                None,
+                OperationId::new(),
+            )
+            .unwrap();
+        let path = worksheet_path_from_lifecycle_result(&created);
+        state
+            .remove_worksheet_resource_transaction(
+                &session.instance_id,
+                &path,
+                ResourceRevision::INITIAL,
+                OperationId::new(),
+            )
+            .unwrap();
+
+        let recreated = state
+            .create_worksheet_resource_transaction(
+                &session.instance_id,
+                &name,
+                None,
+                OperationId::new(),
+            )
+            .unwrap();
+
+        assert_eq!(worksheet_path_from_lifecycle_result(&recreated), path);
+        assert_eq!(recreated.deltas[0].from_revision, ResourceRevision::new(1));
+        assert_eq!(recreated.deltas[0].to_revision, ResourceRevision::new(2));
+        let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(lifecycle) =
+            &recreated.deltas[0].payload
+        else {
+            panic!("expected worksheet lifecycle delta");
+        };
+        assert_eq!(
+            lifecycle.after.as_ref().unwrap().revision,
+            ResourceRevision::new(2)
+        );
+        assert_eq!(
+            state.get_data().unwrap().worksheets[&path].revision,
+            ResourceRevision::new(2)
+        );
+    }
+
+    #[test]
+    fn worksheet_mutation_failures_have_zero_authoritative_effects() {
+        let project = TestProject::new("worksheet-authoritative-failure");
+        let state = active_state(&project, ProjectData::new());
+        let session = state.capture_project_session().unwrap();
+        let operation_id = OperationId::new();
+        let name = ResourceName::parse("Report").unwrap();
+        state.set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::FirstLiveReplacement));
+
+        let error = state
+            .create_worksheet_resource_transaction(&session.instance_id, &name, None, operation_id)
+            .unwrap_err();
+
+        state.set_project_filesystem_fault(None);
+        assert_eq!(error.code(), "transaction_commit_failed");
+        assert!(state.get_data().unwrap().worksheets.is_empty());
+        assert!(state.worksheet_revisions.read().unwrap().is_empty());
+        assert!(worksheet_files(&project).is_empty());
+        state
+            .create_worksheet_resource_transaction(&session.instance_id, &name, None, operation_id)
+            .unwrap();
     }
 
     #[test]

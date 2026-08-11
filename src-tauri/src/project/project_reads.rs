@@ -6,7 +6,7 @@ use crate::node_system::protocol::NodeTypeId;
 use crate::node_system::registry::NodeRegistry;
 use crate::project::{
     ProjectData, ProjectFilesystemError, ProjectIndex, ProjectInstanceId, ProjectSession,
-    ProjectState, WorksheetDocument,
+    ProjectState, WorksheetDocument, WorksheetResourcePath,
 };
 use crate::variable::VariableScope;
 use std::collections::{BTreeMap, BTreeSet};
@@ -99,17 +99,19 @@ impl ProjectState {
     pub fn load_worksheet_document(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
-        worksheet_id: &str,
+        worksheet_path: &WorksheetResourcePath,
     ) -> Result<WorksheetDocument, ProjectFilesystemError> {
         let session = expected_session(self, expected_project_instance_id)?;
         let _lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
         let (_, _, _, data) = self.coherent_project_read_snapshot(&session)?;
-        let document = data.worksheets.get(worksheet_id).cloned().ok_or_else(|| {
-            ProjectFilesystemError::TransactionPrepareFailed {
-                message: format!("worksheet '{worksheet_id}' not found in current authority"),
-            }
-        })?;
+        let document = data
+            .worksheets
+            .get(worksheet_path)
+            .cloned()
+            .ok_or_else(|| ProjectFilesystemError::WorksheetNotFound {
+                path: worksheet_path.clone(),
+            })?;
         self.validate_project_session(&session)?;
         Ok(document)
     }
@@ -627,14 +629,16 @@ fn overlay_authoritative_project_index(
         .sort_by(|left, right| left.id.cmp(&right.id));
     index.worksheets = data
         .worksheets
-        .values()
-        .cloned()
-        .map(|worksheet| crate::project::ProjectWorksheetIndexEntry {
-            id: worksheet.id,
-            name: worksheet.name,
-            database_id: worksheet.database_id,
-            chart_type: worksheet.chart_type,
-        })
+        .iter()
+        .map(
+            |(path, worksheet)| crate::project::ProjectWorksheetIndexEntry {
+                worksheet_path: path.clone(),
+                name: path.display_name().as_str().to_string(),
+                database_id: worksheet.database_id.clone(),
+                chart_type: worksheet.chart_type.clone(),
+                revision: worksheet.revision,
+            },
+        )
         .collect();
     index
         .worksheets
@@ -672,7 +676,7 @@ mod tests {
     use crate::node_system::document::{FunctionParameter, FunctionParameterId, FunctionSignature};
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
-        ProjectFilesystemError, ProjectState, WorksheetDocument, fixtures,
+        ProjectFilesystemError, ProjectState, fixtures,
         read_project_index as read_project_index_from_disk,
     };
     use crate::variable::VariableScope;
@@ -796,10 +800,12 @@ mod tests {
         fixtures::write_graph(&disk, root.to_string_lossy().as_ref(), &function_path).unwrap();
 
         let mut authoritative = disk;
-        let worksheet = WorksheetDocument::new("Authoritative worksheet", "db-1");
+        let (worksheet_path, mut worksheet) =
+            fixtures::worksheet("Authoritative worksheet", "db-1");
+        worksheet.revision = crate::node_system::document::ResourceRevision::new(5);
         authoritative
             .worksheets
-            .insert(worksheet.id.clone(), worksheet.clone());
+            .insert(worksheet_path.clone(), worksheet.clone());
         let global = authoritative.variables.values_mut().next().unwrap();
         global.name = "authoritative_global".into();
         let function = authoritative.graphs.get_mut(&function_path).unwrap();
@@ -824,8 +830,9 @@ mod tests {
         assert_eq!(index.variables.len(), 1);
         assert_eq!(index.variables[0].name, "authoritative_global");
         assert_eq!(index.worksheets.len(), 1);
-        assert_eq!(index.worksheets[0].id, worksheet.id);
-        assert_eq!(index.worksheets[0].name, worksheet.name);
+        assert_eq!(index.worksheets[0].worksheet_path, worksheet_path);
+        assert_eq!(index.worksheets[0].name, "Authoritative worksheet");
+        assert_eq!(index.worksheets[0].revision, worksheet.revision);
         let function = index
             .graphs
             .iter()
@@ -1642,18 +1649,18 @@ mod tests {
     #[test]
     fn worksheet_load_reads_current_authority_without_disk_fallback() {
         let root = project_root("worksheet-authority");
-        let worksheet = WorksheetDocument::new("Authoritative worksheet", "db-1");
+        let (worksheet_path, worksheet) = fixtures::worksheet("Authoritative worksheet", "db-1");
         let mut project = ProjectData::new();
         project
             .worksheets
-            .insert(worksheet.id.clone(), worksheet.clone());
+            .insert(worksheet_path.clone(), worksheet.clone());
         fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref()).unwrap();
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
         let expected = state.capture_project_session().unwrap().instance_id;
 
         let loaded = state
-            .load_worksheet_document(&expected, &worksheet.id)
+            .load_worksheet_document(&expected, &worksheet_path)
             .unwrap();
 
         assert_eq!(loaded, worksheet);

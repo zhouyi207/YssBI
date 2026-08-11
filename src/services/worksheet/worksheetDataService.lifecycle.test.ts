@@ -32,8 +32,6 @@ function document(chartType: WorksheetChartType): WorksheetDocument {
   return {
     schemaVersion: 3,
     revision: 0,
-    id: 'worksheet-1',
-    name: 'Worksheet',
     databaseId: 'sales',
     chartType,
     encodings: chartType === 'histogram' ? { x: 'amount' } : { x: 'amount', y: 'cost' },

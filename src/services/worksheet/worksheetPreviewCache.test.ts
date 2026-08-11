@@ -2,14 +2,17 @@ import { describe, expect, it } from 'vitest';
 import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
 import {
   clearWorksheetPreviewCache,
-  getWorksheetPreview,
-  getCachedWorksheetPreview,
+  getWorksheetPreview as getWorksheetPreviewForPath,
+  getCachedWorksheetPreview as getCachedWorksheetPreviewForPath,
+  getWorksheetPreviewCacheSnapshotForTests,
   invalidateWorksheetPreviewCacheForDatabase,
-  worksheetPreviewCacheKey,
+  invalidateWorksheetPreviewCacheForMove,
+  worksheetPreviewCacheKey as worksheetPreviewCacheKeyForPath,
 } from './worksheetPreviewCache';
 
 const PROJECT_A = '00000000-0000-0000-0000-000000000601';
 const PROJECT_B = '00000000-0000-0000-0000-000000000602';
+const WORKSHEET_PATH = 'worksheets/Chart.yssbi-worksheet';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -24,12 +27,32 @@ function deferred<T>() {
 const DOCUMENT: WorksheetDocument = {
   schemaVersion: 3,
   revision: 0,
-  id: 'worksheet-1',
-  name: 'Chart',
   databaseId: 'database-1',
   chartType: 'scatter',
   encodings: { x: 'x', y: 'y' },
 };
+
+function worksheetPreviewCacheKey(
+  projectInstanceId: string,
+  document: WorksheetDocument,
+): string {
+  return worksheetPreviewCacheKeyForPath(projectInstanceId, WORKSHEET_PATH, document);
+}
+
+function getCachedWorksheetPreview(
+  projectInstanceId: string,
+  document: WorksheetDocument,
+): WorksheetPreviewPayload | undefined {
+  return getCachedWorksheetPreviewForPath(projectInstanceId, WORKSHEET_PATH, document);
+}
+
+function getWorksheetPreview(
+  projectInstanceId: string,
+  document: WorksheetDocument,
+  loader: () => Promise<WorksheetPreviewPayload>,
+): Promise<WorksheetPreviewPayload> {
+  return getWorksheetPreviewForPath(projectInstanceId, WORKSHEET_PATH, document, loader);
+}
 
 describe('worksheetPreviewCacheKey', () => {
   it('is stable for equivalent encoding objects', () => {
@@ -178,6 +201,49 @@ describe('getWorksheetPreview', () => {
 
     await expect(oldCompletion).resolves.toBe(oldPayload);
     expect(getCachedWorksheetPreview(PROJECT_A, DOCUMENT)).toBeUndefined();
+  });
+
+  it('invalidates both opaque worksheet path owners during a move', async () => {
+    clearWorksheetPreviewCache();
+    const from = 'opaque worksheet::before';
+    const to = 'opaque worksheet::after';
+    const preview: WorksheetPreviewPayload = { kind: 'empty' };
+    await getWorksheetPreviewForPath(PROJECT_A, from, DOCUMENT, async () => preview);
+    await getWorksheetPreviewForPath(PROJECT_A, to, DOCUMENT, async () => preview);
+
+    invalidateWorksheetPreviewCacheForMove(PROJECT_A, from, to);
+
+    expect(getCachedWorksheetPreviewForPath(PROJECT_A, from, DOCUMENT)).toBeUndefined();
+    expect(getCachedWorksheetPreviewForPath(PROJECT_A, to, DOCUMENT)).toBeUndefined();
+    const snapshot = getWorksheetPreviewCacheSnapshotForTests();
+    expect(snapshot.databaseKeys.get(DOCUMENT.databaseId)?.size ?? 0).toBe(0);
+    expect(snapshot.worksheetKeys.size).toBe(0);
+    expect(snapshot.keyOwnerKeys.size).toBe(0);
+  });
+
+  it('bounds reverse ownership indexes with primary cache eviction', async () => {
+    clearWorksheetPreviewCache();
+    for (let index = 0; index < 96; index += 1) {
+      await getWorksheetPreviewForPath(
+        PROJECT_A,
+        `opaque worksheet owner ${index}`,
+        { ...DOCUMENT, databaseId: `database-${index}` },
+        async () => ({ kind: 'empty' }),
+      );
+    }
+
+    const snapshot = getWorksheetPreviewCacheSnapshotForTests();
+    const databaseReferences = [...snapshot.databaseKeys.values()]
+      .reduce((count, keys) => count + keys.size, 0);
+    const worksheetReferences = [...snapshot.worksheetKeys.values()]
+      .reduce((count, keys) => count + keys.size, 0);
+    expect(snapshot.previewKeys.size).toBe(32);
+    expect(snapshot.databaseKeys.size).toBe(32);
+    expect(snapshot.worksheetKeys.size).toBe(32);
+    expect(snapshot.keyOwnerKeys.size).toBe(32);
+    expect(databaseReferences).toBe(32);
+    expect(worksheetReferences).toBe(32);
+    expect(snapshot.keyOwnerKeys).toEqual(snapshot.previewKeys);
   });
 
   it('does not reuse a completed preview across replacement projects with the same IDs', async () => {

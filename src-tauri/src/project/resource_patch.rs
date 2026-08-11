@@ -1,4 +1,6 @@
-use crate::project::{GraphResourceDocument, GraphResourcePath, WorksheetDocument};
+use crate::project::{
+    GraphResourceDocument, GraphResourcePath, WorksheetDocument, WorksheetResourcePath,
+};
 use crate::variable::{VariableId, VariableInstance};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -31,10 +33,16 @@ pub enum ResourceDocumentPatch {
         removals: BTreeSet<VariableId>,
     },
     UpsertWorksheet {
-        id: String,
+        path: WorksheetResourcePath,
         document: WorksheetDocument,
     },
     RemoveWorksheet {
-        id: String,
+        path: WorksheetResourcePath,
+        revision: crate::node_system::document::ResourceRevision,
+    },
+    MoveWorksheet {
+        from: WorksheetResourcePath,
+        to: WorksheetResourcePath,
+        moved: WorksheetDocument,
     },
 }

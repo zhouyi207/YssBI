@@ -63,7 +63,7 @@ export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<
   }
 
   if (tab.type === 'worksheet') {
-    useEditorStore.getState().setDetailFocus({ kind: 'worksheet', id: tab.id });
+    useEditorStore.getState().setDetailFocus({ kind: 'worksheet', worksheetPath: tab.id });
     ensureDetailVisible();
     const sessionStore = useGraphSessionStore.getState();
     if (sessionStore.getFocusedGroupId() === groupId) {

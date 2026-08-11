@@ -21,8 +21,6 @@ const projectB = '00000000-0000-0000-0000-000000000602';
 const worksheet: WorksheetDocument = {
   schemaVersion: 3,
   revision: 0,
-  id: 'worksheet-1',
-  name: 'Worksheet',
   databaseId: 'sales',
   chartType: 'scatter',
   encodings: { x: 'x', y: 'y' },
@@ -75,7 +73,12 @@ describe('WorksheetChartPreview project cache identity', () => {
       .mockReturnValueOnce(oldRequest.promise)
       .mockResolvedValueOnce(scatter(2));
 
-    act(() => root.render(<WorksheetChartPreview document={worksheet} />));
+    act(() => root.render(
+      <WorksheetChartPreview
+        worksheetPath="worksheets/Worksheet.yssbi-worksheet"
+        document={worksheet}
+      />,
+    ));
     await act(async () => vi.advanceTimersByTimeAsync(300));
     expect(fetchWorksheetPreview).toHaveBeenCalledTimes(1);
 
@@ -85,7 +88,12 @@ describe('WorksheetChartPreview project cache identity', () => {
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
-    act(() => root.render(<WorksheetChartPreview document={worksheet} />));
+    act(() => root.render(
+      <WorksheetChartPreview
+        worksheetPath="worksheets/Worksheet.yssbi-worksheet"
+        document={worksheet}
+      />,
+    ));
     await act(async () => vi.advanceTimersByTimeAsync(300));
 
     expect(fetchWorksheetPreview).toHaveBeenCalledTimes(2);

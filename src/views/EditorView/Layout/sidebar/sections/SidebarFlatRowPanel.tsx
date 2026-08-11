@@ -25,8 +25,12 @@ export type SidebarFlatRowPanelProps = {
   ) => void;
   onVariableContextMenu?: (e: React.MouseEvent, id: string, name: string) => void;
   onDatabaseContextMenu?: (e: React.MouseEvent, id: string, name: string) => void;
-  onOpenWorksheet?: (id: string, name: string) => void;
-  onWorksheetContextMenu?: (e: React.MouseEvent, id: string, name: string) => void;
+  onOpenWorksheet?: (worksheetPath: string, name: string) => void;
+  onWorksheetContextMenu?: (
+    e: React.MouseEvent,
+    worksheetPath: string,
+    name: string,
+  ) => void;
 };
 
 export function SidebarFlatRowPanel({
@@ -81,8 +85,10 @@ export function SidebarFlatRowPanel({
       onGraphContextMenu: (e, target) => handlersRef.current.onGraphContextMenu?.(e, target),
       onVariableContextMenu: (e, id, name) => handlersRef.current.onVariableContextMenu?.(e, id, name),
       onDatabaseContextMenu: (e, id, name) => handlersRef.current.onDatabaseContextMenu?.(e, id, name),
-      onOpenWorksheet: (id, name) => handlersRef.current.onOpenWorksheet?.(id, name),
-      onWorksheetContextMenu: (e, id, name) => handlersRef.current.onWorksheetContextMenu?.(e, id, name),
+      onOpenWorksheet: (worksheetPath, name) =>
+        handlersRef.current.onOpenWorksheet?.(worksheetPath, name),
+      onWorksheetContextMenu: (e, worksheetPath, name) =>
+        handlersRef.current.onWorksheetContextMenu?.(e, worksheetPath, name),
     }),
     [detailTarget, graphIssueCounts, resolvedSelectedNodeType, sectionActions],
   );

@@ -865,7 +865,7 @@ describe('project application-version architecture audit behavior', () => {
         export interface ExternalRuntimeInfo { runtimeVersion: string; version: string }
         export interface Resource { resourceRevision: number; publicationRevision: number }
         export interface Protocol { wireVersion: number; semanticsVersion: number }
-        export const APP_VERSION = '0.2.7';
+        export const APP_VERSION = '9.8.7';
         declare const index: Record<string, unknown>;
         index[['app', 'Version'].join('')] = APP_VERSION;
       `,

@@ -32,6 +32,7 @@ import { toProjectionEntities } from '@/features/domain/editorProjection';
 import { ProjectService, type ProjectIndexRow } from '@/services/project/projectService';
 import { clearWorksheetPreviewCache } from '@/services/worksheet/worksheetPreviewCache';
 import { prepareGraphProjectionForPublication } from '@/features/application/editorProjection/graphProjectionCoordinator';
+import { clearWorksheetLifecycleProjects } from '@/features/application/editor/worksheetLifecycleCoordinator';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useHistoryStore } from '@/features/core/history';
 import { useDocumentStateStore, useResourceStore } from '@/features/core/resource';
@@ -43,11 +44,12 @@ import {
   validateResourceMutationWireResult,
 } from './resourceMutationResult';
 import {
-  prepareGraphResourceMove,
-  type PreparedGraphResourceMove,
+  prepareResourceMove,
+  type PreparedResourceMove,
 } from './projectPublicationMovePlan';
 import {
   buildProjectRecoveryPathRemaps,
+  buildProjectRecoveryWorksheetPathRemaps,
   collectProjectRecoveryGraphPaths,
   commitPreparedProjectRecovery,
   prepareProjectRecoveryCommit,
@@ -100,25 +102,12 @@ export interface PreparedVariableDeltaInstall {
   readonly toRevision: number;
 }
 
-export interface PreparedWorksheetDeltaInstall {
-  readonly id: string;
-  readonly before: WorksheetDocument | null;
-  readonly after: WorksheetDocument | null;
-}
-
-export interface PreparedWorksheetPublicationState {
-  readonly index: readonly WorksheetIndexEntry[];
-  readonly documents: Readonly<Record<string, WorksheetDocument>>;
-  readonly resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>;
-  readonly documentStates: Readonly<Record<ResourceKey, DocumentState>>;
-  readonly tabs: EditorTabMemento;
-}
 
 export interface PreparedPublicationStoreState {
   readonly resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>;
   readonly graphOrder: string[];
   readonly documents: Readonly<Record<ResourceKey, DocumentState>>;
-  readonly graphMeta: Readonly<Record<string, GraphMeta>>;
+  readonly graphMeta?: Readonly<Record<string, GraphMeta>>;
   readonly databases: Readonly<Record<string, DatabaseRecord>>;
   readonly databaseRevisions: Readonly<Record<string, number>>;
   readonly variables: Readonly<Record<string, Variable>>;
@@ -126,8 +115,8 @@ export interface PreparedPublicationStoreState {
   readonly worksheetIndex: WorksheetIndexEntry[];
   readonly worksheetDocuments: Readonly<Record<string, WorksheetDocument>>;
   readonly tabs: EditorTabMemento;
-  readonly focusedSession: FocusedGraphSession | null;
-  readonly viewports: Readonly<Record<string, EditorViewport>>;
+  readonly focusedSession?: FocusedGraphSession | null;
+  readonly viewports?: Readonly<Record<string, EditorViewport>>;
 }
 
 export interface PreparePublicationContext {
@@ -135,7 +124,7 @@ export interface PreparePublicationContext {
   readonly epoch: number;
   readonly fingerprint: string;
   readonly affectedGraphPaths: ReadonlySet<string>;
-  readonly moves: readonly PreparedGraphResourceMove[];
+  readonly moves: readonly PreparedResourceMove[];
 }
 
 export interface PreparedProjectPublication {
@@ -144,13 +133,12 @@ export interface PreparedProjectPublication {
   readonly publicationRevision: number;
   readonly fingerprint: string;
   readonly affectedGraphPaths: ReadonlySet<string>;
-  readonly moves: readonly PreparedGraphResourceMove[];
-  readonly graphProjectionPlan: PreparedGraphProjectionReplacements;
+  readonly moves: readonly PreparedResourceMove[];
+  readonly removedWorksheetPaths: ReadonlySet<string>;
+  readonly graphProjectionPlan?: PreparedGraphProjectionReplacements;
   readonly projectionReplacements: readonly GraphProjectionReplacementDto[];
   readonly functionInstalls: readonly PreparedFunctionDeltaInstall[];
   readonly variableInstalls: readonly PreparedVariableDeltaInstall[];
-  readonly worksheetInstalls: readonly PreparedWorksheetDeltaInstall[];
-  readonly worksheetState: PreparedWorksheetPublicationState;
   readonly storeState: PreparedPublicationStoreState;
   readonly history: HistoryStatusDto;
 }
@@ -163,11 +151,18 @@ export interface ProjectRecoveryPreparation {
   readonly projections: ReadonlyMap<string, EditorGraphProjectionDto>;
   readonly graphPathsLoadedAtStart: ReadonlySet<string>;
   readonly pathRemaps: ReadonlyMap<string, string>;
+  readonly worksheetPathRemaps?: ReadonlyMap<string, string>;
+}
+
+export interface PreparedProjectRecoveryStoreState extends PreparedPublicationStoreState {
+  readonly graphMeta: Readonly<Record<string, GraphMeta>>;
+  readonly focusedSession: FocusedGraphSession | null;
+  readonly viewports: Readonly<Record<string, EditorViewport>>;
 }
 
 export interface PreparedProjectRecovery extends ProjectRecoveryPreparation {
   readonly graphProjectionPlan: PreparedGraphProjectionReplacements;
-  readonly storeState: PreparedPublicationStoreState;
+  readonly storeState: PreparedProjectRecoveryStoreState;
   readonly history: HistoryStatusDto;
 }
 
@@ -187,7 +182,7 @@ export interface ProjectPublicationDependencies {
   prepareMove(
     move: ResourceMoveDto,
     hasAuthoritativeDestinationReplacement: boolean,
-  ): PreparedGraphResourceMove;
+  ): PreparedResourceMove;
   commitPublication(plan: PreparedProjectPublication): void;
   commitRecovery(plan: PreparedProjectRecovery): void;
   markProjectProjectionStale(): void;
@@ -257,6 +252,7 @@ export class ProjectPublicationCoordinator {
   startProject(projectInstanceId: string, appliedRevision: number): void {
     this.validateProjectStart(projectInstanceId, appliedRevision);
     clearWorksheetPreviewCache();
+    clearWorksheetLifecycleProjects();
     startProjectLifecycle(projectInstanceId);
     this.resetPublicationState(appliedRevision);
   }
@@ -271,6 +267,7 @@ export class ProjectPublicationCoordinator {
     if (result === 'stale') return false;
     if (result === 'activated') {
       clearWorksheetPreviewCache();
+      clearWorksheetLifecycleProjects();
       this.resetPublicationState(0);
     }
     return true;
@@ -278,6 +275,7 @@ export class ProjectPublicationCoordinator {
 
   cancelProject(): void {
     clearWorksheetPreviewCache();
+    clearWorksheetLifecycleProjects();
     clearProjectLifecycle();
     this.resetPublicationState(0);
   }
@@ -579,10 +577,14 @@ export class ProjectPublicationCoordinator {
       }
 
       const authoritativeGraphPaths = new Set(index.graphs.map((graph) => graph.path));
+      const authoritativeWorksheetPaths = new Set(
+        index.worksheets.map((worksheet) => worksheet.worksheetPath),
+      );
       const projections = new Map<string, EditorGraphProjectionDto>();
       let owned: PendingPublication[] = initiallyOwned;
       let queuedResults: ResourceMutationResultDto[] = [];
       let pathRemaps: ReadonlyMap<string, string> = new Map();
+      let worksheetPathRemaps: ReadonlyMap<string, string> = new Map();
       for (;;) {
         const observedVersion = this.recoveryVersion;
         owned = [...this.state.pendingByRevision.values()]
@@ -590,6 +592,10 @@ export class ProjectPublicationCoordinator {
             && pending.revision <= validatedSnapshotRevision);
         queuedResults = owned.map((pending) => pending.input.result);
         pathRemaps = buildProjectRecoveryPathRemaps(authoritativeGraphPaths, queuedResults);
+        worksheetPathRemaps = buildProjectRecoveryWorksheetPathRemaps(
+          authoritativeWorksheetPaths,
+          queuedResults,
+        );
         const recoveryPaths = collectProjectRecoveryGraphPaths(
           index,
           graphPathsLoadedAtStart,
@@ -610,6 +616,7 @@ export class ProjectPublicationCoordinator {
         projections,
         graphPathsLoadedAtStart,
         pathRemaps,
+        worksheetPathRemaps,
       };
       const plan = this.dependencies.prepareRecovery(recoveryPreparation);
       this.dependencies.commitRecovery(plan);
@@ -647,7 +654,7 @@ const productionDependencies: ProjectPublicationDependencies = {
   captureLoadedGraphPaths: () => new Set(Object.keys(useGraphDataStore.getState().graphEntities)),
   preparePublication: prepareSynchronousPublicationCommit,
   prepareRecovery: prepareProjectRecoveryCommit,
-  prepareMove: prepareGraphResourceMove,
+  prepareMove: prepareResourceMove,
   commitPublication: (plan) => {
     commitPreparedPublication(plan);
     useHistoryStore.setState({

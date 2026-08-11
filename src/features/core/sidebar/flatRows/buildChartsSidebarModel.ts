@@ -3,15 +3,15 @@ import type { SidebarPanelModel } from './sidebarPanelModel';
 import type { SidebarItemRow } from './types';
 
 export function buildChartsSidebarModel(params: {
-  worksheets: ReadonlyArray<{ id: string; name: string }>;
+  worksheets: ReadonlyArray<{ worksheetPath: string; name: string }>;
   expandedSections: Record<string, boolean>;
   labels: { worksheets: string; noWorksheets: string };
 }): SidebarPanelModel {
   const items: SidebarItemRow[] = params.worksheets.map((ws) => ({
     kind: 'worksheet',
-    rowKey: `worksheet:${ws.id}`,
+    rowKey: `worksheet:${ws.worksheetPath}`,
     level: 1,
-    id: ws.id,
+    worksheetPath: ws.worksheetPath,
     name: ws.name,
   }));
 

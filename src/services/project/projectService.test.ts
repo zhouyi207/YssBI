@@ -53,6 +53,16 @@ function functionRow(index: Record<string, unknown>): Record<string, unknown> {
   return (index.graphs as Array<Record<string, unknown>>)[0];
 }
 
+function worksheetRow(): Record<string, unknown> {
+  return {
+    worksheetPath: 'worksheets/Opaque Path With Spaces.yssbi-worksheet',
+    name: 'Rust supplied label',
+    databaseId: 'database-1',
+    chartType: 'scatter',
+    revision: 7,
+  };
+}
+
 describe('ProjectService.getProjectIndex function editor projection parser', () => {
   beforeEach(() => {
     ipc.invoke.mockClear();
@@ -156,7 +166,7 @@ describe('ProjectService.getProjectIndex function editor projection parser', () 
 
   it('rejects a legacy project index containing the removed application version key', async () => {
     const index = projectIndex();
-    index[['app', 'Version'].join('')] = '0.2.7';
+    index[['app', 'Version'].join('')] = '9.8.7';
     ipc.response = index;
 
     await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(
@@ -237,6 +247,54 @@ describe('ProjectService.getProjectIndex function editor projection parser', () 
     );
     expect(graphsEvaluated).toBe(false);
     expect(databasesEvaluated).toBe(false);
+  });
+
+  it('strictly parses worksheet path identity and authoritative metadata', async () => {
+    const index = projectIndex();
+    index.worksheets = [worksheetRow()];
+    ipc.response = index;
+
+    await expect(ProjectService.getProjectIndex('project-a')).resolves.toMatchObject({
+      worksheets: [{
+        worksheetPath: 'worksheets/Opaque Path With Spaces.yssbi-worksheet',
+        name: 'Rust supplied label',
+        databaseId: 'database-1',
+        chartType: 'scatter',
+        revision: 7,
+      }],
+    });
+  });
+
+  it.each([
+    ['empty Rust-provided name', (row: Record<string, unknown>) => {
+      row.name = '';
+    }],
+    ['whitespace-only Rust-provided name', (row: Record<string, unknown>) => {
+      row.name = '   ';
+    }],
+    ['legacy id', (row: Record<string, unknown>) => {
+      row.id = row.worksheetPath;
+      delete row.worksheetPath;
+    }],
+    ['missing revision', (row: Record<string, unknown>) => {
+      delete row.revision;
+    }],
+    ['unknown field', (row: Record<string, unknown>) => {
+      row.legacyName = 'inferred';
+    }],
+    ['unsupported chart type', (row: Record<string, unknown>) => {
+      row.chartType = 'pie';
+    }],
+  ])('rejects worksheet rows with %s', async (_case, mutate) => {
+    const index = projectIndex();
+    const row = worksheetRow();
+    mutate(row);
+    index.worksheets = [row];
+    ipc.response = index;
+
+    await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(
+      'Invalid project index response',
+    );
   });
 
   it('rejects a legacy function row containing only raw functionSignature', async () => {

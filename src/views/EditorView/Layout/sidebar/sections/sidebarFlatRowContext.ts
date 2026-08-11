@@ -18,8 +18,12 @@ export type SidebarFlatRowContextValue = {
   ) => void;
   onVariableContextMenu?: (e: React.MouseEvent, id: string, name: string) => void;
   onDatabaseContextMenu?: (e: React.MouseEvent, id: string, name: string) => void;
-  onOpenWorksheet?: (id: string, name: string) => void;
-  onWorksheetContextMenu?: (e: React.MouseEvent, id: string, name: string) => void;
+  onOpenWorksheet?: (worksheetPath: string, name: string) => void;
+  onWorksheetContextMenu?: (
+    e: React.MouseEvent,
+    worksheetPath: string,
+    name: string,
+  ) => void;
 };
 
 export const SidebarFlatRowContext = createContext<SidebarFlatRowContextValue | null>(null);

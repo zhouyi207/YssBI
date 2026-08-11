@@ -22,20 +22,283 @@
       "payload": {
         "payload": {
           "result": {
-            "deltas": [],
+            "deltas": [
+              {
+                "causedBy": "00000000-0000-0000-0000-000000000901",
+                "fromRevision": 0,
+                "payload": {
+                  "kind": "resource_lifecycle",
+                  "patch": {
+                    "after": {
+                      "kind": "worksheet",
+                      "name": "Sales Overview",
+                      "path": "worksheets/Sales Overview.yssbi-worksheet",
+                      "revision": 0
+                    },
+                    "before": null
+                  }
+                },
+                "resource": {
+                  "key": "worksheets/Sales Overview.yssbi-worksheet",
+                  "kind": "worksheet"
+                },
+                "toRevision": 0
+              }
+            ],
             "history": {
               "canRedo": false,
               "canUndo": true
             },
             "moves": [],
-            "operationId": "00000000-0000-0000-0000-000000000004",
+            "operationId": "00000000-0000-0000-0000-000000000901",
             "projectInstanceId": "00000000-0000-0000-0000-000000000601",
             "projectionReplacements": [],
             "projectionStatus": {
               "expectedGraphPaths": [],
               "status": "complete"
             },
-            "publicationRevision": 11
+            "publicationRevision": 1
+          }
+        },
+        "type": "ResourceMutationCommitted"
+      },
+      "type": "Project"
+    },
+    {
+      "payload": {
+        "payload": {
+          "result": {
+            "deltas": [
+              {
+                "causedBy": "00000000-0000-0000-0000-000000000902",
+                "fromRevision": 0,
+                "payload": {
+                  "kind": "worksheet",
+                  "patch": {
+                    "after": {
+                      "chartType": "line",
+                      "databaseId": "database-sales",
+                      "encodings": {
+                        "x": "month",
+                        "y": "revenue"
+                      }
+                    },
+                    "before": {
+                      "chartType": "scatter",
+                      "databaseId": "database-sales",
+                      "encodings": {
+                        "x": "region",
+                        "y": "revenue"
+                      }
+                    }
+                  }
+                },
+                "resource": {
+                  "key": "worksheets/Sales Overview.yssbi-worksheet",
+                  "kind": "worksheet"
+                },
+                "toRevision": 1
+              }
+            ],
+            "history": {
+              "canRedo": false,
+              "canUndo": true
+            },
+            "moves": [],
+            "operationId": "00000000-0000-0000-0000-000000000902",
+            "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+            "projectionReplacements": [],
+            "projectionStatus": {
+              "expectedGraphPaths": [],
+              "status": "complete"
+            },
+            "publicationRevision": 2
+          }
+        },
+        "type": "ResourceMutationCommitted"
+      },
+      "type": "Project"
+    },
+    {
+      "payload": {
+        "payload": {
+          "result": {
+            "deltas": [
+              {
+                "causedBy": "00000000-0000-0000-0000-000000000903",
+                "fromRevision": 1,
+                "payload": {
+                  "kind": "resource_move",
+                  "patch": {
+                    "from": "worksheets/Sales Overview.yssbi-worksheet",
+                    "to": "worksheets/Regional Sales.yssbi-worksheet"
+                  }
+                },
+                "resource": {
+                  "key": "worksheets/Regional Sales.yssbi-worksheet",
+                  "kind": "worksheet"
+                },
+                "toRevision": 2
+              }
+            ],
+            "history": {
+              "canRedo": false,
+              "canUndo": true
+            },
+            "moves": [
+              {
+                "from": "worksheets/Sales Overview.yssbi-worksheet",
+                "kind": "worksheet",
+                "name": "Regional Sales",
+                "to": "worksheets/Regional Sales.yssbi-worksheet"
+              }
+            ],
+            "operationId": "00000000-0000-0000-0000-000000000903",
+            "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+            "projectionReplacements": [],
+            "projectionStatus": {
+              "expectedGraphPaths": [],
+              "status": "complete"
+            },
+            "publicationRevision": 3
+          }
+        },
+        "type": "ResourceMutationCommitted"
+      },
+      "type": "Project"
+    },
+    {
+      "payload": {
+        "payload": {
+          "result": {
+            "deltas": [
+              {
+                "causedBy": "00000000-0000-0000-0000-000000000904",
+                "fromRevision": 2,
+                "payload": {
+                  "kind": "resource_lifecycle",
+                  "patch": {
+                    "after": null,
+                    "before": {
+                      "kind": "worksheet",
+                      "name": "Regional Sales",
+                      "path": "worksheets/Regional Sales.yssbi-worksheet",
+                      "revision": 2
+                    }
+                  }
+                },
+                "resource": {
+                  "key": "worksheets/Regional Sales.yssbi-worksheet",
+                  "kind": "worksheet"
+                },
+                "toRevision": 3
+              }
+            ],
+            "history": {
+              "canRedo": false,
+              "canUndo": true
+            },
+            "moves": [],
+            "operationId": "00000000-0000-0000-0000-000000000904",
+            "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+            "projectionReplacements": [],
+            "projectionStatus": {
+              "expectedGraphPaths": [],
+              "status": "complete"
+            },
+            "publicationRevision": 4
+          }
+        },
+        "type": "ResourceMutationCommitted"
+      },
+      "type": "Project"
+    },
+    {
+      "payload": {
+        "payload": {
+          "result": {
+            "deltas": [
+              {
+                "causedBy": "00000000-0000-0000-0000-000000000905",
+                "fromRevision": 3,
+                "payload": {
+                  "kind": "resource_lifecycle",
+                  "patch": {
+                    "after": {
+                      "kind": "worksheet",
+                      "name": "Regional Sales",
+                      "path": "worksheets/Regional Sales.yssbi-worksheet",
+                      "revision": 4
+                    },
+                    "before": null
+                  }
+                },
+                "resource": {
+                  "key": "worksheets/Regional Sales.yssbi-worksheet",
+                  "kind": "worksheet"
+                },
+                "toRevision": 4
+              }
+            ],
+            "history": {
+              "canRedo": true,
+              "canUndo": true
+            },
+            "moves": [],
+            "operationId": "00000000-0000-0000-0000-000000000905",
+            "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+            "projectionReplacements": [],
+            "projectionStatus": {
+              "expectedGraphPaths": [],
+              "status": "complete"
+            },
+            "publicationRevision": 5
+          }
+        },
+        "type": "ResourceMutationCommitted"
+      },
+      "type": "Project"
+    },
+    {
+      "payload": {
+        "payload": {
+          "result": {
+            "deltas": [
+              {
+                "causedBy": "00000000-0000-0000-0000-000000000906",
+                "fromRevision": 4,
+                "payload": {
+                  "kind": "resource_lifecycle",
+                  "patch": {
+                    "after": null,
+                    "before": {
+                      "kind": "worksheet",
+                      "name": "Regional Sales",
+                      "path": "worksheets/Regional Sales.yssbi-worksheet",
+                      "revision": 4
+                    }
+                  }
+                },
+                "resource": {
+                  "key": "worksheets/Regional Sales.yssbi-worksheet",
+                  "kind": "worksheet"
+                },
+                "toRevision": 5
+              }
+            ],
+            "history": {
+              "canRedo": false,
+              "canUndo": true
+            },
+            "moves": [],
+            "operationId": "00000000-0000-0000-0000-000000000906",
+            "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+            "projectionReplacements": [],
+            "projectionStatus": {
+              "expectedGraphPaths": [],
+              "status": "complete"
+            },
+            "publicationRevision": 6
           }
         },
         "type": "ResourceMutationCommitted"
@@ -43,5 +306,264 @@
       "type": "Project"
     }
   ],
-  "format": "yssbi.project-events.v1"
+  "format": "yssbi.project-events.v1",
+  "resourceMutationResults": [
+    {
+      "result": {
+        "deltas": [
+          {
+            "causedBy": "00000000-0000-0000-0000-000000000901",
+            "fromRevision": 0,
+            "payload": {
+              "kind": "resource_lifecycle",
+              "patch": {
+                "after": {
+                  "kind": "worksheet",
+                  "name": "Sales Overview",
+                  "path": "worksheets/Sales Overview.yssbi-worksheet",
+                  "revision": 0
+                },
+                "before": null
+              }
+            },
+            "resource": {
+              "key": "worksheets/Sales Overview.yssbi-worksheet",
+              "kind": "worksheet"
+            },
+            "toRevision": 0
+          }
+        ],
+        "history": {
+          "canRedo": false,
+          "canUndo": true
+        },
+        "moves": [],
+        "operationId": "00000000-0000-0000-0000-000000000901",
+        "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+        "projectionReplacements": [],
+        "projectionStatus": {
+          "expectedGraphPaths": [],
+          "status": "complete"
+        },
+        "publicationRevision": 1
+      },
+      "scenario": "create"
+    },
+    {
+      "result": {
+        "deltas": [
+          {
+            "causedBy": "00000000-0000-0000-0000-000000000902",
+            "fromRevision": 0,
+            "payload": {
+              "kind": "worksheet",
+              "patch": {
+                "after": {
+                  "chartType": "line",
+                  "databaseId": "database-sales",
+                  "encodings": {
+                    "x": "month",
+                    "y": "revenue"
+                  }
+                },
+                "before": {
+                  "chartType": "scatter",
+                  "databaseId": "database-sales",
+                  "encodings": {
+                    "x": "region",
+                    "y": "revenue"
+                  }
+                }
+              }
+            },
+            "resource": {
+              "key": "worksheets/Sales Overview.yssbi-worksheet",
+              "kind": "worksheet"
+            },
+            "toRevision": 1
+          }
+        ],
+        "history": {
+          "canRedo": false,
+          "canUndo": true
+        },
+        "moves": [],
+        "operationId": "00000000-0000-0000-0000-000000000902",
+        "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+        "projectionReplacements": [],
+        "projectionStatus": {
+          "expectedGraphPaths": [],
+          "status": "complete"
+        },
+        "publicationRevision": 2
+      },
+      "scenario": "save"
+    },
+    {
+      "result": {
+        "deltas": [
+          {
+            "causedBy": "00000000-0000-0000-0000-000000000903",
+            "fromRevision": 1,
+            "payload": {
+              "kind": "resource_move",
+              "patch": {
+                "from": "worksheets/Sales Overview.yssbi-worksheet",
+                "to": "worksheets/Regional Sales.yssbi-worksheet"
+              }
+            },
+            "resource": {
+              "key": "worksheets/Regional Sales.yssbi-worksheet",
+              "kind": "worksheet"
+            },
+            "toRevision": 2
+          }
+        ],
+        "history": {
+          "canRedo": false,
+          "canUndo": true
+        },
+        "moves": [
+          {
+            "from": "worksheets/Sales Overview.yssbi-worksheet",
+            "kind": "worksheet",
+            "name": "Regional Sales",
+            "to": "worksheets/Regional Sales.yssbi-worksheet"
+          }
+        ],
+        "operationId": "00000000-0000-0000-0000-000000000903",
+        "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+        "projectionReplacements": [],
+        "projectionStatus": {
+          "expectedGraphPaths": [],
+          "status": "complete"
+        },
+        "publicationRevision": 3
+      },
+      "scenario": "rename"
+    },
+    {
+      "result": {
+        "deltas": [
+          {
+            "causedBy": "00000000-0000-0000-0000-000000000904",
+            "fromRevision": 2,
+            "payload": {
+              "kind": "resource_lifecycle",
+              "patch": {
+                "after": null,
+                "before": {
+                  "kind": "worksheet",
+                  "name": "Regional Sales",
+                  "path": "worksheets/Regional Sales.yssbi-worksheet",
+                  "revision": 2
+                }
+              }
+            },
+            "resource": {
+              "key": "worksheets/Regional Sales.yssbi-worksheet",
+              "kind": "worksheet"
+            },
+            "toRevision": 3
+          }
+        ],
+        "history": {
+          "canRedo": false,
+          "canUndo": true
+        },
+        "moves": [],
+        "operationId": "00000000-0000-0000-0000-000000000904",
+        "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+        "projectionReplacements": [],
+        "projectionStatus": {
+          "expectedGraphPaths": [],
+          "status": "complete"
+        },
+        "publicationRevision": 4
+      },
+      "scenario": "remove"
+    },
+    {
+      "result": {
+        "deltas": [
+          {
+            "causedBy": "00000000-0000-0000-0000-000000000905",
+            "fromRevision": 3,
+            "payload": {
+              "kind": "resource_lifecycle",
+              "patch": {
+                "after": {
+                  "kind": "worksheet",
+                  "name": "Regional Sales",
+                  "path": "worksheets/Regional Sales.yssbi-worksheet",
+                  "revision": 4
+                },
+                "before": null
+              }
+            },
+            "resource": {
+              "key": "worksheets/Regional Sales.yssbi-worksheet",
+              "kind": "worksheet"
+            },
+            "toRevision": 4
+          }
+        ],
+        "history": {
+          "canRedo": true,
+          "canUndo": true
+        },
+        "moves": [],
+        "operationId": "00000000-0000-0000-0000-000000000905",
+        "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+        "projectionReplacements": [],
+        "projectionStatus": {
+          "expectedGraphPaths": [],
+          "status": "complete"
+        },
+        "publicationRevision": 5
+      },
+      "scenario": "undo"
+    },
+    {
+      "result": {
+        "deltas": [
+          {
+            "causedBy": "00000000-0000-0000-0000-000000000906",
+            "fromRevision": 4,
+            "payload": {
+              "kind": "resource_lifecycle",
+              "patch": {
+                "after": null,
+                "before": {
+                  "kind": "worksheet",
+                  "name": "Regional Sales",
+                  "path": "worksheets/Regional Sales.yssbi-worksheet",
+                  "revision": 4
+                }
+              }
+            },
+            "resource": {
+              "key": "worksheets/Regional Sales.yssbi-worksheet",
+              "kind": "worksheet"
+            },
+            "toRevision": 5
+          }
+        ],
+        "history": {
+          "canRedo": false,
+          "canUndo": true
+        },
+        "moves": [],
+        "operationId": "00000000-0000-0000-0000-000000000906",
+        "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+        "projectionReplacements": [],
+        "projectionStatus": {
+          "expectedGraphPaths": [],
+          "status": "complete"
+        },
+        "publicationRevision": 6
+      },
+      "scenario": "redo"
+    }
+  ]
 }

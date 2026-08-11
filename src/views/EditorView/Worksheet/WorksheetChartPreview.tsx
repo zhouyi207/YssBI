@@ -13,22 +13,23 @@ import {
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 interface WorksheetChartPreviewProps {
+  worksheetPath: string;
   document: WorksheetDocument | null;
 }
 
-export function WorksheetChartPreview({ document }: WorksheetChartPreviewProps) {
+export function WorksheetChartPreview({ worksheetPath, document }: WorksheetChartPreviewProps) {
   const [preview, setPreview] = useState<WorksheetPreviewPayload>({ kind: 'empty' });
   const [loading, setLoading] = useState(false);
 
   const specKey = useMemo(() => {
     if (!document) return '';
     return JSON.stringify({
-      id: document.id,
+      worksheetPath,
       databaseId: document.databaseId,
       chartType: document.chartType,
       encodings: document.encodings,
     });
-  }, [document]);
+  }, [document, worksheetPath]);
 
   useEffect(() => {
     if (!specKey || !document) {
@@ -37,7 +38,7 @@ export function WorksheetChartPreview({ document }: WorksheetChartPreviewProps) 
     }
 
     const identity = captureProjectIdentity();
-    const cached = getCachedWorksheetPreview(identity.projectInstanceId, document);
+    const cached = getCachedWorksheetPreview(identity.projectInstanceId, worksheetPath, document);
     if (cached) {
       if (!isCurrentProjectIdentity(identity)) return;
       setPreview(cached);
@@ -57,6 +58,7 @@ export function WorksheetChartPreview({ document }: WorksheetChartPreviewProps) 
         try {
           const result = await getWorksheetPreview(
             identity.projectInstanceId,
+            worksheetPath,
             document,
             () => fetchWorksheetPreview(document, previewIdentity),
           );

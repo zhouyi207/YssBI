@@ -5824,7 +5824,7 @@ fn project_application_version_audit_allows_semantic_version_decoys() {
 struct ProjectManifest { schema_version: u32 }
 struct ExternalRuntimeInfo { runtime_version: String, version: String }
 struct ExchangeManifest { version: u32 }
-const APP_VERSION: &str = "0.2.7";
+const APP_VERSION: &str = "9.8.7";
 fn inspect(project: ProjectManifest, runtime: ExternalRuntimeInfo, exchange: ExchangeManifest) {
     let _ = (
         project.schema_version,

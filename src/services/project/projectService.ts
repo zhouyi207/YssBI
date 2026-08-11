@@ -15,6 +15,7 @@ import type {
 } from "@/shared/types/dto/editorMutation";
 import type { FunctionEditorProjectionDto } from '@/shared/types/dto/editorProjection';
 import type { DatabaseEngineDTO } from '@/shared/types/dto/database';
+import type { WorksheetChartType } from '@/shared/types/domain/worksheet';
 import {
   isFunctionEditorProjectionDto,
   isGraphResourcePath,
@@ -79,10 +80,11 @@ export interface ProjectFunctionGraphIndexRow extends ProjectGraphIndexRowBase {
 export type ProjectGraphIndexRow = ProjectEventGraphIndexRow | ProjectFunctionGraphIndexRow;
 
 export interface ProjectWorksheetIndexRow {
-  id: string;
+  worksheetPath: string;
   name: string;
   databaseId: string;
-  chartType: string;
+  chartType: WorksheetChartType;
+  revision: number;
 }
 
 export interface ProjectVariableIndexRow {
@@ -169,6 +171,26 @@ export function parseProjectGraphIndexRow(value: unknown): ProjectGraphIndexRow 
   throw new Error('Invalid project graph index row');
 }
 
+function isWorksheetChartType(value: unknown): value is WorksheetChartType {
+  return value === 'histogram' || value === 'scatter' || value === 'line';
+}
+
+function parseProjectWorksheetIndexRow(value: unknown): ProjectWorksheetIndexRow {
+  if (!isRecord(value)
+    || Array.isArray(value)
+    || !hasExactKeys(value, ['worksheetPath', 'name', 'databaseId', 'chartType', 'revision'])
+    || typeof value.worksheetPath !== 'string'
+    || value.worksheetPath.length === 0
+    || typeof value.name !== 'string'
+    || value.name.trim().length === 0
+    || typeof value.databaseId !== 'string'
+    || !isWorksheetChartType(value.chartType)
+    || !isSafeRevision(value.revision)) {
+    throw new Error('Invalid project worksheet index row');
+  }
+  return value as unknown as ProjectWorksheetIndexRow;
+}
+
 function parseProjectIndexRow(value: unknown): ProjectIndexRow {
   if (!isRecord(value)
     || Array.isArray(value)
@@ -200,7 +222,7 @@ function parseProjectIndexRow(value: unknown): ProjectIndexRow {
       projectName: value.projectName,
       exportTime: value.exportTime,
       graphs: value.graphs.map(parseProjectGraphIndexRow),
-      worksheets: value.worksheets as ProjectWorksheetIndexRow[],
+      worksheets: value.worksheets.map(parseProjectWorksheetIndexRow),
       variables: value.variables as ProjectVariableIndexRow[],
       databases: value.databases,
     };

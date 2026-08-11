@@ -438,9 +438,9 @@ fn copy_mutations(
             .map_err(prepare_error)?;
         files.insert(path, contents);
     }
-    for worksheet in authority.worksheets.values() {
-        let (path, contents) =
-            crate::project::serialize_worksheet(worksheet).map_err(prepare_error)?;
+    for (worksheet_path, worksheet) in &authority.worksheets {
+        let (path, contents) = crate::project::serialize_worksheet(worksheet_path, worksheet)
+            .map_err(prepare_error)?;
         files.insert(path, contents);
     }
     let mut mutations = directories
@@ -525,7 +525,7 @@ mod tests {
     use crate::node_system::protocol::NodeTypeId;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
-        ProjectFilesystemFaultPoint, WorksheetDocument, fixtures, load_project_from_file,
+        ProjectFilesystemFaultPoint, fixtures, load_project_from_file,
     };
     use crate::variable::VariableScope;
     use std::sync::{Arc, Barrier};
@@ -603,7 +603,7 @@ mod tests {
         before_revisions: &(
             std::collections::HashMap<GraphResourcePath, ResourceRevision>,
             std::collections::HashMap<crate::variable::VariableId, ResourceRevision>,
-            std::collections::HashMap<String, ResourceRevision>,
+            std::collections::HashMap<crate::project::WorksheetResourcePath, ResourceRevision>,
         ),
         before_generation: u64,
     ) {
@@ -761,7 +761,7 @@ mod tests {
             .unload_graph_resource_for_lifecycle(&instance_id, &unloaded, 2)
             .unwrap_err();
 
-        assert_eq!(error.code(), "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_resource_lifecycle");
         assert_lifecycle_unload_snapshot(
             &state,
             &unloaded,
@@ -1174,18 +1174,18 @@ mod tests {
                 GraphResourceDocument::new("Rename", GraphDocumentKind::Event),
             )
             .unwrap();
-        let worksheet = WorksheetDocument::new("Sheet", "database");
+        let (worksheet_path, worksheet) = fixtures::worksheet("Sheet", "database");
         state
             .project_data
             .write()
             .unwrap()
             .worksheets
-            .insert(worksheet.id.clone(), worksheet.clone());
-        state.initialize_worksheet_revision_for_test(&worksheet.id);
+            .insert(worksheet_path.clone(), worksheet.clone());
+        state.initialize_worksheet_revision_for_test(&worksheet_path);
         let data = state.get_data().unwrap();
         fixtures::write_graph(&data, root.to_string_lossy().as_ref(), &load_path).unwrap();
         fixtures::write_graph(&data, root.to_string_lossy().as_ref(), &rename_path).unwrap();
-        fixtures::write_worksheet(&root, &worksheet).unwrap();
+        fixtures::write_worksheet(&root, &worksheet_path, &worksheet).unwrap();
         state
             .unload_graph_resource_for_lifecycle(&instance_id, &load_path, 1)
             .unwrap();
@@ -1276,7 +1276,13 @@ mod tests {
         );
         assert_rejected(
             state
-                .save_worksheet_document(&instance_id, worksheet, OperationId::new())
+                .save_worksheet_document(
+                    &instance_id,
+                    &worksheet_path,
+                    crate::node_system::document::ResourceRevision::INITIAL,
+                    OperationId::new(),
+                    worksheet,
+                )
                 .map(|_| ()),
         );
 

@@ -63,9 +63,17 @@ export function buildGraphLayoutTab(
   return { id: path, type, component: 'GraphEditor', pinned: pinned ? true : false };
 }
 
-export function buildWorksheetLayoutTab(id: string, options?: { pinned?: boolean }): LayoutTab {
+export function buildWorksheetLayoutTab(
+  worksheetPath: string,
+  options?: { pinned?: boolean },
+): LayoutTab {
   const pinned = options?.pinned !== false;
-  return { id, type: 'worksheet', component: 'WorksheetEditor', pinned: pinned ? true : false };
+  return {
+    id: worksheetPath,
+    type: 'worksheet',
+    component: 'WorksheetEditor',
+    pinned: pinned ? true : false,
+  };
 }
 
 export function isGraphLayoutTab(

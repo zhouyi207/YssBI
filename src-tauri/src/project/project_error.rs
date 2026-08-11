@@ -4,6 +4,10 @@ use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ProjectFilesystemError {
+    #[error("invalid resource name: {0}")]
+    InvalidResourceName(#[from] super::ResourceNameError),
+    #[error("invalid worksheet resource path: {0}")]
+    InvalidWorksheetResourcePath(#[from] super::WorksheetResourcePathError),
     #[error("built-in node system initialization failed: {0}")]
     BuiltinInitialization(#[from] crate::node_system::catalog::BuiltinInitializationError),
     #[error("invalid project root '{}': {message}", path.display())]
@@ -16,6 +20,8 @@ pub enum ProjectFilesystemError {
     },
     #[error("stale project lifecycle: {message}")]
     StaleProjectLifecycle { message: String },
+    #[error("stale resource lifecycle: {message}")]
+    StaleResourceLifecycle { message: String },
     #[error("catalog resource stale: {message}")]
     CatalogResourceStale { message: String },
     #[error("database access failed: {message}")]
@@ -27,6 +33,10 @@ pub enum ProjectFilesystemError {
         path: super::GraphResourcePath,
         retained: u64,
     },
+    #[error("resource name conflict: {message}")]
+    ResourceNameConflict { message: String },
+    #[error("worksheet resource '{}' was not found", path.as_str())]
+    WorksheetNotFound { path: super::WorksheetResourcePath },
     #[error("resource revision conflict: {message}")]
     ResourceRevisionConflict { message: String },
     #[error("duplicate project operation: {message}")]
@@ -51,14 +61,24 @@ pub enum ProjectFilesystemError {
 impl ProjectFilesystemError {
     pub const fn code(&self) -> &'static str {
         match self {
+            Self::InvalidResourceName(source) => resource_name_error_code(source),
+            Self::InvalidWorksheetResourcePath(source) => match source {
+                super::WorksheetResourcePathError::InvalidName(source) => {
+                    resource_name_error_code(source)
+                }
+                _ => "invalid_resource_name",
+            },
             Self::BuiltinInitialization(_) => "builtin_initialization_failed",
             Self::InvalidRoot { .. } => "invalid_project_root",
             Self::InvalidGraphDocument { .. } => "invalid_graph_document",
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
+            Self::StaleResourceLifecycle { .. } => "stale_resource_lifecycle",
             Self::CatalogResourceStale { .. } => "catalog_resource_stale",
             Self::DatabaseAccessFailed { .. } => "database_access_failed",
             Self::ResultSourceReadFailed { .. } => "result_source_read_failed",
             Self::ResourceRevisionOverflow { .. } => "resource_revision_overflow",
+            Self::ResourceNameConflict { .. } => "resource_name_conflict",
+            Self::WorksheetNotFound { .. } => "resource_not_found",
             Self::ResourceRevisionConflict { .. } => "resource_revision_conflict",
             Self::DuplicateOperation { .. } => "duplicate_operation",
             Self::FilesystemTransactionBusy { .. } => "filesystem_transaction_busy",
@@ -79,6 +99,17 @@ impl ProjectFilesystemError {
                     ..
                 }
         )
+    }
+}
+
+const fn resource_name_error_code(error: &super::ResourceNameError) -> &'static str {
+    match error {
+        super::ResourceNameError::NotNfc => "resource_name_not_normalized",
+        super::ResourceNameError::Reserved => "resource_name_reserved",
+        super::ResourceNameError::TooLong => "resource_name_too_long",
+        super::ResourceNameError::Empty
+        | super::ResourceNameError::ForbiddenCharacter(_)
+        | super::ResourceNameError::InvalidSpacing => "invalid_resource_name",
     }
 }
 
@@ -105,4 +136,43 @@ pub enum ProjectError {
         #[source]
         source: DocumentError,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProjectFilesystemError;
+    use crate::project::{ResourceNameError, WorksheetResourcePathError};
+
+    #[test]
+    fn resource_name_errors_have_stable_ipc_codes() {
+        for (source, code) in [
+            (ResourceNameError::Empty, "invalid_resource_name"),
+            (
+                ResourceNameError::ForbiddenCharacter('?'),
+                "invalid_resource_name",
+            ),
+            (ResourceNameError::InvalidSpacing, "invalid_resource_name"),
+            (ResourceNameError::NotNfc, "resource_name_not_normalized"),
+            (ResourceNameError::Reserved, "resource_name_reserved"),
+            (ResourceNameError::TooLong, "resource_name_too_long"),
+        ] {
+            assert_eq!(
+                ProjectFilesystemError::InvalidResourceName(source).code(),
+                code
+            );
+        }
+    }
+
+    #[test]
+    fn resource_path_errors_preserve_name_error_ipc_codes() {
+        let not_normalized = ProjectFilesystemError::InvalidWorksheetResourcePath(
+            WorksheetResourcePathError::InvalidName(ResourceNameError::NotNfc),
+        );
+        let structurally_invalid = ProjectFilesystemError::InvalidWorksheetResourcePath(
+            WorksheetResourcePathError::WrongDirectory,
+        );
+
+        assert_eq!(not_normalized.code(), "resource_name_not_normalized");
+        assert_eq!(structurally_invalid.code(), "invalid_resource_name");
+    }
 }

@@ -219,9 +219,11 @@ pub fn run() {
             get_edit_state,
             // ==================== Worksheet ====================
             create_worksheet,
+            duplicate_worksheet,
             load_worksheet,
             save_worksheet,
-            delete_worksheet,
+            rename_worksheet_resource,
+            remove_worksheet,
             get_plot_column_pair,
             // ==================== 假设检验 ====================
             hypothesis_test,

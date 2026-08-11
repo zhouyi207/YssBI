@@ -5,36 +5,36 @@ import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
 import { SidebarListItem, SidebarRowActionButton, SIDEBAR_ROW_ICON_SIZE } from '../../sidebarUi';
 
 export const SidebarWorksheetRow = memo(function SidebarWorksheetRow({
-  id,
+  worksheetPath,
   name,
   indentDepth = 0,
   isSelected = false,
   onOpen,
   onContextMenu,
 }: {
-  id: string;
+  worksheetPath: string;
   name: string;
   indentDepth?: number;
   isSelected?: boolean;
-  onOpen: (id: string, name: string) => void;
+  onOpen: (worksheetPath: string, name: string) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
   const { t } = useTranslation();
 
   return (
     <SidebarListItem
-      id={id}
+      id={worksheetPath}
       isSelected={isSelected}
       indentDepth={indentDepth}
       icon={<VscGraphLine size={SIDEBAR_ROW_ICON_SIZE} style={{ color: TYPE_ICON_COLORS.worksheet }} />}
       label={name}
       onClick={(e) => {
         e.stopPropagation();
-        void onOpen(id, name);
+        void onOpen(worksheetPath, name);
       }}
       onDoubleClick={(e) => {
         e.stopPropagation();
-        void onOpen(id, name);
+        void onOpen(worksheetPath, name);
       }}
       onContextMenu={onContextMenu}
       trailing={
@@ -43,7 +43,7 @@ export const SidebarWorksheetRow = memo(function SidebarWorksheetRow({
           tooltip={t('sidebar.open')}
           onClick={(e) => {
             e.stopPropagation();
-            void onOpen(id, name);
+            void onOpen(worksheetPath, name);
           }}
         />
       }

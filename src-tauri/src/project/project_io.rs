@@ -291,8 +291,8 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     for graph_path in project_data.graphs.keys() {
         write_loaded_graph_document(project_data, root, graph_path)?;
     }
-    for worksheet in project_data.worksheets.values() {
-        let (relative_path, contents) = super::serialize_worksheet(worksheet)?;
+    for (worksheet_path, worksheet) in &project_data.worksheets {
+        let (relative_path, contents) = super::serialize_worksheet(worksheet_path, worksheet)?;
         let target = root.join(relative_path);
         if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent)?;

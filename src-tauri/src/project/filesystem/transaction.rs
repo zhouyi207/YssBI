@@ -1,8 +1,10 @@
 use super::ProjectFilesystemLeaseSet;
 use crate::project::{ProjectFilesystemError, ProjectTransactionContext};
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::io::{Read, Write};
 use std::path::{Component, Path, PathBuf};
+use unicode_casefold::UnicodeCaseFold;
+use unicode_normalization::UnicodeNormalization;
 
 const TRANSACTION_DIRECTORY: &str = ".yssbi-transaction";
 
@@ -15,6 +17,10 @@ pub enum StagedFilesystemMutation {
     RemoveFile {
         relative_path: PathBuf,
     },
+    MoveFile {
+        from: PathBuf,
+        to: PathBuf,
+    },
     CreateDirectory {
         relative_path: PathBuf,
     },
@@ -24,12 +30,13 @@ pub enum StagedFilesystemMutation {
 }
 
 impl StagedFilesystemMutation {
-    fn relative_path(&self) -> &Path {
+    fn relative_paths(&self) -> Vec<&Path> {
         match self {
             Self::Write { relative_path, .. }
             | Self::RemoveFile { relative_path }
             | Self::CreateDirectory { relative_path }
-            | Self::RemoveDirectoryIfEmpty { relative_path } => relative_path,
+            | Self::RemoveDirectoryIfEmpty { relative_path } => vec![relative_path],
+            Self::MoveFile { from, to } => vec![from, to],
         }
     }
 }
@@ -43,7 +50,7 @@ pub struct ProjectFilesystemTransaction {
 
 pub struct PreparedProjectFilesystemTransaction {
     transaction: ProjectFilesystemTransaction,
-    journal: Vec<JournalEntry>,
+    journal: Vec<MutationJournal>,
     created_parent_directories: BTreeSet<PathBuf>,
 }
 
@@ -61,7 +68,7 @@ impl std::fmt::Debug for PreparedProjectFilesystemTransaction {
 pub struct CommittedFilesystemMutation {
     root: PathBuf,
     staging_root: PathBuf,
-    journal: Vec<JournalEntry>,
+    journal: Vec<MutationJournal>,
     created_parent_directories: BTreeSet<PathBuf>,
     _lease: ProjectFilesystemLeaseSet,
     recovery_marker: Option<crate::project::ProjectRecoveryMarker>,
@@ -77,6 +84,18 @@ impl std::fmt::Debug for CommittedFilesystemMutation {
             .field("journal", &self.journal)
             .finish_non_exhaustive()
     }
+}
+
+#[derive(Debug)]
+struct MutationJournal {
+    kind: MutationJournalKind,
+    entries: Vec<JournalEntry>,
+}
+
+#[derive(Debug)]
+enum MutationJournalKind {
+    Generic,
+    Move { from: PathBuf, to: PathBuf },
 }
 
 #[derive(Debug)]
@@ -120,7 +139,10 @@ impl ProjectFilesystemTransaction {
         let root = context.session.root.as_path().to_path_buf();
         validate_real_directory(&root).map_err(prepare_error)?;
         for mutation in &mutations {
-            validate_secure_path(&root, mutation.relative_path(), true).map_err(prepare_error)?;
+            for relative_path in mutation.relative_paths() {
+                validate_secure_path(&root, relative_path, true).map_err(prepare_error)?;
+            }
+            validate_move_preconditions(&root, mutation)?;
         }
         let staging_root = root
             .join(TRANSACTION_DIRECTORY)
@@ -173,7 +195,7 @@ impl ProjectFilesystemTransaction {
             let journal = transaction
                 .mutations
                 .iter()
-                .map(|mutation| capture_before_image(&root, mutation.relative_path()))
+                .map(|mutation| capture_mutation_before_images(&root, mutation))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(journal)
         })();
@@ -222,16 +244,20 @@ impl PreparedProjectFilesystemTransaction {
                             "injected live replacement failure at mutation {}",
                             index + 1
                         ),
+                        false,
                     );
                 }
             }
             if matches!(
                 mutation,
                 StagedFilesystemMutation::RemoveFile { .. }
+                    | StagedFilesystemMutation::MoveFile { .. }
                     | StagedFilesystemMutation::RemoveDirectoryIfEmpty { .. }
             ) {
-                if let Err(error) = validate_secure_path(&root, mutation.relative_path(), true) {
-                    return self.commit_failed(&root, index, error.to_string());
+                for relative_path in mutation.relative_paths() {
+                    if let Err(error) = validate_secure_path(&root, relative_path, true) {
+                        return self.commit_failed(&root, index, error.to_string(), false);
+                    }
                 }
             }
             if let Err(error) = apply_mutation(
@@ -242,14 +268,20 @@ impl PreparedProjectFilesystemTransaction {
                 &mut self.created_parent_directories,
                 &self.transaction.lease,
             ) {
-                return self.commit_failed(&root, index + 1, error.to_string());
+                let applied_count = index + usize::from(error.include_current_in_rollback);
+                return self.commit_failed(
+                    &root,
+                    applied_count,
+                    error.source.to_string(),
+                    error.recovery_required,
+                );
             }
         }
 
         if let Err(error) = cleanup_staging(&self.transaction.staging_root, &self.transaction.lease)
         {
             let mutation_count = self.transaction.mutations.len();
-            return self.commit_failed(&root, mutation_count, error.to_string());
+            return self.commit_failed(&root, mutation_count, error.to_string(), false);
         }
 
         Ok(CommittedFilesystemMutation {
@@ -268,6 +300,7 @@ impl PreparedProjectFilesystemTransaction {
         root: &Path,
         applied_count: usize,
         commit_message: String,
+        apply_recovery_required: bool,
     ) -> Result<CommittedFilesystemMutation, ProjectFilesystemError> {
         let rollback_result = restore_before_images(
             root,
@@ -296,6 +329,14 @@ impl PreparedProjectFilesystemTransaction {
                 message: format!(
                     "{commit_message}; rollback staging cleanup failed: {cleanup_error}"
                 ),
+                recovery_required: true,
+            };
+            mark_recovery(&self.transaction.context.recovery_marker, &error);
+            return Err(error);
+        }
+        if apply_recovery_required {
+            let error = ProjectFilesystemError::TransactionRollbackFailed {
+                message: commit_message,
                 recovery_required: true,
             };
             mark_recovery(&self.transaction.context.recovery_marker, &error);
@@ -379,41 +420,109 @@ impl Drop for CommittedFilesystemMutation {
     }
 }
 
+#[derive(Debug)]
+enum PortablePathOwner {
+    Write { spelling: PathBuf },
+    RemoveFile,
+    Exclusive,
+    RewritePairComplete,
+}
+
+#[derive(Clone, Copy)]
+enum PortablePathClaim {
+    Write,
+    RemoveFile,
+    Exclusive,
+}
+
 fn validate_mutation_paths(
     mutations: &[StagedFilesystemMutation],
 ) -> Result<(), ProjectFilesystemError> {
-    let mut targets = HashSet::new();
+    let mut owners = HashMap::new();
     for mutation in mutations {
-        let relative = mutation.relative_path();
-        let valid = !relative.as_os_str().is_empty()
-            && !relative.is_absolute()
-            && relative.components().all(|component| {
-                matches!(component, Component::Normal(_) | Component::CurDir)
-            })
-            && relative.components().next().is_some_and(|component| {
-                !matches!(component, Component::Normal(name) if name == TRANSACTION_DIRECTORY)
-            });
-        if !valid {
-            return Err(prepare_error(format!(
-                "invalid transaction target '{}'",
-                relative.display()
-            )));
+        let paths = mutation.relative_paths();
+        for relative in &paths {
+            let valid = !relative.as_os_str().is_empty()
+                && !relative.is_absolute()
+                && relative.components().all(|component| {
+                    matches!(component, Component::Normal(_) | Component::CurDir)
+                })
+                && relative.components().next().is_some_and(|component| {
+                    !matches!(component, Component::Normal(name) if name == TRANSACTION_DIRECTORY)
+                });
+            if !valid {
+                return Err(prepare_error(format!(
+                    "invalid transaction target '{}'",
+                    relative.display()
+                )));
+            }
         }
-        let normalized = relative
-            .components()
-            .filter_map(|component| match component {
-                Component::Normal(name) => Some(name),
-                _ => None,
-            })
-            .collect::<PathBuf>();
-        if !targets.insert(normalized) {
-            return Err(prepare_error(format!(
-                "duplicate transaction target '{}'",
-                relative.display()
-            )));
+
+        match mutation {
+            StagedFilesystemMutation::Write { relative_path, .. } => {
+                register_portable_path(&mut owners, relative_path, PortablePathClaim::Write)?
+            }
+            StagedFilesystemMutation::RemoveFile { relative_path } => {
+                register_portable_path(&mut owners, relative_path, PortablePathClaim::RemoveFile)?
+            }
+            StagedFilesystemMutation::MoveFile { from, to }
+                if portable_path_key(from) == portable_path_key(to) =>
+            {
+                register_portable_path(&mut owners, from, PortablePathClaim::Exclusive)?;
+            }
+            StagedFilesystemMutation::MoveFile { from, to } => {
+                register_portable_path(&mut owners, from, PortablePathClaim::Exclusive)?;
+                register_portable_path(&mut owners, to, PortablePathClaim::Exclusive)?;
+            }
+            StagedFilesystemMutation::CreateDirectory { relative_path }
+            | StagedFilesystemMutation::RemoveDirectoryIfEmpty { relative_path } => {
+                register_portable_path(&mut owners, relative_path, PortablePathClaim::Exclusive)?;
+            }
         }
     }
     Ok(())
+}
+
+fn register_portable_path(
+    owners: &mut HashMap<String, PortablePathOwner>,
+    relative: &Path,
+    claim: PortablePathClaim,
+) -> Result<(), ProjectFilesystemError> {
+    let key = portable_path_key(relative);
+    let spelling = relative
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(name) => Some(name),
+            _ => None,
+        })
+        .collect::<PathBuf>();
+    match owners.entry(key) {
+        std::collections::hash_map::Entry::Vacant(entry) => {
+            entry.insert(match claim {
+                PortablePathClaim::Write => PortablePathOwner::Write { spelling },
+                PortablePathClaim::RemoveFile => PortablePathOwner::RemoveFile,
+                PortablePathClaim::Exclusive => PortablePathOwner::Exclusive,
+            });
+            Ok(())
+        }
+        std::collections::hash_map::Entry::Occupied(mut entry) => {
+            if matches!(claim, PortablePathClaim::RemoveFile)
+                && matches!(
+                    entry.get(),
+                    PortablePathOwner::Write {
+                        spelling: write_spelling
+                    } if write_spelling != &spelling
+                )
+            {
+                entry.insert(PortablePathOwner::RewritePairComplete);
+                return Ok(());
+            }
+            Err(prepare_error(format!(
+                "duplicate portable path '{}' in filesystem transaction",
+                relative.display()
+            )))
+        }
+    }
 }
 
 pub(crate) fn metadata_is_redirect(metadata: &std::fs::Metadata) -> bool {
@@ -528,6 +637,84 @@ fn validate_no_redirect_tree(path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+fn portable_path_key(path: &Path) -> String {
+    path.components()
+        .filter_map(|component| match component {
+            Component::Normal(value) => Some(value.to_string_lossy()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+        .case_fold()
+        .nfc()
+        .collect()
+}
+
+fn validate_move_preconditions(
+    root: &Path,
+    mutation: &StagedFilesystemMutation,
+) -> Result<(), ProjectFilesystemError> {
+    let StagedFilesystemMutation::MoveFile { from, to } = mutation else {
+        return Ok(());
+    };
+    validate_regular_file(&root.join(from)).map_err(prepare_error)?;
+    let target_parent = to.parent().unwrap_or_else(|| Path::new(""));
+    let target_name = to
+        .file_name()
+        .ok_or_else(|| prepare_error(format!("move target '{}' has no file name", to.display())))?;
+    let source_key = portable_path_key(from);
+    let target_key = portable_path_key(to);
+    let directory = root.join(target_parent);
+    if directory.exists() {
+        for entry in std::fs::read_dir(&directory).map_err(prepare_error)? {
+            let entry = entry.map_err(prepare_error)?;
+            let candidate = target_parent.join(entry.file_name());
+            if entry
+                .file_name()
+                .to_string_lossy()
+                .case_fold()
+                .nfc()
+                .collect::<String>()
+                != target_name
+                    .to_string_lossy()
+                    .case_fold()
+                    .nfc()
+                    .collect::<String>()
+            {
+                continue;
+            }
+            if candidate == *from && source_key == target_key {
+                continue;
+            }
+            return Err(prepare_error(format!(
+                "move target '{}' has an existing portable conflict at '{}'",
+                to.display(),
+                candidate.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn capture_mutation_before_images(
+    root: &Path,
+    mutation: &StagedFilesystemMutation,
+) -> Result<MutationJournal, ProjectFilesystemError> {
+    let kind = match mutation {
+        StagedFilesystemMutation::MoveFile { from, to } => MutationJournalKind::Move {
+            from: from.clone(),
+            to: to.clone(),
+        },
+        _ => MutationJournalKind::Generic,
+    };
+    let entries = mutation
+        .relative_paths()
+        .into_iter()
+        .map(|path| capture_before_image(root, path))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(MutationJournal { kind, entries })
+}
+
 fn capture_before_image(
     root: &Path,
     relative_path: &Path,
@@ -629,6 +816,27 @@ impl Drop for ReplacementFile {
     }
 }
 
+struct ApplyMutationError {
+    source: std::io::Error,
+    include_current_in_rollback: bool,
+    recovery_required: bool,
+}
+
+impl From<std::io::Error> for ApplyMutationError {
+    fn from(source: std::io::Error) -> Self {
+        Self {
+            source,
+            include_current_in_rollback: true,
+            recovery_required: false,
+        }
+    }
+}
+
+struct NoReplaceMoveError {
+    source: std::io::Error,
+    recovery_required: bool,
+}
+
 fn apply_mutation(
     root: &Path,
     prepared_root: &Path,
@@ -636,8 +844,12 @@ fn apply_mutation(
     index: usize,
     created_parent_directories: &mut BTreeSet<PathBuf>,
     _lease: &ProjectFilesystemLeaseSet,
-) -> std::io::Result<()> {
-    let relative = mutation.relative_path();
+) -> Result<(), ApplyMutationError> {
+    let relative = mutation
+        .relative_paths()
+        .into_iter()
+        .next()
+        .expect("filesystem mutation has at least one path");
     let live = root.join(relative);
     match mutation {
         StagedFilesystemMutation::Write { .. } => {
@@ -663,7 +875,7 @@ fn apply_mutation(
             #[cfg(test)]
             _lease.run_before_remove_hook();
             validate_secure_path(root, relative, true)?;
-            match std::fs::symlink_metadata(&live) {
+            let result = match std::fs::symlink_metadata(&live) {
                 Ok(metadata) if metadata_is_redirect(&metadata) => {
                     Err(std::io::Error::other("remove-file target is a redirect"))
                 }
@@ -671,20 +883,113 @@ fn apply_mutation(
                 Ok(_) => Err(std::io::Error::other("remove-file target is not a file")),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
                 Err(error) => Err(error),
+            };
+            result.map_err(Into::into)
+        }
+        StagedFilesystemMutation::MoveFile { from, to } => {
+            let source = root.join(from);
+            let target = root.join(to);
+            create_missing_parents(root, &target, created_parent_directories)?;
+            validate_regular_file(&source)?;
+            if from == to {
+                return Ok(());
             }
+            if portable_path_key(from) != portable_path_key(to) {
+                #[cfg(test)]
+                _lease.run_before_remove_hook();
+                return move_file_no_replace(&source, &target, _lease).map_err(|error| {
+                    ApplyMutationError {
+                        source: error.source,
+                        include_current_in_rollback: false,
+                        recovery_required: error.recovery_required,
+                    }
+                });
+            }
+
+            let parent = source
+                .parent()
+                .ok_or_else(|| std::io::Error::other("move source has no parent"))?;
+            for _ in 0..32 {
+                let temporary = parent.join(format!(
+                    ".{}.yssbi-move-{}",
+                    source.file_name().unwrap_or_default().to_string_lossy(),
+                    uuid::Uuid::new_v4()
+                ));
+                match move_file_no_replace(&source, &temporary, _lease) {
+                    Ok(()) => {}
+                    Err(error)
+                        if error.source.kind() == std::io::ErrorKind::AlreadyExists
+                            && !error.recovery_required =>
+                    {
+                        continue;
+                    }
+                    Err(error) => {
+                        return Err(ApplyMutationError {
+                            source: error.source,
+                            include_current_in_rollback: false,
+                            recovery_required: error.recovery_required,
+                        });
+                    }
+                }
+                #[cfg(test)]
+                _lease.run_before_remove_hook();
+                match move_file_no_replace(&temporary, &target, _lease) {
+                    Ok(()) => return Ok(()),
+                    Err(target_error) => {
+                        #[cfg(test)]
+                        if _lease.take_fault(ProjectFilesystemFaultPoint::MoveRestoration) {
+                            return Err(ApplyMutationError {
+                                source: std::io::Error::other(format!(
+                                    "case-only move target failed: {}; injected source restoration failure; source retained at '{}'",
+                                    target_error.source,
+                                    temporary.display()
+                                )),
+                                include_current_in_rollback: false,
+                                recovery_required: true,
+                            });
+                        }
+                        return match move_file_no_replace(&temporary, &source, _lease) {
+                            Ok(()) => Err(ApplyMutationError {
+                                source: target_error.source,
+                                include_current_in_rollback: false,
+                                recovery_required: target_error.recovery_required,
+                            }),
+                            Err(recovery_error) => Err(ApplyMutationError {
+                                source: std::io::Error::other(format!(
+                                    "case-only move target failed: {}; source restoration failed: {}; source retained at '{}'",
+                                    target_error.source,
+                                    recovery_error.source,
+                                    temporary.display()
+                                )),
+                                include_current_in_rollback: false,
+                                recovery_required: true,
+                            }),
+                        };
+                    }
+                }
+            }
+            Err(ApplyMutationError {
+                source: std::io::Error::new(
+                    std::io::ErrorKind::AlreadyExists,
+                    "could not allocate an internal case-only move path",
+                ),
+                include_current_in_rollback: false,
+                recovery_required: false,
+            })
         }
         StagedFilesystemMutation::CreateDirectory { .. } => {
-            if live.exists() {
+            let result = if live.exists() {
                 validate_real_directory(&live)
             } else {
                 create_missing_directories(root, &live, created_parent_directories)
-            }
+            };
+            result.map_err(Into::into)
         }
         StagedFilesystemMutation::RemoveDirectoryIfEmpty { .. } => {
             #[cfg(test)]
             _lease.run_before_remove_hook();
             validate_secure_path(root, relative, false)?;
-            match std::fs::symlink_metadata(&live) {
+            let result = match std::fs::symlink_metadata(&live) {
                 Ok(metadata) if metadata_is_redirect(&metadata) => Err(std::io::Error::other(
                     "remove-directory target is a redirect",
                 )),
@@ -694,9 +999,57 @@ fn apply_mutation(
                 )),
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
                 Err(error) => Err(error),
-            }
+            };
+            result.map_err(Into::into)
         }
     }
+}
+
+fn move_file_no_replace(
+    source: &Path,
+    target: &Path,
+    _lease: &ProjectFilesystemLeaseSet,
+) -> Result<(), NoReplaceMoveError> {
+    std::fs::hard_link(source, target).map_err(|source| NoReplaceMoveError {
+        source,
+        recovery_required: false,
+    })?;
+
+    #[cfg(test)]
+    let injected_cleanup_failure =
+        _lease.take_fault(ProjectFilesystemFaultPoint::MoveTargetCleanup);
+    #[cfg(not(test))]
+    let injected_cleanup_failure = false;
+    #[cfg(test)]
+    let source_removal = if injected_cleanup_failure
+        || _lease.take_fault(ProjectFilesystemFaultPoint::MoveSourceRemoval)
+    {
+        Err(std::io::Error::other(
+            "injected move source removal failure",
+        ))
+    } else {
+        std::fs::remove_file(source)
+    };
+    #[cfg(not(test))]
+    let source_removal = std::fs::remove_file(source);
+
+    if let Err(source_error) = source_removal {
+        #[cfg(test)]
+        _lease.run_before_move_target_delete_hook();
+        let preservation_reason = if injected_cleanup_failure {
+            "injected move target cleanup failure"
+        } else {
+            "move target ownership cannot be proven atomically; target retained for recovery"
+        };
+        return Err(NoReplaceMoveError {
+            source: std::io::Error::other(format!(
+                "move source removal failed: {source_error}; {preservation_reason}; target '{}' was not deleted",
+                target.display()
+            )),
+            recovery_required: true,
+        });
+    }
+    Ok(())
 }
 
 fn create_missing_parents(
@@ -735,15 +1088,166 @@ fn create_missing_directories(
 
 fn restore_before_images(
     root: &Path,
-    journal: &[JournalEntry],
+    journal: &[MutationJournal],
     created_parent_directories: &BTreeSet<PathBuf>,
     _lease: &ProjectFilesystemLeaseSet,
 ) -> std::io::Result<()> {
+    let move_recovery_copies = journal
+        .iter()
+        .enumerate()
+        .filter_map(|(index, mutation)| match &mutation.kind {
+            MutationJournalKind::Move { from, .. } => Some(
+                move_source_contents(mutation, from)
+                    .and_then(|contents| create_move_recovery_copy(root, contents, index))
+                    .map(|path| (index, path)),
+            ),
+            MutationJournalKind::Generic => None,
+        })
+        .collect::<Result<std::collections::BTreeMap<_, _>, _>>()?;
+
     #[cfg(test)]
     if _lease.take_rollback_fault() {
-        return Err(std::io::Error::other("injected rollback restore failure"));
+        return Err(std::io::Error::other(
+            "injected rollback restore failure after move recovery copies were retained",
+        ));
     }
-    for (index, entry) in journal.iter().rev().enumerate() {
+
+    let mut replacement_index = 0;
+    let mut move_messages = Vec::new();
+    for (mutation_index, mutation) in journal.iter().enumerate().rev() {
+        match &mutation.kind {
+            MutationJournalKind::Generic => {
+                restore_journal_entries(root, &mutation.entries, &mut replacement_index)?;
+            }
+            MutationJournalKind::Move { from, to } => {
+                let recovery_copy = move_recovery_copies
+                    .get(&mutation_index)
+                    .expect("every move journal has a retained recovery copy");
+                let contents = move_source_contents(mutation, from)?;
+                let source = root.join(from);
+                validate_secure_path(root, from, true)?;
+                let source_result = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&source)
+                    .and_then(|mut file| {
+                        file.write_all(contents)?;
+                        file.sync_all()
+                    });
+                let source_status = match source_result {
+                    Ok(()) => format!("source '{}' restored without replacement", from.display()),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => format!(
+                        "source '{}' was already present and was not overwritten",
+                        from.display()
+                    ),
+                    Err(error) => {
+                        format!("source '{}' restoration failed: {error}", from.display())
+                    }
+                };
+                move_messages.push(format!(
+                    "{source_status}; move target '{}' retained because ownership cannot be proven atomically; original bytes retained at '{}'",
+                    to.display(),
+                    recovery_copy.display()
+                ));
+            }
+        }
+    }
+
+    let protected_directories = move_target_directories(journal);
+    for relative in created_parent_directories.iter().rev() {
+        if protected_directories.contains(relative) {
+            continue;
+        }
+        validate_secure_path(root, relative, false)?;
+        let path = root.join(relative);
+        match std::fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.is_dir() => std::fs::remove_dir(path)?,
+            Ok(_) => return Err(std::io::Error::other("created parent is not a directory")),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+
+    if move_messages.is_empty() {
+        Ok(())
+    } else {
+        Err(std::io::Error::other(move_messages.join("; ")))
+    }
+}
+
+fn move_source_contents<'a>(
+    mutation: &'a MutationJournal,
+    from: &Path,
+) -> std::io::Result<&'a [u8]> {
+    mutation
+        .entries
+        .iter()
+        .find_map(|entry| {
+            if entry.relative_path != from {
+                return None;
+            }
+            match &entry.before {
+                BeforeImage::File(contents) => Some(contents.as_slice()),
+                _ => None,
+            }
+        })
+        .ok_or_else(|| std::io::Error::other("move journal has no source file before-image"))
+}
+
+fn create_move_recovery_copy(
+    root: &Path,
+    contents: &[u8],
+    index: usize,
+) -> std::io::Result<PathBuf> {
+    validate_real_directory(root)?;
+    for _ in 0..32 {
+        let path = root.join(format!(
+            ".yssbi-move-recovery-{index}-{}",
+            uuid::Uuid::new_v4()
+        ));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut file) => {
+                file.write_all(contents)?;
+                file.sync_all()?;
+                return Ok(path);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::AlreadyExists,
+        "could not allocate a collision-safe move recovery file",
+    ))
+}
+
+fn move_target_directories(journal: &[MutationJournal]) -> BTreeSet<PathBuf> {
+    let mut protected = BTreeSet::new();
+    for mutation in journal {
+        let MutationJournalKind::Move { to, .. } = &mutation.kind else {
+            continue;
+        };
+        let mut current = PathBuf::new();
+        if let Some(parent) = to.parent() {
+            for component in parent.components() {
+                current.push(component.as_os_str());
+                protected.insert(current.clone());
+            }
+        }
+    }
+    protected
+}
+
+fn restore_journal_entries(
+    root: &Path,
+    entries: &[JournalEntry],
+    replacement_index: &mut usize,
+) -> std::io::Result<()> {
+    for entry in entries.iter().rev() {
         validate_secure_path(root, &entry.relative_path, true)?;
         let path = root.join(&entry.relative_path);
         match &entry.before {
@@ -752,7 +1256,8 @@ fn restore_before_images(
                 remove_path_if_present(&path)?;
                 let mut restored_parents = BTreeSet::new();
                 create_missing_parents(root, &path, &mut restored_parents)?;
-                let mut temporary = ReplacementFile::create(&path, index)?;
+                let mut temporary = ReplacementFile::create(&path, *replacement_index)?;
+                *replacement_index += 1;
                 temporary.file_mut().write_all(contents)?;
                 temporary.file_mut().sync_all()?;
                 temporary.close();
@@ -781,16 +1286,6 @@ fn restore_before_images(
                     )));
                 }
             }
-        }
-    }
-    for relative in created_parent_directories.iter().rev() {
-        validate_secure_path(root, relative, false)?;
-        let path = root.join(relative);
-        match std::fs::symlink_metadata(&path) {
-            Ok(metadata) if metadata.is_dir() => std::fs::remove_dir(path)?,
-            Ok(_) => return Err(std::io::Error::other("created parent is not a directory")),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
         }
     }
     Ok(())
@@ -859,5 +1354,8 @@ pub enum ProjectFilesystemFaultPoint {
     StagedSerialization,
     FirstLiveReplacement,
     SecondLiveReplacement,
+    MoveSourceRemoval,
+    MoveTargetCleanup,
+    MoveRestoration,
     StagingCleanup,
 }

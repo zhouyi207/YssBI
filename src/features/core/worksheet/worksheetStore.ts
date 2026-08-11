@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
+import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
@@ -9,19 +10,21 @@ import {
   isResourceDocumentDirty,
   markResourceDirty,
   markResourceLoaded,
-  useResourceStore,
 } from '@/features/core/resource';
 
 interface WorksheetStore {
   index: WorksheetIndexEntry[];
   documents: Record<string, WorksheetDocument>;
-  setIndex: (entries: WorksheetIndexEntry[]) => void;
-  upsertDocument: (document: WorksheetDocument) => void;
-  removeDocument: (worksheetId: string) => void;
-  clear: () => void;
-  updateDocument: (worksheetId: string, patch: Partial<WorksheetDocument>) => WorksheetDocument | null;
-  markDirty: (worksheetId: string) => void;
-  saveDocument: (worksheetId: string) => Promise<boolean>;
+  setIndex(entries: WorksheetIndexEntry[]): void;
+  upsertDocument(worksheetPath: string, document: WorksheetDocument): void;
+  removeDocument(worksheetPath: string): void;
+  clear(): void;
+  updateDocument(
+    worksheetPath: string,
+    patch: Partial<WorksheetDocument>,
+  ): WorksheetDocument | null;
+  markDirty(worksheetPath: string): void;
+  saveDocument(worksheetPath: string): Promise<boolean>;
 }
 
 export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
@@ -30,99 +33,96 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
 
   setIndex: (entries) => set({ index: entries }),
 
-  upsertDocument: (document) =>
+  upsertDocument: (worksheetPath, document) =>
     set((state) => {
-      markResourceLoaded({ id: document.id, kind: 'worksheet' });
-      const indexEntry: WorksheetIndexEntry = {
-        id: document.id,
-        name: document.name,
-        databaseId: document.databaseId,
-        chartType: document.chartType,
-      };
-      return {
-        documents: { ...state.documents, [document.id]: document },
-        index: state.index.some((e) => e.id === document.id)
-          ? state.index.map((e) => (e.id === document.id ? indexEntry : e))
-          : [...state.index, indexEntry],
-      };
+      markResourceLoaded({ id: worksheetPath, kind: 'worksheet' });
+      return { documents: { ...state.documents, [worksheetPath]: document } };
     }),
 
-  removeDocument: (worksheetId) =>
+  removeDocument: (worksheetPath) =>
     set((state) => {
-      clearResourceDocumentState({ id: worksheetId, kind: 'worksheet' });
+      clearResourceDocumentState({ id: worksheetPath, kind: 'worksheet' });
+      const documents = { ...state.documents };
+      delete documents[worksheetPath];
       return {
-        index: state.index.filter((e) => e.id !== worksheetId),
-        documents: Object.fromEntries(
-          Object.entries(state.documents).filter(([id]) => id !== worksheetId),
-        ),
+        index: state.index.filter((entry) => entry.worksheetPath !== worksheetPath),
+        documents,
       };
     }),
 
   clear: () => set({ index: [], documents: {} }),
 
-  updateDocument: (worksheetId, patch) => {
-    const current = get().documents[worksheetId];
+  updateDocument: (worksheetPath, patch) => {
+    const current = get().documents[worksheetPath];
     if (!current) return null;
     const next: WorksheetDocument = {
       ...current,
       ...patch,
       encodings: { ...current.encodings, ...patch.encodings },
     };
-    get().upsertDocument(next);
-    get().markDirty(worksheetId);
-
-    if (patch.name) {
-      useResourceStore.getState().patchResource(
-        { id: worksheetId, kind: 'worksheet' },
-        { name: patch.name },
-      );
-    }
-
+    get().upsertDocument(worksheetPath, next);
+    get().markDirty(worksheetPath);
     return next;
   },
 
-  markDirty: (worksheetId) => {
-    markResourceDirty({ id: worksheetId, kind: 'worksheet' }, true);
+  markDirty: (worksheetPath) => {
+    markResourceDirty({ id: worksheetPath, kind: 'worksheet' }, true);
   },
 
-  saveDocument: async (worksheetId) => {
-    const document = get().documents[worksheetId];
+  saveDocument: async (worksheetPath) => {
+    const document = get().documents[worksheetPath];
     if (!document) return false;
     const context = captureProjectCommandContext();
-    const committed = await WorksheetService.saveWorksheet(
+    const result = await WorksheetService.saveWorksheet(
       context.projectInstanceId,
       context.operationId,
+      worksheetPath,
+      document.revision,
       document,
     );
     if (!context.isCurrent()) return false;
 
-    await projectPublicationCoordinator.submit({ result: committed.result });
-    if (!context.isCurrent()) return false;
-    const settled = get().documents[worksheetId];
+    const expected = savedDocumentFromResult(
+      result,
+      worksheetPath,
+      context.operationId,
+      document,
+    );
+    await projectPublicationCoordinator.submit({ result });
+    if (!context.isCurrent() || !expected) return false;
+    const settled = get().documents[worksheetPath];
     return settled !== undefined
-      && sameWorksheetDocument(settled, committed.document)
-      && !isResourceDocumentDirty({ id: worksheetId, kind: 'worksheet' });
+      && sameWorksheetDocument(settled, expected)
+      && !isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' });
   },
 }));
+
+function savedDocumentFromResult(
+  result: ResourceMutationResultDto,
+  worksheetPath: string,
+  operationId: string,
+  before: WorksheetDocument,
+): WorksheetDocument | null {
+  const delta = result.deltas.find((candidate) =>
+    candidate.resource.kind === 'worksheet'
+      && candidate.resource.key === worksheetPath
+      && candidate.causedBy === operationId
+      && candidate.fromRevision === before.revision
+      && candidate.payload.kind === 'worksheet');
+  if (!delta || delta.payload.kind !== 'worksheet') return null;
+  return {
+    ...before,
+    ...delta.payload.patch.after,
+    encodings: { ...delta.payload.patch.after.encodings },
+    revision: delta.toRevision,
+  };
+}
 
 function sameWorksheetDocument(left: WorksheetDocument, right: WorksheetDocument): boolean {
   return left.schemaVersion === right.schemaVersion
     && left.revision === right.revision
-    && left.id === right.id
-    && left.name === right.name
     && left.databaseId === right.databaseId
     && left.chartType === right.chartType
     && left.encodings.x === right.encodings.x
     && left.encodings.y === right.encodings.y;
-}
-
-export function worksheetIndexFromDocuments(
-  documents: Record<string, WorksheetDocument>,
-): WorksheetIndexEntry[] {
-  return Object.values(documents).map((doc) => ({
-    id: doc.id,
-    name: doc.name,
-    databaseId: doc.databaseId,
-    chartType: doc.chartType,
-  }));
 }

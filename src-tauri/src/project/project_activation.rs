@@ -3,7 +3,7 @@ use crate::database::{DatabaseEngine, DatabaseInstance, DatabaseState};
 use crate::node_system::document::ResourceRevision;
 use crate::project::{
     GraphResourcePath, NormalizedProjectRoot, ProjectData, ProjectFilesystemError,
-    ProjectInstanceId, ProjectSession, ProjectState, ProjectStore,
+    ProjectInstanceId, ProjectSession, ProjectState, ProjectStore, WorksheetResourcePath,
 };
 use crate::tabular::{normalize_variable_tabular, sync_variable_cache};
 use crate::variable::VariableId;
@@ -75,7 +75,7 @@ pub struct PreparedProjectActivation {
     pub(crate) variable_revisions:
         HashMap<VariableId, crate::project::project_state::VariableRevisionEntry>,
     pub(crate) graph_revisions: HashMap<GraphResourcePath, ResourceRevision>,
-    pub(crate) worksheet_revisions: HashMap<String, ResourceRevision>,
+    pub(crate) worksheet_revisions: HashMap<WorksheetResourcePath, ResourceRevision>,
     pub(crate) authority_basis: Option<PreparedAuthorityBasis>,
     pub(crate) requires_final_rebuild: bool,
 }
@@ -138,7 +138,7 @@ impl PreparedProjectActivation {
         let worksheet_revisions = data
             .worksheets
             .iter()
-            .map(|(id, document)| (id.clone(), document.revision))
+            .map(|(path, document)| (path.clone(), document.revision))
             .collect();
         Ok(Self {
             session_root,
@@ -250,7 +250,7 @@ mod tests {
     use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, ProjectState,
-        WorksheetDocument, fixtures, load_project_from_file,
+        fixtures, load_project_from_file,
     };
     use crate::variable::VariableScope;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -270,8 +270,9 @@ mod tests {
         let root = project_root(label);
         let mut data = ProjectData::new();
         data.metadata.project_name = label.to_string();
-        let worksheet = WorksheetDocument::new(format!("{label} worksheet"), "database");
-        data.worksheets.insert(worksheet.id.clone(), worksheet);
+        let (worksheet_path, worksheet) =
+            fixtures::worksheet(&format!("{label} worksheet"), "database");
+        data.worksheets.insert(worksheet_path, worksheet);
         fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
         (root, data)
     }
@@ -342,8 +343,8 @@ mod tests {
             tags: Vec::new(),
         };
         new_data.variables.insert(variable.id, variable);
-        let worksheet = WorksheetDocument::new("New Session Worksheet", "database");
-        new_data.worksheets.insert(worksheet.id.clone(), worksheet);
+        let (worksheet_path, worksheet) = fixtures::worksheet("New Session Worksheet", "database");
+        new_data.worksheets.insert(worksheet_path, worksheet);
         let new_root = crate::project::NormalizedProjectRoot::from_project_path(&new_root).unwrap();
         let prepared = super::PreparedProjectActivation::from_data(
             Some(new_root.clone()),
@@ -558,7 +559,7 @@ mod tests {
         }
         let (runtime_session, identity_session) = state.runtime_identity_sessions_for_test();
         assert_eq!(runtime_session, identity_session);
-        assert_eq!(state.graph_lifecycle_entry_count(), 0);
+        assert_eq!(state.resource_lifecycle_entry_count(), 0);
         assert!(state.project_recovery_marker().error().is_none());
         assert_eq!(state.history_status(), Default::default());
         assert_eq!(state.activation_generation_for_test() % 2, 0);
@@ -643,7 +644,7 @@ mod tests {
         let before_path = state.get_path();
         let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
         let before_history = state.history_status();
-        let before_lifecycle = state.graph_lifecycle_entry_count();
+        let before_lifecycle = state.resource_lifecycle_entry_count();
         let before_revisions = state.revision_state_for_test();
         let before_generation = state.activation_generation_for_test();
         let before_recovery = state.project_recovery_marker().error();
@@ -665,7 +666,7 @@ mod tests {
             before_data
         );
         assert_eq!(state.history_status(), before_history);
-        assert_eq!(state.graph_lifecycle_entry_count(), before_lifecycle);
+        assert_eq!(state.resource_lifecycle_entry_count(), before_lifecycle);
         assert_eq!(state.revision_state_for_test(), before_revisions);
         assert_eq!(state.activation_generation_for_test(), before_generation);
         assert_eq!(state.project_recovery_marker().error(), before_recovery);
@@ -729,7 +730,7 @@ mod tests {
         let before_path = state.get_path();
         let before_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
         let before_history = state.history_status();
-        let before_lifecycle = state.graph_lifecycle_entry_count();
+        let before_lifecycle = state.resource_lifecycle_entry_count();
         let before_revisions = state.revision_state_for_test();
         let before_recovery = state.project_recovery_marker().error();
         let (before_runs, before_runtime_session) = {
@@ -754,7 +755,7 @@ mod tests {
             before_data
         );
         assert_eq!(state.history_status(), before_history);
-        assert_eq!(state.graph_lifecycle_entry_count(), before_lifecycle);
+        assert_eq!(state.resource_lifecycle_entry_count(), before_lifecycle);
         assert_eq!(state.revision_state_for_test(), before_revisions);
         assert_eq!(state.project_recovery_marker().error(), before_recovery);
         let store = state.project_store.read().unwrap();
@@ -1229,7 +1230,7 @@ mod tests {
     }
 
     #[test]
-    fn same_root_reactivation_invalidates_old_graph_lifecycle_owners() {
+    fn same_root_reactivation_invalidates_old_resource_lifecycle_owners() {
         let (root, _) = save_named_project("same-root");
         let graph_path = GraphResourcePath::new("events/Owned.yssbi-event").unwrap();
         let mut disk = ProjectData::new();
@@ -1244,13 +1245,13 @@ mod tests {
         state
             .load_graph_projection(&old_session.instance_id, &graph_path, 1, "en-US")
             .unwrap();
-        assert_eq!(state.graph_lifecycle_entry_count(), 1);
+        assert_eq!(state.resource_lifecycle_entry_count(), 1);
 
         let replacement = state.activate_project_from_path(&root).unwrap();
 
         assert_ne!(replacement.instance_id, old_session.instance_id);
         assert_eq!(replacement.root, old_session.root);
-        assert_eq!(state.graph_lifecycle_entry_count(), 0);
+        assert_eq!(state.resource_lifecycle_entry_count(), 0);
         assert_eq!(
             state
                 .validate_project_session(&old_session)

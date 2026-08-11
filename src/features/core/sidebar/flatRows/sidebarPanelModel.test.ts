@@ -79,6 +79,23 @@ describe('structured Sidebar models', () => {
     });
   });
 
+  it('keeps opaque worksheet path identity separate from the Rust-provided label', () => {
+    const worksheetPath = 'worksheets/Opaque Path With Spaces.yssbi-worksheet';
+    const model = buildChartsSidebarModel({
+      worksheets: [{ worksheetPath, name: 'Rust supplied label' }],
+      expandedSections: {},
+      labels: { worksheets: 'Worksheets', noWorksheets: 'No worksheets' },
+    });
+
+    expect(model.sections[0].rows).toEqual([{
+      kind: 'worksheet',
+      rowKey: `worksheet:${worksheetPath}`,
+      level: 1,
+      worksheetPath,
+      name: 'Rust supplied label',
+    }]);
+  });
+
   it('builds empty data, chart, and variable sections without empty item rows', () => {
     expect(
       buildDataSidebarModel({

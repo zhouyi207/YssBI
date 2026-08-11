@@ -284,7 +284,6 @@ impl ProjectState {
                 caused_by: Some(operation_id),
                 payload: ResourceDocumentPatch::Database(DatabaseDocumentPatch { before, after }),
             }],
-            worksheet_deltas: Vec::new(),
             projection_replacements: Vec::new(),
             projection_status: crate::event::ProjectionStatusDto::Complete {
                 expected_graph_paths: Vec::new(),

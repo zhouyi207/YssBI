@@ -1,6 +1,6 @@
-import { validateResourceMutationWireResult } from '@/features/application/editorMutation/resourceMutationResult';
-import { areResourceDeltasValid } from '@/features/core/sync/utils/resourceMutationWireValidator';
-import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
+import { areResourceDeltasValid } from './resourceMutationWireValidator';
+import { validateResourceMutationWireResult } from './resourceMutationResultValidator';
+
 import type {
   ProjectionStatusDto,
   ResourceDeltaDto,
@@ -8,7 +8,6 @@ import type {
   ResourceKeyDto,
   ResourceMoveDto,
   ResourceMutationResultDto,
-  WorksheetDeltaDto,
 } from '@/shared/types/dto/editorMutation';
 import {
   parseGraphProjectionReplacementDto,
@@ -30,9 +29,6 @@ function hasExactKeys(value: UnknownRecord, keys: readonly string[]): boolean {
     && keys.every((key) => Object.prototype.hasOwnProperty.call(value, key));
 }
 
-function hasExactOptionalKeys(value: UnknownRecord, keys: readonly string[]): boolean {
-  return Object.keys(value).every((key) => keys.includes(key));
-}
 
 function isSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value);
@@ -164,7 +160,7 @@ function isPathMoveShape(value: unknown): boolean {
 }
 
 function isLifecycleStateShape(value: unknown): boolean {
-  return isRecord(value) && hasExactKeys(value, ['revision', 'path', 'kind']);
+  return isRecord(value) && hasExactKeys(value, ['revision', 'path', 'kind', 'name']);
 }
 
 function isLifecyclePatchShape(value: unknown): boolean {
@@ -209,14 +205,29 @@ function isDatabasePatchShape(value: unknown): boolean {
     && (value.after === null || isDatabaseDocumentShape(value.after));
 }
 
+function isWorksheetDocumentStateShape(value: unknown): boolean {
+  return isRecord(value)
+    && hasExactKeys(value, ['databaseId', 'chartType', 'encodings'])
+    && isRecord(value.encodings)
+    && Object.keys(value.encodings).every((key) => key === 'x' || key === 'y');
+}
+
+function isWorksheetPatchShape(value: unknown): boolean {
+  return isRecord(value)
+    && hasExactKeys(value, ['before', 'after'])
+    && isWorksheetDocumentStateShape(value.before)
+    && isWorksheetDocumentStateShape(value.after);
+}
+
 function isResourcePayloadShape(value: unknown): boolean {
   if (!isRecord(value) || !hasExactKeys(value, ['kind', 'patch'])) return false;
   switch (value.kind) {
     case 'graph': return isGraphPatchShape(value.patch);
-    case 'graph_resource_lifecycle': return isLifecyclePatchShape(value.patch);
-    case 'graph_resource_move':
-    case 'variable_scope_move': return isPathMoveShape(value.patch);
     case 'function': return isFunctionPatchShape(value.patch);
+    case 'worksheet': return isWorksheetPatchShape(value.patch);
+    case 'resource_lifecycle': return isLifecyclePatchShape(value.patch);
+    case 'resource_move':
+    case 'variable_scope_move': return isPathMoveShape(value.patch);
     case 'variable': return isBeforeAfterShape(value.patch);
     case 'database': return isDatabasePatchShape(value.patch);
     default: return false;
@@ -245,11 +256,12 @@ function cloneResourceKey(resource: ResourceKeyDto): ResourceKeyDto {
 function cloneResourcePayload(payload: ResourceDocumentPatchDto): ResourceDocumentPatchDto {
   switch (payload.kind) {
     case 'graph': return { kind: 'graph', patch: structuredClone(payload.patch) };
-    case 'graph_resource_lifecycle':
-      return { kind: 'graph_resource_lifecycle', patch: structuredClone(payload.patch) };
-    case 'graph_resource_move':
-      return { kind: 'graph_resource_move', patch: structuredClone(payload.patch) };
     case 'function': return { kind: 'function', patch: structuredClone(payload.patch) };
+    case 'worksheet': return { kind: 'worksheet', patch: structuredClone(payload.patch) };
+    case 'resource_lifecycle':
+      return { kind: 'resource_lifecycle', patch: structuredClone(payload.patch) };
+    case 'resource_move':
+      return { kind: 'resource_move', patch: structuredClone(payload.patch) };
     case 'variable': return { kind: 'variable', patch: structuredClone(payload.patch) };
     case 'variable_scope_move':
       return { kind: 'variable_scope_move', patch: structuredClone(payload.patch) };
@@ -278,7 +290,7 @@ function parseMoves(value: unknown): ResourceMoveDto[] {
       || !hasExactKeys(move, ['from', 'to', 'kind', 'name'])
       || typeof move.from !== 'string'
       || typeof move.to !== 'string'
-      || (move.kind !== 'event' && move.kind !== 'function')
+      || (move.kind !== 'event' && move.kind !== 'function' && move.kind !== 'worksheet')
       || typeof move.name !== 'string') throw new Error('resource moves are malformed');
     return { from: move.from, to: move.to, kind: move.kind, name: move.name };
   });
@@ -308,45 +320,6 @@ function parseProjectionStatus(value: unknown): ProjectionStatusDto {
   }
 }
 
-function isWorksheetDocumentShape(value: unknown): value is WorksheetDocument {
-  return isRecord(value)
-    && hasExactKeys(value, [
-      'schemaVersion', 'revision', 'id', 'name', 'databaseId', 'chartType', 'encodings',
-    ])
-    && isRecord(value.encodings)
-    && hasExactOptionalKeys(value.encodings, ['x', 'y'])
-    && Object.values(value.encodings).every((entry) => typeof entry === 'string');
-}
-
-function cloneWorksheetDocument(value: WorksheetDocument): WorksheetDocument {
-  return {
-    schemaVersion: value.schemaVersion,
-    revision: value.revision,
-    id: value.id,
-    name: value.name,
-    databaseId: value.databaseId,
-    chartType: value.chartType,
-    encodings: { ...value.encodings },
-  };
-}
-
-function parseWorksheetDeltas(value: unknown): WorksheetDeltaDto[] {
-  if (!Array.isArray(value)) throw new Error('worksheet deltas are malformed');
-  return value.map((delta) => {
-    if (!isRecord(delta)
-      || !hasExactKeys(delta, ['id', 'before', 'after'])
-      || typeof delta.id !== 'string'
-      || !(delta.before === null || isWorksheetDocumentShape(delta.before))
-      || !(delta.after === null || isWorksheetDocumentShape(delta.after))) {
-      throw new Error('worksheet deltas are malformed');
-    }
-    return {
-      id: delta.id,
-      before: delta.before === null ? null : cloneWorksheetDocument(delta.before),
-      after: delta.after === null ? null : cloneWorksheetDocument(delta.after),
-    };
-  });
-}
 
 export function parseResourceMutationResultDto(value: unknown): ResourceMutationResultDto {
   if (!isRecord(value)) throw new Error('resource mutation result is malformed');
@@ -354,8 +327,7 @@ export function parseResourceMutationResultDto(value: unknown): ResourceMutation
     'operationId', 'projectInstanceId', 'publicationRevision', 'moves', 'deltas',
     'projectionReplacements', 'projectionStatus', 'history',
   ];
-  const hasWorksheetDeltas = Object.prototype.hasOwnProperty.call(value, 'worksheetDeltas');
-  if (!hasExactKeys(value, hasWorksheetDeltas ? [...keys, 'worksheetDeltas'] : keys)
+  if (!hasExactKeys(value, keys)
     || typeof value.operationId !== 'string'
     || typeof value.projectInstanceId !== 'string'
     || !isSafeInteger(value.publicationRevision)) {
@@ -376,7 +348,6 @@ export function parseResourceMutationResultDto(value: unknown): ResourceMutation
     projectionStatus: parseProjectionStatus(value.projectionStatus),
     history: parseHistoryStatusDto(value.history),
   };
-  if (hasWorksheetDeltas) result.worksheetDeltas = parseWorksheetDeltas(value.worksheetDeltas);
 
   const validationError = validateResourceMutationWireResult(result);
   if (validationError) throw new Error(validationError);

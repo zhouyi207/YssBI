@@ -1,123 +1,180 @@
 use crate::project::{
     GraphResourcePath, ProjectFilesystemError, ProjectInstanceId, ProjectSession,
+    WorksheetResourcePath,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+pub enum LifecycleResourcePath {
+    Graph(GraphResourcePath),
+    Worksheet(WorksheetResourcePath),
+}
+
+impl From<&GraphResourcePath> for LifecycleResourcePath {
+    fn from(path: &GraphResourcePath) -> Self {
+        Self::Graph(path.clone())
+    }
+}
+
+impl From<&WorksheetResourcePath> for LifecycleResourcePath {
+    fn from(path: &WorksheetResourcePath) -> Self {
+        Self::Worksheet(path.clone())
+    }
+}
+
+impl From<&LifecycleResourcePath> for LifecycleResourcePath {
+    fn from(path: &LifecycleResourcePath) -> Self {
+        path.clone()
+    }
+}
+
+impl std::fmt::Display for LifecycleResourcePath {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Graph(path) => formatter.write_str(path.as_str()),
+            Self::Worksheet(path) => formatter.write_str(path.as_str()),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum GraphLifecycleIntent {
+pub enum ResourceLifecycleIntent {
     Load,
     Unload,
     Rename,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GraphLifecycleOwner {
+pub struct ResourceLifecycleOwner {
     pub project_instance_id: ProjectInstanceId,
-    pub graph_path: GraphResourcePath,
+    pub resource_path: LifecycleResourcePath,
     pub token: u64,
-    pub intent: GraphLifecycleIntent,
+    pub intent: ResourceLifecycleIntent,
     registration_id: u64,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct GraphLifecycleKey {
+struct ResourceLifecycleKey {
     project_instance_id: ProjectInstanceId,
-    graph_path: GraphResourcePath,
+    resource_path: LifecycleResourcePath,
 }
 
-impl GraphLifecycleOwner {
-    fn key(&self) -> GraphLifecycleKey {
-        GraphLifecycleKey {
+impl ResourceLifecycleOwner {
+    fn key(&self) -> ResourceLifecycleKey {
+        ResourceLifecycleKey {
             project_instance_id: self.project_instance_id.clone(),
-            graph_path: self.graph_path.clone(),
+            resource_path: self.resource_path.clone(),
+        }
+    }
+
+    pub(crate) fn graph_path(&self) -> &GraphResourcePath {
+        match &self.resource_path {
+            LifecycleResourcePath::Graph(path) => path,
+            LifecycleResourcePath::Worksheet(_) => {
+                unreachable!("worksheet lifecycle owner cannot drive graph runtime state")
+            }
         }
     }
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
-enum GraphLifecycleRegistrationState {
+enum ResourceLifecycleRegistrationState {
     Live,
     Committed,
     Abandoned,
 }
 
 #[derive(Clone)]
-struct GraphLifecycleRegistration {
-    owner: GraphLifecycleOwner,
+struct ResourceLifecycleRegistration {
+    owner: ResourceLifecycleOwner,
     predecessor: Option<u64>,
-    state: GraphLifecycleRegistrationState,
+    state: ResourceLifecycleRegistrationState,
 }
 
 #[derive(Default)]
-pub(crate) struct GraphLifecycleState {
-    owners: HashMap<GraphLifecycleKey, u64>,
-    client_tokens: HashMap<GraphLifecycleKey, u64>,
-    registrations: HashMap<u64, GraphLifecycleRegistration>,
+pub(crate) struct ResourceLifecycleState {
+    owners: HashMap<ResourceLifecycleKey, u64>,
+    client_tokens: HashMap<ResourceLifecycleKey, u64>,
+    issued_internal_tokens: HashMap<ResourceLifecycleKey, u64>,
+    registrations: HashMap<u64, ResourceLifecycleRegistration>,
     next_registration_id: u64,
 }
 
 #[derive(Clone, Default)]
-pub struct GraphLifecycleRegistry {
-    state: Arc<Mutex<GraphLifecycleState>>,
+pub struct ResourceLifecycleRegistry {
+    state: Arc<Mutex<ResourceLifecycleState>>,
 }
 
-impl GraphLifecycleRegistry {
+impl ResourceLifecycleRegistry {
     pub fn register(
         &self,
         session: &ProjectSession,
-        graph_path: &GraphResourcePath,
+        resource_path: impl Into<LifecycleResourcePath>,
         token: u64,
-        intent: GraphLifecycleIntent,
-    ) -> Result<GraphLifecycleGuard, ProjectFilesystemError> {
+        intent: ResourceLifecycleIntent,
+    ) -> Result<ResourceLifecycleGuard, ProjectFilesystemError> {
         let mut state = self.lock_state();
-        self.register_locked(&mut state, session, graph_path, token, intent, Some(token))
+        self.register_locked(
+            &mut state,
+            session,
+            resource_path.into(),
+            token,
+            intent,
+            Some(token),
+        )
     }
 
     pub(crate) fn allocate_and_register(
         &self,
         session: &ProjectSession,
-        graph_path: &GraphResourcePath,
-        intent: GraphLifecycleIntent,
-    ) -> Result<GraphLifecycleGuard, ProjectFilesystemError> {
+        resource_path: impl Into<LifecycleResourcePath>,
+        intent: ResourceLifecycleIntent,
+    ) -> Result<ResourceLifecycleGuard, ProjectFilesystemError> {
         let mut state = self.lock_state();
-        let key = GraphLifecycleKey {
+        let resource_path = resource_path.into();
+        let key = ResourceLifecycleKey {
             project_instance_id: session.instance_id.clone(),
-            graph_path: graph_path.clone(),
+            resource_path: resource_path.clone(),
         };
-        let token = state
+        let current_token = state
             .owners
             .get(&key)
             .and_then(|registration_id| state.registrations.get(registration_id))
-            .map(|registration| {
-                registration.owner.token.checked_add(1).ok_or_else(|| {
-                    ProjectFilesystemError::FilesystemTransactionBusy {
-                        message: format!("graph lifecycle token exhausted for '{graph_path}'"),
-                    }
-                })
-            })
-            .transpose()?
-            .unwrap_or(1);
-        self.register_locked(&mut state, session, graph_path, token, intent, None)
+            .map(|registration| registration.owner.token);
+        let latest_issued = state.issued_internal_tokens.get(&key).copied();
+        let token = current_token
+            .into_iter()
+            .chain(latest_issued)
+            .max()
+            .unwrap_or(0)
+            .checked_add(1)
+            .ok_or_else(|| ProjectFilesystemError::FilesystemTransactionBusy {
+                message: format!("resource lifecycle token exhausted for '{resource_path}'"),
+            })?;
+        let guard =
+            self.register_locked(&mut state, session, resource_path, token, intent, None)?;
+        state.issued_internal_tokens.insert(key, token);
+        Ok(guard)
     }
 
     fn register_locked(
         &self,
-        state: &mut GraphLifecycleState,
+        state: &mut ResourceLifecycleState,
         session: &ProjectSession,
-        graph_path: &GraphResourcePath,
+        resource_path: LifecycleResourcePath,
         token: u64,
-        intent: GraphLifecycleIntent,
+        intent: ResourceLifecycleIntent,
         client_token: Option<u64>,
-    ) -> Result<GraphLifecycleGuard, ProjectFilesystemError> {
+    ) -> Result<ResourceLifecycleGuard, ProjectFilesystemError> {
         let next_registration_id = state.next_registration_id.checked_add(1).ok_or_else(|| {
             ProjectFilesystemError::FilesystemTransactionBusy {
-                message: "graph lifecycle registration identity exhausted".into(),
+                message: "resource lifecycle registration identity exhausted".into(),
             }
         })?;
-        let owner = GraphLifecycleOwner {
+        let owner = ResourceLifecycleOwner {
             project_instance_id: session.instance_id.clone(),
-            graph_path: graph_path.clone(),
+            resource_path,
             token,
             intent,
             registration_id: next_registration_id,
@@ -135,24 +192,24 @@ impl GraphLifecycleRegistry {
         state.next_registration_id = next_registration_id;
         state.registrations.insert(
             next_registration_id,
-            GraphLifecycleRegistration {
+            ResourceLifecycleRegistration {
                 owner: owner.clone(),
                 predecessor,
-                state: GraphLifecycleRegistrationState::Live,
+                state: ResourceLifecycleRegistrationState::Live,
             },
         );
         if let Some(client_token) = client_token {
             state.client_tokens.insert(key.clone(), client_token);
         }
         state.owners.insert(key, next_registration_id);
-        Ok(GraphLifecycleGuard {
+        Ok(ResourceLifecycleGuard {
             registry: self.clone(),
             owner,
             armed: true,
         })
     }
 
-    pub fn validate(&self, owner: &GraphLifecycleOwner) -> Result<(), ProjectFilesystemError> {
+    pub fn validate(&self, owner: &ResourceLifecycleOwner) -> Result<(), ProjectFilesystemError> {
         self.boundary().validate(owner)
     }
 
@@ -164,21 +221,24 @@ impl GraphLifecycleRegistry {
         state
             .client_tokens
             .retain(|key, _| &key.project_instance_id != project_instance_id);
+        state
+            .issued_internal_tokens
+            .retain(|key, _| &key.project_instance_id != project_instance_id);
         state.registrations.retain(|_, registration| {
             &registration.owner.project_instance_id != project_instance_id
         });
     }
 
-    pub(crate) fn boundary(&self) -> GraphLifecycleBoundary<'_> {
+    pub(crate) fn boundary(&self) -> ResourceLifecycleBoundary<'_> {
         self.boundary_recovering().0
     }
 
-    pub(crate) fn boundary_recovering(&self) -> (GraphLifecycleBoundary<'_>, bool) {
+    pub(crate) fn boundary_recovering(&self) -> (ResourceLifecycleBoundary<'_>, bool) {
         let (state, recovered) = match self.state.lock() {
             Ok(state) => (state, false),
             Err(error) => (error.into_inner(), true),
         };
-        (GraphLifecycleBoundary { state }, recovered)
+        (ResourceLifecycleBoundary { state }, recovered)
     }
 
     pub(crate) fn clear_poison(&self) {
@@ -200,21 +260,21 @@ impl GraphLifecycleRegistry {
         self.lock_state().registrations.len()
     }
 
-    fn lock_state(&self) -> MutexGuard<'_, GraphLifecycleState> {
+    fn lock_state(&self) -> MutexGuard<'_, ResourceLifecycleState> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 
-pub(crate) struct GraphLifecycleBoundary<'a> {
-    state: MutexGuard<'a, GraphLifecycleState>,
+pub(crate) struct ResourceLifecycleBoundary<'a> {
+    state: MutexGuard<'a, ResourceLifecycleState>,
 }
 
-impl GraphLifecycleBoundary<'_> {
+impl ResourceLifecycleBoundary<'_> {
     pub(crate) fn validate(
         &self,
-        owner: &GraphLifecycleOwner,
+        owner: &ResourceLifecycleOwner,
     ) -> Result<(), ProjectFilesystemError> {
         if self
             .state
@@ -235,9 +295,9 @@ impl GraphLifecycleBoundary<'_> {
 
     pub(crate) fn commit_guard(
         &mut self,
-        guard: &mut GraphLifecycleGuard,
-        intent: GraphLifecycleIntent,
-    ) -> Result<GraphLifecycleOwner, ProjectFilesystemError> {
+        guard: &mut ResourceLifecycleGuard,
+        intent: ResourceLifecycleIntent,
+    ) -> Result<ResourceLifecycleOwner, ProjectFilesystemError> {
         self.validate(&guard.owner)?;
         let mut committed = guard.owner.clone();
         committed.intent = intent;
@@ -250,7 +310,7 @@ impl GraphLifecycleBoundary<'_> {
             .expect("validated lifecycle registration must exist");
         registration.owner = committed.clone();
         registration.predecessor = None;
-        registration.state = GraphLifecycleRegistrationState::Committed;
+        registration.state = ResourceLifecycleRegistrationState::Committed;
         self.state
             .registrations
             .retain(|id, registration| *id == registration_id || registration.owner.key() != key);
@@ -258,19 +318,19 @@ impl GraphLifecycleBoundary<'_> {
         Ok(committed)
     }
 
-    pub(crate) fn take_state(&mut self) -> GraphLifecycleState {
+    pub(crate) fn take_state(&mut self) -> ResourceLifecycleState {
         std::mem::take(&mut *self.state)
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct GraphLifecycleOperation {
+pub(crate) struct ResourceLifecycleOperation {
     pub(crate) session: ProjectSession,
-    pub(crate) owner: GraphLifecycleOwner,
+    pub(crate) owner: ResourceLifecycleOwner,
 }
 
-impl GraphLifecycleOperation {
-    pub(crate) fn from_guard(session: ProjectSession, guard: &GraphLifecycleGuard) -> Self {
+impl ResourceLifecycleOperation {
+    pub(crate) fn from_guard(session: ProjectSession, guard: &ResourceLifecycleGuard) -> Self {
         Self {
             owner: guard.owner.clone(),
             session,
@@ -280,55 +340,58 @@ impl GraphLifecycleOperation {
     pub(crate) fn stale_error(&self) -> ProjectFilesystemError {
         ProjectFilesystemError::StaleProjectLifecycle {
             message: format!(
-                "stale project lifecycle for graph '{}' in project instance '{}'",
-                self.owner.graph_path, self.owner.project_instance_id
+                "stale project lifecycle for resource '{}' in project instance '{}'",
+                self.owner.resource_path, self.owner.project_instance_id
             ),
         }
     }
 }
 
-pub(crate) struct GraphRenameOwnershipLease {
-    pub(crate) operation: GraphLifecycleOperation,
-    guard: GraphLifecycleGuard,
+pub(crate) struct ResourceRenameOwnershipLease {
+    pub(crate) operation: ResourceLifecycleOperation,
+    guard: ResourceLifecycleGuard,
 }
 
-impl GraphRenameOwnershipLease {
-    pub(crate) fn new(operation: GraphLifecycleOperation, guard: GraphLifecycleGuard) -> Self {
+impl ResourceRenameOwnershipLease {
+    pub(crate) fn new(
+        operation: ResourceLifecycleOperation,
+        guard: ResourceLifecycleGuard,
+    ) -> Self {
         Self { operation, guard }
     }
 
     pub(crate) fn commit_with_boundary(
         &mut self,
-        boundary: &mut GraphLifecycleBoundary<'_>,
+        boundary: &mut ResourceLifecycleBoundary<'_>,
     ) -> Result<(), ProjectFilesystemError> {
-        boundary.commit_guard(&mut self.guard, GraphLifecycleIntent::Unload)?;
+        boundary.commit_guard(&mut self.guard, ResourceLifecycleIntent::Unload)?;
         Ok(())
     }
 }
 
-pub struct GraphLifecycleGuard {
-    registry: GraphLifecycleRegistry,
-    owner: GraphLifecycleOwner,
+pub struct ResourceLifecycleGuard {
+    registry: ResourceLifecycleRegistry,
+    owner: ResourceLifecycleOwner,
     armed: bool,
 }
 
-impl GraphLifecycleGuard {
-    pub fn owner(&self) -> &GraphLifecycleOwner {
+impl ResourceLifecycleGuard {
+    pub fn owner(&self) -> &ResourceLifecycleOwner {
         &self.owner
     }
 }
 
-impl std::fmt::Debug for GraphLifecycleGuard {
+impl std::fmt::Debug for ResourceLifecycleGuard {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
-            .debug_struct("GraphLifecycleGuard")
+            .debug_struct("ResourceLifecycleGuard")
             .field("owner", &self.owner)
             .field("armed", &self.armed)
             .finish()
     }
 }
 
-impl Drop for GraphLifecycleGuard {
+impl Drop for ResourceLifecycleGuard {
     fn drop(&mut self) {
         if !self.armed {
             return;
@@ -339,7 +402,7 @@ impl Drop for GraphLifecycleGuard {
         let Some(registration) = state.registrations.get_mut(&registration_id) else {
             return;
         };
-        registration.state = GraphLifecycleRegistrationState::Abandoned;
+        registration.state = ResourceLifecycleRegistrationState::Abandoned;
         if state.owners.get(&key) == Some(&registration_id) {
             if let Some(predecessor) = nearest_eligible_predecessor(&state, registration_id) {
                 state.owners.insert(key.clone(), predecessor);
@@ -351,22 +414,26 @@ impl Drop for GraphLifecycleGuard {
     }
 }
 
-fn nearest_eligible_predecessor(state: &GraphLifecycleState, registration_id: u64) -> Option<u64> {
+fn nearest_eligible_predecessor(
+    state: &ResourceLifecycleState,
+    registration_id: u64,
+) -> Option<u64> {
     let predecessor = state.registrations.get(&registration_id)?.predecessor;
     nearest_eligible_registration(state, predecessor)
 }
 
 fn nearest_eligible_registration(
-    state: &GraphLifecycleState,
+    state: &ResourceLifecycleState,
     mut registration_id: Option<u64>,
 ) -> Option<u64> {
     while let Some(current_id) = registration_id {
         let registration = state.registrations.get(&current_id)?;
         match registration.state {
-            GraphLifecycleRegistrationState::Live | GraphLifecycleRegistrationState::Committed => {
+            ResourceLifecycleRegistrationState::Live
+            | ResourceLifecycleRegistrationState::Committed => {
                 return Some(current_id);
             }
-            GraphLifecycleRegistrationState::Abandoned => {
+            ResourceLifecycleRegistrationState::Abandoned => {
                 registration_id = registration.predecessor;
             }
         }
@@ -374,7 +441,7 @@ fn nearest_eligible_registration(
     None
 }
 
-fn compact_registration_chain(state: &mut GraphLifecycleState, key: &GraphLifecycleKey) {
+fn compact_registration_chain(state: &mut ResourceLifecycleState, key: &ResourceLifecycleKey) {
     let registration_ids = state
         .registrations
         .iter()
@@ -393,19 +460,19 @@ fn compact_registration_chain(state: &mut GraphLifecycleState, key: &GraphLifecy
     }
     state.registrations.retain(|_, registration| {
         registration.owner.key() != *key
-            || registration.state != GraphLifecycleRegistrationState::Abandoned
+            || registration.state != ResourceLifecycleRegistrationState::Abandoned
     });
 }
 
 fn validate_registration(
-    current: Option<&GraphLifecycleOwner>,
-    next: &GraphLifecycleOwner,
+    current: Option<&ResourceLifecycleOwner>,
+    next: &ResourceLifecycleOwner,
     latest_client_token: Option<u64>,
     client_token: Option<u64>,
 ) -> Result<(), ProjectFilesystemError> {
-    if current.is_some_and(|owner| owner.intent == GraphLifecycleIntent::Rename) {
+    if current.is_some_and(|owner| owner.intent == ResourceLifecycleIntent::Rename) {
         return Err(ProjectFilesystemError::FilesystemTransactionBusy {
-            message: format!("rename is active for '{}'", next.graph_path),
+            message: format!("rename is active for '{}'", next.resource_path),
         });
     }
     if client_token.is_some_and(|token| latest_client_token.is_some_and(|latest| token <= latest)) {
@@ -414,11 +481,11 @@ fn validate_registration(
     Ok(())
 }
 
-fn stale_owner_error(owner: &GraphLifecycleOwner) -> ProjectFilesystemError {
-    ProjectFilesystemError::StaleProjectLifecycle {
+fn stale_owner_error(owner: &ResourceLifecycleOwner) -> ProjectFilesystemError {
+    ProjectFilesystemError::StaleResourceLifecycle {
         message: format!(
-            "stale graph lifecycle token {} for '{}' in project instance '{}'",
-            owner.token, owner.graph_path, owner.project_instance_id
+            "stale resource lifecycle token {} for '{}' in project instance '{}'",
+            owner.token, owner.resource_path, owner.project_instance_id
         ),
     }
 }
@@ -427,7 +494,8 @@ fn stale_owner_error(owner: &GraphLifecycleOwner) -> ProjectFilesystemError {
 mod tests {
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, NormalizedProjectRoot,
-        ProjectData, ProjectInstanceId, ProjectSession, ProjectState, fixtures,
+        ProjectData, ProjectInstanceId, ProjectSession, ProjectState, WorksheetResourcePath,
+        fixtures,
     };
     use std::sync::Arc;
 
@@ -443,19 +511,167 @@ mod tests {
     }
 
     #[test]
+    fn graph_and_worksheet_paths_have_independent_lifecycle_owners() {
+        let registry = super::ResourceLifecycleRegistry::default();
+        let session = session("independent-resource-kinds");
+        let graph = super::LifecycleResourcePath::Graph(
+            GraphResourcePath::new("events/Shared.yssbi-event").unwrap(),
+        );
+        let worksheet = super::LifecycleResourcePath::Worksheet(
+            WorksheetResourcePath::parse("worksheets/Shared.yssbi-worksheet").unwrap(),
+        );
+
+        let graph_guard = registry
+            .register(&session, &graph, 1, super::ResourceLifecycleIntent::Rename)
+            .unwrap();
+        let worksheet_guard = registry
+            .register(
+                &session,
+                &worksheet,
+                1,
+                super::ResourceLifecycleIntent::Rename,
+            )
+            .unwrap();
+
+        registry.validate(graph_guard.owner()).unwrap();
+        registry.validate(worksheet_guard.owner()).unwrap();
+        assert_eq!(registry.entry_count(), 2);
+    }
+
+    #[test]
+    fn client_tokens_are_monotonic_per_resource_path() {
+        let registry = super::ResourceLifecycleRegistry::default();
+        let session = session("monotonic-resource-token");
+        let worksheet = super::LifecycleResourcePath::Worksheet(
+            WorksheetResourcePath::parse("worksheets/Report.yssbi-worksheet").unwrap(),
+        );
+        let first = registry
+            .register(
+                &session,
+                &worksheet,
+                7,
+                super::ResourceLifecycleIntent::Rename,
+            )
+            .unwrap();
+        drop(first);
+
+        let error = registry
+            .register(
+                &session,
+                &worksheet,
+                7,
+                super::ResourceLifecycleIntent::Rename,
+            )
+            .unwrap_err();
+
+        assert_eq!(error.code(), "stale_resource_lifecycle");
+        registry
+            .register(
+                &session,
+                &worksheet,
+                8,
+                super::ResourceLifecycleIntent::Rename,
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn clearing_project_removes_graph_and_worksheet_lifecycle_ownership() {
+        let registry = super::ResourceLifecycleRegistry::default();
+        let session = session("clear-shared-lifecycle");
+        let graph = super::LifecycleResourcePath::Graph(
+            GraphResourcePath::new("events/Clear.yssbi-event").unwrap(),
+        );
+        let worksheet = super::LifecycleResourcePath::Worksheet(
+            WorksheetResourcePath::parse("worksheets/Clear.yssbi-worksheet").unwrap(),
+        );
+        let graph_guard = registry
+            .register(&session, &graph, 1, super::ResourceLifecycleIntent::Load)
+            .unwrap();
+        let worksheet_guard = registry
+            .register(
+                &session,
+                &worksheet,
+                1,
+                super::ResourceLifecycleIntent::Rename,
+            )
+            .unwrap();
+
+        registry.clear_for_project(&session.instance_id);
+
+        assert_eq!(registry.entry_count(), 0);
+        assert_eq!(
+            registry.validate(graph_guard.owner()).unwrap_err().code(),
+            "stale_resource_lifecycle"
+        );
+        assert_eq!(
+            registry
+                .validate(worksheet_guard.owner())
+                .unwrap_err()
+                .code(),
+            "stale_resource_lifecycle"
+        );
+    }
+
+    #[test]
+    fn tokens_do_not_pollute_other_paths_or_resource_kinds() {
+        let registry = super::ResourceLifecycleRegistry::default();
+        let session = session("resource-token-isolation");
+        let graph = super::LifecycleResourcePath::Graph(
+            GraphResourcePath::new("events/Report.yssbi-event").unwrap(),
+        );
+        let worksheet = super::LifecycleResourcePath::Worksheet(
+            WorksheetResourcePath::parse("worksheets/Report.yssbi-worksheet").unwrap(),
+        );
+        let other_worksheet = super::LifecycleResourcePath::Worksheet(
+            WorksheetResourcePath::parse("worksheets/Other.yssbi-worksheet").unwrap(),
+        );
+
+        registry
+            .register(&session, &graph, 40, super::ResourceLifecycleIntent::Load)
+            .unwrap();
+        registry
+            .register(
+                &session,
+                &worksheet,
+                1,
+                super::ResourceLifecycleIntent::Rename,
+            )
+            .unwrap();
+        registry
+            .register(
+                &session,
+                &other_worksheet,
+                1,
+                super::ResourceLifecycleIntent::Rename,
+            )
+            .unwrap();
+    }
+
+    #[test]
     fn duplicate_same_token_and_intent_registration_is_rejected() {
-        let registry = super::GraphLifecycleRegistry::default();
+        let registry = super::ResourceLifecycleRegistry::default();
         let session = session("duplicate-registration");
         let graph_path = GraphResourcePath::new("events/Shared.yssbi-event").unwrap();
         let owner = registry
-            .register(&session, &graph_path, 7, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                7,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
 
         let error = registry
-            .register(&session, &graph_path, 7, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                7,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap_err();
 
-        assert_eq!(error.code(), "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_resource_lifecycle");
         registry.validate(owner.owner()).unwrap();
     }
 
@@ -465,12 +681,22 @@ mod tests {
         let graph_path = GraphResourcePath::new("events/Shared.yssbi-event").unwrap();
 
         for drop_old_first in [true, false] {
-            let registry = super::GraphLifecycleRegistry::default();
+            let registry = super::ResourceLifecycleRegistry::default();
             let old = registry
-                .register(&session, &graph_path, 1, super::GraphLifecycleIntent::Load)
+                .register(
+                    &session,
+                    &graph_path,
+                    1,
+                    super::ResourceLifecycleIntent::Load,
+                )
                 .unwrap();
             let current = registry
-                .register(&session, &graph_path, 2, super::GraphLifecycleIntent::Load)
+                .register(
+                    &session,
+                    &graph_path,
+                    2,
+                    super::ResourceLifecycleIntent::Load,
+                )
                 .unwrap();
 
             if drop_old_first {
@@ -489,17 +715,32 @@ mod tests {
 
     #[test]
     fn three_level_supersession_skips_abandoned_middle_and_restores_live_ancestor() {
-        let registry = super::GraphLifecycleRegistry::default();
+        let registry = super::ResourceLifecycleRegistry::default();
         let session = session("three-level-live-ancestor");
         let graph_path = GraphResourcePath::new("events/Shared.yssbi-event").unwrap();
         let ancestor = registry
-            .register(&session, &graph_path, 1, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                1,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let middle = registry
-            .register(&session, &graph_path, 2, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                2,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let newest = registry
-            .register(&session, &graph_path, 3, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                3,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
 
         drop(middle);
@@ -513,22 +754,37 @@ mod tests {
 
     #[test]
     fn three_level_supersession_restores_committed_ancestor_past_abandoned_middle() {
-        let registry = super::GraphLifecycleRegistry::default();
+        let registry = super::ResourceLifecycleRegistry::default();
         let session = session("three-level-committed-ancestor");
         let graph_path = GraphResourcePath::new("events/Shared.yssbi-event").unwrap();
         let mut ancestor = registry
-            .register(&session, &graph_path, 1, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                1,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let ancestor_owner = ancestor.owner().clone();
         registry
             .boundary()
-            .commit_guard(&mut ancestor, super::GraphLifecycleIntent::Load)
+            .commit_guard(&mut ancestor, super::ResourceLifecycleIntent::Load)
             .unwrap();
         let middle = registry
-            .register(&session, &graph_path, 2, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                2,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let newest = registry
-            .register(&session, &graph_path, 3, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                3,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
 
         drop(middle);
@@ -552,21 +808,36 @@ mod tests {
             [2, 0, 1],
             [2, 1, 0],
         ] {
-            let registry = super::GraphLifecycleRegistry::default();
+            let registry = super::ResourceLifecycleRegistry::default();
             let mut guards = [
                 Some(
                     registry
-                        .register(&session, &graph_path, 1, super::GraphLifecycleIntent::Load)
+                        .register(
+                            &session,
+                            &graph_path,
+                            1,
+                            super::ResourceLifecycleIntent::Load,
+                        )
                         .unwrap(),
                 ),
                 Some(
                     registry
-                        .register(&session, &graph_path, 2, super::GraphLifecycleIntent::Load)
+                        .register(
+                            &session,
+                            &graph_path,
+                            2,
+                            super::ResourceLifecycleIntent::Load,
+                        )
                         .unwrap(),
                 ),
                 Some(
                     registry
-                        .register(&session, &graph_path, 3, super::GraphLifecycleIntent::Load)
+                        .register(
+                            &session,
+                            &graph_path,
+                            3,
+                            super::ResourceLifecycleIntent::Load,
+                        )
                         .unwrap(),
                 ),
             ];
@@ -582,7 +853,7 @@ mod tests {
                         if index != current {
                             assert_eq!(
                                 registry.validate(owner).unwrap_err().code(),
-                                "stale_project_lifecycle"
+                                "stale_resource_lifecycle"
                             );
                         }
                     }
@@ -599,20 +870,35 @@ mod tests {
         let session = session("three-level-commit-orders");
         let graph_path = GraphResourcePath::new("events/Shared.yssbi-event").unwrap();
 
-        let registry = super::GraphLifecycleRegistry::default();
+        let registry = super::ResourceLifecycleRegistry::default();
         let ancestor = registry
-            .register(&session, &graph_path, 1, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                1,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let mut middle = registry
-            .register(&session, &graph_path, 2, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                2,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let middle_owner = middle.owner().clone();
         registry
             .boundary()
-            .commit_guard(&mut middle, super::GraphLifecycleIntent::Load)
+            .commit_guard(&mut middle, super::ResourceLifecycleIntent::Load)
             .unwrap();
         let newest = registry
-            .register(&session, &graph_path, 3, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                3,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         drop(ancestor);
         drop(newest);
@@ -620,20 +906,35 @@ mod tests {
         assert_eq!(registry.entry_count(), 1);
         assert_eq!(registry.registration_count(), 1);
 
-        let registry = super::GraphLifecycleRegistry::default();
+        let registry = super::ResourceLifecycleRegistry::default();
         let ancestor = registry
-            .register(&session, &graph_path, 1, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                1,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let middle = registry
-            .register(&session, &graph_path, 2, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                2,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let mut newest = registry
-            .register(&session, &graph_path, 3, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                3,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let newest_owner = newest.owner().clone();
         registry
             .boundary()
-            .commit_guard(&mut newest, super::GraphLifecycleIntent::Load)
+            .commit_guard(&mut newest, super::ResourceLifecycleIntent::Load)
             .unwrap();
         drop(middle);
         drop(ancestor);
@@ -643,16 +944,121 @@ mod tests {
     }
 
     #[test]
+    fn abandoned_internal_owner_does_not_reuse_its_issued_token() {
+        let registry = super::ResourceLifecycleRegistry::default();
+        let session = session("internal-token-abandon-reallocate");
+        let graph_path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
+
+        let first = registry
+            .allocate_and_register(&session, &graph_path, super::ResourceLifecycleIntent::Load)
+            .unwrap();
+        assert_eq!(first.owner().token, 1);
+        drop(first);
+
+        let second = registry
+            .allocate_and_register(&session, &graph_path, super::ResourceLifecycleIntent::Load)
+            .unwrap();
+        assert_eq!(second.owner().token, 2);
+    }
+
+    #[test]
+    fn internal_token_watermarks_are_isolated_by_project_and_resource() {
+        let registry = super::ResourceLifecycleRegistry::default();
+        let first_project = session("internal-token-first-project");
+        let second_project = session("internal-token-second-project");
+        let shared_path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
+        let other_path = GraphResourcePath::new("functions/Other.yssbi-function").unwrap();
+
+        let first = registry
+            .allocate_and_register(
+                &first_project,
+                &shared_path,
+                super::ResourceLifecycleIntent::Load,
+            )
+            .unwrap();
+        assert_eq!(first.owner().token, 1);
+        drop(first);
+        let advanced = registry
+            .allocate_and_register(
+                &first_project,
+                &shared_path,
+                super::ResourceLifecycleIntent::Load,
+            )
+            .unwrap();
+        assert_eq!(advanced.owner().token, 2);
+
+        let other_project = registry
+            .allocate_and_register(
+                &second_project,
+                &shared_path,
+                super::ResourceLifecycleIntent::Load,
+            )
+            .unwrap();
+        let other_resource = registry
+            .allocate_and_register(
+                &first_project,
+                &other_path,
+                super::ResourceLifecycleIntent::Load,
+            )
+            .unwrap();
+        assert_eq!(other_project.owner().token, 1);
+        assert_eq!(other_resource.owner().token, 1);
+    }
+
+    #[test]
+    fn clearing_project_resets_client_and_internal_token_watermarks() {
+        let registry = super::ResourceLifecycleRegistry::default();
+        let session = session("clear-token-watermark-domains");
+        let graph_path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
+
+        let client = registry
+            .register(
+                &session,
+                &graph_path,
+                5,
+                super::ResourceLifecycleIntent::Load,
+            )
+            .unwrap();
+        let internal = registry
+            .allocate_and_register(&session, &graph_path, super::ResourceLifecycleIntent::Load)
+            .unwrap();
+        assert_eq!(internal.owner().token, 6);
+        drop(client);
+        drop(internal);
+
+        registry.clear_for_project(&session.instance_id);
+
+        let reset_internal = registry
+            .allocate_and_register(&session, &graph_path, super::ResourceLifecycleIntent::Load)
+            .unwrap();
+        assert_eq!(reset_internal.owner().token, 1);
+        drop(reset_internal);
+        registry
+            .register(
+                &session,
+                &graph_path,
+                1,
+                super::ResourceLifecycleIntent::Load,
+            )
+            .unwrap();
+    }
+
+    #[test]
     fn internal_function_load_does_not_advance_the_client_token_high_watermark() {
-        let registry = super::GraphLifecycleRegistry::default();
+        let registry = super::ResourceLifecycleRegistry::default();
         let session = session("internal-client-token-domains");
         let graph_path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
 
         let external = registry
-            .register(&session, &graph_path, 5, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                5,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let internal = registry
-            .allocate_and_register(&session, &graph_path, super::GraphLifecycleIntent::Load)
+            .allocate_and_register(&session, &graph_path, super::ResourceLifecycleIntent::Load)
             .unwrap();
         assert_eq!(internal.owner().token, 6);
 
@@ -661,30 +1067,35 @@ mod tests {
                 &session,
                 &graph_path,
                 6,
-                super::GraphLifecycleIntent::Unload,
+                super::ResourceLifecycleIntent::Unload,
             )
             .unwrap();
         assert_eq!(
             registry
-                .register(&session, &graph_path, 6, super::GraphLifecycleIntent::Load)
+                .register(
+                    &session,
+                    &graph_path,
+                    6,
+                    super::ResourceLifecycleIntent::Load
+                )
                 .unwrap_err()
                 .code(),
-            "stale_project_lifecycle"
+            "stale_resource_lifecycle"
         );
         assert_eq!(
             registry.validate(external.owner()).unwrap_err().code(),
-            "stale_project_lifecycle"
+            "stale_resource_lifecycle"
         );
         assert_eq!(
             registry.validate(internal.owner()).unwrap_err().code(),
-            "stale_project_lifecycle"
+            "stale_resource_lifecycle"
         );
         registry.validate(next_external.owner()).unwrap();
     }
 
     #[test]
     fn function_load_token_allocation_and_registration_are_atomic() {
-        let registry = super::GraphLifecycleRegistry::default();
+        let registry = super::ResourceLifecycleRegistry::default();
         let session = session("atomic-allocation");
         let graph_path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
         let barrier = Arc::new(std::sync::Barrier::new(3));
@@ -698,7 +1109,11 @@ mod tests {
             workers.push(std::thread::spawn(move || {
                 barrier.wait();
                 registry
-                    .allocate_and_register(&session, &graph_path, super::GraphLifecycleIntent::Load)
+                    .allocate_and_register(
+                        &session,
+                        &graph_path,
+                        super::ResourceLifecycleIntent::Load,
+                    )
                     .unwrap()
             }));
         }
@@ -714,14 +1129,14 @@ mod tests {
         assert_eq!(guards[1].owner().token, 2);
         assert_eq!(
             registry.validate(guards[0].owner()).unwrap_err().code(),
-            "stale_project_lifecycle"
+            "stale_resource_lifecycle"
         );
         registry.validate(guards[1].owner()).unwrap();
     }
 
     #[test]
     fn old_project_load_unload_and_rename_tokens_never_match_replacement_project() {
-        let registry = super::GraphLifecycleRegistry::default();
+        let registry = super::ResourceLifecycleRegistry::default();
         let old = session("old");
         let replacement = session("replacement");
         let paths = [
@@ -730,9 +1145,9 @@ mod tests {
             GraphResourcePath::new("events/Rename.yssbi-event").unwrap(),
         ];
         let intents = [
-            super::GraphLifecycleIntent::Load,
-            super::GraphLifecycleIntent::Unload,
-            super::GraphLifecycleIntent::Rename,
+            super::ResourceLifecycleIntent::Load,
+            super::ResourceLifecycleIntent::Unload,
+            super::ResourceLifecycleIntent::Rename,
         ];
         let old_guards = paths
             .iter()
@@ -754,7 +1169,7 @@ mod tests {
         for owner in &old_owners {
             assert_eq!(
                 registry.validate(owner).unwrap_err().code(),
-                "stale_project_lifecycle"
+                "stale_resource_lifecycle"
             );
         }
         for guard in &replacement_guards {
@@ -853,31 +1268,41 @@ mod tests {
 
     #[test]
     fn unload_and_rename_intents_exclude_load_for_the_same_owner() {
-        let registry = super::GraphLifecycleRegistry::default();
+        let registry = super::ResourceLifecycleRegistry::default();
         let session = session("intent-exclusion");
         let graph_path = GraphResourcePath::new("events/Shared.yssbi-event").unwrap();
         let load = registry
-            .register(&session, &graph_path, 1, super::GraphLifecycleIntent::Load)
+            .register(
+                &session,
+                &graph_path,
+                1,
+                super::ResourceLifecycleIntent::Load,
+            )
             .unwrap();
         let unload = registry
             .register(
                 &session,
                 &graph_path,
                 2,
-                super::GraphLifecycleIntent::Unload,
+                super::ResourceLifecycleIntent::Unload,
             )
             .unwrap();
 
         assert_eq!(
             registry.validate(load.owner()).unwrap_err().code(),
-            "stale_project_lifecycle"
+            "stale_resource_lifecycle"
         );
         assert_eq!(
             registry
-                .register(&session, &graph_path, 2, super::GraphLifecycleIntent::Load,)
+                .register(
+                    &session,
+                    &graph_path,
+                    2,
+                    super::ResourceLifecycleIntent::Load,
+                )
                 .unwrap_err()
                 .code(),
-            "stale_project_lifecycle"
+            "stale_resource_lifecycle"
         );
         drop(unload);
         let rename = registry
@@ -885,12 +1310,17 @@ mod tests {
                 &session,
                 &graph_path,
                 3,
-                super::GraphLifecycleIntent::Rename,
+                super::ResourceLifecycleIntent::Rename,
             )
             .unwrap();
         assert_eq!(
             registry
-                .register(&session, &graph_path, 4, super::GraphLifecycleIntent::Load,)
+                .register(
+                    &session,
+                    &graph_path,
+                    4,
+                    super::ResourceLifecycleIntent::Load,
+                )
                 .unwrap_err()
                 .code(),
             "filesystem_transaction_busy"

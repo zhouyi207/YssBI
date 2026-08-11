@@ -76,7 +76,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
         deleteDatabaseItem: actions.deleteDatabaseItem,
         importData: actions.triggerImportData,
         openWorksheet: actions.openWorksheet,
-        renameWorksheet: actions.renameWorksheetItem,
+        renameWorksheetItem: actions.renameWorksheetItem,
+        duplicateWorksheet: actions.duplicateWorksheet,
         deleteWorksheet: actions.deleteWorksheetItem,
         addWorksheet: actions.addWorksheet,
         revealInExplorer: actions.revealInExplorer,
@@ -137,8 +138,8 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
   );
 
   const openWorksheetContextMenu = useCallback(
-    (e: React.MouseEvent, id: string, name: string) => {
-      openContextMenu(e, { type: 'worksheet', id, name });
+    (e: React.MouseEvent, worksheetPath: string, name: string) => {
+      openContextMenu(e, { type: 'worksheet', worksheetPath, name });
     },
     [openContextMenu],
   );

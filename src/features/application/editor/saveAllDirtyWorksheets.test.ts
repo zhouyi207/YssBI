@@ -11,7 +11,7 @@ import {
 import { uiStore } from '@/features/core/ui/UIStore';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 
-const worksheetId = 'worksheet-1';
+const worksheetPath = 'worksheets/Quarterly Sales Report.yssbi-worksheet';
 
 describe('saveAllDirtyGraphs worksheet lifecycle', () => {
   beforeEach(() => {
@@ -21,10 +21,10 @@ describe('saveAllDirtyGraphs worksheet lifecycle', () => {
     useResourceStore.getState().clear();
     useEditorTabStore.getState().initGroupPlacement(
       'editor',
-      [buildWorksheetLayoutTab(worksheetId)],
-      worksheetId,
+      [buildWorksheetLayoutTab(worksheetPath)],
+      worksheetPath,
     );
-    markResourceDirty({ id: worksheetId, kind: 'worksheet' }, true);
+    markResourceDirty({ id: worksheetPath, kind: 'worksheet' }, true);
   });
 
   it('keeps a worksheet dirty and reports incomplete when its save basis becomes stale', async () => {
@@ -33,7 +33,7 @@ describe('saveAllDirtyGraphs worksheet lifecycle', () => {
 
     await expect(saveAllDirtyGraphs()).resolves.toBe(false);
 
-    expect(isResourceDocumentDirty({ id: worksheetId, kind: 'worksheet' })).toBe(true);
+    expect(isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' })).toBe(true);
     expect(toast).not.toHaveBeenCalled();
   });
 });

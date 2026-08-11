@@ -10,16 +10,20 @@ export function isResourceDocumentDirty(ref: ResourceRef): boolean {
   return getDocumentState(ref)?.dirty ?? false;
 }
 
+export type PathDocumentResourceKind = 'event' | 'function' | 'worksheet';
+
+export function isPathResourceDirty(
+  resourcePath: string,
+  kind: PathDocumentResourceKind,
+): boolean {
+  return isResourceDocumentDirty({ id: resourcePath, kind });
+}
+
 export function isGraphResourceDirty(
   graphPath: string,
-  kind?: 'event' | 'function' | 'worksheet',
+  kind?: PathDocumentResourceKind,
 ): boolean {
-  if (kind) {
-    return isResourceDocumentDirty({ id: graphPath, kind });
-  }
-  return (
-    isResourceDocumentDirty({ id: graphPath, kind: 'event' }) ||
-    isResourceDocumentDirty({ id: graphPath, kind: 'function' }) ||
-    isResourceDocumentDirty({ id: graphPath, kind: 'worksheet' })
-  );
+  if (kind) return isPathResourceDirty(graphPath, kind);
+  return isPathResourceDirty(graphPath, 'event')
+    || isPathResourceDirty(graphPath, 'function');
 }
