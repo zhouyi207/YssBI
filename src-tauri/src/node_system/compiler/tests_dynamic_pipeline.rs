@@ -567,6 +567,64 @@ fn schema_dependent_interface_resolves_after_preliminary_schema_analysis() {
 }
 
 #[test]
+fn schema_completion_replaces_provisional_ports_projection_and_diagnostics() {
+    let registry = staged_registry();
+    let mut document = staged_document(true);
+    let consumer_id = NodeId::from_uuid(Uuid::from_u128(11));
+    let restored = PortAddress::instance(
+        consumer_id,
+        key("columns"),
+        PortInstanceId::from_uuid(Uuid::from_u128(13)),
+    );
+    document.port_bindings.insert(
+        restored.clone(),
+        crate::node_system::document::DynamicPortBinding::Orphan {
+            origin: locator("amount"),
+            order: crate::node_system::document::OrderKey("a".into()),
+            last_known: crate::node_system::document::LastKnownPortMetadata {
+                label: "Amount".into(),
+            },
+        },
+    );
+    let (schema_resolvers, interface_resolvers) = staged_resolvers();
+
+    let result =
+        GraphCompiler::with_resolvers(&registry, &Resources, schema_resolvers, interface_resolvers)
+            .compile(&document);
+    let codes = result
+        .analysis
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect::<Vec<_>>();
+    let interface = result
+        .analysis
+        .resolved_interfaces
+        .iter()
+        .find(|interface| interface.node_id == consumer_id)
+        .unwrap();
+    let projection = result.interface_projection.nodes.get(&consumer_id).unwrap();
+
+    assert!(!codes.contains(&"compiler.port.orphan"));
+    assert!(interface.ports.iter().any(|port| {
+        port.address == restored
+            && port.status == crate::node_system::analysis::ResolvedPortStatus::Resolved
+    }));
+    assert!(matches!(
+        projection.projected_bindings.get(&restored),
+        Some(ProjectedDynamicPortBinding::Resolved { .. })
+    ));
+    assert_eq!(
+        projection
+            .available_members
+            .iter()
+            .filter(|member| member.template() == &key("columns"))
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn unresolved_schema_dependency_defers_without_interface_resolver_diagnostic() {
     let registry = staged_registry();
     let document = staged_document(false);
@@ -586,6 +644,74 @@ fn unresolved_schema_dependency_defers_without_interface_resolver_diagnostic() {
     assert!(!codes.contains(&"compiler.interface.resolver_missing"));
     assert!(!codes.contains(&"compiler.interface.resolver_failed"));
     assert!(derived_output_labels(&result).is_empty());
+    assert!(result.plan.is_none());
+    assert_eq!(result.outcome, CompilationOutcome::AnalysisBlocked);
+}
+
+#[test]
+fn connected_schema_dependency_without_fact_blocks_lowering() {
+    let mut registry = staged_registry();
+    let source = registry
+        .protocols
+        .iter_mut()
+        .find(|protocol| protocol.type_id.as_str() == "yssbi.test.schema_source")
+        .unwrap();
+    source
+        .interface
+        .ports
+        .iter_mut()
+        .find(|port| port.key == key("dataframe"))
+        .unwrap()
+        .schema = None;
+    let document = staged_document(true);
+    let (schema_resolvers, interface_resolvers) = staged_resolvers();
+
+    let result =
+        GraphCompiler::with_resolvers(&registry, &Resources, schema_resolvers, interface_resolvers)
+            .compile(&document);
+    let codes = result
+        .analysis
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(codes.contains(&"compiler.interface.schema_dependency_unresolved"));
+    assert!(!codes.contains(&"compiler.interface.resolver_missing"));
+    assert!(!codes.contains(&"compiler.interface.resolver_failed"));
+    assert!(result.plan.is_none());
+    assert_eq!(result.outcome, CompilationOutcome::AnalysisBlocked);
+}
+
+#[test]
+fn preliminary_schema_issues_are_not_published() {
+    let registry = staged_registry();
+    let document = staged_document(true);
+    let (_, interface_resolvers) = staged_resolvers();
+
+    let result = GraphCompiler::with_resolvers(
+        &registry,
+        &Resources,
+        SchemaResolverSet::new(),
+        interface_resolvers,
+    )
+    .compile(&document);
+    let codes = result
+        .analysis
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        codes
+            .iter()
+            .filter(|code| **code == "compiler.schema.resolver_missing")
+            .count(),
+        1
+    );
+    assert!(!codes.contains(&"compiler.interface.resolver_missing"));
+    assert!(!codes.contains(&"compiler.interface.resolver_failed"));
 }
 
 #[test]
@@ -689,5 +815,17 @@ fn staged_schema_resource_reads_remain_set_based() {
         vec!["databases/main"]
     );
     assert!(result.analysis.basis.resource_observations.is_empty());
+    assert_eq!(result.interface_projection.basis, result.analysis.basis);
+    assert_eq!(
+        result
+            .interface_projection
+            .basis
+            .resource_versions
+            .get(&crate::node_system::analysis::ResourceKey::new(
+                "databases/main",
+            ))
+            .map(crate::node_system::analysis::ResourceVersion::as_str),
+        Some("main-v1")
+    );
     assert_eq!(derived_output_labels(&result), vec!["amount"]);
 }

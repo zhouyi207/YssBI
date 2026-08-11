@@ -2,6 +2,7 @@
 
 mod control;
 mod coordinator;
+mod dataframe;
 mod dependency;
 mod diagnostics;
 pub mod dynamic_interface;
@@ -19,6 +20,9 @@ pub use coordinator::{
     CompileCoordinator, CompileProducts, PublishOutcome, PublishReport, PublishedExecutionPlan,
     ScheduleOutcome, SelectedExecutionPlan, compilation_basis,
 };
+pub use dataframe::DATAFRAME_COLUMNS_RESOLVER;
+#[cfg(test)]
+pub(crate) use dataframe::DataframeColumnsResolver;
 pub use diagnostics::CompilerDiagnosticDefinitionError;
 pub(crate) use diagnostics::{
     COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnostic, CompilerDiagnosticLocation,
@@ -48,13 +52,20 @@ pub type ProjectCompileCoordinator =
 pub use project::{
     FUNCTION_CALL_ARGUMENTS_RESOLVER, FUNCTION_CALL_RESULTS_RESOLVER,
     FUNCTION_ENTRY_PARAMETERS_RESOLVER, FUNCTION_RETURN_RESULTS_RESOLVER,
-    build_builtin_interface_resolvers, builtin_function_interface_resolver_ids,
+    builtin_function_interface_resolver_ids,
 };
 pub use schema_analysis::{
     SchemaFact, SchemaResolutionContext, SchemaResolutionError, SchemaResolver, SchemaResolverSet,
 };
 pub use specialization::{DemandPlanError, ExecutionPlanBasis, NormalizedExecutionDemand};
 pub(crate) use type_analysis::type_exprs_assignable;
+
+pub fn build_builtin_interface_resolvers() -> InterfaceResolverSet {
+    let mut resolvers = InterfaceResolverSet::new();
+    project::install_function_interface_resolvers(&mut resolvers);
+    dataframe::install_dataframe_interface_resolvers(&mut resolvers);
+    resolvers
+}
 pub use type_analysis::{TypeConstraintGraph, TypeEnvironment};
 
 #[cfg(test)]

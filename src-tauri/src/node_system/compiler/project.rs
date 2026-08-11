@@ -24,8 +24,7 @@ pub fn builtin_function_interface_resolver_ids() -> Box<[InterfaceResolverId]> {
     .into()
 }
 
-pub fn build_builtin_interface_resolvers() -> InterfaceResolverSet {
-    let mut resolvers = InterfaceResolverSet::new();
+pub(super) fn install_function_interface_resolvers(resolvers: &mut InterfaceResolverSet) {
     for (id, projection) in [
         (
             FUNCTION_CALL_ARGUMENTS_RESOLVER,
@@ -51,7 +50,6 @@ pub fn build_builtin_interface_resolvers() -> InterfaceResolverSet {
             )
             .expect("built-in function resolver IDs are unique");
     }
-    resolvers
 }
 
 #[derive(Clone, Copy)]

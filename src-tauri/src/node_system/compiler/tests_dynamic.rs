@@ -135,6 +135,42 @@ fn resolved_binding(field: &str) -> DynamicPortBinding {
 }
 
 #[test]
+fn available_members_preserve_resolver_order() {
+    let current = basis(1);
+    let graph = document(None);
+    let set = resolver_set(vec![
+        member(
+            current.clone(),
+            "zeta",
+            "First",
+            SchemaFieldIdentityGuarantee::Stable,
+        ),
+        member(
+            current.clone(),
+            "alpha",
+            "Second",
+            SchemaFieldIdentityGuarantee::Stable,
+        ),
+        member(
+            current.clone(),
+            "middle",
+            "Third",
+            SchemaFieldIdentityGuarantee::Stable,
+        ),
+    ]);
+
+    let result = materialize_dynamic_interface(&current, node_id(), &protocol(), &graph, &set);
+    let labels = result
+        .available_members
+        .iter()
+        .map(|member| member.member().label.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(result.diagnostics.is_empty());
+    assert_eq!(labels, ["First", "Second", "Third"]);
+}
+
+#[test]
 fn exact_locator_materializes_existing_binding_and_exposes_unbound_members() {
     let current = basis(1);
     let bound = address(10);

@@ -11635,6 +11635,161 @@ fn function_resource_version_changes_with_graph_body() {
     assert_ne!(before, after);
 }
 
+fn dataframe_decompose_production_fixture(
+    include_database: bool,
+) -> (ProjectState, std::path::PathBuf, NodeId) {
+    let root = std::env::temp_dir().join(format!(
+        "yssbi-dataframe-decompose-production-{}",
+        uuid::Uuid::new_v4()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+
+    let source_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x400));
+    let decompose_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x401));
+    let connection_id = ConnectionId::from_uuid(uuid::Uuid::from_u128(0x402));
+    let mut source = node("yssbi.dataframe.source.get");
+    source.id = source_id;
+    source.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("dataframe").unwrap(),
+        serde_json::json!("databases/main"),
+    );
+    let mut decompose = node("yssbi.dataframe.decompose");
+    decompose.id = decompose_id;
+    let mut graph = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    graph.document.nodes.insert(source_id, source);
+    graph.document.nodes.insert(decompose_id, decompose);
+    graph.document.connections.insert(
+        connection_id,
+        DocumentConnection {
+            id: connection_id,
+            output: PortAddress::declared(source_id, PortKey::new("dataframe").unwrap()),
+            input: PortAddress::declared(decompose_id, PortKey::new("dataframe").unwrap()),
+            order: None,
+        },
+    );
+
+    let mut data = ProjectData::new();
+    data.graphs.insert(graph_path(), graph);
+    if include_database {
+        std::fs::create_dir_all(root.join("database")).unwrap();
+        let database_path = root.join("database/main.duckdb");
+        let mut dataframe = polars::df!("customer_id" => [1_i64], "amount" => [2.5_f64]).unwrap();
+        crate::database::ingest_dataframe_to_duckdb(&mut dataframe, &database_path, "main")
+            .unwrap();
+        data.databases.insert(
+            "main".into(),
+            crate::database::DatabaseDecl {
+                id: "main".into(),
+                engine: crate::database::DatabaseEngine::DuckDb {
+                    path: "database/main.duckdb".into(),
+                    table: "main".into(),
+                },
+                schema_version: 1,
+                required: true,
+                name: Some("Main".into()),
+            },
+        );
+    }
+
+    let state = ProjectState::new();
+    state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
+    (state, root, decompose_id)
+}
+
+#[test]
+fn project_compile_resolves_dataframe_decompose_columns() {
+    let (state, root, decompose_id) = dataframe_decompose_production_fixture(true);
+    let source = state.capture_projection_source(&graph_path()).unwrap();
+    let (analysis, _) = state
+        .get_or_compile_current_from_source(&graph_path(), &source)
+        .unwrap();
+    let diagnostic_codes = analysis
+        .payload
+        .analysis
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect::<Vec<_>>();
+    let decompose_candidate_count = analysis
+        .payload
+        .analysis
+        .resolved_interfaces
+        .iter()
+        .find(|interface| interface.node_id == decompose_id)
+        .unwrap()
+        .ports
+        .iter()
+        .filter(|port| port.template.as_str() == "columns" && port.address.is_instance())
+        .count();
+    let decompose_input_schema_labels = analysis
+        .payload
+        .analysis
+        .resolved_schemas
+        .get(&PortAddress::declared(
+            decompose_id,
+            PortKey::new("dataframe").unwrap(),
+        ))
+        .unwrap()
+        .fields
+        .iter()
+        .map(|field| field.name.0.as_ref())
+        .collect::<Vec<_>>();
+
+    assert!(!diagnostic_codes.contains(&"compiler.interface.resolver_missing"));
+    assert_eq!(
+        decompose_candidate_count,
+        decompose_input_schema_labels.len()
+    );
+    assert_eq!(decompose_input_schema_labels, vec!["customer_id", "amount"]);
+    assert!(
+        analysis
+            .payload
+            .analysis
+            .basis
+            .resource_versions
+            .contains_key(&crate::node_system::analysis::ResourceKey::new(
+                "databases/main"
+            ))
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn dataframe_decompose_preserves_missing_database_diagnostic() {
+    let (state, root, _) = dataframe_decompose_production_fixture(false);
+    let source = state.capture_projection_source(&graph_path()).unwrap();
+    let (analysis, plan) = state
+        .get_or_compile_current_from_source(&graph_path(), &source)
+        .unwrap();
+    let diagnostic_codes = analysis
+        .payload
+        .analysis
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect::<Vec<_>>();
+    let resource_diagnostic = analysis
+        .payload
+        .analysis
+        .diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.code.as_str() == "compiler.resource.resolution_failed")
+        .unwrap();
+
+    assert!(diagnostic_codes.contains(&"compiler.resource.resolution_failed"));
+    assert!(!diagnostic_codes.contains(&"compiler.interface.resolver_missing"));
+    assert!(!diagnostic_codes.contains(&"compiler.interface.resolver_failed"));
+    assert!(plan.is_none());
+    assert_eq!(
+        resource_diagnostic
+            .arguments
+            .get("resource_key")
+            .map(Box::as_ref),
+        Some("databases/main")
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn database_schema_resolver_attaches_canonical_field_lineage() {
     let declaration = crate::database::DatabaseDecl {

@@ -3,7 +3,8 @@ use crate::node_system::analysis::DiagnosticLocation;
 use crate::node_system::document::{NodeId, PortAddress, PortRef};
 use crate::node_system::protocol::{
     ColumnRename, ColumnSelectionExpr, NodeProtocol, ParameterKey, PortKey, RelationalScalarType,
-    RenameExpr, ResolvedSchemaFact, SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaResolverId,
+    RenameExpr, ResolvedSchemaFact, SchemaColumnRef, SchemaDependency, SchemaExpr,
+    SchemaResolverId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -948,7 +949,10 @@ mod tests {
             )
             .unwrap();
         assert_eq!(renamed.fields[0].name, SchemaColumnRef("account_id".into()));
-        assert_eq!(renamed.fields[0].lineage, stable_field("customer_id").lineage);
+        assert_eq!(
+            renamed.fields[0].lineage,
+            stable_field("customer_id").lineage
+        );
         assert_eq!(renamed.fields[1], stable_field("region"));
     }
 

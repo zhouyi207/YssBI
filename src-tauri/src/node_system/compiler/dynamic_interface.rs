@@ -417,7 +417,8 @@ impl<'a> MaterializationState<'a> {
         spec: &PortSpec,
         members: Box<[InterfaceResolverMember]>,
     ) {
-        let mut by_locator = BTreeMap::new();
+        let mut ordered_members = Vec::new();
+        let mut locator_indices = BTreeMap::new();
         let mut duplicated = BTreeSet::new();
         for member in members.into_vec() {
             if !validate_projected_member_basis(basis, &member) {
@@ -432,13 +433,17 @@ impl<'a> MaterializationState<'a> {
                 continue;
             }
             let locator = member.locator.clone();
-            if by_locator.insert(locator.clone(), member).is_some() {
+            if let Some(index) = locator_indices.get(&locator).copied() {
+                ordered_members[index] = None;
                 duplicated.insert(locator);
+            } else {
+                locator_indices.insert(locator, ordered_members.len());
+                ordered_members.push(Some(member));
             }
         }
         // A duplicated locator is ambiguous even if labels differ; reject it rather than name-match.
         for locator in duplicated {
-            by_locator.remove(&locator);
+            locator_indices.remove(&locator);
             self.push_node_diagnostic(CompilerDiagnostic::InterfaceDuplicateLocator {
                 port_key: spec.key.to_string().into(),
                 locator: serde_json::to_string(&locator)
@@ -446,9 +451,14 @@ impl<'a> MaterializationState<'a> {
                     .into(),
             });
         }
+        let by_locator = ordered_members
+            .iter()
+            .filter_map(Option::as_ref)
+            .map(|member| (member.locator.clone(), member.clone()))
+            .collect::<BTreeMap<_, _>>();
 
         self.add_existing_instances(spec, Some(&by_locator));
-        for member in by_locator.into_values() {
+        for member in ordered_members.into_iter().flatten() {
             let bound_address = self
                 .find_binding(spec, &member.locator)
                 .map(|(address, _)| address.clone());

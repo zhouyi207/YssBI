@@ -416,6 +416,7 @@ fn finalize_resource_basis(
         basis.resource_observations = observations.clone();
     };
     apply(&mut result.analysis.basis);
+    apply(&mut result.interface_projection.basis);
     if let Some(semantic) = result.semantic.as_mut() {
         apply(&mut semantic.basis);
     }
@@ -1400,6 +1401,7 @@ impl<'a> AnalysisState<'a> {
                 );
             }
             self.validate_binding_templates(node_id, resolved.protocol);
+            let provisional_diagnostic_start = self.diagnostics.len();
             let (ports, deferred_for_schema) = self.resolve_ports(
                 node_id,
                 resolved.protocol,
@@ -1408,6 +1410,7 @@ impl<'a> AnalysisState<'a> {
                 interface_resolvers,
             );
             if deferred_for_schema {
+                self.diagnostics.truncate(provisional_diagnostic_start);
                 deferred_nodes.insert(node_id);
             }
             self.nodes.insert(
@@ -1942,10 +1945,16 @@ impl<'a> AnalysisState<'a> {
             self.projection_only_ports
                 .retain(|address| address.node_id != node_id);
             self.interface_projections.remove(&node_id);
-            let (ports, _) =
+            let (ports, deferred_for_schema) =
                 self.resolve_ports(node_id, protocol, resolved_schemas, resources, resolvers);
             if let Some(node) = self.nodes.get_mut(&node_id) {
                 node.ports = ports;
+            }
+            if deferred_for_schema {
+                self.push(
+                    CompilerDiagnostic::InterfaceSchemaDependencyUnresolved {},
+                    DiagnosticLocation::Node(node_id),
+                );
             }
         }
     }

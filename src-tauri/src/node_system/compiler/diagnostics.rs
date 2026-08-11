@@ -565,6 +565,13 @@ define_compiler_diagnostics! {
         en: "Identity-free interface port {port} cannot have an override.",
         zh: "无标识接口端口 {port} 不能有覆盖。",
     },
+    InterfaceSchemaDependencyUnresolved {} => {
+        code: "compiler.interface.schema_dependency_unresolved",
+        message_key: "diagnostics.compiler.interface.schema_dependency_unresolved",
+        severity: Error,
+        en: "Schema-dependent interface requirements could not be resolved.",
+        zh: "无法解析依赖架构的接口要求。",
+    },
     InterfaceResolverFailed { resolver_id } => {
         code: "compiler.interface.resolver_failed",
         message_key: "diagnostics.compiler.interface.resolver_failed",
@@ -1187,7 +1194,7 @@ mod tests {
 
     #[test]
     fn compiler_diagnostic_definitions_are_unique_and_template_safe() {
-        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 108);
+        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 109);
         validate_compiler_diagnostic_definitions(COMPILER_DIAGNOSTIC_DEFINITIONS).unwrap();
 
         let codes = COMPILER_DIAGNOSTIC_DEFINITIONS

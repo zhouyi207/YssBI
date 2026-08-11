@@ -35,7 +35,7 @@ use std::sync::Arc;
 pub use families::LEGACY_NODE_IDS;
 use families::{InterfaceKind, NODES, NodeSpec};
 
-pub const DATAFRAME_COLUMNS_RESOLVER: &str = "yssbi.dataframe.interface.columns";
+pub use crate::node_system::compiler::DATAFRAME_COLUMNS_RESOLVER;
 pub const DATAFRAME_RESOURCE_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.resource";
 pub const DATAFRAME_PANEL_SCHEMA_RESOLVER: &str = "yssbi.dataframe.schema.panel";
 

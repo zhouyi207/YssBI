@@ -1,23 +1,41 @@
-use super::{LEGACY_NODE_IDS, NODES, build_provider_fragment};
+use super::{
+    DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER, LEGACY_NODE_IDS, NODES,
+    build_provider_fragment,
+};
+use crate::node_system::analysis::{
+    AnalysisResourceReads, AnalysisResourceResolver, ResolvedPortStatus, ResourceObservationSet,
+    ResourceVersionSet,
+};
 use crate::node_system::catalog::builtin::build_builtin_node_system;
 use crate::node_system::catalog::localization::Message;
+use crate::node_system::compiler::ResourceSnapshot;
 use crate::node_system::compiler::{
-    CompileCancellationToken, LoweredKernel, LoweringContext, NodeImplementation,
-    ValidatedNodeConfig,
+    CompileCancellationToken, CompileResult, DataframeColumnsResolver, GraphCompiler,
+    InterfaceResolver, InterfaceResolverRequest, LoweredKernel, LoweringContext,
+    NodeImplementation, ProjectedDynamicPortBinding, SchemaFact, SchemaFieldIdentityGuarantee,
+    SchemaResolutionContext, SchemaResolutionError, SchemaResolver, SchemaResolverSet,
+    ValidatedNodeConfig, build_builtin_interface_resolvers,
+    builtin_function_interface_resolver_ids,
 };
-use crate::node_system::document::{NodeId, PortAddress};
+use crate::node_system::document::{
+    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+    GraphDocument, GraphRevision, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
+    SchemaFieldIdentity, SchemaSourceIdentity,
+};
 use crate::node_system::plan::{
     KernelHandle, RelationalExpression, RelationalLiteral, RelationalOperator,
     RelationalOperatorIndex, RelationalProjection, RelationalRename, ResourceId, ValueRef,
 };
 use crate::node_system::protocol::{
-    InputConsumption, LiteralPolicy, NodeInterfaceProtocol, NodeTypeId, OutputProduction,
-    ParameterConstraint, ParameterEditorSpec, ParameterKey, PortDirection, PortKey, RenameExpr,
-    SchemaExpr, TypeExpr, TypeId, Value,
+    InputConsumption, InterfaceResolverId, LiteralPolicy, NodeInterfaceProtocol, NodeTypeId,
+    OutputProduction, ParameterConstraint, ParameterEditorSpec, ParameterKey, PortDirection,
+    PortInstances, PortKey, RelationalScalarType, RenameExpr, SchemaColumnRef, SchemaExpr,
+    SchemaField, SchemaFieldLineage, SchemaResolverId, TypeExpr, TypeId, Value,
 };
 use crate::node_system::registry::ImplementationKind;
 use crate::node_system::runtime::build_builtin_kernel_registry;
 use std::collections::{BTreeMap, BTreeSet};
+use uuid::Uuid;
 
 fn validated_config(
     registry: &crate::node_system::registry::NodeRegistry,
@@ -31,6 +49,230 @@ fn validated_config(
     );
     ValidatedNodeConfig::from_analysis(protocol, parameters, &validation.prepared_nominal)
         .expect("test configuration is analysis-valid")
+}
+
+struct EmptyResources;
+
+impl ResourceSnapshot for EmptyResources {
+    fn versions(&self) -> ResourceVersionSet {
+        BTreeMap::new()
+    }
+}
+
+#[derive(Default)]
+struct EmptyAnalysisResources {
+    reads: AnalysisResourceReads,
+    observations: ResourceObservationSet,
+}
+
+impl AnalysisResourceResolver for EmptyAnalysisResources {
+    fn resolve_function(
+        &mut self,
+        _: &crate::node_system::document::GraphResourcePath,
+    ) -> Result<
+        crate::node_system::analysis::ResolvedFunction<'_>,
+        crate::node_system::analysis::ResourceResolutionError,
+    > {
+        panic!("dataframe columns resolver must not read function resources")
+    }
+
+    fn resolve_variable(
+        &mut self,
+        _: &crate::variable::VariableId,
+    ) -> Result<
+        crate::node_system::analysis::ResolvedVariable<'_>,
+        crate::node_system::analysis::ResourceResolutionError,
+    > {
+        panic!("dataframe columns resolver must not read variable resources")
+    }
+
+    fn resolve_database(
+        &mut self,
+        _: &str,
+    ) -> Result<
+        crate::node_system::analysis::ResolvedDatabase<'_>,
+        crate::node_system::analysis::ResourceResolutionError,
+    > {
+        panic!("dataframe columns resolver must not read database resources")
+    }
+
+    fn reads(&self) -> &AnalysisResourceReads {
+        &self.reads
+    }
+
+    fn observations(&self) -> &ResourceObservationSet {
+        &self.observations
+    }
+}
+
+struct DataframeSchemaResolver {
+    fields: Box<[SchemaField]>,
+}
+
+impl SchemaResolver for DataframeSchemaResolver {
+    fn resolve(
+        &self,
+        _: &mut SchemaResolutionContext<'_, '_>,
+    ) -> Result<SchemaFact, SchemaResolutionError> {
+        Ok(SchemaFact::new(
+            SchemaExpr::Derived {
+                resolver: SchemaResolverId::new(DATAFRAME_RESOURCE_SCHEMA_RESOLVER).unwrap(),
+                dependencies: vec![],
+            },
+            self.fields.clone(),
+        ))
+    }
+}
+
+fn dataframe_node_id(value: u128) -> NodeId {
+    NodeId::from_uuid(Uuid::from_u128(value))
+}
+
+fn dataframe_port(value: &str) -> PortKey {
+    PortKey::new(value).unwrap()
+}
+
+fn stable_field(name: &str, scalar_type: RelationalScalarType) -> SchemaField {
+    SchemaField {
+        name: SchemaColumnRef(name.into()),
+        scalar_type,
+        lineage: Some(SchemaFieldLineage {
+            source: "databases/main".into(),
+            field: name.into(),
+        }),
+    }
+}
+
+fn dataframe_document(
+    transform: Option<(&str, BTreeMap<ParameterKey, serde_json::Value>)>,
+) -> GraphDocument {
+    let source_id = dataframe_node_id(1);
+    let decompose_id = dataframe_node_id(3);
+    let mut nodes = BTreeMap::from([
+        (
+            source_id,
+            DocumentNode {
+                id: source_id,
+                node_type: NodeTypeId::new("yssbi.dataframe.source.get").unwrap(),
+                position: NodePosition { x: 0.0, y: 0.0 },
+                parameters: BTreeMap::from([(
+                    ParameterKey::new("dataframe").unwrap(),
+                    serde_json::json!("databases/main"),
+                )]),
+                user_label: None,
+            },
+        ),
+        (
+            decompose_id,
+            DocumentNode {
+                id: decompose_id,
+                node_type: NodeTypeId::new("yssbi.dataframe.decompose").unwrap(),
+                position: NodePosition { x: 2.0, y: 0.0 },
+                parameters: BTreeMap::new(),
+                user_label: None,
+            },
+        ),
+    ]);
+    let mut connections = BTreeMap::new();
+
+    if let Some((node_type, parameters)) = transform {
+        let transform_id = dataframe_node_id(2);
+        nodes.insert(
+            transform_id,
+            DocumentNode {
+                id: transform_id,
+                node_type: NodeTypeId::new(node_type).unwrap(),
+                position: NodePosition { x: 1.0, y: 0.0 },
+                parameters,
+                user_label: None,
+            },
+        );
+        insert_dataframe_connection(
+            &mut connections,
+            10,
+            source_id,
+            "dataframe",
+            transform_id,
+            "source",
+        );
+        insert_dataframe_connection(
+            &mut connections,
+            11,
+            transform_id,
+            "result",
+            decompose_id,
+            "dataframe",
+        );
+    } else {
+        insert_dataframe_connection(
+            &mut connections,
+            10,
+            source_id,
+            "dataframe",
+            decompose_id,
+            "dataframe",
+        );
+    }
+
+    GraphDocument {
+        revision: GraphRevision::new(1),
+        nodes,
+        port_bindings: BTreeMap::new(),
+        connections,
+        input_states: BTreeMap::new(),
+    }
+}
+
+fn insert_dataframe_connection(
+    connections: &mut BTreeMap<ConnectionId, DocumentConnection>,
+    connection: u128,
+    output_node: NodeId,
+    output_port: &str,
+    input_node: NodeId,
+    input_port: &str,
+) {
+    let id = ConnectionId::from_uuid(Uuid::from_u128(connection));
+    connections.insert(
+        id,
+        DocumentConnection {
+            id,
+            output: PortAddress::declared(output_node, dataframe_port(output_port)),
+            input: PortAddress::declared(input_node, dataframe_port(input_port)),
+            order: None,
+        },
+    );
+}
+
+fn compile_dataframe_document(
+    document: &GraphDocument,
+    fields: Box<[SchemaField]>,
+) -> CompileResult {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let mut schema_resolvers = SchemaResolverSet::new();
+    schema_resolvers.insert(
+        SchemaResolverId::new(DATAFRAME_RESOURCE_SCHEMA_RESOLVER).unwrap(),
+        DataframeSchemaResolver { fields },
+    );
+    GraphCompiler::with_resolvers(
+        &registry,
+        &EmptyResources,
+        schema_resolvers,
+        build_builtin_interface_resolvers(),
+    )
+    .compile(document)
+}
+
+fn decompose_members(
+    result: &CompileResult,
+) -> Vec<&crate::node_system::compiler::ValidatedProjectedMember> {
+    result
+        .interface_projection
+        .nodes
+        .get(&dataframe_node_id(3))
+        .into_iter()
+        .flat_map(|projection| projection.available_members.iter())
+        .filter(|member| member.template() == &dataframe_port("columns"))
+        .collect()
 }
 
 #[test]
@@ -57,6 +299,330 @@ fn every_legacy_dataframe_node_has_one_stable_id() {
                 .any(|spec| spec.legacy_name == Some(*legacy_name) && spec.id == *id)
         );
     }
+}
+
+#[test]
+fn dataframe_columns_resolver_is_installed_in_builtin_set() {
+    let resolvers = crate::node_system::compiler::build_builtin_interface_resolvers();
+    let id = InterfaceResolverId::new(DATAFRAME_COLUMNS_RESOLVER).unwrap();
+    assert!(resolvers.get(&id).is_some());
+    for function_resolver in builtin_function_interface_resolver_ids() {
+        assert!(resolvers.get(&function_resolver).is_some());
+    }
+
+    let fragment = build_provider_fragment().expect("dataframe built-in fixture must assemble");
+    assert_eq!(fragment.interface_resolvers, vec![id.clone()]);
+    let decompose = fragment
+        .nodes
+        .iter()
+        .find(|node| node.protocol().type_id.as_str() == "yssbi.dataframe.decompose")
+        .expect("decompose protocol");
+    let columns = decompose
+        .protocol()
+        .interface
+        .ports
+        .iter()
+        .find(|port| port.key.as_str() == "columns")
+        .expect("decompose columns template");
+    assert_eq!(columns.instances, PortInstances::Derived { resolver: id },);
+}
+
+#[test]
+fn decompose_projects_final_upstream_schema() {
+    let source_fields = || {
+        vec![
+            stable_field("customer_id", RelationalScalarType::Int64),
+            stable_field("region", RelationalScalarType::String),
+            stable_field("amount", RelationalScalarType::Float64),
+        ]
+        .into_boxed_slice()
+    };
+    let cases = [
+        ("source", None, vec!["customer_id", "region", "amount"]),
+        (
+            "filter",
+            Some((
+                "yssbi.dataframe.filter.rows",
+                BTreeMap::from([(
+                    ParameterKey::new("predicate").unwrap(),
+                    serde_json::json!({
+                        "column": "amount",
+                        "operator": "greaterThan",
+                        "value": { "type": "integer", "value": "0" }
+                    }),
+                )]),
+            )),
+            vec!["customer_id", "region", "amount"],
+        ),
+        (
+            "project",
+            Some((
+                "yssbi.dataframe.project",
+                BTreeMap::from([(
+                    ParameterKey::new("columns").unwrap(),
+                    serde_json::json!(["amount", "customer_id"]),
+                )]),
+            )),
+            vec!["amount", "customer_id"],
+        ),
+        (
+            "rename",
+            Some((
+                "yssbi.dataframe.rename",
+                BTreeMap::from([
+                    (
+                        ParameterKey::new("from").unwrap(),
+                        serde_json::json!("customer_id"),
+                    ),
+                    (
+                        ParameterKey::new("to").unwrap(),
+                        serde_json::json!("account_id"),
+                    ),
+                ]),
+            )),
+            vec!["account_id", "region", "amount"],
+        ),
+    ];
+
+    for (name, transform, expected) in cases {
+        let document = dataframe_document(transform);
+        let result = compile_dataframe_document(&document, source_fields());
+        let codes = result
+            .analysis
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect::<BTreeSet<_>>();
+        let members = decompose_members(&result);
+        let labels = members
+            .iter()
+            .map(|member| member.member().label.as_str())
+            .collect::<Vec<_>>();
+        let resolved_labels = result
+            .analysis
+            .resolved_schemas
+            .get(&PortAddress::declared(
+                dataframe_node_id(3),
+                dataframe_port("dataframe"),
+            ))
+            .expect("decompose input schema is resolved")
+            .fields
+            .iter()
+            .map(|field| field.name.0.as_ref())
+            .collect::<Vec<_>>();
+
+        assert!(
+            !codes.contains("compiler.interface.resolver_missing"),
+            "{name}: {:?}",
+            result.analysis.diagnostics,
+        );
+        assert!(
+            !codes.contains("compiler.interface.resolver_failed"),
+            "{name}: {:?}",
+            result.analysis.diagnostics,
+        );
+        assert_eq!(resolved_labels, expected, "{name} schema order");
+        assert_eq!(labels, expected, "{name} projected labels");
+        assert!(
+            members
+                .iter()
+                .all(|member| { member.member().identity == SchemaFieldIdentityGuarantee::Stable })
+        );
+
+        if name == "rename" {
+            let renamed = members
+                .iter()
+                .find(|member| member.member().label == "account_id")
+                .expect("renamed field is projected");
+            assert_eq!(
+                renamed.member().locator,
+                DynamicMemberLocator::SchemaField {
+                    source: SchemaSourceIdentity("databases/main".into()),
+                    field: SchemaFieldIdentity("customer_id".into()),
+                },
+            );
+        }
+    }
+}
+
+#[test]
+fn dataframe_decompose_preserves_exact_dynamic_field_identity() {
+    let decompose_id = dataframe_node_id(3);
+    let binding = PortAddress::instance(
+        decompose_id,
+        dataframe_port("columns"),
+        PortInstanceId::from_uuid(Uuid::from_u128(20)),
+    );
+    let customer_locator = DynamicMemberLocator::SchemaField {
+        source: SchemaSourceIdentity("databases/main".into()),
+        field: SchemaFieldIdentity("customer_id".into()),
+    };
+    let mut document = dataframe_document(None);
+    document.port_bindings.insert(
+        binding.clone(),
+        DynamicPortBinding::Resolved {
+            origin: customer_locator.clone(),
+            order: OrderKey("a".into()),
+        },
+    );
+    let original_bindings = document.port_bindings.clone();
+
+    let unchanged = compile_dataframe_document(
+        &document,
+        vec![stable_field("customer_id", RelationalScalarType::Int64)].into_boxed_slice(),
+    );
+    assert_eq!(document.port_bindings, original_bindings);
+    let unchanged_interface = unchanged
+        .analysis
+        .resolved_interfaces
+        .iter()
+        .find(|interface| interface.node_id == decompose_id)
+        .expect("decompose interface");
+    assert!(
+        unchanged_interface
+            .ports
+            .iter()
+            .any(|port| { port.address == binding && port.status == ResolvedPortStatus::Resolved })
+    );
+
+    let removed = compile_dataframe_document(&document, Box::new([]));
+    assert_eq!(document.port_bindings, original_bindings);
+    let removed_projection = removed
+        .interface_projection
+        .nodes
+        .get(&decompose_id)
+        .expect("decompose projection");
+    assert!(matches!(
+        removed_projection.projected_bindings.get(&binding),
+        Some(ProjectedDynamicPortBinding::Orphan { origin, .. }) if origin == &customer_locator
+    ));
+
+    let added = compile_dataframe_document(
+        &document,
+        vec![
+            stable_field("customer_id", RelationalScalarType::Int64),
+            stable_field("total", RelationalScalarType::Float64),
+        ]
+        .into_boxed_slice(),
+    );
+    assert_eq!(document.port_bindings, original_bindings);
+    let total = decompose_members(&added)
+        .into_iter()
+        .find(|member| member.member().label == "total")
+        .expect("new field is an unbound member");
+    assert!(
+        added
+            .interface_projection
+            .materialization_candidate(total.projection_address())
+            .is_some()
+    );
+
+    let same_label = compile_dataframe_document(
+        &document,
+        vec![SchemaField {
+            name: SchemaColumnRef("customer_id".into()),
+            scalar_type: RelationalScalarType::Int64,
+            lineage: Some(SchemaFieldLineage {
+                source: "databases/archive".into(),
+                field: "legacy_customer_id".into(),
+            }),
+        }]
+        .into_boxed_slice(),
+    );
+    assert_eq!(document.port_bindings, original_bindings);
+    let same_label_projection = same_label
+        .interface_projection
+        .nodes
+        .get(&decompose_id)
+        .expect("decompose projection");
+    assert!(matches!(
+        same_label_projection.projected_bindings.get(&binding),
+        Some(ProjectedDynamicPortBinding::Orphan { origin, .. }) if origin == &customer_locator
+    ));
+    let replacement = decompose_members(&same_label)
+        .into_iter()
+        .find(|member| member.member().label == "customer_id")
+        .expect("different locator remains independently materializable");
+    assert_ne!(replacement.member().locator, customer_locator);
+    assert!(
+        same_label
+            .interface_projection
+            .materialization_candidate(replacement.projection_address())
+            .is_some()
+    );
+}
+
+#[test]
+fn dataframe_columns_resolver_rejects_duplicate_locators_deterministically() {
+    let duplicate_fields = vec![
+        stable_field("customer_id", RelationalScalarType::Int64),
+        SchemaField {
+            name: SchemaColumnRef("account_id".into()),
+            scalar_type: RelationalScalarType::Int64,
+            lineage: Some(SchemaFieldLineage {
+                source: "databases/main".into(),
+                field: "customer_id".into(),
+            }),
+        },
+    ]
+    .into_boxed_slice();
+    let document = dataframe_document(None);
+    let result = compile_dataframe_document(&document, duplicate_fields);
+    let fragment = build_provider_fragment().expect("dataframe built-in fixture must assemble");
+    let decompose = fragment
+        .nodes
+        .iter()
+        .find(|node| node.protocol().type_id.as_str() == "yssbi.dataframe.decompose")
+        .expect("decompose protocol");
+    let protocol = decompose.protocol();
+    let template = protocol
+        .interface
+        .ports
+        .iter()
+        .find(|port| port.key.as_str() == "columns")
+        .expect("columns template");
+    let mut resources = EmptyAnalysisResources::default();
+
+    let error = DataframeColumnsResolver
+        .resolve(InterfaceResolverRequest {
+            basis: &result.analysis.basis,
+            node_id: dataframe_node_id(3),
+            template,
+            protocol: &protocol,
+            document: &document,
+            resolved_schemas: &result.analysis.resolved_schemas,
+            resources: &mut resources,
+        })
+        .expect_err("duplicate locator must fail instead of being deduplicated");
+
+    assert_eq!(
+        error.detail.as_ref(),
+        "duplicate dataframe schema field locator 'databases/main/customer_id'",
+    );
+}
+
+#[test]
+fn dataframe_columns_without_lineage_are_snapshot_scoped() {
+    let document = dataframe_document(None);
+    let result = compile_dataframe_document(
+        &document,
+        vec![SchemaField {
+            name: SchemaColumnRef("ephemeral".into()),
+            scalar_type: RelationalScalarType::String,
+            lineage: None,
+        }]
+        .into_boxed_slice(),
+    );
+    let member = decompose_members(&result)
+        .into_iter()
+        .next()
+        .expect("schema field is projected");
+
+    assert_eq!(
+        member.member().identity,
+        SchemaFieldIdentityGuarantee::SnapshotScoped,
+    );
+    assert_eq!(member.member().label, "ephemeral");
 }
 
 #[test]
