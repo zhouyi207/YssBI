@@ -189,7 +189,6 @@ export const enUS = {
     databaseEditor: "Database Editor",
     newWorksheet: "New Worksheet",
     schemaViewer: "Schema Viewer",
-    newWindow: "New Window",
     splitEditorRight: "Split Editor Right",
     splitEditorDown: "Split Editor Down",
     enterZenMode: "Enter Zen Mode",

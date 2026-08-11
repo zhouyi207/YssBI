@@ -189,7 +189,6 @@ export const zhCN = {
     databaseEditor: "数据库编辑器",
     newWorksheet: "新建工作表",
     schemaViewer: "Schema 查看器",
-    newWindow: "新窗口",
     splitEditorRight: "向右拆分编辑器",
     splitEditorDown: "向下拆分编辑器",
     enterZenMode: "进入 Zen 模式",

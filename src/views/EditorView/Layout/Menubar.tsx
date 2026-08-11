@@ -145,7 +145,6 @@ export function Menubar() {
     toggleLogPanel,
     toggleSidebar,
     handleResetLayout,
-    openNewWindow,
   } = useMenubar();
 
   const currentPath = useActiveProjectPath();
@@ -213,8 +212,6 @@ export function Menubar() {
   );
 
   const windowItems: MenuItem[] = [
-    { label: t("menubar.newWindow"), onClick: openNewWindow },
-    { label: "-" },
     { label: t("menubar.splitEditorRight"), onClick: handleSplitRight },
     { label: t("menubar.splitEditorDown"), onClick: handleSplitDown },
     { label: "-" },

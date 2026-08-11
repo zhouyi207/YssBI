@@ -28,10 +28,6 @@ export { openDatabaseEditorWindow } from "./openDatabaseEditor";
 export { openBayesWindow } from "./openBayesWindow";
 export { openLogsWindow } from "./openLogsWindow";
 export type { OpenLogsWindowOptions } from "./openLogsWindow";
-export {
-  buildSecondaryEditorWindowRequest,
-  openSecondaryEditorWindow,
-} from "./openSecondaryEditorWindow";
 export { createEphemeralWindowLabel } from "./windowLabels";
 export { usePresentationWindowLifecycle } from "./usePresentationWindowLifecycle";
 export { PresentationWindowShell } from "./PresentationWindowShell";

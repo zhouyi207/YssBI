@@ -2028,6 +2028,86 @@ fn editor_mutation_returns_correlated_delta_projection_and_history_status() {
 }
 
 #[test]
+fn dynamic_merge_input_create_and_connect_serializes_parseable_internal_failure() {
+    use crate::node_system::document::{
+        DynamicPortBinding, GraphResourcePath as DocumentGraphResourcePath, OrderKey,
+        PortInstanceId,
+    };
+
+    let path = graph_path();
+    let begin = node("yssbi.project.event.begin");
+    let merge = node("yssbi.control.merge");
+    let connected_enter = PortAddress::instance(
+        merge.id,
+        PortKey::new("enter").unwrap(),
+        PortInstanceId::from_uuid(uuid::Uuid::from_u128(1)),
+    );
+    let unconnected_enter = PortAddress::instance(
+        merge.id,
+        PortKey::new("enter").unwrap(),
+        PortInstanceId::from_uuid(uuid::Uuid::from_u128(2)),
+    );
+    let connection_id = ConnectionId::new();
+    let mut graph = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
+    graph.document.revision = GraphRevision::new(1);
+    graph.document.nodes.insert(begin.id, begin.clone());
+    graph.document.nodes.insert(merge.id, merge.clone());
+    graph.document.port_bindings.insert(
+        connected_enter.clone(),
+        DynamicPortBinding::UserCreated {
+            order: OrderKey("00000".into()),
+        },
+    );
+    graph.document.port_bindings.insert(
+        unconnected_enter.clone(),
+        DynamicPortBinding::UserCreated {
+            order: OrderKey("00001".into()),
+        },
+    );
+    graph.document.connections.insert(
+        connection_id,
+        DocumentConnection {
+            id: connection_id,
+            output: PortAddress::declared(begin.id, PortKey::new("then").unwrap()),
+            input: connected_enter,
+            order: None,
+        },
+    );
+    let state = ActivatedProjectState(crate::project::fixtures::TempProject::activate(
+        "dynamic-merge-create-connect",
+        ProjectData::new(),
+    ));
+    state.insert_graph(path.clone(), graph).unwrap();
+
+    let result = state
+        .apply_editor_graph_mutation(
+            &current_project_instance_id(&state),
+            &path,
+            "zh-CN",
+            MutationRequest::new(
+                ResourceKey::Graph(DocumentGraphResourcePath(path.as_str().into())),
+                GraphRevision::new(1),
+                OperationId::new(),
+                EditorGraphMutationDto::CreateNode {
+                    descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+                        node_type_id: NodeTypeId::new("yssbi.control.do").unwrap(),
+                    },
+                    position: crate::node_system::document::NodePosition { x: 20.0, y: 30.0 },
+                    user_label: None,
+                    connect_from: Some(unconnected_enter.into()),
+                },
+            ),
+        )
+        .unwrap();
+
+    let outcome = serde_json::to_value(&result.projection_replacement.projection.outcome).unwrap();
+    assert_eq!(outcome["type"], "internalFailure");
+    assert!(outcome.get("nodeId").is_some());
+    assert!(outcome.get("node_id").is_none());
+    assert_eq!(result.delta.to_revision, GraphRevision::new(2));
+}
+
+#[test]
 fn stale_editor_mutation_rejects_without_consuming_history() {
     let state = state_with_empty_graph();
     state
