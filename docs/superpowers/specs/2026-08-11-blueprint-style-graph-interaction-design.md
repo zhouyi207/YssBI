@@ -223,12 +223,15 @@ Canvas interaction becomes an explicit mutually exclusive state instead of accum
 ```ts
 type CanvasInteraction =
   | { type: 'idle' }
+  | { type: 'panning'; session: PanSession }
   | { type: 'selecting'; session: SelectionSession }
   | { type: 'draggingNodes'; session: NodeDragSession }
   | { type: 'drawingConnection'; session: ConnectionDrawSession }
   | { type: 'movingConnections'; session: ConnectionMoveSession }
   | { type: 'pendingNodeCreation'; session: PendingNodeCreationSession };
 ```
+
+Panning participates in the same state union so it cannot overlap selection, node dragging, or connection gestures.
 
 A connection draw session tracks the start port, pointer, hovered target, snapping target, compatibility result, and whether a successful drop will append or replace.
 

@@ -340,6 +340,7 @@ src/app/appConfig/appLinks.ts
 - [ ] 关于可视化层面，目前可视化的图表还不够，我希望更加的丰富；并将这些图表组件化放置在一起，哪里需要就调用避免重复实现，差异较大可以分为两个组件
 - [ ] 将过去的操作尽可能实现后归纳到 v0_0.md 文档
 - [ ] 思考是否有必要多窗口进行跨窗同步，这样就不需要什么多进程的 token 了吧
+- [ ] snapshot 有必要吗？？？？
 
 
 
@@ -348,7 +349,7 @@ src/app/appConfig/appLinks.ts
 
 ### 窗口跨窗同步
 
-- [ ] 我想将 @glideapps/glide-data-grid 切换为 shadcn 中的 data table，主要是因为风格和组件和目前的 shadcn 组件不搭，同时在构建的时候还有一些其他的错误，如下。需要考虑替换的可行性；
+- [ ] 我想将 @glideapps/glide-data-grid 切换为 shadcn 中的 data table，主要是因为风格和组件和目前的 shadcn 组件不搭，同时在构建的时候还有一些其他的错误，如下。需要考虑替换的可行性；或许使用 Handsontable 替代（商用收费）
 
 ```
 "/*#__PURE__*/"
@@ -356,49 +357,6 @@ src/app/appConfig/appLinks.ts
 in "node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_react-dom@19.2.7_react@19.2_c19a5bde3a2383671a6324b7c97614b7/node_modules/@glideapps/glide-data-grid/dist/esm/internal/data-editor-container/data-grid-container.js" contains an annotation that Rollup cannot interpret due to the position of the comment. The comment will be removed to avoid issues.
 node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_react-dom@19.2.7_react@19.2_c19a5bde3a2383671a6324b7c97614b7/node_modules/@glideapps/glide-data-grid/dist/esm/internal/data-grid-overlay-editor/private/markdown-overlay-editor-style.js (2:13): A comment
 ```
-
-> **8.6 多 Editor 窗口跨窗同步（v1.0 设计 / 待办）**：**基线（已实现）**：副窗口 `#/editor`、per-label `workbenchLayoutMemento`（`setWorkbenchLayoutWindowScope`）、`useEditorWindowGeometryPersistence`（main → backend / secondary → localStorage）、各窗独立 `layoutStore` + editor grid。主题/设置跨窗；项目/图事件经 Tauri + `ProjectListener` 共享。**layout / open-tabs 跨窗不同步**为当前有意 defer。详见 [`docs/features/WORKBENCH_SATELLITE_WINDOWS.md`](./docs/features/WORKBENCH_SATELLITE_WINDOWS.md) § Secondary Editor Windows / Multi-window sync。
-
-**Phase 0 — 设计与产品定稿（Implement 前必做）**
-
-- [ ] **跨窗能力范围定稿**：明确 v1.0 需要哪些能力（勾选后写进设计 doc）：① `Window → New Window` 空白副 workbench（**已有**）；② **Tab 移到新窗**（源窗 remove + 副窗 add，VS Code「Move into New Window」）；③ 多窗 **镜像** 同一 tab 集（VS Code **不做**，默认排除）；④ 仅共享项目数据（**已有**，非 layout）；⑤ chrome 可见性克隆（sidebar/panel/detail 开关，不含 tabs/grid 拓扑）。
-- [ ] **权威源与冲突模型**：文档化 write authority——每窗 `workbenchLayoutMemento:${label}` 为 layout 真源；同一 `graphPath` 多窗同时打开时的 dirty / save / `graphSessionLifecycle`（focused hydrate）冲突策略；副窗关闭时 tab 回收到主窗还是丢弃。
-- [ ] **IPC / 事件边界草案**：与 `CLIENT_SETTINGS_UPDATED_EVENT`、`ProjectListener` 分工；跨窗 workbench 变更的 Tauri event 命名与 payload（例：`editor-tab-moved`、`workbench-chrome-changed`）、窗口 `label` scope、debounce / fan-out；禁止 layout sash 热路径跨窗广播（对齐 §6「拖拽期零状态广播」）。
-
-**Phase 1 — 首选 MVP（定稿后实现）**
-
-- [ ] **Tab 跨窗移动**：命令 + Tab 上下文菜单「Move to New Window」——`openSecondaryEditorWindow` 创建副窗 → IPC/handoff 传递 tab descriptor → 源窗 `closeTab`、副窗 `openTab` + `setPanelActiveView('logs')` 可选；vitest + 手工双窗回归。
-- [ ] **同一 graph 多窗打开提示（非阻断）**：检测多 label 下相同 `activeTabId` / open tabs 含同一 path 时，Tab 标题或 Status Bar 弱提示「已在其他窗口打开」；与 save 冲突 toast 文案联动。
-
-**Phase 2 — 可选增强（v1.0 后 / 有明确需求再排）**
-
-- [ ] **跨窗 layout 镜像或跟随**：仅当产品明确要求（VS Code 默认 **per-window layout**）；若做，需 global layout revision + merge 规则，勿破坏现有 per-label memento。
-- [ ] **副窗 ↔ 主窗 tab 回收**：副窗关闭前 prompt「将未保存 tab 移回主窗？」（应用内 Modal，非原生 dialog）；与 dirty-tab 关闭拦截（`useMenubar`）统一。
-- [ ] **跨窗执行 / 日志焦点**：Run graph 时自动 `openLogsPanel` 是否仅焦点窗生效；多窗同时 playback 的 `graphSessionStore.focusedSession` 策略。
-
-**Phase 3 — 测试与文档**
-
-- [ ] **双窗 E2E 清单**：新建副窗、per-label memento 隔离、geometry 持久化、Tab 移动、同 path 双开、主题同步、项目事件双窗一致；写入 `WORKBENCH_SATELLITE_WINDOWS.md` 或独立 `docs/MULTI_WINDOW_SYNC.md`。
-- [ ] **Rust 侧 window registry（若 IPC 需要）**：可选 `command/list_editor_windows` 返回 label + 前台状态，供冲突检测与 handoff；保持 command 层薄包装。
-
----
-
-### Rust 后端复盘
-
-> **源于 2026.07.08 Rust 后端复盘**（`cargo build` 已 0 warning，但 clippy / 架构 / 契约层仍有债）：
-
-- [ ] **`yss-sci` clippy 错误清零（当前 4 error 阻断）**：`cargo clippy -p yss-sci` 失败（`varsoc.rs` min/max 比较恒真/假、`column_distribution`/`column_stats`/`edit_operation` 等）；修完后 CI 才能挂 clippy；与已完成的 `cargo build` 0 warning 区分对待。
-- [ ] **`yss-sci` clippy warning 分期清理（~90+）**：冗余 field name、identity `filter_map`、`too_many_arguments`、索引 loop 等；按模块（`database/`、`regression/`、`ts/`）分批 `-D warnings`，避免一次性大爆炸。
-- [ ] **`NodeExecutionContext::get_bound_type` 实现**：`node_execution_context.rs` 仍 TODO 恒返回 `None`，运行时 type var 绑定不可查；在 `GraphRuntime` 暴露 bound 查询，供泛型 pin / 节点求值与连接校验闭环。
-- [ ] **执行期 Graph 锁粒度优化**：`node_execution_context` + `executor/data_inputs` 对 `Arc<Mutex<GraphInstance>>` 高频 `lock().unwrap()`；引入 scoped read guard 或执行帧级缓存，缩短临界区，降低 lock poison 一次拖垮整次执行的概率。
-- [ ] **`with_graph_mut` 死锁规则回归测**：`project_state_graph_mut.rs` 文档禁止闭包内再调 `get_graph`/`load_graph`（`RwLock` 不可重入），但无测试；补 integration test 或 code-review checklist，覆盖 `sync_all_call_nodes_in_graph` / `update_function_signature` 等高频路径。
-- [ ] **Call 同步后 `persist_loaded_graph` 勿吞错**：`sync_all_call_nodes_for_function` 批量投影后对未加载 caller `let _ = persist_loaded_graph(&gid)` 静默丢弃 IO 失败；改为记录 warn / 返回 `Result` 聚合，必要时标记资源 `hasStaleDocument`。
-- [ ] **报告 / Plot JSON schema 注册表（Rust 侧）**：`info_nodes.rs` 等巨型模块 ad-hoc 序列化；与 `ReportKind` / `PlotChart` 对齐，每类报告集中 `struct` + `serde` + roundtrip 单测（含 `SerialTestsResponse`、`DurbinWatsonResult { d }` 等已结构化但前端曾误用的字段）。
-- [ ] **`CallDepthGuard` 超限路径测试**：`MAX_CALL_DEPTH = 64` 已实现但 integration tests 未覆盖递归 Call 超限；补错误 message 与执行中断行为单测。
-- [ ] **项目 IO roundtrip 集成测**：`project_io` 保存/加载、`read_project_index`、`rebuild_function_signature_table`、`rebuild_function_call_site_index` 缺端到端测（现有 `function_call_test` 仅局部）；补「改签名 → 保存 → 重开 → Call pin/索引一致」回归。
-- [ ] **类型推断脏边 surfacing**：`TypeInferenceSession::infer_all` 对不兼容边 skip + `warn` only，前端无图级提示；考虑 `GraphValidationWarning` DTO / 打开图时返回 `inference_warnings[]`，与 palette 类型高亮联动。
-- [ ] **`RwLock` poison 策略文档化**：`project_data` / `function_signatures` / `graph.data_state` 普遍 `read().unwrap()`，中毒即 panic IPC 线程；明确运维策略（重启项目会话）或关键 command 改返回 `LockPoisoned` 而非 panic。
-
 ### 口语化表达
 
 - [ ] 点击更新会自动更新
