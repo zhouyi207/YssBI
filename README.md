@@ -77,6 +77,9 @@ pnpm tauri:dev
 
 # 构建
 pnpm tauri:build
+
+# 清理
+cargo clean --manifest-path src-tauri/Cargo.toml
 ```
 
 <!-- ## 致谢
