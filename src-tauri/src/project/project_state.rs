@@ -52,6 +52,8 @@ pub(crate) type ProjectActivationTestHook = Arc<dyn Fn() + Send + Sync>;
 type ActivationPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 type LifecycleLockTestHook = Arc<dyn Fn() + Send + Sync>;
+#[cfg(test)]
+type ComputationSettingsPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -451,6 +453,7 @@ pub(super) struct MutationPublication {
     pub(super) project_instance_id: String,
     pub(super) resource_revision: u64,
     authority_generation: u64,
+    computation_settings_revision: u64,
 }
 
 pub(super) struct VariableStagingBasis {
@@ -464,6 +467,7 @@ impl Default for MutationPublication {
             project_instance_id: uuid::Uuid::new_v4().to_string(),
             resource_revision: 0,
             authority_generation: 0,
+            computation_settings_revision: 0,
         }
     }
 }
@@ -493,6 +497,7 @@ impl MutationPublication {
         let previous = std::mem::replace(&mut self.project_instance_id, project_instance_id);
         self.resource_revision = 0;
         self.authority_generation = 0;
+        self.computation_settings_revision = 0;
         previous
     }
 }
@@ -1437,6 +1442,9 @@ pub struct ProjectState {
     activation_preparation_after_read_test_hook: Arc<RwLock<Option<ActivationPublicationTestHook>>>,
     #[cfg(test)]
     activation_final_rebuild_test_hook: Arc<RwLock<Option<ActivationPublicationTestHook>>>,
+    #[cfg(test)]
+    computation_settings_publication_test_hook:
+        Arc<RwLock<Option<ComputationSettingsPublicationTestHook>>>,
 }
 
 #[cfg(test)]
@@ -1703,12 +1711,154 @@ impl ProjectState {
             activation_preparation_after_read_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             activation_final_rebuild_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            computation_settings_publication_test_hook: Arc::new(RwLock::new(None)),
         }
     }
 
     pub fn get_data(&self) -> Result<ProjectData, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         Ok(self.project_data.read().unwrap().clone())
+    }
+
+    pub fn get_computation_settings(
+        &self,
+    ) -> Result<crate::project::ComputationSettingsSnapshot, ProjectFilesystemError> {
+        self.ensure_project_operational()?;
+        let publication = self.mutation_publication.lock().unwrap();
+        let data = self.project_data.read().unwrap();
+        Ok(crate::project::ComputationSettingsSnapshot {
+            project_instance_id: ProjectInstanceId::from_existing(
+                publication.project_instance_id.clone(),
+            ),
+            settings_revision: publication.computation_settings_revision,
+            publication_revision: publication.resource_revision,
+            settings: data.computation_settings.clone(),
+        })
+    }
+
+    pub fn update_computation_settings_transaction(
+        &self,
+        request: crate::project::ComputationSettingsMutationRequest,
+    ) -> Result<crate::project::ComputationSettingsMutationReceipt, ProjectFilesystemError> {
+        self.ensure_project_operational()?;
+        request.settings.validate().map_err(|error| {
+            ProjectFilesystemError::TransactionPrepareFailed {
+                message: error.to_string(),
+            }
+        })?;
+        let session = self.capture_project_session()?;
+        if session.instance_id != request.project_instance_id {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "computation settings request belongs to another project".into(),
+            });
+        }
+        let (authority_generation, current_revision, mut next_data) = {
+            let publication = self.mutation_publication.lock().unwrap();
+            let data = self.project_data.read().unwrap();
+            if publication.computation_settings_revision != request.expected_revision {
+                return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                    message: format!(
+                        "expected computation settings revision {}, current revision is {}",
+                        request.expected_revision, publication.computation_settings_revision
+                    ),
+                });
+            }
+            (
+                publication.authority_generation(),
+                publication.computation_settings_revision,
+                data.clone(),
+            )
+        };
+        next_data.computation_settings = request.settings.clone();
+        let contents = crate::project::project_io::serialize_project_manifest(&next_data)
+            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                message: error.to_string(),
+            })?;
+        let lease = self.filesystem.acquire(session.root.clone())?;
+        let context = ProjectTransactionContext {
+            session: session.clone(),
+            operation_id: request.operation_id,
+            affected_resources: Vec::new(),
+            expected_revisions: Default::default(),
+            expected_absent_resources: Default::default(),
+            recovery_marker: Some(self.project_recovery_marker()),
+        };
+        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+            context,
+            lease,
+            vec![StagedFilesystemMutation::Write {
+                relative_path: crate::project::PROJECT_METADATA_FILE.into(),
+                contents,
+            }],
+            |_, staged| {
+                serde_json::from_slice::<crate::project::project_io::ProjectManifest>(staged)
+                    .map(|_| ())
+                    .map_err(|error| error.to_string())
+            },
+        )?;
+        self.validate_project_session(&session)?;
+        let committed = prepared.commit()?;
+
+        let publication_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut publication = self.mutation_publication.lock().unwrap();
+            let mut data = self.project_data.write().unwrap();
+            self.ensure_project_operational()?;
+            if publication.project_instance_id != request.project_instance_id.as_str()
+                || publication.authority_generation() != authority_generation
+            {
+                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                    message: "project authority changed during computation settings commit".into(),
+                });
+            }
+            if publication.computation_settings_revision != current_revision {
+                return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                    message: "computation settings changed during commit".into(),
+                });
+            }
+            #[cfg(test)]
+            if let Some(hook) = self
+                .computation_settings_publication_test_hook
+                .write()
+                .unwrap()
+                .take()
+            {
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| hook())).is_err() {
+                    return Err(ProjectFilesystemError::TransactionCommitFailed {
+                        message: "computation settings authority publication failed".into(),
+                    });
+                }
+            }
+            data.computation_settings = request.settings.clone();
+            publication.computation_settings_revision = current_revision
+                .checked_add(1)
+                .expect("computation settings revision overflowed");
+            let publication_revision = publication.allocate_resource_revision();
+            Ok(crate::project::ComputationSettingsMutationReceipt {
+                project_instance_id: request.project_instance_id.clone(),
+                operation_id: request.operation_id,
+                settings_revision: publication.computation_settings_revision,
+                publication_revision,
+                settings: request.settings.clone(),
+            })
+        }));
+
+        match publication_result {
+            Ok(Ok(receipt)) => {
+                committed.finalize();
+                Ok(receipt)
+            }
+            Ok(Err(error)) => {
+                committed.rollback()?;
+                Err(error)
+            }
+            Err(_) => {
+                committed.rollback()?;
+                Err(ProjectFilesystemError::TransactionCommitFailed {
+                    message: "computation settings authority publication failed".into(),
+                })
+            }
+        }
     }
 
     pub(super) fn capture_variable_staging_basis(
@@ -2632,6 +2782,17 @@ impl ProjectState {
         hook: ActivationPublicationTestHook,
     ) {
         *self.activation_final_rebuild_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_computation_settings_publication_test_hook(
+        &self,
+        hook: ComputationSettingsPublicationTestHook,
+    ) {
+        *self
+            .computation_settings_publication_test_hook
+            .write()
+            .unwrap() = Some(hook);
     }
 
     #[cfg(test)]
@@ -9616,6 +9777,7 @@ mod run_parameter_tests {
                 compile_id: CompileId::new(1),
             },
             value_count: 0,
+            value_contracts: BTreeMap::new(),
             value_sources: Box::new([]),
             bound_values: BTreeMap::new(),
             operations: Box::new([PlannedOperation {
@@ -9862,6 +10024,7 @@ mod run_parameter_tests {
                 inputs: Box::new([]),
                 outputs: Box::new([PlannedOutput {
                     value: ValueRef::new(0),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production: OutputProduction::FullyMaterialized,
                 }]),
                 params: CompiledParameterHandle::new("adf-series").unwrap(),
@@ -9881,11 +10044,13 @@ mod run_parameter_tests {
                 ),
                 inputs: Box::new([PlannedInput {
                     value: ValueRef::new(0),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     consumption: InputConsumption::FullyMaterialized,
                     bound_value: None,
                 }]),
                 outputs: Box::new([PlannedOutput {
                     value: ValueRef::new(1),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production: OutputProduction::FullyMaterialized,
                 }]),
                 params: CompiledParameterHandle::new("adf-production-chain").unwrap(),
@@ -10029,6 +10194,7 @@ mod run_parameter_tests {
             inputs: Box::new([]),
             outputs: Box::new([PlannedOutput {
                 value: ValueRef::new(index as u32),
+                contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 production: OutputProduction::FullyMaterialized,
             }]),
             params: CompiledParameterHandle::new(format!("series-{index}")).unwrap(),
@@ -10049,11 +10215,13 @@ mod run_parameter_tests {
             inputs: Box::new([
                 PlannedInput {
                     value: ValueRef::new(0),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     consumption: InputConsumption::FullyMaterialized,
                     bound_value: None,
                 },
                 PlannedInput {
                     value: ValueRef::new(1),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     consumption: InputConsumption::FullyMaterialized,
                     bound_value: None,
                 },
@@ -10061,10 +10229,12 @@ mod run_parameter_tests {
             outputs: Box::new([
                 PlannedOutput {
                     value: ValueRef::new(2),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production: OutputProduction::FullyMaterialized,
                 },
                 PlannedOutput {
                     value: ValueRef::new(3),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production: OutputProduction::FullyMaterialized,
                 },
             ]),

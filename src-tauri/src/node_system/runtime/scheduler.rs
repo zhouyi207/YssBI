@@ -18,7 +18,7 @@ use crate::node_system::analysis::{
 use crate::node_system::plan::{
     AttemptId, CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan,
     FunctionPlanHandle, GraphOutputRef, OperationIndex, PlannedKernel, PlannedPublication,
-    StructuredControlRegion, ValueRef, WorkloadClass,
+    PlannedValueKind, StructuredControlRegion, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::{CachePolicy, RetryPolicy, Value};
 use std::cell::Cell;
@@ -2147,13 +2147,30 @@ impl<'a> RunExecutor<'a> {
             .inputs
             .iter()
             .map(|input| {
-                if frame.has(input.value) {
+                let value = if frame.has(input.value) {
                     frame.value(input.value).cloned()
                 } else if let Some(value) = &input.bound_value {
                     Ok(RuntimeValue::Scalar(value.clone()))
                 } else {
                     frame.value(input.value).cloned()
+                }?;
+                if input.contract.kind == PlannedValueKind::DataSeries
+                    && !matches!(
+                        &value,
+                        RuntimeValue::Artifact(artifact)
+                            if artifact.value_kind()
+                                == crate::node_system::runtime::ArtifactValueKind::DataSeries
+                    )
+                {
+                    return Err(RunError::InvalidPlan(
+                        format!(
+                            "DataSeries input value {} did not receive a DataSeries Artifact",
+                            input.value.index()
+                        )
+                        .into(),
+                    ));
                 }
+                Ok(value)
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice();

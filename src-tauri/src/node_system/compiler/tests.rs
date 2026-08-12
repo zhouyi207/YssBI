@@ -1331,6 +1331,43 @@ fn type_id(value: &str) -> TypeId {
     TypeId::new(value).unwrap()
 }
 
+fn concrete(value: &str) -> TypeExpr {
+    TypeExpr::Concrete(type_id(value))
+}
+
+#[test]
+fn type_conformance_requires_every_source_union_member() {
+    let source = TypeExpr::Union(vec![concrete("core.int64"), concrete("core.string")]);
+
+    assert_eq!(
+        type_exprs_compatibility(&source, &concrete("core.int64"), &[], &[]),
+        TypeCompatibility::Incompatible
+    );
+}
+
+#[test]
+fn type_conformance_accepts_numeric_series_members() {
+    let target = numeric_data_series_type();
+
+    assert_eq!(
+        type_exprs_compatibility(&data_series_type(concrete("core.int64")), &target, &[], &[],),
+        TypeCompatibility::Compatible
+    );
+}
+
+#[test]
+fn type_conformance_reports_unknown_as_indeterminate() {
+    assert_eq!(
+        type_exprs_compatibility(
+            &TypeExpr::Unknown,
+            &data_series_type(concrete("core.float64")),
+            &[],
+            &[],
+        ),
+        TypeCompatibility::Indeterminate
+    );
+}
+
 fn data_port(
     name: &str,
     direction: PortDirection,
@@ -2184,6 +2221,123 @@ fn compiler_maps_data_edges_into_plan_dependencies() {
                 destination: plan.operations[1].inputs[0].value,
             })
     );
+}
+
+#[test]
+fn data_series_contract_survives_materialization_adapter_insertion() {
+    use crate::node_system::plan::PlannedValueKind;
+    use crate::node_system::protocol::data_series_type;
+
+    let series = data_series_type(TypeExpr::Concrete(TypeId::new("core.int64").unwrap()));
+    let mut source_output = data_port("out", PortDirection::Output, series.clone(), None);
+    source_output.production = Some(OutputProduction::Streaming);
+    let source = test_protocol(
+        "series_contract_source",
+        vec![source_output],
+        vec![],
+        vec![],
+    );
+    let mut sink_input = data_port("in", PortDirection::Input, series, None);
+    sink_input.consumption = Some(InputConsumption::FullyMaterialized);
+    let sink = test_protocol("series_contract_sink", vec![sink_input], vec![], vec![]);
+    let registry = TestRegistry::new(vec![source, sink]).with_constructor(
+        TypeConstructorId::new("core.data_series").unwrap(),
+        1,
+        [],
+    );
+    let mut graph = graph_with_nodes(&[(1, "series_contract_source"), (2, "series_contract_sink")]);
+    connect(&mut graph, 10, 1, "out", 2, "in");
+
+    let plan = GraphCompiler::new(&registry, &Resources)
+        .compile(&graph)
+        .plan
+        .expect("connected canonical DataSeries graph should lower");
+    let adapter = plan
+        .operations
+        .iter()
+        .find(|operation| matches!(operation.kernel, PlannedKernel::Adapter(_)))
+        .expect("streaming DataSeries edge should insert a materialization adapter");
+
+    assert!(
+        adapter
+            .inputs
+            .iter()
+            .all(|input| input.contract.kind == PlannedValueKind::DataSeries)
+    );
+    assert!(
+        adapter
+            .outputs
+            .iter()
+            .all(|output| output.contract.kind == PlannedValueKind::DataSeries)
+    );
+}
+
+#[test]
+fn function_plan_store_rejects_data_series_kind_mismatch() {
+    use crate::node_system::plan::{PlannedValueContract, PlannedValueKind};
+    use crate::node_system::protocol::data_series_type;
+    use crate::node_system::runtime::{FunctionPlanStore, FunctionPlanStoreError};
+
+    let series = data_series_type(TypeExpr::Concrete(TypeId::new("core.int64").unwrap()));
+    let mut source_output = data_port("out", PortDirection::Output, series.clone(), None);
+    source_output.production = Some(OutputProduction::FullyMaterialized);
+    let source = test_protocol(
+        "series_function_source",
+        vec![source_output],
+        vec![],
+        vec![],
+    );
+    let registry = TestRegistry::new(vec![source]).with_constructor(
+        TypeConstructorId::new("core.data_series").unwrap(),
+        1,
+        [],
+    );
+    let path = GraphResourcePath("functions/series-contract".into());
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let graph = graph_with_nodes(&[(1, "series_function_source")]);
+    let mut plan = compiler
+        .compile(&graph)
+        .plan
+        .expect("canonical DataSeries function body should lower");
+    let version = ResourceVersion::new("1");
+    let versions = BTreeMap::from([(ResourceKey::new(path.0.as_ref()), version.clone())]);
+    plan.provenance.graph_path = path.clone();
+    plan.provenance.basis.resource_versions = versions.clone();
+    let result_value = plan.operations[0].outputs[0].value;
+    plan.operations[0].outputs[0].contract.kind = PlannedValueKind::Scalar;
+    plan.value_contracts
+        .get_mut(&result_value)
+        .expect("compiled output has a plan-global value contract")
+        .kind = PlannedValueKind::Scalar;
+    let result = FunctionParameterId("return".into());
+    let abi = FunctionPlanAbi {
+        provenance: plan.provenance.clone(),
+        parameters: BTreeMap::new(),
+        parameter_contracts: BTreeMap::new(),
+        results: BTreeMap::from([(result.clone(), result_value)]),
+        result_productions: BTreeMap::from([(result.clone(), OutputProduction::FullyMaterialized)]),
+        result_contracts: BTreeMap::from([(
+            result,
+            PlannedValueContract {
+                kind: PlannedValueKind::DataSeries,
+                type_expr: series,
+            },
+        )]),
+    };
+    let error = match FunctionPlanStore::new(plan.provenance.project_session_id.clone(), 64)
+        .generation(
+            registry.fingerprint.clone(),
+            versions,
+            vec![(path, version, Arc::new(plan), Arc::new(abi))],
+        ) {
+        Ok(_) => panic!("corrupt function ABI value contract must be rejected"),
+        Err(error) => error,
+    };
+
+    assert!(matches!(
+        error,
+        FunctionPlanStoreError::AbiValueContractMismatch { .. }
+    ));
 }
 
 #[test]
@@ -8758,6 +8912,7 @@ fn structured_function_plan(
         provenance: provenance.clone(),
         value_count,
         operations: Box::new([]),
+        value_contracts: BTreeMap::new(),
         value_sources,
         bound_values: BTreeMap::new(),
         value_dependencies,
@@ -8771,8 +8926,10 @@ fn structured_function_plan(
     let abi = FunctionPlanAbi {
         provenance,
         parameters: BTreeMap::new(),
+        parameter_contracts: BTreeMap::new(),
         results: BTreeMap::from([(result.clone(), result_value)]),
         result_productions: BTreeMap::from([(result.clone(), OutputProduction::FullyMaterialized)]),
+        result_contracts: BTreeMap::new(),
     };
     (plan, abi, result)
 }

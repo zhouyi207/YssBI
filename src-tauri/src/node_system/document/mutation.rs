@@ -1182,6 +1182,30 @@ fn connect_operations(
             "connection endpoint kinds do not match",
         ));
     }
+    let output_type_parameters = registry
+        .protocol(&document.nodes[&output.node_id].node_type)
+        .expect("resolved mutation ports have registered protocols")
+        .interface
+        .type_parameters
+        .as_ref();
+    let input_type_parameters = registry
+        .protocol(&document.nodes[&input.node_id].node_type)
+        .expect("resolved mutation ports have registered protocols")
+        .interface
+        .type_parameters
+        .as_ref();
+    if output_port.spec.kind == PortKind::Data
+        && crate::node_system::compiler::type_exprs_compatibility(
+            &output_port.spec.value_type,
+            &input_port.spec.value_type,
+            output_type_parameters,
+            input_type_parameters,
+        ) == crate::node_system::compiler::TypeCompatibility::Incompatible
+    {
+        return Err(invalid_editor_mutation(
+            "connection endpoint types are incompatible",
+        ));
+    }
     validate_connection_capacity(document, &output, output_port.spec.connections)?;
     validate_connection_capacity(document, &input, input_port.spec.connections)?;
     validate_connection_order(input_port.spec.connections, order.as_ref())?;

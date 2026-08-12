@@ -459,20 +459,21 @@ fn ports_are_compatible(source: &SourcePort, candidate: &CandidatePort) -> bool 
     if source.kind != PortKind::Data {
         return true;
     }
-    match source.direction {
-        PortDirection::Output => crate::node_system::compiler::type_exprs_assignable(
+    let compatibility = match source.direction {
+        PortDirection::Output => crate::node_system::compiler::type_exprs_compatibility(
             &source.value_type,
             &candidate.value_type,
             &[],
             &candidate.type_parameters,
         ),
-        PortDirection::Input => crate::node_system::compiler::type_exprs_assignable(
+        PortDirection::Input => crate::node_system::compiler::type_exprs_compatibility(
             &candidate.value_type,
             &source.value_type,
             &candidate.type_parameters,
             &[],
         ),
-    }
+    };
+    compatibility != crate::node_system::compiler::TypeCompatibility::Incompatible
 }
 
 fn direction(port: &ResolvedPortDto) -> PortDirection {
@@ -571,12 +572,13 @@ mod tests {
 
     #[test]
     fn compatibility_uses_exact_type_expr_ids_and_compiler_source_union_semantics() {
-        let tabular_series = source_expr(concrete_type("tabular.series").unwrap());
-        let concrete_float_series = candidate(concrete_type("core.data_series.float64").unwrap());
-        assert!(!ports_are_compatible(
-            &tabular_series,
-            &concrete_float_series
+        let string_series = source_expr(crate::node_system::protocol::data_series_type(
+            concrete_type("core.string").unwrap(),
         ));
+        let float_series = candidate(crate::node_system::protocol::data_series_type(
+            concrete_type("core.float64").unwrap(),
+        ));
+        assert!(!ports_are_compatible(&string_series, &float_series));
 
         let source_union = source_expr(TypeExpr::Union(vec![
             concrete_type("core.int64").unwrap(),

@@ -160,6 +160,7 @@ pub struct ExecutionPlanBasis {
     pub(crate) provenance: CompileProvenance,
     pub(crate) value_count: u32,
     pub(crate) operations: Box<[IntermediateOperation]>,
+    pub(crate) value_contracts: BTreeMap<ValueRef, crate::node_system::plan::PlannedValueContract>,
     pub(crate) value_sources: Box<[PlanValueSource]>,
     pub(crate) value_dependencies: Box<[ValueDependency]>,
     pub(crate) effect_dependencies: Box<[(usize, usize)]>,

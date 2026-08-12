@@ -2,7 +2,7 @@ use crate::node_system::analysis::{CompileProvenance, ResourceKey};
 use crate::node_system::document::{FunctionParameterId, GraphResourcePath, NodeId, PortAddress};
 use crate::node_system::protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, RetryPolicy,
-    Value,
+    TypeExpr, Value,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -120,6 +120,8 @@ pub struct ExecutionPlan {
     /// Number of plan-global logical values addressable by `ValueRef`.
     pub value_count: u32,
     pub operations: Box<[PlannedOperation]>,
+    /// Canonical runtime contract for each plan-global logical value.
+    pub value_contracts: BTreeMap<ValueRef, PlannedValueContract>,
     /// Values supplied without a producing operation in this plan.
     pub value_sources: Box<[PlanValueSource]>,
     /// Scalar values bound directly to plan-global references used by structured control.
@@ -131,6 +133,32 @@ pub struct ExecutionPlan {
     pub resources: Box<[CompiledResourceRequirement]>,
     pub results: Box<[PlanResult]>,
     pub publications: Box<[PlannedPublication]>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum PlannedValueKind {
+    Scalar,
+    DataSeries,
+    DataFrame,
+    Opaque,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlannedValueContract {
+    pub kind: PlannedValueKind,
+    pub type_expr: TypeExpr,
+}
+
+impl PlannedValueContract {
+    pub fn opaque() -> Self {
+        Self {
+            kind: PlannedValueKind::Opaque,
+            type_expr: TypeExpr::Concrete(
+                crate::node_system::protocol::TypeId::new("core.object")
+                    .expect("static opaque plan type is valid"),
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -159,8 +187,10 @@ impl PlanValueSource {
 pub struct FunctionPlanAbi {
     pub provenance: CompileProvenance,
     pub parameters: BTreeMap<FunctionParameterId, ValueRef>,
+    pub parameter_contracts: BTreeMap<FunctionParameterId, PlannedValueContract>,
     pub results: BTreeMap<FunctionParameterId, ValueRef>,
     pub result_productions: BTreeMap<FunctionParameterId, OutputProduction>,
+    pub result_contracts: BTreeMap<FunctionParameterId, PlannedValueContract>,
 }
 
 impl OperationStableId {
@@ -265,6 +295,7 @@ pub struct PlannedOperation {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlannedInput {
     pub value: ValueRef,
+    pub contract: PlannedValueContract,
     pub consumption: InputConsumption,
     /// Compiled literal or protocol default used only when no frame value is connected.
     pub bound_value: Option<Value>,
@@ -273,6 +304,7 @@ pub struct PlannedInput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlannedOutput {
     pub value: ValueRef,
+    pub contract: PlannedValueContract,
     pub production: OutputProduction,
 }
 

@@ -496,7 +496,7 @@ fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))
 }
 fn series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    concrete("tabular.series")
+    Ok(numeric_data_series_type())
 }
 fn config_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("statistics.configuration")

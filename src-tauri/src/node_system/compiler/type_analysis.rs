@@ -347,12 +347,19 @@ fn port_template(address: &PortAddress) -> &PortKey {
     }
 }
 
-pub(crate) fn type_exprs_assignable(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeCompatibility {
+    Compatible,
+    Incompatible,
+    Indeterminate,
+}
+
+pub fn type_exprs_compatibility(
     source: &TypeExpr,
     target: &TypeExpr,
     source_type_parameters: &[TypeParameterId],
     target_type_parameters: &[TypeParameterId],
-) -> bool {
+) -> TypeCompatibility {
     let source_generics = source_type_parameters
         .iter()
         .enumerate()
@@ -363,13 +370,92 @@ pub(crate) fn type_exprs_assignable(
         .enumerate()
         .map(|(index, parameter)| (parameter.clone(), source_type_parameters.len() + index))
         .collect::<BTreeMap<_, _>>();
-    let mut solver = Solver::new(source_type_parameters.len() + target_type_parameters.len());
-    solver
-        .assignable(
-            instantiate(source, &source_generics),
-            instantiate(target, &target_generics),
-        )
-        .is_ok()
+
+    compatibility(
+        &instantiate(source, &source_generics),
+        &instantiate(target, &target_generics),
+    )
+}
+
+#[cfg(test)]
+pub(crate) fn type_exprs_assignable(
+    source: &TypeExpr,
+    target: &TypeExpr,
+    source_type_parameters: &[TypeParameterId],
+    target_type_parameters: &[TypeParameterId],
+) -> bool {
+    type_exprs_compatibility(
+        source,
+        target,
+        source_type_parameters,
+        target_type_parameters,
+    ) == TypeCompatibility::Compatible
+}
+
+fn compatibility(source: &TypeValue, target: &TypeValue) -> TypeCompatibility {
+    use TypeCompatibility::{Compatible, Incompatible, Indeterminate};
+
+    match (source, target) {
+        (TypeValue::Union(sources), target) => {
+            combine_every(sources.iter().map(|source| compatibility(source, target)))
+        }
+        (source, TypeValue::Union(targets)) => {
+            combine_any(targets.iter().map(|target| compatibility(source, target)))
+        }
+        (TypeValue::Unknown | TypeValue::Variable(_), _)
+        | (_, TypeValue::Unknown | TypeValue::Variable(_)) => Indeterminate,
+        (TypeValue::Concrete(source), TypeValue::Concrete(target)) => {
+            if source == target {
+                Compatible
+            } else {
+                Incompatible
+            }
+        }
+        (
+            TypeValue::Applied {
+                constructor: source_constructor,
+                arguments: source_arguments,
+            },
+            TypeValue::Applied {
+                constructor: target_constructor,
+                arguments: target_arguments,
+            },
+        ) if source_constructor == target_constructor
+            && source_arguments.len() == target_arguments.len() =>
+        {
+            combine_every(
+                source_arguments
+                    .iter()
+                    .zip(target_arguments)
+                    .map(|(source, target)| compatibility(source, target)),
+            )
+        }
+        _ => Incompatible,
+    }
+}
+
+fn combine_every(values: impl IntoIterator<Item = TypeCompatibility>) -> TypeCompatibility {
+    let mut outcome = TypeCompatibility::Compatible;
+    for value in values {
+        match value {
+            TypeCompatibility::Incompatible => return TypeCompatibility::Incompatible,
+            TypeCompatibility::Indeterminate => outcome = TypeCompatibility::Indeterminate,
+            TypeCompatibility::Compatible => {}
+        }
+    }
+    outcome
+}
+
+fn combine_any(values: impl IntoIterator<Item = TypeCompatibility>) -> TypeCompatibility {
+    let mut outcome = TypeCompatibility::Incompatible;
+    for value in values {
+        match value {
+            TypeCompatibility::Compatible => return TypeCompatibility::Compatible,
+            TypeCompatibility::Indeterminate => outcome = TypeCompatibility::Indeterminate,
+            TypeCompatibility::Incompatible => {}
+        }
+    }
+    outcome
 }
 
 fn instantiate(expr: &TypeExpr, generics: &BTreeMap<TypeParameterId, usize>) -> TypeValue {

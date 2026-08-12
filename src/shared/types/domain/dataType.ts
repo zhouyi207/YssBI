@@ -73,11 +73,16 @@ export function dataTypeKind(dt: DataType): string {
 
 /** 将 DataType 转为显示字符串，如 "Int32"、"Array<String>"、"DataSeries<Float64>" */
 export function dataTypeDisplay(dt: DataType): string {
+  if (isExactNumberUnion(dt)) return 'Number';
+  if (isExactNumericDataSeriesUnion(dt)) return 'DataSeries<Number>';
   if (dt.kind === 'Array') {
     return `Array<${dataTypeDisplay(dt.inner)}>`;
   }
   if (dt.kind === 'DataSeries') {
-    return `DataSeries<${dataTypeDisplay(dt.inner)}>`;
+    const innerDisplay = dt.inner.kind === 'OneOf' && isExactNumberUnion(dt.inner)
+      ? dt.inner.inner.map(dataTypeDisplay).join(' | ')
+      : dataTypeDisplay(dt.inner);
+    return `DataSeries<${innerDisplay}>`;
   }
   if (dt.kind === 'Struct') {
     return `Struct<${dt.inner}>`;
@@ -86,6 +91,24 @@ export function dataTypeDisplay(dt: DataType): string {
     return dt.inner.map(dataTypeDisplay).join(' | ');
   }
   return dt.kind;
+}
+
+function hasExactKinds(types: DataType[], expected: readonly DataType['kind'][]): boolean {
+  return types.length === expected.length
+    && expected.every((kind) => types.some((type) => type.kind === kind));
+}
+
+function isExactNumberUnion(dataType: DataType): boolean {
+  return dataType.kind === 'OneOf'
+    && hasExactKinds(dataType.inner, ['Int64', 'Float64']);
+}
+
+function isExactNumericDataSeriesUnion(dataType: DataType): boolean {
+  if (dataType.kind !== 'OneOf' || dataType.inner.length !== 2) return false;
+  const elements = dataType.inner.map((member) =>
+    member.kind === 'DataSeries' ? member.inner : null);
+  return elements.every((element): element is DataType => element !== null)
+    && hasExactKinds(elements, ['Int64', 'Float64']);
 }
 
 /** 在顶层（不在 `<>` 内部）按分隔符拆分字符串，对齐 Rust split_top_level */

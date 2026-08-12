@@ -6,6 +6,7 @@
 
 mod artifact;
 mod builtin;
+mod data_series;
 mod execution_event;
 mod function_plan;
 mod kernel;
@@ -33,6 +34,12 @@ pub use artifact::{
 };
 pub use builtin::{
     BuiltinConstantParameters, BuiltinVariableParameters, build_builtin_kernel_registry,
+};
+pub use data_series::{
+    BooleanSeriesView, DataSeriesBuilder, DataSeriesContractError, DataSeriesElementType,
+    DataSeriesMetadata, Float64SeriesView, Int64SeriesView, NullPolicy, NumericSeriesView,
+    StringSeriesView, boolean_series, checked_int64_to_f64, numeric_series, require_data_series,
+    string_series,
 };
 #[cfg(test)]
 pub(crate) use execution_event::RUN_EVENT_KIND_VARIANT_COUNT;
@@ -86,9 +93,9 @@ pub(crate) use result_store::PendingResultSource;
 pub use result_store::{ResultSourceDescriptor, ResultSourceId, ResultSourcePage, ResultStore};
 pub(crate) use run::{ACTIVATION_IDS, ActivationIdAllocator, check_terminal};
 pub use run::{
-    ActivationId, Artifact, ArtifactCursor, ArtifactKind, CancellationToken, FrameId,
-    MaterializedArtifact, RunDeadline, RunError, RunOptions, RunPhase, RunResult, RuntimeValue,
-    StreamValue,
+    ActivationId, Artifact, ArtifactCursor, ArtifactKind, ArtifactValueKind, CancellationToken,
+    FrameId, MaterializedArtifact, RunDeadline, RunError, RunOptions, RunPhase, RunResult,
+    RuntimeValue, StreamValue,
 };
 pub use scheduler::{FunctionPlanProvider, RunExecutor};
 pub use scheduling::{OperationCompletion, SchedulingPolicy};

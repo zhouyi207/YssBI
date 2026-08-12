@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use super::ensure_worksheets_dir;
 use super::{
     GraphResourceDocument, GraphResourceIndex, GraphResourcePath, PROJECT_METADATA_FILE,
-    ProjectData, ProjectError, ProjectWorksheetIndexEntry, load_worksheets_from_root,
-    read_worksheet_index_entries, scan_graph_resource_index,
+    ProjectComputationSettings, ProjectData, ProjectError, ProjectWorksheetIndexEntry,
+    load_worksheets_from_root, read_worksheet_index_entries, scan_graph_resource_index,
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
 
@@ -30,6 +30,8 @@ pub struct ProjectManifest {
     pub schema_version: u32,
     pub project_name: String,
     pub export_time: String,
+    #[serde(default)]
+    pub computation_settings: ProjectComputationSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,6 +154,7 @@ pub fn serialize_project_manifest(data: &ProjectData) -> Result<Vec<u8>, Project
         schema_version: SCHEMA_VERSION,
         project_name: data.metadata.project_name.clone(),
         export_time: data.metadata.export_time.clone(),
+        computation_settings: data.computation_settings.clone(),
     })
     .map_err(ProjectError::Serialize)
 }
@@ -303,6 +306,7 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     let mut manifest = read_project_manifest_from_root(root)?;
     manifest.project_name = project_data.metadata.project_name.clone();
     manifest.export_time = project_data.metadata.export_time.clone();
+    manifest.computation_settings = project_data.computation_settings.clone();
     write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
     Ok(())
 }
@@ -314,6 +318,7 @@ pub fn load_project_from_file(path: &str) -> Result<ProjectData, ProjectError> {
     let mut project_data = ProjectData::new();
     project_data.metadata.project_name = manifest.project_name;
     project_data.metadata.export_time = manifest.export_time;
+    project_data.computation_settings = manifest.computation_settings;
     project_data.databases = discover_databases_from_root(root.as_path())?;
     project_data.worksheets = load_worksheets_from_root(root.as_path())?;
 
@@ -457,6 +462,7 @@ fn read_project_manifest_from_root(root: &Path) -> Result<ProjectManifest, Proje
             schema_version: SCHEMA_VERSION,
             project_name: default_name,
             export_time: String::new(),
+            computation_settings: ProjectComputationSettings::default(),
         });
     }
     read_json(manifest_path.as_path())
@@ -1096,7 +1102,8 @@ mod tests {
         NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
     };
     use crate::node_system::protocol::{NodeTypeId, PortKey};
-    use crate::project::GraphResourceDocument;
+    use crate::project::{GraphResourceDocument, NumericTolerance, ProjectComputationSettings};
+    use serde_json::json;
 
     fn temp_project_dir() -> PathBuf {
         let path = std::env::temp_dir().join(format!("yssbi-production-{}", uuid::Uuid::new_v4()));
@@ -1114,13 +1121,64 @@ mod tests {
     }
 
     #[test]
+    fn legacy_manifest_defaults_computation_settings() {
+        let manifest = serde_json::from_value::<ProjectManifest>(json!({
+            "schemaVersion": 3,
+            "projectName": "Legacy",
+            "exportTime": "2026-08-12T00:00:00Z"
+        }))
+        .unwrap();
+
+        assert_eq!(
+            manifest.computation_settings,
+            ProjectComputationSettings::default()
+        );
+    }
+
+    #[test]
+    fn computation_settings_reject_non_finite_or_zero_pair() {
+        assert!(
+            NumericTolerance {
+                absolute: f64::NAN,
+                relative: 1e-9,
+            }
+            .validate()
+            .is_err()
+        );
+        assert!(
+            NumericTolerance {
+                absolute: 0.0,
+                relative: 0.0,
+            }
+            .validate()
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn project_manifest_round_trips_computation_settings() {
+        let mut data = ProjectData::new();
+        data.computation_settings.numeric.tolerance.absolute = 1e-10;
+
+        let manifest = serialize_project_manifest(&data).unwrap();
+        let decoded: ProjectManifest = serde_json::from_slice(&manifest).unwrap();
+
+        assert_eq!(decoded.computation_settings, data.computation_settings);
+    }
+
+    #[test]
     fn project_manifest_omits_application_version() {
         let manifest = serialize_project_manifest(&ProjectData::new()).unwrap();
         let value: serde_json::Value = serde_json::from_slice(&manifest).unwrap();
 
         assert_eq!(
             top_level_keys(&value),
-            std::collections::BTreeSet::from(["schemaVersion", "projectName", "exportTime"])
+            std::collections::BTreeSet::from([
+                "schemaVersion",
+                "projectName",
+                "exportTime",
+                "computationSettings",
+            ])
         );
     }
 

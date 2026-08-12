@@ -44,6 +44,9 @@ impl ExecutionPlan {
         let mut relational_owners = BTreeMap::new();
         let mut stable_operation_ids = BTreeMap::new();
 
+        for (value, _) in &self.value_contracts {
+            check_value(&mut errors, "value contract", *value, value_count);
+        }
         for (operation, planned) in self.operations.iter().enumerate() {
             let operation = OperationIndex::new(operation as u32);
             if let Some(first) = stable_operation_ids.insert(planned.stable_id.clone(), operation) {
@@ -91,8 +94,22 @@ impl ExecutionPlan {
             }
             for input in &planned.inputs {
                 check_value(&mut errors, "operation input", input.value, value_count);
+                validate_value_contract(
+                    &self.value_contracts,
+                    input.value,
+                    &input.contract,
+                    "operation input",
+                    &mut errors,
+                );
             }
             for output in &planned.outputs {
+                validate_value_contract(
+                    &self.value_contracts,
+                    output.value,
+                    &output.contract,
+                    "operation output",
+                    &mut errors,
+                );
                 check_value(&mut errors, "operation output", output.value, value_count);
                 if output.value.index() < value_count {
                     let operation = OperationIndex::new(operation as u32);
@@ -169,6 +186,19 @@ impl ExecutionPlan {
                 errors.push(PlanValidationError::ValueDependencySelfLoop(
                     dependency.source,
                 ));
+            }
+            if let (Some(source), Some(destination)) = (
+                self.value_contracts.get(&dependency.source),
+                self.value_contracts.get(&dependency.destination),
+            ) && source != destination
+            {
+                errors.push(PlanValidationError::ValueContractMismatch {
+                    context: "value dependency",
+                    source: dependency.source,
+                    destination: dependency.destination,
+                    source_contract: source.clone(),
+                    destination_contract: destination.clone(),
+                });
             }
         }
 
@@ -345,6 +375,28 @@ impl ExecutionPlan {
         } else {
             Err(PlanValidationErrors(errors.into_boxed_slice()))
         }
+    }
+}
+
+fn validate_value_contract(
+    contracts: &BTreeMap<ValueRef, PlannedValueContract>,
+    value: ValueRef,
+    actual: &PlannedValueContract,
+    context: &'static str,
+    errors: &mut Vec<PlanValidationError>,
+) {
+    match contracts.get(&value) {
+        Some(expected) if expected != actual => {
+            errors.push(PlanValidationError::ValueContractMismatch {
+                context,
+                source: value,
+                destination: value,
+                source_contract: expected.clone(),
+                destination_contract: actual.clone(),
+            })
+        }
+        None => errors.push(PlanValidationError::MissingValueContract { context, value }),
+        Some(_) => {}
     }
 }
 
@@ -1602,6 +1654,17 @@ impl std::error::Error for PlanValidationErrors {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlanValidationError {
+    MissingValueContract {
+        context: &'static str,
+        value: ValueRef,
+    },
+    ValueContractMismatch {
+        context: &'static str,
+        source: ValueRef,
+        destination: ValueRef,
+        source_contract: PlannedValueContract,
+        destination_contract: PlannedValueContract,
+    },
     IndexOutOfBounds {
         context: &'static str,
         index: usize,

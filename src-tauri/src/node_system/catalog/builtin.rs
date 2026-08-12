@@ -673,7 +673,11 @@ fn assemble_builtin_parts_with(
                 Ok(TypeRegistration {
                     id: sid(leak(format!("core.{name}")), TypeId::new)?,
                     title_key: iid(leak(format!("types.{name}.title")))?,
-                    classes: BTreeSet::new(),
+                    classes: if matches!(name, "int64" | "float64") {
+                        BTreeSet::from([sid(NUMERIC_TYPE_CLASS_ID, TypeClassId::new)?])
+                    } else {
+                        BTreeSet::new()
+                    },
                 })
             })
             .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?,
@@ -720,6 +724,7 @@ fn assemble_builtin_parts_with(
     let mut provider = ProviderRegistration::new(sid(PROVIDER, ProviderId::new)?);
     provider.types = fragment.types.into_boxed_slice();
     provider.type_constructors = fragment.type_constructors.into_boxed_slice();
+    provider.type_classes = vec![sid(NUMERIC_TYPE_CLASS_ID, TypeClassId::new)?].into_boxed_slice();
     provider.categories = fragment.categories.into_boxed_slice();
     provider.i18n = i18n;
     provider.interface_resolvers = fragment.interface_resolvers.into_boxed_slice();

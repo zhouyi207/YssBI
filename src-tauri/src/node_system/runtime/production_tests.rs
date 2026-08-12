@@ -5,7 +5,8 @@ use crate::node_system::analysis::{
 use crate::node_system::document::{GraphResourcePath, GraphRevision};
 use crate::node_system::plan::{
     CompiledResourceRequirement, ExecutionPlan, FunctionPlanAbi, FunctionPlanHandle,
-    ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion, ValueRef,
+    PlannedValueContract, ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion,
+    ValueRef,
 };
 use crate::node_system::protocol::OutputProduction;
 use crate::node_system::registry::RegistryFingerprint;
@@ -50,6 +51,7 @@ fn empty_plan(
         },
         value_count: 0,
         operations: Box::new([]),
+        value_contracts: BTreeMap::new(),
         value_sources: Box::new([]),
         bound_values: BTreeMap::new(),
         value_dependencies: Box::new([]),
@@ -368,8 +370,10 @@ fn function_plan_generation_rejects_stale_abi_provenance() {
     let abi = Arc::new(FunctionPlanAbi {
         provenance: stale_provenance,
         parameters: BTreeMap::new(),
+        parameter_contracts: BTreeMap::new(),
         results: BTreeMap::new(),
         result_productions: BTreeMap::new(),
+        result_contracts: BTreeMap::new(),
     });
 
     let error = match FunctionPlanStore::new(session, 64).generation(
@@ -411,8 +415,19 @@ fn function_plan_generation_rejects_aliased_abi_members() {
             (FunctionParameterId("left".into()), ValueRef::new(0)),
             (FunctionParameterId("right".into()), ValueRef::new(0)),
         ]),
+        parameter_contracts: BTreeMap::from([
+            (
+                FunctionParameterId("left".into()),
+                PlannedValueContract::opaque(),
+            ),
+            (
+                FunctionParameterId("right".into()),
+                PlannedValueContract::opaque(),
+            ),
+        ]),
         results: BTreeMap::new(),
         result_productions: BTreeMap::new(),
+        result_contracts: BTreeMap::new(),
     });
 
     let result = FunctionPlanStore::new(session, 64).generation(
@@ -463,8 +478,13 @@ fn function_plan_generation_requires_exact_result_production_keys() {
                 Arc::new(FunctionPlanAbi {
                     provenance: plan.provenance.clone(),
                     parameters: BTreeMap::new(),
+                    parameter_contracts: BTreeMap::new(),
                     results: BTreeMap::from([(result.clone(), ValueRef::new(0))]),
                     result_productions,
+                    result_contracts: BTreeMap::from([(
+                        result.clone(),
+                        PlannedValueContract::opaque(),
+                    )]),
                 }),
             )],
         )
@@ -501,6 +521,7 @@ fn function_plan_generation_rejects_stale_result_production_contract() {
         resource_versions.clone(),
     );
     plan.value_count = 1;
+    plan.value_contracts = BTreeMap::from([(ValueRef::new(0), PlannedValueContract::opaque())]);
     plan.value_sources = Box::new([PlanValueSource::ExternalInput(
         ValueRef::new(0),
         OutputProduction::Streaming,
@@ -509,8 +530,10 @@ fn function_plan_generation_rejects_stale_result_production_contract() {
     let abi = FunctionPlanAbi {
         provenance: plan.provenance.clone(),
         parameters: BTreeMap::new(),
+        parameter_contracts: BTreeMap::new(),
         results: BTreeMap::from([(result.clone(), ValueRef::new(0))]),
-        result_productions: BTreeMap::from([(result, OutputProduction::FullyMaterialized)]),
+        result_productions: BTreeMap::from([(result.clone(), OutputProduction::FullyMaterialized)]),
+        result_contracts: BTreeMap::from([(result, PlannedValueContract::opaque())]),
     };
 
     let error = match FunctionPlanStore::new(session, 64).generation(
@@ -562,8 +585,10 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
     let parameter_abi = FunctionPlanAbi {
         provenance: unsourced_parameter.provenance.clone(),
         parameters: BTreeMap::from([(FunctionParameterId("amount".into()), ValueRef::new(0))]),
+        parameter_contracts: BTreeMap::new(),
         results: BTreeMap::new(),
         result_productions: BTreeMap::new(),
+        result_contracts: BTreeMap::new(),
     };
     assert!(matches!(
         generate(unsourced_parameter, parameter_abi),
@@ -580,10 +605,15 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
     let result_abi = FunctionPlanAbi {
         provenance: unsourced_result.provenance.clone(),
         parameters: BTreeMap::new(),
+        parameter_contracts: BTreeMap::new(),
         results: BTreeMap::from([(FunctionParameterId("return".into()), ValueRef::new(0))]),
         result_productions: BTreeMap::from([(
             FunctionParameterId("return".into()),
             OutputProduction::FullyMaterialized,
+        )]),
+        result_contracts: BTreeMap::from([(
+            FunctionParameterId("return".into()),
+            PlannedValueContract::opaque(),
         )]),
     };
     assert!(matches!(
@@ -598,6 +628,7 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
         resource_versions.clone(),
     );
     sourced.value_count = 1;
+    sourced.value_contracts = BTreeMap::from([(ValueRef::new(0), PlannedValueContract::opaque())]);
     sourced.value_sources = Box::new([PlanValueSource::ExternalInput(
         ValueRef::new(0),
         OutputProduction::FullyMaterialized,
@@ -605,10 +636,18 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
     let sourced_abi = FunctionPlanAbi {
         provenance: sourced.provenance.clone(),
         parameters: BTreeMap::from([(FunctionParameterId("amount".into()), ValueRef::new(0))]),
+        parameter_contracts: BTreeMap::from([(
+            FunctionParameterId("amount".into()),
+            PlannedValueContract::opaque(),
+        )]),
         results: BTreeMap::from([(FunctionParameterId("return".into()), ValueRef::new(0))]),
         result_productions: BTreeMap::from([(
             FunctionParameterId("return".into()),
             OutputProduction::FullyMaterialized,
+        )]),
+        result_contracts: BTreeMap::from([(
+            FunctionParameterId("return".into()),
+            PlannedValueContract::opaque(),
         )]),
     };
     assert!(generate(sourced, sourced_abi).is_ok());
@@ -638,8 +677,10 @@ fn concurrent_function_plan_publication_and_calls_keep_run_local_generations() {
             let abi = Arc::new(FunctionPlanAbi {
                 provenance: plan.provenance.clone(),
                 parameters: BTreeMap::new(),
+                parameter_contracts: BTreeMap::new(),
                 results: BTreeMap::new(),
                 result_productions: BTreeMap::new(),
+                result_contracts: BTreeMap::new(),
             });
             let generation = store
                 .generation(

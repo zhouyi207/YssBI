@@ -1,6 +1,7 @@
 //! 项目管理模块
 
 mod compile_publication;
+pub mod computation_settings;
 pub mod filesystem;
 pub mod graph_resource_index;
 pub mod graph_resource_path;
@@ -36,6 +37,7 @@ pub mod unique_name;
 pub mod worksheet_io;
 pub mod worksheet_resource_path;
 
+pub use computation_settings::*;
 pub use filesystem::*;
 pub use graph_resource_index::*;
 pub use graph_resource_path::*;

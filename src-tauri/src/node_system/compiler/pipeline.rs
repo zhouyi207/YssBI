@@ -39,8 +39,8 @@ use crate::node_system::plan::{
     EXECUTION_SEMANTICS_SCHEMA_VERSION, EffectDependency as PlannedEffectDependency, ExecutionPlan,
     ExecutionSemanticsVersion, FunctionPlanAbi, GraphOutputRef, KernelHandle, OperationIndex,
     OperationStableId, PlanResult, PlanValueSource, PlannedInput, PlannedOutput, PlannedRetry,
-    RelationalBackendId, ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion,
-    ValueDependency, ValueRef, WorkloadClass,
+    PlannedValueContract, PlannedValueKind, RelationalBackendId, ResourceAccess, ResourceId,
+    ResourceKind, StructuredControlRegion, ValueDependency, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
@@ -2920,6 +2920,73 @@ pub(super) fn finalize_function_abi_productions(
     Ok(())
 }
 
+fn planned_value_contract(type_expr: &TypeExpr) -> Option<PlannedValueContract> {
+    if type_expr_contains_unresolved(type_expr) {
+        return None;
+    }
+    let kind = match type_expr {
+        TypeExpr::Applied { constructor, .. }
+            if constructor.as_str() == crate::node_system::protocol::DATA_SERIES_CONSTRUCTOR_ID =>
+        {
+            PlannedValueKind::DataSeries
+        }
+        TypeExpr::Concrete(id) if id.as_str() == "tabular.dataframe" => PlannedValueKind::DataFrame,
+        TypeExpr::Concrete(id)
+            if matches!(
+                id.as_str(),
+                "core.bool"
+                    | "core.int64"
+                    | "core.float64"
+                    | "core.string"
+                    | "core.date"
+                    | "core.datetime"
+                    | "core.time"
+                    | "core.categorical"
+            ) =>
+        {
+            PlannedValueKind::Scalar
+        }
+        TypeExpr::Union(members) => {
+            let mut kinds = members
+                .iter()
+                .map(planned_value_contract)
+                .map(|contract| contract.map(|contract| contract.kind));
+            let first = kinds.next().flatten()?;
+            if kinds.all(|kind| kind == Some(first)) {
+                first
+            } else {
+                return None;
+            }
+        }
+        TypeExpr::Concrete(_) | TypeExpr::Applied { .. } => PlannedValueKind::Opaque,
+        TypeExpr::Generic(_) | TypeExpr::Unknown => return None,
+    };
+    Some(PlannedValueContract {
+        kind,
+        type_expr: type_expr.clone(),
+    })
+}
+
+fn type_expr_contains_unresolved(type_expr: &TypeExpr) -> bool {
+    match type_expr {
+        TypeExpr::Generic(_) | TypeExpr::Unknown => true,
+        TypeExpr::Applied { arguments, .. } | TypeExpr::Union(arguments) => {
+            arguments.iter().any(type_expr_contains_unresolved)
+        }
+        TypeExpr::Concrete(_) => false,
+    }
+}
+
+fn port_contract(
+    port: &ValidatedSemanticPort<PortAddress, TypeExpr, crate::node_system::protocol::SchemaExpr>,
+    declared: &TypeExpr,
+) -> Result<PlannedValueContract, CompilerNodeDiagnostic> {
+    let type_expr = port.resolved_type.as_ref().unwrap_or(declared);
+    planned_value_contract(type_expr).ok_or_else(|| {
+        CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Port(port.address.clone()))
+    })
+}
+
 fn derive_function_abi<R: CompilerRegistry>(
     registry: &R,
     graph: &CompilerSemanticGraph,
@@ -2931,8 +2998,10 @@ fn derive_function_abi<R: CompilerRegistry>(
     }
     let (_, values) = allocate_port_values(registry, graph)?;
     let mut parameters = BTreeMap::new();
+    let mut parameter_contracts = BTreeMap::new();
     let mut results = BTreeMap::new();
     let mut result_productions = BTreeMap::new();
+    let mut result_contracts = BTreeMap::new();
     for node in graph.nodes.iter() {
         let resolved = resolve_for_lowering(registry, node)?;
         let destination = match resolved.structural_role() {
@@ -2963,6 +3032,10 @@ fn derive_function_abi<R: CompilerRegistry>(
                 .into_node(DiagnosticLocation::Port(port.address.clone())));
             }
             let value = values[&port.address];
+            let contract = port_contract(
+                port,
+                &protocol_port(resolved.protocol, &port.address).value_type,
+            )?;
             if resolved.structural_role() == Some(StructuralNodeRole::FunctionReturn) {
                 let production = graph
                     .dependencies
@@ -2983,6 +3056,9 @@ fn derive_function_abi<R: CompilerRegistry>(
                             .into_node(DiagnosticLocation::Port(port.address.clone()))
                     })?;
                 result_productions.insert(parameter.clone(), production);
+                result_contracts.insert(parameter.clone(), contract);
+            } else {
+                parameter_contracts.insert(parameter.clone(), contract);
             }
             if destination.insert(parameter.clone(), value).is_some() {
                 return Err(CompilerDiagnostic::FunctionAbiMemberDuplicate {
@@ -2995,8 +3071,10 @@ fn derive_function_abi<R: CompilerRegistry>(
     Ok(Some(FunctionPlanAbi {
         provenance: provenance.clone(),
         parameters,
+        parameter_contracts,
         results,
         result_productions,
+        result_contracts,
     }))
 }
 
@@ -3015,6 +3093,7 @@ fn lower_graph<R: CompilerRegistry>(
     let (next_value, port_values) = allocate_port_values(registry, graph)?;
     let mut production_by_port = BTreeMap::new();
     let mut consumption_by_port = BTreeMap::new();
+    let mut value_contracts = BTreeMap::new();
     let mut structural_inputs = BTreeSet::new();
     let mut structural_outputs = BTreeSet::new();
     let mut value_sources = BTreeSet::new();
@@ -3028,6 +3107,7 @@ fn lower_graph<R: CompilerRegistry>(
             let spec = protocol_port(resolved.protocol, &port.address);
             if spec.kind == PortKind::Data {
                 let value = port_values[&port.address];
+                value_contracts.insert(value, port_contract(port, &spec.value_type)?);
                 if let Some(role) = structural_role {
                     match spec.direction {
                         PortDirection::Input => {
@@ -3129,6 +3209,7 @@ fn lower_graph<R: CompilerRegistry>(
                     outputs.push((port.address.clone(), value));
                     planned_outputs.push(PlannedOutput {
                         value,
+                        contract: value_contracts[&value].clone(),
                         production: spec
                             .production
                             .unwrap_or(OutputProduction::FullyMaterialized),
@@ -3152,6 +3233,7 @@ fn lower_graph<R: CompilerRegistry>(
                     };
                     planned_inputs.push(PlannedInput {
                         value,
+                        contract: value_contracts[&value].clone(),
                         consumption: spec
                             .consumption
                             .unwrap_or(InputConsumption::FullyMaterialized),
@@ -3643,6 +3725,7 @@ fn lower_graph<R: CompilerRegistry>(
         &mut root_region,
         &mut value_sources,
         &mut production_by_value,
+        &mut value_contracts,
         function_abis,
     )?;
     debug_assert_eq!(provenance.basis, graph.basis);
@@ -3690,6 +3773,7 @@ fn lower_graph<R: CompilerRegistry>(
         provenance,
         value_count: next_value,
         operations,
+        value_contracts,
         value_sources: value_sources
             .into_iter()
             .collect::<Vec<_>>()
@@ -3753,13 +3837,20 @@ fn collect_control_value_sources(
     region: &mut StructuredControlRegion,
     sources: &mut BTreeSet<PlanValueSource>,
     productions: &mut BTreeMap<ValueRef, OutputProduction>,
+    contracts: &mut BTreeMap<ValueRef, PlannedValueContract>,
     function_abis: &BTreeMap<GraphResourcePath, FunctionPlanAbi>,
 ) -> Result<(), LowerGraphFailure> {
     match region {
         StructuredControlRegion::Sequence(steps) => {
             for step in steps {
                 if let crate::node_system::plan::ControlStep::Region(region) = step {
-                    collect_control_value_sources(region, sources, productions, function_abis)?;
+                    collect_control_value_sources(
+                        region,
+                        sources,
+                        productions,
+                        contracts,
+                        function_abis,
+                    )?;
                 }
             }
         }
@@ -3769,8 +3860,20 @@ fn collect_control_value_sources(
             results,
             ..
         } => {
-            collect_control_value_sources(then_region, sources, productions, function_abis)?;
-            collect_control_value_sources(else_region, sources, productions, function_abis)?;
+            collect_control_value_sources(
+                then_region,
+                sources,
+                productions,
+                contracts,
+                function_abis,
+            )?;
+            collect_control_value_sources(
+                else_region,
+                sources,
+                productions,
+                contracts,
+                function_abis,
+            )?;
             for binding in results {
                 let then_production =
                     productions
@@ -3791,8 +3894,21 @@ fn collect_control_value_sources(
                         .into_node(DiagnosticLocation::Graph)
                         .into());
                 }
+                let then_contract =
+                    contracts
+                        .get(&binding.then_source)
+                        .cloned()
+                        .ok_or_else(|| {
+                            CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                        })?;
+                if contracts.get(&binding.else_source) != Some(&then_contract) {
+                    return Err(CompilerDiagnostic::PlanInvalid {}
+                        .into_node(DiagnosticLocation::Graph)
+                        .into());
+                }
                 binding.production = Some(then_production);
                 productions.insert(binding.destination, then_production);
+                contracts.insert(binding.destination, then_contract);
                 sources.insert(PlanValueSource::ControlProduced(
                     binding.destination,
                     then_production,
@@ -3807,14 +3923,22 @@ fn collect_control_value_sources(
                     .ok_or_else(|| {
                         CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
                     })?;
+                let contract =
+                    contracts
+                        .get(&binding.initial_source)
+                        .cloned()
+                        .ok_or_else(|| {
+                            CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                        })?;
                 binding.production = Some(initial);
                 productions.insert(binding.body_input, initial);
+                contracts.insert(binding.body_input, contract);
                 sources.insert(PlanValueSource::ControlProduced(
                     binding.body_input,
                     initial,
                 ));
             }
-            collect_control_value_sources(body, sources, productions, function_abis)?;
+            collect_control_value_sources(body, sources, productions, contracts, function_abis)?;
             for binding in carried {
                 let initial = binding.production.ok_or_else(|| {
                     CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
@@ -3830,17 +3954,51 @@ fn collect_control_value_sources(
                         .into_node(DiagnosticLocation::Graph)
                         .into());
                 }
+                let initial_contract =
+                    contracts
+                        .get(&binding.initial_source)
+                        .cloned()
+                        .ok_or_else(|| {
+                            CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                        })?;
+                if contracts.get(&binding.next_source) != Some(&initial_contract) {
+                    return Err(CompilerDiagnostic::PlanInvalid {}
+                        .into_node(DiagnosticLocation::Graph)
+                        .into());
+                }
                 productions.insert(binding.result, initial);
+                contracts.insert(binding.result, initial_contract);
                 sources.insert(PlanValueSource::ControlProduced(binding.result, initial));
             }
         }
         StructuredControlRegion::Call {
-            target, results, ..
+            target,
+            arguments,
+            results,
+            ..
         } => {
             let path = GraphResourcePath(target.as_str().into());
             let abi = function_abis.get(&path).ok_or_else(|| {
                 CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
             })?;
+            for binding in arguments {
+                let expected = abi
+                    .parameters
+                    .iter()
+                    .find_map(|(parameter, value)| {
+                        (*value == binding.callee_destination)
+                            .then(|| abi.parameter_contracts.get(parameter))
+                            .flatten()
+                    })
+                    .ok_or_else(|| {
+                        CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                    })?;
+                if contracts.get(&binding.caller_source) != Some(expected) {
+                    return Err(CompilerDiagnostic::PlanInvalid {}
+                        .into_node(DiagnosticLocation::Graph)
+                        .into());
+                }
+            }
             for binding in results {
                 let production = abi
                     .results
@@ -3858,7 +4016,19 @@ fn collect_control_value_sources(
                         .into_node(DiagnosticLocation::Graph)
                         .into());
                 }
+                let contract = abi
+                    .results
+                    .iter()
+                    .find_map(|(parameter, value)| {
+                        (*value == binding.callee_source)
+                            .then(|| abi.result_contracts.get(parameter).cloned())
+                            .flatten()
+                    })
+                    .ok_or_else(|| {
+                        CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+                    })?;
                 productions.insert(binding.caller_destination, production);
+                contracts.insert(binding.caller_destination, contract);
                 sources.insert(PlanValueSource::ControlProduced(
                     binding.caller_destination,
                     production,

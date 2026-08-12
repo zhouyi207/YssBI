@@ -1,4 +1,4 @@
-use super::{Artifact, SpillArtifact};
+use super::{Artifact, ArtifactValueKind, DataSeriesMetadata, SpillArtifact};
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext, RunId};
 use crate::node_system::document::GraphRevision;
 use crate::node_system::protocol::Value;
@@ -43,6 +43,20 @@ impl ArtifactSnapshot {
         self.len() == 0
     }
 
+    fn value_kind(&self) -> ArtifactValueKind {
+        match self {
+            Self::RuntimeArtifact(artifact) => artifact.value_kind(),
+            Self::Value(_) | Self::Sequence(_) | Self::Spilled(_) => ArtifactValueKind::Sequence,
+        }
+    }
+
+    fn data_series_metadata(&self) -> Option<&DataSeriesMetadata> {
+        match self {
+            Self::RuntimeArtifact(artifact) => artifact.data_series_metadata(),
+            Self::Value(_) | Self::Sequence(_) | Self::Spilled(_) => None,
+        }
+    }
+
     fn page(&self, offset: usize, limit: usize) -> Result<Box<[Value]>, super::RunError> {
         let start = offset.min(self.len());
         let end = start.saturating_add(limit).min(self.len());
@@ -80,6 +94,8 @@ pub enum ArtifactSnapshotKind {
 pub struct ArtifactDescriptor {
     pub artifact_id: ArtifactId,
     pub kind: ArtifactSnapshotKind,
+    pub value_kind: ArtifactValueKind,
+    pub data_series_metadata: Option<DataSeriesMetadata>,
     pub total_count: usize,
     pub correlation: CorrelationContext,
     pub basis: CompilationBasis<GraphRevision>,
@@ -92,6 +108,8 @@ pub struct ArtifactPage {
     pub offset: usize,
     pub limit: usize,
     pub total_count: usize,
+    pub value_kind: ArtifactValueKind,
+    pub data_series_metadata: Option<DataSeriesMetadata>,
     pub values: Box<[Value]>,
 }
 
@@ -226,6 +244,8 @@ impl ArtifactStore {
                 | ArtifactSnapshot::Spilled(_)
                 | ArtifactSnapshot::RuntimeArtifact(_) => ArtifactSnapshotKind::Sequence,
             },
+            value_kind: snapshot.value_kind(),
+            data_series_metadata: snapshot.data_series_metadata().cloned(),
             total_count: snapshot.len(),
             correlation,
             basis,
@@ -283,6 +303,8 @@ impl ArtifactStore {
             offset: start,
             limit,
             total_count: snapshot.len(),
+            value_kind: snapshot.value_kind(),
+            data_series_metadata: snapshot.data_series_metadata().cloned(),
             values: snapshot.page(start, limit)?,
         }))
     }
@@ -369,6 +391,46 @@ mod tests {
             trace_parent_span_id: None,
         };
         (correlation, basis)
+    }
+
+    #[test]
+    fn runtime_data_series_descriptor_and_page_publish_metadata() {
+        let store = ArtifactStore::new();
+        let run_id = RunId::new(8);
+        let (correlation, basis) = context(run_id);
+        let metadata = crate::node_system::runtime::DataSeriesMetadata {
+            element_type: crate::node_system::runtime::DataSeriesElementType::Int64,
+            length: 2,
+            null_count: 1,
+            name: Some("published".into()),
+            format: None,
+        };
+        let artifact = Artifact::new_data_series(
+            crate::node_system::runtime::ArtifactKind::Collected,
+            metadata.clone(),
+            [Value::Integer(4), Value::Null],
+        )
+        .unwrap();
+
+        let descriptor = store.insert(
+            run_id,
+            correlation,
+            basis,
+            ArtifactSnapshot::RuntimeArtifact(artifact),
+        );
+        let page = store.page(descriptor.artifact_id, 0, 10).unwrap().unwrap();
+
+        assert_eq!(
+            descriptor.value_kind,
+            crate::node_system::runtime::ArtifactValueKind::DataSeries
+        );
+        assert_eq!(descriptor.data_series_metadata, Some(metadata.clone()));
+        assert_eq!(
+            page.value_kind,
+            crate::node_system::runtime::ArtifactValueKind::DataSeries
+        );
+        assert_eq!(page.data_series_metadata, Some(metadata));
+        assert_eq!(page.values.as_ref(), &[Value::Integer(4), Value::Null]);
     }
 
     #[test]

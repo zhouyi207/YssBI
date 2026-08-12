@@ -1150,15 +1150,10 @@ pub(crate) fn project_data_type(value: &TypeExpr) -> Option<DataType> {
             "core.string" => DataType::String,
             "core.date" => DataType::Date,
             "core.datetime" => DataType::Datetime,
+            "core.time" => DataType::Time,
             "core.categorical" => DataType::Categorical,
+            "core.object" => DataType::Object,
             "tabular.dataframe" => DataType::DataFrame,
-            "tabular.series" => DataType::DataSeries(Box::new(DataType::Any)),
-            "core.data_series.bool" => DataType::DataSeries(Box::new(DataType::Boolean)),
-            "core.data_series.int64" => DataType::DataSeries(Box::new(DataType::Int64)),
-            "core.data_series.float64" => DataType::DataSeries(Box::new(DataType::Float64)),
-            "core.data_series.string" => DataType::DataSeries(Box::new(DataType::String)),
-            "core.data_series.categorical" => DataType::DataSeries(Box::new(DataType::Categorical)),
-            "core.data_series.date" => DataType::DataSeries(Box::new(DataType::Date)),
             semantic_id => DataType::Struct(semantic_id.to_owned()),
         }),
         TypeExpr::Applied {
@@ -1167,13 +1162,19 @@ pub(crate) fn project_data_type(value: &TypeExpr) -> Option<DataType> {
         } if constructor.as_str() == "core.data_series" && arguments.len() == 1 => {
             project_data_type(&arguments[0]).map(|element| DataType::DataSeries(Box::new(element)))
         }
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } if constructor.as_str() == "core.array" && arguments.len() == 1 => {
+            project_data_type(&arguments[0]).map(|element| DataType::Array(Box::new(element)))
+        }
         TypeExpr::Applied { .. } => None,
         TypeExpr::Union(values) if !values.is_empty() => values
             .iter()
             .map(project_data_type)
             .collect::<Option<Vec<_>>>()
             .map(DataType::one_of),
-        TypeExpr::Unknown => Some(DataType::Any),
+        TypeExpr::Unknown => None,
         TypeExpr::Union(_) | TypeExpr::Generic(_) => None,
     }
 }
@@ -1467,10 +1468,47 @@ mod tests {
     };
     use crate::node_system::protocol::{
         NodeTypeId, ParameterKey, PortKey, TypeConstructorId, TypeExpr, TypeId,
+        numeric_data_series_type,
     };
     use crate::node_system::registry::RegistryFingerprint;
     use serde_json::json;
     use uuid::Uuid;
+
+    #[test]
+    fn projection_projects_unknown_without_any() {
+        let summary = project_type_summary(&TypeExpr::Unknown);
+
+        assert!(!summary.resolved);
+        assert_eq!(summary.data_type, None);
+    }
+
+    #[test]
+    fn projection_projects_numeric_series_union_without_legacy_ids() {
+        let summary = project_type_summary(&numeric_data_series_type());
+
+        assert!(summary.resolved);
+        assert_eq!(
+            summary.display.as_ref(),
+            "core.data_series<core.float64> | core.data_series<core.int64>"
+        );
+        assert_eq!(
+            summary.data_type,
+            Some(DataType::one_of(vec![
+                DataType::DataSeries(Box::new(DataType::Float64)),
+                DataType::DataSeries(Box::new(DataType::Int64)),
+            ]))
+        );
+        for legacy_id in [
+            "tabular.series",
+            "core.data_series.float64",
+            "core.data_series.int64",
+        ] {
+            assert_eq!(
+                project_data_type(&TypeExpr::Concrete(TypeId::new(legacy_id).unwrap())),
+                Some(DataType::Struct(legacy_id.into()))
+            );
+        }
+    }
 
     #[test]
     fn type_summary_serializes_structured_data_type_without_display_parsing() {

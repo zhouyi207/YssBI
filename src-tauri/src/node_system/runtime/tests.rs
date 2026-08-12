@@ -10,7 +10,8 @@ use crate::node_system::document::{
 };
 use crate::node_system::plan::*;
 use crate::node_system::protocol::{
-    CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy, Value,
+    CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey,
+    RetryPolicy, TypeExpr, TypeId, Value,
 };
 use crate::node_system::registry::RegistryFingerprint;
 use std::any::Any;
@@ -45,6 +46,7 @@ fn operation(kernel: &str, inputs: &[u32], outputs: &[u32]) -> PlannedOperation 
             .iter()
             .map(|value| PlannedInput {
                 value: ValueRef::new(*value),
+                contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 consumption: InputConsumption::FullyMaterialized,
                 bound_value: None,
             })
@@ -54,6 +56,7 @@ fn operation(kernel: &str, inputs: &[u32], outputs: &[u32]) -> PlannedOperation 
             .iter()
             .map(|value| PlannedOutput {
                 value: ValueRef::new(*value),
+                contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 production: OutputProduction::FullyMaterialized,
             })
             .collect::<Vec<_>>()
@@ -82,11 +85,13 @@ fn adapter_operation(
         kernel: PlannedKernel::Adapter(contract.adapter),
         inputs: Box::new([PlannedInput {
             value: ValueRef::new(input),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: contract.input_consumption,
             bound_value: None,
         }]),
         outputs: Box::new([PlannedOutput {
             value: ValueRef::new(output),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: contract.output_production,
         }]),
         params: id("adapter.test", CompiledParameterHandle::new),
@@ -129,6 +134,9 @@ fn plan(
             compile_id: CompileId::new(1),
         },
         value_count,
+        value_contracts: (0..value_count)
+            .map(|value| (ValueRef::new(value), PlannedValueContract::opaque()))
+            .collect(),
         value_sources: Box::new([]),
         bound_values: BTreeMap::new(),
         operations: operations.into_boxed_slice(),
@@ -307,7 +315,7 @@ fn published_function(
 ) -> Arc<PublishedFunctionPlan> {
     plan.provenance.graph_path = GraphResourcePath(target.into());
     let provenance = plan.provenance.clone();
-    let parameters = parameters
+    let parameters: BTreeMap<FunctionParameterId, ValueRef> = parameters
         .iter()
         .enumerate()
         .map(|(index, value)| {
@@ -331,11 +339,21 @@ fn published_function(
         plan: Arc::new(plan),
         abi: Arc::new(FunctionPlanAbi {
             provenance,
+            parameter_contracts: parameters
+                .keys()
+                .cloned()
+                .map(|parameter| (parameter, PlannedValueContract::opaque()))
+                .collect(),
             parameters,
             result_productions: results
                 .keys()
                 .cloned()
                 .map(|parameter| (parameter, OutputProduction::FullyMaterialized))
+                .collect(),
+            result_contracts: results
+                .keys()
+                .cloned()
+                .map(|parameter| (parameter, PlannedValueContract::opaque()))
                 .collect(),
             results,
         }),
@@ -416,6 +434,223 @@ fn materialization_test_owner() -> Arc<RunResourceOwner> {
         )
         .unwrap(),
     )
+}
+
+fn decimal(value: &str) -> Value {
+    Value::Decimal(CanonicalDecimal::new(value).unwrap())
+}
+
+fn data_series_metadata(
+    element_type: DataSeriesElementType,
+    length: usize,
+    null_count: usize,
+) -> DataSeriesMetadata {
+    DataSeriesMetadata {
+        element_type,
+        length,
+        null_count,
+        name: Some("x".into()),
+        format: Some("test-format".into()),
+    }
+}
+
+#[test]
+fn data_series_constructor_validates_metadata_and_storage_contract() {
+    let length_error = Artifact::new_data_series(
+        ArtifactKind::Collected,
+        data_series_metadata(DataSeriesElementType::Int64, 2, 0),
+        [Value::Integer(1)],
+    )
+    .unwrap_err();
+    assert_eq!(
+        length_error.to_string(),
+        "DataSeries metadata length 2 does not match 1 values"
+    );
+
+    let null_error = Artifact::new_data_series(
+        ArtifactKind::Collected,
+        data_series_metadata(DataSeriesElementType::Int64, 1, 0),
+        [Value::Null],
+    )
+    .unwrap_err();
+    assert_eq!(
+        null_error.to_string(),
+        "DataSeries metadata null count 0 does not match 1 nulls"
+    );
+
+    let type_error = Artifact::new_data_series(
+        ArtifactKind::Collected,
+        data_series_metadata(DataSeriesElementType::Int64, 1, 0),
+        [decimal("1")],
+    )
+    .unwrap_err();
+    assert_eq!(
+        type_error.to_string(),
+        "DataSeries Int64 element at index 0 has incompatible Decimal storage"
+    );
+}
+
+#[test]
+fn data_series_artifact_preserves_metadata_through_spill_and_replay() {
+    let root = materialization_test_root("data-series-replay");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(104),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let metadata = data_series_metadata(DataSeriesElementType::Float64, 3, 1);
+    let series = Artifact::new_data_series(
+        ArtifactKind::Collected,
+        metadata.clone(),
+        [decimal("1"), Value::Null, decimal("3")],
+    )
+    .unwrap();
+
+    let spilled = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Artifact(series),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    let replayed =
+        execute_planned_adapter(&PlannedAdapter::Replay, spilled, &owner, &cancellation).unwrap();
+    let RuntimeValue::Artifact(artifact) = replayed else {
+        panic!("replay must produce an artifact");
+    };
+
+    assert_eq!(artifact.kind(), ArtifactKind::Replayable);
+    assert_eq!(artifact.value_kind(), ArtifactValueKind::DataSeries);
+    assert_eq!(artifact.data_series_metadata(), Some(&metadata));
+    assert_eq!(
+        artifact
+            .cursor()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        [decimal("1"), Value::Null, decimal("3")]
+    );
+
+    drop(artifact);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn scalar_list_is_rejected_as_data_series() {
+    let value = RuntimeValue::Scalar(Value::List(vec![Value::Integer(1)]));
+
+    assert_eq!(
+        require_data_series(&value).unwrap_err().message(),
+        "expected DataSeries Artifact, received scalar"
+    );
+}
+
+#[test]
+fn scalar_object_is_rejected_as_data_series() {
+    let value = RuntimeValue::Scalar(Value::Object(BTreeMap::new()));
+
+    assert_eq!(
+        require_data_series(&value).unwrap_err().message(),
+        "expected DataSeries Artifact, received scalar"
+    );
+}
+
+#[test]
+fn typed_data_series_readers_preserve_numeric_kind_and_apply_null_policy() {
+    let integers = Artifact::new_data_series(
+        ArtifactKind::Collected,
+        data_series_metadata(DataSeriesElementType::Int64, 3, 1),
+        [Value::Integer(1), Value::Null, Value::Integer(3)],
+    )
+    .unwrap();
+    let floats = DataSeriesBuilder::new(DataSeriesElementType::Float64)
+        .name("float values")
+        .format("0.00")
+        .values([decimal("1.5"), Value::Null, decimal("2.5")])
+        .build(ArtifactKind::Collected)
+        .unwrap();
+
+    let NumericSeriesView::Int64(propagated) =
+        numeric_series(&integers, NullPolicy::Propagate).unwrap()
+    else {
+        panic!("Int64 metadata must produce an Int64 view");
+    };
+    assert_eq!(propagated.values(), &[Some(1), None, Some(3)]);
+    let NumericSeriesView::Int64(skipped) = numeric_series(&integers, NullPolicy::Skip).unwrap()
+    else {
+        panic!("Int64 metadata must produce an Int64 view");
+    };
+    assert_eq!(skipped.values(), &[Some(1), Some(3)]);
+    assert_eq!(
+        numeric_series(&integers, NullPolicy::Reject)
+            .unwrap_err()
+            .message(),
+        "DataSeries contains null at index 1"
+    );
+
+    let NumericSeriesView::Float64(floats) =
+        numeric_series(&floats, NullPolicy::Propagate).unwrap()
+    else {
+        panic!("Float64 metadata must produce a Float64 view");
+    };
+    assert_eq!(floats.values(), &[Some(1.5), None, Some(2.5)]);
+    assert_eq!(floats.metadata().name.as_deref(), Some("float values"));
+    assert_eq!(floats.metadata().format.as_deref(), Some("0.00"));
+}
+
+#[test]
+fn string_and_boolean_readers_are_typed_and_reject_wrong_metadata() {
+    let strings = Artifact::new_data_series(
+        ArtifactKind::Collected,
+        data_series_metadata(DataSeriesElementType::String, 2, 1),
+        [Value::String("a".into()), Value::Null],
+    )
+    .unwrap();
+    let booleans = Artifact::new_data_series(
+        ArtifactKind::Collected,
+        data_series_metadata(DataSeriesElementType::Boolean, 2, 1),
+        [Value::Bool(true), Value::Null],
+    )
+    .unwrap();
+
+    assert_eq!(
+        string_series(&strings, NullPolicy::Propagate)
+            .unwrap()
+            .values(),
+        &[Some(Box::<str>::from("a")), None]
+    );
+    assert_eq!(
+        boolean_series(&booleans, NullPolicy::Skip)
+            .unwrap()
+            .values(),
+        &[Some(true)]
+    );
+    assert_eq!(
+        boolean_series(&strings, NullPolicy::Propagate)
+            .unwrap_err()
+            .message(),
+        "expected Boolean DataSeries, received String"
+    );
+}
+
+#[test]
+fn checked_int64_float_promotion_rejects_inexact_values() {
+    assert_eq!(
+        checked_int64_to_f64(9_007_199_254_740_992).unwrap(),
+        9_007_199_254_740_992.0
+    );
+    assert_eq!(
+        checked_int64_to_f64(9_007_199_254_740_993)
+            .unwrap_err()
+            .message(),
+        "Int64 value 9007199254740993 cannot be represented exactly as Float64"
+    );
 }
 
 fn requirement(name: &str) -> CompiledResourceRequirement {
@@ -2032,6 +2267,87 @@ fn truly_missing_operation_input_still_reports_missing_value() {
 }
 
 #[test]
+fn runtime_admission_rejects_sequence_artifact_for_data_series_contract() {
+    let series_contract = PlannedValueContract {
+        kind: PlannedValueKind::DataSeries,
+        type_expr: crate::node_system::protocol::data_series_type(TypeExpr::Concrete(
+            TypeId::new("core.int64").unwrap(),
+        )),
+    };
+    let downstream_executed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("sequence_artifact_source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| {
+                Ok(vec![RuntimeValue::Artifact(Artifact::new(
+                    ArtifactKind::Collected,
+                    [Value::Integer(1)],
+                ))])
+            }),
+        )
+        .unwrap();
+    let observed = Arc::clone(&downstream_executed);
+    kernels
+        .register(
+            id("data_series_sink", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.store(true, Ordering::SeqCst);
+                Ok(Vec::new())
+            }),
+        )
+        .unwrap();
+    let mut source = operation("sequence_artifact_source", &[], &[0]);
+    source.outputs[0].contract = series_contract.clone();
+    source.outputs[0].production = OutputProduction::Streaming;
+    let mut adapter = adapter_operation(
+        "data_series_identity",
+        1,
+        2,
+        OutputProduction::Streaming,
+        InputConsumption::FullyMaterialized,
+    );
+    adapter.inputs[0].contract = series_contract.clone();
+    adapter.outputs[0].contract = series_contract.clone();
+    let mut sink = operation("data_series_sink", &[3], &[]);
+    sink.inputs[0].contract = series_contract.clone();
+    let mut execution_plan = plan(
+        vec![source, adapter, sink],
+        4,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    execution_plan.value_contracts = BTreeMap::from([
+        (ValueRef::new(0), series_contract.clone()),
+        (ValueRef::new(1), series_contract.clone()),
+        (ValueRef::new(2), series_contract.clone()),
+        (ValueRef::new(3), series_contract),
+    ]);
+    execution_plan.value_dependencies = Box::new([
+        ValueDependency {
+            source: ValueRef::new(0),
+            destination: ValueRef::new(1),
+        },
+        ValueDependency {
+            source: ValueRef::new(2),
+            destination: ValueRef::new(3),
+        },
+    ]);
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(
+        matches!(&error, RunError::InvalidPlan(message) if message.contains("DataSeries Artifact")),
+        "unexpected admission error: {error:?}"
+    );
+    assert!(!downstream_executed.load(Ordering::SeqCst));
+}
+
+#[test]
 fn executes_sequence_deterministically() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let mut kernels = KernelRegistry::new();
@@ -3357,8 +3673,10 @@ fn call_rejects_stale_published_abi_before_entering_the_callee_frame() {
         abi: Arc::new(FunctionPlanAbi {
             provenance: stale_provenance,
             parameters: BTreeMap::new(),
+            parameter_contracts: BTreeMap::new(),
             results: BTreeMap::new(),
             result_productions: BTreeMap::new(),
+            result_contracts: BTreeMap::new(),
         }),
     });
     let caller = plan(
@@ -4344,8 +4662,10 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
         let abi = FunctionPlanAbi {
             provenance: function.provenance.clone(),
             parameters: BTreeMap::new(),
+            parameter_contracts: BTreeMap::new(),
             results: BTreeMap::new(),
             result_productions: BTreeMap::new(),
+            result_contracts: BTreeMap::new(),
         };
         (Arc::new(function), Arc::new(abi))
     };
@@ -6830,11 +7150,13 @@ fn scheduler_executes_only_the_planned_materialization_adapter() {
         }),
         inputs: Box::new([PlannedInput {
             value: ValueRef::new(1),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: InputConsumption::Streaming,
             bound_value: None,
         }]),
         outputs: Box::new([PlannedOutput {
             value: ValueRef::new(2),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
         }]),
         params: id("adapter.none", CompiledParameterHandle::new),
@@ -7105,11 +7427,13 @@ fn shared_materialized_fanout_delivers_complete_data_to_same_and_different_consu
                 kernel: PlannedKernel::Adapter(adapter),
                 inputs: Box::new([PlannedInput {
                     value: ValueRef::new(input),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     consumption,
                     bound_value: None,
                 }]),
                 outputs: Box::new([PlannedOutput {
                     value: ValueRef::new(output),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production,
                 }]),
                 params: id("adapter.fanout", CompiledParameterHandle::new),

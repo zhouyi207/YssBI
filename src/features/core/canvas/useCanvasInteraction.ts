@@ -8,7 +8,7 @@ import { executeCommand } from "@/features/core/history";
 import { Pin } from "@/shared/types/domain";
 import type { EditorViewport } from "@/features/core/viewport";
 import { logger } from '@/utils/appLogger';
-import { canConnectPins } from "@/shared/utils/pinCompatibility";
+import { getPinCompatibility } from "@/shared/utils/pinCompatibility";
 
 import { getCanvasWorldPoint, resolveTabId } from "./canvasInteractionUtils";
 import { attachCanvasPointerLoop } from "./canvasPointerLoop";
@@ -62,9 +62,13 @@ export function useCanvasInteraction({
         const graph = getGraphByPath(tid);
         const pinA = graph?.pins.find((pin) => pin.id === a);
         const pinB = graph?.pins.find((pin) => pin.id === b);
-        if (pinA && pinB && !canConnectPins(pinA as Pin, pinB as Pin)) {
-            logger.graph.warn('Ignored type-mismatched pin connection attempt', 'CanvasInteraction');
-            return;
+        if (pinA && pinB) {
+            const source = pinA.direction === 'output' ? pinA : pinB;
+            const target = pinA.direction === 'input' ? pinA : pinB;
+            if (getPinCompatibility(source as Pin, target as Pin) === 'incompatible') {
+                logger.graph.warn('Ignored type-mismatched pin connection attempt', 'CanvasInteraction');
+                return;
+            }
         }
 
         const applied = await executeCommand(tid, 'ConnectPins', { pinA: a, pinB: b });

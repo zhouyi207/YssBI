@@ -36,6 +36,7 @@ mod tests {
             inputs: Box::new([]),
             outputs: Box::new([PlannedOutput {
                 value: ValueRef::new(output),
+                contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 production: OutputProduction::FullyMaterialized,
             }]),
             params: id("params-1", CompiledParameterHandle::new),
@@ -69,6 +70,9 @@ mod tests {
             },
             value_count: 8,
             operations: Box::new([operation(0), operation(1)]),
+            value_contracts: (0..8)
+                .map(|value| (ValueRef::new(value), PlannedValueContract::opaque()))
+                .collect(),
             value_sources: Box::new([
                 PlanValueSource::ExternalInput(
                     ValueRef::new(3),
@@ -1420,6 +1424,9 @@ mod tests {
     fn accepts_declared_external_and_control_produced_input_sources() {
         let mut external = valid_plan();
         external.value_count = 9;
+        external
+            .value_contracts
+            .insert(ValueRef::new(8), PlannedValueContract::opaque());
         external.value_sources = external
             .value_sources
             .into_vec()
@@ -1432,6 +1439,7 @@ mod tests {
             .into_boxed_slice();
         external.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(8),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);
@@ -1441,6 +1449,7 @@ mod tests {
         let mut control_produced = valid_plan();
         control_produced.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(5),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);
@@ -1453,17 +1462,20 @@ mod tests {
         let mut first = operation(1);
         first.inputs = Box::new([PlannedInput {
             value: ValueRef::new(0),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: InputConsumption::FullyMaterialized,
             bound_value: Some(Value::Integer(7)),
         }]);
         let mut second = operation(2);
         second.inputs = Box::new([PlannedInput {
             value: ValueRef::new(1),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);
         let mut plan = valid_plan();
         plan.value_count = 3;
+        plan.value_contracts.retain(|value, _| value.index() < 3);
         plan.operations = Box::new([first, second]);
         plan.value_sources = Box::new([]);
         plan.value_dependencies = Box::new([]);
@@ -1595,6 +1607,7 @@ mod tests {
         plan.value_count = 10;
         plan.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(9),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);

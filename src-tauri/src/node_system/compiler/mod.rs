@@ -60,7 +60,9 @@ pub use schema_analysis::{
     SchemaFact, SchemaResolutionContext, SchemaResolutionError, SchemaResolver, SchemaResolverSet,
 };
 pub use specialization::{DemandPlanError, ExecutionPlanBasis, NormalizedExecutionDemand};
+#[cfg(test)]
 pub(crate) use type_analysis::type_exprs_assignable;
+pub use type_analysis::{TypeCompatibility, type_exprs_compatibility};
 
 pub fn build_builtin_interface_resolvers() -> InterfaceResolverSet {
     let mut resolvers = InterfaceResolverSet::new();

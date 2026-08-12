@@ -75,6 +75,7 @@ fn operation(kernel: &str, params: &str, inputs: &[u32], output: u32) -> Planned
             .iter()
             .map(|value| PlannedInput {
                 value: ValueRef::new(*value),
+                contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 consumption: InputConsumption::FullyMaterialized,
                 bound_value: None,
             })
@@ -82,6 +83,7 @@ fn operation(kernel: &str, params: &str, inputs: &[u32], output: u32) -> Planned
             .into_boxed_slice(),
         outputs: Box::new([PlannedOutput {
             value: ValueRef::new(output),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
         }]),
         params: handle(params, CompiledParameterHandle::new),
@@ -179,6 +181,9 @@ fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) ->
             compile_id: CompileId::new(1),
         },
         value_count,
+        value_contracts: (0..value_count)
+            .map(|value| (ValueRef::new(value), PlannedValueContract::opaque()))
+            .collect(),
         value_sources: Box::new([]),
         bound_values: BTreeMap::new(),
         value_dependencies: Box::new([]),
@@ -270,14 +275,17 @@ fn statistics_fit_executes_instead_of_returning_an_adapter_error() {
     fit.outputs = Box::new([
         PlannedOutput {
             value: ValueRef::new(5),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
         },
         PlannedOutput {
             value: ValueRef::new(6),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
         },
         PlannedOutput {
             value: ValueRef::new(7),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
         },
     ]);
@@ -326,14 +334,17 @@ fn logit_fit_uses_the_real_binary_response_implementation() {
     fit.outputs = Box::new([
         PlannedOutput {
             value: ValueRef::new(5),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
         },
         PlannedOutput {
             value: ValueRef::new(6),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
         },
         PlannedOutput {
             value: ValueRef::new(7),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
         },
     ]);

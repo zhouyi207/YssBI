@@ -1,6 +1,6 @@
 use super::{
-    GraphDocumentKind, GraphResourcePath, ProjectError, ProjectMetadata, WorksheetDocument,
-    WorksheetResourcePath,
+    GraphDocumentKind, GraphResourcePath, ProjectComputationSettings, ProjectError,
+    ProjectMetadata, WorksheetDocument, WorksheetResourcePath,
 };
 use crate::database::DatabaseDecl;
 use crate::node_system::document::{
@@ -39,6 +39,8 @@ impl GraphResourceDocument {
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectData {
+    #[serde(default)]
+    pub computation_settings: ProjectComputationSettings,
     pub variables: HashMap<VariableId, VariableInstance>,
     pub graphs: HashMap<GraphResourcePath, GraphResourceDocument>,
     #[serde(default)]

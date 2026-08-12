@@ -3,6 +3,7 @@ use super::{
     TypeId, TypeParameterId,
 };
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TypeExpr {
@@ -14,6 +15,88 @@ pub enum TypeExpr {
     },
     Union(Vec<TypeExpr>),
     Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeNormalizationError {
+    EmptyUnion,
+}
+
+impl fmt::Display for TypeNormalizationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyUnion => formatter.write_str("type unions must contain at least one member"),
+        }
+    }
+}
+
+impl std::error::Error for TypeNormalizationError {}
+
+pub fn normalize_type_expr(value: TypeExpr) -> Result<TypeExpr, TypeNormalizationError> {
+    match value {
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } => Ok(TypeExpr::Applied {
+            constructor,
+            arguments: arguments
+                .into_iter()
+                .map(normalize_type_expr)
+                .collect::<Result<_, _>>()?,
+        }),
+        TypeExpr::Union(members) => normalize_union(members),
+        value => Ok(value),
+    }
+}
+
+fn normalize_union(members: Vec<TypeExpr>) -> Result<TypeExpr, TypeNormalizationError> {
+    if members.is_empty() {
+        return Err(TypeNormalizationError::EmptyUnion);
+    }
+
+    let mut normalized = Vec::new();
+    for member in members {
+        match normalize_type_expr(member)? {
+            TypeExpr::Union(nested) => normalized.extend(nested),
+            member => normalized.push(member),
+        }
+    }
+    normalized.sort_by_key(type_expr_sort_key);
+    normalized.dedup();
+
+    match normalized.len() {
+        0 => Err(TypeNormalizationError::EmptyUnion),
+        1 => Ok(normalized.pop().expect("single normalized union member")),
+        _ => Ok(TypeExpr::Union(normalized)),
+    }
+}
+
+fn type_expr_sort_key(value: &TypeExpr) -> String {
+    match value {
+        TypeExpr::Concrete(id) => format!("0:{}", id.as_str()),
+        TypeExpr::Generic(id) => format!("1:{}", id.as_str()),
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } => format!(
+            "2:{}<{}>",
+            constructor.as_str(),
+            arguments
+                .iter()
+                .map(type_expr_sort_key)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        TypeExpr::Union(members) => format!(
+            "3:{}",
+            members
+                .iter()
+                .map(type_expr_sort_key)
+                .collect::<Vec<_>>()
+                .join("|")
+        ),
+        TypeExpr::Unknown => "4".to_string(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

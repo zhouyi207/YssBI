@@ -1,13 +1,20 @@
 #![deny(unused_must_use)]
 
+mod data_series;
 pub mod dataframe;
 mod identity;
 mod model;
 mod parameter;
 mod types;
 pub mod validation;
+
+#[cfg(test)]
+mod tests;
 mod value;
 
+pub use data_series::{
+    DATA_SERIES_CONSTRUCTOR_ID, NUMERIC_TYPE_CLASS_ID, data_series_type, numeric_data_series_type,
+};
 pub use identity::{
     I18nKey, IconId, InterfaceResolverId, InvalidSemanticId, NodeCategoryId, NodeStyleId,
     NodeTypeId, ParameterKey, PortKey, ProviderId, SchemaResolverId, TypeClassId,
@@ -28,7 +35,7 @@ pub use parameter::{
 pub use types::{
     ColumnRename, ColumnSelectionExpr, RelationalScalarType, RenameExpr, ResolvedSchemaFact,
     SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField, SchemaFieldLineage, TypeConstraint,
-    TypeExpr, TypeTerm,
+    TypeExpr, TypeNormalizationError, TypeTerm, normalize_type_expr,
 };
 pub use validation::{
     LiteralValidationIssue, LocatedParameterIssue, NominalParameterValidator, ParameterIssueKind,

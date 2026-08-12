@@ -1,5 +1,8 @@
 use super::{LEGACY_NODE_IDS, NODES, build_provider_fragment};
-use crate::node_system::protocol::{LiteralPolicy, NodeInterfaceProtocol};
+use crate::node_system::protocol::{
+    LiteralPolicy, NodeInterfaceProtocol, TypeExpr, TypeId, data_series_type,
+    numeric_data_series_type,
+};
 use std::collections::BTreeSet;
 
 #[test]
@@ -34,6 +37,60 @@ fn every_legacy_statistics_node_has_one_stable_id() {
 fn statistics_fragment_contains_every_migrated_protocol() {
     let fragment = build_provider_fragment().expect("statistics built-in fixture must assemble");
     assert_eq!(fragment.nodes.len(), LEGACY_NODE_IDS.len());
+}
+
+#[test]
+fn ols_summary_accepts_numeric_data_series_and_rejects_string_series() {
+    let fragment = build_provider_fragment().expect("statistics built-in fixture must assemble");
+    let summary = fragment
+        .nodes
+        .iter()
+        .find(|node| node.protocol().type_id.as_str() == "yssbi.statistics.ols.summary")
+        .expect("OLS Summary protocol");
+    let port_type = |key: &str| {
+        summary
+            .protocol()
+            .interface
+            .ports
+            .iter()
+            .find(|port| port.key.as_str() == key)
+            .unwrap_or_else(|| panic!("OLS Summary must expose {key}"))
+            .value_type
+            .clone()
+    };
+    let series = data_series_type;
+    let int = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
+    let float = TypeExpr::Concrete(TypeId::new("core.float64").unwrap());
+    let string = TypeExpr::Concrete(TypeId::new("core.string").unwrap());
+    let numeric_union = numeric_data_series_type();
+
+    for key in ["response", "predictors"] {
+        let target = port_type(key);
+        assert!(crate::node_system::compiler::type_exprs_assignable(
+            &series(int.clone()),
+            &target,
+            &[],
+            &[],
+        ));
+        assert!(crate::node_system::compiler::type_exprs_assignable(
+            &series(float.clone()),
+            &target,
+            &[],
+            &[],
+        ));
+        assert!(crate::node_system::compiler::type_exprs_assignable(
+            &numeric_union,
+            &target,
+            &[],
+            &[],
+        ));
+        assert!(!crate::node_system::compiler::type_exprs_assignable(
+            &series(string.clone()),
+            &target,
+            &[],
+            &[],
+        ));
+    }
 }
 
 #[test]
