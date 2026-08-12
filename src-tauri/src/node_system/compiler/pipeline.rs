@@ -24,11 +24,11 @@ use crate::node_system::analysis::{
     AnalysisResourceReads, AnalysisResourceResolver, AnalysisSnapshot, AnalyzedNode,
     CompilationBasis, CompileId, CompileProvenance, ControlEdge, CorrelationContext,
     DiagnosticLocation, NOOP_TRACE_SINK, NodeDiagnostic, ProjectSessionId, ResolvedDatabase,
-    ResolvedFunction, ResolvedFunctionValue, ResolvedInterface, ResolvedPort, ResolvedResource,
-    ResolvedVariable, ResourceKey, ResourceObservationSet, ResourceObservedState,
-    ResourceResolutionError, ResourceVersion, ResourceVersionSet, SemanticDependency, SpanId,
-    SpanKind, SpanOutcome, SpanSpec, TraceSink, ValidatedSemanticGraph, ValidatedSemanticNode,
-    ValidatedSemanticPort, ValueEdge, start_span_safely,
+    ResolvedDatabaseValue, ResolvedFunction, ResolvedFunctionValue, ResolvedInterface,
+    ResolvedPort, ResolvedResource, ResolvedVariable, ResourceKey, ResourceObservationSet,
+    ResourceObservedState, ResourceResolutionError, ResourceVersion, ResourceVersionSet,
+    SemanticDependency, SpanId, SpanKind, SpanOutcome, SpanSpec, TraceSink, ValidatedSemanticGraph,
+    ValidatedSemanticNode, ValidatedSemanticPort, ValueEdge, start_span_safely,
 };
 use crate::node_system::document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, FunctionDocument, FunctionParameterId,
@@ -44,10 +44,10 @@ use crate::node_system::plan::{
 };
 use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
-    InputConsumption, LiteralPolicy, NodeProtocol, NodeTypeId, OutputProduction,
-    ParameterEditorSpec, ParameterIssueKind, PortDirection, PortInstances, PortKind, PortSpec,
-    Purity, ResolvedSchemaFact, RetryPolicy, SchemaExpr, TypeClassId, TypeConstructorId, TypeExpr,
-    TypeId, Value, validate_and_prepare_parameter_values,
+    InputConsumption, LiteralPolicy, NodeInstanceDisplaySpec, NodeProtocol, NodeTypeId,
+    OutputProduction, ParameterEditorSpec, ParameterIssueKind, PortDirection, PortInstances,
+    PortKind, PortSpec, Purity, ResolvedSchemaFact, ResourceDisplayKind, RetryPolicy, SchemaExpr,
+    TypeClassId, TypeConstructorId, TypeExpr, TypeId, Value, validate_and_prepare_parameter_values,
 };
 use crate::node_system::registry::{
     NodeRegistry, PreparedNominalValue, ProtocolFingerprint, RegistryFingerprint,
@@ -217,6 +217,10 @@ pub trait ResourceSnapshot {
             .unwrap_or(ResourceObservedState::Absent(None))
     }
 
+    fn function_name(&self, _path: &GraphResourcePath) -> Option<&str> {
+        None
+    }
+
     fn function_document(&self, _path: &GraphResourcePath) -> Option<&FunctionDocument> {
         None
     }
@@ -229,6 +233,10 @@ pub trait ResourceSnapshot {
         &self,
         _id: &crate::variable::VariableId,
     ) -> Option<&crate::variable::VariableInstance> {
+        None
+    }
+
+    fn database_name(&self, _id: &str) -> Option<&str> {
         None
     }
 
@@ -285,6 +293,7 @@ impl<S: ResourceSnapshot> AnalysisResourceResolver for TrackedResourceResolver<'
                 format!("function resource '{}' is missing", path.0),
             ));
         };
+        let name = self.snapshot.function_name(path);
         let Some(function) = self.snapshot.function_document(path) else {
             return Err(self.failure(
                 key,
@@ -303,7 +312,11 @@ impl<S: ResourceSnapshot> AnalysisResourceResolver for TrackedResourceResolver<'
         Ok(ResolvedResource {
             key,
             version,
-            value: ResolvedFunctionValue { function, graph },
+            value: ResolvedFunctionValue {
+                name,
+                function,
+                graph,
+            },
         })
     }
 
@@ -336,7 +349,8 @@ impl<S: ResourceSnapshot> AnalysisResourceResolver for TrackedResourceResolver<'
         let ResourceObservedState::Present(version) = state.clone() else {
             return Err(self.failure(key, state, format!("database resource '{id}' is missing")));
         };
-        let Some(value) = self.snapshot.database_schema(id) else {
+        let name = self.snapshot.database_name(id);
+        let Some(columns) = self.snapshot.database_schema(id) else {
             return Err(self.failure(
                 key,
                 state,
@@ -347,7 +361,7 @@ impl<S: ResourceSnapshot> AnalysisResourceResolver for TrackedResourceResolver<'
         Ok(ResolvedResource {
             key,
             version,
-            value,
+            value: ResolvedDatabaseValue { name, columns },
         })
     }
 
@@ -390,6 +404,7 @@ pub enum CompilationOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublishedCompileAnalysis {
     pub analysis: CompilerAnalysis,
+    pub interface_projection: ValidatedInterfaceProjection,
     pub semantic: Option<CompilerSemanticGraph>,
     pub outcome: CompilationOutcome,
 }
@@ -736,7 +751,10 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             Ok((basis, plan)) => {
                 let abi_finalized = function_abi
                     .as_mut()
-                    .map(|abi| finalize_function_abi_productions(&plan, abi))
+                    .map(|abi| {
+                        let plan = plan.as_ref().ok_or(())?;
+                        finalize_function_abi_productions(plan, abi).map_err(|_| ())
+                    })
                     .transpose();
                 if abi_finalized.is_err() {
                     lowering_span.finish(SpanOutcome::Error);
@@ -755,7 +773,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     (
                         Some(semantic),
                         Some(basis),
-                        Some(plan),
+                        plan,
                         CompilationOutcome::Succeeded,
                     )
                 }
@@ -948,6 +966,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     }
                     LowerGraphFailure::Internal(_) => CallAbiFinalizationFailure::Invalid,
                 })?;
+                let plan = plan.ok_or(CallAbiFinalizationFailure::Invalid)?;
                 let mut abi = node
                     .abi
                     .clone()
@@ -1291,6 +1310,7 @@ fn strongly_connected_call_components(
 struct ResolvedNode<'a> {
     registry: RegistryNode<'a>,
     parameters: BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
+    instance_title: Option<Box<str>>,
     prepared_nominal: BTreeMap<crate::node_system::protocol::ParameterKey, PreparedNominalValue>,
     ports: BTreeMap<PortAddress, ResolvedPort<PortAddress>>,
     port_sequence: Vec<PortAddress>,
@@ -1392,15 +1412,8 @@ impl<'a> AnalysisState<'a> {
             }
             let (parameters, prepared_nominal) =
                 self.normalize_parameters(node_id, resolved.protocol, registry);
-            if let Some(error) = track_variable_resource(&node.node_type, &parameters, resources) {
-                self.push(
-                    CompilerDiagnostic::ResourceResolutionFailed {
-                        resource_key: error.key().as_str().into(),
-                        reason: error.reason().into(),
-                    },
-                    DiagnosticLocation::Node(node_id),
-                );
-            }
+            let instance_title =
+                self.resolve_instance_title(node_id, resolved.protocol, &parameters, resources);
             self.validate_binding_templates(node_id, resolved.protocol);
             let provisional_diagnostic_start = self.diagnostics.len();
             let (ports, port_sequence, deferred_for_schema) = self.resolve_ports(
@@ -1419,6 +1432,7 @@ impl<'a> AnalysisState<'a> {
                 ResolvedNode {
                     registry: resolved,
                     parameters,
+                    instance_title,
                     prepared_nominal,
                     ports,
                     port_sequence,
@@ -1450,6 +1464,107 @@ impl<'a> AnalysisState<'a> {
         cancellation.checkpoint()?;
         self.diagnostics.sort_by(compare_diagnostics);
         Ok(())
+    }
+
+    fn resolve_instance_title(
+        &mut self,
+        node_id: NodeId,
+        protocol: &NodeProtocol,
+        parameters: &BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
+        resources: &mut dyn AnalysisResourceResolver,
+    ) -> Option<Box<str>> {
+        let NodeInstanceDisplaySpec::ResourceParameter { parameter, kind } =
+            &protocol.instance_display
+        else {
+            return None;
+        };
+        let resource = parameters
+            .get(parameter)
+            .and_then(serde_json::Value::as_str);
+        let result: Result<Box<str>, (String, bool)> = match (kind, resource) {
+            (ResourceDisplayKind::Function, Some(path)) => resources
+                .resolve_function(&GraphResourcePath(path.into()))
+                .map_err(|error| (error.to_string(), true))
+                .and_then(|resolved| {
+                    resolved
+                        .value
+                        .name
+                        .filter(|name| !name.trim().is_empty())
+                        .map(Into::into)
+                        .ok_or_else(|| {
+                            (
+                                "function resource has no valid display name".to_owned(),
+                                false,
+                            )
+                        })
+                }),
+            (ResourceDisplayKind::Variable, Some(path)) => path
+                .strip_prefix("variables/")
+                .ok_or_else(|| (format!("variable resource '{path}' is not canonical"), true))
+                .and_then(|id| uuid::Uuid::parse_str(id).map_err(|error| (error.to_string(), true)))
+                .and_then(|id| {
+                    resources
+                        .resolve_variable(&crate::variable::VariableId::from(id))
+                        .map_err(|error| (error.to_string(), true))
+                })
+                .and_then(|resolved| {
+                    (!resolved.value.name.trim().is_empty())
+                        .then(|| resolved.value.name.as_str().into())
+                        .ok_or_else(|| {
+                            (
+                                "variable resource has no valid display name".to_owned(),
+                                false,
+                            )
+                        })
+                }),
+            (ResourceDisplayKind::Database, Some(path)) => path
+                .strip_prefix("databases/")
+                .filter(|id| !id.is_empty())
+                .ok_or_else(|| (format!("database resource '{path}' is not canonical"), true))
+                .and_then(|id| {
+                    resources
+                        .resolve_database(id)
+                        .map_err(|error| (error.to_string(), true))
+                })
+                .and_then(|resolved| {
+                    resolved
+                        .value
+                        .name
+                        .filter(|name| !name.trim().is_empty())
+                        .map(Into::into)
+                        .ok_or_else(|| {
+                            (
+                                "database resource has no valid display name".to_owned(),
+                                false,
+                            )
+                        })
+                }),
+            (_, None) => Err((
+                format!(
+                    "resource display parameter '{}' is missing",
+                    parameter.as_str()
+                ),
+                true,
+            )),
+        };
+        match result {
+            Ok(title) => Some(title),
+            Err((reason, semantic_failure)) => {
+                let diagnostic = if semantic_failure {
+                    CompilerDiagnostic::ResourceResolutionFailed {
+                        resource_key: resource.unwrap_or(parameter.as_str()).into(),
+                        reason: reason.into(),
+                    }
+                } else {
+                    CompilerDiagnostic::ResourceDisplayNameUnavailable {
+                        resource_key: resource.unwrap_or(parameter.as_str()).into(),
+                        reason: reason.into(),
+                    }
+                };
+                self.push(diagnostic, DiagnosticLocation::Node(node_id));
+                None
+            }
+        }
     }
 
     fn validate_function_abi_contract(&mut self, resources: &mut dyn AnalysisResourceResolver) {
@@ -2276,7 +2391,13 @@ impl<'a> AnalysisState<'a> {
     fn analyze_types<R: CompilerRegistry>(&mut self, registry: &R) {
         let mut graph = TypeConstraintGraph::new();
         for (&node_id, node) in &self.nodes {
-            graph.add_node(node_id, node.registry.protocol, node.ports.keys().cloned());
+            graph.add_node(
+                node_id,
+                node.registry.protocol,
+                node.ports
+                    .values()
+                    .map(|port| (&port.address, &port.value_type)),
+            );
         }
         for connection in self.document.connections.values() {
             let is_value = self
@@ -2421,6 +2542,7 @@ impl<'a> AnalysisState<'a> {
                 node_type_id: node.registry.protocol.type_id.clone(),
                 protocol_fingerprint: node.registry.protocol_fingerprint.clone(),
                 normalized_parameters: node.parameters.clone(),
+                instance_title: node.instance_title.clone(),
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
@@ -2716,35 +2838,6 @@ fn call_member_role(template: &str) -> &'static str {
     }
 }
 
-fn track_variable_resource(
-    node_type: &NodeTypeId,
-    parameters: &BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
-    resources: &mut dyn AnalysisResourceResolver,
-) -> Option<ResourceResolutionError> {
-    if !matches!(
-        node_type.as_str(),
-        "yssbi.project.variable.get" | "yssbi.project.variable.set"
-    ) {
-        return None;
-    }
-    let Some(path) = parameters
-        .iter()
-        .find(|(key, _)| key.as_str() == "variable")
-        .and_then(|(_, value)| value.as_str())
-    else {
-        return None;
-    };
-    let Some(id) = path.strip_prefix("variables/") else {
-        return None;
-    };
-    let Ok(id) = uuid::Uuid::parse_str(id) else {
-        return None;
-    };
-    resources
-        .resolve_variable(&crate::variable::VariableId::from(id))
-        .err()
-}
-
 fn protocol_value_to_json(value: &Value) -> serde_json::Value {
     match value {
         Value::Null => serde_json::Value::Null,
@@ -2917,7 +3010,7 @@ fn lower_graph<R: CompilerRegistry>(
     function_abis: &BTreeMap<GraphResourcePath, FunctionPlanAbi>,
     provenance: CompileProvenance,
     cancellation: &CompileCancellationToken,
-) -> Result<(ExecutionPlanBasis, ExecutionPlan), LowerGraphFailure> {
+) -> Result<(ExecutionPlanBasis, Option<ExecutionPlan>), LowerGraphFailure> {
     cancellation.checkpoint()?;
     let (next_value, port_values) = allocate_port_values(registry, graph)?;
     let mut production_by_port = BTreeMap::new();
@@ -2925,6 +3018,8 @@ fn lower_graph<R: CompilerRegistry>(
     let mut structural_inputs = BTreeSet::new();
     let mut structural_outputs = BTreeSet::new();
     let mut value_sources = BTreeSet::new();
+    let mut unbound_inputs = BTreeMap::new();
+    let mut bound_values = BTreeMap::new();
     for node in graph.nodes.iter() {
         cancellation.checkpoint()?;
         let resolved = resolve_for_lowering(registry, node)?;
@@ -2967,6 +3062,27 @@ fn lower_graph<R: CompilerRegistry>(
                             spec.consumption
                                 .unwrap_or(InputConsumption::FullyMaterialized),
                         );
+                        let has_connection = document
+                            .connections
+                            .values()
+                            .any(|connection| connection.input == port.address);
+                        let bound_value = if has_connection {
+                            None
+                        } else if let Some(literal) = decoded_literals.get(&port.address) {
+                            Some(literal.value.clone())
+                        } else {
+                            spec.input_binding
+                                .as_ref()
+                                .and_then(|binding| binding.default_value.as_ref())
+                                .map(|default| default.value.clone())
+                        };
+                        if let Some(bound_value) = bound_value {
+                            if structural_role.is_some() {
+                                bound_values.insert(value, bound_value);
+                            }
+                        } else if !has_connection {
+                            unbound_inputs.insert(value, port.address.clone());
+                        }
                     }
                 }
             }
@@ -3136,7 +3252,7 @@ fn lower_graph<R: CompilerRegistry>(
         }
 
         for parameter in resolved.protocol.parameters.parameters.iter() {
-            if parameter.editor != ParameterEditorSpec::Resource {
+            if !matches!(parameter.editor, ParameterEditorSpec::Resource { .. }) {
                 continue;
             }
             let Some(resource) = prepared_config.resource(&parameter.key).cloned() else {
@@ -3587,14 +3703,21 @@ fn lower_graph<R: CompilerRegistry>(
         root_region,
         relational_connections: relational_connections.into_boxed_slice(),
         port_facts,
+        unbound_inputs,
+        bound_values,
         nodes,
         output_results,
         default_outputs,
     };
     cancellation.checkpoint()?;
-    let plan = basis
-        .derive_full_plan()
-        .map_err(|_| CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph))?;
+    let plan =
+        if basis.unbound_inputs.is_empty() {
+            Some(basis.derive_full_plan().map_err(|_| {
+                CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+            })?)
+        } else {
+            None
+        };
     Ok((basis, plan))
 }
 

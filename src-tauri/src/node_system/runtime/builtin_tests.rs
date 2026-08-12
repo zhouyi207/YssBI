@@ -180,6 +180,7 @@ fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) ->
         },
         value_count,
         value_sources: Box::new([]),
+        bound_values: BTreeMap::new(),
         value_dependencies: Box::new([]),
         root_region: StructuredControlRegion::Sequence(
             (0..operations.len())
@@ -853,15 +854,28 @@ fn do_sleep_print_and_view_leaf_kernels_preserve_contracts() {
     .unwrap_err();
     assert_eq!(deadline_error.kind(), KernelErrorKind::DeadlineExceeded);
     assert!(started.elapsed() < std::time::Duration::from_millis(200));
+    crate::log::clear_test_logs();
     assert!(
         execute_kernel_direct(
             "yssbi.debug.print",
             &params,
             None,
-            &[Value::String("message".into()).into()],
+            &[Value::String("fine".into()).into()],
         )
         .unwrap()
         .is_empty()
+    );
+    let print_log = crate::log::take_test_logs()
+        .into_iter()
+        .find(|log| log.message == "fine")
+        .expect("Print emits an application-visible execution log");
+    assert_eq!(print_log.level, crate::log::LogLevel::Info);
+    assert_eq!(print_log.log_type, crate::log::LogType::Execution);
+    assert!(
+        print_log
+            .source
+            .as_deref()
+            .is_some_and(|source| { source.starts_with("yssbi.debug.print activation=") })
     );
     let print_error = execute_kernel_direct(
         "yssbi.debug.print",

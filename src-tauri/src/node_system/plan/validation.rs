@@ -145,6 +145,12 @@ impl ExecutionPlan {
                 }
             }
         }
+        for value in self.bound_values.keys().copied() {
+            check_value(&mut errors, "plan bound value", value, value_count);
+            if value.index() < value_count && !declared_sources.insert(value) {
+                errors.push(PlanValidationError::DuplicateValueSource(value));
+            }
+        }
 
         for dependency in &self.value_dependencies {
             check_value(
@@ -273,6 +279,7 @@ impl ExecutionPlan {
             .iter()
             .chain(&external_inputs)
             .copied()
+            .chain(self.bound_values.keys().copied())
             .chain(structured.producers.keys().copied())
             .collect::<BTreeSet<_>>();
         let source_facts = PlanSourceFacts {
@@ -293,7 +300,11 @@ impl ExecutionPlan {
             &source_facts,
             &mut errors,
         );
-        let mut region_available = external_inputs.clone();
+        let mut region_available = external_inputs
+            .iter()
+            .copied()
+            .chain(self.bound_values.keys().copied())
+            .collect();
         validate_region_availability(&self.root_region, self, &mut region_available, &mut errors);
         validate_relational_subplans(self, &mut errors);
         validate_resources(self, &mut errors);

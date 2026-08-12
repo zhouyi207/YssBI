@@ -1230,8 +1230,8 @@ mod tests {
     use super::*;
     use crate::node_system::catalog::build_builtin_node_system;
     use crate::node_system::protocol::{
-        I18nKey, NodeInterfaceProtocol, NodeTypeId, ParameterEditorSpec, ParameterSpec, PortKey,
-        TypeExpr, TypeId,
+        I18nKey, NodeInterfaceProtocol, NodeTypeId, ParameterEditorSpec, ParameterPresentation,
+        ParameterSpec, PortKey, TypeExpr, TypeId,
     };
     use crate::node_system::testing::TestProtocolBuilder;
     use uuid::Uuid;
@@ -1248,6 +1248,7 @@ mod tests {
                 default_value: None,
                 constraints: Vec::new(),
                 editor: ParameterEditorSpec::Text { multiline: false },
+                presentation: ParameterPresentation::DetailPanel,
             }])
             .build();
         let parameters = ValidatedNodeConfig::from_analysis(

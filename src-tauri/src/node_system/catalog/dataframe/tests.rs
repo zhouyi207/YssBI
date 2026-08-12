@@ -2,6 +2,7 @@ use super::{
     DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER, LEGACY_NODE_IDS, NODES,
     build_provider_fragment,
 };
+use crate::graph::DataType;
 use crate::node_system::analysis::{
     AnalysisResourceReads, AnalysisResourceResolver, ResolvedPortStatus, ResourceObservationSet,
     ResourceVersionSet,
@@ -19,8 +20,10 @@ use crate::node_system::compiler::{
 };
 use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    GraphDocument, GraphRevision, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
-    SchemaFieldIdentity, SchemaSourceIdentity,
+    GraphDocument, GraphMutation, GraphResourcePath, GraphRevision, LastKnownPortMetadata,
+    MutationRequest, NodeId, NodePosition, OperationId, OrderKey, PortAddress, PortInstanceId,
+    ResourceKey as DocumentResourceKey, RevisionedGraphStore, SchemaFieldIdentity,
+    SchemaSourceIdentity,
 };
 use crate::node_system::plan::{
     KernelHandle, RelationalExpression, RelationalLiteral, RelationalOperator,
@@ -275,6 +278,36 @@ fn decompose_members(
         .collect()
 }
 
+fn editor_projection(
+    document: &GraphDocument,
+    result: &CompileResult,
+) -> crate::node_system::analysis::EditorGraphProjectionDto {
+    let builtin = build_builtin_node_system().unwrap();
+    crate::node_system::analysis::build_editor_graph_projection(
+        "events/dataframe-test.yssbi-event",
+        document,
+        &result.analysis,
+        &result.outcome,
+        builtin.registry.as_ref(),
+        &builtin.catalog.localization("en-US"),
+    )
+    .unwrap()
+}
+
+fn decompose_resolved_ports(
+    projection: &crate::node_system::analysis::EditorGraphProjectionDto,
+) -> Vec<&crate::node_system::analysis::ResolvedPortDto> {
+    projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id.as_ref() == dataframe_node_id(3).to_string())
+        .expect("decompose node is projected")
+        .ports
+        .iter()
+        .filter(|port| port.template_key.as_ref() == "columns")
+        .collect()
+}
+
 #[test]
 fn every_legacy_dataframe_node_has_one_stable_id() {
     assert_eq!(LEGACY_NODE_IDS.len(), 26);
@@ -446,12 +479,195 @@ fn decompose_projects_final_upstream_schema() {
 }
 
 #[test]
+fn decompose_projects_every_column_name_order_and_scalar_type() {
+    let fields = vec![
+        stable_field("active", RelationalScalarType::Boolean),
+        stable_field("count", RelationalScalarType::Int64),
+        stable_field("amount", RelationalScalarType::Float64),
+        stable_field("name", RelationalScalarType::String),
+        stable_field("day", RelationalScalarType::Date),
+        stable_field("created", RelationalScalarType::DateTime),
+    ];
+    let document = dataframe_document(None);
+    let result = compile_dataframe_document(&document, fields.into_boxed_slice());
+    let projection = editor_projection(&document, &result);
+    let ports = decompose_resolved_ports(&projection);
+
+    assert_eq!(
+        ports
+            .iter()
+            .map(|port| port.display.instance_label.as_deref().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["active", "count", "amount", "name", "day", "created"],
+    );
+    assert_eq!(
+        ports
+            .iter()
+            .map(|port| {
+                port.resolved_type
+                    .as_ref()
+                    .and_then(|summary| summary.data_type.clone())
+                    .unwrap()
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            DataType::Boolean,
+            DataType::Int64,
+            DataType::Float64,
+            DataType::String,
+            DataType::Date,
+            DataType::Datetime,
+        ],
+    );
+}
+
+#[test]
+fn dataframe_field_type_unsupported_projects_any_and_port_diagnostic() {
+    let document = dataframe_document(None);
+    let result = compile_dataframe_document(
+        &document,
+        vec![stable_field("opaque", RelationalScalarType::Unknown)].into_boxed_slice(),
+    );
+    let projection = editor_projection(&document, &result);
+    let port = decompose_resolved_ports(&projection)
+        .into_iter()
+        .next()
+        .expect("unknown field remains projected");
+
+    assert_eq!(
+        port.resolved_type
+            .as_ref()
+            .and_then(|summary| summary.data_type.clone()),
+        Some(DataType::Any),
+    );
+    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.dataframe.field_type_unsupported"
+            && diagnostic.arguments.get("column").map(Box::as_ref) == Some("opaque")
+            && matches!(
+                &diagnostic.primary,
+                crate::node_system::analysis::DiagnosticLocation::Port(address)
+                    if crate::node_system::analysis::PortAddressDto::from(address) == port.address
+            )
+    }));
+}
+
+#[test]
+fn decompose_orphan_preserves_last_known_label_and_type() {
+    let graph_path = GraphResourcePath("events/dataframe-orphan".into());
+    let decompose_id = dataframe_node_id(3);
+    let consumer_id = dataframe_node_id(4);
+    let customer_locator = DynamicMemberLocator::SchemaField {
+        source: SchemaSourceIdentity("databases/main".into()),
+        field: SchemaFieldIdentity("customer_id".into()),
+    };
+    let expected_metadata = LastKnownPortMetadata {
+        label: "customer_id".into(),
+        value_type: Some(TypeExpr::Concrete(TypeId::new("core.int64").unwrap())),
+    };
+    let mut document = dataframe_document(None);
+    document.nodes.insert(
+        consumer_id,
+        DocumentNode {
+            id: consumer_id,
+            node_type: NodeTypeId::new("yssbi.debug.view").unwrap(),
+            position: NodePosition { x: 3.0, y: 0.0 },
+            parameters: BTreeMap::new(),
+            user_label: None,
+        },
+    );
+
+    let resolved = compile_dataframe_document(
+        &document,
+        vec![stable_field("customer_id", RelationalScalarType::Int64)].into_boxed_slice(),
+    );
+    let candidate = decompose_members(&resolved)
+        .into_iter()
+        .find(|candidate| candidate.member().locator == customer_locator)
+        .expect("current schema member is available for materialization");
+    let (member, authorization) = candidate.authorize_materialization(
+        graph_path.clone(),
+        &resolved.interface_projection.basis,
+        OrderKey("a".into()),
+    );
+    let mut store = RevisionedGraphStore::new(graph_path.clone(), document);
+    store
+        .apply_mutation(MutationRequest::new(
+            DocumentResourceKey::Graph(graph_path),
+            store.revision(),
+            OperationId::from_uuid(Uuid::from_u128(21)),
+            GraphMutation::MaterializeProjectedMemberAndConnect {
+                member,
+                authorization,
+                output: PortAddress::declared(consumer_id, dataframe_port("data")),
+                order: None,
+            },
+        ))
+        .expect("validated current member materializes and connects atomically");
+    let materialized = store.document();
+    let (binding, persisted) = materialized
+        .port_bindings
+        .iter()
+        .find(|(_, binding)| matches!(binding, DynamicPortBinding::Resolved { origin, .. } if origin == &customer_locator))
+        .expect("production mutation persists the resolved member");
+    assert_eq!(
+        persisted,
+        &DynamicPortBinding::Resolved {
+            origin: customer_locator.clone(),
+            order: OrderKey("a".into()),
+            last_known: expected_metadata.clone(),
+        },
+    );
+    let connection_id = materialized
+        .connections
+        .values()
+        .find(|connection| connection.output == *binding)
+        .expect("materialization preserves its connection")
+        .id;
+
+    let orphaned = compile_dataframe_document(materialized, Box::new([]));
+    let node_projection = orphaned
+        .interface_projection
+        .nodes
+        .get(&decompose_id)
+        .expect("decompose projection");
+    assert_eq!(
+        node_projection.projected_bindings.get(binding),
+        Some(&ProjectedDynamicPortBinding::Orphan {
+            origin: customer_locator,
+            order: OrderKey("a".into()),
+            last_known: expected_metadata,
+        }),
+    );
+    let projection = editor_projection(materialized, &orphaned);
+    let orphan_port = decompose_resolved_ports(&projection)
+        .into_iter()
+        .find(|port| port.address == crate::node_system::analysis::PortAddressDto::from(binding))
+        .expect("removed materialized member remains projected");
+    assert!(orphan_port.orphan);
+    assert_eq!(
+        orphan_port.display.instance_label.as_deref(),
+        Some("customer_id")
+    );
+    assert_eq!(
+        orphan_port
+            .resolved_type
+            .as_ref()
+            .and_then(|summary| summary.data_type.clone()),
+        Some(DataType::Int64),
+    );
+    assert!(projection.connections.iter().any(|connection| {
+        connection.connection_id.as_ref() == connection_id.to_string()
+            && connection.output == crate::node_system::analysis::PortAddressDto::from(binding)
+    }));
+}
+
+#[test]
 fn dataframe_decompose_preserves_exact_dynamic_field_identity() {
     let decompose_id = dataframe_node_id(3);
     let binding = PortAddress::instance(
         decompose_id,
         dataframe_port("columns"),
-        PortInstanceId::from_uuid(Uuid::from_u128(20)),
+        PortInstanceId::from_uuid(Uuid::from_u128(30)),
     );
     let customer_locator = DynamicMemberLocator::SchemaField {
         source: SchemaSourceIdentity("databases/main".into()),
@@ -463,6 +679,7 @@ fn dataframe_decompose_preserves_exact_dynamic_field_identity() {
         DynamicPortBinding::Resolved {
             origin: customer_locator.clone(),
             order: OrderKey("a".into()),
+            last_known: LastKnownPortMetadata::default(),
         },
     );
     let original_bindings = document.port_bindings.clone();

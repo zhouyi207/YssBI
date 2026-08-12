@@ -20,6 +20,7 @@ const scalarTypes = new Set([
 const schemaKinds = new Set(['input', 'project', 'append', 'rename', 'filter', 'derived']);
 const portStatuses = new Set(['resolved', 'orphan']);
 const parameterEditorKinds = new Set(['auto', 'text', 'number', 'toggle', 'select', 'resource']);
+const parameterPresentations = new Set(['detailPanel', 'inlineAndDetail']);
 const diagnosticSeverities = new Set(['error', 'warning', 'information']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -198,13 +199,15 @@ function isPort(value: unknown): boolean {
 
 function isParameterEditor(value: unknown): boolean {
   return hasExactKeys(value, [
-    'key', 'display', 'editor', 'multiline', 'value', 'configuration',
+    'key', 'display', 'editor', 'presentation', 'valueType', 'multiline', 'value', 'configuration',
   ])
     && typeof value.key === 'string'
     && hasExactKeys(value.display, ['title', 'description'])
     && typeof value.display.title === 'string'
     && isStringOrNull(value.display.description)
     && parameterEditorKinds.has(value.editor as string)
+    && parameterPresentations.has(value.presentation as string)
+    && (value.valueType === null || isDataTypeBackendFormat(value.valueType))
     && typeof value.multiline === 'boolean'
     && isJsonValue(value.value)
     && (value.configuration === null || isSchemaAwareParameterEditorDto(value.configuration));

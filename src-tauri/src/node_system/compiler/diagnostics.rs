@@ -42,7 +42,7 @@ macro_rules! define_compiler_diagnostics {
         ),* $(,)?
     ) => {
         #[derive(Debug, Clone, PartialEq, Eq)]
-        pub(crate) enum CompilerDiagnostic {
+        pub enum CompilerDiagnostic {
             $(
                 $variant { $($argument: Box<str>),* },
             )*
@@ -130,6 +130,13 @@ macro_rules! define_compiler_diagnostics {
 }
 
 define_compiler_diagnostics! {
+    DataframeFieldTypeUnsupported { column, schema_type, reason } => {
+        code: "compiler.dataframe.field_type_unsupported",
+        message_key: "diagnostics.compiler.dataframe.field_type_unsupported",
+        severity: Warning,
+        en: "Column {column} uses unsupported schema type {schema_type}: {reason}.",
+        zh: "列 {column} 使用了不支持的 Schema 类型 {schema_type}：{reason}。",
+    },
     ConnectionInputDirection { port } => {
         code: "compiler.connection.input_direction",
         message_key: "diagnostics.compiler.connection.input_direction",
@@ -481,6 +488,13 @@ define_compiler_diagnostics! {
         zh: "函数 ABI 成员 {field_name} 不符合预期。",
     },
 
+    ResourceDisplayNameUnavailable { resource_key, reason } => {
+        code: "compiler.resource.display_name_unavailable",
+        message_key: "diagnostics.compiler.resource.display_name_unavailable",
+        severity: Warning,
+        en: "Resource {resource_key} uses the default node title: {reason}.",
+        zh: "资源 {resource_key} 使用默认节点标题：{reason}。",
+    },
     ResourceResolutionFailed { resource_key, reason } => {
         code: "compiler.resource.resolution_failed",
         message_key: "diagnostics.compiler.resource.resolution_failed",
@@ -526,7 +540,7 @@ define_compiler_diagnostics! {
     InputUnbound { port } => {
         code: "compiler.input.unbound",
         message_key: "diagnostics.compiler.input.unbound",
-        severity: Error,
+        severity: Warning,
         en: "Required input {port} is unbound.",
         zh: "必需输入 {port} 尚未绑定。",
     },
@@ -1194,7 +1208,7 @@ mod tests {
 
     #[test]
     fn compiler_diagnostic_definitions_are_unique_and_template_safe() {
-        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 109);
+        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 110);
         validate_compiler_diagnostic_definitions(COMPILER_DIAGNOSTIC_DEFINITIONS).unwrap();
 
         let codes = COMPILER_DIAGNOSTIC_DEFINITIONS

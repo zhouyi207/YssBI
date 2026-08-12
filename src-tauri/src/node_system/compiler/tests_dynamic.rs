@@ -93,9 +93,11 @@ impl InterfaceResolver for FixedResolver {
     fn resolve(
         &self,
         _request: InterfaceResolverRequest<'_>,
-    ) -> Result<Box<[super::dynamic_interface::InterfaceResolverMember]>, InterfaceResolverError>
-    {
-        Ok(self.members.clone())
+    ) -> Result<InterfaceResolverOutput, InterfaceResolverError> {
+        Ok(InterfaceResolverOutput {
+            members: self.members.clone(),
+            diagnostics: Box::new([]),
+        })
     }
 }
 
@@ -109,6 +111,7 @@ fn member(
         basis,
         locator: locator(field),
         label: label.into(),
+        value_type: TypeExpr::Unknown,
         identity,
     }
 }
@@ -131,6 +134,7 @@ fn resolved_binding(field: &str) -> DynamicPortBinding {
     DynamicPortBinding::Resolved {
         origin: locator(field),
         order: OrderKey("a".into()),
+        last_known: LastKnownPortMetadata::default(),
     }
 }
 
@@ -168,6 +172,81 @@ fn available_members_preserve_resolver_order() {
 
     assert!(result.diagnostics.is_empty());
     assert_eq!(labels, ["First", "Second", "Third"]);
+}
+
+#[test]
+fn resolved_ports_follow_current_member_order_before_deterministic_orphans() {
+    let current = basis(1);
+    let first_bound = address(10);
+    let second_bound = address(11);
+    let orphan = address(12);
+    let mut graph = document(None);
+    graph.port_bindings = BTreeMap::from([
+        (
+            first_bound.clone(),
+            DynamicPortBinding::Resolved {
+                origin: locator("first_bound"),
+                order: OrderKey("z".into()),
+                last_known: LastKnownPortMetadata::default(),
+            },
+        ),
+        (
+            second_bound.clone(),
+            DynamicPortBinding::Resolved {
+                origin: locator("second_bound"),
+                order: OrderKey("a".into()),
+                last_known: LastKnownPortMetadata::default(),
+            },
+        ),
+        (
+            orphan.clone(),
+            DynamicPortBinding::Orphan {
+                origin: locator("removed"),
+                order: OrderKey("m".into()),
+                last_known: LastKnownPortMetadata {
+                    label: "Removed".into(),
+                    value_type: Some(TypeExpr::Unknown),
+                },
+            },
+        ),
+    ]);
+    let set = resolver_set(vec![
+        member(
+            current.clone(),
+            "inserted_earlier",
+            "Inserted earlier",
+            SchemaFieldIdentityGuarantee::Stable,
+        ),
+        member(
+            current.clone(),
+            "first_bound",
+            "First bound",
+            SchemaFieldIdentityGuarantee::Stable,
+        ),
+        member(
+            current.clone(),
+            "second_bound",
+            "Second bound",
+            SchemaFieldIdentityGuarantee::Stable,
+        ),
+    ]);
+
+    let result = materialize_dynamic_interface(&current, node_id(), &protocol(), &graph, &set);
+    let labels = result
+        .interface
+        .ports
+        .iter()
+        .map(|port| port.instance_label.as_deref().unwrap())
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        labels,
+        ["Inserted earlier", "First bound", "Second bound", "Removed"],
+    );
+    assert_eq!(result.interface.ports[1].address, first_bound);
+    assert_eq!(result.interface.ports[2].address, second_bound);
+    assert_eq!(result.interface.ports[3].address, orphan);
+    assert_eq!(result.interface.ports[3].status, ResolvedPortStatus::Orphan);
 }
 
 #[test]
@@ -281,6 +360,7 @@ fn existing_orphan_restores_only_by_exact_locator() {
             order: OrderKey("a".into()),
             last_known: LastKnownPortMetadata {
                 label: "Old label".into(),
+                value_type: None,
             },
         },
     )));

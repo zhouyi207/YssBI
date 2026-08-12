@@ -10,6 +10,7 @@ import type {
   ResourceMutationResultDto,
 } from '@/shared/types/dto/editorMutation';
 import {
+  isTypeExprWire,
   parseGraphProjectionReplacementDto,
   parseHistoryStatusDto,
 } from '@/shared/types/dto/editorMutationWireParser';
@@ -70,18 +71,25 @@ function isDynamicMemberLocatorShape(value: unknown): boolean {
     && hasExactKeys(value, ['kind', 'source', 'field']);
 }
 
+function isLastKnownPortMetadataShape(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.label !== 'string') return false;
+  return hasExactKeys(value, ['label'])
+    || (hasExactKeys(value, ['label', 'value_type']) && isTypeExprWire(value.value_type));
+}
+
 function isDynamicPortBindingShape(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (value.kind === 'user_created') return hasExactKeys(value, ['kind', 'order']);
   if (value.kind === 'resolved') {
-    return hasExactKeys(value, ['kind', 'origin', 'order'])
-      && isDynamicMemberLocatorShape(value.origin);
+    return isDynamicMemberLocatorShape(value.origin)
+      && (hasExactKeys(value, ['kind', 'origin', 'order'])
+        || (hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])
+          && isLastKnownPortMetadataShape(value.last_known)));
   }
   return value.kind === 'orphan'
     && hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])
     && isDynamicMemberLocatorShape(value.origin)
-    && isRecord(value.last_known)
-    && hasExactKeys(value.last_known, ['label']);
+    && isLastKnownPortMetadataShape(value.last_known);
 }
 
 function isDocumentConnectionShape(value: unknown): boolean {

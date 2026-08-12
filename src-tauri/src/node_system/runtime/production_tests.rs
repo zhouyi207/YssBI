@@ -51,6 +51,7 @@ fn empty_plan(
         value_count: 0,
         operations: Box::new([]),
         value_sources: Box::new([]),
+        bound_values: BTreeMap::new(),
         value_dependencies: Box::new([]),
         root_region: StructuredControlRegion::Sequence(Box::new([])),
         effect_dependencies: Box::new([]),

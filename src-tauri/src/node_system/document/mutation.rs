@@ -272,7 +272,7 @@ pub enum EditorGraphMutationDto {
         descriptor: NodeCreationDescriptor,
         position: NodePosition,
         user_label: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[serde(default)]
         connect_from: Option<PortAddressDto>,
     },
     DeleteNode {
@@ -314,6 +314,15 @@ pub struct NodePositionMutationDto {
     pub position: NodePosition,
 }
 
+pub(crate) struct ProjectedConnectPlan {
+    pub projection_address: PortAddress,
+    pub direction: PortDirection,
+    pub kind: PortKind,
+    pub connections: ConnectionsPerPort,
+    pub member: ProjectedMemberRef,
+    pub authorization: MaterializationAuthorization,
+}
+
 impl EditorGraphMutationDto {
     pub fn into_patch(
         self,
@@ -331,7 +340,14 @@ impl EditorGraphMutationDto {
         registry: &NodeRegistry,
         catalog_validation: Option<&crate::project::CatalogMutationValidationSnapshot>,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
-        self.into_patch_with_compatibility(graph_path, document, registry, catalog_validation, None)
+        self.into_patch_with_compatibility(
+            graph_path,
+            document,
+            registry,
+            catalog_validation,
+            None,
+            None,
+        )
     }
 
     pub(crate) fn into_patch_with_compatibility(
@@ -341,6 +357,7 @@ impl EditorGraphMutationDto {
         registry: &NodeRegistry,
         catalog_validation: Option<&crate::project::CatalogMutationValidationSnapshot>,
         compatibility_source: Option<&crate::node_system::compatibility::SourcePort>,
+        projected_connect: Option<ProjectedConnectPlan>,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
         let operations = match self {
             Self::CreateNode {
@@ -509,13 +526,16 @@ impl EditorGraphMutationDto {
                 output,
                 input,
                 order,
-            } => connect_operations(
-                document,
-                registry,
-                output.try_into().map_err(invalid_editor_mutation)?,
-                input.try_into().map_err(invalid_editor_mutation)?,
-                order,
-            )?,
+            } => {
+                let output = output.try_into().map_err(invalid_editor_mutation)?;
+                let input = input.try_into().map_err(invalid_editor_mutation)?;
+                match projected_connect {
+                    Some(plan) => projected_connect_operations(
+                        graph_path, document, registry, output, input, order, plan,
+                    )?,
+                    None => connect_operations(document, registry, output, input, order)?,
+                }
+            }
             Self::Disconnect { connection_id } => {
                 let connection = document
                     .connections
@@ -789,6 +809,7 @@ fn append_atomic_connection(
             binding: DynamicPortBinding::Resolved {
                 origin: dynamic.origin,
                 order: dynamic.order,
+                last_known: dynamic.last_known,
             },
         });
         address
@@ -1047,6 +1068,94 @@ fn resolve_mutation_port<'a>(
     Ok(MutationPort { spec, binding })
 }
 
+fn projected_connect_operations(
+    graph_path: &GraphResourcePath,
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    output: PortAddress,
+    input: PortAddress,
+    order: Option<OrderKey>,
+    plan: ProjectedConnectPlan,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    let projected_is_output = output == plan.projection_address;
+    let projected_is_input = input == plan.projection_address;
+    if projected_is_output == projected_is_input {
+        return Err(invalid_editor_mutation(
+            "exactly one connection endpoint must match the projected member",
+        ));
+    }
+    if projected_is_output != (plan.direction == PortDirection::Output)
+        || projected_is_input != (plan.direction == PortDirection::Input)
+    {
+        return Err(invalid_editor_mutation(
+            "connection endpoints have invalid directions",
+        ));
+    }
+    let ordinary = if projected_is_output {
+        input.clone()
+    } else {
+        output.clone()
+    };
+    let ordinary_port = resolve_mutation_port(document, registry, &ordinary)?;
+    if matches!(
+        ordinary_port.binding,
+        Some(DynamicPortBinding::Orphan { .. })
+    ) {
+        return Err(invalid_editor_mutation("orphan ports cannot be connected"));
+    }
+    let expected_ordinary_direction = match plan.member.direction() {
+        PortDirection::Output => PortDirection::Input,
+        PortDirection::Input => PortDirection::Output,
+    };
+    if ordinary_port.spec.direction != expected_ordinary_direction {
+        return Err(invalid_editor_mutation(
+            "connection endpoints have invalid directions",
+        ));
+    }
+    if ordinary_port.spec.kind != plan.kind {
+        return Err(invalid_editor_mutation(
+            "connection endpoint kinds do not match",
+        ));
+    }
+    validate_connection_capacity(document, &ordinary, ordinary_port.spec.connections)?;
+    if plan.direction == PortDirection::Input {
+        validate_connection_capacity(document, &plan.projection_address, plan.connections)?;
+    }
+    let input_connections = if plan.direction == PortDirection::Input {
+        plan.connections
+    } else {
+        ordinary_port.spec.connections
+    };
+    validate_connection_order(input_connections, order.as_ref())?;
+    materialize_projected_member_operations(
+        graph_path,
+        document,
+        plan.member,
+        plan.authorization,
+        ordinary,
+        order,
+    )
+}
+
+fn validate_connection_order(
+    input_connections: ConnectionsPerPort,
+    order: Option<&OrderKey>,
+) -> Result<(), MutationConflict> {
+    match input_connections {
+        ConnectionsPerPort::Multiple { ordered: true, .. } if order.is_none() => Err(
+            invalid_editor_mutation("ordered input connections require an order key"),
+        ),
+        ConnectionsPerPort::Single | ConnectionsPerPort::Multiple { ordered: false, .. }
+            if order.is_some() =>
+        {
+            Err(invalid_editor_mutation(
+                "unordered input connections cannot carry an order key",
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
 fn connect_operations(
     document: &GraphDocument,
     registry: &NodeRegistry,
@@ -1075,21 +1184,7 @@ fn connect_operations(
     }
     validate_connection_capacity(document, &output, output_port.spec.connections)?;
     validate_connection_capacity(document, &input, input_port.spec.connections)?;
-    match input_port.spec.connections {
-        ConnectionsPerPort::Multiple { ordered: true, .. } if order.is_none() => {
-            return Err(invalid_editor_mutation(
-                "ordered input connections require an order key",
-            ));
-        }
-        ConnectionsPerPort::Single | ConnectionsPerPort::Multiple { ordered: false, .. }
-            if order.is_some() =>
-        {
-            return Err(invalid_editor_mutation(
-                "unordered input connections cannot carry an order key",
-            ));
-        }
-        _ => {}
-    }
+    validate_connection_order(input_port.spec.connections, order.as_ref())?;
     Ok(vec![GraphDocumentOperation::InsertConnection {
         connection: DocumentConnection {
             id: ConnectionId::new(),
@@ -1466,21 +1561,25 @@ fn materialize_projected_member_operations(
         });
     }
 
-    let input = PortAddress::instance(
+    let materialized = PortAddress::instance(
         member.node_id(),
         member.template().clone(),
         PortInstanceId::new(),
     );
+    let (connection_output, connection_input) = match member.direction() {
+        PortDirection::Input => (output, materialized.clone()),
+        PortDirection::Output => (materialized.clone(), output),
+    };
     Ok(vec![
         GraphDocumentOperation::InsertPortBinding {
-            address: input.clone(),
+            address: materialized,
             binding: authorization.into_binding(),
         },
         GraphDocumentOperation::InsertConnection {
             connection: DocumentConnection {
                 id: ConnectionId::new(),
-                output,
-                input,
+                output: connection_output,
+                input: connection_input,
                 order,
             },
         },

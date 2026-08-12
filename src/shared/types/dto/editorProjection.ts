@@ -179,10 +179,14 @@ export type SchemaSummaryKindDto =
 
 export type ResolvedPortStatusDto = 'resolved' | 'orphan';
 
+export type ParameterPresentationDto = 'detailPanel' | 'inlineAndDetail';
+
 export interface ParameterEditorDto {
   key: string;
   display: ParameterDisplayDto;
   editor: ParameterEditorKindDto;
+  presentation: ParameterPresentationDto;
+  valueType: DataType | null;
   multiline: boolean;
   value: unknown | null;
   configuration: SchemaAwareParameterEditorDto | null;

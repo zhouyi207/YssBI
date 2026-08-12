@@ -107,6 +107,13 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         },
         interface: assembled_interface(spec.id, ports, vec![], vec![], vec![])?,
         parameters: assembled_parameters(spec.id, parameters)?,
+        instance_display: match spec.interface {
+            InterfaceKind::DataframeSource => NodeInstanceDisplaySpec::ResourceParameter {
+                parameter: sid("dataframe", ParameterKey::new)?,
+                kind: ResourceDisplayKind::Database,
+            },
+            _ => NodeInstanceDisplaySpec::Static,
+        },
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
             purity: Purity::Pure,
@@ -453,7 +460,9 @@ fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssembl
     parameter(
         key,
         concrete("core.string")?,
-        ParameterEditorSpec::Resource,
+        ParameterEditorSpec::Resource {
+            kind: ResourceDisplayKind::Database,
+        },
         None,
         vec![ParameterConstraint::Required],
     )
@@ -562,6 +571,7 @@ fn parameter(
         default_value,
         constraints,
         editor,
+        presentation: ParameterPresentation::DetailPanel,
     })
 }
 

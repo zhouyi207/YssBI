@@ -25,7 +25,7 @@ function installCallProjection(nodeTypeId: string, targetPath: string): void {
     graphPath,
     nodeId,
     nodeTypeId,
-    title: 'Localized call title',
+    title: 'Calculate Sales',
   });
   useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
   useGraphDataStore.setState((state) => ({
@@ -64,16 +64,16 @@ describe('useNodeView Call Function title projection', () => {
     useResourceStore.getState().clear();
   });
 
-  it('projects the target function name for the stable Rust node type ID', () => {
+  it('keeps the projected call title when the resource store is mismatched', () => {
     useResourceStore.getState().setSnapshot({
-      resources: [buildGraphResourceMeta('function', functionPath, 'Target function')],
+      resources: [buildGraphResourceMeta('function', functionPath, 'Stale resource title')],
     });
     installCallProjection('yssbi.project.function.call', functionPath);
 
     act(() => root.render(<NodeTitleProbe />));
 
     expect(container.querySelector('[data-testid="node-title"]')?.textContent)
-      .toBe('Target function');
+      .toBe('Calculate Sales');
   });
 
   it('does not override a legacy display identity', () => {
@@ -85,15 +85,15 @@ describe('useNodeView Call Function title projection', () => {
     act(() => root.render(<NodeTitleProbe />));
 
     expect(container.querySelector('[data-testid="node-title"]')?.textContent)
-      .toBe('Localized call title');
+      .toBe('Calculate Sales');
   });
 
-  it('keeps the missing-function title for a stable unresolved target', () => {
+  it('keeps the projected call title when the resource store is empty', () => {
     installCallProjection('yssbi.project.function.call', 'functions/Missing.yssbi-function');
 
     act(() => root.render(<NodeTitleProbe />));
 
     expect(container.querySelector('[data-testid="node-title"]')?.textContent)
-      .toBe('(missing function)');
+      .toBe('Calculate Sales');
   });
 });

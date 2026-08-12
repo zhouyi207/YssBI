@@ -95,6 +95,7 @@ mod tests {
                     OutputProduction::FullyMaterialized,
                 ),
             ]),
+            bound_values: Default::default(),
             value_dependencies: Box::new([ValueDependency {
                 source: ValueRef::new(0),
                 destination: ValueRef::new(1),

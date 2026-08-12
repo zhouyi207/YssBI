@@ -224,7 +224,7 @@ pub fn validate_and_prepare_parameter_values<T>(
             issues.push(issue(&spec.key, ParameterIssueKind::Constraint));
             continue;
         }
-        if spec.editor == ParameterEditorSpec::Resource
+        if matches!(spec.editor, ParameterEditorSpec::Resource { .. })
             && !value.as_str().is_some_and(valid_opaque_resource_id)
         {
             issues.push(issue(&spec.key, ParameterIssueKind::InvalidResourceId));

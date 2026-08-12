@@ -65,7 +65,7 @@
     ],
     "locale": "en-US",
     "projectInstanceId": "fixture-project",
-    "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+    "registryFingerprint": "c50129f4312bfe5e505120a7c0d513741b13bd745409185a9bd874fe5c1543e0",
     "resourcePublicationRevision": 0
   },
   "connect": {
@@ -130,7 +130,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 3,
-            "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+            "registryFingerprint": "c50129f4312bfe5e505120a7c0d513741b13bd745409185a9bd874fe5c1543e0",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -240,7 +240,7 @@
                 "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
-                "title": "Get DataFrame",
+                "title": "Main",
                 "userLabel": null
               },
               "graphPath": "events/ProductionChain.yssbi-event",
@@ -256,7 +256,11 @@
                   "editor": "resource",
                   "key": "dataframe",
                   "multiline": false,
-                  "value": "databases/main"
+                  "presentation": "detailPanel",
+                  "value": "databases/main",
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
@@ -300,8 +304,10 @@
                     "kind": "input"
                   },
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -374,6 +380,7 @@
                   "editor": "auto",
                   "key": "predicate",
                   "multiline": false,
+                  "presentation": "detailPanel",
                   "value": {
                     "column": "amount",
                     "operator": "greaterThan",
@@ -381,41 +388,14 @@
                       "type": "integer",
                       "value": "10"
                     }
+                  },
+                  "valueType": {
+                    "inner": "yssbi.dataframe.filter_predicate",
+                    "kind": "Struct"
                   }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000002",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": false,
-                    "current": 1,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -444,12 +424,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000002",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -498,44 +513,18 @@
                   "editor": "auto",
                   "key": "columns",
                   "multiline": false,
+                  "presentation": "detailPanel",
                   "value": [
                     "amount",
                     "region"
-                  ]
+                  ],
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000003",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": false,
-                    "current": 1,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -564,12 +553,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000003",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -609,7 +633,11 @@
                   "editor": "text",
                   "key": "from",
                   "multiline": false,
-                  "value": "amount"
+                  "presentation": "detailPanel",
+                  "value": "amount",
+                  "valueType": {
+                    "kind": "String"
+                  }
                 },
                 {
                   "configuration": null,
@@ -620,41 +648,14 @@
                   "editor": "text",
                   "key": "to",
                   "multiline": false,
-                  "value": "selected_amount"
+                  "presentation": "detailPanel",
+                  "value": "selected_amount",
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000004",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": false,
-                    "current": 1,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -683,12 +684,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000004",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -728,41 +764,14 @@
                   "editor": "number",
                   "key": "rows",
                   "multiline": false,
-                  "value": 2
+                  "presentation": "detailPanel",
+                  "value": 2,
+                  "valueType": {
+                    "kind": "Int64"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000005",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": true,
-                    "current": 0,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -791,12 +800,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000005",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -868,41 +912,15 @@
                   "editor": "auto",
                   "key": "columns",
                   "multiline": false,
-                  "value": null
+                  "presentation": "detailPanel",
+                  "value": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000009",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": true,
-                    "current": 0,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -947,12 +965,47 @@
                     "kind": "input"
                   },
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000009",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -974,6 +1027,7 @@
     "locale": "en-US",
     "mutation": {
       "payload": {
+        "connectFrom": null,
         "descriptor": {
           "kind": "parameterizedStatic",
           "nodeTypeId": "yssbi.dataframe.project",
@@ -985,8 +1039,7 @@
           "x": 320.0,
           "y": 180.0
         },
-        "userLabel": null,
-        "connectFrom": null
+        "userLabel": null
       },
       "type": "createNode"
     },
@@ -1030,7 +1083,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 2,
-            "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+            "registryFingerprint": "c50129f4312bfe5e505120a7c0d513741b13bd745409185a9bd874fe5c1543e0",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -1141,7 +1194,7 @@
                 "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
-                "title": "Get DataFrame",
+                "title": "Main",
                 "userLabel": null
               },
               "graphPath": "events/ProductionChain.yssbi-event",
@@ -1157,7 +1210,11 @@
                   "editor": "resource",
                   "key": "dataframe",
                   "multiline": false,
-                  "value": "databases/main"
+                  "presentation": "detailPanel",
+                  "value": "databases/main",
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
@@ -1201,8 +1258,10 @@
                     "kind": "input"
                   },
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1275,6 +1334,7 @@
                   "editor": "auto",
                   "key": "predicate",
                   "multiline": false,
+                  "presentation": "detailPanel",
                   "value": {
                     "column": "amount",
                     "operator": "greaterThan",
@@ -1282,41 +1342,14 @@
                       "type": "integer",
                       "value": "10"
                     }
+                  },
+                  "valueType": {
+                    "inner": "yssbi.dataframe.filter_predicate",
+                    "kind": "Struct"
                   }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000002",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": false,
-                    "current": 1,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -1345,12 +1378,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000002",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -1399,44 +1467,18 @@
                   "editor": "auto",
                   "key": "columns",
                   "multiline": false,
+                  "presentation": "detailPanel",
                   "value": [
                     "amount",
                     "region"
-                  ]
+                  ],
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000003",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": false,
-                    "current": 1,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -1465,12 +1507,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000003",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -1510,7 +1587,11 @@
                   "editor": "text",
                   "key": "from",
                   "multiline": false,
-                  "value": "amount"
+                  "presentation": "detailPanel",
+                  "value": "amount",
+                  "valueType": {
+                    "kind": "String"
+                  }
                 },
                 {
                   "configuration": null,
@@ -1521,41 +1602,14 @@
                   "editor": "text",
                   "key": "to",
                   "multiline": false,
-                  "value": "selected_amount"
+                  "presentation": "detailPanel",
+                  "value": "selected_amount",
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000004",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": false,
-                    "current": 1,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -1584,12 +1638,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000004",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -1629,41 +1718,14 @@
                   "editor": "number",
                   "key": "rows",
                   "multiline": false,
-                  "value": 2
+                  "presentation": "detailPanel",
+                  "value": 2,
+                  "valueType": {
+                    "kind": "Int64"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000005",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": true,
-                    "current": 0,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -1692,12 +1754,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000005",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -1771,41 +1868,15 @@
                   "editor": "auto",
                   "key": "columns",
                   "multiline": false,
-                  "value": null
+                  "presentation": "detailPanel",
+                  "value": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000009",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": true,
-                    "current": 0,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -1834,12 +1905,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000009",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -1862,7 +1968,7 @@
     "basis": {
       "graphPath": "events/ProductionChain.yssbi-event",
       "graphRevision": 1,
-      "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+      "registryFingerprint": "c50129f4312bfe5e505120a7c0d513741b13bd745409185a9bd874fe5c1543e0",
       "resourceVersions": {
         "databases/main": "revision:0"
       }
@@ -1946,7 +2052,7 @@
           "description": "Performs a typed tabular operation.",
           "iconId": "builtin.dataframe",
           "styleId": "builtin.dataframe",
-          "title": "Get DataFrame",
+          "title": "Main",
           "userLabel": null
         },
         "graphPath": "events/ProductionChain.yssbi-event",
@@ -1962,7 +2068,11 @@
             "editor": "resource",
             "key": "dataframe",
             "multiline": false,
-            "value": "databases/main"
+            "presentation": "detailPanel",
+            "value": "databases/main",
+            "valueType": {
+              "kind": "String"
+            }
           }
         ],
         "ports": [
@@ -2006,8 +2116,10 @@
               "kind": "input"
             },
             "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
               "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2080,6 +2192,7 @@
             "editor": "auto",
             "key": "predicate",
             "multiline": false,
+            "presentation": "detailPanel",
             "value": {
               "column": "amount",
               "operator": "greaterThan",
@@ -2087,41 +2200,14 @@
                 "type": "integer",
                 "value": "10"
               }
+            },
+            "valueType": {
+              "inner": "yssbi.dataframe.filter_predicate",
+              "kind": "Struct"
             }
           }
         ],
         "ports": [
-          {
-            "address": {
-              "kind": "declared",
-              "nodeId": "00000000-0000-0000-0000-000000000002",
-              "portKey": "result"
-            },
-            "canRemove": false,
-            "connections": {
-              "canConnect": false,
-              "current": 1,
-              "maximum": 1,
-              "ordered": false
-            },
-            "direction": "output",
-            "display": {
-              "instanceLabel": null,
-              "label": "Result"
-            },
-            "input": null,
-            "instanceKind": "declared",
-            "kind": "data",
-            "orphan": false,
-            "resolvedSchema": null,
-            "resolvedType": {
-              "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
-              "resolved": true
-            },
-            "status": "resolved",
-            "templateKey": "result"
-          },
           {
             "address": {
               "kind": "declared",
@@ -2150,12 +2236,47 @@
             "orphan": false,
             "resolvedSchema": null,
             "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
               "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
             "templateKey": "source"
+          },
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000002",
+              "portKey": "result"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": false,
+              "current": 1,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "output",
+            "display": {
+              "instanceLabel": null,
+              "label": "Result"
+            },
+            "input": null,
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "result"
           }
         ],
         "position": {
@@ -2204,44 +2325,18 @@
             "editor": "auto",
             "key": "columns",
             "multiline": false,
+            "presentation": "detailPanel",
             "value": [
               "amount",
               "region"
-            ]
+            ],
+            "valueType": {
+              "inner": "yssbi.dataframe.project_columns",
+              "kind": "Struct"
+            }
           }
         ],
         "ports": [
-          {
-            "address": {
-              "kind": "declared",
-              "nodeId": "00000000-0000-0000-0000-000000000003",
-              "portKey": "result"
-            },
-            "canRemove": false,
-            "connections": {
-              "canConnect": false,
-              "current": 1,
-              "maximum": 1,
-              "ordered": false
-            },
-            "direction": "output",
-            "display": {
-              "instanceLabel": null,
-              "label": "Result"
-            },
-            "input": null,
-            "instanceKind": "declared",
-            "kind": "data",
-            "orphan": false,
-            "resolvedSchema": null,
-            "resolvedType": {
-              "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
-              "resolved": true
-            },
-            "status": "resolved",
-            "templateKey": "result"
-          },
           {
             "address": {
               "kind": "declared",
@@ -2270,12 +2365,47 @@
             "orphan": false,
             "resolvedSchema": null,
             "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
               "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
             "templateKey": "source"
+          },
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000003",
+              "portKey": "result"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": false,
+              "current": 1,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "output",
+            "display": {
+              "instanceLabel": null,
+              "label": "Result"
+            },
+            "input": null,
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "result"
           }
         ],
         "position": {
@@ -2315,7 +2445,11 @@
             "editor": "text",
             "key": "from",
             "multiline": false,
-            "value": "amount"
+            "presentation": "detailPanel",
+            "value": "amount",
+            "valueType": {
+              "kind": "String"
+            }
           },
           {
             "configuration": null,
@@ -2326,41 +2460,14 @@
             "editor": "text",
             "key": "to",
             "multiline": false,
-            "value": "selected_amount"
+            "presentation": "detailPanel",
+            "value": "selected_amount",
+            "valueType": {
+              "kind": "String"
+            }
           }
         ],
         "ports": [
-          {
-            "address": {
-              "kind": "declared",
-              "nodeId": "00000000-0000-0000-0000-000000000004",
-              "portKey": "result"
-            },
-            "canRemove": false,
-            "connections": {
-              "canConnect": false,
-              "current": 1,
-              "maximum": 1,
-              "ordered": false
-            },
-            "direction": "output",
-            "display": {
-              "instanceLabel": null,
-              "label": "Result"
-            },
-            "input": null,
-            "instanceKind": "declared",
-            "kind": "data",
-            "orphan": false,
-            "resolvedSchema": null,
-            "resolvedType": {
-              "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
-              "resolved": true
-            },
-            "status": "resolved",
-            "templateKey": "result"
-          },
           {
             "address": {
               "kind": "declared",
@@ -2389,12 +2496,47 @@
             "orphan": false,
             "resolvedSchema": null,
             "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
               "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
             "templateKey": "source"
+          },
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000004",
+              "portKey": "result"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": false,
+              "current": 1,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "output",
+            "display": {
+              "instanceLabel": null,
+              "label": "Result"
+            },
+            "input": null,
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "result"
           }
         ],
         "position": {
@@ -2434,41 +2576,14 @@
             "editor": "number",
             "key": "rows",
             "multiline": false,
-            "value": 2
+            "presentation": "detailPanel",
+            "value": 2,
+            "valueType": {
+              "kind": "Int64"
+            }
           }
         ],
         "ports": [
-          {
-            "address": {
-              "kind": "declared",
-              "nodeId": "00000000-0000-0000-0000-000000000005",
-              "portKey": "result"
-            },
-            "canRemove": false,
-            "connections": {
-              "canConnect": true,
-              "current": 0,
-              "maximum": 1,
-              "ordered": false
-            },
-            "direction": "output",
-            "display": {
-              "instanceLabel": null,
-              "label": "Result"
-            },
-            "input": null,
-            "instanceKind": "declared",
-            "kind": "data",
-            "orphan": false,
-            "resolvedSchema": null,
-            "resolvedType": {
-              "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
-              "resolved": true
-            },
-            "status": "resolved",
-            "templateKey": "result"
-          },
           {
             "address": {
               "kind": "declared",
@@ -2497,12 +2612,47 @@
             "orphan": false,
             "resolvedSchema": null,
             "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
               "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
             "templateKey": "source"
+          },
+          {
+            "address": {
+              "kind": "declared",
+              "nodeId": "00000000-0000-0000-0000-000000000005",
+              "portKey": "result"
+            },
+            "canRemove": false,
+            "connections": {
+              "canConnect": true,
+              "current": 0,
+              "maximum": 1,
+              "ordered": false
+            },
+            "direction": "output",
+            "display": {
+              "instanceLabel": null,
+              "label": "Result"
+            },
+            "input": null,
+            "instanceKind": "declared",
+            "kind": "data",
+            "orphan": false,
+            "resolvedSchema": null,
+            "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
+              "display": "tabular.dataframe",
+              "resolved": true
+            },
+            "status": "resolved",
+            "templateKey": "result"
           }
         ],
         "position": {
@@ -2597,7 +2747,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 4,
-            "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+            "registryFingerprint": "c50129f4312bfe5e505120a7c0d513741b13bd745409185a9bd874fe5c1543e0",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -2695,7 +2845,7 @@
                 "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
-                "title": "Get DataFrame",
+                "title": "Main",
                 "userLabel": null
               },
               "graphPath": "events/ProductionChain.yssbi-event",
@@ -2711,7 +2861,11 @@
                   "editor": "resource",
                   "key": "dataframe",
                   "multiline": false,
-                  "value": "databases/main"
+                  "presentation": "detailPanel",
+                  "value": "databases/main",
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
@@ -2755,8 +2909,10 @@
                     "kind": "input"
                   },
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -2829,6 +2985,7 @@
                   "editor": "auto",
                   "key": "predicate",
                   "multiline": false,
+                  "presentation": "detailPanel",
                   "value": {
                     "column": "amount",
                     "operator": "greaterThan",
@@ -2836,41 +2993,14 @@
                       "type": "integer",
                       "value": "10"
                     }
+                  },
+                  "valueType": {
+                    "inner": "yssbi.dataframe.filter_predicate",
+                    "kind": "Struct"
                   }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000002",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": false,
-                    "current": 1,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -2899,12 +3029,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000002",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -2953,44 +3118,18 @@
                   "editor": "auto",
                   "key": "columns",
                   "multiline": false,
+                  "presentation": "detailPanel",
                   "value": [
                     "amount",
                     "region"
-                  ]
+                  ],
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000003",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": false,
-                    "current": 1,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -3019,12 +3158,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000003",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -3064,7 +3238,11 @@
                   "editor": "text",
                   "key": "from",
                   "multiline": false,
-                  "value": "amount"
+                  "presentation": "detailPanel",
+                  "value": "amount",
+                  "valueType": {
+                    "kind": "String"
+                  }
                 },
                 {
                   "configuration": null,
@@ -3075,41 +3253,14 @@
                   "editor": "text",
                   "key": "to",
                   "multiline": false,
-                  "value": "selected_amount"
+                  "presentation": "detailPanel",
+                  "value": "selected_amount",
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000004",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": false,
-                    "current": 1,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -3138,12 +3289,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000004",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": false,
+                    "current": 1,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -3183,41 +3369,14 @@
                   "editor": "number",
                   "key": "rows",
                   "multiline": false,
-                  "value": 2
+                  "presentation": "detailPanel",
+                  "value": 2,
+                  "valueType": {
+                    "kind": "Int64"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000005",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": true,
-                    "current": 0,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": null,
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -3246,12 +3405,47 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000005",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": null,
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {
@@ -3313,56 +3507,18 @@
                   "editor": "auto",
                   "key": "columns",
                   "multiline": false,
+                  "presentation": "detailPanel",
                   "value": [
                     "region",
                     "amount"
-                  ]
+                  ],
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
-                {
-                  "address": {
-                    "kind": "declared",
-                    "nodeId": "00000000-0000-0000-0000-000000000009",
-                    "portKey": "result"
-                  },
-                  "canRemove": false,
-                  "connections": {
-                    "canConnect": true,
-                    "current": 0,
-                    "maximum": 1,
-                    "ordered": false
-                  },
-                  "direction": "output",
-                  "display": {
-                    "instanceLabel": null,
-                    "label": "Result"
-                  },
-                  "input": null,
-                  "instanceKind": "declared",
-                  "kind": "data",
-                  "orphan": false,
-                  "resolvedSchema": {
-                    "fields": [
-                      {
-                        "name": "region",
-                        "scalarType": "string"
-                      },
-                      {
-                        "name": "amount",
-                        "scalarType": "int64"
-                      }
-                    ],
-                    "kind": "project"
-                  },
-                  "resolvedType": {
-                    "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
-                    "resolved": true
-                  },
-                  "status": "resolved",
-                  "templateKey": "result"
-                },
                 {
                   "address": {
                     "kind": "declared",
@@ -3407,12 +3563,59 @@
                     "kind": "input"
                   },
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
                   "templateKey": "source"
+                },
+                {
+                  "address": {
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000009",
+                    "portKey": "result"
+                  },
+                  "canRemove": false,
+                  "connections": {
+                    "canConnect": true,
+                    "current": 0,
+                    "maximum": 1,
+                    "ordered": false
+                  },
+                  "direction": "output",
+                  "display": {
+                    "instanceLabel": null,
+                    "label": "Result"
+                  },
+                  "input": null,
+                  "instanceKind": "declared",
+                  "kind": "data",
+                  "orphan": false,
+                  "resolvedSchema": {
+                    "fields": [
+                      {
+                        "name": "region",
+                        "scalarType": "string"
+                      },
+                      {
+                        "name": "amount",
+                        "scalarType": "int64"
+                      }
+                    ],
+                    "kind": "project"
+                  },
+                  "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
+                    "display": "tabular.dataframe",
+                    "resolved": true
+                  },
+                  "status": "resolved",
+                  "templateKey": "result"
                 }
               ],
               "position": {

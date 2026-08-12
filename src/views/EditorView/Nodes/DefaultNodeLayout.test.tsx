@@ -3,9 +3,21 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useDatabaseStore, useVariableStore } from '@/features/core/dataStore';
 import type { UINode } from '@/shared/types/ui';
 import { DefaultNodeLayout } from './DefaultNodeLayout';
+
+const { inlineEditor } = vi.hoisted(() => ({ inlineEditor: vi.fn() }));
+
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({ i18n: { resolvedLanguage: 'en-US', language: 'en' } }),
+}));
+
+vi.mock('./InlineParameterEditor', () => ({
+  InlineParameterEditor: (props: unknown) => {
+    inlineEditor(props);
+    return <span data-testid="inline-parameter">inline editor</span>;
+  },
+}));
 
 vi.mock('../Pins/Pin', () => ({
   Pin: ({ name }: { name: string }) => <span data-testid="pin-name">{name}</span>,
@@ -14,22 +26,27 @@ vi.mock('../Pins/Pin', () => ({
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
 
-function resourceNode(nodeType: string, resource: 'variable' | 'database'): UINode {
+function projectedNode(): UINode {
   return {
-    id: `${resource}-node`,
+    id: 'database-node',
     graphPath: 'events/Main.yssbi-event',
-    nodeType,
+    nodeType: 'yssbi.dataframe.source.get',
     category: [],
-    title: 'Localized resource node',
+    title: 'Sales Database',
     uiStyle: 'default',
     position: { x: 0, y: 0 },
-    variableId: resource === 'variable' ? 'variable-1' : undefined,
-    dataframeId: resource === 'database' ? 'database-1' : undefined,
+    display: {
+      title: 'Sales Database',
+      description: null,
+      userLabel: 'Prior period',
+      iconId: null,
+      styleId: null,
+    },
     inputs: [],
     outputs: [{
       id: 'resource-output',
-      nodeId: `${resource}-node`,
-      name: 'Projected resource',
+      nodeId: 'database-node',
+      name: 'amount',
       type: 'object',
       direction: 'output',
       kind: 'data',
@@ -41,56 +58,84 @@ function resourceNode(nodeType: string, resource: 'variable' | 'database'): UINo
   } as UINode;
 }
 
-describe('DefaultNodeLayout resource pin projection', () => {
+describe('DefaultNodeLayout projection authority', () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
+    inlineEditor.mockClear();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    useVariableStore.setState({
-      variables: {
-        'variable-1': {
-          id: 'variable-1',
-          name: 'Counter',
-          dataType: { kind: 'Float64' },
-          dataValue: { kind: 'Float64', value: 1 },
-          description: '',
-          scope: { type: 'global' },
-          tags: [],
-        },
-      },
-    });
-    useDatabaseStore.setState({
-      databases: {
-        'database-1': {
-          id: 'database-1',
-          name: 'Sales',
-          engine: { inMemory: { name: 'sales' } },
-          schemaVersion: 1,
-          required: false,
-        },
-      },
-    });
   });
 
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
-    useVariableStore.setState({ variables: {} });
-    useDatabaseStore.setState({ databases: {} });
   });
 
-  it.each([
-    ['yssbi.project.variable.get', 'Variables:Get Variable', 'variable', 'Counter'],
-    ['yssbi.project.variable.set', 'Variables:Set Variable', 'variable', 'Counter'],
-    ['yssbi.dataframe.source.get', 'Data:Get DataFrame', 'database', 'Sales'],
-  ] as const)('uses stable %s identity but ignores legacy %s', (stableId, legacyId, resource, expectedName) => {
-    act(() => root.render(<DefaultNodeLayout node={resourceNode(stableId, resource)} />));
-    expect(container.querySelector('[data-testid="pin-name"]')?.textContent).toBe(expectedName);
+  it('renders projected title subtitle and pin names without resource stores', () => {
+    act(() => root.render(<DefaultNodeLayout node={projectedNode()} />));
 
-    act(() => root.render(<DefaultNodeLayout node={resourceNode(legacyId, resource)} />));
-    expect(container.querySelector('[data-testid="pin-name"]')?.textContent).toBe('Projected resource');
+    expect(container.textContent).toContain('Sales Database');
+    expect(container.textContent).toContain('Prior period');
+    expect(container.querySelector('[data-testid="pin-name"]')?.textContent).toBe('amount');
+  });
+
+  it('renders only protocol-declared inlineAndDetail parameters with projection locale', () => {
+    const node = projectedNode();
+    node.parameterEditors = [
+      {
+        key: 'inline',
+        display: { title: 'Inline', description: null },
+        editor: 'text',
+        presentation: 'inlineAndDetail',
+        valueType: { kind: 'String' },
+        multiline: false,
+        value: 'shown',
+        configuration: null,
+      },
+      {
+        key: 'detail',
+        display: { title: 'Detail', description: null },
+        editor: 'text',
+        presentation: 'detailPanel',
+        valueType: { kind: 'String' },
+        multiline: false,
+        value: 'hidden',
+        configuration: null,
+      },
+    ];
+
+    const graphPath = 'events/Main.yssbi-event';
+    act(() => root.render(<DefaultNodeLayout node={node} graphPath={graphPath} />));
+
+    expect(container.querySelectorAll('[data-testid="inline-parameter"]')).toHaveLength(1);
+    expect(inlineEditor).toHaveBeenCalledWith(expect.objectContaining({
+      graphPath,
+      nodeId: node.id,
+      locale: 'en-US',
+      parameter: node.parameterEditors[0],
+    }));
+  });
+
+  it('renders a projected inline value read-only without graphPath', () => {
+    const node = projectedNode();
+    node.parameterEditors = [{
+      key: 'value',
+      display: { title: 'Value', description: null },
+      editor: 'number',
+      presentation: 'inlineAndDetail',
+      valueType: { kind: 'Int64' },
+      multiline: false,
+      value: 42,
+      configuration: null,
+    }];
+
+    act(() => root.render(<DefaultNodeLayout node={node} />));
+
+    expect(container.textContent).toContain('Value');
+    expect(container.textContent).toContain('42');
+    expect(inlineEditor).not.toHaveBeenCalled();
   });
 });

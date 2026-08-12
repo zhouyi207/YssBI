@@ -19,11 +19,13 @@ impl Kernel for PrintKernel {
         let RuntimeValue::Scalar(Value::String(message)) = &inputs[0] else {
             return Err(KernelError::new("Print message must be a String scalar"));
         };
-        tauri_plugin_log::log::info!(
-            target: "yssbi::node_system::debug",
-            "Print [activation={}]: {}",
-            context.activation_id.get(),
-            message,
+        crate::log::emit_execution_log(
+            crate::log::LogLevel::Info,
+            message.to_string(),
+            Some(format!(
+                "yssbi.debug.print activation={}",
+                context.activation_id.get()
+            )),
         );
         Ok(Vec::new())
     }

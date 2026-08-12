@@ -8,8 +8,9 @@ use crate::node_system::document::{
     PortAddressDto, port_member_group_state,
 };
 use crate::node_system::protocol::{
-    ConnectionsPerPort, I18nKey, ParameterEditorSpec, PortDirection, PortEditorSpec, PortInstances,
-    PortKey, PortKind, RelationalScalarType, ResolvedSchemaFact, SchemaExpr, TypeExpr,
+    ConnectionsPerPort, I18nKey, ParameterEditorSpec, ParameterPresentation, PortDirection,
+    PortEditorSpec, PortInstances, PortKey, PortKind, RelationalScalarType, ResolvedSchemaFact,
+    SchemaExpr, TypeExpr,
 };
 use crate::node_system::registry::{NodeRegistry, RegistryFingerprint};
 use serde::{Deserialize, Serialize};
@@ -396,9 +397,27 @@ pub struct ParameterEditorDto {
     pub key: Box<str>,
     pub display: ParameterDisplayDto,
     pub editor: ParameterEditorKindDto,
+    pub presentation: ParameterPresentationDto,
+    pub value_type: Option<DataType>,
     pub multiline: bool,
     pub value: Option<serde_json::Value>,
     pub configuration: Option<SchemaAwareParameterEditorDto>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ParameterPresentationDto {
+    DetailPanel,
+    InlineAndDetail,
+}
+
+impl From<ParameterPresentation> for ParameterPresentationDto {
+    fn from(value: ParameterPresentation) -> Self {
+        match value {
+            ParameterPresentation::DetailPanel => Self::DetailPanel,
+            ParameterPresentation::InlineAndDetail => Self::InlineAndDetail,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -657,9 +676,8 @@ impl EditorGraphProjectionDto {
             .values()
             .map(|node| {
                 let protocol = registry.get(&node.node_type).map(|entry| entry.protocol());
-                let normalized = analyzed_nodes
-                    .get(&node.id)
-                    .map(|node| &node.normalized_parameters);
+                let normalized_node = analyzed_nodes.get(&node.id).copied();
+                let normalized = normalized_node.map(|node| &node.normalized_parameters);
                 let ports = interfaces
                     .get(&node.id)
                     .map(|interface| {
@@ -745,7 +763,7 @@ impl EditorGraphProjectionDto {
                                         effective,
                                     }
                                 });
-                                let instance_label = orphan_label(document, &port.address);
+                                let instance_label = port.instance_label.clone();
                                 let label = instance_label.clone().unwrap_or_else(|| {
                                     localization.text(&spec.label_key, &DiagnosticArguments::new())
                                 });
@@ -763,10 +781,12 @@ impl EditorGraphProjectionDto {
                                     can_remove,
                                     connections,
                                     input,
-                                    resolved_type: analysis
-                                        .partial_types
-                                        .get(&port.address)
-                                        .map(project_type_summary),
+                                    resolved_type: Some(project_type_summary(
+                                        analysis
+                                            .partial_types
+                                            .get(&port.address)
+                                            .unwrap_or(&port.value_type),
+                                    )),
                                     resolved_schema: analysis
                                         .partial_schemas
                                         .get(&port.address)
@@ -819,6 +839,8 @@ impl EditorGraphProjectionDto {
                                         ),
                                     },
                                     editor,
+                                    presentation: parameter.presentation.into(),
+                                    value_type: project_data_type(&parameter.value_type),
                                     multiline,
                                     value: value.clone(),
                                     configuration: project_schema_aware_editor(
@@ -847,8 +869,12 @@ impl EditorGraphProjectionDto {
                         style_id: None,
                     },
                     |protocol| NodeDisplayDto {
-                        title: localization
-                            .text(&protocol.catalog.title_key, &DiagnosticArguments::new()),
+                        title: normalized_node
+                            .and_then(|node| node.instance_title.clone())
+                            .unwrap_or_else(|| {
+                                localization
+                                    .text(&protocol.catalog.title_key, &DiagnosticArguments::new())
+                            }),
                         description: protocol
                             .catalog
                             .description_key
@@ -1122,6 +1148,8 @@ pub(crate) fn project_data_type(value: &TypeExpr) -> Option<DataType> {
             "core.int64" => DataType::Int64,
             "core.float64" => DataType::Float64,
             "core.string" => DataType::String,
+            "core.date" => DataType::Date,
+            "core.datetime" => DataType::Datetime,
             "core.categorical" => DataType::Categorical,
             "tabular.dataframe" => DataType::DataFrame,
             "tabular.series" => DataType::DataSeries(Box::new(DataType::Any)),
@@ -1145,7 +1173,8 @@ pub(crate) fn project_data_type(value: &TypeExpr) -> Option<DataType> {
             .map(project_data_type)
             .collect::<Option<Vec<_>>>()
             .map(DataType::one_of),
-        TypeExpr::Union(_) | TypeExpr::Generic(_) | TypeExpr::Unknown => None,
+        TypeExpr::Unknown => Some(DataType::Any),
+        TypeExpr::Union(_) | TypeExpr::Generic(_) => None,
     }
 }
 
@@ -1205,15 +1234,6 @@ fn project_schema_summary(
         })
         .collect();
     SchemaSummaryDto { kind, fields }
-}
-
-fn orphan_label(document: &GraphDocument, address: &PortAddress) -> Option<Box<str>> {
-    match document.port_bindings.get(address) {
-        Some(crate::node_system::document::DynamicPortBinding::Orphan { last_known, .. }) => {
-            Some(last_known.label.as_str().into())
-        }
-        _ => None,
-    }
 }
 
 fn project_schema_aware_editor(
@@ -1331,7 +1351,7 @@ fn project_parameter_editor(
         ParameterEditorSpec::Number => (ParameterEditorKindDto::Number, false),
         ParameterEditorSpec::Toggle => (ParameterEditorKindDto::Toggle, false),
         ParameterEditorSpec::Select => (ParameterEditorKindDto::Select, false),
-        ParameterEditorSpec::Resource => (ParameterEditorKindDto::Resource, false),
+        ParameterEditorSpec::Resource { .. } => (ParameterEditorKindDto::Resource, false),
     })
 }
 
@@ -1442,8 +1462,8 @@ mod tests {
     use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
     use crate::node_system::document::{
         DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-        FunctionParameterId, GraphResourcePath, InputState, LastKnownPortMetadata, NodePosition,
-        OrderKey, PortInstanceId,
+        FunctionDocument, FunctionParameterId, FunctionSignature, GraphResourcePath, InputState,
+        LastKnownPortMetadata, NodePosition, OrderKey, PortInstanceId,
     };
     use crate::node_system::protocol::{
         NodeTypeId, ParameterKey, PortKey, TypeConstructorId, TypeExpr, TypeId,
@@ -1490,6 +1510,181 @@ mod tests {
         fn versions(&self) -> ResourceVersionSet {
             BTreeMap::new()
         }
+    }
+
+    struct NamedResources {
+        function_path: GraphResourcePath,
+        function: FunctionDocument,
+        function_graph: GraphDocument,
+        function_name: Box<str>,
+        variable: crate::variable::VariableInstance,
+        database_name: Box<str>,
+        database_columns: Vec<crate::schema::ColumnInfoDTO>,
+    }
+
+    impl ResourceSnapshot for NamedResources {
+        fn versions(&self) -> ResourceVersionSet {
+            BTreeMap::from([
+                (
+                    crate::node_system::analysis::ResourceKey::new(self.function_path.0.clone()),
+                    crate::node_system::analysis::ResourceVersion::new("function-v1"),
+                ),
+                (
+                    crate::node_system::analysis::ResourceKey::new(format!(
+                        "variables/{}",
+                        self.variable.id
+                    )),
+                    crate::node_system::analysis::ResourceVersion::new("variable-v1"),
+                ),
+                (
+                    crate::node_system::analysis::ResourceKey::new("databases/sales"),
+                    crate::node_system::analysis::ResourceVersion::new("database-v1"),
+                ),
+            ])
+        }
+
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            (path == &self.function_path).then_some(self.function_name.as_ref())
+        }
+
+        fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
+            (path == &self.function_path).then_some(&self.function)
+        }
+
+        fn function_graph_document(&self, path: &GraphResourcePath) -> Option<&GraphDocument> {
+            (path == &self.function_path).then_some(&self.function_graph)
+        }
+
+        fn variable(
+            &self,
+            id: &crate::variable::VariableId,
+        ) -> Option<&crate::variable::VariableInstance> {
+            (id == &self.variable.id).then_some(&self.variable)
+        }
+
+        fn database_name(&self, id: &str) -> Option<&str> {
+            (id == "sales").then_some(self.database_name.as_ref())
+        }
+
+        fn database_schema(&self, id: &str) -> Option<&[crate::schema::ColumnInfoDTO]> {
+            (id == "sales").then_some(self.database_columns.as_slice())
+        }
+    }
+
+    #[test]
+    fn resource_bound_editor_titles_use_authoritative_names_and_preserve_labels() {
+        let builtin = build_builtin_node_system().unwrap();
+        let registry = builtin.registry;
+        let catalog = builtin.catalog;
+        let variable_id = crate::variable::VariableId::from(Uuid::from_u128(100));
+        let function_path = GraphResourcePath("functions/calculate-sales".into());
+        let resources = NamedResources {
+            function_path: function_path.clone(),
+            function: FunctionDocument::new(FunctionSignature::default()),
+            function_graph: GraphDocument::default(),
+            function_name: "Calculate Sales".into(),
+            variable: crate::variable::VariableInstance {
+                id: variable_id,
+                name: "Revenue".into(),
+                data_type: DataType::Int64,
+                data_value: crate::graph::value::DataValue::Int64(1),
+                tabular: None,
+                description: String::new(),
+                scope: crate::variable::VariableScope::Global,
+                tags: Vec::new(),
+            },
+            database_name: "Sales Database".into(),
+            database_columns: Vec::new(),
+        };
+        let variable_path = format!("variables/{variable_id}");
+        let mut document = GraphDocument::default();
+        for (index, node_type, parameter, resource, user_label) in [
+            (
+                1,
+                "yssbi.project.function.call",
+                "target",
+                function_path.0.as_ref(),
+                None,
+            ),
+            (
+                2,
+                "yssbi.project.variable.get",
+                "variable",
+                variable_path.as_str(),
+                Some("Previous period"),
+            ),
+            (
+                3,
+                "yssbi.dataframe.source.get",
+                "dataframe",
+                "databases/sales",
+                None,
+            ),
+            (
+                4,
+                "yssbi.dataframe.source.get",
+                "dataframe",
+                "databases/missing",
+                None,
+            ),
+        ] {
+            let node_id = NodeId::from_uuid(Uuid::from_u128(index));
+            document.nodes.insert(
+                node_id,
+                DocumentNode {
+                    id: node_id,
+                    node_type: NodeTypeId::new(node_type).unwrap(),
+                    position: NodePosition { x: 0.0, y: 0.0 },
+                    parameters: BTreeMap::from([(
+                        ParameterKey::new(parameter).unwrap(),
+                        json!(resource),
+                    )]),
+                    user_label: user_label.map(str::to_owned),
+                },
+            );
+        }
+
+        let analysis = GraphCompiler::new(registry.as_ref(), &resources)
+            .compile(&document)
+            .analysis;
+        let projection = EditorGraphProjectionDto::from_sources(
+            "events/resource-titles",
+            &analysis,
+            &document,
+            registry.as_ref(),
+            &catalog.localization("en-US"),
+        )
+        .unwrap();
+        let titles = projection
+            .nodes
+            .iter()
+            .filter(|node| node.node_id.as_ref() != Uuid::from_u128(4).to_string())
+            .map(|node| (node.node_type_id.as_ref(), node.display.title.as_ref()))
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(titles["yssbi.project.function.call"], "Calculate Sales");
+        assert_eq!(titles["yssbi.project.variable.get"], "Revenue");
+        assert_eq!(titles["yssbi.dataframe.source.get"], "Sales Database");
+        let missing = projection
+            .nodes
+            .iter()
+            .find(|node| node.node_id.as_ref() == Uuid::from_u128(4).to_string())
+            .unwrap();
+        assert_eq!(missing.display.title.as_ref(), "Get DataFrame");
+        assert!(missing.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code.as_ref() == "compiler.resource.resolution_failed"
+        }));
+        assert_eq!(
+            projection
+                .nodes
+                .iter()
+                .find(|node| node.node_type_id.as_ref() == "yssbi.project.variable.get")
+                .unwrap()
+                .display
+                .user_label
+                .as_deref(),
+            Some("Previous period"),
+        );
     }
 
     fn basis(revision: u64) -> ProjectionBasis {
@@ -2096,6 +2291,7 @@ mod tests {
                 DynamicPortBinding::Resolved {
                     origin: locator(),
                     order: OrderKey("resolved-body".into()),
+                    last_known: LastKnownPortMetadata::default(),
                 },
             ),
             (
@@ -2105,6 +2301,7 @@ mod tests {
                     order: OrderKey("orphan-next".into()),
                     last_known: LastKnownPortMetadata {
                         label: "Next".into(),
+                        value_type: None,
                     },
                 },
             ),
@@ -2113,6 +2310,7 @@ mod tests {
                 DynamicPortBinding::Resolved {
                     origin: locator(),
                     order: OrderKey("resolved-result".into()),
+                    last_known: LastKnownPortMetadata::default(),
                 },
             ),
         ] {

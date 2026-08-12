@@ -1,4 +1,4 @@
-use super::{I18nKey, ParameterKey, ParameterValue, TypeExpr, Value};
+use super::{I18nKey, ParameterKey, ParameterValue, ResourceDisplayKind, TypeExpr, Value};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -11,6 +11,15 @@ pub struct ParameterSpec {
     pub default_value: Option<ParameterValue>,
     pub constraints: Vec<ParameterConstraint>,
     pub editor: ParameterEditorSpec,
+    #[serde(default)]
+    pub presentation: ParameterPresentation,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ParameterPresentation {
+    #[default]
+    DetailPanel,
+    InlineAndDetail,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,7 +59,7 @@ pub enum ParameterEditorSpec {
     Number,
     Toggle,
     Select,
-    Resource,
+    Resource { kind: ResourceDisplayKind },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

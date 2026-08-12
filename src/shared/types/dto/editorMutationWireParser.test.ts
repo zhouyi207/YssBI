@@ -45,7 +45,7 @@ const operations = [
       kind: 'orphan',
       origin: { kind: 'schema_field', source: 'databases/sales', field: 'amount' },
       order: 'b',
-      last_known: { label: 'Amount' },
+      last_known: { label: 'Amount', value_type: { Concrete: 'core.float64' } },
     },
   },
   { operation: 'insert_connection', connection },
@@ -84,6 +84,22 @@ function projection(path: string, revision: number) {
     outcome: { type: 'success' },
     hasBlockingDiagnostics: false,
   };
+}
+
+function projectionWithParameterEditor(): Record<string, unknown> {
+  const value = projectionWithResolvedType(null);
+  const projectedNode = (value.nodes as Array<Record<string, unknown>>)[0];
+  projectedNode.parameterEditors = [{
+    key: 'value',
+    display: { title: 'Value', description: null },
+    editor: 'number',
+    presentation: 'inlineAndDetail',
+    valueType: { kind: 'Int64' },
+    multiline: false,
+    value: 1,
+    configuration: null,
+  }];
+  return value;
 }
 
 function projectionWithResolvedType(resolvedType: unknown): Record<string, unknown> {
@@ -152,6 +168,45 @@ function graphResult() {
 }
 
 describe('editor mutation wire parser', () => {
+  it('requires strict parameter editor presentation metadata', () => {
+    const replacement = {
+      graphPath,
+      projection: projectionWithParameterEditor(),
+    };
+    expect(parseGraphProjectionReplacementDto(replacement)).toEqual(replacement);
+
+    const missing = structuredClone(replacement) as any;
+    delete missing.projection.nodes[0].parameterEditors[0].presentation;
+    expect(() => parseGraphProjectionReplacementDto(missing)).toThrow('projection replacement');
+
+    const invalid = structuredClone(replacement) as any;
+    invalid.projection.nodes[0].parameterEditors[0].presentation = 'inlineOnly';
+    expect(() => parseGraphProjectionReplacementDto(invalid)).toThrow('projection replacement');
+  });
+
+  it.each([
+    ['missing valueType', (editor: Record<string, unknown>) => { delete editor.valueType; }],
+    ['string valueType', (editor: Record<string, unknown>) => { editor.valueType = 'Int64'; }],
+    ['malformed valueType', (editor: Record<string, unknown>) => {
+      editor.valueType = { kind: 'Array' };
+    }],
+    ['valueType with an extra key', (editor: Record<string, unknown>) => {
+      editor.valueType = { kind: 'Int64', extra: true };
+    }],
+    ['parameter editor with an extra key', (editor: Record<string, unknown>) => {
+      editor.extra = true;
+    }],
+  ])('rejects parameter editor %s', (_, mutate) => {
+    const replacement = {
+      graphPath,
+      projection: projectionWithParameterEditor(),
+    };
+    const projectedNode = (replacement.projection.nodes as Array<Record<string, unknown>>)[0];
+    const editor = (projectedNode.parameterEditors as Array<Record<string, unknown>>)[0];
+    mutate(editor);
+    expect(() => parseGraphProjectionReplacementDto(replacement)).toThrow('projection replacement');
+  });
+
   it('requires an exact structured dataType on every non-null resolved type', () => {
     const malformedResolvedTypes = [
       { display: 'Float64', resolved: true },
@@ -232,6 +287,108 @@ describe('editor mutation wire parser', () => {
 
   it('parses every Rust graph patch operation from an exact delta', () => {
     expect(parseGraphDeltaDto(delta())).toEqual(delta());
+  });
+
+  it('accepts and carries every structured orphan value_type wire variant', () => {
+    const valueTypes = [
+      { Concrete: 'core.int64' },
+      { Generic: 'value' },
+      { Applied: { constructor: 'core.array', arguments: [{ Concrete: 'core.string' }] } },
+      { Union: [{ Concrete: 'core.int64' }, 'Unknown'] },
+      'Unknown',
+    ];
+
+    for (const value_type of valueTypes) {
+      const value = delta();
+      const operation = structuredClone(operations[4]) as Record<string, any>;
+      operation.binding.last_known.value_type = value_type;
+      (value.payload.operations as unknown[]) = [operation];
+
+      expect(parseGraphDeltaDto(value)).toEqual(value);
+    }
+  });
+
+  it('accepts current resolved metadata and historical resolved bindings without metadata', () => {
+    for (const last_known of [
+      { label: 'Amount', value_type: { Concrete: 'core.float64' } },
+      { label: 'Amount' },
+    ]) {
+      const value = delta();
+      const operation = structuredClone(operations[4]) as Record<string, any>;
+      operation.binding = {
+        kind: 'resolved',
+        origin: operation.binding.origin,
+        order: operation.binding.order,
+        last_known,
+      };
+      (value.payload.operations as unknown[]) = [operation];
+
+      expect(parseGraphDeltaDto(value)).toEqual(value);
+    }
+
+    const historical = delta();
+    const operation = structuredClone(operations[4]) as Record<string, any>;
+    operation.binding = {
+      kind: 'resolved',
+      origin: operation.binding.origin,
+      order: operation.binding.order,
+    };
+    (historical.payload.operations as unknown[]) = [operation];
+    expect(parseGraphDeltaDto(historical)).toEqual(historical);
+  });
+
+  it('rejects malformed or extended resolved last_known metadata', () => {
+    for (const last_known of [
+      null,
+      {},
+      { label: 42 },
+      { label: 'Amount', value_type: { Concrete: 42 } },
+      { label: 'Amount', extra: true },
+    ]) {
+      const value = delta();
+      const operation = structuredClone(operations[4]) as Record<string, any>;
+      operation.binding = {
+        kind: 'resolved',
+        origin: operation.binding.origin,
+        order: operation.binding.order,
+        last_known,
+      };
+      (value.payload.operations as unknown[]) = [operation];
+
+      expect(() => parseGraphDeltaDto(value)).toThrow('graph patch operation');
+    }
+  });
+
+  it('keeps historical label-only orphan metadata without inferring value_type', () => {
+    const value = delta();
+    const operation = structuredClone(operations[4]) as Record<string, any>;
+    delete operation.binding.last_known.value_type;
+    (value.payload.operations as unknown[]) = [operation];
+
+    const parsed = parseGraphDeltaDto(value);
+    expect(parsed).toEqual(value);
+    expect((parsed.payload.operations[0] as Record<string, any>)
+      .binding.last_known).not.toHaveProperty('value_type');
+  });
+
+  it('rejects malformed, inferred, or extended orphan value_type wire shapes', () => {
+    const malformed = [
+      null,
+      'core.int64',
+      { Concrete: 'core.int64', extra: true },
+      { Applied: { constructor: 'core.array', arguments: 'core.string' } },
+      { Union: 'core.int64' },
+      { Unknown: true },
+    ];
+
+    for (const value_type of malformed) {
+      const value = delta();
+      const operation = structuredClone(operations[4]) as Record<string, any>;
+      operation.binding.last_known.value_type = value_type;
+      (value.payload.operations as unknown[]) = [operation];
+
+      expect(() => parseGraphDeltaDto(value)).toThrow('graph patch operation');
+    }
   });
 
   it.each([

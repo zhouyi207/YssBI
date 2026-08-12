@@ -191,6 +191,38 @@ pub fn get_log_manager() -> Option<&'static LogManager> {
     LOG_MANAGER.get()
 }
 
+pub fn emit_execution_log(level: LogLevel, message: String, source: Option<String>) {
+    #[cfg(test)]
+    TEST_LOGS.with(|logs| {
+        logs.borrow_mut().push(LogMessage {
+            timestamp: String::new(),
+            level,
+            log_type: LogType::Execution,
+            message: message.clone(),
+            source: source.clone(),
+        });
+    });
+
+    if let Some(manager) = get_log_manager() {
+        manager.log_execution(level, message, source);
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_LOGS: std::cell::RefCell<Vec<LogMessage>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(crate) fn clear_test_logs() {
+    TEST_LOGS.with(|logs| logs.borrow_mut().clear());
+}
+
+#[cfg(test)]
+pub(crate) fn take_test_logs() -> Vec<LogMessage> {
+    TEST_LOGS.with(|logs| std::mem::take(&mut *logs.borrow_mut()))
+}
+
 /// 读取日志文件（分页，从末尾开始）
 /// offset: 从末尾开始的偏移量（0 表示最新的日志）
 /// limit: 要读取的日志数量

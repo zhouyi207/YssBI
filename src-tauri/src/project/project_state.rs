@@ -4789,6 +4789,87 @@ impl ProjectState {
         } else {
             None
         };
+        let (projected_connect, projected_connect_authority_generation) =
+            if let EditorGraphMutationDto::Connect { output, input, .. } = &request.payload {
+                let output = crate::node_system::document::PortAddress::try_from(output.clone())
+                    .map_err(|message: String| {
+                        MutationConflict::InvalidEditorMutation(message.into())
+                    })?;
+                let input = crate::node_system::document::PortAddress::try_from(input.clone())
+                    .map_err(|message: String| {
+                        MutationConflict::InvalidEditorMutation(message.into())
+                    })?;
+                let source = self
+                    .capture_projection_source(graph_path)
+                    .map_err(|error| MutationConflict::Projection(error.into()))?;
+                if source.project_instance_id != project_instance_id.as_str() {
+                    return Err(MutationConflict::StaleProjectLifecycle(
+                        "project changed before projected connection resolution".into(),
+                    ));
+                }
+                let (analysis, _) = self
+                    .get_or_compile_current_from_source(graph_path, &source)
+                    .map_err(|error| MutationConflict::Projection(error.into()))?;
+                let projection = &analysis.payload.interface_projection;
+                if projection.basis.graph_revision != request.base_revision {
+                    return Err(MutationConflict::CompilationBasisStale {
+                        basis_revision: projection.basis.graph_revision,
+                        current_revision: request.base_revision,
+                    });
+                }
+                let candidates: Vec<(
+                    crate::node_system::document::PortAddress,
+                    &crate::node_system::compiler::ValidatedProjectedMember,
+                )> = [output.clone(), input.clone()]
+                    .into_iter()
+                    .filter_map(|address| {
+                        projection
+                            .materialization_candidate(&address)
+                            .map(|candidate| (address, candidate))
+                    })
+                    .collect();
+                if candidates.len() > 1 {
+                    return Err(MutationConflict::InvalidEditorMutation(
+                        "connections between two projected members are not supported".into(),
+                    ));
+                }
+                if candidates.is_empty() {
+                    let document = &source
+                        .data
+                        .graphs
+                        .get(graph_path)
+                        .expect("captured projection source contains the target graph")
+                        .document;
+                    let has_unbound_instance = [&output, &input].into_iter().any(|address| {
+                        address.is_instance() && !document.port_bindings.contains_key(address)
+                    });
+                    if has_unbound_instance {
+                        return Err(MutationConflict::InvalidEditorMutation(
+                            "projected connection endpoint is stale or unavailable".into(),
+                        ));
+                    }
+                }
+                let plan = candidates.into_iter().next().map(|(address, candidate)| {
+                    let direction = candidate.direction();
+                    let kind = candidate.kind();
+                    let connections = candidate.connections();
+                    let (member, authorization) = projection
+                        .authorize_materialization_candidate(node_path.clone(), &address)
+                        .expect("the selected current candidate remains authorizable");
+                    crate::node_system::document::ProjectedConnectPlan {
+                        projection_address: address,
+                        direction,
+                        kind,
+                        connections,
+                        member,
+                        authorization,
+                    }
+                });
+                let authority_generation = plan.as_ref().map(|_| source.authority_generation);
+                (plan, authority_generation)
+            } else {
+                (None, None)
+            };
         if catalog_snapshot.is_some() {
             self.run_catalog_mutation_before_publication_test_hook();
         }
@@ -4798,6 +4879,8 @@ impl ProjectState {
             request,
             catalog_snapshot.as_ref(),
             compatibility_source.as_ref(),
+            projected_connect,
+            projected_connect_authority_generation,
         )?;
         observe(&committed.delta);
         let projection_replacement = crate::event::GraphProjectionReplacementDto {
@@ -4914,6 +4997,7 @@ impl ProjectState {
             operation_id,
             None,
             None,
+            None,
             move |_, _| Ok(payload),
         )
     }
@@ -4925,6 +5009,8 @@ impl ProjectState {
         request: MutationRequest<EditorGraphMutationDto>,
         catalog_snapshot: Option<&crate::project::CatalogMutationValidationSnapshot>,
         compatibility_source: Option<&crate::node_system::compatibility::SourcePort>,
+        projected_connect: Option<crate::node_system::document::ProjectedConnectPlan>,
+        projected_connect_authority_generation: Option<u64>,
     ) -> Result<CommittedGraphMutation, MutationConflict> {
         let MutationRequest {
             resource,
@@ -4940,6 +5026,7 @@ impl ProjectState {
             operation_id,
             Some(project_instance_id),
             catalog_snapshot,
+            projected_connect_authority_generation,
             move |document, registry| {
                 payload.into_patch_with_compatibility(
                     &node_path,
@@ -4947,6 +5034,7 @@ impl ProjectState {
                     registry,
                     catalog_snapshot,
                     compatibility_source,
+                    projected_connect,
                 )
             },
         )
@@ -4960,6 +5048,7 @@ impl ProjectState {
         operation_id: OperationId,
         project_instance_id: Option<&ProjectInstanceId>,
         catalog_snapshot: Option<&crate::project::CatalogMutationValidationSnapshot>,
+        expected_authority_generation: Option<u64>,
         plan: impl FnOnce(
             &crate::node_system::document::GraphDocument,
             &crate::node_system::registry::NodeRegistry,
@@ -4988,6 +5077,18 @@ impl ProjectState {
             return Err(MutationConflict::StaleProjectLifecycle(
                 "caller project changed before graph authority commit".into(),
             ));
+        }
+        if expected_authority_generation
+            .is_some_and(|expected| publication.authority_generation() != expected)
+        {
+            return Err(MutationConflict::CompilationBasisStale {
+                basis_revision: base_revision,
+                current_revision: data
+                    .graphs
+                    .get(graph_path)
+                    .map(|graph| graph.document.revision)
+                    .unwrap_or(base_revision),
+            });
         }
         if let Some(snapshot) = catalog_snapshot {
             if publication.project_instance_id != snapshot.project_instance_id.as_str()
@@ -6916,7 +7017,13 @@ impl ProjectState {
             execution.variable_revisions.clone(),
             execution.database_revisions.clone(),
         );
-        if compile_resources.versions != compilation.authority.basis.resource_versions {
+        let resource_basis_matches = compilation
+            .authority
+            .basis
+            .resource_versions
+            .iter()
+            .all(|(key, expected)| compile_resources.versions.get(key) == Some(expected));
+        if !resource_basis_matches {
             return Err("stale_project_lifecycle: execution resource basis changed".into());
         }
         let resource_snapshot = snapshot_execution_resources(&execution, compile_resources)?;
@@ -6929,6 +7036,7 @@ impl ProjectState {
             execution.registry.as_ref(),
             execution.functions.as_ref(),
             &resource_snapshot.compile,
+            Some(plan.as_ref()),
             execution.session_id.clone(),
             trace_sink.as_ref(),
             &compile_cancellation,
@@ -7935,6 +8043,7 @@ impl std::fmt::Display for VariableEffectCommitError {
 pub(super) struct CompileResourceSnapshot {
     pub(super) versions: crate::node_system::analysis::ResourceVersionSet,
     resource_states: crate::node_system::analysis::ResourceObservationSet,
+    function_names: BTreeMap<crate::node_system::document::GraphResourcePath, Box<str>>,
     functions: BTreeMap<
         crate::node_system::document::GraphResourcePath,
         crate::node_system::document::FunctionDocument,
@@ -7945,6 +8054,7 @@ pub(super) struct CompileResourceSnapshot {
     >,
     variables:
         std::collections::HashMap<crate::variable::VariableId, crate::variable::VariableInstance>,
+    database_names: BTreeMap<crate::node_system::plan::ResourceId, Box<str>>,
     database_schemas:
         BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
 }
@@ -8000,7 +8110,7 @@ impl crate::node_system::compiler::SchemaResolver for ProjectDatabaseSchemaResol
             .map_err(|error| {
                 crate::node_system::compiler::SchemaResolutionError::from_resource(&error)
             })?;
-        let fields = fields.value;
+        let fields = fields.value.columns;
         Ok(crate::node_system::compiler::SchemaFact::new(
             crate::node_system::protocol::SchemaExpr::Input(
                 crate::node_system::protocol::PortKey::new("dataframe").unwrap(),
@@ -8043,6 +8153,13 @@ impl ResourceSnapshot for CompileResourceSnapshot {
         )
     }
 
+    fn function_name(
+        &self,
+        path: &crate::node_system::document::GraphResourcePath,
+    ) -> Option<&str> {
+        self.function_names.get(path).map(AsRef::as_ref)
+    }
+
     fn function_document(
         &self,
         path: &crate::node_system::document::GraphResourcePath,
@@ -8062,6 +8179,11 @@ impl ResourceSnapshot for CompileResourceSnapshot {
         id: &crate::variable::VariableId,
     ) -> Option<&crate::variable::VariableInstance> {
         self.variables.get(id)
+    }
+
+    fn database_name(&self, id: &str) -> Option<&str> {
+        let resource = crate::node_system::plan::ResourceId::new(format!("databases/{id}")).ok()?;
+        self.database_names.get(&resource).map(AsRef::as_ref)
     }
 
     fn database_schema(&self, id: &str) -> Option<&[crate::schema::ColumnInfoDTO]> {
@@ -8214,6 +8336,18 @@ pub(super) fn compile_resources_from_data(
 ) -> Result<CompileResourceSnapshot, String> {
     use crate::node_system::analysis::{ResourceKey as AnalysisResourceKey, ResourceVersion};
 
+    let function_names = data
+        .graphs
+        .iter()
+        .filter_map(|(path, graph)| {
+            graph.function.as_ref().map(|_| {
+                (
+                    crate::node_system::document::GraphResourcePath(path.as_str().into()),
+                    graph.name.clone().into_boxed_str(),
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
     let functions = data
         .graphs
         .iter()
@@ -8242,12 +8376,11 @@ pub(super) fn compile_resources_from_data(
     for (path, function) in &functions {
         let graph_path =
             GraphResourcePath::new(path.0.as_ref()).map_err(|error| error.to_string())?;
-        let graph_document = &data
+        let graph = data
             .graphs
             .get(&graph_path)
-            .ok_or_else(|| format!("function '{}' graph is not loaded", graph_path))?
-            .document;
-        let version = serde_json::to_string(&(function, graph_document))
+            .ok_or_else(|| format!("function '{}' graph is not loaded", graph_path))?;
+        let version = serde_json::to_string(&(graph.name.as_str(), function, &graph.document))
             .map_err(|error| error.to_string())?;
         versions.insert(
             AnalysisResourceKey::new(path.0.as_ref()),
@@ -8278,6 +8411,21 @@ pub(super) fn compile_resources_from_data(
         );
     }
 
+    let database_names = data
+        .databases
+        .iter()
+        .filter_map(|(id, declaration)| {
+            declaration
+                .name
+                .as_deref()
+                .filter(|name| !name.is_empty())
+                .and_then(|name| {
+                    crate::node_system::plan::ResourceId::new(format!("databases/{id}"))
+                        .ok()
+                        .map(|resource| (resource, name.into()))
+                })
+        })
+        .collect();
     let resource_states = versions
         .iter()
         .map(|(key, version)| {
@@ -8290,9 +8438,11 @@ pub(super) fn compile_resources_from_data(
     Ok(CompileResourceSnapshot {
         versions,
         resource_states,
+        function_names,
         functions,
         function_graphs,
         variables: data.variables.clone(),
+        database_names,
         database_schemas,
     })
 }
@@ -8381,8 +8531,20 @@ pub(super) fn snapshot_project_resources(
         (store.project_session_id.clone(), loaded)
     };
 
-    let (function_resources, function_graphs) = {
+    let (function_names, function_resources, function_graphs) = {
         let data = state.project_data.read().unwrap();
+        let names = data
+            .graphs
+            .iter()
+            .filter_map(|(path, graph)| {
+                graph.function.as_ref().map(|_| {
+                    (
+                        crate::node_system::document::GraphResourcePath(path.as_str().into()),
+                        graph.name.clone().into_boxed_str(),
+                    )
+                })
+            })
+            .collect::<BTreeMap<_, _>>();
         let resources = data
             .graphs
             .iter()
@@ -8407,15 +8569,18 @@ pub(super) fn snapshot_project_resources(
                 })
             })
             .collect::<BTreeMap<_, _>>();
-        (resources, graphs)
+        (names, resources, graphs)
     };
     let mut versions = crate::node_system::analysis::ResourceVersionSet::new();
     for (path, function) in &function_resources {
         let graph = function_graphs
             .get(path)
             .ok_or_else(|| format!("function '{}' graph is not loaded", path.0))?;
+        let name = function_names
+            .get(path)
+            .ok_or_else(|| format!("function '{}' name is missing", path.0))?;
         let version =
-            serde_json::to_string(&(function, graph)).map_err(|error| error.to_string())?;
+            serde_json::to_string(&(name, function, graph)).map_err(|error| error.to_string())?;
         versions.insert(
             AnalysisResourceKey::new(path.0.as_ref()),
             ResourceVersion::new(version),
@@ -8441,6 +8606,20 @@ pub(super) fn snapshot_project_resources(
     let project_root = state
         .get_path()
         .map(|path| crate::project::project_root_from_path(&path));
+    let database_names = databases
+        .iter()
+        .filter_map(|(id, declaration)| {
+            declaration
+                .name
+                .as_deref()
+                .filter(|name| !name.is_empty())
+                .and_then(|name| {
+                    ResourceId::new(format!("databases/{id}"))
+                        .ok()
+                        .map(|resource| (resource, name.into()))
+                })
+        })
+        .collect();
     let mut database_schemas = BTreeMap::new();
     let variable_revisions = state.variable_revisions.read().unwrap().clone();
     let compile_variables = variables.clone();
@@ -8496,9 +8675,11 @@ pub(super) fn snapshot_project_resources(
                 })
                 .collect(),
             versions,
+            function_names,
             functions: function_resources,
             function_graphs,
             variables: compile_variables,
+            database_names,
             database_schemas,
         },
         runtime,
@@ -8661,10 +8842,45 @@ pub(super) fn replace_project_documents(
     }
 }
 
+fn function_targets(
+    region: &crate::node_system::plan::StructuredControlRegion,
+) -> std::collections::BTreeSet<crate::node_system::document::GraphResourcePath> {
+    use crate::node_system::plan::{ControlStep, StructuredControlRegion};
+
+    let mut targets = std::collections::BTreeSet::new();
+    match region {
+        StructuredControlRegion::Sequence(steps) => {
+            for step in steps {
+                if let ControlStep::Region(region) = step {
+                    targets.extend(function_targets(region));
+                }
+            }
+        }
+        StructuredControlRegion::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            targets.extend(function_targets(then_region));
+            targets.extend(function_targets(else_region));
+        }
+        StructuredControlRegion::Loop { body, .. } => {
+            targets.extend(function_targets(body));
+        }
+        StructuredControlRegion::Call { target, .. } => {
+            targets.insert(crate::node_system::document::GraphResourcePath(
+                target.as_str().into(),
+            ));
+        }
+    }
+    targets
+}
+
 pub(super) fn publish_function_plans(
     registry: &crate::node_system::registry::NodeRegistry,
     store: &crate::node_system::runtime::FunctionPlanStore,
     resources: &CompileResourceSnapshot,
+    root_plan: Option<&crate::node_system::plan::ExecutionPlan>,
     session_id: crate::node_system::analysis::ProjectSessionId,
     trace_sink: &dyn crate::node_system::analysis::TraceSink,
     cancellation: &crate::node_system::compiler::CompileCancellationToken,
@@ -8678,7 +8894,21 @@ pub(super) fn publish_function_plans(
     )
     .with_observability(session_id, trace_sink);
     let mut entries = Vec::with_capacity(resources.function_graphs.len());
-    for (document_path, document) in &resources.function_graphs {
+    let mut pending = root_plan
+        .map(|plan| function_targets(&plan.root_region))
+        .unwrap_or_else(|| resources.function_graphs.keys().cloned().collect());
+    let mut published = std::collections::BTreeSet::new();
+    while let Some(document_path) = pending.pop_first() {
+        cancellation
+            .checkpoint()
+            .map_err(|error| error.to_string())?;
+        if !published.insert(document_path.clone()) {
+            continue;
+        }
+        let document = resources
+            .function_graphs
+            .get(&document_path)
+            .ok_or_else(|| format!("required function '{}' is unavailable", document_path.0))?;
         let snapshot = compiler.snapshot(document_path.clone(), document);
         let products = compiler
             .compile_snapshot(&snapshot, cancellation)
@@ -8718,7 +8948,8 @@ pub(super) fn publish_function_plans(
                 },
             )
         })?;
-        build_run_parameters(parameters, &document, &plan)?;
+        pending.extend(function_targets(&plan.root_region));
+        build_run_parameters(parameters, document, &plan)?;
         let resource_key = crate::node_system::analysis::ResourceKey::new(document_path.0.as_ref());
         let version = resources
             .versions
@@ -9386,6 +9617,7 @@ mod run_parameter_tests {
             },
             value_count: 0,
             value_sources: Box::new([]),
+            bound_values: BTreeMap::new(),
             operations: Box::new([PlannedOperation {
                 stable_id: OperationStableId::new(format!("test.operation.{}", node.id)).unwrap(),
                 source_node_id: node.id,
@@ -9470,9 +9702,11 @@ mod run_parameter_tests {
         let resources = CompileResourceSnapshot {
             versions: crate::node_system::analysis::ResourceVersionSet::new(),
             resource_states: crate::node_system::analysis::ResourceObservationSet::new(),
+            function_names: BTreeMap::new(),
             functions: BTreeMap::new(),
             function_graphs: BTreeMap::new(),
             variables: std::collections::HashMap::new(),
+            database_names: BTreeMap::new(),
             database_schemas: BTreeMap::new(),
         };
         let mut parameters = crate::node_system::runtime::CompiledParameterStore::new();
@@ -9481,6 +9715,7 @@ mod run_parameter_tests {
             &registry,
             &store,
             &resources,
+            None,
             session,
             &crate::node_system::analysis::NOOP_TRACE_SINK,
             &crate::node_system::compiler::CompileCancellationToken::new(),

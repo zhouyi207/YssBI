@@ -10,25 +10,11 @@ import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { UINode } from '@/shared/types/ui';
 import { useGraphDataStore } from './graphDataStore';
-import { useResourceStore } from '@/features/core/resource';
-import { isCallFunctionNodeType } from '@/features/domain/nodeCatalog';
-import { getFunctionResourceName } from '@/features/domain/graphDiagnostics';
 import { toUiNode } from './nodeView';
 
 export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
   const nodeData = useGraphDataStore((s) => (graphPath ? s.getGraphNode(graphPath, nodeId) : undefined));
 
-  // Call Function 节点在画布上显示目标函数名（随函数重命名实时更新），而非静态 "Call Function"。
-  // 名称以 ResourceStore 为准（重命名的单一事实来源）。
-  const callFunctionName = useResourceStore((s) => {
-    if (!nodeData || !isCallFunctionNodeType(nodeData.nodeType) || !nodeData.subGraphPath) return undefined;
-    return getFunctionResourceName(s.resources, nodeData.subGraphPath);
-  });
-
-  const callTitleOverride =
-    nodeData && isCallFunctionNodeType(nodeData.nodeType) && nodeData.subGraphPath
-      ? (callFunctionName ?? '(missing function)')
-      : callFunctionName;
 
   const pinObjs = useGraphDataStore(
     useShallow((s) =>
@@ -49,9 +35,6 @@ export function useNodeView(nodeId: string, graphPath?: string): UINode | null {
       pin ? [{ pin, connectionIds: pinConns[index] ?? [] }] : [],
     );
 
-    return toUiNode(nodeData, {
-      title: callTitleOverride,
-      pins,
-    });
-  }, [graphPath, nodeData, pinObjs, pinConns, callTitleOverride]);
+    return toUiNode(nodeData, { pins });
+  }, [graphPath, nodeData, pinObjs, pinConns]);
 }

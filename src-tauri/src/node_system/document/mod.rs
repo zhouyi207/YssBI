@@ -36,6 +36,7 @@ pub use model::{
     LastKnownPortMetadata, NodePosition, OrderKey, ParameterValues, PortAddress, PortRef,
     SchemaFieldIdentity, SchemaSourceIdentity, TypedValue,
 };
+pub(crate) use mutation::ProjectedConnectPlan;
 pub use mutation::{
     EditorGraphMutationDto, GraphDeltaEvent, MutationConflict, MutationRequest,
     NodePositionMutationDto, PortAddressDto, RevisionGap, detect_revision_gap,

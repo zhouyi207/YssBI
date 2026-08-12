@@ -2,7 +2,7 @@
   "basis": {
     "graphPath": "events/contract.yssbi-event",
     "graphRevision": 7,
-    "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+    "registryFingerprint": "ef83f80b837b2e401b53d16a28c8091da32eb606a66b865360b6512673e155dd",
     "resourceVersions": {}
   },
   "connections": [],
@@ -38,10 +38,14 @@
             "description": "The constant value.",
             "title": "Value"
           },
-          "editor": "auto",
+          "editor": "toggle",
           "key": "value",
           "multiline": false,
-          "value": true
+          "presentation": "inlineAndDetail",
+          "value": true,
+          "valueType": {
+            "kind": "Boolean"
+          }
         }
       ],
       "ports": [
@@ -69,8 +73,10 @@
           "orphan": false,
           "resolvedSchema": null,
           "resolvedType": {
+            "dataType": {
+              "kind": "Boolean"
+            },
             "display": "core.bool",
-            "dataType": { "kind": "Boolean" },
             "resolved": true
           },
           "status": "resolved",

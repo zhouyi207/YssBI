@@ -52,6 +52,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         },
         interface: assembled_interface(spec.id, ports(spec)?, vec![], vec![], vec![])?,
         parameters: assembled_parameters(spec.id, parameters(spec)?)?,
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution: execution(spec.stage),
         scope: NodeScope::Any,
         managed_role: None,
@@ -440,6 +441,7 @@ fn parameter(
         value_type,
         constraints,
         editor,
+        presentation: ParameterPresentation::DetailPanel,
     })
 }
 

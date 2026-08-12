@@ -1,8 +1,8 @@
 use crate::node_system::protocol::{
     CachePolicy, Determinism, EffectSemantics, EvaluationPolicy, ExecutionSemantics, I18nKey,
-    IconId, ManagedNodeRole, NodeCatalogProtocol, NodeCategoryId, NodeInterfaceProtocol,
-    NodeProtocol, NodeScope, NodeStyleId, NodeTypeId, ParameterSchema, ParameterSpec, PortSpec,
-    Purity,
+    IconId, ManagedNodeRole, NodeCatalogProtocol, NodeCategoryId, NodeInstanceDisplaySpec,
+    NodeInterfaceProtocol, NodeProtocol, NodeScope, NodeStyleId, NodeTypeId, ParameterSchema,
+    ParameterSpec, PortSpec, Purity,
 };
 
 pub(crate) struct TestProtocolBuilder {
@@ -87,6 +87,7 @@ impl TestProtocolBuilder {
                 .expect("test port contracts are valid"),
             parameters: ParameterSchema::new(self.parameters)
                 .expect("test parameter schema is valid"),
+            instance_display: NodeInstanceDisplaySpec::Static,
             execution: self.execution,
             scope: self.scope,
             managed_role: self.managed_role,

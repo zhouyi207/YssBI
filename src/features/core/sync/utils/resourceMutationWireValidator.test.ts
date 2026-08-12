@@ -174,6 +174,48 @@ describe('resource mutation wire envelope', () => {
   });
 });
 
+describe('graph binding resource mutation wire', () => {
+  function graphBindingDelta(binding: Record<string, unknown>): ResourceDeltaDto {
+    const delta = graphDelta() as unknown as Record<string, any>;
+    delta.payload.patch.operations = [{
+      operation: 'insert_port_binding',
+      address: {
+        node_id: '00000000-0000-0000-0000-000000000402',
+        port: {
+          kind: 'instance',
+          template: 'columns',
+          instance_id: '00000000-0000-0000-0000-000000000403',
+        },
+      },
+      binding,
+    }];
+    return delta as unknown as ResourceDeltaDto;
+  }
+
+  it('accepts current and historical resolved binding metadata', () => {
+    const origin = { kind: 'schema_field', source: 'databases/sales', field: 'amount' };
+    expect(areResourceDeltasValid([graphBindingDelta({
+      kind: 'resolved', origin, order: 'a',
+      last_known: { label: 'Amount', value_type: { Concrete: 'core.float64' } },
+    })])).toBe(true);
+    expect(areResourceDeltasValid([graphBindingDelta({
+      kind: 'resolved', origin, order: 'a',
+    })])).toBe(true);
+  });
+
+  it('strictly rejects malformed resolved binding metadata', () => {
+    const origin = { kind: 'schema_field', source: 'databases/sales', field: 'amount' };
+    expect(areResourceDeltasValid([graphBindingDelta({
+      kind: 'resolved', origin, order: 'a',
+      last_known: { label: 'Amount', value_type: { Concrete: 42 } },
+    })])).toBe(false);
+    expect(areResourceDeltasValid([graphBindingDelta({
+      kind: 'resolved', origin, order: 'a',
+      last_known: { label: 'Amount', extra: true },
+    })])).toBe(false);
+  });
+});
+
 describe('worksheet resource mutation wire', () => {
   it('accepts canonical document, lifecycle, and move deltas with opaque non-empty paths', () => {
     expect(areResourceDeltasValid([

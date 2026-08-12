@@ -50,8 +50,9 @@
                 }
               },
               "description_key": "parameters.value.description",
-              "editor": "Auto",
+              "editor": "Toggle",
               "key": "value",
+              "presentation": "InlineAndDetail",
               "title_key": "parameters.value.title",
               "value_type": {
                 "Concrete": "core.bool"
@@ -62,7 +63,7 @@
         "scope": "Any",
         "typeId": "yssbi.constant.bool"
       },
-      "protocolFingerprint": "e8916db2cded4a51d0cfe108225d2144da5ea874d9c83a74caeba88341229011"
+      "protocolFingerprint": "c5b73a27648c91cd1d505f4434e41a5b83b9ace1f3ab5f5796257ae582423741"
     },
     {
       "nodeTypeId": "yssbi.constant.float64",
@@ -113,8 +114,9 @@
                 }
               },
               "description_key": "parameters.value.description",
-              "editor": "Auto",
+              "editor": "Number",
               "key": "value",
+              "presentation": "InlineAndDetail",
               "title_key": "parameters.value.title",
               "value_type": {
                 "Concrete": "core.float64"
@@ -125,7 +127,7 @@
         "scope": "Any",
         "typeId": "yssbi.constant.float64"
       },
-      "protocolFingerprint": "481ad8e571687f7358ce37444fe4b158f34c97b2bb83b8449ca2ce48ae7303a7"
+      "protocolFingerprint": "f6cfd3b5077079f29950370fca0ce4890700f436cf1ea817877f45f2064458ec"
     },
     {
       "nodeTypeId": "yssbi.constant.int64",
@@ -176,8 +178,9 @@
                 }
               },
               "description_key": "parameters.value.description",
-              "editor": "Auto",
+              "editor": "Number",
               "key": "value",
+              "presentation": "InlineAndDetail",
               "title_key": "parameters.value.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -188,7 +191,7 @@
         "scope": "Any",
         "typeId": "yssbi.constant.int64"
       },
-      "protocolFingerprint": "21532ae651d09a72ce626f71000969e32594aa930b1bee68cbf5f6a720de3040"
+      "protocolFingerprint": "76e60f5909b6d3d8eccb02f6b85339c90cc0ca2572342fbcb3f5b86a40a47ddc"
     },
     {
       "nodeTypeId": "yssbi.constant.string",
@@ -239,8 +242,13 @@
                 }
               },
               "description_key": "parameters.value.description",
-              "editor": "Auto",
+              "editor": {
+                "Text": {
+                  "multiline": false
+                }
+              },
               "key": "value",
+              "presentation": "InlineAndDetail",
               "title_key": "parameters.value.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -251,7 +259,7 @@
         "scope": "Any",
         "typeId": "yssbi.constant.string"
       },
-      "protocolFingerprint": "ac70dd040029936d1eb4a89354685eeccb40a78cd075fe95b25dda9adec7acf7"
+      "protocolFingerprint": "d856b4baf523ef7dab5aa87ce46bab9c62d77f8f7ca0a0f155ba7ae1e2ff010f"
     },
     {
       "nodeTypeId": "yssbi.control.branch",
@@ -694,6 +702,7 @@
               "description_key": "parameters.max_iterations.description",
               "editor": "Number",
               "key": "max_iterations",
+              "presentation": "DetailPanel",
               "title_key": "parameters.max_iterations.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -704,7 +713,7 @@
         "scope": "Any",
         "typeId": "yssbi.control.loop"
       },
-      "protocolFingerprint": "04a9b3917bc0b42a8e01a8936bd2289e37d3e4a025e58f3e0bae4ac2a12e3cbb"
+      "protocolFingerprint": "03680816abec7ae5eb095fe621d412ab67943dd9a51c58449530985cc9596733"
     },
     {
       "nodeTypeId": "yssbi.control.merge",
@@ -2324,6 +2333,7 @@
               "description_key": "parameters.predicate.description",
               "editor": "Auto",
               "key": "predicate",
+              "presentation": "DetailPanel",
               "title_key": "parameters.predicate.title",
               "value_type": {
                 "Concrete": "yssbi.dataframe.filter_predicate"
@@ -2334,7 +2344,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.filter.rows"
       },
-      "protocolFingerprint": "badfc3a739748aa841fed298ca6ff8be439ce0e104bfc0f4161b21b843cfb6b6"
+      "protocolFingerprint": "85533ee23d24b61bd31943c7e6777ebec7736d52a46eb652fe3225db5d331720"
     },
     {
       "nodeTypeId": "yssbi.dataframe.limit",
@@ -2415,6 +2425,7 @@
               "description_key": "parameters.rows.description",
               "editor": "Number",
               "key": "rows",
+              "presentation": "DetailPanel",
               "title_key": "parameters.rows.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -2425,7 +2436,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.limit"
       },
-      "protocolFingerprint": "77b72816ddaa4d2228c3a72424cfd83e3c8046dc99114bfd480547dae9a00c4c"
+      "protocolFingerprint": "648c9339afad3bece58e42ca3f94bb2bc4742a671411685aac4da011020a6df3"
     },
     {
       "nodeTypeId": "yssbi.dataframe.panel.align",
@@ -2633,6 +2644,7 @@
               "description_key": "parameters.order.description",
               "editor": "Number",
               "key": "order",
+              "presentation": "DetailPanel",
               "title_key": "parameters.order.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -2643,7 +2655,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.panel.difference"
       },
-      "protocolFingerprint": "4b6dbf41152890a716213f6ab9ac5579e51a99d7472b7fbcbcb5a850255a7e68"
+      "protocolFingerprint": "46ba970dc9ffea4d4f9bd868253b85c00e20179f186a465f7e94a10ffc50e564"
     },
     {
       "nodeTypeId": "yssbi.dataframe.project",
@@ -2719,6 +2731,7 @@
               "description_key": "parameters.columns.description",
               "editor": "Auto",
               "key": "columns",
+              "presentation": "DetailPanel",
               "title_key": "parameters.columns.title",
               "value_type": {
                 "Concrete": "yssbi.dataframe.project_columns"
@@ -2729,7 +2742,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.project"
       },
-      "protocolFingerprint": "d1d849966b466f5c50a37a92f8f6fff0ea64d2110ae7bff21fb8e5d1745bf0f2"
+      "protocolFingerprint": "db8c6e66e1af2548036b753743d0a1a631fd58336b7181ba77d471e71e2d72f2"
     },
     {
       "nodeTypeId": "yssbi.dataframe.rename",
@@ -2812,6 +2825,7 @@
                 }
               },
               "key": "from",
+              "presentation": "DetailPanel",
               "title_key": "parameters.from.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -2829,6 +2843,7 @@
                 }
               },
               "key": "to",
+              "presentation": "DetailPanel",
               "title_key": "parameters.to.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -2839,7 +2854,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.rename"
       },
-      "protocolFingerprint": "43b12edd620a9afff6cc645fd7db53a0c3fc19071f67c2336f6eb9189491428a"
+      "protocolFingerprint": "0eade17bcd81d4a59f750e726499a5296bb0be60848b9c3c59bb736a53392e62"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.annotate_dummy",
@@ -2908,6 +2923,7 @@
                 }
               },
               "key": "base_level",
+              "presentation": "DetailPanel",
               "title_key": "parameters.base_level.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -2918,7 +2934,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.annotate_dummy"
       },
-      "protocolFingerprint": "a69761e3199e00ae02cac74691d6d2fc737d6b730c1f7f4064b1e835bc581f65"
+      "protocolFingerprint": "3aeaefc6439eccdab302ca37d171c7916fd1300dc534bb77b00a7f75d5deeb43"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.compare.equal",
@@ -3847,6 +3863,7 @@
               "description_key": "parameters.column.description",
               "editor": "Select",
               "key": "column",
+              "presentation": "DetailPanel",
               "title_key": "parameters.column.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -3857,7 +3874,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.series.select"
       },
-      "protocolFingerprint": "65ca479769267e117218be3c797318fa5d79f5bfb4af0521de04093e2e6bd7d0"
+      "protocolFingerprint": "fa4a93b71129ee570f0afe3cb77a743e988db27bcb15bb698a53a142fc574b4b"
     },
     {
       "nodeTypeId": "yssbi.dataframe.series.standardize",
@@ -4066,8 +4083,13 @@
               ],
               "default_value": null,
               "description_key": "parameters.dataframe.description",
-              "editor": "Resource",
+              "editor": {
+                "Resource": {
+                  "kind": "Database"
+                }
+              },
               "key": "dataframe",
+              "presentation": "DetailPanel",
               "title_key": "parameters.dataframe.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -4078,7 +4100,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.source.get"
       },
-      "protocolFingerprint": "0572da7ee3bd090523dbad5f1ea5fe4e7ccf128a125da1f1c079cb016cc5d25b"
+      "protocolFingerprint": "0dd46c6d9814a32037afdcca615309c0c8310c20d5273c572622be695585a3e4"
     },
     {
       "nodeTypeId": "yssbi.dataframe.timeseries.align",
@@ -4166,6 +4188,7 @@
               "description_key": "parameters.frequency.description",
               "editor": "Select",
               "key": "frequency",
+              "presentation": "DetailPanel",
               "title_key": "parameters.frequency.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -4176,7 +4199,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.timeseries.align"
       },
-      "protocolFingerprint": "b1e13d9fbb3b35e5c73aeb162715aa8f85c3a55c5008f27d07befc26c0b38c1e"
+      "protocolFingerprint": "d767938244b08f9255f54567bf7dea8726fff303497bc984d0ace49cc9b32e13"
     },
     {
       "nodeTypeId": "yssbi.dataframe.timeseries.difference",
@@ -4255,6 +4278,7 @@
               "description_key": "parameters.order.description",
               "editor": "Number",
               "key": "order",
+              "presentation": "DetailPanel",
               "title_key": "parameters.order.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -4265,7 +4289,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.timeseries.difference"
       },
-      "protocolFingerprint": "ef4bab31ce869230071ae1892878cd5555d32f1238354d2a12db934b90f1495c"
+      "protocolFingerprint": "267ac52b240ba67841d01d4f5ed14e17e2f71e66c0b682d739221b085ba5259f"
     },
     {
       "nodeTypeId": "yssbi.dataframe.timeseries.lag",
@@ -4344,6 +4368,7 @@
               "description_key": "parameters.window.description",
               "editor": "Number",
               "key": "window",
+              "presentation": "DetailPanel",
               "title_key": "parameters.window.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -4354,7 +4379,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.timeseries.lag"
       },
-      "protocolFingerprint": "8360cd5b5b8cbfe375ac8c9c0445b00885145306e0b5e57c51ed16747b3954ac"
+      "protocolFingerprint": "002d3ce7e4d1efc918729308752d319eb759198df63508e41e3e14c40a184822"
     },
     {
       "nodeTypeId": "yssbi.dataframe.timeseries.percent_change",
@@ -4433,6 +4458,7 @@
               "description_key": "parameters.order.description",
               "editor": "Number",
               "key": "order",
+              "presentation": "DetailPanel",
               "title_key": "parameters.order.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -4443,7 +4469,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.timeseries.percent_change"
       },
-      "protocolFingerprint": "af591f46d2c0c2aa5c50c382eb8a6886ce0ec19c190776fadeeff4d01c2db1a6"
+      "protocolFingerprint": "54bf988552e4f9a33958a344eb941b4062b1e9471d7cc94590186028126ec66f"
     },
     {
       "nodeTypeId": "yssbi.dataframe.timeseries.rolling_mean",
@@ -4522,6 +4548,7 @@
               "description_key": "parameters.window.description",
               "editor": "Number",
               "key": "window",
+              "presentation": "DetailPanel",
               "title_key": "parameters.window.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -4532,7 +4559,7 @@
         "scope": "Any",
         "typeId": "yssbi.dataframe.timeseries.rolling_mean"
       },
-      "protocolFingerprint": "2327503e9c8497d20e91e77363c3079fc203279817f0b9f321d7f84c485b7020"
+      "protocolFingerprint": "aefc45266a7bd5b2eb8323caf96ad4f2f65afbb7cd4e16174d279cb224530352"
     },
     {
       "nodeTypeId": "yssbi.debug.print",
@@ -10411,8 +10438,13 @@
               ],
               "default_value": null,
               "description_key": "parameters.target.description",
-              "editor": "Resource",
+              "editor": {
+                "Resource": {
+                  "kind": "Function"
+                }
+              },
               "key": "target",
+              "presentation": "DetailPanel",
               "title_key": "parameters.target.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -10423,7 +10455,7 @@
         "scope": "Any",
         "typeId": "yssbi.project.function.call"
       },
-      "protocolFingerprint": "89f848e662718651a6a3b423054976e443a66e34ac089ca4e6d8d19ad7d2bb32"
+      "protocolFingerprint": "c84db67b9844810f59d480ceecc50e6fe0f3a0e9ed18dce47729bf105dbd994e"
     },
     {
       "nodeTypeId": "yssbi.project.function.entry",
@@ -10485,8 +10517,13 @@
               ],
               "default_value": null,
               "description_key": "parameters.function.description",
-              "editor": "Resource",
+              "editor": {
+                "Resource": {
+                  "kind": "Function"
+                }
+              },
               "key": "function",
+              "presentation": "DetailPanel",
               "title_key": "parameters.function.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -10497,7 +10534,7 @@
         "scope": "Function",
         "typeId": "yssbi.project.function.entry"
       },
-      "protocolFingerprint": "d7eccf66eaffe206816f41ed0d5d12e614ee0068694f11c0d016fcf9b3e962d5"
+      "protocolFingerprint": "3bcfe5c48959b7c8688e935a934f8c400bc3379e29b3d86e9bcb78ce88769a36"
     },
     {
       "nodeTypeId": "yssbi.project.function.return",
@@ -10562,8 +10599,13 @@
               ],
               "default_value": null,
               "description_key": "parameters.function.description",
-              "editor": "Resource",
+              "editor": {
+                "Resource": {
+                  "kind": "Function"
+                }
+              },
               "key": "function",
+              "presentation": "DetailPanel",
               "title_key": "parameters.function.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -10574,7 +10616,7 @@
         "scope": "Function",
         "typeId": "yssbi.project.function.return"
       },
-      "protocolFingerprint": "ac3f8c7799210ef7027a4f47af0c96df11414c6116baa1b176bb770ef5dcd72e"
+      "protocolFingerprint": "a75d3c9a794cbc72bff3a71c8912b8453b050b3dd74a7232a71a38ad7cff4742"
     },
     {
       "nodeTypeId": "yssbi.project.variable.get",
@@ -10622,8 +10664,13 @@
               ],
               "default_value": null,
               "description_key": "parameters.variable.description",
-              "editor": "Resource",
+              "editor": {
+                "Resource": {
+                  "kind": "Variable"
+                }
+              },
               "key": "variable",
+              "presentation": "DetailPanel",
               "title_key": "parameters.variable.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -10634,7 +10681,7 @@
         "scope": "Any",
         "typeId": "yssbi.project.variable.get"
       },
-      "protocolFingerprint": "740f622b57fc5bc738247e6a12db861eae1fcfcdcf4d7ebbeec966019c2593d1"
+      "protocolFingerprint": "04a5a5840b989299bd321b70856186f83e3f8c40facdf99ac59fb20a91032d6f"
     },
     {
       "nodeTypeId": "yssbi.project.variable.set",
@@ -10713,8 +10760,13 @@
               ],
               "default_value": null,
               "description_key": "parameters.variable.description",
-              "editor": "Resource",
+              "editor": {
+                "Resource": {
+                  "kind": "Variable"
+                }
+              },
               "key": "variable",
+              "presentation": "DetailPanel",
               "title_key": "parameters.variable.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -10725,7 +10777,7 @@
         "scope": "Any",
         "typeId": "yssbi.project.variable.set"
       },
-      "protocolFingerprint": "8e7448378242c18a08837df309a1b04e72b9a965b44a38fc54ab09a6381de724"
+      "protocolFingerprint": "7a1c1dad53c7c161978f89c0816dad79f13b76ea042318f846fc4631b2f0593c"
     },
     {
       "nodeTypeId": "yssbi.statistics.adf.summary",
@@ -10963,6 +11015,7 @@
               "description_key": "parameters.statistics.lags.description",
               "editor": "Number",
               "key": "lags",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.lags.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -10983,6 +11036,7 @@
               "description_key": "parameters.statistics.regression.description",
               "editor": "Select",
               "key": "regression",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.regression.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -10993,7 +11047,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.adf.test"
       },
-      "protocolFingerprint": "47984d36408ab3f0524e5886258930328be95eff206a3d8d736aa71e9238ccd7"
+      "protocolFingerprint": "83097f50d251789e3912fadbf8570d64073707a39accd1056dea839354205817"
     },
     {
       "nodeTypeId": "yssbi.statistics.gls.configure",
@@ -11046,6 +11100,7 @@
               "description_key": "parameters.statistics.constant.description",
               "editor": "Toggle",
               "key": "constant",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.constant.title",
               "value_type": {
                 "Concrete": "core.bool"
@@ -11066,6 +11121,7 @@
               "description_key": "parameters.statistics.covariance_structure.description",
               "editor": "Select",
               "key": "covariance_structure",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.covariance_structure.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -11076,7 +11132,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.gls.configure"
       },
-      "protocolFingerprint": "1b9eb032d1c90ec04a5d54cac46d2a75781cdf0bd8baada6be075597272afeba"
+      "protocolFingerprint": "326266a3a083cac8f131b4da650aec5d0cc08eeef24052a84157a46934c5650e"
     },
     {
       "nodeTypeId": "yssbi.statistics.gls.fit",
@@ -11455,6 +11511,7 @@
               "description_key": "parameters.statistics.constant.description",
               "editor": "Toggle",
               "key": "constant",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.constant.title",
               "value_type": {
                 "Concrete": "core.bool"
@@ -11475,6 +11532,7 @@
               "description_key": "parameters.statistics.covariance.description",
               "editor": "Select",
               "key": "covariance",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.covariance.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -11485,7 +11543,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.iv.2sls.configure"
       },
-      "protocolFingerprint": "de82966ace6419afc19d0a44c6b59359a35c2b14a50dab8e2f97624e6dd37602"
+      "protocolFingerprint": "789f505d19fd6503077fa0a99906dd3c5b2bf517e06e0df87fd0e419476fe206"
     },
     {
       "nodeTypeId": "yssbi.statistics.iv.2sls.summary",
@@ -12059,6 +12117,7 @@
               "description_key": "parameters.statistics.constant.description",
               "editor": "Toggle",
               "key": "constant",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.constant.title",
               "value_type": {
                 "Concrete": "core.bool"
@@ -12084,6 +12143,7 @@
               "description_key": "parameters.statistics.max_iterations.description",
               "editor": "Number",
               "key": "max_iterations",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.max_iterations.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -12102,6 +12162,7 @@
               "description_key": "parameters.statistics.tolerance.description",
               "editor": "Number",
               "key": "tolerance",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.tolerance.title",
               "value_type": {
                 "Concrete": "core.float64"
@@ -12112,7 +12173,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.logit.configure"
       },
-      "protocolFingerprint": "2e7dbfbcab36771dbc746ad7dc064f196e6d834971744d6ba62ab6e0d46250a4"
+      "protocolFingerprint": "3f2a1dd0e94c78c20a4075abf60692d27a76ed0ff50889344245b9bda9f774c3"
     },
     {
       "nodeTypeId": "yssbi.statistics.logit.fit",
@@ -12630,6 +12691,7 @@
               "description_key": "parameters.statistics.constant.description",
               "editor": "Toggle",
               "key": "constant",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.constant.title",
               "value_type": {
                 "Concrete": "core.bool"
@@ -12640,7 +12702,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.configure"
       },
-      "protocolFingerprint": "df3a838c7ed976b1b1b9f37316ddad12e4bd1084e7699a4a88d566c11acf2a04"
+      "protocolFingerprint": "b7308cec7eda55eb8c73d38cd135456aa669e6b9defa2a9c6232dc8681f2d306"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.fit",
@@ -13049,6 +13111,7 @@
                 }
               },
               "key": "cluster",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.cluster.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -13059,7 +13122,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.cluster"
       },
-      "protocolFingerprint": "94614f28cd387cef053ffd926799dab992798bbbeed83155893de9781ff08054"
+      "protocolFingerprint": "e99c99b01a8aa09a5056e950b0cf4505a7d1047638402b997e3c452017eb89f9"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.fixed_scale",
@@ -13136,6 +13199,7 @@
               "description_key": "parameters.statistics.scale.description",
               "editor": "Number",
               "key": "scale",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.scale.title",
               "value_type": {
                 "Concrete": "core.float64"
@@ -13146,7 +13210,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.fixed_scale"
       },
-      "protocolFingerprint": "6681f70ed073559cbcd8933f3eb6eb952d5827d0c74cdb2b1d471f95cd5ec05f"
+      "protocolFingerprint": "c88c3f7082115551ed54a2b3d57299e3a9cbc7abac3fc56ee4adf2131183a070"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.hac",
@@ -13225,6 +13289,7 @@
               "description_key": "parameters.statistics.kernel.description",
               "editor": "Select",
               "key": "kernel",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.kernel.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -13250,6 +13315,7 @@
               "description_key": "parameters.statistics.bandwidth.description",
               "editor": "Number",
               "key": "bandwidth",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.bandwidth.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -13260,7 +13326,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.hac"
       },
-      "protocolFingerprint": "793edd050dc1cc2892009d211df9f2342032b3dfcc0767c7be64411fb5d624ec"
+      "protocolFingerprint": "8cb6869fc1aa17f3aa4e87f4a8465e46de905934ebaf919aeee8ee53fdec095d"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.hc0",
@@ -13520,6 +13586,7 @@
               "description_key": "parameters.statistics.lag.description",
               "editor": "Number",
               "key": "lag",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.lag.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -13530,7 +13597,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.ols.vce.newey_west"
       },
-      "protocolFingerprint": "73b37c4141fbae321b63a27c43b6bcdee194e77cd92188ed4991f7cd34bc8fef"
+      "protocolFingerprint": "b45f8d162ae499ae7a51353e6d1e18ec135442c7544065a8d06ff841dc9d7df0"
     },
     {
       "nodeTypeId": "yssbi.statistics.ols.vce.non_robust",
@@ -13627,6 +13694,7 @@
               "description_key": "parameters.statistics.constant.description",
               "editor": "Toggle",
               "key": "constant",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.constant.title",
               "value_type": {
                 "Concrete": "core.bool"
@@ -13647,6 +13715,7 @@
               "description_key": "parameters.statistics.estimator.description",
               "editor": "Select",
               "key": "estimator",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.estimator.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -13667,6 +13736,7 @@
               "description_key": "parameters.statistics.effects.description",
               "editor": "Select",
               "key": "effects",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.effects.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -13677,7 +13747,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.panel.configure"
       },
-      "protocolFingerprint": "ce82870297aa3d32b0e198b33b803360aa54d39ebe2a76049975b3ee7ad0b5de"
+      "protocolFingerprint": "92594df5cfb9d0768c5b31d63e4c316e6f1d520e7201a9b683a0df639eb56d55"
     },
     {
       "nodeTypeId": "yssbi.statistics.panel.did.twfe",
@@ -13898,6 +13968,7 @@
               "description_key": "parameters.statistics.event_study.description",
               "editor": "Toggle",
               "key": "event_study",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.event_study.title",
               "value_type": {
                 "Concrete": "core.bool"
@@ -13923,6 +13994,7 @@
               "description_key": "parameters.statistics.placebo_repetitions.description",
               "editor": "Number",
               "key": "placebo_repetitions",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.placebo_repetitions.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -13933,7 +14005,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.panel.did.twfe"
       },
-      "protocolFingerprint": "1666969bd9d45cb6c796067d0204ba2c7a2fdf6ab4de8b1d471e87b220eeaf05"
+      "protocolFingerprint": "f5d9f2f298cd1a491e8d16aca9c8cba5796937b9dcc33a4aa0d12cf76a523039"
     },
     {
       "nodeTypeId": "yssbi.statistics.panel.summary",
@@ -14223,6 +14295,7 @@
               "description_key": "parameters.statistics.constant.description",
               "editor": "Toggle",
               "key": "constant",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.constant.title",
               "value_type": {
                 "Concrete": "core.bool"
@@ -14243,6 +14316,7 @@
               "description_key": "parameters.statistics.transform.description",
               "editor": "Select",
               "key": "transform",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.transform.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -14253,7 +14327,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.prais.configure"
       },
-      "protocolFingerprint": "e91dc368ab375f56097567ec5e5d46e9ea661d2677edc5e99e6606bb81885c94"
+      "protocolFingerprint": "ef8bc7868fdc1627f136720749c9c9067764ebed3b7bcdd93fca8660dd9d5745"
     },
     {
       "nodeTypeId": "yssbi.statistics.prais.fit",
@@ -14632,6 +14706,7 @@
               "description_key": "parameters.statistics.constant.description",
               "editor": "Toggle",
               "key": "constant",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.constant.title",
               "value_type": {
                 "Concrete": "core.bool"
@@ -14657,6 +14732,7 @@
               "description_key": "parameters.statistics.max_iterations.description",
               "editor": "Number",
               "key": "max_iterations",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.max_iterations.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -14675,6 +14751,7 @@
               "description_key": "parameters.statistics.tolerance.description",
               "editor": "Number",
               "key": "tolerance",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.tolerance.title",
               "value_type": {
                 "Concrete": "core.float64"
@@ -14685,7 +14762,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.probit.configure"
       },
-      "protocolFingerprint": "684d99157f5fe4a4e30446b62f2f97e6bc910f09e04e88d5b24a52e7cb05e5d9"
+      "protocolFingerprint": "d8f7e999f915e0db694064965696cb12fe0ab2409ae5a94a2ef8eb90a12b9f62"
     },
     {
       "nodeTypeId": "yssbi.statistics.probit.fit",
@@ -15238,6 +15315,7 @@
               "description_key": "parameters.statistics.max_lags.description",
               "editor": "Number",
               "key": "max_lags",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.max_lags.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -15258,6 +15336,7 @@
               "description_key": "parameters.statistics.trend.description",
               "editor": "Select",
               "key": "trend",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.trend.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -15268,7 +15347,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.var.lag_order"
       },
-      "protocolFingerprint": "6eaa9b9a8c5c3575a1dabd8eba87f4d21ac6e9c629a9473656405e6098efcc6a"
+      "protocolFingerprint": "d9b0599059488fa42b490fae624dae09aa302f12381bcc42b2718c41a9005afe"
     },
     {
       "nodeTypeId": "yssbi.statistics.var.summary",
@@ -15420,6 +15499,7 @@
               "description_key": "parameters.statistics.lags.description",
               "editor": "Number",
               "key": "lags",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.lags.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -15440,6 +15520,7 @@
               "description_key": "parameters.statistics.trend.description",
               "editor": "Select",
               "key": "trend",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.trend.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -15450,7 +15531,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.var.summary"
       },
-      "protocolFingerprint": "1c54e2b1ccab89ed4bf325ce859ac2c729c4305ce58965a10e5c5c9d212f8923"
+      "protocolFingerprint": "82c271def0bc52dd1ec33134c5fd41bf13889529b2010dc0fb49c9cae36b6189"
     },
     {
       "nodeTypeId": "yssbi.statistics.vec.fit",
@@ -15618,6 +15699,7 @@
               "description_key": "parameters.statistics.rank.description",
               "editor": "Number",
               "key": "rank",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.rank.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -15643,6 +15725,7 @@
               "description_key": "parameters.statistics.lags.description",
               "editor": "Number",
               "key": "lags",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.lags.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -15663,6 +15746,7 @@
               "description_key": "parameters.statistics.trend.description",
               "editor": "Select",
               "key": "trend",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.trend.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -15673,7 +15757,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.vec.fit"
       },
-      "protocolFingerprint": "a841ec0f208a9128c704f1043cf1343e1796e4fd0eba70d714ee23cb7886f6d5"
+      "protocolFingerprint": "e43aa777a5df65b86a75f8bdb157f94da4adf2a67c9be9b399d9815db21f7172"
     },
     {
       "nodeTypeId": "yssbi.statistics.vec.rank_test",
@@ -15785,6 +15869,7 @@
               "description_key": "parameters.statistics.max_lags.description",
               "editor": "Number",
               "key": "max_lags",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.max_lags.title",
               "value_type": {
                 "Concrete": "core.int64"
@@ -15805,6 +15890,7 @@
               "description_key": "parameters.statistics.trend.description",
               "editor": "Select",
               "key": "trend",
+              "presentation": "DetailPanel",
               "title_key": "parameters.statistics.trend.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -15815,7 +15901,7 @@
         "scope": "Any",
         "typeId": "yssbi.statistics.vec.rank_test"
       },
-      "protocolFingerprint": "33583ae6ede6182743e3683656ddd8b85faec68e7f5d79ba37dd386613fb2b75"
+      "protocolFingerprint": "a6858e23516d5d718a1aa2ff5f6cebe1a25574628dae944cd2847277dab4e5f1"
     },
     {
       "nodeTypeId": "yssbi.statistics.wls.fit",
@@ -16239,6 +16325,7 @@
               "description_key": "nodes.yssbi.value.convert.parameters.target_type.description",
               "editor": "Select",
               "key": "target_type",
+              "presentation": "DetailPanel",
               "title_key": "nodes.yssbi.value.convert.parameters.target_type.title",
               "value_type": {
                 "Concrete": "core.string"
@@ -16249,7 +16336,7 @@
         "scope": "Any",
         "typeId": "yssbi.value.convert"
       },
-      "protocolFingerprint": "8ac73732acaf165cb88b08a1441208aa82ee62573479067f0c53b19f33e8a226"
+      "protocolFingerprint": "0d2f7c275f477bd276cc3e5f10b2fe63140ac25aa8ce2f4ccbf78c95a0ed27a6"
     }
   ]
 }

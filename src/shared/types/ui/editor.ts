@@ -1,5 +1,10 @@
 import type { Pin, Node as DomainNode } from '../domain';
 import type { PinView } from '../store/graph';
+import type {
+    DiagnosticDto,
+    NodeDisplayDto,
+    ParameterEditorDto,
+} from '../dto/editorProjection';
 
 /**
  * UI Types - Editor
@@ -23,6 +28,9 @@ export interface UINode extends Omit<DomainNode, 'inputs' | 'outputs'> {
     variableType?: string;
     subGraphPath?: string;
     dataframeId?: string;
+    display?: NodeDisplayDto;
+    parameterEditors?: ParameterEditorDto[];
+    diagnostics?: DiagnosticDto[];
     centerSymbol?: string;
     inputs: PinView[];
     outputs: PinView[];
@@ -49,6 +57,9 @@ export class Node implements UINode {
     variableType?: string;
     subGraphPath?: string;
     dataframeId?: string;
+    display?: NodeDisplayDto;
+    parameterEditors?: ParameterEditorDto[];
+    diagnostics?: DiagnosticDto[];
     centerSymbol?: string;
 
     constructor(data: UINode) {
@@ -68,6 +79,9 @@ export class Node implements UINode {
         this.variableType = data.variableType;
         this.subGraphPath = data.subGraphPath;
         this.dataframeId = data.dataframeId;
+        this.display = data.display;
+        this.parameterEditors = data.parameterEditors;
+        this.diagnostics = data.diagnostics;
         this.centerSymbol = data.centerSymbol;
     }
 
@@ -102,6 +116,9 @@ export class Node implements UINode {
             variableType: this.variableType,
             subGraphPath: this.subGraphPath,
             dataframeId: this.dataframeId,
+            display: this.display,
+            parameterEditors: this.parameterEditors,
+            diagnostics: this.diagnostics,
             centerSymbol: this.centerSymbol,
         });
     }

@@ -15,8 +15,9 @@ use crate::node_system::document::{
 };
 
 use crate::node_system::protocol::{
-    ConnectionsPerPort, I18nKey, ManagedNodeRole, NodeScope, NodeTypeId, OutputProduction,
-    ParameterKey, PortDirection, PortInstances, PortKind, TypeExpr,
+    ConnectionsPerPort, I18nKey, ManagedNodeRole, NodeInstanceDisplaySpec, NodeScope, NodeTypeId,
+    OutputProduction, ParameterEditorSpec, ParameterKey, PortDirection, PortInstances, PortKind,
+    ResourceDisplayKind, TypeExpr,
 };
 use crate::node_system::registry::{I18nManifest, ImplementationKind, StructuralNodeRole};
 use crate::node_system::runtime::build_builtin_kernel_registry;
@@ -78,6 +79,99 @@ fn editor_projection(locale: &str) -> EditorGraphProjectionDto {
         &catalog.localization(locale),
     )
     .unwrap()
+}
+
+#[test]
+fn every_resource_parameter_has_an_explicit_instance_display_classification() {
+    let builtin = build_builtin_node_system().unwrap();
+    let expected_identity = BTreeMap::from([
+        (
+            ("yssbi.project.function.call", "target"),
+            ResourceDisplayKind::Function,
+        ),
+        (
+            ("yssbi.project.variable.get", "variable"),
+            ResourceDisplayKind::Variable,
+        ),
+        (
+            ("yssbi.project.variable.set", "variable"),
+            ResourceDisplayKind::Variable,
+        ),
+        (
+            ("yssbi.dataframe.source.get", "dataframe"),
+            ResourceDisplayKind::Database,
+        ),
+    ]);
+    let expected_static = BTreeMap::from([
+        (
+            ("yssbi.project.function.entry", "function"),
+            "managed entry nodes display their graph-boundary role",
+        ),
+        (
+            ("yssbi.project.function.return", "function"),
+            "managed return nodes display their graph-boundary role",
+        ),
+    ]);
+    let mut observed = BTreeSet::new();
+
+    for (node_type, registered) in builtin.registry.iter() {
+        let protocol = registered.protocol();
+        for parameter in
+            protocol.parameters.parameters.iter().filter(|parameter| {
+                matches!(parameter.editor, ParameterEditorSpec::Resource { .. })
+            })
+        {
+            let key = (node_type.as_ref(), parameter.key.as_ref());
+            observed.insert(key);
+            let ParameterEditorSpec::Resource {
+                kind: parameter_kind,
+            } = parameter.editor
+            else {
+                unreachable!()
+            };
+            let expected_kind = expected_identity
+                .get(&key)
+                .copied()
+                .or_else(|| match key.1 {
+                    "function" => Some(ResourceDisplayKind::Function),
+                    _ => None,
+                })
+                .expect("every built-in resource parameter has an expected kind");
+            assert_eq!(
+                parameter_kind, expected_kind,
+                "resource parameter {key:?} has the wrong kind"
+            );
+            if let Some(kind) = expected_identity.get(&key) {
+                assert_eq!(
+                    &protocol.instance_display,
+                    &NodeInstanceDisplaySpec::ResourceParameter {
+                        parameter: parameter.key.clone(),
+                        kind: *kind,
+                    },
+                    "resource identity parameter {key:?} has the wrong display classification",
+                );
+            } else if let Some(reason) = expected_static.get(&key) {
+                assert!(
+                    !reason.is_empty(),
+                    "static audit entry {key:?} needs a reason"
+                );
+                assert_eq!(
+                    protocol.instance_display,
+                    NodeInstanceDisplaySpec::Static,
+                    "static resource parameter {key:?} must retain its protocol title: {reason}",
+                );
+            } else {
+                panic!("resource parameter {key:?} has no explicit display classification");
+            }
+        }
+    }
+
+    let expected = expected_identity
+        .keys()
+        .chain(expected_static.keys())
+        .copied()
+        .collect::<BTreeSet<_>>();
+    assert_eq!(observed, expected, "audit entries must match built-ins");
 }
 
 #[test]
@@ -1431,6 +1525,10 @@ fn builtin_function_resolver_projects_function_document_members() {
             )])
         }
 
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            self.function_document(path).map(|_| "Test function")
+        }
+
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
             (path == &self.path).then_some(&self.document)
         }
@@ -1483,7 +1581,14 @@ fn builtin_function_resolver_projects_function_document_members() {
             crate::node_system::document::DynamicMemberLocator::FunctionParameter {
                 function,
                 parameter,
-            } => function == &path && parameter == &FunctionParameterId("amount".into()),
+            } => {
+                function == &path
+                    && parameter == &FunctionParameterId("amount".into())
+                    && member.member().value_type
+                        == TypeExpr::Concrete(
+                            crate::node_system::protocol::TypeId::new("core.float64").unwrap(),
+                        )
+            }
             _ => false,
         }
     }));

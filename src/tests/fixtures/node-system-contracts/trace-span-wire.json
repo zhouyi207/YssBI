@@ -10,7 +10,7 @@
       "nodeTypeId": null,
       "parentCall": null,
       "projectSessionId": "contract-session",
-      "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+      "registryFingerprint": "ef83f80b837b2e401b53d16a28c8091da32eb606a66b865360b6512673e155dd",
       "resourceVersions": {
         "databases/contract-database": "13",
         "functions/contract-function": "11"
@@ -38,7 +38,7 @@
       "nodeTypeId": null,
       "parentCall": null,
       "projectSessionId": "contract-session",
-      "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+      "registryFingerprint": "ef83f80b837b2e401b53d16a28c8091da32eb606a66b865360b6512673e155dd",
       "resourceVersions": {
         "databases/contract-database": "13",
         "functions/contract-function": "11"

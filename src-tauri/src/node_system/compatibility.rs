@@ -7,8 +7,8 @@ use crate::node_system::catalog::{
     LocalizedCatalogDto, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
 };
 use crate::node_system::document::{
-    DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath, OrderKey,
-    PortAddress, PortAddressDto, PortRef,
+    DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath,
+    LastKnownPortMetadata, OrderKey, PortAddress, PortAddressDto, PortRef,
 };
 use crate::node_system::protocol::{
     ConnectionsPerPort, NodeProtocol, PortDirection, PortInstances, PortKey, PortKind,
@@ -40,6 +40,7 @@ pub(crate) struct CandidatePort {
 pub(crate) struct DynamicCandidate {
     pub origin: DynamicMemberLocator,
     pub order: OrderKey,
+    pub last_known: LastKnownPortMetadata,
 }
 
 pub(crate) fn source_from_projection(
@@ -266,6 +267,10 @@ fn candidate_ports(
                             parameter: parameter.id.clone(),
                         },
                         order: OrderKey(format!("{index:05}").into()),
+                        last_known: LastKnownPortMetadata {
+                            label: parameter.name.clone(),
+                            value_type: Some(function_type_expr(&parameter.type_name)?),
+                        },
                     }),
                 });
             }
@@ -291,6 +296,10 @@ fn candidate_ports(
                         parameter: FunctionParameterId("return".into()),
                     },
                     order: OrderKey("00000".into()),
+                    last_known: LastKnownPortMetadata {
+                        label: return_type.to_owned(),
+                        value_type: Some(function_type_expr(return_type)?),
+                    },
                 }),
             });
         }
@@ -381,7 +390,7 @@ fn resource_type_override(
     }
 }
 
-fn function_type_expr(type_name: &str) -> Result<TypeExpr, String> {
+pub(crate) fn function_type_expr(type_name: &str) -> Result<TypeExpr, String> {
     data_type_to_type_expr(&resolve_function_data_type(type_name)?)
 }
 

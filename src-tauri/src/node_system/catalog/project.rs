@@ -223,6 +223,19 @@ fn protocol(
         },
         interface: assembled_interface(id, ports, type_parameters, vec![], vec![])?,
         parameters: assembled_parameters(id, parameters)?,
+        instance_display: match id {
+            "yssbi.project.function.call" => NodeInstanceDisplaySpec::ResourceParameter {
+                parameter: sid("target", ParameterKey::new)?,
+                kind: ResourceDisplayKind::Function,
+            },
+            "yssbi.project.variable.get" | "yssbi.project.variable.set" => {
+                NodeInstanceDisplaySpec::ResourceParameter {
+                    parameter: sid("variable", ParameterKey::new)?,
+                    kind: ResourceDisplayKind::Variable,
+                }
+            }
+            _ => NodeInstanceDisplaySpec::Static,
+        },
         execution,
         scope,
         managed_role,
@@ -296,6 +309,11 @@ fn port(
 }
 
 fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    let kind = match key {
+        "target" | "function" => ResourceDisplayKind::Function,
+        "variable" => ResourceDisplayKind::Variable,
+        _ => unreachable!("unsupported built-in project resource parameter: {key}"),
+    };
     Ok(ParameterSpec {
         key: sid(key, ParameterKey::new)?,
         title_key: iid(Box::leak(
@@ -307,7 +325,8 @@ fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssembl
         value_type: TypeExpr::Concrete(sid("core.string", TypeId::new)?),
         default_value: None,
         constraints: vec![ParameterConstraint::Required],
-        editor: ParameterEditorSpec::Resource,
+        editor: ParameterEditorSpec::Resource { kind },
+        presentation: ParameterPresentation::DetailPanel,
     })
 }
 

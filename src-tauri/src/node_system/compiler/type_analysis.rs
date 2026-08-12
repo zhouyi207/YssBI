@@ -88,11 +88,11 @@ impl TypeConstraintGraph {
         }
     }
 
-    pub(crate) fn add_node(
+    pub(crate) fn add_node<'a>(
         &mut self,
         node_id: NodeId,
         protocol: &NodeProtocol,
-        ports: impl Iterator<Item = PortAddress>,
+        ports: impl Iterator<Item = (&'a PortAddress, &'a TypeExpr)>,
     ) {
         let generic_variables: BTreeMap<_, _> = protocol
             .interface
@@ -113,28 +113,24 @@ impl TypeConstraintGraph {
             .collect();
         let ports = ports.collect::<Vec<_>>();
 
-        for address in &ports {
+        for &(address, value_type) in &ports {
             let variable = self.variable(VariableOrigin::Port);
             self.port_variables.insert(address.clone(), variable);
-            if let Some(spec) = protocol
-                .interface
-                .ports
-                .iter()
-                .find(|spec| spec.key == *port_template(address))
-            {
-                let declared = instantiate(&spec.value_type, &generic_variables);
-                self.constraints.push(Constraint {
-                    kind: ConstraintKind::Equal(TypeValue::Variable(variable), declared),
-                    location: DiagnosticLocation::Port(address.clone()),
-                });
-            }
+            let declared = instantiate(value_type, &generic_variables);
+            self.constraints.push(Constraint {
+                kind: ConstraintKind::Equal(TypeValue::Variable(variable), declared),
+                location: DiagnosticLocation::Port(address.clone()),
+            });
         }
 
         for constraint in protocol.interface.type_constraints.iter() {
             self.add_protocol_constraint(
                 node_id,
                 constraint,
-                &ports,
+                &ports
+                    .iter()
+                    .map(|(address, _)| (*address).clone())
+                    .collect::<Vec<_>>(),
                 &parameter_types,
                 &generic_variables,
             );

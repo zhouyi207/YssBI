@@ -557,6 +557,7 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
         },
         interface: assembled_interface(spec.id, ports, vec![], vec![], vec![])?,
         parameters: assembled_parameters(spec.id, vec![])?,
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::NonDeterministic,
             purity: Purity::Pure,

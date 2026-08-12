@@ -12,8 +12,6 @@ export interface UiNodePinSlice {
 }
 
 export interface ToUiNodeOptions {
-  /** 覆盖展示标题（如 Call Function 解析函数名） */
-  title?: string;
   pins: UiNodePinSlice[];
 }
 
@@ -24,7 +22,7 @@ export function uiNodeHasNoHeader(node: Pick<UINode, 'uiStyle'>): boolean {
 
 /** 由 store 节点数据与 graph-scoped pin 切片构建画布节点视图 */
 export function toUiNode(nodeData: NodeData, options: ToUiNodeOptions): UINode {
-  const title = options.title ?? nodeData.display?.title ?? nodeData.title;
+  const title = nodeData.display?.title ?? nodeData.title;
   const inputs: PinView[] = [];
   const outputs: PinView[] = [];
 
@@ -42,6 +40,9 @@ export function toUiNode(nodeData: NodeData, options: ToUiNodeOptions): UINode {
     title,
     uiStyle: nodeData.display?.styleId ?? 'default',
     description: nodeData.display?.description ?? nodeData.description,
+    display: nodeData.display,
+    parameterEditors: nodeData.parameterEditors ?? [],
+    diagnostics: nodeData.diagnostics ?? [],
     position: nodeData.position ?? { x: 0, y: 0 },
     isInternal: nodeData.isInternal,
     paramsKind: nodeData.paramsKind,

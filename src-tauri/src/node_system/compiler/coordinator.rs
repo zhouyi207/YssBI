@@ -137,13 +137,13 @@ pub struct SelectedExecutionPlan {
 
 #[derive(Debug)]
 pub struct PublishedExecutionPlan {
-    full_plan: ExecutionPlan,
+    full_plan: Option<ExecutionPlan>,
     execution_basis: ExecutionPlanBasis,
     variants: Mutex<BoundedVariantCache<NormalizedExecutionDemand, Arc<ExecutionPlan>>>,
 }
 
 impl PublishedExecutionPlan {
-    pub fn new(full_plan: ExecutionPlan, execution_basis: ExecutionPlanBasis) -> Self {
+    pub fn new(full_plan: Option<ExecutionPlan>, execution_basis: ExecutionPlanBasis) -> Self {
         Self {
             full_plan,
             execution_basis,
@@ -151,8 +151,8 @@ impl PublishedExecutionPlan {
         }
     }
 
-    pub fn full_plan(&self) -> &ExecutionPlan {
-        &self.full_plan
+    pub fn full_plan(&self) -> Option<&ExecutionPlan> {
+        self.full_plan.as_ref()
     }
 
     pub fn select(

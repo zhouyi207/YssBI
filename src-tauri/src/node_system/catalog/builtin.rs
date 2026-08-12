@@ -740,6 +740,12 @@ fn constant_protocol(
     ty: &'static str,
     value: Value,
 ) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let editor = match ty {
+        "core.bool" => ParameterEditorSpec::Toggle,
+        "core.int64" | "core.float64" => ParameterEditorSpec::Number,
+        "core.string" => ParameterEditorSpec::Text { multiline: false },
+        _ => unreachable!("unsupported built-in constant type: {ty}"),
+    };
     protocol(
         id,
         "constants",
@@ -754,7 +760,8 @@ fn constant_protocol(
                 value,
             }),
             constraints: vec![],
-            editor: ParameterEditorSpec::Auto,
+            editor,
+            presentation: ParameterPresentation::InlineAndDetail,
         }],
         pure(),
     )
@@ -843,6 +850,7 @@ fn protocol(
         },
         interface: assembled_interface(id, ports, vec![], vec![], vec![])?,
         parameters: assembled_parameters(id, parameters)?,
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution,
         scope: NodeScope::Any,
         managed_role: None,

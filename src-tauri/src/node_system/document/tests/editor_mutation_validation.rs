@@ -4,7 +4,7 @@ use crate::node_system::compiler::NodeImplementation;
 use crate::node_system::document::mutation::validate_parameters_with_registry;
 use crate::node_system::protocol::{
     InputBindingSpec, InterfaceResolverId, LiteralPolicy, ParameterConstraint, ParameterEditorSpec,
-    ParameterKey, ParameterSchema, ParameterSpec, TypeExpr, TypeId, Value,
+    ParameterKey, ParameterPresentation, ParameterSchema, ParameterSpec, TypeExpr, TypeId, Value,
 };
 use crate::node_system::registry::TypeRegistration;
 
@@ -128,6 +128,7 @@ fn validation_registry() -> NodeRegistry {
                 },
             ],
             editor: ParameterEditorSpec::Number,
+            presentation: ParameterPresentation::DetailPanel,
         },
         ParameterSpec {
             key: ParameterKey::new("mode").unwrap(),
@@ -140,6 +141,7 @@ fn validation_registry() -> NodeRegistry {
                 Value::String("beta".into()),
             ])],
             editor: ParameterEditorSpec::Select,
+            presentation: ParameterPresentation::DetailPanel,
         },
         ParameterSpec {
             key: ParameterKey::new("label").unwrap(),
@@ -152,6 +154,7 @@ fn validation_registry() -> NodeRegistry {
                 max: Some(4),
             }],
             editor: ParameterEditorSpec::Text { multiline: false },
+            presentation: ParameterPresentation::DetailPanel,
         },
     ];
     let protocol = TestProtocolBuilder::new(NODE_TYPE, "test")
@@ -233,6 +236,7 @@ fn editor_parameter_validation_applies_registered_nominal_codec() {
         default_value: None,
         constraints: vec![ParameterConstraint::Required],
         editor: ParameterEditorSpec::Auto,
+        presentation: ParameterPresentation::DetailPanel,
     }])
     .unwrap();
 
@@ -864,6 +868,7 @@ fn editor_mutation_rejects_orphan_and_binding_policy_mismatches() {
             order: OrderKey("a".into()),
             last_known: LastKnownPortMetadata {
                 label: "Field".to_owned(),
+                value_type: None,
             },
         },
     );

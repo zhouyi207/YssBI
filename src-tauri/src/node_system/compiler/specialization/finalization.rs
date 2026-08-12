@@ -1011,6 +1011,14 @@ impl ExecutionPlanBasis {
                 .into_iter()
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
+            bound_values: self
+                .bound_values
+                .iter()
+                .filter(|(value, _)| {
+                    required_values.is_none_or(|required| required.contains(value))
+                })
+                .map(|(value, bound)| (*value, bound.clone()))
+                .collect(),
             value_dependencies: value_dependencies.into_boxed_slice(),
             root_region,
             effect_dependencies: effect_dependencies.into_boxed_slice(),

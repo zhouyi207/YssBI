@@ -23,14 +23,16 @@ pub use coordinator::{
 pub use dataframe::DATAFRAME_COLUMNS_RESOLVER;
 #[cfg(test)]
 pub(crate) use dataframe::DataframeColumnsResolver;
+pub use diagnostics::CompilerDiagnostic;
 pub use diagnostics::CompilerDiagnosticDefinitionError;
 pub(crate) use diagnostics::{
-    COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnostic, CompilerDiagnosticLocation,
-    CompilerNodeDiagnostic, compare_diagnostics, managed_node_role_name, node_scope_name,
-    port_kind_name, validate_compiler_diagnostic_definitions,
+    COMPILER_DIAGNOSTIC_DEFINITIONS, CompilerDiagnosticLocation, CompilerNodeDiagnostic,
+    compare_diagnostics, managed_node_role_name, node_scope_name, port_kind_name,
+    validate_compiler_diagnostic_definitions,
 };
 pub use dynamic_interface::{
-    InterfaceResolver, InterfaceResolverError, InterfaceResolverMember, InterfaceResolverRequest,
+    InterfaceResolver, InterfaceResolverDiagnostic, InterfaceResolverError,
+    InterfaceResolverMember, InterfaceResolverOutput, InterfaceResolverRequest,
     InterfaceResolverSet, ProjectedDynamicPortBinding, SchemaFieldIdentityGuarantee,
     ValidatedInterfaceProjection, ValidatedNodeInterfaceProjection, ValidatedProjectedMember,
 };

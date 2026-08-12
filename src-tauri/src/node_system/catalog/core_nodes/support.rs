@@ -153,6 +153,7 @@ pub(crate) fn protocol(
         },
         interface: assembled_interface(id, ports, type_parameters, type_constraints, vec![])?,
         parameters: assembled_parameters(id, parameters)?,
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution,
         scope: NodeScope::Any,
         managed_role: None,
@@ -234,6 +235,7 @@ pub(crate) fn parameter(
         default_value,
         constraints,
         editor,
+        presentation: ParameterPresentation::DetailPanel,
     })
 }
 

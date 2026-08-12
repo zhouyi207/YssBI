@@ -1,0 +1,312 @@
+// @vitest-environment happy-dom
+
+import { act } from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot, type Root } from 'react-dom/client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ExecuteEditorMutationOutcome } from '@/features/application/editorMutation/editorMutationCoordinator';
+import { uiStore } from '@/features/core/ui/UIStore';
+import type { ParameterEditorDto } from '@/shared/types/dto/editorProjection';
+import { NodeParameterEditor } from './NodeParameterEditor';
+
+const { setNodeParameters } = vi.hoisted(() => ({ setNodeParameters: vi.fn() }));
+
+vi.mock('@/features/application/editor/setNodeParameters', () => ({ setNodeParameters }));
+
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const graphPath = 'events/Main.yssbi-event';
+const nodeId = 'constant-node';
+const appliedOutcome: ExecuteEditorMutationOutcome = {
+  status: 'applied',
+  result: {} as never,
+};
+let container: HTMLDivElement;
+let root: Root;
+
+function parameter(
+  editor: ParameterEditorDto['editor'],
+  value: unknown,
+  valueType: ParameterEditorDto['valueType'],
+  multiline = false,
+): ParameterEditorDto {
+  return {
+    key: 'value',
+    display: { title: 'Value', description: null },
+    editor,
+    presentation: 'detailPanel',
+    valueType,
+    multiline,
+    value,
+    configuration: null,
+  };
+}
+
+function renderEditor(projected: ParameterEditorDto): void {
+  act(() => root.render(
+    <NodeParameterEditor
+      graphPath={graphPath}
+      nodeId={nodeId}
+      locale="en-US"
+      parameter={projected}
+      diagnostics={[]}
+      formatFallback={String}
+    />,
+  ));
+}
+
+function input(): HTMLInputElement {
+  const element = container.querySelector('input');
+  if (!(element instanceof HTMLInputElement)) throw new Error('missing input');
+  return element;
+}
+
+function setControlValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  act(() => {
+    const prototype = element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, 'value')?.set?.call(element, value);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+}
+
+async function flushPromises(): Promise<void> {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
+beforeEach(() => {
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  root = createRoot(container);
+  setNodeParameters.mockReset();
+  setNodeParameters.mockResolvedValue(appliedOutcome);
+});
+
+afterEach(() => {
+  act(() => root.unmount());
+  container.remove();
+  vi.restoreAllMocks();
+});
+
+describe('NodeParameterEditor ordinary controls', () => {
+  it('commits a toggle immediately through setNodeParameters', async () => {
+    renderEditor(parameter('toggle', false, { kind: 'Boolean' }));
+
+    const toggle = container.querySelector('[role="switch"]');
+    if (!toggle) throw new Error('missing switch');
+    act(() => toggle.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushPromises();
+
+    expect(setNodeParameters).toHaveBeenCalledWith({
+      graphPath,
+      nodeId,
+      locale: 'en-US',
+      parameters: { value: true },
+    });
+  });
+
+  it.each([
+    [{ kind: 'Int64' }, '1.5', false],
+    [{ kind: 'Float64' }, '1.5', true],
+  ] as const)('uses projected %s semantics for numeric commits', async (valueType, draft, shouldCommit) => {
+    renderEditor(parameter('number', 1, valueType));
+    const input = container.querySelector('input');
+    if (!(input instanceof HTMLInputElement)) throw new Error('missing input');
+
+    setControlValue(input, draft);
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    await flushPromises();
+
+    if (shouldCommit) {
+      expect(setNodeParameters).toHaveBeenCalledWith({
+        graphPath,
+        nodeId,
+        locale: 'en-US',
+        parameters: { value: 1.5 },
+      });
+    } else {
+      expect(setNodeParameters).not.toHaveBeenCalled();
+    }
+  });
+
+  it('commits single-line text on Enter and restores it on Escape', async () => {
+    renderEditor(parameter('text', 'old', { kind: 'String' }));
+    const input = container.querySelector('input');
+    if (!(input instanceof HTMLInputElement)) throw new Error('missing input');
+
+    setControlValue(input, 'new');
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+    await flushPromises();
+    expect(setNodeParameters).toHaveBeenLastCalledWith(expect.objectContaining({ parameters: { value: 'new' } }));
+
+    setControlValue(input, 'draft');
+    act(() => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(input.value).toBe('old');
+  });
+
+  it('does not write a text draft per keystroke', () => {
+    renderEditor(parameter('text', 'old', { kind: 'String' }));
+
+    setControlValue(input(), 'new');
+
+    expect(input().value).toBe('new');
+    expect(setNodeParameters).not.toHaveBeenCalled();
+  });
+
+  it('commits a numeric draft on blur', async () => {
+    renderEditor(parameter('number', 1, { kind: 'Float64' }));
+
+    setControlValue(input(), '2.5');
+    act(() => input().dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    await flushPromises();
+
+    expect(setNodeParameters).toHaveBeenCalledWith({
+      graphPath,
+      nodeId,
+      locale: 'en-US',
+      parameters: { value: 2.5 },
+    });
+  });
+
+  it('resets an invalid numeric blur and syncs a later projected value', () => {
+    const initial = parameter('number', 1, { kind: 'Int64' });
+    renderEditor(initial);
+
+    setControlValue(input(), '1.5');
+    act(() => input().dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    expect(input().value).toBe('1');
+    expect(setNodeParameters).not.toHaveBeenCalled();
+
+    renderEditor({ ...initial, value: 2 });
+    expect(input().value).toBe('2');
+  });
+
+  it('synchronously blocks blur from committing an active draft when a newer projection renders', async () => {
+    renderEditor(parameter('text', 'old', { kind: 'String' }));
+    setControlValue(input(), 'draft');
+
+    act(() => {
+      flushSync(() => root.render(
+        <NodeParameterEditor
+          graphPath={graphPath}
+          nodeId={nodeId}
+          locale="en-US"
+          parameter={parameter('text', 'projected', { kind: 'String' })}
+          diagnostics={[]}
+          formatFallback={String}
+        />,
+      ));
+      input().dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+    expect(input().value).toBe('projected');
+    await flushPromises();
+
+    expect(setNodeParameters).not.toHaveBeenCalled();
+  });
+
+  it('guards synchronously against Enter plus blur duplicate commits', async () => {
+    let resolveMutation: (outcome: ExecuteEditorMutationOutcome) => void = () => undefined;
+    setNodeParameters.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveMutation = resolve;
+    }));
+    renderEditor(parameter('text', 'old', { kind: 'String' }));
+    setControlValue(input(), 'draft');
+
+    act(() => {
+      input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      input().dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    });
+
+    expect(setNodeParameters).toHaveBeenCalledOnce();
+    resolveMutation(appliedOutcome);
+    await flushPromises();
+  });
+
+  it('shows a shared toast for an invalid numeric draft on blur', () => {
+    const toast = vi.spyOn(uiStore, 'showToast');
+    renderEditor(parameter('number', 1, { kind: 'Int64' }));
+    setControlValue(input(), '1.5');
+
+    act(() => input().dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+
+    expect(toast).toHaveBeenCalledWith('Enter an integer', 'error');
+    expect(setNodeParameters).not.toHaveBeenCalled();
+  });
+
+  it.each(['stale', 'conflict'] as const)(
+    'restores the latest projection and toasts when mutation resolves %s',
+    async (status) => {
+      const toast = vi.spyOn(uiStore, 'showToast');
+      setNodeParameters.mockResolvedValueOnce({ status });
+      const initial = parameter('text', 'old', { kind: 'String' });
+      renderEditor(initial);
+      setControlValue(input(), 'draft');
+      act(() => input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+
+      renderEditor({ ...initial, value: 'latest projection' });
+      await flushPromises();
+
+      expect(input().value).toBe('latest projection');
+      expect(toast).toHaveBeenCalledWith(expect.stringContaining(status), 'error');
+    },
+  );
+
+  it('restores the latest projected value and shows a shared toast when mutation rejects', async () => {
+    let rejectMutation: (reason: Error) => void = () => undefined;
+    setNodeParameters.mockImplementationOnce(() => new Promise((_, reject) => {
+      rejectMutation = reject;
+    }));
+    const toast = vi.spyOn(uiStore, 'showToast');
+    renderEditor(parameter('text', 'old', { kind: 'String' }));
+    setControlValue(input(), 'draft');
+    act(() => input().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+
+    renderEditor(parameter('text', 'latest projection', { kind: 'String' }));
+    expect(input().value).toBe('latest projection');
+    rejectMutation(new Error('backend rejected value'));
+    await flushPromises();
+
+    expect(input().value).toBe('latest projection');
+    expect(toast).toHaveBeenCalledWith('backend rejected value', 'error');
+  });
+
+  it('shows the shared error toast when a toggle mutation rejects', async () => {
+    const toast = vi.spyOn(uiStore, 'showToast');
+    setNodeParameters.mockRejectedValueOnce(new Error('toggle rejected'));
+    renderEditor(parameter('toggle', false, { kind: 'Boolean' }));
+
+    const toggle = container.querySelector('[role="switch"]');
+    if (!toggle) throw new Error('missing switch');
+    act(() => toggle.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await flushPromises();
+
+    expect(toggle.getAttribute('data-state')).toBe('unchecked');
+    expect(toast).toHaveBeenCalledWith('toggle rejected', 'error');
+  });
+
+  it('renders multiline text in a textarea and commits it on blur', async () => {
+    renderEditor(parameter('text', 'old', { kind: 'String' }, true));
+    const textarea = container.querySelector('textarea');
+    if (!(textarea instanceof HTMLTextAreaElement)) throw new Error('missing textarea');
+
+    setControlValue(textarea, 'line one\nline two');
+    act(() => textarea.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    await flushPromises();
+
+    expect(setNodeParameters).toHaveBeenCalledWith(expect.objectContaining({
+      parameters: { value: 'line one\nline two' },
+    }));
+  });
+
+  it.each(['auto', 'select', 'resource'] as const)('keeps %s parameters read-only', (editor) => {
+    renderEditor(parameter(editor, 'projected', null));
+
+    expect(container.textContent).toContain('projected');
+    expect(container.querySelector('input, textarea, [role="switch"]')).toBeNull();
+  });
+});

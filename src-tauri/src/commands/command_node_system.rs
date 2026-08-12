@@ -504,7 +504,7 @@ fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
     })
 }
 
-fn mutate_graph_document_with_emitter(
+pub(crate) fn mutate_graph_document_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     graph_path: String,

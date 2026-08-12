@@ -94,7 +94,7 @@ impl ValidatedNodeConfig {
             let Some(value) = parameters.get(&spec.key) else {
                 continue;
             };
-            let value = if spec.editor == ParameterEditorSpec::Resource {
+            let value = if matches!(spec.editor, ParameterEditorSpec::Resource { .. }) {
                 value
                     .as_str()
                     .and_then(|value| ResourceId::new(value).ok())

@@ -154,6 +154,111 @@ fn error(provider: ProviderRegistration) -> RegistryValidationError {
     }
 }
 
+fn valid_test_protocol(type_id: &str) -> NodeProtocol {
+    TestProtocolBuilder::new(type_id, "test")
+        .managed_role(None)
+        .build()
+}
+
+fn validate_single_protocol(protocol: NodeProtocol) -> Result<(), RegistryValidationError> {
+    let mut provider = provider_with(RegisteredNode::leaf(
+        Arc::new(protocol.clone()),
+        implementation(),
+    ));
+    provider
+        .i18n
+        .keys
+        .insert(protocol.catalog.title_key.clone());
+    for parameter in &protocol.parameters.parameters {
+        provider.i18n.keys.insert(parameter.title_key.clone());
+        provider.i18n.keys.extend(parameter.description_key.clone());
+    }
+
+    let mut builder = NodeRegistryBuilder::new();
+    builder.register_provider(provider).unwrap();
+    builder.freeze().map(|_| ()).map_err(|error| match error {
+        NodeRegistrationError::InvalidRegistry(error) => error,
+        other => panic!("unexpected {other}"),
+    })
+}
+
+#[test]
+fn resource_instance_display_requires_an_existing_resource_parameter() {
+    let mut protocol = valid_test_protocol("yssbi.test.resource.title");
+    protocol.instance_display = NodeInstanceDisplaySpec::ResourceParameter {
+        parameter: ParameterKey::new("target").unwrap(),
+        kind: ResourceDisplayKind::Function,
+    };
+
+    let error = validate_single_protocol(protocol).unwrap_err();
+    assert!(matches!(
+        error,
+        RegistryValidationError::InvalidNode { reason, .. }
+            if reason.contains("instance display parameter 'target'")
+    ));
+}
+
+#[test]
+fn resource_instance_display_rejects_a_non_resource_editor() {
+    let mut protocol = valid_test_protocol("yssbi.test.resource.title");
+    protocol.parameters = ParameterSchema::new(vec![ParameterSpec {
+        key: ParameterKey::new("target").unwrap(),
+        title_key: I18nKey::new("test.parameter.title").unwrap(),
+        description_key: None,
+        value_type: TypeExpr::Unknown,
+        default_value: None,
+        constraints: vec![ParameterConstraint::Required],
+        editor: ParameterEditorSpec::Text { multiline: false },
+        presentation: ParameterPresentation::DetailPanel,
+    }])
+    .unwrap();
+    protocol.instance_display = NodeInstanceDisplaySpec::ResourceParameter {
+        parameter: ParameterKey::new("target").unwrap(),
+        kind: ResourceDisplayKind::Function,
+    };
+
+    let error = validate_single_protocol(protocol).unwrap_err();
+    assert!(
+        matches!(
+            &error,
+            RegistryValidationError::InvalidNode { reason, .. }
+                if reason.contains("must use the resource editor")
+        ),
+        "unexpected registry error: {error:?}",
+    );
+}
+
+#[test]
+fn resource_instance_display_rejects_an_incompatible_resource_kind() {
+    let mut protocol = valid_test_protocol("yssbi.test.resource.kind");
+    protocol.parameters = ParameterSchema::new(vec![ParameterSpec {
+        key: ParameterKey::new("target").unwrap(),
+        title_key: I18nKey::new("test.parameter.title").unwrap(),
+        description_key: None,
+        value_type: TypeExpr::Unknown,
+        default_value: None,
+        constraints: vec![ParameterConstraint::Required],
+        editor: ParameterEditorSpec::Resource {
+            kind: ResourceDisplayKind::Database,
+        },
+        presentation: ParameterPresentation::DetailPanel,
+    }])
+    .unwrap();
+    protocol.instance_display = NodeInstanceDisplaySpec::ResourceParameter {
+        parameter: ParameterKey::new("target").unwrap(),
+        kind: ResourceDisplayKind::Function,
+    };
+
+    let error = validate_single_protocol(protocol).unwrap_err();
+    assert!(matches!(
+        error,
+        RegistryValidationError::InvalidNode { reason, .. }
+            if reason.contains("incompatible")
+                && reason.contains("Function")
+                && reason.contains("Database")
+    ));
+}
+
 #[test]
 fn registry_rejects_invalid_retry_semantics_before_compile() {
     let cases = [
@@ -452,6 +557,7 @@ fn custom_nominal_provider_prepares_typed_value_for_compiler_lowering() {
         default_value: None,
         constraints: vec![ParameterConstraint::Required],
         editor: ParameterEditorSpec::Auto,
+        presentation: ParameterPresentation::DetailPanel,
     }])
     .unwrap();
     provider.i18n.keys.insert(id("nodes.test.empty.count"));
@@ -780,6 +886,7 @@ fn validates_ports_parameters_schema_and_resolvers() {
         default_value: None,
         constraints: vec![],
         editor: ParameterEditorSpec::Auto,
+        presentation: ParameterPresentation::DetailPanel,
     };
     node.parameters.parameters = vec![parameter.clone(), parameter].into_boxed_slice();
     provider.i18n.keys.insert(id("nodes.test.limit"));
@@ -842,6 +949,7 @@ fn provider_with_two_parameter_rename_schema() -> ProviderRegistration {
             default_value: None,
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::Text { multiline: false },
+            presentation: ParameterPresentation::DetailPanel,
         })
         .collect();
     provider.i18n.keys.extend([

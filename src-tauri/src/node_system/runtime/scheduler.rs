@@ -1172,6 +1172,7 @@ impl<'a> RunExecutor<'a> {
             &cancellation,
         )?;
         let mut frame = Frame::new(plan.value_count);
+        frame.bind(&plan.bound_values)?;
         let memoization = RunMemoization::new();
         let root_demand = DemandFingerprint::for_root(plan, self.selection_digest);
         let result = (|| {
@@ -1409,6 +1410,7 @@ impl<'a> RunExecutor<'a> {
                         cancellation,
                     )?;
                     let mut callee_frame = Frame::new(callee.value_count);
+                    callee_frame.bind(&callee.bound_values)?;
                     let callee_demand =
                         DemandFingerprint::for_callee(&callee, target, arguments, results);
                     let result = (|| {
@@ -3048,6 +3050,13 @@ impl Frame {
                 value.close_stream();
             }
         }
+    }
+
+    fn bind(&mut self, values: &BTreeMap<ValueRef, Value>) -> Result<(), RunError> {
+        for (reference, value) in values {
+            self.set(*reference, RuntimeValue::Scalar(value.clone()))?;
+        }
+        Ok(())
     }
 
     fn has(&self, reference: ValueRef) -> bool {

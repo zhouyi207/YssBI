@@ -8096,6 +8096,7 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
             parameter: parameter.clone(),
         },
         order: OrderKey(order.into()),
+        last_known: crate::node_system::document::LastKnownPortMetadata::default(),
     };
     let connection = |output: PortAddress, input: PortAddress| DocumentConnection {
         id: ConnectionId::new(),
@@ -8368,6 +8369,7 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
                 parameter: parameter.clone(),
             },
             order: OrderKey(order.into()),
+            last_known: crate::node_system::document::LastKnownPortMetadata::default(),
         }
     };
     let signature = || FunctionSignature {
@@ -8550,6 +8552,7 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
             registry.as_ref(),
             store.as_ref(),
             &resources,
+            None,
             session,
             &crate::node_system::analysis::NOOP_TRACE_SINK,
             &crate::node_system::compiler::CompileCancellationToken::new(),
@@ -8837,6 +8840,55 @@ fn project_execution_refuses_blocking_analysis() {
         .unwrap_err();
     assert!(error.contains("blocking diagnostics"));
     assert!(error.contains("compiler.node.unknown"));
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn project_execution_ignores_an_unreferenced_incomplete_function() {
+    let (state, root) = active_state_with_empty_graph("unreferenced-incomplete-function");
+    let function_path = GraphResourcePath::new("functions/asd.yssbi-function").unwrap();
+    state
+        .insert_graph(
+            function_path,
+            GraphResourceDocument::new("asd", GraphDocumentKind::Function),
+        )
+        .unwrap();
+
+    state
+        .execute_graph_for_current_project_for_test(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
+        .expect("an unreferenced incomplete function must not block event execution");
+
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn project_execution_ignores_unreferenced_local_variable_versions() {
+    let (state, root) = active_state_with_empty_graph("unreferenced-local-variable");
+    state
+        .add_variable(
+            "unused",
+            crate::graph::value::DataType::Int64,
+            crate::graph::value::DataValue::Int64(0),
+            "",
+            crate::variable::VariableScope::Event {
+                event_path: graph_path().as_str().into(),
+            },
+            Vec::new(),
+        )
+        .unwrap();
+
+    state
+        .execute_graph_for_current_project_for_test(
+            &graph_path(),
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
+        .expect("an unreferenced local variable must not stale the execution basis");
+
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -11717,7 +11769,7 @@ fn execution_rejects_exact_dependency_change_after_plan_before_run() {
 }
 
 #[test]
-fn function_resource_version_changes_with_graph_body() {
+fn function_resource_version_changes_with_name_and_graph_body() {
     let function_path = GraphResourcePath::new("functions/Fingerprint.yssbi-function").unwrap();
     let mut data = ProjectData::new();
     data.graphs.insert(
@@ -11729,21 +11781,28 @@ fn function_resource_version_changes_with_graph_body() {
         .unwrap()
         .versions[&key]
         .clone();
+    data.graphs.get_mut(&function_path).unwrap().name = "Renamed Fingerprint".into();
+    let after_name = compile_resources_from_data(&data, Default::default())
+        .unwrap()
+        .versions[&key]
+        .clone();
+    assert_ne!(before, after_name);
+
     let graph = data.graphs.get_mut(&function_path).unwrap();
     graph.document.revision = GraphRevision::new(1);
     let body_node = node("yssbi.constant.int64");
     graph.document.nodes.insert(body_node.id, body_node);
-    let after = compile_resources_from_data(&data, Default::default())
+    let after_body = compile_resources_from_data(&data, Default::default())
         .unwrap()
         .versions[&key]
         .clone();
 
-    assert_ne!(before, after);
+    assert_ne!(after_name, after_body);
 }
 
 fn dataframe_decompose_production_fixture(
     include_database: bool,
-) -> (ProjectState, std::path::PathBuf, NodeId) {
+) -> (ProjectState, std::path::PathBuf, NodeId, NodeId) {
     let root = std::env::temp_dir().join(format!(
         "yssbi-dataframe-decompose-production-{}",
         uuid::Uuid::new_v4()
@@ -11753,6 +11812,7 @@ fn dataframe_decompose_production_fixture(
     let source_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x400));
     let decompose_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x401));
     let connection_id = ConnectionId::from_uuid(uuid::Uuid::from_u128(0x402));
+    let consumer_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x403));
     let mut source = node("yssbi.dataframe.source.get");
     source.id = source_id;
     source.parameters.insert(
@@ -11761,9 +11821,12 @@ fn dataframe_decompose_production_fixture(
     );
     let mut decompose = node("yssbi.dataframe.decompose");
     decompose.id = decompose_id;
+    let mut consumer = node("yssbi.debug.view");
+    consumer.id = consumer_id;
     let mut graph = GraphResourceDocument::new("Production", GraphDocumentKind::Event);
     graph.document.nodes.insert(source_id, source);
     graph.document.nodes.insert(decompose_id, decompose);
+    graph.document.nodes.insert(consumer_id, consumer);
     graph.document.connections.insert(
         connection_id,
         DocumentConnection {
@@ -11799,12 +11862,135 @@ fn dataframe_decompose_production_fixture(
 
     let state = ProjectState::new();
     state.activate_project_fixture(root.to_string_lossy().into_owned(), data);
-    (state, root, decompose_id)
+    (state, root, decompose_id, consumer_id)
+}
+
+#[test]
+fn production_decompose_projects_database_column_metadata() {
+    let mut data = ProjectData::new();
+    data.databases.insert(
+        "main".into(),
+        crate::database::DatabaseDecl {
+            id: "main".into(),
+            engine: crate::database::DatabaseEngine::InMemory {
+                name: "main".into(),
+            },
+            schema_version: 1,
+            required: true,
+            name: Some("Main".into()),
+        },
+    );
+    let resource = crate::node_system::plan::ResourceId::new("databases/main").unwrap();
+    let resources = compile_resources_from_data(
+        &data,
+        std::collections::BTreeMap::from([(
+            resource,
+            vec![
+                crate::schema::ColumnInfoDTO {
+                    name: "customer_id".into(),
+                    dtype: "Int64".into(),
+                },
+                crate::schema::ColumnInfoDTO {
+                    name: "amount".into(),
+                    dtype: "Float64".into(),
+                },
+                crate::schema::ColumnInfoDTO {
+                    name: "opaque".into(),
+                    dtype: "Binary".into(),
+                },
+            ],
+        )]),
+    )
+    .unwrap();
+    let builtin = crate::node_system::catalog::build_builtin_node_system().unwrap();
+    let source_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x410));
+    let decompose_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x411));
+    let mut source = node("yssbi.dataframe.source.get");
+    source.id = source_id;
+    source.parameters.insert(
+        crate::node_system::protocol::ParameterKey::new("dataframe").unwrap(),
+        serde_json::json!("databases/main"),
+    );
+    let mut decompose = node("yssbi.dataframe.decompose");
+    decompose.id = decompose_id;
+    let connection_id = ConnectionId::from_uuid(uuid::Uuid::from_u128(0x412));
+    let mut document = crate::node_system::document::GraphDocument::default();
+    document.nodes.insert(source_id, source);
+    document.nodes.insert(decompose_id, decompose);
+    document.connections.insert(
+        connection_id,
+        DocumentConnection {
+            id: connection_id,
+            output: PortAddress::declared(source_id, PortKey::new("dataframe").unwrap()),
+            input: PortAddress::declared(decompose_id, PortKey::new("dataframe").unwrap()),
+            order: None,
+        },
+    );
+    let compiler = crate::node_system::compiler::GraphCompiler::with_resolvers(
+        builtin.registry.as_ref(),
+        &resources,
+        resources.schema_resolvers(),
+        crate::node_system::compiler::build_builtin_interface_resolvers(),
+    );
+    let result = compiler.compile(&document);
+    let projection = crate::node_system::analysis::build_editor_graph_projection(
+        "events/production-dataframe-metadata.yssbi-event",
+        &document,
+        &result.analysis,
+        &result.outcome,
+        builtin.registry.as_ref(),
+        &builtin.catalog.localization("en-US"),
+    )
+    .unwrap();
+    let node = projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id.as_ref() == decompose_id.to_string())
+        .unwrap();
+    let ports = node
+        .ports
+        .iter()
+        .filter(|port| port.template_key.as_ref() == "columns")
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        ports
+            .iter()
+            .map(|port| port.display.instance_label.as_deref().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["customer_id", "amount", "opaque"],
+    );
+    assert_eq!(
+        ports
+            .iter()
+            .map(|port| {
+                port.resolved_type
+                    .as_ref()
+                    .and_then(|summary| summary.data_type.clone())
+                    .unwrap()
+            })
+            .collect::<Vec<_>>(),
+        vec![
+            crate::graph::DataType::Int64,
+            crate::graph::DataType::Float64,
+            crate::graph::DataType::Any,
+        ],
+    );
+    let opaque = ports[2];
+    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.dataframe.field_type_unsupported"
+            && diagnostic.arguments.get("column").map(Box::as_ref) == Some("opaque")
+            && matches!(
+                &diagnostic.primary,
+                crate::node_system::analysis::DiagnosticLocation::Port(address)
+                    if crate::node_system::analysis::PortAddressDto::from(address) == opaque.address
+            )
+    }));
 }
 
 #[test]
 fn project_compile_resolves_dataframe_decompose_columns() {
-    let (state, root, decompose_id) = dataframe_decompose_production_fixture(true);
+    let (state, root, decompose_id, _) = dataframe_decompose_production_fixture(true);
     let source = state.capture_projection_source(&graph_path()).unwrap();
     let (analysis, _) = state
         .get_or_compile_current_from_source(&graph_path(), &source)
@@ -11861,8 +12047,199 @@ fn project_compile_resolves_dataframe_decompose_columns() {
 }
 
 #[test]
+fn editor_connect_materializes_current_decompose_projection_and_preserves_orphan() {
+    let (state, root, decompose_id, consumer_id) = dataframe_decompose_production_fixture(true);
+    let project_instance_id = current_project_instance_id(&state);
+    let source = state.capture_projection_source(&graph_path()).unwrap();
+    let (analysis, _) = state
+        .get_or_compile_current_from_source(&graph_path(), &source)
+        .unwrap();
+    let members = &analysis
+        .payload
+        .interface_projection
+        .nodes
+        .get(&decompose_id)
+        .unwrap()
+        .available_members;
+    let projected = members
+        .iter()
+        .find(|candidate| candidate.member().label == "customer_id")
+        .unwrap()
+        .projection_address()
+        .clone();
+    let other_projected = members
+        .iter()
+        .find(|candidate| candidate.member().label == "amount")
+        .unwrap()
+        .projection_address()
+        .clone();
+    let two_projected = state
+        .apply_editor_graph_mutation(
+            &project_instance_id,
+            &graph_path(),
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::INITIAL,
+                OperationId::from_uuid(uuid::Uuid::from_u128(0x406)),
+                EditorGraphMutationDto::Connect {
+                    output: crate::node_system::document::PortAddressDto::from(projected.clone()),
+                    input: crate::node_system::document::PortAddressDto::from(other_projected),
+                    order: None,
+                },
+            ),
+        )
+        .unwrap_err();
+    assert!(
+        two_projected
+            .to_string()
+            .contains("two projected members are not supported")
+    );
+    assert_eq!(
+        state.get_data().unwrap().graphs[&graph_path()]
+            .document
+            .revision,
+        GraphRevision::INITIAL,
+    );
+    let mut observed = Vec::new();
+
+    let request = MutationRequest::new(
+        ResourceKey::Graph(document_path()),
+        GraphRevision::INITIAL,
+        OperationId::from_uuid(uuid::Uuid::from_u128(0x404)),
+        EditorGraphMutationDto::Connect {
+            output: crate::node_system::document::PortAddressDto::from(projected),
+            input: crate::node_system::document::PortAddressDto::from(PortAddress::declared(
+                consumer_id,
+                PortKey::new("data").unwrap(),
+            )),
+            order: None,
+        },
+    );
+    let result = crate::commands::command_node_system::mutate_graph_document_with_emitter(
+        &state,
+        project_instance_id.clone(),
+        graph_path().as_str().to_string(),
+        "en-US",
+        serde_json::to_value(request).unwrap(),
+        |event| observed.push(event),
+    )
+    .expect("a real command EditorGraphMutationDto Connect materializes its current endpoint");
+
+    assert!(matches!(
+        observed.as_slice(),
+        [crate::event::Event::Project(crate::event::EventProject::GraphDelta { delta, .. })]
+            if delta == &result.delta
+    ));
+    let document = &state.get_data().unwrap().graphs[&graph_path()].document;
+    let (materialized, binding) = document
+        .port_bindings
+        .iter()
+        .find(|(_, binding)| matches!(
+            binding,
+            crate::node_system::document::DynamicPortBinding::Resolved { origin, .. }
+                if matches!(origin, crate::node_system::document::DynamicMemberLocator::SchemaField { field, .. } if field.0.as_ref() == "customer_id")
+        ))
+        .unwrap();
+    let expected_metadata = crate::node_system::document::LastKnownPortMetadata {
+        label: "customer_id".into(),
+        value_type: Some(crate::node_system::protocol::TypeExpr::Concrete(
+            crate::node_system::protocol::TypeId::new("core.int64").unwrap(),
+        )),
+    };
+    assert!(matches!(
+        binding,
+        crate::node_system::document::DynamicPortBinding::Resolved { last_known, .. }
+            if last_known == &expected_metadata
+    ));
+    assert!(document.connections.values().any(|connection| {
+        connection.output == *materialized
+            && connection.input == PortAddress::declared(consumer_id, PortKey::new("data").unwrap())
+    }));
+    let materialized = materialized.clone();
+    let stale = state
+        .apply_editor_graph_mutation(
+            &project_instance_id,
+            &graph_path(),
+            "en-US",
+            MutationRequest::new(
+                ResourceKey::Graph(document_path()),
+                GraphRevision::new(1),
+                OperationId::from_uuid(uuid::Uuid::from_u128(0x407)),
+                EditorGraphMutationDto::Connect {
+                    output: crate::node_system::document::PortAddressDto::from(
+                        members
+                            .iter()
+                            .find(|candidate| candidate.member().label == "customer_id")
+                            .unwrap()
+                            .projection_address()
+                            .clone(),
+                    ),
+                    input: crate::node_system::document::PortAddressDto::from(
+                        PortAddress::declared(consumer_id, PortKey::new("data").unwrap()),
+                    ),
+                    order: None,
+                },
+            ),
+        )
+        .unwrap_err();
+    assert!(
+        stale
+            .to_string()
+            .contains("projected connection endpoint is stale or unavailable")
+    );
+
+    state
+        .with_database_writer(
+            &project_instance_id,
+            "main",
+            ResourceRevision::INITIAL,
+            OperationId::from_uuid(uuid::Uuid::from_u128(0x405)),
+            |database, _| database.delete_column("customer_id"),
+        )
+        .unwrap();
+    let projection = state
+        .graph_projection_for_project(&project_instance_id, &graph_path(), "en-US")
+        .unwrap();
+    let document = &state.get_data().unwrap().graphs[&graph_path()].document;
+    let binding = document.port_bindings.get(&materialized).unwrap();
+    assert!(matches!(
+        binding,
+        crate::node_system::document::DynamicPortBinding::Resolved { last_known, .. }
+            if last_known == &expected_metadata
+    ));
+    assert!(
+        document
+            .connections
+            .values()
+            .any(|connection| connection.output == materialized)
+    );
+    let orphan = projection
+        .nodes
+        .iter()
+        .flat_map(|node| node.ports.iter())
+        .find(|port| {
+            port.address == crate::node_system::analysis::PortAddressDto::from(&materialized)
+        })
+        .unwrap();
+    assert!(orphan.orphan);
+    assert_eq!(
+        orphan.display.instance_label.as_deref(),
+        Some("customer_id")
+    );
+    assert_eq!(
+        orphan
+            .resolved_type
+            .as_ref()
+            .and_then(|resolved| resolved.data_type.clone()),
+        Some(crate::graph::DataType::Int64),
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn dataframe_decompose_preserves_missing_database_diagnostic() {
-    let (state, root, _) = dataframe_decompose_production_fixture(false);
+    let (state, root, _, _) = dataframe_decompose_production_fixture(false);
     let source = state.capture_projection_source(&graph_path()).unwrap();
     let (analysis, plan) = state
         .get_or_compile_current_from_source(&graph_path(), &source)
@@ -11894,6 +12271,302 @@ fn dataframe_decompose_preserves_missing_database_diagnostic() {
         Some("databases/main")
     );
     std::fs::remove_dir_all(root).unwrap();
+}
+
+fn projection_title<'a>(
+    projection: &'a crate::node_system::analysis::EditorGraphProjectionDto,
+    node_type: &str,
+) -> &'a str {
+    projection
+        .nodes
+        .iter()
+        .find(|node| node.node_type_id.as_ref() == node_type)
+        .unwrap()
+        .display
+        .title
+        .as_ref()
+}
+
+#[test]
+fn resource_rename_updates_editor_title() {
+    let (state, root) = state_with_project_path("resource-title-renames");
+    crate::project::fixtures::write_project(&ProjectData::new(), root.to_string_lossy().as_ref())
+        .unwrap();
+    let function_path = state
+        .create_graph_resource_fixture("Calculate Sales", GraphDocumentKind::Function)
+        .unwrap();
+    load_graph(&state, &function_path).unwrap();
+    let event_path = GraphResourcePath::new("events/Titles.yssbi-event").unwrap();
+    let variable = state
+        .add_variable(
+            "Revenue",
+            crate::graph::value::DataType::Int64,
+            crate::graph::value::DataValue::Int64(1),
+            "",
+            crate::variable::VariableScope::Global,
+            Vec::new(),
+        )
+        .unwrap();
+    let variable_id = variable.id;
+    let csv = root.join("sales.csv");
+    std::fs::write(&csv, "amount\n1\n").unwrap();
+    let imported = crate::application::database::load_database(
+        &state,
+        &state.capture_project_session().unwrap().instance_id,
+        OperationId::new(),
+        crate::schema::DatabaseEngineDTO::Csv {
+            path: csv.to_string_lossy().into_owned(),
+            delimiter: ',',
+            has_header: true,
+            infer_schema_length: None,
+        },
+    )
+    .unwrap()
+    .data;
+    let database_id = imported.id;
+    let initial_database_name = imported.name;
+    let mut event = GraphResourceDocument::new("Titles", GraphDocumentKind::Event);
+    for (index, node_type, parameter, resource) in [
+        (
+            1,
+            "yssbi.project.function.call",
+            "target",
+            function_path.as_str().to_owned(),
+        ),
+        (
+            2,
+            "yssbi.project.variable.get",
+            "variable",
+            format!("variables/{variable_id}"),
+        ),
+        (
+            3,
+            "yssbi.dataframe.source.get",
+            "dataframe",
+            format!("databases/{database_id}"),
+        ),
+    ] {
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(index));
+        event.document.nodes.insert(
+            node_id,
+            DocumentNode {
+                id: node_id,
+                node_type: NodeTypeId::new(node_type).unwrap(),
+                position: crate::node_system::document::NodePosition { x: 0.0, y: 0.0 },
+                parameters: std::collections::BTreeMap::from([(
+                    crate::node_system::protocol::ParameterKey::new(parameter).unwrap(),
+                    serde_json::json!(resource),
+                )]),
+                user_label: None,
+            },
+        );
+    }
+    state.insert_graph(event_path.clone(), event).unwrap();
+
+    let initial = state.graph_projection(&event_path, "en-US").unwrap();
+    let initial_function_version =
+        compile_resources_from_data(&state.get_data().unwrap(), Default::default())
+            .unwrap()
+            .versions[&crate::node_system::analysis::ResourceKey::new(function_path.as_str())]
+            .clone();
+
+    assert_eq!(
+        projection_title(&initial, "yssbi.project.function.call"),
+        "Calculate Sales"
+    );
+    assert_eq!(
+        projection_title(&initial, "yssbi.project.variable.get"),
+        "Revenue"
+    );
+    assert_eq!(
+        projection_title(&initial, "yssbi.dataframe.source.get"),
+        initial_database_name
+    );
+
+    let renamed_function = state
+        .rename_graph_resource_fixture(
+            &state.project_instance_id(),
+            &function_path,
+            "Calculate Margin",
+        )
+        .unwrap()
+        .path;
+    state
+        .update_variable(
+            &variable_id,
+            Some("Net Revenue".into()),
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+    let database_revision = state
+        .database_authority_revisions
+        .read()
+        .unwrap()
+        .get(&database_id)
+        .copied()
+        .map(crate::node_system::document::ResourceRevision::new)
+        .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+    crate::application::database::rename_database(
+        &state,
+        &state.capture_project_session().unwrap().instance_id,
+        &database_id,
+        database_revision,
+        "Warehouse Sales",
+        OperationId::new(),
+    )
+    .unwrap();
+
+    let renamed = state.graph_projection(&event_path, "en-US").unwrap();
+    let renamed_function_version =
+        compile_resources_from_data(&state.get_data().unwrap(), Default::default())
+            .unwrap()
+            .versions[&crate::node_system::analysis::ResourceKey::new(renamed_function.as_str())]
+            .clone();
+    assert_ne!(renamed_function_version, initial_function_version);
+    assert_eq!(
+        projection_title(&renamed, "yssbi.project.function.call"),
+        "Calculate Margin"
+    );
+    assert_eq!(
+        projection_title(&renamed, "yssbi.project.variable.get"),
+        "Net Revenue"
+    );
+    assert_eq!(
+        projection_title(&renamed, "yssbi.dataframe.source.get"),
+        "Warehouse Sales"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn database_without_name_uses_localized_editor_title() {
+    let database_id = "opaque-database-id";
+    let mut data = ProjectData::new();
+    data.databases.insert(
+        database_id.into(),
+        crate::database::DatabaseDecl {
+            id: database_id.into(),
+            engine: crate::database::DatabaseEngine::InMemory {
+                name: database_id.into(),
+            },
+            schema_version: 1,
+            required: false,
+            name: None,
+        },
+    );
+    let resource =
+        crate::node_system::plan::ResourceId::new(format!("databases/{database_id}")).unwrap();
+    let resources = compile_resources_from_data(
+        &data,
+        std::collections::BTreeMap::from([(
+            resource,
+            vec![crate::schema::ColumnInfoDTO {
+                name: "amount".into(),
+                dtype: "Int64".into(),
+            }],
+        )]),
+    )
+    .unwrap();
+    let builtin = crate::node_system::catalog::build_builtin_node_system().unwrap();
+    let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(901));
+    let decompose_id = NodeId::from_uuid(uuid::Uuid::from_u128(902));
+    let mut document = crate::node_system::document::GraphDocument::default();
+    document.nodes.insert(
+        node_id,
+        DocumentNode {
+            id: node_id,
+            node_type: NodeTypeId::new("yssbi.dataframe.source.get").unwrap(),
+            position: crate::node_system::document::NodePosition { x: 0.0, y: 0.0 },
+            parameters: std::collections::BTreeMap::from([(
+                crate::node_system::protocol::ParameterKey::new("dataframe").unwrap(),
+                serde_json::json!(format!("databases/{database_id}")),
+            )]),
+            user_label: None,
+        },
+    );
+    document.nodes.insert(
+        decompose_id,
+        DocumentNode {
+            id: decompose_id,
+            node_type: NodeTypeId::new("yssbi.dataframe.decompose").unwrap(),
+            position: crate::node_system::document::NodePosition { x: 1.0, y: 0.0 },
+            parameters: std::collections::BTreeMap::new(),
+            user_label: None,
+        },
+    );
+    let connection_id = ConnectionId::from_uuid(uuid::Uuid::from_u128(903));
+    document.connections.insert(
+        connection_id,
+        DocumentConnection {
+            id: connection_id,
+            output: PortAddress::declared(node_id, PortKey::new("dataframe").unwrap()),
+            input: PortAddress::declared(decompose_id, PortKey::new("dataframe").unwrap()),
+            order: None,
+        },
+    );
+    let compiler = crate::node_system::compiler::GraphCompiler::with_resolvers(
+        builtin.registry.as_ref(),
+        &resources,
+        resources.schema_resolvers(),
+        crate::node_system::compiler::build_builtin_interface_resolvers(),
+    );
+    let result = compiler
+        .compile_snapshot(
+            &compiler.snapshot(
+                crate::node_system::document::GraphResourcePath(
+                    "events/database-title-fallback.yssbi-event".into(),
+                ),
+                &document,
+            ),
+            &crate::node_system::compiler::CompileCancellationToken::new(),
+        )
+        .unwrap();
+    let projection = crate::node_system::analysis::build_editor_graph_projection(
+        "events/database-title-fallback.yssbi-event",
+        &document,
+        &result.analysis,
+        &result.outcome,
+        builtin.registry.as_ref(),
+        &builtin.catalog.localization("en-US"),
+    )
+    .unwrap();
+    let node = projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id.as_ref() == node_id.to_string())
+        .unwrap();
+
+    assert_eq!(node.display.title.as_ref(), "Get DataFrame");
+    assert_ne!(node.display.title.as_ref(), database_id);
+    let decompose = projection
+        .nodes
+        .iter()
+        .find(|node| node.node_id.as_ref() == decompose_id.to_string())
+        .expect("Decompose remains projected for an unnamed database");
+    let amount = decompose
+        .ports
+        .iter()
+        .find(|port| port.display.instance_label.as_deref() == Some("amount"))
+        .expect("unnamed database schema still propagates to Decompose");
+    assert!(!amount.orphan);
+    assert_eq!(
+        amount
+            .resolved_type
+            .as_ref()
+            .and_then(|summary| summary.data_type.clone()),
+        Some(crate::graph::DataType::Int64),
+    );
+    assert!(node.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_ref() == "compiler.resource.display_name_unavailable"
+            && matches!(
+                &diagnostic.location,
+                crate::node_system::analysis::DiagnosticLocationDto::Node { node_id: id }
+                    if id.as_ref() == node_id.to_string()
+            )
+    }));
 }
 
 #[test]

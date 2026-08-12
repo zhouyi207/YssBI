@@ -110,6 +110,8 @@ function projection(
             key: 'factor',
             display: { title: 'Factor', description: null },
             editor: 'number',
+            presentation: 'detailPanel',
+            valueType: { kind: 'Float64' },
             multiline: false,
             value: 2,
             configuration: null,

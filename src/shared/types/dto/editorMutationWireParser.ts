@@ -3,6 +3,7 @@ import type {
   GraphDocumentPatchDto,
   GraphMutationResultDto,
   HistoryStatusDto,
+  TypeExprDto,
 } from './editorMutation';
 import type {
   DiagnosticLocationDto,
@@ -86,19 +87,42 @@ function isDynamicMemberLocator(value: unknown): boolean {
     && typeof value.field === 'string';
 }
 
+export function isTypeExprWire(value: unknown): value is TypeExprDto {
+  if (value === 'Unknown') return true;
+  if (!isRecord(value) || Object.keys(value).length !== 1) return false;
+  if (hasExactKeys(value, ['Concrete'])) return typeof value.Concrete === 'string';
+  if (hasExactKeys(value, ['Generic'])) return typeof value.Generic === 'string';
+  if (hasExactKeys(value, ['Applied'])) {
+    return isRecord(value.Applied)
+      && hasExactKeys(value.Applied, ['constructor', 'arguments'])
+      && typeof value.Applied.constructor === 'string'
+      && Array.isArray(value.Applied.arguments)
+      && value.Applied.arguments.every(isTypeExprWire);
+  }
+  return hasExactKeys(value, ['Union'])
+    && Array.isArray(value.Union)
+    && value.Union.every(isTypeExprWire);
+}
+
+function isLastKnownPortMetadata(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.label !== 'string') return false;
+  return hasExactKeys(value, ['label'])
+    || (hasExactKeys(value, ['label', 'value_type']) && isTypeExprWire(value.value_type));
+}
+
 function isDynamicPortBinding(value: unknown): boolean {
   if (!isRecord(value) || typeof value.order !== 'string') return false;
   if (value.kind === 'user_created') return hasExactKeys(value, ['kind', 'order']);
   if (value.kind === 'resolved') {
-    return hasExactKeys(value, ['kind', 'origin', 'order'])
-      && isDynamicMemberLocator(value.origin);
+    return isDynamicMemberLocator(value.origin)
+      && (hasExactKeys(value, ['kind', 'origin', 'order'])
+        || (hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])
+          && isLastKnownPortMetadata(value.last_known)));
   }
   return value.kind === 'orphan'
     && hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])
     && isDynamicMemberLocator(value.origin)
-    && isRecord(value.last_known)
-    && hasExactKeys(value.last_known, ['label'])
-    && typeof value.last_known.label === 'string';
+    && isLastKnownPortMetadata(value.last_known);
 }
 
 function isDocumentConnection(value: unknown): boolean {
@@ -271,13 +295,17 @@ function isParameterConfiguration(value: unknown): boolean {
 
 function isParameterEditor(value: unknown): boolean {
   return isRecord(value)
-    && hasExactKeys(value, ['key', 'display', 'editor', 'multiline', 'value', 'configuration'])
+    && hasExactKeys(value, [
+      'key', 'display', 'editor', 'presentation', 'valueType', 'multiline', 'value', 'configuration',
+    ])
     && typeof value.key === 'string'
     && isRecord(value.display)
     && hasExactKeys(value.display, ['title', 'description'])
     && typeof value.display.title === 'string'
     && isNullableString(value.display.description)
     && ['auto', 'text', 'number', 'toggle', 'select', 'resource'].includes(value.editor as string)
+    && ['detailPanel', 'inlineAndDetail'].includes(value.presentation as string)
+    && (value.valueType === null || isDataTypeBackendFormat(value.valueType))
     && typeof value.multiline === 'boolean'
     && isParameterConfiguration(value.configuration);
 }

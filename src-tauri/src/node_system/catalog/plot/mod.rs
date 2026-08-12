@@ -259,6 +259,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         },
         interface: assembled_interface(spec.id, ports, vec![], vec![], vec![])?,
         parameters: assembled_parameters(spec.id, vec![])?,
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::EnvironmentDependent,
             purity: Purity::Effectful,

@@ -1,7 +1,8 @@
 use super::*;
 use crate::node_system::analysis::{
-    CompileId, DiagnosticLocation, NOOP_TRACE_SINK, ProjectSessionId, ResourceKey, ResourceVersion,
-    SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanSpec, TraceSink, TraceSpan,
+    CompileId, DiagnosticLocation, DiagnosticSeverity, NOOP_TRACE_SINK, ProjectSessionId,
+    ResourceKey, ResourceVersion, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanSpec, TraceSink,
+    TraceSpan,
 };
 use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
@@ -603,6 +604,10 @@ fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
             )])
         }
 
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            self.function_document(path).map(|_| "Test function")
+        }
+
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
             (path == &self.path).then_some(&self.function)
         }
@@ -698,6 +703,10 @@ fn nested_blocking_callee_projects_to_root_call_with_exact_basis() {
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
             self.versions.clone()
+        }
+
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            self.function_document(path).map(|_| "Test function")
         }
 
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
@@ -807,6 +816,10 @@ fn locally_invalid_callee_still_discovers_complete_outgoing_call_closure() {
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
             self.versions.clone()
+        }
+
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            self.function_document(path).map(|_| "Test function")
         }
 
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
@@ -956,6 +969,10 @@ fn mutual_call_scc_propagates_external_blocking_to_every_root_site() {
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
             self.versions.clone()
+        }
+
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            self.function_document(path).map(|_| "Test function")
         }
 
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
@@ -1390,6 +1407,7 @@ fn test_protocol(
         },
         interface: NodeInterfaceProtocol::new(ports, type_parameters, constraints).unwrap(),
         parameters: ParameterSchema::default(),
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
             purity: Purity::Pure,
@@ -1704,6 +1722,7 @@ fn execution_semantics_version_is_sensitive_to_registry_and_parameters() {
         default_value: None,
         constraints: vec![ParameterConstraint::Required],
         editor: ParameterEditorSpec::Auto,
+        presentation: ParameterPresentation::DetailPanel,
     }])
     .unwrap();
     let mut first_registry = TestRegistry::new(vec![protocol.clone()]);
@@ -1911,6 +1930,7 @@ fn bind_resolved_function_port(
                 parameter: parameter.clone(),
             },
             order: OrderKey(order.into()),
+            last_known: crate::node_system::document::LastKnownPortMetadata::default(),
         },
     );
     address
@@ -1985,6 +2005,7 @@ fn non_concrete_parameter_shapes_block_when_they_cannot_be_prepared() {
             default_value: None,
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::Auto,
+            presentation: ParameterPresentation::DetailPanel,
         }])
         .unwrap();
         let node_type = protocol.type_id.clone();
@@ -2079,6 +2100,14 @@ fn unbound_input_diagnostic_carries_the_exact_port() {
         diagnostic.arguments,
         BTreeMap::from([(Box::from("port"), address.to_string().into())])
     );
+    assert_eq!(diagnostic.severity, DiagnosticSeverity::Warning);
+    let basis = result.execution_basis.as_ref().expect("execution basis");
+    assert!(result.plan.is_none());
+    assert!(matches!(result.outcome, CompilationOutcome::Succeeded));
+    let default_plan = basis
+        .derive_plan(&ExecutionDemand::Default)
+        .expect("default demand ignores an unbound orphan");
+    assert!(default_plan.operations.is_empty());
 }
 
 struct FragmentLowerer {
@@ -2944,6 +2973,89 @@ fn compiled_demand_basis() -> ExecutionPlanBasis {
         .expect("demand fixture has a basis")
 }
 
+#[test]
+fn demand_specialization_ignores_unbound_inputs_outside_the_retained_closure() {
+    let (registry, mut graph) = demand_fixture();
+    graph
+        .connections
+        .remove(&ConnectionId::from_uuid(Uuid::from_u128(11)));
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+
+    let result = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap();
+
+    assert!(
+        matches!(result.outcome, CompilationOutcome::Succeeded),
+        "unexpected outcome {:?} with diagnostics {:?}",
+        result.outcome,
+        result.analysis.diagnostics
+    );
+    assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
+        diagnostic.code.as_str() == "compiler.input.unbound"
+            && diagnostic.primary
+                == DiagnosticLocation::Port(PortAddress::declared(node_id(4), key("in")))
+    }));
+    let basis = result
+        .execution_basis
+        .expect("unbound orphan preserves basis");
+    basis
+        .derive_plan(&ExecutionDemand::Outputs {
+            outputs: Box::new([demand_output("events/main", 2, "out")]),
+            include_default_results: false,
+        })
+        .expect("unbound input outside the retained closure must not block execution");
+}
+
+#[test]
+fn pin_preview_ignores_unbound_inputs_outside_the_retained_closure() {
+    let (registry, mut graph) = demand_fixture();
+    graph
+        .connections
+        .remove(&ConnectionId::from_uuid(Uuid::from_u128(11)));
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let basis = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap()
+        .execution_basis
+        .expect("unbound orphan preserves preview basis");
+
+    basis
+        .derive_plan(&ExecutionDemand::PinPreview {
+            output: demand_output("events/main", 2, "out"),
+            generation: 7,
+        })
+        .expect("preview ignores unbound inputs outside its retained closure");
+}
+
+#[test]
+fn demand_specialization_rejects_a_required_unbound_input_with_its_port() {
+    let (registry, mut graph) = demand_fixture();
+    graph
+        .connections
+        .remove(&ConnectionId::from_uuid(Uuid::from_u128(11)));
+    let compiler = GraphCompiler::new(&registry, &Resources);
+    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let basis = compiler
+        .compile_snapshot(&snapshot, &CompileCancellationToken::new())
+        .unwrap()
+        .execution_basis
+        .expect("unbound input preserves demand-specializable basis");
+    let expected = PortAddress::declared(node_id(4), key("in"));
+
+    assert_eq!(
+        basis
+            .derive_plan(&ExecutionDemand::Outputs {
+                outputs: Box::new([demand_output("events/main", 4, "out")]),
+                include_default_results: false,
+            })
+            .unwrap_err(),
+        DemandPlanError::UnboundInput(expected)
+    );
+}
+
 fn append_control_region(basis: &mut ExecutionPlanBasis, region: StructuredControlRegion) {
     let StructuredControlRegion::Sequence(steps) = &mut basis.root_region else {
         panic!("demand fixture root is a sequence")
@@ -3400,6 +3512,7 @@ fn invalid_requested_outputs_are_rejected_before_plan_construction() {
             DemandPlanError::InputPort(_) => "input_port",
             DemandPlanError::ControlPort(_) => "control_port",
             DemandPlanError::EffectPort(_) => "effect_port",
+            DemandPlanError::UnboundInput(_) => "unbound_input",
             DemandPlanError::InvalidDerivedPlan(_) => "invalid_derived_plan",
             DemandPlanError::CanonicalEncoding(_) => "canonical_encoding",
         };
@@ -3982,6 +4095,7 @@ fn determinism_protocols() -> Vec<NodeProtocol> {
             default_value: None,
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::Auto,
+            presentation: ParameterPresentation::DetailPanel,
         },
         ParameterSpec {
             key: ParameterKey::new("beta").unwrap(),
@@ -3991,6 +4105,7 @@ fn determinism_protocols() -> Vec<NodeProtocol> {
             default_value: None,
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::Auto,
+            presentation: ParameterPresentation::DetailPanel,
         },
     ])
     .unwrap();
@@ -4564,6 +4679,10 @@ impl ResourceSnapshot for AnalysisReadMatrixResources {
         self.versions.clone()
     }
 
+    fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+        self.functions.contains_key(path).then_some("Test function")
+    }
+
     fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
         self.functions.get(path)
     }
@@ -4577,6 +4696,10 @@ impl ResourceSnapshot for AnalysisReadMatrixResources {
         id: &crate::variable::VariableId,
     ) -> Option<&crate::variable::VariableInstance> {
         self.variables.get(id)
+    }
+
+    fn database_name(&self, id: &str) -> Option<&str> {
+        self.databases.contains_key(id).then_some("Test database")
     }
 
     fn database_schema(&self, id: &str) -> Option<&[crate::schema::ColumnInfoDTO]> {
@@ -5612,6 +5735,7 @@ fn schema_filter_project_and_rename_are_evaluated_into_facts() {
         default_value: None,
         constraints: vec![ParameterConstraint::Required],
         editor: ParameterEditorSpec::Auto,
+        presentation: ParameterPresentation::DetailPanel,
     }])
     .unwrap();
     let project = test_protocol(
@@ -6088,6 +6212,47 @@ fn print_protocol_default_lowers_to_effective_runtime_binding() {
         Some(Value::String("Hello, World!".into()))
     );
     plan.validate().unwrap();
+}
+
+#[test]
+fn unconnected_branch_condition_uses_the_protocol_default() {
+    use crate::node_system::catalog::build_builtin_node_system;
+
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let mut graph = builtin_graph_with_nodes(&[
+        (1, "yssbi.project.event.begin"),
+        (2, "yssbi.control.branch"),
+        (3, "yssbi.constant.string"),
+        (4, "yssbi.debug.print"),
+    ]);
+    connect(&mut graph, 100, 1, "then", 2, "enter");
+    connect(&mut graph, 101, 2, "true", 4, "enter");
+    connect(&mut graph, 102, 3, "value", 4, "message");
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+
+    assert!(
+        matches!(result.outcome, CompilationOutcome::Succeeded),
+        "unexpected outcome {:?} with diagnostics {:?}",
+        result.outcome,
+        result.analysis.diagnostics
+    );
+    let plan = result
+        .plan
+        .expect("Branch protocol default makes a full plan");
+    let StructuredControlRegion::Sequence(steps) = &plan.root_region else {
+        panic!("event root is a sequence")
+    };
+    let condition = steps
+        .iter()
+        .find_map(|step| match step {
+            ControlStep::Region(region) => match region.as_ref() {
+                StructuredControlRegion::If { condition, .. } => Some(*condition),
+                _ => None,
+            },
+            ControlStep::Operation(_) => None,
+        })
+        .expect("event plan contains Branch");
+    assert_eq!(plan.bound_values.get(&condition), Some(&Value::Bool(true)));
 }
 
 #[test]
@@ -7119,6 +7284,10 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
             )])
         }
 
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            self.function_document(path).map(|_| "Test function")
+        }
+
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
             (path == &self.path).then_some(&self.function)
         }
@@ -7602,6 +7771,10 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
                 .collect()
         }
 
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            self.function_document(path).map(|_| "Test function")
+        }
+
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
             self.functions.get(path)
         }
@@ -8024,6 +8197,10 @@ fn function_abi_managed_role_error_emits_expected_role_and_actual_count() {
             )])
         }
 
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            self.function_document(path).map(|_| "Test function")
+        }
+
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
             (path == &self.path).then_some(&self.function)
         }
@@ -8113,6 +8290,10 @@ fn function_abi_rejects_wrong_dynamic_member_direction() {
                 ResourceKey::new(self.path.0.clone()),
                 ResourceVersion::new("fixture-v1"),
             )])
+        }
+
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            self.function_document(path).map(|_| "Test function")
         }
 
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
@@ -8236,6 +8417,10 @@ fn call_closure_finalizes_nested_structured_result_productions_before_caller_low
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
             self.versions.clone()
+        }
+
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            self.function_document(path).map(|_| "Test function")
         }
 
         fn function_document(&self, path: &GraphResourcePath) -> Option<&FunctionDocument> {
@@ -8574,6 +8759,7 @@ fn structured_function_plan(
         value_count,
         operations: Box::new([]),
         value_sources,
+        bound_values: BTreeMap::new(),
         value_dependencies,
         root_region,
         effect_dependencies: Box::new([]),

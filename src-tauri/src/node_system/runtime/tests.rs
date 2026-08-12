@@ -130,6 +130,7 @@ fn plan(
         },
         value_count,
         value_sources: Box::new([]),
+        bound_values: BTreeMap::new(),
         operations: operations.into_boxed_slice(),
         value_dependencies: Box::new([]),
         root_region,
@@ -2341,6 +2342,48 @@ fn stable_output_ready_is_published_before_completion() {
         .position(|event| event.kind == RunEventKind::RunCompleted)
         .expect("run completion must be published");
     assert!(output_index < completion_index);
+}
+
+#[test]
+fn if_uses_a_plan_bound_condition_value() {
+    let counts = Arc::new(Mutex::new(BTreeMap::<&'static str, usize>::new()));
+    let mut kernels = KernelRegistry::new();
+    for name in ["then", "else"] {
+        let counts = counts.clone();
+        kernels
+            .register(
+                id(name, KernelHandle::new),
+                FnKernel(move |_: &[RuntimeValue]| {
+                    *counts.lock().unwrap().entry(name).or_default() += 1;
+                    Ok(Vec::new())
+                }),
+            )
+            .unwrap();
+    }
+    let mut execution_plan = plan(
+        vec![operation("then", &[], &[]), operation("else", &[], &[])],
+        1,
+        StructuredControlRegion::If {
+            condition: ValueRef::new(0),
+            then_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+                ControlStep::Operation(OperationIndex::new(0)),
+            ]))),
+            else_region: Box::new(StructuredControlRegion::Sequence(Box::new([
+                ControlStep::Operation(OperationIndex::new(1)),
+            ]))),
+            results: Box::new([]),
+        },
+    );
+    execution_plan
+        .bound_values
+        .insert(ValueRef::new(0), Value::Bool(true));
+
+    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(counts.lock().unwrap().get("then"), Some(&1));
+    assert_eq!(counts.lock().unwrap().get("else"), None);
 }
 
 #[test]

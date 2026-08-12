@@ -122,6 +122,8 @@ pub struct ExecutionPlan {
     pub operations: Box<[PlannedOperation]>,
     /// Values supplied without a producing operation in this plan.
     pub value_sources: Box<[PlanValueSource]>,
+    /// Scalar values bound directly to plan-global references used by structured control.
+    pub bound_values: BTreeMap<ValueRef, Value>,
     pub value_dependencies: Box<[ValueDependency]>,
     pub root_region: StructuredControlRegion,
     pub effect_dependencies: Box<[EffectDependency]>,

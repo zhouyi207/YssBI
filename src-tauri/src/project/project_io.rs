@@ -1503,6 +1503,7 @@ mod tests {
             DynamicPortBinding::Resolved {
                 origin: locator.clone(),
                 order: OrderKey("stable-order".into()),
+                last_known: crate::node_system::document::LastKnownPortMetadata::default(),
             },
         );
         document.connections.insert(

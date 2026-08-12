@@ -16,6 +16,8 @@ const delta = {
   payload: { operations: [] },
 };
 const operationId = '00000000-0000-0000-0000-000000000401';
+const nodeId = '00000000-0000-0000-0000-000000000101';
+const instanceId = '00000000-0000-0000-0000-000000000102';
 const functionPath = 'functions/Sales Report 销售预测.yssbi-function';
 const functionSignature = {
   parameters: [{ id: 'sales', name: 'Observed sales', type_name: 'Float64' }],
@@ -54,6 +56,40 @@ function worksheetResourceResult(
       toRevision,
       causedBy: operationId,
       payload,
+    }],
+  };
+}
+
+function graphResourceResult(value_type: unknown) {
+  return {
+    ...resourceResult,
+    projectionStatus: {
+      status: 'incomplete',
+      invalidatedGraphPaths: ['events/Main.yssbi-event'],
+    },
+    deltas: [{
+      resource: { kind: 'graph', key: 'events/Main.yssbi-event' },
+      fromRevision: 0,
+      toRevision: 1,
+      causedBy: operationId,
+      payload: {
+        kind: 'graph',
+        patch: {
+          operations: [{
+            operation: 'insert_port_binding',
+            address: {
+              node_id: nodeId,
+              port: { kind: 'instance', template: 'columns', instance_id: instanceId },
+            },
+            binding: {
+              kind: 'orphan',
+              origin: { kind: 'schema_field', source: 'databases/main', field: 'amount' },
+              order: 'a',
+              last_known: { label: 'Amount', value_type },
+            },
+          }],
+        },
+      },
     }],
   };
 }
@@ -199,6 +235,86 @@ describe('project event wire parser', () => {
   it('parses an exact function replacement with Rust-resolved editor pins', () => {
     const result = functionResourceResult();
     expect(parseResourceMutationCommittedPayload({ result })).toEqual({ result });
+  });
+
+  it('accepts and carries structured orphan value_type in resource graph patches', () => {
+    const valueTypes = [
+      { Concrete: 'core.float64' },
+      { Applied: { constructor: 'core.array', arguments: [{ Generic: 'element' }] } },
+      { Union: [{ Concrete: 'core.int64' }, 'Unknown'] },
+      'Unknown',
+    ];
+
+    for (const value_type of valueTypes) {
+      const result = graphResourceResult(value_type);
+      expect(parseResourceMutationCommittedPayload({ result })).toEqual({ result });
+    }
+  });
+
+  it('rejects malformed or extended orphan value_type in resource graph patches', () => {
+    const malformed = [
+      null,
+      'core.float64',
+      { Concrete: 'core.float64', extra: true },
+      { Applied: { constructor: 'core.array', arguments: [] }, extra: true },
+      { Union: 'core.float64' },
+    ];
+
+    for (const value_type of malformed) {
+      expect(() => parseResourceMutationCommittedPayload({
+        result: graphResourceResult(value_type),
+      })).toThrow('resource deltas');
+    }
+  });
+
+  it('accepts resolved last_known metadata and historical resolved bindings without it', () => {
+    for (const last_known of [
+      { label: 'Amount', value_type: { Concrete: 'core.float64' } },
+      { label: 'Amount' },
+    ]) {
+      const result = graphResourceResult({ Concrete: 'core.float64' }) as Record<string, any>;
+      const binding = result.deltas[0].payload.patch.operations[0].binding;
+      result.deltas[0].payload.patch.operations[0].binding = {
+        kind: 'resolved',
+        origin: binding.origin,
+        order: binding.order,
+        last_known,
+      };
+
+      expect(parseResourceMutationCommittedPayload({ result })).toEqual({ result });
+    }
+
+    const result = graphResourceResult({ Concrete: 'core.float64' }) as Record<string, any>;
+    const binding = result.deltas[0].payload.patch.operations[0].binding;
+    result.deltas[0].payload.patch.operations[0].binding = {
+      kind: 'resolved',
+      origin: binding.origin,
+      order: binding.order,
+    };
+    expect(parseResourceMutationCommittedPayload({ result })).toEqual({ result });
+  });
+
+  it('rejects malformed resolved last_known metadata', () => {
+    const result = graphResourceResult({ Concrete: 'core.float64' }) as Record<string, any>;
+    const binding = result.deltas[0].payload.patch.operations[0].binding;
+    result.deltas[0].payload.patch.operations[0].binding = {
+      kind: 'resolved',
+      origin: binding.origin,
+      order: binding.order,
+      last_known: { label: 'Amount', value_type: { Concrete: 42 } },
+    };
+
+    expect(() => parseResourceMutationCommittedPayload({ result })).toThrow();
+  });
+
+  it('accepts label-only historical orphan metadata without inferring value_type', () => {
+    const result = graphResourceResult({ Concrete: 'core.float64' }) as Record<string, any>;
+    delete result.deltas[0].payload.patch.operations[0].binding.last_known.value_type;
+
+    const parsed = parseResourceMutationCommittedPayload({ result });
+    expect(parsed).toEqual({ result });
+    expect((parsed.result.deltas[0].payload as Record<string, any>)
+      .patch.operations[0].binding.last_known).not.toHaveProperty('value_type');
   });
 
   it('rejects a function replacement revision that disagrees with its function delta', () => {
