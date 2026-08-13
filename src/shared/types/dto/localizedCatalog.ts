@@ -5,6 +5,8 @@ import {
 
 export interface LocalizedCategoryDto {
   categoryId: string;
+  parentCategoryId: string | null;
+  order: number;
   title: string;
   searchText: string;
 }
@@ -74,8 +76,12 @@ function isStringArray(value: unknown): value is string[] {
 function isLocalizedCategory(value: unknown): value is LocalizedCategoryDto {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const candidate = value as Record<string, unknown>;
-  return hasExactKeys(candidate, ['categoryId', 'title', 'searchText'])
+  return hasExactKeys(candidate, [
+    'categoryId', 'parentCategoryId', 'order', 'title', 'searchText',
+  ])
     && typeof candidate.categoryId === 'string'
+    && (candidate.parentCategoryId === null || typeof candidate.parentCategoryId === 'string')
+    && Number.isSafeInteger(candidate.order)
     && typeof candidate.title === 'string'
     && typeof candidate.searchText === 'string';
 }

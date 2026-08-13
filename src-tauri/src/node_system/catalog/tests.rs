@@ -198,6 +198,27 @@ fn english_and_chinese_project_the_same_stable_node_ids() {
 }
 
 #[test]
+fn localized_categories_preserve_registry_hierarchy_and_order() {
+    let builtin = build_builtin_node_system().unwrap();
+    let localized = builtin.catalog.localize(&builtin.registry, "en-US");
+    let category = |id: &str| {
+        localized
+            .categories
+            .iter()
+            .find(|category| category.category_id.as_ref() == id)
+            .unwrap()
+    };
+
+    let statistics = category("statistics");
+    assert_eq!(statistics.parent_category_id, None);
+    assert_eq!(statistics.order, 70);
+
+    let regression = category("statistics.regression");
+    assert_eq!(regression.parent_category_id.as_deref(), Some("statistics"));
+    assert_eq!(regression.order, 71);
+}
+
+#[test]
 fn changing_locale_does_not_change_registry_fingerprint() {
     let builtin = build_builtin_node_system().unwrap();
     let registry = builtin.registry;

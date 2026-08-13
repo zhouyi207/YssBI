@@ -46,7 +46,7 @@ fn external_project_event_executes_when_diagnostic_path_is_configured() {
     state.activate_project_fixture(root, data);
     let graph_path = GraphResourcePath::new(graph_path).unwrap();
     load_graph(&state, &graph_path).unwrap();
-    let report_node = state
+    let view_node = state
         .project_data
         .read()
         .unwrap()
@@ -56,23 +56,20 @@ fn external_project_event_executes_when_diagnostic_path_is_configured() {
         .document
         .nodes
         .values()
-        .find(|node| node.node_type.as_str() == "yssbi.statistics.ols.summary")
+        .find(|node| node.node_type.as_str() == "yssbi.debug.view")
         .map(|node| node.id)
-        .expect("external diagnostic graph must contain OLS Summary");
-    let report_output = crate::node_system::plan::GraphOutputRef {
+        .expect("external diagnostic graph must contain View Data");
+    let view_output = crate::node_system::plan::GraphOutputRef {
         graph_path: crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
         port: crate::node_system::document::PortAddress::declared(
-            report_node,
-            crate::node_system::protocol::PortKey::new("report").unwrap(),
+            view_node,
+            crate::node_system::protocol::PortKey::new("snapshot").unwrap(),
         ),
     };
     let events = Events::default();
     let result = state.execute_graph_for_current_project_for_test(
         &graph_path,
-        &crate::node_system::plan::ExecutionDemand::PinPreview {
-            output: report_output,
-            generation: 1,
-        },
+        &crate::node_system::plan::ExecutionDemand::Default,
         &events,
     );
     assert!(
@@ -87,21 +84,31 @@ fn external_project_event_executes_when_diagnostic_path_is_configured() {
         .find_map(|event| match &event.kind {
             crate::node_system::runtime::RunEventKind::OutputReady {
                 output, source_id, ..
-            } if matches!(
-                &output.port.port,
-                crate::node_system::document::PortRef::Declared { key }
-                    if key.as_str() == "report"
-            ) =>
-            {
-                Some(*source_id)
-            }
+            } if output == &view_output => Some(*source_id),
             _ => None,
         })
-        .expect("OLS Summary report output must be published");
+        .expect("View Data snapshot output must be published");
     let descriptor = state
         .result_source_descriptor(report_source)
         .unwrap()
         .expect("published report descriptor must remain available");
+    let snapshot = state
+        .result_source_value(report_source)
+        .unwrap()
+        .expect("published report value must remain available");
+    let values = match snapshot.as_ref() {
+        crate::node_system::runtime::ArtifactSnapshot::RuntimeArtifact(artifact) => artifact
+            .in_memory_values()
+            .expect("View Data report must remain in memory"),
+        other => panic!("View Data must publish a runtime artifact, got {other:?}"),
+    };
+    let ipc_json = values
+        .iter()
+        .map(crate::commands::command_node_system::result_source_value_to_json)
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(ipc_json.len(), 1);
+    assert_eq!(ipc_json[0]["title"], "OLS Summary");
     assert_eq!(
         descriptor.presentation,
         crate::node_system::runtime::ResultSourcePresentation::Report {

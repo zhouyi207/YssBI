@@ -616,8 +616,8 @@ fn execute_operation(
             let result = protocol_value(
                 serde_json::to_value(&fit).map_err(|error| KernelError::new(error.to_string()))?,
             )?;
+            let report = protocol_value(crate::sci::api::node_statistics::regression_report(&fit))?;
             emit_fit_log(fit.family, &fit.metadata);
-            let report = Value::String(format!("{} fit from yss_sci", fit.family).into());
             Ok(vec![
                 RuntimeValue::Scalar(result),
                 RuntimeValue::Scalar(report),

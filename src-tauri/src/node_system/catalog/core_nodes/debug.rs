@@ -90,7 +90,7 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
             source,
         }
     })?;
-    fragment.nodes.push(leaf(
+    fragment.nodes.push(result_leaf(
         protocol(
             ID,
             "debug",
@@ -116,6 +116,8 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
             effectful(),
         )?,
         ID,
+        "snapshot",
+        "snapshot",
     ));
     Ok(())
 }

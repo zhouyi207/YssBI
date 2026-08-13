@@ -55,6 +55,7 @@ export enum LogType {
     System = "system",
     Graph = "graph",
     Data = "data",
+    Notify = "notify",
 }
 
 /**

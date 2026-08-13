@@ -104,6 +104,42 @@ fn adapter_operation(
     }
 }
 
+#[test]
+fn view_data_inherits_report_presentation_from_its_input() {
+    let mut summary = operation("summary", &[], &[0]);
+    summary.source_node_type_id = NodeTypeId::new("yssbi.statistics.ols.summary").unwrap();
+    let mut view = operation("view", &[1], &[2]);
+    view.source_node_type_id = NodeTypeId::new("yssbi.debug.view").unwrap();
+    let mut execution_plan = plan(
+        vec![summary, view],
+        3,
+        StructuredControlRegion::Sequence(Box::new([])),
+    );
+    execution_plan.value_dependencies = Box::new([ValueDependency {
+        source: ValueRef::new(0),
+        destination: ValueRef::new(1),
+    }]);
+    let output = GraphOutputRef {
+        graph_path: execution_plan.provenance.graph_path.clone(),
+        port: PortAddress::declared(
+            execution_plan.operations[1].source_node_id,
+            PortKey::new("snapshot").unwrap(),
+        ),
+    };
+    execution_plan.results = Box::new([PlanResult {
+        name: "view".into(),
+        output: output.clone(),
+        value: ValueRef::new(2),
+    }]);
+
+    assert_eq!(
+        super::scheduler::result_presentation(&execution_plan, &output),
+        ResultSourcePresentation::Report {
+            report: ResultReportKind::OlsSummary,
+        },
+    );
+}
+
 fn publish_graph_results(plan: &mut ExecutionPlan) {
     plan.publications = plan
         .results

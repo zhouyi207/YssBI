@@ -737,6 +737,39 @@ fn trace_span_wire_contract(registry: &NodeRegistry) -> Value {
     json!([TraceSpanDto::from(run), TraceSpanDto::from(cleanup)])
 }
 
+fn ols_summary_report_contract() -> Value {
+    let metadata = crate::sci::models::regression::StatisticalObservationMetadata {
+        original_observation_count: 3,
+        used_observation_count: 3,
+        dropped_null_count: 0,
+        dropped_nan_count: 0,
+        missing_value_policy: crate::project::StatisticalMissingValuePolicy::Listwise,
+        missing_value_policy_source:
+            crate::sci::models::regression::StatisticalSettingSource::Project,
+        effective_convergence_tolerance: 1e-12,
+        convergence_tolerance_source:
+            crate::sci::models::regression::StatisticalSettingSource::Project,
+        convergence_tolerance_consumed: false,
+    };
+    let fit = crate::sci::api::node_statistics::RegressionFit {
+        family: "ols",
+        coefficients: vec![0.5, 0.75],
+        fitted: vec![1.25, 2.0, 2.75],
+        residuals: vec![-0.25, 0.0, 0.25],
+        statistics: json!({
+            "r2": 0.875,
+            "adjustedR2": 0.75,
+            "fStatistic": 7.0,
+            "fPValue": 0.1,
+            "standardErrors": [0.25, 0.5],
+            "pValues": [0.2, 0.1],
+            "conditionNumber": 2.0,
+        }),
+        metadata,
+    };
+    crate::sci::api::node_statistics::regression_report(&fit)
+}
+
 fn contracts() -> BTreeMap<&'static str, Value> {
     let builtin = build_builtin_node_system().expect("built-in node system must validate");
     let registry = builtin.registry;
@@ -757,6 +790,7 @@ fn contracts() -> BTreeMap<&'static str, Value> {
         ),
         ("i18n-inventory.json", i18n_contract(&registry)),
         ("localized-catalog.json", localized_catalog),
+        ("ols-summary-report.json", ols_summary_report_contract()),
         (
             "catalog-search-wire.json",
             catalog_search_wire_contract(&registry, &catalog),

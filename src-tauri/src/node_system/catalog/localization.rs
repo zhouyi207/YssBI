@@ -65,6 +65,8 @@ impl LocalizedCatalog {
 #[serde(rename_all = "camelCase")]
 pub struct LocalizedCategoryDto {
     pub category_id: Box<str>,
+    pub parent_category_id: Option<Box<str>>,
+    pub order: i32,
     pub title: Box<str>,
     pub search_text: Box<str>,
 }
@@ -338,6 +340,11 @@ impl BuiltinCatalog {
                 let title = self.text(&locale, &category.title_key);
                 LocalizedCategoryDto {
                     category_id: id.as_str().into(),
+                    parent_category_id: category
+                        .parent
+                        .as_ref()
+                        .map(|parent| parent.as_str().into()),
+                    order: category.order,
                     search_text: search([title.as_ref()]),
                     title,
                 }

@@ -6,6 +6,7 @@ export const LOG_TYPE_LABELS: Record<string, string> = {
   system: "SYS",
   graph: "GRAPH",
   data: "DATA",
+  notify: "NOTIFY",
 };
 
 export const LOG_TYPE_BACKGROUND: Record<string, string> = {
@@ -14,6 +15,7 @@ export const LOG_TYPE_BACKGROUND: Record<string, string> = {
   system: "bg-cyan-500/10",
   graph: "bg-orange-500/10",
   data: "bg-pink-500/10",
+  notify: "bg-amber-500/10",
 };
 
 export function getLogLevelColor(level: LogLevel) {
@@ -45,6 +47,7 @@ export function getLogTypeColor(type: LogType) {
     case "system": return "text-cyan-400";
     case "graph": return "text-orange-400";
     case "data": return "text-pink-400";
+    case "notify": return "text-amber-400";
     default: return "text-muted-foreground";
   }
 }

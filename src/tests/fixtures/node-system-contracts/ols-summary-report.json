@@ -1,0 +1,62 @@
+{
+  "betas": [
+    0.5,
+    0.75
+  ],
+  "coefficients": [
+    {
+      "coef": 0.5,
+      "confidence_interval_0.025": 0.01,
+      "confidence_interval_0.975": 0.99,
+      "is_significant": false,
+      "p_value": 0.2,
+      "std_err": 0.25,
+      "t_value": 2.0,
+      "variable": "_cons"
+    },
+    {
+      "coef": 0.75,
+      "confidence_interval_0.025": -0.23,
+      "confidence_interval_0.975": 1.73,
+      "is_significant": false,
+      "p_value": 0.1,
+      "std_err": 0.5,
+      "t_value": 1.5,
+      "variable": "x1"
+    }
+  ],
+  "diagnostic_info": {
+    "cond_no": 2.0,
+    "fitted_values": [
+      1.25,
+      2.0,
+      2.75
+    ],
+    "residuals": [
+      -0.25,
+      0.0,
+      0.25
+    ]
+  },
+  "endog_name": "response",
+  "model_basic_info": {
+    "adj_r_squared": 0.75,
+    "covariance_type": "nonrobust",
+    "df_model": 1,
+    "df_residual": 1,
+    "df_total": 2,
+    "f_statistic": 7.0,
+    "method": "Least Squares",
+    "model_type": "OLS",
+    "ms_model": 1.125,
+    "ms_residual": 0.125,
+    "ms_total": 0.625,
+    "num_observation": 3,
+    "prob_f_statistic": 0.1,
+    "r_squared": 0.875,
+    "ss_model": 1.125,
+    "ss_residual": 0.125,
+    "ss_total": 1.25
+  },
+  "title": "OLS Summary"
+}

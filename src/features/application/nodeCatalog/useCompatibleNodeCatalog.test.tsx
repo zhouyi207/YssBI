@@ -37,7 +37,7 @@ function catalog(projectInstanceId: string, itemId: string): LocalizedCatalogDto
     registryFingerprint: '0'.repeat(64),
     resourcePublicationRevision: 7,
     locale: 'en-US',
-    categories: [{ categoryId: 'compatible', title: 'Compatible', searchText: 'compatible' }],
+    categories: [{ categoryId: 'compatible', parentCategoryId: null, order: 0, title: 'Compatible', searchText: 'compatible' }],
     items: [{
       nodeTypeId: itemId,
       title: itemId,

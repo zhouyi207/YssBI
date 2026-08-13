@@ -1473,6 +1473,36 @@ fn test_protocol(
 }
 
 #[test]
+fn semantic_graph_preserves_protocol_port_order_for_kernel_abi() {
+    let protocol = test_protocol(
+        "ordered_outputs",
+        vec![
+            data_port("z_result", PortDirection::Output, TypeExpr::Unknown, None),
+            data_port("a_report", PortDirection::Output, TypeExpr::Unknown, None),
+        ],
+        vec![],
+        vec![],
+    );
+    let registry = TestRegistry::new(vec![protocol]);
+    let result = GraphCompiler::new(&registry, &Resources).compile(&document(
+        NodeTypeId::new("yssbi.test.ordered_outputs").unwrap(),
+    ));
+    let semantic = result.semantic.expect("ordered output graph must compile");
+    let keys = semantic.nodes[0]
+        .ports
+        .iter()
+        .map(|port| match &port.address.port {
+            crate::node_system::document::PortRef::Declared { key } => key.as_str(),
+            crate::node_system::document::PortRef::Instance { .. } => {
+                panic!("expected declared output")
+            }
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(keys, ["z_result", "a_report"]);
+}
+
+#[test]
 fn effective_cache_policy_disables_every_effect_semantics_independently() {
     for effects in [EffectSemantics::Ordered, EffectSemantics::Exclusive] {
         assert_eq!(

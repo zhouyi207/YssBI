@@ -23,7 +23,7 @@ export interface LogStore {
 
 const initialFilter: LogFilter = {
   levels: new Set(['trace', 'debug', 'info', 'warn', 'error'] as LogLevel[]),
-  types: new Set(['application', 'execution', 'system', 'graph', 'data'] as LogType[]),
+  types: new Set(['application', 'execution', 'system', 'graph', 'data', 'notify'] as LogType[]),
   searchText: '',
 };
 

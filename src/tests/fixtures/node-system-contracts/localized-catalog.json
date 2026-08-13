@@ -2,86 +2,120 @@
   "categories": [
     {
       "categoryId": "constants",
+      "order": 10,
+      "parentCategoryId": null,
       "searchText": "constants",
       "title": "Constants"
     },
     {
       "categoryId": "control",
+      "order": 40,
+      "parentCategoryId": null,
       "searchText": "flow control",
       "title": "Flow Control"
     },
     {
       "categoryId": "conversion",
+      "order": 25,
+      "parentCategoryId": null,
       "searchText": "conversion",
       "title": "Conversion"
     },
     {
       "categoryId": "dataframe",
+      "order": 60,
+      "parentCategoryId": null,
       "searchText": "dataframe",
       "title": "DataFrame"
     },
     {
       "categoryId": "dataframe.panel",
+      "order": 63,
+      "parentCategoryId": "dataframe",
       "searchText": "panel data",
       "title": "Panel Data"
     },
     {
       "categoryId": "dataframe.series",
+      "order": 61,
+      "parentCategoryId": "dataframe",
       "searchText": "dataseries",
       "title": "DataSeries"
     },
     {
       "categoryId": "dataframe.timeseries",
+      "order": 62,
+      "parentCategoryId": "dataframe",
       "searchText": "time series",
       "title": "Time Series"
     },
     {
       "categoryId": "debug",
+      "order": 60,
+      "parentCategoryId": null,
       "searchText": "debug",
       "title": "Debug"
     },
     {
       "categoryId": "distribution",
+      "order": 60,
+      "parentCategoryId": null,
       "searchText": "probability distributions",
       "title": "Probability Distributions"
     },
     {
       "categoryId": "logic",
+      "order": 30,
+      "parentCategoryId": null,
       "searchText": "logic",
       "title": "Logic"
     },
     {
       "categoryId": "numeric",
+      "order": 20,
+      "parentCategoryId": null,
       "searchText": "numeric",
       "title": "Numeric"
     },
     {
       "categoryId": "plot",
+      "order": 70,
+      "parentCategoryId": null,
       "searchText": "plots",
       "title": "Plots"
     },
     {
       "categoryId": "project",
+      "order": 50,
+      "parentCategoryId": null,
       "searchText": "project",
       "title": "Project"
     },
     {
       "categoryId": "statistics",
+      "order": 70,
+      "parentCategoryId": null,
       "searchText": "statistics",
       "title": "Statistics"
     },
     {
       "categoryId": "statistics.panel",
+      "order": 72,
+      "parentCategoryId": "statistics",
       "searchText": "panel statistics",
       "title": "Panel Statistics"
     },
     {
       "categoryId": "statistics.regression",
+      "order": 71,
+      "parentCategoryId": "statistics",
       "searchText": "regression",
       "title": "Regression"
     },
     {
       "categoryId": "statistics.timeseries",
+      "order": 73,
+      "parentCategoryId": "statistics",
       "searchText": "time series statistics",
       "title": "Time-Series Statistics"
     }

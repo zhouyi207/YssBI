@@ -3,6 +3,8 @@
     "categories": [
       {
         "categoryId": "dataframe",
+        "order": 60,
+        "parentCategoryId": null,
         "searchText": "dataframe",
         "title": "DataFrame"
       }

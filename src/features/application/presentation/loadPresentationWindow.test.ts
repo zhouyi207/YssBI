@@ -20,6 +20,7 @@ const inspectorDescriptor = {
 describe('loadPresentationWindow', () => {
   beforeEach(() => {
     vi.mocked(SourceService.getDescriptor).mockReset();
+    vi.mocked(SourceService.getValue).mockReset();
   });
 
   it('loads inspector window by sourceId', async () => {
@@ -30,6 +31,31 @@ describe('loadPresentationWindow', () => {
     expect(state.status).toBe('ready');
     if (state.status === 'ready') {
       expect(state.payload.mode).toBe('inspector');
+    }
+  });
+
+  it('unwraps a single report captured by View Data from its sequence source', async () => {
+    const report = { title: 'OLS Summary', model_basic_info: {} };
+    vi.mocked(SourceService.getDescriptor).mockResolvedValue({
+      sourceId: 'view-source',
+      kind: 'json',
+      presentation: { kind: 'report', report: 'olsSummary' },
+      title: 'Results',
+    });
+    vi.mocked(SourceService.getValue).mockResolvedValue({
+      kind: 'sequence',
+      value: [report],
+    });
+
+    const state = await loadPresentationWindow('view-source');
+
+    expect(state.status).toBe('ready');
+    if (state.status === 'ready') {
+      expect(state.payload).toEqual({
+        mode: 'report',
+        report: 'olsSummary',
+        data: report,
+      });
     }
   });
 

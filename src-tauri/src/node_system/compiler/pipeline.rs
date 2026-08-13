@@ -2635,8 +2635,8 @@ impl<'a> AnalysisState<'a> {
                 protocol_fingerprint: node.registry.protocol_fingerprint.clone(),
                 normalized_parameters: node.parameters.clone(),
                 ports: node
-                    .ports
-                    .keys()
+                    .port_sequence
+                    .iter()
                     .filter(|address| !self.projection_only_ports.contains(*address))
                     .map(|address| ValidatedSemanticPort {
                         address: address.clone(),

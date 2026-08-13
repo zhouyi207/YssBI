@@ -1324,6 +1324,16 @@ fn statistics_summary_uses_compiled_data_series_input_indices() {
     .unwrap();
 
     assert_eq!(outputs.len(), 2);
+    assert!(matches!(outputs[0], RuntimeValue::Scalar(Value::Object(_))));
+    let report = scalar_object(&outputs[1]);
+    for key in [
+        "title",
+        "model_basic_info",
+        "coefficients",
+        "diagnostic_info",
+    ] {
+        assert!(report.contains_key(key), "missing report field '{key}'");
+    }
 }
 
 #[test]

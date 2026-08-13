@@ -15,6 +15,8 @@ pub enum LogType {
     Graph,
     /// 数据日志（数据库、变量、DataFrame 操作）
     Data,
+    /// 用户通知（原 toast 状态反馈）
+    Notify,
 }
 
 impl fmt::Display for LogType {
@@ -25,6 +27,7 @@ impl fmt::Display for LogType {
             LogType::System => write!(f, "sys"),
             LogType::Graph => write!(f, "graph"),
             LogType::Data => write!(f, "data"),
+            LogType::Notify => write!(f, "notify"),
         }
     }
 }

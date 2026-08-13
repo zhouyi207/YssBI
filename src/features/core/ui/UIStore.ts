@@ -1,6 +1,8 @@
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
+import { LogService } from "@/services/log";
 import {
-    Message,
+    LogLevel,
+    LogType,
     MessageType,
     DialogOptions,
     InputDialogOptions,
@@ -23,7 +25,6 @@ type UIModal =
     | { id: string; type: "sqlRemoteTableSelect"; options: SqlRemoteTableSelectDialogOptions };
 
 type UIState = {
-  messages: Message[];
   modals: UIModal[];
   /** 全局进度蒙层；为 null 时不显示。 */
   progress: ProgressState | null;
@@ -33,7 +34,6 @@ type Listener = () => void;
 
 class UIStore {
   private state: UIState = {
-    messages: [],
     modals: [],
     progress: null,
   };
@@ -55,31 +55,15 @@ class UIStore {
     return this.state;
   }
 
-  // --- Toast ---
-  showToast(content: string, type: MessageType = "info", duration = 3000) {
-    const message =
-      typeof content === "string" ? content : formatErrorMessage(content);
-    this.state = {
-      ...this.state,
-      messages: [
-        ...this.state.messages,
-        {
-          id: crypto.randomUUID(),
-          content: message,
-          type,
-          duration,
-        },
-      ],
-    };
-    this.emit();
-  }
-
-  closeToast(id: string) {
-    this.state = {
-      ...this.state,
-      messages: this.state.messages.filter(m => m.id !== id),
-    };
-    this.emit();
+  // --- Notifications ---
+  showToast(content: string, type: MessageType = "info", _duration = 3000) {
+    const message = typeof content === "string" ? content : formatErrorMessage(content);
+    const level = type === "error"
+      ? LogLevel.Error
+      : type === "warning"
+        ? LogLevel.Warn
+        : LogLevel.Info;
+    void LogService.frontendLog(level, LogType.Notify, message, "UI").catch(() => {});
   }
 
   // --- Modal Stack ---

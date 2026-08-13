@@ -51,17 +51,9 @@ export interface SourceDescriptor {
   structKind?: SourceStructKind;
 }
 
-export interface SourceValue {
-  kind: SourceKind;
-  title: string;
-  message?: string;
-  value?: unknown;
-  valueType?: string;
-  typeKey?: string;
-  handleId?: string;
-  structKind?: SourceStructKind;
-  structured?: unknown;
-}
+export type SourceValue =
+  | { kind: 'value'; value: unknown }
+  | { kind: 'sequence'; value: unknown[] };
 
 export interface SourcePage {
   kind: 'dataframe' | 'dataseries';

@@ -16,7 +16,6 @@ use crate::node_system::analysis::{
     SYSTEM_TRACE_CLOCK, SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan,
     complete_span_safely, start_span_safely,
 };
-use crate::node_system::document::PortRef;
 use crate::node_system::plan::{
     AttemptId, CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan,
     FunctionPlanHandle, GraphOutputRef, OperationIndex, PlannedKernel, PlannedPublication,
@@ -84,35 +83,8 @@ impl PendingSourceEvent {
     }
 }
 
-fn result_presentation(plan: &ExecutionPlan, output: &GraphOutputRef) -> ResultSourcePresentation {
-    let PortRef::Declared { key } = &output.port.port else {
-        return ResultSourcePresentation::Inspector;
-    };
-    if key.as_str() != "report" {
-        return ResultSourcePresentation::Inspector;
-    }
-    let Some(value) = plan
-        .results
-        .iter()
-        .find(|result| result.output == *output)
-        .map(|result| result.value)
-    else {
-        return ResultSourcePresentation::Inspector;
-    };
-    let Some(node_type) = plan
-        .operations
-        .iter()
-        .find(|operation| {
-            operation
-                .outputs
-                .iter()
-                .any(|candidate| candidate.value == value)
-        })
-        .map(|operation| operation.source_node_type_id.as_str())
-    else {
-        return ResultSourcePresentation::Inspector;
-    };
-    let report = match node_type {
+fn report_kind_for_node_type(node_type: &str) -> Option<ResultReportKind> {
+    Some(match node_type {
         "yssbi.statistics.ols.summary"
         | "yssbi.statistics.gls.summary"
         | "yssbi.statistics.wls.summary" => ResultReportKind::OlsSummary,
@@ -129,9 +101,50 @@ fn result_presentation(plan: &ExecutionPlan, output: &GraphOutputRef) -> ResultS
         "yssbi.statistics.adf.summary" => ResultReportKind::DfAdfSummary,
         "yssbi.statistics.vec.fit" => ResultReportKind::VecSummary,
         "yssbi.statistics.vec.rank_test" => ResultReportKind::VecRankSummary,
-        _ => return ResultSourcePresentation::Inspector,
+        _ => return None,
+    })
+}
+
+fn report_kind_for_value(
+    plan: &ExecutionPlan,
+    value: crate::node_system::plan::ValueRef,
+) -> Option<ResultReportKind> {
+    let producer = plan
+        .operations
+        .iter()
+        .find(|operation| operation.outputs.iter().any(|output| output.value == value))?;
+    if let Some(report) = report_kind_for_node_type(producer.source_node_type_id.as_str()) {
+        return Some(report);
+    }
+    let preserves_presentation = producer.source_node_type_id.as_str() == "yssbi.debug.view"
+        || matches!(producer.kernel, PlannedKernel::Adapter(_));
+    if !preserves_presentation {
+        return None;
+    }
+    let input = producer.inputs.first()?.value;
+    let source = plan
+        .value_dependencies
+        .iter()
+        .find(|dependency| dependency.destination == input)?
+        .source;
+    report_kind_for_value(plan, source)
+}
+
+pub(super) fn result_presentation(
+    plan: &ExecutionPlan,
+    output: &GraphOutputRef,
+) -> ResultSourcePresentation {
+    let Some(value) = plan
+        .results
+        .iter()
+        .find(|result| result.output == *output)
+        .map(|result| result.value)
+    else {
+        return ResultSourcePresentation::Inspector;
     };
-    ResultSourcePresentation::Report { report }
+    report_kind_for_value(plan, value)
+        .map(|report| ResultSourcePresentation::Report { report })
+        .unwrap_or(ResultSourcePresentation::Inspector)
 }
 
 struct PendingSourcePublication {

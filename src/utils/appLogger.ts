@@ -68,6 +68,7 @@ const TYPE_LABELS: Record<LogType, string> = {
   [LogType.System]:      'SYS',
   [LogType.Graph]:       'GRAPH',
   [LogType.Data]:        'DATA',
+  [LogType.Notify]:      'NOTIFY',
 };
 
 const CONSOLE_FN: Record<LogLevel, (...args: unknown[]) => void> = {
@@ -102,5 +103,6 @@ export const logger = {
   exec:  createTypedLogger(LogType.Execution),
   sys:   createTypedLogger(LogType.System),
   graph: createTypedLogger(LogType.Graph),
-  data:  createTypedLogger(LogType.Data),
+  data:   createTypedLogger(LogType.Data),
+  notify: createTypedLogger(LogType.Notify),
 };

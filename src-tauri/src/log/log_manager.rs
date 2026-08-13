@@ -170,6 +170,20 @@ impl LogManager {
         self.emit_log(log);
     }
 
+    /// 发送用户通知日志
+    pub fn log_notify(&self, level: LogLevel, message: String, source: Option<String>) {
+        let log = LogMessage {
+            timestamp: chrono::Local::now()
+                .format("%Y-%m-%d %H:%M:%S%.3f")
+                .to_string(),
+            level,
+            log_type: LogType::Notify,
+            message,
+            source,
+        };
+        self.emit_log(log);
+    }
+
     /// 获取当前日志文件路径
     pub fn get_log_file_path(&self) -> Option<PathBuf> {
         self.log_file_path.lock().unwrap().clone()
