@@ -2,7 +2,9 @@ use super::support::{KernelFragment, expect_arity, expect_min_arity};
 use super::value::canonical_float;
 use crate::node_system::protocol::{CanonicalDecimal, Value};
 use crate::node_system::runtime::{
-    ArtifactCursor, Kernel, KernelContext, KernelError, RunError, RuntimeValue,
+    Artifact, ArtifactKind, DataSeriesBuilder, DataSeriesElementType, DataSeriesMetadata, Kernel,
+    KernelContext, KernelError, NullPolicy, NumericSeriesView, RuntimeValue, checked_int64_to_f64,
+    numeric_series, require_data_series,
 };
 
 #[derive(Clone, Copy)]
@@ -51,7 +53,7 @@ struct SeriesMathKernel {
 impl Kernel for SeriesMathKernel {
     fn execute(
         &self,
-        context: &KernelContext<'_>,
+        _context: &KernelContext<'_>,
         inputs: &[RuntimeValue],
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         if matches!(self.operation, BinaryOperation::Add) {
@@ -59,48 +61,23 @@ impl Kernel for SeriesMathKernel {
         } else {
             expect_arity(inputs, 2)?;
         }
-        let artifact = inputs
-            .iter()
-            .find_map(|input| match input {
-                RuntimeValue::Artifact(artifact) => Some(artifact),
-                _ => None,
-            })
-            .ok_or_else(|| {
-                KernelError::new("DataSeries arithmetic requires at least one artifact operand")
-            })?;
-        let length = artifact.materialized().len();
-        let mut cursors = inputs
-            .iter()
-            .map(|input| match input {
-                RuntimeValue::Scalar(value) => Ok(SeriesInput::Scalar(value)),
-                RuntimeValue::Artifact(candidate) if candidate.materialized().len() == length => {
-                    candidate
-                        .cursor()
-                        .map(SeriesInput::Artifact)
-                        .map_err(kernel_error)
-                }
-                RuntimeValue::Artifact(_) => Err(KernelError::new(
-                    "DataSeries operands must have equal lengths",
-                )),
-                RuntimeValue::Stream(_) => Err(KernelError::new(
-                    "DataSeries arithmetic requires fully materialized inputs",
-                )),
-            })
+        let (operands, metadata, kind) = read_operands(inputs)?;
+        let float_output = matches!(self.operation, BinaryOperation::Divide)
+            || operands.iter().any(NumericOperand::is_float);
+        let values = (0..metadata.length)
+            .map(|index| evaluate_row(self.operation, &operands, index, float_output))
             .collect::<Result<Vec<_>, _>>()?;
-        let operation = self.operation;
-        let mut index = 0_usize;
-        let output = std::iter::from_fn(move || {
-            if index == length {
-                return None;
-            }
-            index += 1;
-            Some(series_binary_value(operation, &mut cursors).map_err(run_error))
-        });
-        let output = context
-            .resource_owner
-            .materialize_artifact(artifact.kind(), output)
-            .map_err(kernel_error)?;
-        Ok(vec![RuntimeValue::Artifact(output)])
+        let element_type = if float_output {
+            DataSeriesElementType::Float64
+        } else {
+            DataSeriesElementType::Int64
+        };
+        Ok(vec![RuntimeValue::Artifact(build_series(
+            element_type,
+            &metadata,
+            kind,
+            values,
+        )?)])
     }
 }
 
@@ -111,37 +88,34 @@ struct UnaryMathKernel {
 impl Kernel for UnaryMathKernel {
     fn execute(
         &self,
-        context: &KernelContext<'_>,
+        _context: &KernelContext<'_>,
         inputs: &[RuntimeValue],
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         expect_arity(inputs, 1)?;
         match &inputs[0] {
             RuntimeValue::Scalar(Value::Null) => Ok(vec![Value::Null.into()]),
             RuntimeValue::Scalar(value) => Ok(vec![
-                Value::Decimal(apply_unary(self.operation, numeric(value)?)?).into(),
+                Value::Decimal(apply_unary(self.operation, scalar_float(value)?)?).into(),
             ]),
-            RuntimeValue::Artifact(artifact) => {
-                let operation = self.operation;
-                let values = artifact.cursor().map_err(kernel_error)?.enumerate().map(
-                    move |(index, value)| {
-                        let value = value?;
-                        let converted = if matches!(value, Value::Null) {
-                            Ok(Value::Null)
-                        } else {
-                            numeric(&value)
-                                .and_then(|value| apply_unary(operation, value))
-                                .map(Value::Decimal)
-                        };
-                        converted.map_err(|error| {
-                            RunError::Stream(format!("DataSeries element {index}: {error}").into())
-                        })
-                    },
-                );
-                let output = context
-                    .resource_owner
-                    .materialize_artifact(artifact.kind(), values)
-                    .map_err(kernel_error)?;
-                Ok(vec![RuntimeValue::Artifact(output)])
+            RuntimeValue::Artifact(_) => {
+                let artifact = require_data_series(&inputs[0])?;
+                let series = numeric_series(artifact, NullPolicy::Propagate)?;
+                let metadata = series.metadata().clone();
+                let values = series
+                    .float_values()?
+                    .iter()
+                    .map(|value| {
+                        value
+                            .map(|value| apply_unary(self.operation, value).map(Value::Decimal))
+                            .unwrap_or(Ok(Value::Null))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(vec![RuntimeValue::Artifact(build_series(
+                    DataSeriesElementType::Float64,
+                    &metadata,
+                    artifact.kind(),
+                    values,
+                )?)])
             }
             RuntimeValue::Stream(_) => Err(KernelError::new(
                 "unary math requires a scalar or fully materialized DataSeries",
@@ -150,75 +124,173 @@ impl Kernel for UnaryMathKernel {
     }
 }
 
-enum SeriesInput<'a> {
-    Scalar(&'a Value),
-    Artifact(ArtifactCursor),
+#[derive(Clone)]
+enum NumericOperand {
+    ScalarInt(i64),
+    ScalarFloat(f64),
+    SeriesInt(Box<[Option<i64>]>),
+    SeriesFloat(Box<[Option<f64>]>),
 }
 
-impl SeriesInput<'_> {
-    fn next_value(&mut self) -> Result<Value, KernelError> {
+impl NumericOperand {
+    fn is_float(&self) -> bool {
         match self {
-            Self::Scalar(value) => Ok((*value).clone()),
-            Self::Artifact(values) => values
-                .next()
-                .ok_or_else(|| KernelError::new("DataSeries ended before its declared length"))?
-                .map_err(kernel_error),
+            Self::ScalarFloat(_) | Self::SeriesFloat(_) => true,
+            Self::ScalarInt(_) | Self::SeriesInt(_) => false,
+        }
+    }
+
+    fn int_at(&self, index: usize) -> Result<Option<i64>, KernelError> {
+        match self {
+            Self::ScalarInt(value) => Ok(Some(*value)),
+            Self::SeriesInt(values) => Ok(values[index]),
+            Self::ScalarFloat(_) | Self::SeriesFloat(_) => {
+                Err(KernelError::new("internal numeric promotion mismatch"))
+            }
+        }
+    }
+
+    fn float_at(&self, index: usize) -> Result<Option<f64>, KernelError> {
+        match self {
+            Self::ScalarInt(value) => checked_int64_to_f64(*value).map(Some),
+            Self::ScalarFloat(value) => Ok(Some(*value)),
+            Self::SeriesInt(values) => values[index].map(checked_int64_to_f64).transpose(),
+            Self::SeriesFloat(values) => Ok(values[index]),
         }
     }
 }
 
-fn series_binary_value(
-    operation: BinaryOperation,
-    inputs: &mut [SeriesInput<'_>],
-) -> Result<Value, KernelError> {
-    let values = inputs
-        .iter_mut()
-        .map(SeriesInput::next_value)
+trait NumericSeriesMetadata {
+    fn metadata(&self) -> &DataSeriesMetadata;
+    fn float_values(&self) -> Result<Box<[Option<f64>]>, KernelError>;
+}
+
+impl NumericSeriesMetadata for NumericSeriesView {
+    fn metadata(&self) -> &DataSeriesMetadata {
+        match self {
+            Self::Int64(series) => series.metadata(),
+            Self::Float64(series) => series.metadata(),
+        }
+    }
+
+    fn float_values(&self) -> Result<Box<[Option<f64>]>, KernelError> {
+        match self {
+            Self::Int64(series) => series
+                .values()
+                .iter()
+                .map(|value| value.map(checked_int64_to_f64).transpose())
+                .collect::<Result<Vec<_>, _>>()
+                .map(Vec::into_boxed_slice),
+            Self::Float64(series) => Ok(series.values().into()),
+        }
+    }
+}
+
+fn read_operands(
+    inputs: &[RuntimeValue],
+) -> Result<(Vec<NumericOperand>, DataSeriesMetadata, ArtifactKind), KernelError> {
+    let first_series = inputs
+        .iter()
+        .find_map(|input| match input {
+            RuntimeValue::Artifact(_) => Some(require_data_series(input)),
+            _ => None,
+        })
+        .transpose()?
+        .ok_or_else(|| {
+            KernelError::new("series arithmetic requires at least one DataSeries operand")
+        })?;
+    let metadata = first_series
+        .data_series_metadata()
+        .expect("required DataSeries has metadata")
+        .clone();
+    let kind = first_series.kind();
+    let operands = inputs
+        .iter()
+        .map(|input| read_operand(input, metadata.length))
         .collect::<Result<Vec<_>, _>>()?;
-    if values.iter().any(|value| matches!(value, Value::Null)) {
-        return Ok(Value::Null);
-    }
-    let mut values = values.iter().map(numeric);
-    let first = values
-        .next()
-        .expect("series arithmetic has at least two inputs")?;
-    let result = values.try_fold(first, |left, right| apply_binary(operation, left, right?))?;
-    Ok(Value::Decimal(canonical_float(result)?))
+    Ok((operands, metadata, kind))
 }
 
-fn kernel_error(error: RunError) -> KernelError {
-    KernelError::new(error.to_string())
-}
-
-fn run_error(error: KernelError) -> RunError {
-    RunError::Stream(error.to_string().into())
-}
-
-fn numeric(value: &Value) -> Result<f64, KernelError> {
-    let value = match value {
-        Value::Integer(value) => *value as f64,
-        Value::Decimal(value) => parse_decimal(value)?,
-        _ => {
-            return Err(KernelError::new(
-                "numeric operation expects Int64 or Float64 values",
-            ));
+fn read_operand(input: &RuntimeValue, length: usize) -> Result<NumericOperand, KernelError> {
+    match input {
+        RuntimeValue::Scalar(Value::Integer(value)) => Ok(NumericOperand::ScalarInt(*value)),
+        RuntimeValue::Scalar(Value::Decimal(value)) => {
+            parse_decimal(value).map(NumericOperand::ScalarFloat)
         }
-    };
-    if value.is_finite() {
-        Ok(value)
-    } else {
-        Err(KernelError::new("numeric value must be finite"))
+        RuntimeValue::Scalar(_) => Err(KernelError::new(
+            "numeric operation expects Int64 or Float64 values",
+        )),
+        RuntimeValue::Artifact(_) => {
+            let artifact = require_data_series(input)?;
+            if artifact.data_series_metadata().unwrap().length != length {
+                return Err(KernelError::new(
+                    "DataSeries operands must have equal lengths",
+                ));
+            }
+            match numeric_series(artifact, NullPolicy::Propagate)? {
+                NumericSeriesView::Int64(series) => {
+                    Ok(NumericOperand::SeriesInt(series.values().into()))
+                }
+                NumericSeriesView::Float64(series) => {
+                    Ok(NumericOperand::SeriesFloat(series.values().into()))
+                }
+            }
+        }
+        RuntimeValue::Stream(_) => Err(KernelError::new(
+            "DataSeries arithmetic requires fully materialized inputs",
+        )),
     }
 }
 
-fn parse_decimal(value: &CanonicalDecimal) -> Result<f64, KernelError> {
-    value
-        .as_str()
-        .parse::<f64>()
-        .map_err(|_| KernelError::new("invalid Float64 decimal"))
+fn evaluate_row(
+    operation: BinaryOperation,
+    operands: &[NumericOperand],
+    index: usize,
+    float_output: bool,
+) -> Result<Value, KernelError> {
+    if float_output {
+        let values = operands
+            .iter()
+            .map(|operand| operand.float_at(index))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values.iter().any(Option::is_none) {
+            return Ok(Value::Null);
+        }
+        let mut values = values.into_iter().flatten();
+        let first = values
+            .next()
+            .expect("series math has at least two operands");
+        let result = values.try_fold(first, |left, right| apply_float(operation, left, right))?;
+        Ok(Value::Decimal(canonical_float(result)?))
+    } else {
+        let values = operands
+            .iter()
+            .map(|operand| operand.int_at(index))
+            .collect::<Result<Vec<_>, _>>()?;
+        if values.iter().any(Option::is_none) {
+            return Ok(Value::Null);
+        }
+        let mut values = values.into_iter().flatten();
+        let first = values
+            .next()
+            .expect("series math has at least two operands");
+        values
+            .try_fold(first, |left, right| apply_int(operation, left, right))
+            .map(Value::Integer)
+    }
 }
 
-fn apply_binary(operation: BinaryOperation, left: f64, right: f64) -> Result<f64, KernelError> {
+fn apply_int(operation: BinaryOperation, left: i64, right: i64) -> Result<i64, KernelError> {
+    let result = match operation {
+        BinaryOperation::Add => left.checked_add(right),
+        BinaryOperation::Subtract => left.checked_sub(right),
+        BinaryOperation::Multiply => left.checked_mul(right),
+        BinaryOperation::Divide => unreachable!("division always promotes to Float64"),
+    };
+    result.ok_or_else(|| KernelError::new("Int64 arithmetic overflow"))
+}
+
+fn apply_float(operation: BinaryOperation, left: f64, right: f64) -> Result<f64, KernelError> {
     if matches!(operation, BinaryOperation::Divide) && right == 0.0 {
         return Err(KernelError::new("Float64 division by zero"));
     }
@@ -228,13 +300,49 @@ fn apply_binary(operation: BinaryOperation, left: f64, right: f64) -> Result<f64
         BinaryOperation::Multiply => left * right,
         BinaryOperation::Divide => left / right,
     };
-    if result.is_finite() {
-        Ok(result)
-    } else {
-        Err(KernelError::new(
-            "Float64 arithmetic produced a non-finite result",
-        ))
+    result
+        .is_finite()
+        .then_some(result)
+        .ok_or_else(|| KernelError::new("Float64 arithmetic produced a non-finite result"))
+}
+
+fn build_series(
+    element_type: DataSeriesElementType,
+    metadata: &DataSeriesMetadata,
+    kind: ArtifactKind,
+    values: Vec<Value>,
+) -> Result<Artifact, KernelError> {
+    let mut builder = DataSeriesBuilder::new(element_type).values(values);
+    if let Some(name) = &metadata.name {
+        builder = builder.name(name.clone());
     }
+    if let Some(format) = &metadata.format {
+        builder = builder.format(format.clone());
+    }
+    builder
+        .build(kind)
+        .map_err(|error| KernelError::new(error.to_string()))
+}
+
+fn scalar_float(value: &Value) -> Result<f64, KernelError> {
+    match value {
+        Value::Integer(value) => checked_int64_to_f64(*value),
+        Value::Decimal(value) => parse_decimal(value),
+        _ => Err(KernelError::new(
+            "numeric operation expects Int64 or Float64 values",
+        )),
+    }
+}
+
+fn parse_decimal(value: &CanonicalDecimal) -> Result<f64, KernelError> {
+    let value = value
+        .as_str()
+        .parse::<f64>()
+        .map_err(|_| KernelError::new("invalid Float64 decimal"))?;
+    value
+        .is_finite()
+        .then_some(value)
+        .ok_or_else(|| KernelError::new("numeric value must be finite"))
 }
 
 fn apply_unary(operation: UnaryOperation, input: f64) -> Result<CanonicalDecimal, KernelError> {

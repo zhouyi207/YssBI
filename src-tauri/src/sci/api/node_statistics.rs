@@ -22,12 +22,14 @@ pub enum RegressionKind {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RegressionFit {
     pub family: &'static str,
     pub coefficients: Vec<f64>,
     pub fitted: Vec<f64>,
     pub residuals: Vec<f64>,
     pub statistics: serde_json::Value,
+    pub metadata: crate::sci::models::regression::StatisticalObservationMetadata,
 }
 
 pub fn fit_regression(
@@ -35,6 +37,7 @@ pub fn fit_regression(
     response: Vec<f64>,
     predictors: Vec<Vec<f64>>,
     weights: Option<Vec<f64>>,
+    metadata: crate::sci::models::regression::StatisticalObservationMetadata,
 ) -> Result<RegressionFit, String> {
     let y = Array1::from_vec(response);
     let x = design_matrix(&predictors, y.len(), true)?;
@@ -63,6 +66,7 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             )
         }
         RegressionKind::Gls => {
@@ -86,6 +90,7 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             )
         }
         RegressionKind::Wls => {
@@ -117,6 +122,7 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             )
         }
         RegressionKind::Prais => {
@@ -139,6 +145,7 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             )
         }
         RegressionKind::Logit => {
@@ -170,6 +177,7 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             })
         }
         RegressionKind::Probit => {
@@ -202,6 +210,7 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             })
         }
     }
@@ -213,6 +222,7 @@ fn linear_fit(
     x: &Array2<f64>,
     coefficients: Vec<f64>,
     statistics: serde_json::Value,
+    metadata: crate::sci::models::regression::StatisticalObservationMetadata,
 ) -> Result<RegressionFit, String> {
     let fitted = x.dot(&Array1::from_vec(coefficients.clone())).to_vec();
     Ok(RegressionFit {
@@ -221,6 +231,7 @@ fn linear_fit(
         fitted,
         coefficients,
         statistics,
+        metadata,
     })
 }
 

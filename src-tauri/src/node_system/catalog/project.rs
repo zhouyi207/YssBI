@@ -312,7 +312,12 @@ fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssembl
     let kind = match key {
         "target" | "function" => ResourceDisplayKind::Function,
         "variable" => ResourceDisplayKind::Variable,
-        _ => unreachable!("unsupported built-in project resource parameter: {key}"),
+        _ => {
+            return Err(BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
+                context: "project resource parameter",
+                value: key.into(),
+            });
+        }
     };
     Ok(ParameterSpec {
         key: sid(key, ParameterKey::new)?,

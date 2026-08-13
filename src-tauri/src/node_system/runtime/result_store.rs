@@ -1,4 +1,7 @@
-use super::{CancellationToken, RunDeadline, RunError, RunPhase, RuntimeValue, check_terminal};
+use super::{
+    CancellationToken, DataSeriesMetadata, RunDeadline, RunError, RunPhase, RuntimeValue,
+    check_terminal,
+};
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext, RunId};
 use crate::node_system::document::GraphRevision;
 use crate::node_system::protocol::Value;
@@ -26,6 +29,46 @@ impl ResultSourceId {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResultReportKind {
+    OlsSummary,
+    BinarySummary,
+    Iv2slsSummary,
+    IvLimlSummary,
+    PraisSummary,
+    VarSummary,
+    VarSoc,
+    PanelSummary,
+    PanelDid,
+    DfAdfSummary,
+    DfAdfSummaryList,
+    VecSummary,
+    VecRankSummary,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ResultSourcePresentation {
+    #[default]
+    Inspector,
+    Report {
+        report: ResultReportKind,
+    },
+}
+
+impl ResultSourcePresentation {
+    pub const fn default_title(self) -> &'static str {
+        match self {
+            Self::Inspector => "Source Inspector",
+            Self::Report {
+                report: ResultReportKind::OlsSummary,
+            } => "Results",
+            Self::Report { .. } => "Statistical Report",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResultSourceDescriptor {
@@ -33,7 +76,9 @@ pub struct ResultSourceDescriptor {
     pub artifact_id: ArtifactId,
     pub name: Box<str>,
     pub kind: ArtifactSnapshotKind,
+    pub data_series_metadata: Option<DataSeriesMetadata>,
     pub total_count: usize,
+    pub presentation: ResultSourcePresentation,
     pub correlation: CorrelationContext,
     pub basis: CompilationBasis<GraphRevision>,
 }
@@ -45,6 +90,8 @@ pub struct ResultSourcePage {
     pub offset: usize,
     pub limit: usize,
     pub total_count: usize,
+    pub kind: ArtifactSnapshotKind,
+    pub data_series_metadata: Option<DataSeriesMetadata>,
     pub values: Box<[Value]>,
 }
 
@@ -53,6 +100,7 @@ pub(crate) struct PendingResultSource {
     correlation: CorrelationContext,
     basis: CompilationBasis<GraphRevision>,
     name: Box<str>,
+    presentation: ResultSourcePresentation,
     snapshot: ArtifactSnapshot,
 }
 
@@ -155,10 +203,28 @@ impl ResultStore {
         name: impl Into<Box<str>>,
         snapshot: ArtifactSnapshot,
     ) -> PendingResultSource {
+        self.prepare_snapshot_with_presentation(
+            correlation,
+            basis,
+            name,
+            ResultSourcePresentation::Inspector,
+            snapshot,
+        )
+    }
+
+    fn prepare_snapshot_with_presentation(
+        &self,
+        correlation: CorrelationContext,
+        basis: CompilationBasis<GraphRevision>,
+        name: impl Into<Box<str>>,
+        presentation: ResultSourcePresentation,
+        snapshot: ArtifactSnapshot,
+    ) -> PendingResultSource {
         PendingResultSource {
             correlation,
             basis,
             name: name.into(),
+            presentation,
             snapshot,
         }
     }
@@ -170,12 +236,35 @@ impl ResultStore {
         name: impl Into<Box<str>>,
         value: &RuntimeValue,
     ) -> Option<PendingResultSource> {
+        self.prepare_runtime_value_with_presentation(
+            correlation,
+            basis,
+            name,
+            ResultSourcePresentation::Inspector,
+            value,
+        )
+    }
+
+    pub(crate) fn prepare_runtime_value_with_presentation(
+        &self,
+        correlation: CorrelationContext,
+        basis: CompilationBasis<GraphRevision>,
+        name: impl Into<Box<str>>,
+        presentation: ResultSourcePresentation,
+        value: &RuntimeValue,
+    ) -> Option<PendingResultSource> {
         let snapshot = match value {
             RuntimeValue::Scalar(value) => ArtifactSnapshot::Value(value.clone()),
             RuntimeValue::Artifact(artifact) => ArtifactSnapshot::RuntimeArtifact(artifact.clone()),
             RuntimeValue::Stream(_) => return None,
         };
-        Some(self.prepare_snapshot(correlation, basis, name, snapshot))
+        Some(self.prepare_snapshot_with_presentation(
+            correlation,
+            basis,
+            name,
+            presentation,
+            snapshot,
+        ))
     }
 
     pub(crate) fn begin_publication(
@@ -299,6 +388,7 @@ impl ResultStore {
             offset,
             limit,
             total_count,
+            data_series_metadata,
             values,
             ..
         }) = self.artifacts.page(descriptor.artifact_id, offset, limit)?
@@ -310,6 +400,8 @@ impl ResultStore {
             offset,
             limit,
             total_count,
+            kind: descriptor.kind,
+            data_series_metadata,
             values,
         }))
     }
@@ -432,6 +524,7 @@ impl ResultPublicationTransaction<'_> {
                 correlation,
                 basis,
                 name,
+                presentation,
                 snapshot,
             } = pending;
             let (artifact, prepared) = self.store.artifacts.prepare_retained_result_source(
@@ -451,7 +544,9 @@ impl ResultPublicationTransaction<'_> {
                 artifact_id: artifact.artifact_id,
                 name,
                 kind: artifact.kind,
+                data_series_metadata: artifact.data_series_metadata,
                 total_count: artifact.total_count,
+                presentation,
                 correlation,
                 basis,
             });

@@ -41,6 +41,10 @@ export interface ProjectSavedPayload {
     result: import('@/shared/types/dto').ProjectSaveResultDto;
 }
 
+export interface ComputationSettingsChangedPayload {
+    result: import('@/shared/types/dto/projectComputationSettings').ComputationSettingsMutationReceiptDto;
+}
+
 export interface GraphUpdatedPayload {
     path: string;
     data: Partial<Graph> & {
@@ -125,6 +129,7 @@ export interface ResourceMutationCommittedPayload {
 
 export type BackendEventType =
     | 'ProjectLoaded' | 'ProjectCleared' | 'ProjectLifecycleCommitted' | 'ProjectSaved'
+    | 'ComputationSettingsChanged'
     | 'EventUpdated' | 'EventDeleted'
     | 'FunctionUpdated' | 'FunctionDeleted'
     | 'VariableCreated' | 'VariableUpdated' | 'VariableDeleted'
@@ -137,6 +142,7 @@ export interface BackendEventPayloadMap {
     ProjectCleared: void;
     ProjectLifecycleCommitted: ProjectLifecycleCommittedPayload;
     ProjectSaved: ProjectSavedPayload;
+    ComputationSettingsChanged: ComputationSettingsChangedPayload;
     EventUpdated: GraphUpdatedPayload;
     EventDeleted: GraphDeletedPayload;
     FunctionUpdated: GraphUpdatedPayload;

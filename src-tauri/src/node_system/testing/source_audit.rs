@@ -1724,6 +1724,13 @@ impl AssemblyEscapeVisitor<'_> {
 }
 
 impl Visit<'_> for AssemblyEscapeVisitor<'_> {
+    fn visit_item(&mut self, node: &Item) {
+        if is_test_only(item_attributes(node)) {
+            return;
+        }
+        visit::visit_item(self, node);
+    }
+
     fn visit_block(&mut self, node: &syn::Block) {
         let local_functions = node
             .stmts
@@ -2059,6 +2066,23 @@ fn fixture_boundary() {
     ] {
         assert_offender(&offenders, "fixture.rs", label);
     }
+}
+
+#[test]
+fn builtin_assembly_audit_excludes_test_only_functions() {
+    let offenders = audit_builtin_assembly_file(
+        "node_system/catalog/fixture.rs",
+        r#"
+#[cfg(test)]
+fn fault_fixture() {
+    panic!("test-only fault");
+}
+
+fn production_helper() {}
+"#,
+    );
+
+    assert!(offenders.is_empty(), "{offenders:#?}");
 }
 
 #[test]

@@ -200,6 +200,7 @@ function isPort(value: unknown): boolean {
 function isParameterEditor(value: unknown): boolean {
   return hasExactKeys(value, [
     'key', 'display', 'editor', 'presentation', 'valueType', 'multiline', 'value', 'configuration',
+    'inheritedValue', 'valueSource', 'options',
   ])
     && typeof value.key === 'string'
     && hasExactKeys(value.display, ['title', 'description'])
@@ -210,7 +211,11 @@ function isParameterEditor(value: unknown): boolean {
     && (value.valueType === null || isDataTypeBackendFormat(value.valueType))
     && typeof value.multiline === 'boolean'
     && isJsonValue(value.value)
-    && (value.configuration === null || isSchemaAwareParameterEditorDto(value.configuration));
+    && (value.configuration === null || isSchemaAwareParameterEditorDto(value.configuration))
+    && isJsonValue(value.inheritedValue)
+    && (value.valueSource === null || value.valueSource === 'project' || value.valueSource === 'node')
+    && (value.options === null || (Array.isArray(value.options)
+      && value.options.every((option) => typeof option === 'string')));
 }
 
 function isDiagnosticLocation(value: unknown): value is DiagnosticLocationDto {

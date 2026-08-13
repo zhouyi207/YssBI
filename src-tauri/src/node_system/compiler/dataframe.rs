@@ -9,6 +9,7 @@ use crate::node_system::document::{
 };
 use crate::node_system::protocol::{
     InterfaceResolverId, PortKey, RelationalScalarType, SchemaField, TypeExpr, TypeId,
+    data_series_type,
 };
 use std::collections::BTreeSet;
 use std::sync::{Arc, OnceLock};
@@ -65,7 +66,11 @@ impl InterfaceResolver for DataframeColumnsResolver {
                 source: SchemaSourceIdentity(source),
                 field: SchemaFieldIdentity(identity),
             };
-            let (value_type, diagnostic) = dataframe_field_type(field);
+            let (element_type, diagnostic) = dataframe_field_type(field);
+            let value_type = match element_type {
+                TypeExpr::Unknown => TypeExpr::Unknown,
+                element_type => data_series_type(element_type),
+            };
             if let Some(diagnostic) = diagnostic {
                 diagnostics.push(InterfaceResolverDiagnostic {
                     locator: locator.clone(),

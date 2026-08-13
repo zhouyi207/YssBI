@@ -84,17 +84,33 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
             ("then", "Then", "然后"),
         ],
     )?;
+    let value_type = TypeParameterId::new("value").map_err(|source| {
+        BuiltinAssemblyError::InvalidSemanticId {
+            value: "value".into(),
+            source,
+        }
+    })?;
     fragment.nodes.push(leaf(
         protocol(
             ID,
             "debug",
             vec![
                 control_port(ID, "enter", PortDirection::Input, PortInstances::Declared)?,
-                data_port(ID, "data", PortDirection::Input, TypeExpr::Unknown)?,
-                data_port(ID, "snapshot", PortDirection::Output, TypeExpr::Unknown)?,
+                data_port(
+                    ID,
+                    "data",
+                    PortDirection::Input,
+                    TypeExpr::Generic(value_type.clone()),
+                )?,
+                data_port(
+                    ID,
+                    "snapshot",
+                    PortDirection::Output,
+                    TypeExpr::Generic(value_type.clone()),
+                )?,
                 control_port(ID, "then", PortDirection::Output, PortInstances::Declared)?,
             ],
-            vec![],
+            vec![value_type],
             vec![],
             vec![],
             effectful(),

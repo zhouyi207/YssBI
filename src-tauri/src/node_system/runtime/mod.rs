@@ -13,6 +13,7 @@ mod kernel;
 mod kernels;
 mod materialization;
 mod memoization;
+mod numeric;
 mod parameters;
 mod production_relational;
 mod project_resource;
@@ -39,7 +40,7 @@ pub use data_series::{
     BooleanSeriesView, DataSeriesBuilder, DataSeriesContractError, DataSeriesElementType,
     DataSeriesMetadata, Float64SeriesView, Int64SeriesView, NullPolicy, NumericSeriesView,
     StringSeriesView, boolean_series, checked_int64_to_f64, numeric_series, require_data_series,
-    string_series,
+    string_series, validate_data_series_type_expr,
 };
 #[cfg(test)]
 pub(crate) use execution_event::RUN_EVENT_KIND_VARIANT_COUNT;
@@ -51,7 +52,8 @@ pub use function_plan::{
     FunctionPlanGeneration, FunctionPlanStore, FunctionPlanStoreError, PublishedFunctionPlan,
 };
 pub use kernel::{
-    Kernel, KernelContext, KernelError, KernelErrorKind, KernelRegistrationError, KernelRegistry,
+    EffectiveComputationSettings, Kernel, KernelContext, KernelError, KernelErrorKind,
+    KernelRegistrationError, KernelRegistry,
 };
 pub(crate) use kernels::dataframe_to_protocol_value_with_checkpoint;
 pub use kernels::{
@@ -62,6 +64,10 @@ pub use materialization::{RunResourceBudgets, RunResourceOwner, execute_planned_
 #[cfg(test)]
 pub(crate) use memoization::MemoCommitCheckpoint;
 pub use memoization::{DemandFingerprint, OperationMemoKey, RunMemoization, ValueFingerprint};
+pub use numeric::{
+    ListwiseRows, NumericError, NumericValue, approximately_equal, approximately_zero,
+    listwise_numeric_rows, numeric_equal, numeric_ordering, prepare_numeric_rows,
+};
 pub use parameters::{
     CompiledParameterRegistrationError, CompiledParameterStore, CompiledParameterTypeError,
 };
@@ -90,7 +96,10 @@ pub use resource::{
     ResourceError, ResourceErrorKind, ResourceLease, ResourceProvider, RunResourceSet,
 };
 pub(crate) use result_store::PendingResultSource;
-pub use result_store::{ResultSourceDescriptor, ResultSourceId, ResultSourcePage, ResultStore};
+pub use result_store::{
+    ResultReportKind, ResultSourceDescriptor, ResultSourceId, ResultSourcePage,
+    ResultSourcePresentation, ResultStore,
+};
 pub(crate) use run::{ACTIVATION_IDS, ActivationIdAllocator, check_terminal};
 pub use run::{
     ActivationId, Artifact, ArtifactCursor, ArtifactKind, ArtifactValueKind, CancellationToken,

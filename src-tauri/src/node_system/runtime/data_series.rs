@@ -146,17 +146,22 @@ pub(crate) fn validate_data_series_values(
 }
 
 fn value_matches(element_type: DataSeriesElementType, value: &Value) -> bool {
-    matches!(value, Value::Null)
-        || matches!(
-            (element_type, value),
-            (DataSeriesElementType::Int64, Value::Integer(_))
-                | (DataSeriesElementType::Float64, Value::Decimal(_))
-                | (DataSeriesElementType::String, Value::String(_))
-                | (DataSeriesElementType::Boolean, Value::Bool(_))
-                | (DataSeriesElementType::Date, Value::String(_))
-                | (DataSeriesElementType::Datetime, Value::String(_))
-                | (DataSeriesElementType::Categorical, Value::String(_))
-        )
+    match (element_type, value) {
+        (_, Value::Null)
+        | (DataSeriesElementType::Int64, Value::Integer(_))
+        | (DataSeriesElementType::Float64, Value::Decimal(_))
+        | (DataSeriesElementType::String, Value::String(_))
+        | (DataSeriesElementType::Boolean, Value::Bool(_))
+        | (DataSeriesElementType::Date, Value::String(_))
+        | (DataSeriesElementType::Datetime, Value::String(_))
+        | (DataSeriesElementType::Categorical, Value::String(_)) => true,
+        (DataSeriesElementType::Float64, Value::String(value)) => is_float64_special_value(value),
+        _ => false,
+    }
+}
+
+fn is_float64_special_value(value: &str) -> bool {
+    matches!(value, "NaN" | "Infinity" | "-Infinity")
 }
 
 fn value_storage_name(value: &Value) -> &'static str {
@@ -170,6 +175,77 @@ fn value_storage_name(value: &Value) -> &'static str {
         Value::Bytes(_) => "Bytes",
         Value::List(_) => "List",
         Value::Object(_) => "Object",
+    }
+}
+
+pub fn validate_data_series_type_expr(
+    metadata: &DataSeriesMetadata,
+    type_expr: &crate::node_system::protocol::TypeExpr,
+) -> Result<(), DataSeriesContractError> {
+    use crate::node_system::protocol::TypeExpr;
+    match type_expr {
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } if constructor.as_str() == crate::node_system::protocol::DATA_SERIES_CONSTRUCTOR_ID
+            && arguments.len() == 1 =>
+        {
+            validate_element_type_expr(metadata.element_type, &arguments[0])
+        }
+        TypeExpr::Union(members) => {
+            if members
+                .iter()
+                .any(|member| validate_data_series_type_expr(metadata, member).is_ok())
+            {
+                Ok(())
+            } else {
+                Err(DataSeriesContractError::new(format!(
+                    "DataSeries contract does not accept {} metadata",
+                    metadata.element_type
+                )))
+            }
+        }
+        _ => Err(DataSeriesContractError::new(
+            "DataSeries contract must use canonical core.data_series<T>",
+        )),
+    }
+}
+
+fn validate_element_type_expr(
+    actual: DataSeriesElementType,
+    type_expr: &crate::node_system::protocol::TypeExpr,
+) -> Result<(), DataSeriesContractError> {
+    use crate::node_system::protocol::TypeExpr;
+    let expected = match type_expr {
+        TypeExpr::Concrete(id) => match id.as_str() {
+            "core.int64" => Some(DataSeriesElementType::Int64),
+            "core.float64" => Some(DataSeriesElementType::Float64),
+            "core.string" => Some(DataSeriesElementType::String),
+            "core.bool" => Some(DataSeriesElementType::Boolean),
+            "core.date" => Some(DataSeriesElementType::Date),
+            "core.datetime" => Some(DataSeriesElementType::Datetime),
+            "core.categorical" => Some(DataSeriesElementType::Categorical),
+            _ => None,
+        },
+        TypeExpr::Union(members) => {
+            if members
+                .iter()
+                .any(|member| validate_element_type_expr(actual, member).is_ok())
+            {
+                return Ok(());
+            }
+            None
+        }
+        _ => None,
+    };
+    match expected {
+        Some(expected) if expected == actual => Ok(()),
+        Some(expected) => Err(DataSeriesContractError::new(format!(
+            "DataSeries contract expects {expected}, received {actual} metadata"
+        ))),
+        None => Err(DataSeriesContractError::new(
+            "DataSeries contract has an unsupported element type",
+        )),
     }
 }
 
@@ -279,6 +355,9 @@ pub fn numeric_series(
             metadata: metadata.clone(),
             values: read_values(artifact, policy, |value| match value {
                 Value::Decimal(value) => value.as_str().parse().ok(),
+                Value::String(value) if is_float64_special_value(&value) => {
+                    value.as_ref().parse().ok()
+                }
                 _ => None,
             })?,
         })),

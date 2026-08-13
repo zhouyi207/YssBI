@@ -2,6 +2,27 @@
 
 use crate::graph::value::CategoricalRole;
 use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StatisticalSettingSource {
+    Project,
+    Node,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatisticalObservationMetadata {
+    pub original_observation_count: usize,
+    pub used_observation_count: usize,
+    pub dropped_null_count: usize,
+    pub dropped_nan_count: usize,
+    pub missing_value_policy: crate::project::StatisticalMissingValuePolicy,
+    pub missing_value_policy_source: StatisticalSettingSource,
+    pub effective_convergence_tolerance: f64,
+    pub convergence_tolerance_source: StatisticalSettingSource,
+    pub convergence_tolerance_consumed: bool,
+}
 use std::f64::consts::PI;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

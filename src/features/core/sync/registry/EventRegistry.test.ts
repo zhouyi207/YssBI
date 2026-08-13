@@ -25,6 +25,7 @@ describe('EventRegistry project mutation registrations', () => {
     expect(registered).toEqual(expect.arrayContaining([
       'GraphDelta',
       'ResourceMutationCommitted',
+      'ComputationSettingsChanged',
     ]));
     expect(registered).not.toEqual(expect.arrayContaining(legacyGraphMutationEvents));
   });

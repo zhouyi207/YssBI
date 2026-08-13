@@ -34,8 +34,9 @@ pub use parameter::{
 };
 pub use types::{
     ColumnRename, ColumnSelectionExpr, RelationalScalarType, RenameExpr, ResolvedSchemaFact,
-    SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField, SchemaFieldLineage, TypeConstraint,
-    TypeExpr, TypeNormalizationError, TypeTerm, normalize_type_expr,
+    SchemaColumnRef, SchemaDependency, SchemaExpr, SchemaField, SchemaFieldLineage,
+    TypeCompatibility, TypeConstraint, TypeExpr, TypeNormalizationError, TypeTerm,
+    normalize_type_expr, type_exprs_compatibility,
 };
 pub use validation::{
     LiteralValidationIssue, LocatedParameterIssue, NominalParameterValidator, ParameterIssueKind,

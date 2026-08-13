@@ -21,7 +21,7 @@ use crate::node_system::protocol::{
 };
 use crate::node_system::registry::{
     CategoryRegistration, I18nManifest, NodeRegistry, NodeRegistryBuilder, ProviderRegistration,
-    RegisteredNode,
+    RegisteredNode, TypeRegistration,
 };
 use crate::node_system::runtime::{
     Kernel, KernelContext, KernelError, KernelRegistry, RuntimeValue,
@@ -125,6 +125,12 @@ impl TestProviderBuilder {
 
     pub fn build(self) -> TestProvider {
         let mut provider = ProviderRegistration::new("yssbi.testing".parse().unwrap());
+        provider.types = vec![TypeRegistration {
+            id: crate::node_system::protocol::TypeId::new("core.int64").unwrap(),
+            title_key: I18nKey::new("types.int64.title").unwrap(),
+            classes: BTreeSet::new(),
+        }]
+        .into_boxed_slice();
         provider.categories = vec![CategoryRegistration {
             id: "testing".parse().unwrap(),
             title_key: "categories.testing.title".parse().unwrap(),
@@ -133,7 +139,10 @@ impl TestProviderBuilder {
         }]
         .into_boxed_slice();
 
-        let mut keys = BTreeSet::from(["categories.testing.title".parse().unwrap()]);
+        let mut keys = BTreeSet::from([
+            "types.int64.title".parse().unwrap(),
+            "categories.testing.title".parse().unwrap(),
+        ]);
         let mut registered = Vec::new();
         let mut kernels = KernelRegistry::new();
         let mut outputs = BTreeMap::new();
@@ -443,7 +452,9 @@ fn port(node_type: &NodeTypeId, key: &PortKey, direction: PortDirection) -> Port
         .unwrap(),
         direction,
         kind: PortKind::Data,
-        value_type: TypeExpr::Unknown,
+        value_type: TypeExpr::Concrete(
+            crate::node_system::protocol::TypeId::new("core.int64").unwrap(),
+        ),
         instances: PortInstances::Declared,
         connections: if direction == PortDirection::Input {
             ConnectionsPerPort::Single

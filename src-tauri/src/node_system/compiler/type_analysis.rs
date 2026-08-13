@@ -1,6 +1,6 @@
 use super::{CompilerDiagnostic, CompilerDiagnosticLocation};
 use crate::node_system::analysis::DiagnosticLocation;
-use crate::node_system::document::{ConnectionId, NodeId, PortAddress};
+use crate::node_system::document::{ConnectionId, NodeId, PortAddress, PortRef};
 use crate::node_system::protocol::{
     NodeProtocol, ParameterKey, PortKey, TypeClassId, TypeConstraint, TypeConstructorId, TypeExpr,
     TypeId, TypeParameterId, TypeTerm,
@@ -121,6 +121,39 @@ impl TypeConstraintGraph {
                 kind: ConstraintKind::Equal(TypeValue::Variable(variable), declared),
                 location: DiagnosticLocation::Port(address.clone()),
             });
+        }
+
+        for group in protocol.interface.member_groups.iter() {
+            let mut instances = BTreeMap::new();
+            for (address, _) in &ports {
+                let PortRef::Instance {
+                    template,
+                    instance_id,
+                } = &address.port
+                else {
+                    continue;
+                };
+                if group.templates.contains(template) {
+                    instances
+                        .entry(*instance_id)
+                        .or_insert_with(Vec::new)
+                        .push((*address).clone());
+                }
+            }
+            for addresses in instances.values() {
+                if let Some((first, rest)) = addresses.split_first() {
+                    let first = self.port_variables[first];
+                    for address in rest {
+                        self.constraints.push(Constraint {
+                            kind: ConstraintKind::Equal(
+                                TypeValue::Variable(first),
+                                TypeValue::Variable(self.port_variables[address]),
+                            ),
+                            location: DiagnosticLocation::Port(address.clone()),
+                        });
+                    }
+                }
+            }
         }
 
         for constraint in protocol.interface.type_constraints.iter() {
@@ -347,36 +380,6 @@ fn port_template(address: &PortAddress) -> &PortKey {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TypeCompatibility {
-    Compatible,
-    Incompatible,
-    Indeterminate,
-}
-
-pub fn type_exprs_compatibility(
-    source: &TypeExpr,
-    target: &TypeExpr,
-    source_type_parameters: &[TypeParameterId],
-    target_type_parameters: &[TypeParameterId],
-) -> TypeCompatibility {
-    let source_generics = source_type_parameters
-        .iter()
-        .enumerate()
-        .map(|(index, parameter)| (parameter.clone(), index))
-        .collect::<BTreeMap<_, _>>();
-    let target_generics = target_type_parameters
-        .iter()
-        .enumerate()
-        .map(|(index, parameter)| (parameter.clone(), source_type_parameters.len() + index))
-        .collect::<BTreeMap<_, _>>();
-
-    compatibility(
-        &instantiate(source, &source_generics),
-        &instantiate(target, &target_generics),
-    )
-}
-
 #[cfg(test)]
 pub(crate) fn type_exprs_assignable(
     source: &TypeExpr,
@@ -384,78 +387,12 @@ pub(crate) fn type_exprs_assignable(
     source_type_parameters: &[TypeParameterId],
     target_type_parameters: &[TypeParameterId],
 ) -> bool {
-    type_exprs_compatibility(
+    crate::node_system::protocol::type_exprs_compatibility(
         source,
         target,
         source_type_parameters,
         target_type_parameters,
-    ) == TypeCompatibility::Compatible
-}
-
-fn compatibility(source: &TypeValue, target: &TypeValue) -> TypeCompatibility {
-    use TypeCompatibility::{Compatible, Incompatible, Indeterminate};
-
-    match (source, target) {
-        (TypeValue::Union(sources), target) => {
-            combine_every(sources.iter().map(|source| compatibility(source, target)))
-        }
-        (source, TypeValue::Union(targets)) => {
-            combine_any(targets.iter().map(|target| compatibility(source, target)))
-        }
-        (TypeValue::Unknown | TypeValue::Variable(_), _)
-        | (_, TypeValue::Unknown | TypeValue::Variable(_)) => Indeterminate,
-        (TypeValue::Concrete(source), TypeValue::Concrete(target)) => {
-            if source == target {
-                Compatible
-            } else {
-                Incompatible
-            }
-        }
-        (
-            TypeValue::Applied {
-                constructor: source_constructor,
-                arguments: source_arguments,
-            },
-            TypeValue::Applied {
-                constructor: target_constructor,
-                arguments: target_arguments,
-            },
-        ) if source_constructor == target_constructor
-            && source_arguments.len() == target_arguments.len() =>
-        {
-            combine_every(
-                source_arguments
-                    .iter()
-                    .zip(target_arguments)
-                    .map(|(source, target)| compatibility(source, target)),
-            )
-        }
-        _ => Incompatible,
-    }
-}
-
-fn combine_every(values: impl IntoIterator<Item = TypeCompatibility>) -> TypeCompatibility {
-    let mut outcome = TypeCompatibility::Compatible;
-    for value in values {
-        match value {
-            TypeCompatibility::Incompatible => return TypeCompatibility::Incompatible,
-            TypeCompatibility::Indeterminate => outcome = TypeCompatibility::Indeterminate,
-            TypeCompatibility::Compatible => {}
-        }
-    }
-    outcome
-}
-
-fn combine_any(values: impl IntoIterator<Item = TypeCompatibility>) -> TypeCompatibility {
-    let mut outcome = TypeCompatibility::Incompatible;
-    for value in values {
-        match value {
-            TypeCompatibility::Compatible => return TypeCompatibility::Compatible,
-            TypeCompatibility::Indeterminate => outcome = TypeCompatibility::Indeterminate,
-            TypeCompatibility::Incompatible => {}
-        }
-    }
-    outcome
+    ) == crate::node_system::protocol::TypeCompatibility::Compatible
 }
 
 fn instantiate(expr: &TypeExpr, generics: &BTreeMap<TypeParameterId, usize>) -> TypeValue {

@@ -50,6 +50,20 @@ impl ArtifactSnapshot {
         }
     }
 
+    fn kind(&self) -> ArtifactSnapshotKind {
+        match self {
+            Self::Value(_) => ArtifactSnapshotKind::Value,
+            Self::RuntimeArtifact(artifact)
+                if artifact.value_kind() == ArtifactValueKind::DataSeries =>
+            {
+                ArtifactSnapshotKind::DataSeries
+            }
+            Self::Sequence(_) | Self::Spilled(_) | Self::RuntimeArtifact(_) => {
+                ArtifactSnapshotKind::Sequence
+            }
+        }
+    }
+
     fn data_series_metadata(&self) -> Option<&DataSeriesMetadata> {
         match self {
             Self::RuntimeArtifact(artifact) => artifact.data_series_metadata(),
@@ -87,6 +101,7 @@ impl ArtifactSnapshot {
 pub enum ArtifactSnapshotKind {
     Value,
     Sequence,
+    DataSeries,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -238,12 +253,7 @@ impl ArtifactStore {
         let artifact_id = ArtifactId::new(self.inner.next_id.fetch_add(1, Ordering::Relaxed) + 1);
         let descriptor = ArtifactDescriptor {
             artifact_id,
-            kind: match &snapshot {
-                ArtifactSnapshot::Value(_) => ArtifactSnapshotKind::Value,
-                ArtifactSnapshot::Sequence(_)
-                | ArtifactSnapshot::Spilled(_)
-                | ArtifactSnapshot::RuntimeArtifact(_) => ArtifactSnapshotKind::Sequence,
-            },
+            kind: snapshot.kind(),
             value_kind: snapshot.value_kind(),
             data_series_metadata: snapshot.data_series_metadata().cloned(),
             total_count: snapshot.len(),

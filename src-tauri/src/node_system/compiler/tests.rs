@@ -23,6 +23,7 @@ use crate::node_system::protocol::*;
 use crate::node_system::registry::{
     CategoryRegistration, I18nManifest, NodeRegistry, NodeRegistryBuilder, ProtocolFingerprint,
     ProviderRegistration, RegisteredNode, RegistryFingerprint, StructuralNodeRole,
+    TypeRegistration,
 };
 use crate::node_system::testing::TestProtocolBuilder;
 use rand::SeedableRng;
@@ -124,7 +125,7 @@ fn protocol() -> NodeProtocol {
             label_key: I18nKey::new("nodes.test.constant.value").unwrap(),
             direction: PortDirection::Output,
             kind: PortKind::Data,
-            value_type: TypeExpr::Unknown,
+            value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
             instances: PortInstances::Declared,
             connections: ConnectionsPerPort::Multiple {
                 max: None,
@@ -261,6 +262,12 @@ impl CompilerRegistry for ProtocolOverrideCompilerRegistry<'_> {
 
 fn registry() -> NodeRegistry {
     let mut provider = ProviderRegistration::new(ProviderId::new("yssbi").unwrap());
+    provider.types = vec![TypeRegistration {
+        id: TypeId::new("core.int64").unwrap(),
+        title_key: I18nKey::new("types.int64.title").unwrap(),
+        classes: BTreeSet::new(),
+    }]
+    .into_boxed_slice();
     provider.categories = vec![CategoryRegistration {
         id: NodeCategoryId::new("test").unwrap(),
         title_key: I18nKey::new("categories.test.title").unwrap(),
@@ -270,6 +277,7 @@ fn registry() -> NodeRegistry {
     .into_boxed_slice();
     provider.i18n = I18nManifest {
         keys: BTreeSet::from([
+            I18nKey::new("types.int64.title").unwrap(),
             I18nKey::new("categories.test.title").unwrap(),
             I18nKey::new("nodes.test.constant.title").unwrap(),
             I18nKey::new("nodes.test.constant.value").unwrap(),
@@ -1426,10 +1434,15 @@ fn effect_port(name: &str, direction: PortDirection) -> PortSpec {
 
 fn test_protocol(
     name: &str,
-    ports: Vec<PortSpec>,
+    mut ports: Vec<PortSpec>,
     type_parameters: Vec<TypeParameterId>,
     constraints: Vec<TypeConstraint>,
 ) -> NodeProtocol {
+    for port in &mut ports {
+        if port.kind == PortKind::Data && port.value_type == TypeExpr::Unknown {
+            port.value_type = TypeExpr::Concrete(TypeId::new("core.object").unwrap());
+        }
+    }
     NodeProtocol {
         type_id: NodeTypeId::new(format!("yssbi.test.{name}")).unwrap(),
         catalog: NodeCatalogProtocol {
@@ -4970,6 +4983,14 @@ fn compilation_basis_contains_only_resources_read_by_analysis() {
         serde_json::json!(format!("variables/{used_variable}")),
     )]);
     let variable = GraphCompiler::new(&registry, &resources).compile(&variable_graph);
+    let variable_plan = variable
+        .plan
+        .as_ref()
+        .expect("an exact authoritative variable type should lower");
+    assert_eq!(
+        variable_plan.value_contracts[&ValueRef::new(0)].type_expr,
+        TypeExpr::Concrete(TypeId::new("core.int64").unwrap())
+    );
     assert_eq!(variable.analysis.basis.resource_versions.len(), 1);
     assert!(
         variable
@@ -5507,6 +5528,25 @@ fn value_dependency_cycle_is_blocking() {
     );
 }
 
+struct DataframeDatabaseResources;
+
+impl ResourceSnapshot for DataframeDatabaseResources {
+    fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
+        BTreeMap::from([(
+            ResourceKey::new("databases/main"),
+            ResourceVersion::new("fixture-v1"),
+        )])
+    }
+
+    fn database_name(&self, id: &str) -> Option<&str> {
+        (id == "main").then_some("Main database")
+    }
+
+    fn database_schema(&self, id: &str) -> Option<&[crate::schema::ColumnInfoDTO]> {
+        (id == "main").then_some(&[])
+    }
+}
+
 struct SourceSchemaResolver;
 impl SchemaResolver for SourceSchemaResolver {
     fn resolve(
@@ -5562,7 +5602,8 @@ fn compile_builtin_rename(
             SourceSchemaResolver,
         );
     }
-    GraphCompiler::with_schema_resolvers(&registry, &Resources, resolvers).compile(&graph)
+    GraphCompiler::with_schema_resolvers(&registry, &DataframeDatabaseResources, resolvers)
+        .compile(&graph)
 }
 
 fn rename_diagnostic_codes(result: &CompileResult) -> BTreeSet<&str> {
@@ -5662,7 +5703,8 @@ fn compile_builtin_relational_chain(graph_path: &str) -> CompileResult {
         SchemaResolverId::new(DATAFRAME_RESOURCE_SCHEMA_RESOLVER).unwrap(),
         SourceSchemaResolver,
     );
-    let compiler = GraphCompiler::with_schema_resolvers(&registry, &Resources, resolvers);
+    let compiler =
+        GraphCompiler::with_schema_resolvers(&registry, &DataframeDatabaseResources, resolvers);
     let snapshot = compiler.snapshot(GraphResourcePath(graph_path.into()), &graph);
     compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
@@ -5683,7 +5725,13 @@ fn builtin_relational_chain_specializes_final_and_intermediate_demands() {
         basis.provenance.graph_path,
         GraphResourcePath(graph_path.into())
     );
-    assert!(basis.provenance.basis.resource_versions.is_empty());
+    assert_eq!(
+        basis.provenance.basis.resource_versions,
+        BTreeMap::from([(
+            ResourceKey::new("databases/main"),
+            ResourceVersion::new("fixture-v1"),
+        )])
+    );
 
     let final_plan = basis
         .derive_plan(&ExecutionDemand::Outputs {

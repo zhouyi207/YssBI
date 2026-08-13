@@ -54,6 +54,13 @@ pub enum BuiltinAssemblyError {
         locale: Box<str>,
         key: Box<str>,
     },
+    UnsupportedBuiltinConfiguration {
+        context: &'static str,
+        value: Box<str>,
+    },
+    UnsupportedStatisticsPredictionFamily {
+        family: Box<str>,
+    },
     Registration(NodeRegistrationError),
 }
 
@@ -110,6 +117,13 @@ impl std::fmt::Display for BuiltinAssemblyError {
                 formatter,
                 "built-in localization key '{key}' has conflicting values for '{locale}'",
             ),
+            Self::UnsupportedBuiltinConfiguration { context, value } => {
+                write!(formatter, "unsupported built-in {context}: '{value}'")
+            }
+            Self::UnsupportedStatisticsPredictionFamily { family } => write!(
+                formatter,
+                "statistics prediction does not support the '{family}' model family",
+            ),
             Self::Registration(error) => error.fmt(formatter),
         }
     }
@@ -124,7 +138,9 @@ impl std::error::Error for BuiltinAssemblyError {
             Self::InvalidParameterSchema { source, .. } => Some(source),
             Self::InvalidDecimal { source, .. } => Some(source),
             Self::InvalidDefaultBinding { source, .. } => Some(source),
-            Self::LocalizationConflict { .. } => None,
+            Self::LocalizationConflict { .. }
+            | Self::UnsupportedBuiltinConfiguration { .. }
+            | Self::UnsupportedStatisticsPredictionFamily { .. } => None,
             Self::Registration(error) => Some(error),
         }
     }
@@ -749,7 +765,12 @@ fn constant_protocol(
         "core.bool" => ParameterEditorSpec::Toggle,
         "core.int64" | "core.float64" => ParameterEditorSpec::Number,
         "core.string" => ParameterEditorSpec::Text { multiline: false },
-        _ => unreachable!("unsupported built-in constant type: {ty}"),
+        _ => {
+            return Err(BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
+                context: "constant type",
+                value: ty.into(),
+            });
+        }
     };
     protocol(
         id,

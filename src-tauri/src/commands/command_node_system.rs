@@ -1638,10 +1638,19 @@ mod tests {
                 artifact_id: crate::node_system::runtime::ArtifactId::new(unsafe_id),
                 name: "result".into(),
                 kind: crate::node_system::runtime::ArtifactSnapshotKind::Value,
+                data_series_metadata: None,
                 total_count: 1,
+                presentation: crate::node_system::runtime::ResultSourcePresentation::Report {
+                    report: crate::node_system::runtime::ResultReportKind::OlsSummary,
+                },
                 correlation: correlation.clone(),
                 basis: basis.clone(),
             });
+        let source = serde_json::to_value(source).unwrap();
+        assert_eq!(source["title"], "Results");
+        assert_eq!(source["presentation"]["kind"], "report");
+        assert_eq!(source["presentation"]["report"], "olsSummary");
+
         let result = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
             correlation,
             basis,
@@ -1679,7 +1688,6 @@ mod tests {
             operation["correlation"]["selectionDigest"],
             preview["correlation"]["selectionDigest"]
         );
-        let source = serde_json::to_value(source).unwrap();
         assert_eq!(
             source["correlation"]["selectionDigest"],
             "demand-selection-a"

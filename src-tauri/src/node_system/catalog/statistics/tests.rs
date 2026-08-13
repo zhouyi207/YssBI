@@ -1,7 +1,10 @@
-use super::{LEGACY_NODE_IDS, NODES, build_provider_fragment};
+use super::{
+    LEGACY_NODE_IDS, NODES, build_provider_fragment, families::Family, prediction_model_type,
+};
+use crate::node_system::catalog::builtin::BuiltinAssemblyError;
 use crate::node_system::protocol::{
-    LiteralPolicy, NodeInterfaceProtocol, TypeExpr, TypeId, data_series_type,
-    numeric_data_series_type,
+    LiteralPolicy, NodeInterfaceProtocol, ParameterKey, PortDirection, PortInstances, TypeExpr,
+    TypeId, data_series_type, numeric_data_series_type, validate_parameter_values,
 };
 use std::collections::BTreeSet;
 
@@ -90,6 +93,226 @@ fn ols_summary_accepts_numeric_data_series_and_rejects_string_series() {
             &[],
             &[],
         ));
+    }
+}
+
+#[test]
+fn statistics_protocols_use_outer_numeric_unions_and_float_series_outputs() {
+    let fragment = build_provider_fragment().expect("statistics built-in fixture must assemble");
+    let numeric = numeric_data_series_type();
+    let float_series = data_series_type(TypeExpr::Concrete(TypeId::new("core.float64").unwrap()));
+
+    for node in &fragment.nodes {
+        for port in &node.protocol().interface.ports {
+            if port.kind != crate::node_system::protocol::PortKind::Data {
+                continue;
+            }
+            if matches!(
+                port.key.as_str(),
+                "response"
+                    | "predictors"
+                    | "weights"
+                    | "variables"
+                    | "endogenous"
+                    | "instruments"
+                    | "entity"
+                    | "time"
+                    | "treatment"
+                    | "series"
+            ) {
+                assert_eq!(
+                    port.value_type,
+                    numeric,
+                    "{}:{}",
+                    node.protocol().type_id,
+                    port.key
+                );
+            }
+            if port.direction == PortDirection::Output
+                && matches!(port.key.as_str(), "fitted" | "residuals" | "prediction")
+            {
+                assert_eq!(
+                    port.value_type,
+                    float_series,
+                    "{}:{} must be Float64 DataSeries",
+                    node.protocol().type_id,
+                    port.key
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn unsupported_prediction_family_cannot_silently_use_ols() {
+    assert_eq!(
+        prediction_model_type(Family::Panel),
+        Err(
+            BuiltinAssemblyError::UnsupportedStatisticsPredictionFamily {
+                family: "Panel".into(),
+            }
+        )
+    );
+}
+
+#[test]
+fn statistics_function_abi_preserves_family_nominals_and_rejects_cross_family_binding() {
+    let fragment = build_provider_fragment().expect("statistics built-in fixture must assemble");
+    let port_type = |node_id: &str, key: &str| {
+        fragment
+            .nodes
+            .iter()
+            .find(|node| node.protocol().type_id.as_str() == node_id)
+            .unwrap_or_else(|| panic!("missing {node_id}"))
+            .protocol()
+            .interface
+            .ports
+            .iter()
+            .find(|port| port.key.as_str() == key)
+            .unwrap_or_else(|| panic!("missing {node_id}:{key}"))
+            .value_type
+            .clone()
+    };
+    let nominal = |id| TypeExpr::Concrete(TypeId::new(id).unwrap());
+
+    let ols_model = port_type("yssbi.statistics.ols.fit", "model");
+    let logit_model = port_type("yssbi.statistics.logit.fit", "model");
+    let logit_predict_model = port_type("yssbi.statistics.logit.predict", "model");
+    let iv_2sls_result = port_type("yssbi.statistics.iv.2sls.summary", "result");
+
+    assert_eq!(ols_model, nominal("statistics.model.ols"));
+    assert_eq!(logit_model, nominal("statistics.model.logit"));
+    assert_eq!(logit_predict_model, nominal("statistics.model.logit"));
+    assert_eq!(iv_2sls_result, nominal("statistics.model.iv_2sls"));
+    assert!(!crate::node_system::compiler::type_exprs_assignable(
+        &ols_model,
+        &logit_predict_model,
+        &[],
+        &[],
+    ));
+    assert!(!crate::node_system::compiler::type_exprs_assignable(
+        &iv_2sls_result,
+        &logit_predict_model,
+        &[],
+        &[],
+    ));
+}
+
+#[test]
+fn iv_summary_requires_exactly_one_endogenous_and_one_instrument() {
+    let fragment = build_provider_fragment().expect("statistics built-in fixture must assemble");
+    for node_id in [
+        "yssbi.statistics.iv.2sls.summary",
+        "yssbi.statistics.iv.liml.summary",
+    ] {
+        let node = fragment
+            .nodes
+            .iter()
+            .find(|node| node.protocol().type_id.as_str() == node_id)
+            .unwrap_or_else(|| panic!("missing {node_id}"));
+        for key in ["endogenous", "instruments"] {
+            let port = node
+                .protocol()
+                .interface
+                .ports
+                .iter()
+                .find(|port| port.key.as_str() == key)
+                .unwrap_or_else(|| panic!("missing {node_id}:{key}"));
+            assert_eq!(
+                port.instances,
+                PortInstances::UserCreated {
+                    min: 1,
+                    max: Some(1)
+                }
+            );
+        }
+    }
+}
+
+#[test]
+fn default_statistics_node_allows_both_setting_overrides_to_inherit() {
+    let fragment = build_provider_fragment().expect("statistics built-in fixture must assemble");
+    let fit = fragment
+        .nodes
+        .iter()
+        .find(|node| node.protocol().type_id.as_str() == "yssbi.statistics.ols.fit")
+        .expect("OLS fit protocol");
+    let values = std::collections::BTreeMap::<ParameterKey, serde_json::Value>::new();
+
+    fn no_nominal_validation(_: &TypeId, _: &serde_json::Value) -> Option<Result<(), String>> {
+        None
+    }
+    let issues = validate_parameter_values(fit.protocol(), &values, &no_nominal_validation);
+
+    assert!(
+        issues.is_empty(),
+        "absent overrides must inherit: {issues:?}"
+    );
+}
+
+#[test]
+fn every_graph_crossing_statistics_model_or_result_is_family_specific() {
+    let fragment = build_provider_fragment().expect("statistics built-in fixture must assemble");
+    let output_type = |node_id: &str, key: &str| {
+        fragment
+            .nodes
+            .iter()
+            .find(|node| node.protocol().type_id.as_str() == node_id)
+            .unwrap_or_else(|| panic!("missing {node_id}"))
+            .protocol()
+            .interface
+            .ports
+            .iter()
+            .find(|port| port.key.as_str() == key)
+            .unwrap_or_else(|| panic!("missing {node_id}:{key}"))
+            .value_type
+            .clone()
+    };
+
+    let cases = [
+        ("yssbi.statistics.ols.fit", "model", "statistics.model.ols"),
+        (
+            "yssbi.statistics.iv.2sls.summary",
+            "result",
+            "statistics.model.iv_2sls",
+        ),
+        (
+            "yssbi.statistics.iv.liml.summary",
+            "result",
+            "statistics.model.iv_liml",
+        ),
+        (
+            "yssbi.statistics.panel.summary",
+            "result",
+            "statistics.model.panel",
+        ),
+        (
+            "yssbi.statistics.panel.did.twfe",
+            "result",
+            "statistics.model.panel_did",
+        ),
+        (
+            "yssbi.statistics.var.summary",
+            "result",
+            "statistics.model.var",
+        ),
+        (
+            "yssbi.statistics.adf.test",
+            "result",
+            "statistics.model.adf",
+        ),
+        (
+            "yssbi.statistics.vec.rank_test",
+            "result",
+            "statistics.model.vec_rank",
+        ),
+    ];
+    for (node_id, key, expected) in cases {
+        assert_eq!(
+            output_type(node_id, key),
+            TypeExpr::Concrete(TypeId::new(expected).unwrap()),
+            "{node_id}:{key}"
+        );
     }
 }
 

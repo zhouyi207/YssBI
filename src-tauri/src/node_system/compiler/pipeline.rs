@@ -1416,12 +1416,18 @@ impl<'a> AnalysisState<'a> {
                 self.resolve_instance_title(node_id, resolved.protocol, &parameters, resources);
             self.validate_binding_templates(node_id, resolved.protocol);
             let provisional_diagnostic_start = self.diagnostics.len();
-            let (ports, port_sequence, deferred_for_schema) = self.resolve_ports(
+            let (mut ports, port_sequence, deferred_for_schema) = self.resolve_ports(
                 node_id,
                 resolved.protocol,
                 &empty_schemas,
                 resources,
                 interface_resolvers,
+            );
+            self.refine_resource_bound_port_types(
+                resolved.protocol,
+                &parameters,
+                resources,
+                &mut ports,
             );
             if deferred_for_schema {
                 self.diagnostics.truncate(provisional_diagnostic_start);
@@ -1999,6 +2005,54 @@ impl<'a> AnalysisState<'a> {
             .filter(|(key, _)| known.contains(key))
             .collect();
         (normalized, validation.prepared_nominal)
+    }
+
+    fn refine_resource_bound_port_types(
+        &mut self,
+        protocol: &NodeProtocol,
+        parameters: &BTreeMap<crate::node_system::protocol::ParameterKey, serde_json::Value>,
+        resources: &mut dyn AnalysisResourceResolver,
+        ports: &mut BTreeMap<PortAddress, ResolvedPort<PortAddress>>,
+    ) {
+        let NodeInstanceDisplaySpec::ResourceParameter { parameter, kind } =
+            &protocol.instance_display
+        else {
+            return;
+        };
+        let Some(path) = parameters
+            .get(parameter)
+            .and_then(serde_json::Value::as_str)
+        else {
+            return;
+        };
+        let value_type = match kind {
+            ResourceDisplayKind::Variable => path
+                .strip_prefix("variables/")
+                .and_then(|id| uuid::Uuid::parse_str(id).ok())
+                .and_then(|id| {
+                    resources
+                        .resolve_variable(&crate::variable::VariableId::from(id))
+                        .ok()
+                })
+                .and_then(|resolved| {
+                    crate::node_system::compatibility::data_type_to_type_expr(
+                        &resolved.value.data_type,
+                    )
+                    .ok()
+                }),
+            ResourceDisplayKind::Function | ResourceDisplayKind::Database => None,
+        };
+        let Some(value_type) = value_type else {
+            return;
+        };
+        for port in ports
+            .values_mut()
+            .filter(|port| port.kind == PortKind::Data)
+        {
+            if matches!(port.value_type, TypeExpr::Generic(_) | TypeExpr::Unknown) {
+                port.value_type = value_type.clone();
+            }
+        }
     }
 
     fn resolve_ports(

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useLayoutStore } from "@/features/core/layout/layoutStore";
 import { useTranslation } from "react-i18next";
 import { ActivityBar } from "./Layout/ActivityBar";
@@ -33,6 +34,7 @@ function EditorWindowReady() {
   const setSettingsOpen = useLayoutStore((s) => s.setSettingsOpen);
   const setNodeDocumentationOpen = useLayoutStore((s) => s.setNodeDocumentationOpen);
   const activityBar = useActivityBarLayout(zenMode);
+  const [, setSettingsDirty] = useState(false);
 
   useWorkbenchLayout();
   useEditorWorkbenchAppearance();
@@ -76,9 +78,21 @@ function EditorWindowReady() {
       {!zenMode ? <BottomBar /> : null}
       <ZenModeHintOverlay />
       <NodeDocumentationModal open={isNodeDocumentationOpen} onOpenChange={setNodeDocumentationOpen} />
-      <Dialog open={isSettingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="h-[min(760px,86vh)] max-w-[min(1120px,92vw)] p-0">
-          <SettingsView />
+      <Dialog
+        open={isSettingsOpen}
+        onOpenChange={(open) => {
+          if (open) setSettingsOpen(true);
+        }}
+      >
+        <DialogContent
+          explicitClose
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          className="h-[min(760px,86vh)] max-w-[min(1120px,92vw)] p-0"
+        >
+          <SettingsView
+            onRequestClose={() => setSettingsOpen(false)}
+            onDirtyChange={setSettingsDirty}
+          />
         </DialogContent>
       </Dialog>
     </div>

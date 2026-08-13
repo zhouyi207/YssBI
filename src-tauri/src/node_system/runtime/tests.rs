@@ -14,6 +14,7 @@ use crate::node_system::protocol::{
     RetryPolicy, TypeExpr, TypeId, Value,
 };
 use crate::node_system::registry::RegistryFingerprint;
+use crate::project::{NumericTolerance, StatisticalMissingValuePolicy};
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
@@ -653,6 +654,234 @@ fn checked_int64_float_promotion_rejects_inexact_values() {
     );
 }
 
+fn task_8_tolerance() -> NumericTolerance {
+    NumericTolerance {
+        absolute: 1e-12,
+        relative: 1e-9,
+    }
+}
+
+fn numeric_view(
+    element_type: DataSeriesElementType,
+    values: impl Into<Box<[Value]>>,
+) -> NumericSeriesView {
+    let artifact = DataSeriesBuilder::new(element_type)
+        .values(values)
+        .build(ArtifactKind::Collected)
+        .unwrap();
+    numeric_series(&artifact, NullPolicy::Propagate).unwrap()
+}
+
+#[test]
+fn approximate_equality_handles_special_values_and_exact_ints() {
+    let tolerance = task_8_tolerance();
+
+    assert!(approximately_equal(0.0, 5e-13, tolerance));
+    assert!(approximately_equal(1e9, 1e9 + 0.5, tolerance));
+    assert!(!approximately_equal(f64::NAN, f64::NAN, tolerance));
+    assert!(approximately_equal(f64::INFINITY, f64::INFINITY, tolerance));
+    assert!(!approximately_equal(
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        tolerance
+    ));
+    assert!(approximately_equal(0.0, -0.0, tolerance));
+    assert!(approximately_zero(-0.0, tolerance));
+    assert!(approximately_zero(5e-13, tolerance));
+    assert!(!approximately_zero(5e-10, tolerance));
+    assert!(
+        numeric_equal(
+            NumericValue::Int64(9_007_199_254_740_993),
+            NumericValue::Int64(9_007_199_254_740_993),
+            tolerance
+        )
+        .unwrap()
+    );
+    assert!(
+        numeric_equal(
+            NumericValue::Int64(7),
+            NumericValue::Float64(7.0),
+            tolerance
+        )
+        .unwrap()
+    );
+}
+
+#[test]
+fn mixed_numeric_comparison_rejects_lossy_int64_conversion() {
+    let error = numeric_equal(
+        NumericValue::Int64(9_007_199_254_740_993),
+        NumericValue::Float64(9_007_199_254_740_992.0),
+        task_8_tolerance(),
+    )
+    .unwrap_err();
+
+    assert_eq!(
+        error.to_string(),
+        "Int64 value 9007199254740993 cannot be represented exactly as Float64"
+    );
+}
+
+#[test]
+fn numeric_ordering_ignores_tolerance() {
+    assert_eq!(
+        numeric_ordering(
+            NumericValue::Float64(1.0),
+            NumericValue::Float64(1.0 + 5e-10)
+        )
+        .unwrap(),
+        std::cmp::Ordering::Less
+    );
+    assert_eq!(
+        numeric_ordering(NumericValue::Int64(3), NumericValue::Int64(2)).unwrap(),
+        std::cmp::Ordering::Greater
+    );
+}
+
+#[test]
+fn listwise_rows_combines_all_model_inputs() {
+    let inputs = [
+        numeric_view(
+            DataSeriesElementType::Int64,
+            [
+                Value::Integer(1),
+                Value::Null,
+                Value::Integer(3),
+                Value::Integer(4),
+            ],
+        ),
+        numeric_view(
+            DataSeriesElementType::Float64,
+            [
+                decimal("10"),
+                decimal("20"),
+                Value::String("NaN".into()),
+                decimal("40"),
+            ],
+        ),
+        numeric_view(
+            DataSeriesElementType::Float64,
+            [
+                decimal("100"),
+                decimal("200"),
+                decimal("300"),
+                decimal("400"),
+            ],
+        ),
+    ];
+
+    let rows = prepare_numeric_rows(&inputs, StatisticalMissingValuePolicy::Listwise).unwrap();
+
+    assert_eq!(rows.original_row_count(), 4);
+    assert_eq!(rows.used_row_count(), 2);
+    assert_eq!(rows.dropped_null_count(), 1);
+    assert_eq!(rows.dropped_nan_count(), 1);
+    assert_eq!(rows.columns()[0].as_ref(), [1.0, 4.0]);
+    assert_eq!(rows.columns()[1].as_ref(), [10.0, 40.0]);
+    assert_eq!(rows.columns()[2].as_ref(), [100.0, 400.0]);
+}
+
+#[test]
+fn reject_missing_value_reports_input_and_row() {
+    let null_inputs = [numeric_view(
+        DataSeriesElementType::Int64,
+        [Value::Integer(1), Value::Null],
+    )];
+    let null_error =
+        prepare_numeric_rows(&null_inputs, StatisticalMissingValuePolicy::Reject).unwrap_err();
+    assert_eq!(
+        null_error.message(),
+        "numeric input 0 contains Null at row 1"
+    );
+
+    let nan_inputs = [numeric_view(
+        DataSeriesElementType::Float64,
+        [decimal("1"), Value::String("NaN".into())],
+    )];
+    let nan_error =
+        prepare_numeric_rows(&nan_inputs, StatisticalMissingValuePolicy::Reject).unwrap_err();
+    assert_eq!(nan_error.message(), "numeric input 0 contains NaN at row 1");
+}
+
+#[test]
+fn kernel_context_receives_an_immutable_effective_settings_snapshot() {
+    struct SettingsKernel;
+
+    impl Kernel for SettingsKernel {
+        fn execute(
+            &self,
+            context: &KernelContext<'_>,
+            _: &[RuntimeValue],
+        ) -> Result<Vec<RuntimeValue>, KernelError> {
+            let settings = context.computation_settings();
+            assert_eq!(settings.numeric_tolerance.absolute, 0.25);
+            assert_eq!(settings.numeric_tolerance.relative, 0.5);
+            assert_eq!(
+                settings.statistical_missing_value_policy,
+                StatisticalMissingValuePolicy::Reject
+            );
+            Ok(Vec::new())
+        }
+    }
+
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(id("settings.snapshot", KernelHandle::new), SettingsKernel)
+        .unwrap();
+    let mut settings = crate::project::ProjectComputationSettings::default();
+    settings.numeric.tolerance = NumericTolerance {
+        absolute: 0.25,
+        relative: 0.5,
+    };
+    settings.missing_values.statistics = StatisticalMissingValuePolicy::Reject;
+    let resources = no_resources();
+    let executor = RunExecutor::new(&kernels, &resources, &NoFunctions)
+        .with_computation_settings_snapshot(&settings);
+    settings.numeric.tolerance.absolute = 9.0;
+    assert_eq!(settings.numeric.tolerance.absolute, 9.0);
+    let execution_plan = plan(
+        vec![operation("settings.snapshot", &[], &[])],
+        0,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+
+    executor
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+}
+
+#[test]
+fn numeric_row_preparation_rejects_infinity_and_mismatched_lengths() {
+    let infinity_inputs = [numeric_view(
+        DataSeriesElementType::Float64,
+        [decimal("1"), Value::String("Infinity".into())],
+    )];
+    let infinity_error =
+        prepare_numeric_rows(&infinity_inputs, StatisticalMissingValuePolicy::Listwise)
+            .unwrap_err();
+    assert_eq!(
+        infinity_error.message(),
+        "numeric input 0 contains positive infinity at row 1"
+    );
+
+    let mismatched_inputs = [
+        numeric_view(DataSeriesElementType::Int64, [Value::Integer(1)]),
+        numeric_view(
+            DataSeriesElementType::Int64,
+            [Value::Integer(1), Value::Integer(2)],
+        ),
+    ];
+    let mismatch_error =
+        prepare_numeric_rows(&mismatched_inputs, StatisticalMissingValuePolicy::Listwise)
+            .unwrap_err();
+    assert_eq!(
+        mismatch_error.message(),
+        "numeric input 1 has 2 rows; expected 1"
+    );
+}
+
 fn requirement(name: &str) -> CompiledResourceRequirement {
     CompiledResourceRequirement {
         resource: id(name, ResourceId::new),
@@ -976,6 +1205,64 @@ fn bounded_materialization_run_result_and_result_store_keep_spill_durable() {
         &[Value::String("durable".into())]
     );
     assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn spilled_data_series_is_pageable_as_data_series() {
+    let root = materialization_test_root("data-series-result-page");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(105),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let metadata = data_series_metadata(DataSeriesElementType::Float64, 3, 1);
+    let series = Artifact::new_data_series(
+        ArtifactKind::Collected,
+        metadata.clone(),
+        [decimal("1.25"), Value::Null, decimal("3.75")],
+    )
+    .unwrap();
+    let spilled = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Artifact(series),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    let execution_plan = plan(
+        Vec::new(),
+        0,
+        StructuredControlRegion::Sequence(Box::new([])),
+    );
+    let run_id = RunId::new(105);
+    let correlation = CorrelationContext::compile(&execution_plan.provenance).for_run(run_id, None);
+    let results = ResultStore::new();
+
+    let descriptor = results
+        .publish_runtime_value(
+            run_id,
+            correlation,
+            execution_plan.provenance.basis.clone(),
+            "series",
+            &spilled,
+        )
+        .unwrap();
+    assert_eq!(descriptor.kind, ArtifactSnapshotKind::DataSeries);
+    assert_eq!(descriptor.data_series_metadata, Some(metadata.clone()));
+
+    let page = results.page(descriptor.source_id, 1, 2).unwrap().unwrap();
+    assert_eq!(page.kind, ArtifactSnapshotKind::DataSeries);
+    assert_eq!(page.data_series_metadata, Some(metadata));
+    assert_eq!(page.values.as_ref(), &[Value::Null, decimal("3.75")]);
+
+    drop(spilled);
+    drop(owner);
     std::fs::remove_dir(root).unwrap();
 }
 
@@ -1896,6 +2183,97 @@ fn bounded_materialization_panic_cleanup_errors_are_traced_without_replacing_pan
 }
 
 #[test]
+fn data_series_artifact_survives_memoization() {
+    let root = materialization_test_root("data-series-spill-memo");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(130),
+        materialization_test_budgets(1, 1),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+    let metadata = DataSeriesMetadata {
+        element_type: DataSeriesElementType::Float64,
+        length: 3,
+        null_count: 1,
+        name: Some("spill-backed".into()),
+        format: Some("number".into()),
+    };
+    let series = Artifact::new_data_series(
+        ArtifactKind::Collected,
+        metadata.clone(),
+        [decimal("1"), Value::Null, decimal("3")],
+    )
+    .unwrap();
+    let spilled = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Artifact(series),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    assert!(matches!(
+        &spilled,
+        RuntimeValue::Artifact(artifact)
+            if artifact.kind() == ArtifactKind::Spilled
+                && artifact.data_series_metadata() == Some(&metadata)
+    ));
+    assert!(
+        OperationMemoKey::from_inputs(
+            OperationStableId::new("events/test::data-series-spilled-consumer").unwrap(),
+            std::slice::from_ref(&spilled),
+            BTreeMap::new(),
+            ExecutionSemanticsVersion::from_bytes([7; 32]),
+            DemandFingerprint::from_bytes([9; 32]),
+        )
+        .is_none(),
+        "run-owned spill paths must not become memo keys"
+    );
+
+    let calls = AtomicUsize::new(0);
+    let mut outputs = Vec::new();
+    for _ in 0..2 {
+        calls.fetch_add(1, Ordering::SeqCst);
+        let RuntimeValue::Artifact(artifact) = &spilled else {
+            unreachable!();
+        };
+        let values = artifact
+            .cursor()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        outputs.push(
+            DataSeriesBuilder::new(metadata.element_type)
+                .values(values)
+                .name(metadata.name.clone().unwrap())
+                .format(metadata.format.clone().unwrap())
+                .build(ArtifactKind::Replayable)
+                .unwrap(),
+        );
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    for output in outputs {
+        assert_eq!(output.data_series_metadata(), Some(&metadata));
+        assert_eq!(
+            output
+                .cursor()
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+            [decimal("1"), Value::Null, decimal("3")]
+        );
+    }
+
+    drop(spilled);
+    drop(owner);
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
 fn spill_artifacts_never_enter_per_run_memoization() {
     let root = materialization_test_root("spill-memo");
     let cancellation = CancellationToken::new();
@@ -2343,6 +2721,66 @@ fn runtime_admission_rejects_sequence_artifact_for_data_series_contract() {
     assert!(
         matches!(&error, RunError::InvalidPlan(message) if message.contains("DataSeries Artifact")),
         "unexpected admission error: {error:?}"
+    );
+    assert!(!downstream_executed.load(Ordering::SeqCst));
+}
+
+#[test]
+fn runtime_admission_rejects_data_series_element_metadata_mismatch() {
+    let int_series_contract = PlannedValueContract {
+        kind: PlannedValueKind::DataSeries,
+        type_expr: crate::node_system::protocol::data_series_type(TypeExpr::Concrete(
+            TypeId::new("core.int64").unwrap(),
+        )),
+    };
+    let downstream_executed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observed = Arc::clone(&downstream_executed);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("float_series_source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| {
+                Ok(vec![RuntimeValue::Artifact(
+                    DataSeriesBuilder::new(DataSeriesElementType::Float64)
+                        .values([decimal("1.5")])
+                        .name("float input")
+                        .build(ArtifactKind::Replayable)
+                        .unwrap(),
+                )])
+            }),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("int_series_sink", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.store(true, Ordering::SeqCst);
+                Ok(Vec::new())
+            }),
+        )
+        .unwrap();
+    let mut source = operation("float_series_source", &[], &[0]);
+    source.outputs[0].contract = int_series_contract.clone();
+    source.outputs[0].production = OutputProduction::FullyMaterialized;
+    let mut sink = operation("int_series_sink", &[0], &[]);
+    sink.inputs[0].contract = int_series_contract.clone();
+    let mut execution_plan = plan(
+        vec![source, sink],
+        1,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    execution_plan.value_contracts = BTreeMap::from([(ValueRef::new(0), int_series_contract)]);
+
+    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap_err();
+
+    assert!(
+        matches!(&error, RunError::InvalidPlan(message) if message.contains("expects Int64") && message.contains("Float64")),
+        "unexpected metadata admission error: {error:?}"
     );
     assert!(!downstream_executed.load(Ordering::SeqCst));
 }
@@ -3641,6 +4079,142 @@ fn call_copies_values_across_different_caller_and_callee_layouts() {
     assert_eq!(
         result.values["answer"],
         RuntimeValue::from(Value::Integer(42))
+    );
+}
+
+#[test]
+fn function_call_preserves_data_series_artifact() {
+    let series_contract = PlannedValueContract {
+        kind: PlannedValueKind::DataSeries,
+        type_expr: crate::node_system::protocol::data_series_type(TypeExpr::Concrete(
+            TypeId::new("core.float64").unwrap(),
+        )),
+    };
+    let mut kernels = build_builtin_kernel_registry();
+    kernels
+        .register(
+            id("function_series_source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| {
+                Ok(vec![RuntimeValue::Artifact(
+                    DataSeriesBuilder::new(DataSeriesElementType::Float64)
+                        .values([decimal("1"), Value::Null, decimal("3")])
+                        .name("function payload")
+                        .format("number")
+                        .build(ArtifactKind::Replayable)
+                        .unwrap(),
+                )])
+            }),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("function_scalar_source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(2).into()])),
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("function_series_identity", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| Ok(vec![inputs[0].clone()])),
+        )
+        .unwrap();
+
+    let mut identity = operation("function_series_identity", &[1], &[3]);
+    identity.inputs[0].contract = series_contract.clone();
+    identity.outputs[0].contract = series_contract.clone();
+    identity.outputs[0].production = OutputProduction::FullyMaterialized;
+    let mut callee = plan(
+        vec![identity],
+        4,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    callee.value_sources = Box::new([PlanValueSource::ExternalInput(
+        ValueRef::new(1),
+        OutputProduction::FullyMaterialized,
+    )]);
+    callee
+        .value_contracts
+        .insert(ValueRef::new(1), series_contract.clone());
+    callee
+        .value_contracts
+        .insert(ValueRef::new(3), series_contract.clone());
+
+    let mut source = operation("function_series_source", &[], &[4]);
+    source.outputs[0].contract = series_contract.clone();
+    source.outputs[0].production = OutputProduction::FullyMaterialized;
+    let scalar = operation("function_scalar_source", &[], &[5]);
+    let mut math = operation("yssbi.numeric.series.add", &[0, 5], &[6]);
+    math.inputs[0].contract = series_contract.clone();
+    math.outputs[0].contract = series_contract.clone();
+    math.outputs[0].production = OutputProduction::FullyMaterialized;
+    let mut caller = plan(
+        vec![source, scalar, math],
+        7,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+            ControlStep::Region(Box::new(StructuredControlRegion::Call {
+                target: id("functions/data-series", FunctionPlanHandle::new),
+                arguments: Box::new([CallArgumentBinding {
+                    caller_source: ValueRef::new(4),
+                    callee_destination: ValueRef::new(1),
+                }]),
+                results: Box::new([CallResultBinding {
+                    callee_source: ValueRef::new(3),
+                    caller_destination: ValueRef::new(0),
+                    production: Some(OutputProduction::FullyMaterialized),
+                }]),
+                mandatory: true,
+            })),
+            ControlStep::Operation(OperationIndex::new(2)),
+        ])),
+    );
+    caller.value_sources = Box::new([PlanValueSource::ControlProduced(
+        ValueRef::new(0),
+        OutputProduction::FullyMaterialized,
+    )]);
+    for value in [0, 4, 6] {
+        caller
+            .value_contracts
+            .insert(ValueRef::new(value), series_contract.clone());
+    }
+    caller.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("result"),
+        value: ValueRef::new(6),
+    }]);
+    publish_graph_results(&mut caller);
+
+    let mut function = published_function(callee, "functions/data-series", &[1], &[3]);
+    let published = Arc::make_mut(&mut function);
+    Arc::make_mut(&mut published.abi)
+        .parameter_contracts
+        .values_mut()
+        .for_each(|contract| *contract = series_contract.clone());
+    Arc::make_mut(&mut published.abi)
+        .result_contracts
+        .values_mut()
+        .for_each(|contract| *contract = series_contract.clone());
+    let result = RunExecutor::new(&kernels, &no_resources(), &OneFunction(function))
+        .run(&caller, CancellationToken::new())
+        .unwrap();
+    let artifact = require_data_series(&result.values["result"]).unwrap();
+    let metadata = artifact.data_series_metadata().unwrap();
+
+    assert_eq!(metadata.element_type, DataSeriesElementType::Float64);
+    assert_eq!(metadata.length, 3);
+    assert_eq!(metadata.null_count, 1);
+    assert_eq!(metadata.name.as_deref(), Some("function payload"));
+    assert_eq!(metadata.format.as_deref(), Some("number"));
+    assert_eq!(
+        artifact
+            .cursor()
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap(),
+        [decimal("3"), Value::Null, decimal("5")]
     );
 }
 

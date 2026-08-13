@@ -94,6 +94,15 @@ export function NodeParameterEditor({
   };
 
   const configuration = parameter.configuration;
+  if (parameter.valueSource && parameter.inheritedValue !== undefined) {
+    return (
+      <ProjectedOverrideEditor
+        parameter={parameter}
+        pending={pending}
+        onCommit={commit}
+      />
+    );
+  }
   if (configuration?.kind === 'projectColumns') {
     return (
       <div className="space-y-2">
@@ -145,6 +154,51 @@ export function NodeParameterEditor({
     <DetailReadonlyField label={parameter.display.title}>
       {formatFallback(parameter.value)}
     </DetailReadonlyField>
+  );
+}
+
+function ProjectedOverrideEditor({ parameter, pending, onCommit }: OrdinaryValueEditorProps) {
+  const inherited = parameter.inheritedValue;
+  const source = parameter.valueSource ?? (parameter.value == null ? 'project' : 'node');
+  const effectiveValue = source === 'project' ? inherited : parameter.value;
+  const setSource = (next: 'project' | 'node') => {
+    onCommit(next === 'project' ? null : inherited);
+  };
+
+  return (
+    <div className="space-y-2">
+      <DetailFieldRow label={parameter.display.title}>
+        <select
+          aria-label="Setting source"
+          className={detailInlineInputClass}
+          value={source}
+          disabled={pending}
+          onChange={(event) => setSource(event.target.value as 'project' | 'node')}
+        >
+          <option value="project">Inherit project setting</option>
+          <option value="node">Node override</option>
+        </select>
+      </DetailFieldRow>
+      {source === 'project' ? (
+        <DetailReadonlyField label="Effective value">
+          {String(effectiveValue)}
+        </DetailReadonlyField>
+      ) : parameter.options?.length ? (
+        <DetailFieldRow label="Effective value">
+          <select
+            aria-label={parameter.display.title}
+            className={detailInlineInputClass}
+            value={String(parameter.value ?? inherited)}
+            disabled={pending}
+            onChange={(event) => onCommit(event.target.value)}
+          >
+            {parameter.options.map((option) => <option key={option} value={option}>{option}</option>)}
+          </select>
+        </DetailFieldRow>
+      ) : (
+        <OrdinaryValueEditor parameter={parameter} pending={pending} onCommit={onCommit} />
+      )}
+    </div>
   );
 }
 

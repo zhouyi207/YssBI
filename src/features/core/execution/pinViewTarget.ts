@@ -1,7 +1,10 @@
 import type { TFunction } from 'i18next';
 import { otherEndpointFromConnectionId } from '@/features/core/dataStore/pinLinks';
 import type { InspectableSourceRef } from '@/features/core/resultSource/inspectableSource';
-import { runtimePinRef } from '@/features/core/resultSource/inspectableSource';
+import {
+  runtimePinRef,
+  windowSourceRef,
+} from '@/features/core/resultSource/inspectableSource';
 import type { ExecutionStatus, PinResultState } from '@/shared/types/ui';
 import { lookupPinResult } from './pinResultIndex';
 
@@ -57,13 +60,15 @@ function buildInspectableRefs(
   const { graphPath, pinResults } = params;
   return candidates.map((candidatePinId) => {
     const cached = lookupPinResult(pinResults, graphPath, candidatePinId);
-    return runtimePinRef(cached?.graphPath ?? graphPath, cached?.pinId ?? candidatePinId);
+    return cached
+      ? windowSourceRef(cached.sourceId)
+      : runtimePinRef(graphPath, candidatePinId);
   });
 }
 
 /** Single-pass UI + open resolution for pin view menus. */
 export function evaluatePinViewState(params: ResolvePinViewTargetParams): PinViewUiState {
-  const { isExec, executionStatus, direction } = params;
+  const { isExec, direction } = params;
 
   if (!isInspectableDataPin(isExec)) {
     return {
@@ -98,15 +103,10 @@ export function evaluatePinViewState(params: ResolvePinViewTargetParams): PinVie
     };
   }
 
-  const enabled = executionStatus === 'completed' && refs.length > 0;
   return {
     showMenu: true,
-    enabled,
-    disabledReason: enabled
-      ? null
-      : direction === 'input'
-        ? 'no_upstream'
-        : 'no_run',
+    enabled: false,
+    disabledReason: direction === 'input' ? 'no_upstream' : 'no_run',
     refs,
   };
 }

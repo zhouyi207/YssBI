@@ -115,6 +115,9 @@ function projection(
             multiline: false,
             value: 2,
             configuration: null,
+            inheritedValue: null,
+            valueSource: null,
+            options: null,
           },
         ],
         capabilities: {

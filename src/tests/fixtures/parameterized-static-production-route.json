@@ -65,7 +65,7 @@
     ],
     "locale": "en-US",
     "projectInstanceId": "fixture-project",
-    "registryFingerprint": "c50129f4312bfe5e505120a7c0d513741b13bd745409185a9bd874fe5c1543e0",
+    "registryFingerprint": "5204f97e4ef0727ba5aa2e6aaeee9ffb462e4d2d2d3ec5db29ef0c1dc87db0d3",
     "resourcePublicationRevision": 0
   },
   "connect": {
@@ -130,7 +130,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 3,
-            "registryFingerprint": "c50129f4312bfe5e505120a7c0d513741b13bd745409185a9bd874fe5c1543e0",
+            "registryFingerprint": "5204f97e4ef0727ba5aa2e6aaeee9ffb462e4d2d2d3ec5db29ef0c1dc87db0d3",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -195,7 +195,7 @@
           ],
           "diagnostics": [
             {
-              "blocking": true,
+              "blocking": false,
               "code": "compiler.input.unbound",
               "location": {
                 "address": {
@@ -207,7 +207,7 @@
               },
               "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
               "related": [],
-              "severity": "error"
+              "severity": "warning"
             },
             {
               "blocking": true,
@@ -254,10 +254,13 @@
                     "title": "dataframe"
                   },
                   "editor": "resource",
+                  "inheritedValue": null,
                   "key": "dataframe",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": "databases/main",
+                  "valueSource": null,
                   "valueType": {
                     "kind": "String"
                   }
@@ -332,7 +335,7 @@
               },
               "diagnostics": [
                 {
-                  "blocking": true,
+                  "blocking": false,
                   "code": "compiler.input.unbound",
                   "location": {
                     "address": {
@@ -344,7 +347,7 @@
                   },
                   "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
                   "related": [],
-                  "severity": "error"
+                  "severity": "warning"
                 }
               ],
               "display": {
@@ -378,8 +381,10 @@
                     "title": "Predicate"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "predicate",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": {
                     "column": "amount",
@@ -389,6 +394,7 @@
                       "value": "10"
                     }
                   },
+                  "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.filter_predicate",
                     "kind": "Struct"
@@ -511,13 +517,16 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": [
                     "amount",
                     "region"
                   ],
+                  "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.project_columns",
                     "kind": "Struct"
@@ -631,10 +640,13 @@
                     "title": "Source column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "from",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": "amount",
+                  "valueSource": null,
                   "valueType": {
                     "kind": "String"
                   }
@@ -646,10 +658,13 @@
                     "title": "Destination column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "to",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": "selected_amount",
+                  "valueSource": null,
                   "valueType": {
                     "kind": "String"
                   }
@@ -762,10 +777,13 @@
                     "title": "rows"
                   },
                   "editor": "number",
+                  "inheritedValue": null,
                   "key": "rows",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": 2,
+                  "valueSource": null,
                   "valueType": {
                     "kind": "Int64"
                   }
@@ -910,10 +928,13 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": null,
+                  "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.project_columns",
                     "kind": "Struct"
@@ -1083,7 +1104,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 2,
-            "registryFingerprint": "c50129f4312bfe5e505120a7c0d513741b13bd745409185a9bd874fe5c1543e0",
+            "registryFingerprint": "5204f97e4ef0727ba5aa2e6aaeee9ffb462e4d2d2d3ec5db29ef0c1dc87db0d3",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -1134,7 +1155,7 @@
           ],
           "diagnostics": [
             {
-              "blocking": true,
+              "blocking": false,
               "code": "compiler.input.unbound",
               "location": {
                 "address": {
@@ -1146,10 +1167,10 @@
               },
               "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
               "related": [],
-              "severity": "error"
+              "severity": "warning"
             },
             {
-              "blocking": true,
+              "blocking": false,
               "code": "compiler.input.unbound",
               "location": {
                 "address": {
@@ -1161,7 +1182,7 @@
               },
               "message": "Required input 00000000-0000-0000-0000-000000000009:source is unbound.",
               "related": [],
-              "severity": "error"
+              "severity": "warning"
             },
             {
               "blocking": true,
@@ -1208,10 +1229,13 @@
                     "title": "dataframe"
                   },
                   "editor": "resource",
+                  "inheritedValue": null,
                   "key": "dataframe",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": "databases/main",
+                  "valueSource": null,
                   "valueType": {
                     "kind": "String"
                   }
@@ -1286,7 +1310,7 @@
               },
               "diagnostics": [
                 {
-                  "blocking": true,
+                  "blocking": false,
                   "code": "compiler.input.unbound",
                   "location": {
                     "address": {
@@ -1298,7 +1322,7 @@
                   },
                   "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
                   "related": [],
-                  "severity": "error"
+                  "severity": "warning"
                 }
               ],
               "display": {
@@ -1332,8 +1356,10 @@
                     "title": "Predicate"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "predicate",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": {
                     "column": "amount",
@@ -1343,6 +1369,7 @@
                       "value": "10"
                     }
                   },
+                  "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.filter_predicate",
                     "kind": "Struct"
@@ -1465,13 +1492,16 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": [
                     "amount",
                     "region"
                   ],
+                  "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.project_columns",
                     "kind": "Struct"
@@ -1585,10 +1615,13 @@
                     "title": "Source column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "from",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": "amount",
+                  "valueSource": null,
                   "valueType": {
                     "kind": "String"
                   }
@@ -1600,10 +1633,13 @@
                     "title": "Destination column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "to",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": "selected_amount",
+                  "valueSource": null,
                   "valueType": {
                     "kind": "String"
                   }
@@ -1716,10 +1752,13 @@
                     "title": "rows"
                   },
                   "editor": "number",
+                  "inheritedValue": null,
                   "key": "rows",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": 2,
+                  "valueSource": null,
                   "valueType": {
                     "kind": "Int64"
                   }
@@ -1815,7 +1854,7 @@
               },
               "diagnostics": [
                 {
-                  "blocking": true,
+                  "blocking": false,
                   "code": "compiler.input.unbound",
                   "location": {
                     "address": {
@@ -1827,7 +1866,7 @@
                   },
                   "message": "Required input 00000000-0000-0000-0000-000000000009:source is unbound.",
                   "related": [],
-                  "severity": "error"
+                  "severity": "warning"
                 },
                 {
                   "blocking": true,
@@ -1866,10 +1905,13 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": null,
+                  "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.project_columns",
                     "kind": "Struct"
@@ -1968,7 +2010,7 @@
     "basis": {
       "graphPath": "events/ProductionChain.yssbi-event",
       "graphRevision": 1,
-      "registryFingerprint": "c50129f4312bfe5e505120a7c0d513741b13bd745409185a9bd874fe5c1543e0",
+      "registryFingerprint": "5204f97e4ef0727ba5aa2e6aaeee9ffb462e4d2d2d3ec5db29ef0c1dc87db0d3",
       "resourceVersions": {
         "databases/main": "revision:0"
       }
@@ -2019,7 +2061,7 @@
     ],
     "diagnostics": [
       {
-        "blocking": true,
+        "blocking": false,
         "code": "compiler.input.unbound",
         "location": {
           "address": {
@@ -2031,11 +2073,11 @@
         },
         "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
         "related": [],
-        "severity": "error"
+        "severity": "warning"
       }
     ],
     "graphPath": "events/ProductionChain.yssbi-event",
-    "hasBlockingDiagnostics": true,
+    "hasBlockingDiagnostics": false,
     "nodes": [
       {
         "capabilities": {
@@ -2066,10 +2108,13 @@
               "title": "dataframe"
             },
             "editor": "resource",
+            "inheritedValue": null,
             "key": "dataframe",
             "multiline": false,
+            "options": null,
             "presentation": "detailPanel",
             "value": "databases/main",
+            "valueSource": null,
             "valueType": {
               "kind": "String"
             }
@@ -2144,7 +2189,7 @@
         },
         "diagnostics": [
           {
-            "blocking": true,
+            "blocking": false,
             "code": "compiler.input.unbound",
             "location": {
               "address": {
@@ -2156,7 +2201,7 @@
             },
             "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
             "related": [],
-            "severity": "error"
+            "severity": "warning"
           }
         ],
         "display": {
@@ -2190,8 +2235,10 @@
               "title": "Predicate"
             },
             "editor": "auto",
+            "inheritedValue": null,
             "key": "predicate",
             "multiline": false,
+            "options": null,
             "presentation": "detailPanel",
             "value": {
               "column": "amount",
@@ -2201,6 +2248,7 @@
                 "value": "10"
               }
             },
+            "valueSource": null,
             "valueType": {
               "inner": "yssbi.dataframe.filter_predicate",
               "kind": "Struct"
@@ -2323,13 +2371,16 @@
               "title": "Columns"
             },
             "editor": "auto",
+            "inheritedValue": null,
             "key": "columns",
             "multiline": false,
+            "options": null,
             "presentation": "detailPanel",
             "value": [
               "amount",
               "region"
             ],
+            "valueSource": null,
             "valueType": {
               "inner": "yssbi.dataframe.project_columns",
               "kind": "Struct"
@@ -2443,10 +2494,13 @@
               "title": "Source column"
             },
             "editor": "text",
+            "inheritedValue": null,
             "key": "from",
             "multiline": false,
+            "options": null,
             "presentation": "detailPanel",
             "value": "amount",
+            "valueSource": null,
             "valueType": {
               "kind": "String"
             }
@@ -2458,10 +2512,13 @@
               "title": "Destination column"
             },
             "editor": "text",
+            "inheritedValue": null,
             "key": "to",
             "multiline": false,
+            "options": null,
             "presentation": "detailPanel",
             "value": "selected_amount",
+            "valueSource": null,
             "valueType": {
               "kind": "String"
             }
@@ -2574,10 +2631,13 @@
               "title": "rows"
             },
             "editor": "number",
+            "inheritedValue": null,
             "key": "rows",
             "multiline": false,
+            "options": null,
             "presentation": "detailPanel",
             "value": 2,
+            "valueSource": null,
             "valueType": {
               "kind": "Int64"
             }
@@ -2663,7 +2723,7 @@
       }
     ],
     "outcome": {
-      "type": "analysisBlocked"
+      "type": "success"
     },
     "sourceRevision": 1
   },
@@ -2747,7 +2807,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 4,
-            "registryFingerprint": "c50129f4312bfe5e505120a7c0d513741b13bd745409185a9bd874fe5c1543e0",
+            "registryFingerprint": "5204f97e4ef0727ba5aa2e6aaeee9ffb462e4d2d2d3ec5db29ef0c1dc87db0d3",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -2812,7 +2872,7 @@
           ],
           "diagnostics": [
             {
-              "blocking": true,
+              "blocking": false,
               "code": "compiler.input.unbound",
               "location": {
                 "address": {
@@ -2824,11 +2884,11 @@
               },
               "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
               "related": [],
-              "severity": "error"
+              "severity": "warning"
             }
           ],
           "graphPath": "events/ProductionChain.yssbi-event",
-          "hasBlockingDiagnostics": true,
+          "hasBlockingDiagnostics": false,
           "nodes": [
             {
               "capabilities": {
@@ -2859,10 +2919,13 @@
                     "title": "dataframe"
                   },
                   "editor": "resource",
+                  "inheritedValue": null,
                   "key": "dataframe",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": "databases/main",
+                  "valueSource": null,
                   "valueType": {
                     "kind": "String"
                   }
@@ -2937,7 +3000,7 @@
               },
               "diagnostics": [
                 {
-                  "blocking": true,
+                  "blocking": false,
                   "code": "compiler.input.unbound",
                   "location": {
                     "address": {
@@ -2949,7 +3012,7 @@
                   },
                   "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
                   "related": [],
-                  "severity": "error"
+                  "severity": "warning"
                 }
               ],
               "display": {
@@ -2983,8 +3046,10 @@
                     "title": "Predicate"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "predicate",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": {
                     "column": "amount",
@@ -2994,6 +3059,7 @@
                       "value": "10"
                     }
                   },
+                  "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.filter_predicate",
                     "kind": "Struct"
@@ -3116,13 +3182,16 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": [
                     "amount",
                     "region"
                   ],
+                  "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.project_columns",
                     "kind": "Struct"
@@ -3236,10 +3305,13 @@
                     "title": "Source column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "from",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": "amount",
+                  "valueSource": null,
                   "valueType": {
                     "kind": "String"
                   }
@@ -3251,10 +3323,13 @@
                     "title": "Destination column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "to",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": "selected_amount",
+                  "valueSource": null,
                   "valueType": {
                     "kind": "String"
                   }
@@ -3367,10 +3442,13 @@
                     "title": "rows"
                   },
                   "editor": "number",
+                  "inheritedValue": null,
                   "key": "rows",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": 2,
+                  "valueSource": null,
                   "valueType": {
                     "kind": "Int64"
                   }
@@ -3505,13 +3583,16 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
+                  "options": null,
                   "presentation": "detailPanel",
                   "value": [
                     "region",
                     "amount"
                   ],
+                  "valueSource": null,
                   "valueType": {
                     "inner": "yssbi.dataframe.project_columns",
                     "kind": "Struct"
@@ -3626,7 +3707,7 @@
             }
           ],
           "outcome": {
-            "type": "analysisBlocked"
+            "type": "success"
           },
           "sourceRevision": 4
         }

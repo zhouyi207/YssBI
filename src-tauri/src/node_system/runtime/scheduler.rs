@@ -2,19 +2,21 @@ use super::relational::RunRelationalBackends;
 use super::scheduling::ClassScheduler;
 use super::{
     ACTIVATION_IDS, ActivationId, ActivationIdAllocator, CancellationToken, CompiledParameterStore,
-    DemandFingerprint, FrameId, KernelContext, KernelErrorKind, KernelRegistry,
-    NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey, PendingResultSource,
-    ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider, RelationalContext,
-    ResourceErrorKind, ResourceProvider, ResultSourceDescriptor, ResultStore, RunDeadline,
-    RunError, RunErrorOutcome, RunEvent, RunEventKind, RunEventSink, RunMemoization, RunOptions,
-    RunPhase, RunResourceBudgets, RunResourceOwner, RunResourceSet, RunResult, RuntimeValue,
-    SchedulingPolicy, check_terminal, execute_planned_adapter,
+    DemandFingerprint, EffectiveComputationSettings, FrameId, KernelContext, KernelErrorKind,
+    KernelRegistry, NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey,
+    PendingResultSource, ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider,
+    RelationalContext, ResourceErrorKind, ResourceProvider, ResultReportKind,
+    ResultSourceDescriptor, ResultSourcePresentation, ResultStore, RunDeadline, RunError,
+    RunErrorOutcome, RunEvent, RunEventKind, RunEventSink, RunMemoization, RunOptions, RunPhase,
+    RunResourceBudgets, RunResourceOwner, RunResourceSet, RunResult, RuntimeValue,
+    SchedulingPolicy, check_terminal, execute_planned_adapter, validate_data_series_type_expr,
 };
 use crate::node_system::analysis::{
     CorrelationContext, NOOP_TRACE_SINK, ParentCallId, ResourceVersionSet, RunId,
     SYSTEM_TRACE_CLOCK, SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan,
     complete_span_safely, start_span_safely,
 };
+use crate::node_system::document::PortRef;
 use crate::node_system::plan::{
     AttemptId, CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan,
     FunctionPlanHandle, GraphOutputRef, OperationIndex, PlannedKernel, PlannedPublication,
@@ -72,6 +74,64 @@ enum PendingSourceEvent {
         output: GraphOutputRef,
         generation: u64,
     },
+}
+
+impl PendingSourceEvent {
+    fn output(&self) -> &GraphOutputRef {
+        match self {
+            Self::GraphResult { output } | Self::PinPreview { output, .. } => output,
+        }
+    }
+}
+
+fn result_presentation(plan: &ExecutionPlan, output: &GraphOutputRef) -> ResultSourcePresentation {
+    let PortRef::Declared { key } = &output.port.port else {
+        return ResultSourcePresentation::Inspector;
+    };
+    if key.as_str() != "report" {
+        return ResultSourcePresentation::Inspector;
+    }
+    let Some(value) = plan
+        .results
+        .iter()
+        .find(|result| result.output == *output)
+        .map(|result| result.value)
+    else {
+        return ResultSourcePresentation::Inspector;
+    };
+    let Some(node_type) = plan
+        .operations
+        .iter()
+        .find(|operation| {
+            operation
+                .outputs
+                .iter()
+                .any(|candidate| candidate.value == value)
+        })
+        .map(|operation| operation.source_node_type_id.as_str())
+    else {
+        return ResultSourcePresentation::Inspector;
+    };
+    let report = match node_type {
+        "yssbi.statistics.ols.summary"
+        | "yssbi.statistics.gls.summary"
+        | "yssbi.statistics.wls.summary" => ResultReportKind::OlsSummary,
+        "yssbi.statistics.logit.summary" | "yssbi.statistics.probit.summary" => {
+            ResultReportKind::BinarySummary
+        }
+        "yssbi.statistics.iv.2sls.summary" => ResultReportKind::Iv2slsSummary,
+        "yssbi.statistics.iv.liml.summary" => ResultReportKind::IvLimlSummary,
+        "yssbi.statistics.prais.summary" => ResultReportKind::PraisSummary,
+        "yssbi.statistics.var.summary" => ResultReportKind::VarSummary,
+        "yssbi.statistics.var.lag_order" => ResultReportKind::VarSoc,
+        "yssbi.statistics.panel.summary" => ResultReportKind::PanelSummary,
+        "yssbi.statistics.panel.did.twfe" => ResultReportKind::PanelDid,
+        "yssbi.statistics.adf.summary" => ResultReportKind::DfAdfSummary,
+        "yssbi.statistics.vec.fit" => ResultReportKind::VecSummary,
+        "yssbi.statistics.vec.rank_test" => ResultReportKind::VecRankSummary,
+        _ => return ResultSourcePresentation::Inspector,
+    };
+    ResultSourcePresentation::Report { report }
 }
 
 struct PendingSourcePublication {
@@ -141,6 +201,7 @@ struct AdmissionBookkeeping {
 struct OperationWorkerContext<'a> {
     run_id: RunId,
     frame_id: FrameId,
+    computation_settings: EffectiveComputationSettings,
     plan: &'a ExecutionPlan,
     kernels: &'a KernelRegistry,
     compiled_parameters: Option<&'a CompiledParameterStore>,
@@ -557,6 +618,7 @@ pub struct RunExecutor<'a> {
     compiled_parameters: Option<&'a CompiledParameterStore>,
     run_registry: Option<&'a ProjectRunRegistry>,
     selection_digest: Option<[u8; 32]>,
+    computation_settings: EffectiveComputationSettings,
     recursion_limit: usize,
     trace: &'a dyn TraceSink,
     events: &'a dyn RunEventSink,
@@ -595,6 +657,7 @@ impl<'a> RunExecutor<'a> {
             compiled_parameters: None,
             run_registry: None,
             selection_digest: None,
+            computation_settings: EffectiveComputationSettings::default(),
             recursion_limit: functions.recursion_limit().max(1),
             trace: &NOOP_TRACE_SINK,
             events: &NOOP_RUN_EVENT_SINK,
@@ -635,6 +698,14 @@ impl<'a> RunExecutor<'a> {
 
     pub fn with_selection_digest(mut self, digest: [u8; 32]) -> Self {
         self.selection_digest = Some(digest);
+        self
+    }
+
+    pub fn with_computation_settings_snapshot(
+        mut self,
+        settings: &crate::project::ProjectComputationSettings,
+    ) -> Self {
+        self.computation_settings = EffectiveComputationSettings::from(settings);
         self
     }
 
@@ -1070,10 +1141,12 @@ impl<'a> RunExecutor<'a> {
                     )
                 }
             };
-            if let Some(source) = results.prepare_runtime_value(
+            let presentation = result_presentation(plan, event.output());
+            if let Some(source) = results.prepare_runtime_value_with_presentation(
                 correlation.clone(),
                 plan.provenance.basis.clone(),
                 name,
+                presentation,
                 value,
             ) {
                 pending_sources.push(PendingSourcePublication { source, event });
@@ -1586,6 +1659,7 @@ impl<'a> RunExecutor<'a> {
         let worker_context = OperationWorkerContext {
             run_id,
             frame_id: frame.id,
+            computation_settings: self.computation_settings,
             plan,
             kernels: self.kernels,
             compiled_parameters: self.compiled_parameters,
@@ -2154,21 +2228,27 @@ impl<'a> RunExecutor<'a> {
                 } else {
                     frame.value(input.value).cloned()
                 }?;
-                if input.contract.kind == PlannedValueKind::DataSeries
-                    && !matches!(
-                        &value,
-                        RuntimeValue::Artifact(artifact)
-                            if artifact.value_kind()
-                                == crate::node_system::runtime::ArtifactValueKind::DataSeries
-                    )
-                {
-                    return Err(RunError::InvalidPlan(
-                        format!(
-                            "DataSeries input value {} did not receive a DataSeries Artifact",
-                            input.value.index()
+                if input.contract.kind == PlannedValueKind::DataSeries {
+                    let RuntimeValue::Artifact(artifact) = &value else {
+                        return Err(RunError::InvalidPlan(
+                            format!(
+                                "DataSeries input value {} did not receive a DataSeries Artifact",
+                                input.value.index()
+                            )
+                            .into(),
+                        ));
+                    };
+                    let metadata = artifact.data_series_metadata().ok_or_else(|| {
+                        RunError::InvalidPlan(
+                            format!(
+                                "DataSeries input value {} did not receive a DataSeries Artifact",
+                                input.value.index()
+                            )
+                            .into(),
                         )
-                        .into(),
-                    ));
+                    })?;
+                    validate_data_series_type_expr(metadata, &input.contract.type_expr)
+                        .map_err(|error| RunError::InvalidPlan(error.to_string().into()))?;
                 }
                 Ok(value)
             })
@@ -2791,6 +2871,7 @@ fn execute_operation_worker_inner(
                 run_id: context.run_id,
                 frame_id: context.frame_id,
                 activation_id: job.activation,
+                computation_settings: context.computation_settings,
                 params: &operation.params,
                 compiled_parameters: context.compiled_parameters,
                 resources: context.resources,

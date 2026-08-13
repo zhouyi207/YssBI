@@ -42,6 +42,9 @@ function projectedParameter(
     multiline: false,
     value,
     configuration: null,
+    inheritedValue: null,
+    valueSource: null,
+    options: null,
   };
 }
 

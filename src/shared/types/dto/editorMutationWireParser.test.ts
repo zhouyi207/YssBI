@@ -98,6 +98,9 @@ function projectionWithParameterEditor(): Record<string, unknown> {
     multiline: false,
     value: 1,
     configuration: null,
+    inheritedValue: null,
+    valueSource: null,
+    options: null,
   }];
   return value;
 }
@@ -185,6 +188,13 @@ describe('editor mutation wire parser', () => {
   });
 
   it.each([
+    ['missing inheritedValue', (editor: Record<string, unknown>) => { delete editor.inheritedValue; }],
+    ['missing valueSource', (editor: Record<string, unknown>) => { delete editor.valueSource; }],
+    ['missing options', (editor: Record<string, unknown>) => { delete editor.options; }],
+    ['invalid valueSource casing', (editor: Record<string, unknown>) => {
+      editor.valueSource = 'Project';
+    }],
+    ['non-string options', (editor: Record<string, unknown>) => { editor.options = [1]; }],
     ['missing valueType', (editor: Record<string, unknown>) => { delete editor.valueType; }],
     ['string valueType', (editor: Record<string, unknown>) => { editor.valueType = 'Int64'; }],
     ['malformed valueType', (editor: Record<string, unknown>) => {

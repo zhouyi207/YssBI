@@ -190,6 +190,9 @@ export interface ParameterEditorDto {
   multiline: boolean;
   value: unknown | null;
   configuration: SchemaAwareParameterEditorDto | null;
+  inheritedValue: unknown | null;
+  valueSource: 'project' | 'node' | null;
+  options: string[] | null;
 }
 
 export interface DataframeColumnOptionDto {

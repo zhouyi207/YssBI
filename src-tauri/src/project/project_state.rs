@@ -75,9 +75,13 @@ impl ProjectExecutionError {
     pub fn internal_compilation(
         failure: crate::node_system::compiler::InternalCompilationFailure,
     ) -> Self {
+        let node_context = failure
+            .node_id
+            .map(|node_id| format!(" (node {node_id})"))
+            .unwrap_or_default();
         Self {
             message: format!(
-                "internal compilation failure at {:?}: {}",
+                "internal compilation failure at {:?}: {}{node_context}",
                 failure.stage, failure.code
             )
             .into(),
@@ -1323,6 +1327,7 @@ impl ProjectionSourceSnapshot {
             &document,
             self.environment.registry.as_ref(),
             &self.environment.catalog.localization(locale),
+            &self.data.computation_settings,
         )
         .map_err(|error| error.to_string())
     }
@@ -1771,10 +1776,11 @@ impl ProjectState {
             )
         };
         next_data.computation_settings = request.settings.clone();
-        let contents = crate::project::project_io::serialize_project_manifest(&next_data)
-            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+        let contents = crate::project::project_io::serialize_project_manifest(&next_data).map_err(
+            |error| ProjectFilesystemError::TransactionPrepareFailed {
                 message: error.to_string(),
-            })?;
+            },
+        )?;
         let lease = self.filesystem.acquire(session.root.clone())?;
         let context = ProjectTransactionContext {
             session: session.clone(),
@@ -7201,6 +7207,7 @@ impl ProjectState {
             execution.session_id.clone(),
             trace_sink.as_ref(),
             &compile_cancellation,
+            &execution.data.computation_settings,
             &mut compiled_parameters,
         )?;
         #[cfg(test)]
@@ -7220,7 +7227,12 @@ impl ProjectState {
         if let Some(observer) = self.project_resource_lease_observer.read().unwrap().clone() {
             resources.set_lease_observer(observer);
         }
-        build_run_parameters(&mut compiled_parameters, &execution.document, plan.as_ref())?;
+        build_run_parameters(
+            &mut compiled_parameters,
+            &execution.document,
+            plan.as_ref(),
+            &execution.data.computation_settings,
+        )?;
         let mut relational_backends = crate::node_system::runtime::RelationalBackendRegistry::new();
         #[cfg(test)]
         let production_relational_backend = self
@@ -7327,6 +7339,7 @@ impl ProjectState {
         .with_relational_backends(&relational_backends)
         .with_compiled_parameters(&compiled_parameters)
         .with_run_registry(execution.runs.as_ref())
+        .with_computation_settings_snapshot(&execution.data.computation_settings)
         .with_selection_digest(selected.selection_digest)
         .with_trace_sink(trace_sink.as_ref())
         .with_event_sink(events)
@@ -9045,6 +9058,7 @@ pub(super) fn publish_function_plans(
     session_id: crate::node_system::analysis::ProjectSessionId,
     trace_sink: &dyn crate::node_system::analysis::TraceSink,
     cancellation: &crate::node_system::compiler::CompileCancellationToken,
+    computation_settings: &crate::project::ProjectComputationSettings,
     parameters: &mut crate::node_system::runtime::CompiledParameterStore,
 ) -> Result<crate::node_system::runtime::FunctionPlanGeneration, ProjectExecutionError> {
     let compiler = GraphCompiler::with_resolvers(
@@ -9110,7 +9124,7 @@ pub(super) fn publish_function_plans(
             )
         })?;
         pending.extend(function_targets(&plan.root_region));
-        build_run_parameters(parameters, document, &plan)?;
+        build_run_parameters(parameters, document, &plan, computation_settings)?;
         let resource_key = crate::node_system::analysis::ResourceKey::new(document_path.0.as_ref());
         let version = resources
             .versions
@@ -9137,6 +9151,7 @@ fn build_run_parameters(
     parameters: &mut crate::node_system::runtime::CompiledParameterStore,
     document: &crate::node_system::document::GraphDocument,
     plan: &crate::node_system::plan::ExecutionPlan,
+    computation_settings: &crate::project::ProjectComputationSettings,
 ) -> Result<(), String> {
     for operation in &plan.operations {
         let node_type = operation.source_node_type_id.as_str();
@@ -9177,10 +9192,34 @@ fn build_run_parameters(
                     .and_then(serde_json::Value::as_u64)
                     .map(|value| value as usize)
             };
+            let convergence_override = parameter("convergence_tolerance")
+                .map(|value| {
+                    value
+                        .as_f64()
+                        .filter(|value| value.is_finite() && *value > 0.0)
+                        .ok_or_else(|| {
+                            "statistics convergence tolerance must be finite and greater than zero"
+                                .to_string()
+                        })
+                })
+                .transpose()?;
             parameters
                 .insert(
                     operation.params.clone(),
                     crate::node_system::runtime::StatisticsKernelParameters {
+                        data_series_input_indices: Some(
+                            operation
+                                .inputs
+                                .iter()
+                                .enumerate()
+                                .filter_map(|(index, input)| {
+                                    (input.contract.kind
+                                        == crate::node_system::plan::PlannedValueKind::DataSeries)
+                                        .then_some(index)
+                                })
+                                .collect::<Vec<_>>()
+                                .into_boxed_slice(),
+                        ),
                         lags: positive_integer("lags"),
                         max_lags: positive_integer("max_lags"),
                         rank: positive_integer("rank"),
@@ -9190,6 +9229,31 @@ fn build_run_parameters(
                         trend: parameter("trend")
                             .and_then(serde_json::Value::as_str)
                             .map(Into::into),
+                        convergence_tolerance: convergence_override
+                            .unwrap_or(computation_settings.numeric.tolerance.absolute),
+                        convergence_tolerance_source: if parameter("convergence_tolerance")
+                            .is_some()
+                        {
+                            crate::sci::models::regression::StatisticalSettingSource::Node
+                        } else {
+                            crate::sci::models::regression::StatisticalSettingSource::Project
+                        },
+                        missing_value_policy: match parameter("missing_value_policy")
+                            .and_then(serde_json::Value::as_str)
+                        {
+                            Some("Reject") => crate::project::StatisticalMissingValuePolicy::Reject,
+                            Some("Listwise") => crate::project::StatisticalMissingValuePolicy::Listwise,
+                            Some(other) => return Err(format!(
+                                "statistics missing-value policy must be Listwise or Reject, got '{other}'"
+                            )),
+                            None => computation_settings.missing_values.statistics,
+                        },
+                        missing_value_policy_source: if parameter("missing_value_policy").is_some()
+                        {
+                            crate::sci::models::regression::StatisticalSettingSource::Node
+                        } else {
+                            crate::sci::models::regression::StatisticalSettingSource::Project
+                        },
                     },
                 )
                 .map_err(|error| error.to_string())?;
@@ -9214,12 +9278,69 @@ fn build_run_parameters(
                 .or_else(|| parameter("window"))
                 .and_then(serde_json::Value::as_u64)
                 .map(|value| value as usize);
+            let columns = if node_type == "yssbi.dataframe.decompose" {
+                let mut columns = document
+                    .port_bindings
+                    .iter()
+                    .filter_map(|(address, binding)| {
+                        if address.node_id != operation.source_node_id {
+                            return None;
+                        }
+                        let crate::node_system::document::PortRef::Instance { template, .. } =
+                            &address.port
+                        else {
+                            return None;
+                        };
+                        if template.as_str() != "columns" {
+                            return None;
+                        }
+                        match binding {
+                            crate::node_system::document::DynamicPortBinding::Resolved {
+                                origin:
+                                    crate::node_system::document::DynamicMemberLocator::SchemaField {
+                                        field,
+                                        ..
+                                    },
+                                order,
+                                ..
+                            }
+                            | crate::node_system::document::DynamicPortBinding::Orphan {
+                                origin:
+                                    crate::node_system::document::DynamicMemberLocator::SchemaField {
+                                        field,
+                                        ..
+                                    },
+                                order,
+                                ..
+                            } => Some((order.clone(), field.0.clone())),
+                            _ => None,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                columns.sort_by(|left, right| left.0.cmp(&right.0));
+                let columns = columns
+                    .into_iter()
+                    .map(|(_, column)| column)
+                    .collect::<Vec<_>>();
+                if columns.len() != operation.outputs.len() {
+                    return Err(format!(
+                        "dataframe decompose node '{}' has {} compiled outputs but {} bound columns",
+                        operation.source_node_id,
+                        operation.outputs.len(),
+                        columns.len()
+                    ));
+                }
+                Some(columns.into_boxed_slice())
+            } else {
+                None
+            };
             parameters
                 .insert(
                     operation.params.clone(),
                     crate::node_system::runtime::DataframeKernelParameters {
                         resource,
                         column,
+                        columns,
                         order,
                     },
                 )
@@ -9756,6 +9877,25 @@ mod run_parameter_tests {
             .collect()
     }
 
+    fn populate_plan_value_contracts(plan: &mut ExecutionPlan) {
+        plan.value_contracts = plan
+            .operations
+            .iter()
+            .flat_map(|operation| {
+                operation
+                    .inputs
+                    .iter()
+                    .map(|input| (input.value, input.contract.clone()))
+                    .chain(
+                        operation
+                            .outputs
+                            .iter()
+                            .map(|output| (output.value, output.contract.clone())),
+                    )
+            })
+            .collect();
+    }
+
     fn parameter_plan(node: &DocumentNode, params: CompiledParameterHandle) -> ExecutionPlan {
         use crate::node_system::analysis::{
             CompilationBasis, CompileId, CompileProvenance, ProjectSessionId,
@@ -9881,11 +10021,164 @@ mod run_parameter_tests {
             session,
             &crate::node_system::analysis::NOOP_TRACE_SINK,
             &crate::node_system::compiler::CompileCancellationToken::new(),
+            &crate::project::ProjectComputationSettings::default(),
             &mut parameters,
         )
         .unwrap();
 
         assert_eq!(generation.plan_count(), 0);
+    }
+
+    #[test]
+    fn statistics_default_node_compiles_with_inherited_project_settings() {
+        let node_type = NodeTypeId::new("yssbi.statistics.ols.fit").unwrap();
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(4));
+        let node = DocumentNode {
+            id: node_id,
+            node_type: node_type.clone(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: catalog_defaults(&node_type),
+            user_label: None,
+        };
+        assert!(
+            !node
+                .parameters
+                .contains_key(&ParameterKey::new("convergence_tolerance").unwrap())
+        );
+        assert!(
+            !node
+                .parameters
+                .contains_key(&ParameterKey::new("missing_value_policy").unwrap())
+        );
+        let mut document = GraphDocument::default();
+        document.nodes.insert(node_id, node.clone());
+        let handle = CompiledParameterHandle::new("inherited-statistics-settings").unwrap();
+        let plan = parameter_plan(&node, handle.clone());
+        let mut store = crate::node_system::runtime::CompiledParameterStore::new();
+        let project_settings = crate::project::ProjectComputationSettings {
+            numeric: crate::project::NumericSettings {
+                tolerance: crate::project::NumericTolerance {
+                    absolute: 2e-6,
+                    relative: 3e-5,
+                },
+            },
+            missing_values: crate::project::MissingValueSettings {
+                statistics: crate::project::StatisticalMissingValuePolicy::Reject,
+            },
+        };
+
+        build_run_parameters(&mut store, &document, &plan, &project_settings).unwrap();
+        let compiled = store
+            .get::<crate::node_system::runtime::StatisticsKernelParameters>(&handle)
+            .unwrap()
+            .unwrap();
+        assert_eq!(compiled.convergence_tolerance, 2e-6);
+        assert_eq!(
+            compiled.convergence_tolerance_source,
+            crate::sci::models::regression::StatisticalSettingSource::Project
+        );
+        assert_eq!(
+            compiled.missing_value_policy,
+            crate::project::StatisticalMissingValuePolicy::Reject
+        );
+        assert_eq!(
+            compiled.missing_value_policy_source,
+            crate::sci::models::regression::StatisticalSettingSource::Project
+        );
+    }
+
+    #[test]
+    fn statistics_node_overrides_project_settings_in_compiled_parameters() {
+        let node_type = NodeTypeId::new("yssbi.statistics.ols.fit").unwrap();
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(2));
+        let mut node_parameters = catalog_defaults(&node_type);
+        node_parameters.insert(
+            ParameterKey::new("convergence_tolerance").unwrap(),
+            serde_json::json!(1e-7),
+        );
+        node_parameters.insert(
+            ParameterKey::new("missing_value_policy").unwrap(),
+            serde_json::json!("Reject"),
+        );
+        let node = DocumentNode {
+            id: node_id,
+            node_type,
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: node_parameters,
+            user_label: None,
+        };
+        let mut document = GraphDocument::default();
+        document.nodes.insert(node_id, node.clone());
+        let handle = CompiledParameterHandle::new("statistics-settings").unwrap();
+        let plan = parameter_plan(&node, handle.clone());
+        let mut store = crate::node_system::runtime::CompiledParameterStore::new();
+        let project_settings = crate::project::ProjectComputationSettings {
+            numeric: crate::project::NumericSettings {
+                tolerance: crate::project::NumericTolerance {
+                    absolute: 1e-5,
+                    relative: 1e-4,
+                },
+            },
+            missing_values: crate::project::MissingValueSettings {
+                statistics: crate::project::StatisticalMissingValuePolicy::Listwise,
+            },
+        };
+
+        build_run_parameters(&mut store, &document, &plan, &project_settings).unwrap();
+        let compiled = store
+            .get::<crate::node_system::runtime::StatisticsKernelParameters>(&handle)
+            .unwrap()
+            .unwrap();
+        assert_eq!(compiled.convergence_tolerance, 1e-7);
+        assert_eq!(
+            compiled.convergence_tolerance_source,
+            crate::sci::models::regression::StatisticalSettingSource::Node
+        );
+        assert_eq!(
+            compiled.missing_value_policy,
+            crate::project::StatisticalMissingValuePolicy::Reject
+        );
+        assert_eq!(
+            compiled.missing_value_policy_source,
+            crate::sci::models::regression::StatisticalSettingSource::Node
+        );
+    }
+
+    #[test]
+    fn statistics_rejects_nonpositive_convergence_override() {
+        let node_type = NodeTypeId::new("yssbi.statistics.ols.fit").unwrap();
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(3));
+        let mut node_parameters = catalog_defaults(&node_type);
+        node_parameters.insert(
+            ParameterKey::new("convergence_tolerance").unwrap(),
+            serde_json::json!(0.0),
+        );
+        let node = DocumentNode {
+            id: node_id,
+            node_type,
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: node_parameters,
+            user_label: None,
+        };
+        let mut document = GraphDocument::default();
+        document.nodes.insert(node_id, node.clone());
+        let plan = parameter_plan(
+            &node,
+            CompiledParameterHandle::new("invalid-statistics-settings").unwrap(),
+        );
+        let mut store = crate::node_system::runtime::CompiledParameterStore::new();
+
+        let error = build_run_parameters(
+            &mut store,
+            &document,
+            &plan,
+            &crate::project::ProjectComputationSettings::default(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error,
+            "statistics convergence tolerance must be finite and greater than zero"
+        );
     }
 
     #[test]
@@ -9914,7 +10207,13 @@ mod run_parameter_tests {
         let plan = parameter_plan(&node, handle.clone());
         let mut store = crate::node_system::runtime::CompiledParameterStore::new();
 
-        build_run_parameters(&mut store, &document, &plan).unwrap();
+        build_run_parameters(
+            &mut store,
+            &document,
+            &plan,
+            &crate::project::ProjectComputationSettings::default(),
+        )
+        .unwrap();
 
         let parameters = store
             .get::<crate::node_system::runtime::StatisticsKernelParameters>(&handle)
@@ -9963,7 +10262,43 @@ mod run_parameter_tests {
             Vec<crate::node_system::runtime::RuntimeValue>,
             crate::node_system::runtime::KernelError,
         > {
-            Ok(vec![self.0.clone().into()])
+            let Value::List(values) = &self.0 else {
+                return Err(crate::node_system::runtime::KernelError::new(
+                    "test series fixture requires a list",
+                ));
+            };
+            let values = values
+                .iter()
+                .map(|value| {
+                    let decimal = match value {
+                        Value::Integer(value) => {
+                            crate::node_system::protocol::CanonicalDecimal::new(value.to_string())
+                        }
+                        Value::Unsigned(value) => {
+                            crate::node_system::protocol::CanonicalDecimal::new(value.to_string())
+                        }
+                        Value::Decimal(value) => return Ok(Value::Decimal(value.clone())),
+                        _ => {
+                            return Err(crate::node_system::runtime::KernelError::new(
+                                "test series fixture requires numeric values",
+                            ));
+                        }
+                    }
+                    .map_err(|error| {
+                        crate::node_system::runtime::KernelError::new(error.to_string())
+                    })?;
+                    Ok(Value::Decimal(decimal))
+                })
+                .collect::<Result<Vec<_>, crate::node_system::runtime::KernelError>>()?;
+            let artifact = crate::node_system::runtime::DataSeriesBuilder::new(
+                crate::node_system::runtime::DataSeriesElementType::Float64,
+            )
+            .values(values)
+            .build(crate::node_system::runtime::ArtifactKind::Replayable)
+            .map_err(|error| crate::node_system::runtime::KernelError::new(error.to_string()))?;
+            Ok(vec![crate::node_system::runtime::RuntimeValue::Artifact(
+                artifact,
+            )])
         }
     }
 
@@ -10012,6 +10347,10 @@ mod run_parameter_tests {
             &adf_node,
             CompiledParameterHandle::new("adf-production-chain").unwrap(),
         );
+        let series_contract = crate::node_system::plan::PlannedValueContract {
+            kind: crate::node_system::plan::PlannedValueKind::DataSeries,
+            type_expr: crate::node_system::protocol::numeric_data_series_type(),
+        };
         plan.value_count = 2;
         plan.operations = Box::new([
             PlannedOperation {
@@ -10024,7 +10363,7 @@ mod run_parameter_tests {
                 inputs: Box::new([]),
                 outputs: Box::new([PlannedOutput {
                     value: ValueRef::new(0),
-                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
+                    contract: series_contract.clone(),
                     production: OutputProduction::FullyMaterialized,
                 }]),
                 params: CompiledParameterHandle::new("adf-series").unwrap(),
@@ -10044,7 +10383,7 @@ mod run_parameter_tests {
                 ),
                 inputs: Box::new([PlannedInput {
                     value: ValueRef::new(0),
-                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
+                    contract: series_contract,
                     consumption: InputConsumption::FullyMaterialized,
                     bound_value: None,
                 }]),
@@ -10079,6 +10418,7 @@ mod run_parameter_tests {
             output: adf_output,
             value: ValueRef::new(1),
         }]);
+        populate_plan_value_contracts(&mut plan);
 
         let mut kernels = crate::node_system::runtime::build_builtin_kernel_registry();
         kernels
@@ -10089,7 +10429,13 @@ mod run_parameter_tests {
             .unwrap();
         let run = |document: &GraphDocument| {
             let mut store = crate::node_system::runtime::CompiledParameterStore::new();
-            build_run_parameters(&mut store, document, &plan).unwrap();
+            build_run_parameters(
+                &mut store,
+                document,
+                &plan,
+                &crate::project::ProjectComputationSettings::default(),
+            )
+            .unwrap();
             RunExecutor::new(&kernels, &NoResources, &NoFunctions)
                 .with_compiled_parameters(&store)
                 .run(&plan, CancellationToken::new())
@@ -10266,8 +10612,15 @@ mod run_parameter_tests {
             output: var_output,
             value: ValueRef::new(2),
         }]);
+        populate_plan_value_contracts(&mut plan);
         let mut store = crate::node_system::runtime::CompiledParameterStore::new();
-        build_run_parameters(&mut store, &document, &plan).unwrap();
+        build_run_parameters(
+            &mut store,
+            &document,
+            &plan,
+            &crate::project::ProjectComputationSettings::default(),
+        )
+        .unwrap();
 
         let mut kernels = crate::node_system::runtime::build_builtin_kernel_registry();
         for (index, values) in [

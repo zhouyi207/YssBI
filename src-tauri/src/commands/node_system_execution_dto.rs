@@ -3,8 +3,9 @@ use crate::node_system::document::{GraphResourcePath, GraphRevision, PortAddress
 use crate::node_system::plan::{ExecutionDemand, GraphOutputRef, MAX_SAFE_PREVIEW_GENERATION};
 use crate::node_system::protocol::Value;
 use crate::node_system::runtime::{
-    ArtifactSnapshotKind, OrdinaryRunErrorCode, ResultSourceDescriptor, ResultSourcePage,
-    RunErrorCode, RunErrorOutcome, RunEvent, RunEventKind, RunPhase,
+    ArtifactSnapshotKind, DataSeriesMetadata, OrdinaryRunErrorCode, ResultSourceDescriptor,
+    ResultSourcePage, ResultSourcePresentation, RunErrorCode, RunErrorOutcome, RunEvent,
+    RunEventKind, RunPhase,
 };
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
@@ -346,7 +347,10 @@ pub struct ResultSourceDescriptorDto {
     source_id: String,
     artifact_id: String,
     name: Box<str>,
-    kind: ArtifactSnapshotKind,
+    kind: &'static str,
+    presentation: ResultSourcePresentation,
+    title: Box<str>,
+    data_series_metadata: Option<DataSeriesMetadata>,
     total_count: usize,
     correlation: RunCorrelationDto,
     basis: CompilationBasisDto,
@@ -354,11 +358,22 @@ pub struct ResultSourceDescriptorDto {
 
 impl From<ResultSourceDescriptor> for ResultSourceDescriptorDto {
     fn from(descriptor: ResultSourceDescriptor) -> Self {
+        let kind = match descriptor.kind {
+            ArtifactSnapshotKind::Value | ArtifactSnapshotKind::Sequence => "json",
+            ArtifactSnapshotKind::DataSeries => "dataseries",
+        };
+        let title = match descriptor.presentation {
+            ResultSourcePresentation::Inspector => descriptor.name.clone(),
+            presentation => presentation.default_title().into(),
+        };
         Self {
             source_id: descriptor.source_id.get().to_string(),
             artifact_id: descriptor.artifact_id.get().to_string(),
             name: descriptor.name,
-            kind: descriptor.kind,
+            kind,
+            presentation: descriptor.presentation,
+            title,
+            data_series_metadata: descriptor.data_series_metadata,
             total_count: descriptor.total_count,
             correlation: descriptor.correlation.into(),
             basis: descriptor.basis.into(),
@@ -373,6 +388,8 @@ pub struct ResultSourcePageDto {
     offset: usize,
     limit: usize,
     total_count: usize,
+    kind: ArtifactSnapshotKind,
+    data_series_metadata: Option<DataSeriesMetadata>,
     values: Box<[Value]>,
 }
 
@@ -383,6 +400,8 @@ impl From<ResultSourcePage> for ResultSourcePageDto {
             offset: page.offset,
             limit: page.limit,
             total_count: page.total_count,
+            kind: page.kind,
+            data_series_metadata: page.data_series_metadata,
             values: page.values,
         }
     }

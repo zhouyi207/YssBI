@@ -2,7 +2,13 @@
 
 use super::KernelFragment;
 use crate::node_system::protocol::Value;
-use crate::node_system::runtime::{Kernel, KernelContext, KernelError, RuntimeValue};
+use crate::node_system::runtime::{
+    ArtifactKind, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
+    NullPolicy, NumericSeriesView, RuntimeValue, numeric_series as read_numeric_series,
+    prepare_numeric_rows, require_data_series,
+};
+use crate::project::{NumericTolerance, StatisticalMissingValuePolicy};
+use crate::sci::models::regression::{StatisticalObservationMetadata, StatisticalSettingSource};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,13 +65,35 @@ pub enum StatisticsOperation {
     WlsSummary,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct StatisticsKernelParameters {
+    pub data_series_input_indices: Option<Box<[usize]>>,
     pub lags: Option<usize>,
     pub max_lags: Option<usize>,
     pub rank: Option<usize>,
     pub regression: Option<Box<str>>,
     pub trend: Option<Box<str>>,
+    pub convergence_tolerance: f64,
+    pub convergence_tolerance_source: StatisticalSettingSource,
+    pub missing_value_policy: StatisticalMissingValuePolicy,
+    pub missing_value_policy_source: StatisticalSettingSource,
+}
+
+impl Default for StatisticsKernelParameters {
+    fn default() -> Self {
+        Self {
+            data_series_input_indices: None,
+            lags: None,
+            max_lags: None,
+            rank: None,
+            regression: None,
+            trend: None,
+            convergence_tolerance: NumericTolerance::default().absolute,
+            convergence_tolerance_source: StatisticalSettingSource::Project,
+            missing_value_policy: StatisticalMissingValuePolicy::default(),
+            missing_value_policy_source: StatisticalSettingSource::Project,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -98,9 +126,13 @@ fn scalar(input: &RuntimeValue) -> Result<&Value, KernelError> {
     }
 }
 
-fn numeric_series(value: &Value) -> Result<Vec<f64>, KernelError> {
+/// Decodes coefficient vectors stored inside an opaque scalar model object.
+/// Graph DataSeries inputs must always pass through `require_data_series`.
+fn opaque_model_coefficients(value: &Value) -> Result<Vec<f64>, KernelError> {
     let Value::List(values) = value else {
-        return Err(KernelError::new("expected numeric series"));
+        return Err(KernelError::new(
+            "prediction model coefficients must be a numeric list",
+        ));
     };
     values
         .iter()
@@ -165,44 +197,142 @@ fn regression_kind(
     }
 }
 
+fn numeric_view(input: &RuntimeValue) -> Result<NumericSeriesView, KernelError> {
+    read_numeric_series(require_data_series(input)?, NullPolicy::Propagate)
+}
+
+struct PreparedStatisticsRows {
+    columns: Box<[Box<[f64]>]>,
+    metadata: StatisticalObservationMetadata,
+}
+
+fn prepare_statistics_rows(
+    inputs: &[RuntimeValue],
+    labels: &[Box<str>],
+    parameters: &StatisticsKernelParameters,
+    convergence_tolerance_consumed: bool,
+) -> Result<PreparedStatisticsRows, KernelError> {
+    let views = inputs
+        .iter()
+        .map(numeric_view)
+        .collect::<Result<Vec<_>, _>>()?;
+    let rows = prepare_numeric_rows(&views, parameters.missing_value_policy).map_err(|error| {
+        let message = error.message();
+        for (index, label) in labels.iter().enumerate() {
+            let prefix = format!("numeric input {index}");
+            if let Some(detail) = message.strip_prefix(&prefix) {
+                return KernelError::new(format!("statistics input '{label}'{detail}"));
+            }
+        }
+        KernelError::new(message.to_owned())
+    })?;
+    if rows.used_row_count() == 0 {
+        return Err(KernelError::new(
+            "statistics input has no usable observations",
+        ));
+    }
+    Ok(PreparedStatisticsRows {
+        columns: rows.columns().to_vec().into_boxed_slice(),
+        metadata: StatisticalObservationMetadata {
+            original_observation_count: rows.original_row_count(),
+            used_observation_count: rows.used_row_count(),
+            dropped_null_count: rows.dropped_null_count(),
+            dropped_nan_count: rows.dropped_nan_count(),
+            missing_value_policy: parameters.missing_value_policy,
+            missing_value_policy_source: parameters.missing_value_policy_source,
+            effective_convergence_tolerance: parameters.convergence_tolerance,
+            convergence_tolerance_source: parameters.convergence_tolerance_source,
+            convergence_tolerance_consumed,
+        },
+    })
+}
+
 fn regression_fit(
     operation: StatisticsOperation,
+    parameters: &StatisticsKernelParameters,
     inputs: &[RuntimeValue],
 ) -> Result<crate::sci::api::node_statistics::RegressionFit, KernelError> {
-    let response = inputs
-        .first()
-        .ok_or_else(|| KernelError::new("regression requires a response series"))
-        .and_then(scalar)
-        .and_then(numeric_series)?;
-    let mut series = inputs[1..]
-        .iter()
-        .map(scalar)
-        .filter_map(|value| match value {
-            Ok(Value::List(_)) => Some(value.and_then(numeric_series)),
-            Ok(Value::Null | Value::Object(_)) => None,
-            Ok(_) => Some(Err(KernelError::new("regression input is not a series"))),
-            Err(error) => Some(Err(error)),
+    let selected_inputs;
+    let inputs = match parameters.data_series_input_indices.as_deref() {
+        Some(indices) => {
+            selected_inputs = indices
+                .iter()
+                .map(|index| {
+                    inputs.get(*index).cloned().ok_or_else(|| {
+                        KernelError::new(format!(
+                            "compiled statistics input index {index} is out of bounds"
+                        ))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            selected_inputs.as_slice()
+        }
+        None => inputs,
+    };
+    if inputs.len() < 2 {
+        return Err(KernelError::new(
+            "regression requires a response and at least one predictor",
+        ));
+    }
+    let labels = (0..inputs.len())
+        .map(|index| match index {
+            0 => "response".into(),
+            index
+                if matches!(
+                    operation,
+                    StatisticsOperation::WlsFit | StatisticsOperation::WlsSummary
+                ) && index + 1 == inputs.len() =>
+            {
+                "weights".into()
+            }
+            index => format!("predictors[{}]", index - 1).into(),
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Vec<Box<str>>>();
+    let prepared = prepare_statistics_rows(inputs, &labels, parameters, false)?;
+    let mut columns = prepared.columns.into_vec();
+    let response = columns.remove(0).into_vec();
     let weights = if matches!(
         operation,
         StatisticsOperation::WlsFit | StatisticsOperation::WlsSummary
     ) {
         Some(
-            series
+            columns
                 .pop()
-                .ok_or_else(|| KernelError::new("WLS requires weights"))?,
+                .ok_or_else(|| KernelError::new("WLS requires weights"))?
+                .into_vec(),
         )
     } else {
         None
     };
+    if prepared.metadata.used_observation_count < columns.len() + 1 {
+        return Err(KernelError::new(format!(
+            "regression has {} usable observations but requires at least {} fitted parameters",
+            prepared.metadata.used_observation_count,
+            columns.len() + 1
+        )));
+    }
     crate::sci::api::node_statistics::fit_regression(
         regression_kind(operation).expect("regression operation"),
         response,
-        series,
+        columns.into_iter().map(Vec::from).collect(),
         weights,
+        prepared.metadata,
     )
     .map_err(KernelError::new)
+}
+
+fn float_series(values: Vec<f64>, name: &'static str) -> Result<RuntimeValue, KernelError> {
+    let values = values
+        .into_iter()
+        .map(|value| super::core_nodes::canonical_float(value).map(Value::Decimal))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(RuntimeValue::Artifact(
+        DataSeriesBuilder::new(DataSeriesElementType::Float64)
+            .name(name)
+            .values(values)
+            .build(ArtifactKind::Replayable)
+            .map_err(|error| KernelError::new(error.to_string()))?,
+    ))
 }
 
 fn fit_values(
@@ -212,12 +342,75 @@ fn fit_values(
         "family": fit.family,
         "coefficients": fit.coefficients,
         "statistics": fit.statistics,
+        "metadata": fit.metadata,
     }))?;
+    emit_fit_log(fit.family, &fit.metadata);
     Ok(vec![
         RuntimeValue::Scalar(model),
-        RuntimeValue::Scalar(protocol_value(serde_json::json!(fit.fitted))?),
-        RuntimeValue::Scalar(protocol_value(serde_json::json!(fit.residuals))?),
+        float_series(fit.fitted, "fitted")?,
+        float_series(fit.residuals, "residuals")?,
     ])
+}
+
+fn participating_series<'a>(
+    inputs: &'a [RuntimeValue],
+) -> Result<Vec<&'a RuntimeValue>, KernelError> {
+    inputs
+        .iter()
+        .filter_map(|input| match input {
+            RuntimeValue::Artifact(_) => Some(Ok(input)),
+            RuntimeValue::Scalar(Value::Null | Value::Object(_)) => None,
+            RuntimeValue::Scalar(Value::List(_)) => Some(Err(KernelError::new(
+                "expected DataSeries Artifact, received scalar",
+            ))),
+            RuntimeValue::Scalar(_) => None,
+            RuntimeValue::Stream(_) => Some(Err(KernelError::new(
+                "expected DataSeries Artifact, received stream",
+            ))),
+        })
+        .collect()
+}
+
+fn prepare_participating_rows(
+    inputs: &[RuntimeValue],
+    labels: Vec<Box<str>>,
+    parameters: &StatisticsKernelParameters,
+) -> Result<PreparedStatisticsRows, KernelError> {
+    let series = participating_series(inputs)?;
+    let owned = series.into_iter().cloned().collect::<Vec<_>>();
+    prepare_statistics_rows(&owned, &labels, parameters, false)
+}
+
+fn emit_fit_log(family: &str, metadata: &StatisticalObservationMetadata) {
+    crate::log::emit_execution_log(
+        crate::log::LogLevel::Info,
+        format!(
+            "{family} fit used {} of {} rows ({} null, {} NaN dropped)",
+            metadata.used_observation_count,
+            metadata.original_observation_count,
+            metadata.dropped_null_count,
+            metadata.dropped_nan_count,
+        ),
+        Some(format!("yssbi.statistics.{family}.fit")),
+    );
+}
+
+fn result_with_metadata(
+    result: serde_json::Value,
+    metadata: &StatisticalObservationMetadata,
+    family: &str,
+) -> Result<Value, KernelError> {
+    let serde_json::Value::Object(mut result) = result else {
+        return Err(KernelError::new(
+            "statistical model result must be an object",
+        ));
+    };
+    result.insert(
+        "metadata".to_owned(),
+        serde_json::to_value(metadata).map_err(|error| KernelError::new(error.to_string()))?,
+    );
+    emit_fit_log(family, metadata);
+    protocol_value(serde_json::Value::Object(result))
 }
 
 fn configuration(operation: StatisticsOperation) -> Value {
@@ -232,8 +425,9 @@ fn configuration(operation: StatisticsOperation) -> Value {
 
 fn prediction(
     operation: StatisticsOperation,
+    parameters: &StatisticsKernelParameters,
     inputs: &[RuntimeValue],
-) -> Result<Value, KernelError> {
+) -> Result<RuntimeValue, KernelError> {
     use statrs::distribution::{ContinuousCDF, Normal};
     let Value::Object(model) = scalar(
         inputs
@@ -263,12 +457,18 @@ fn prediction(
     let coefficients = model
         .get("coefficients")
         .ok_or_else(|| KernelError::new("prediction model has no coefficients"))
-        .and_then(numeric_series)?;
-    let predictors = inputs[1..]
-        .iter()
-        .map(|input| scalar(input).and_then(numeric_series))
-        .collect::<Result<Vec<_>, _>>()?;
-    let observations = predictors.first().map(Vec::len).unwrap_or(0);
+        .and_then(opaque_model_coefficients)?;
+    let labels = (0..inputs.len().saturating_sub(1))
+        .map(|index| format!("predictors[{index}]").into())
+        .collect::<Vec<Box<str>>>();
+    let prepared = prepare_statistics_rows(&inputs[1..], &labels, parameters, false)?;
+    let predictors = prepared
+        .columns
+        .into_vec()
+        .into_iter()
+        .map(Vec::from)
+        .collect::<Vec<_>>();
+    let observations = prepared.metadata.used_observation_count;
     if coefficients.len() != predictors.len() + 1
         || predictors.iter().any(|series| series.len() != observations)
     {
@@ -293,7 +493,7 @@ fn prediction(
             }
         })
         .collect::<Vec<_>>();
-    protocol_value(serde_json::json!(values))
+    float_series(values, "prediction")
 }
 
 fn execute_operation(
@@ -323,19 +523,16 @@ fn execute_operation(
         | PraisConfigure
         | ProbitConfigure => Ok(vec![RuntimeValue::Scalar(configuration(operation))]),
         OlsFit | GlsFit | LogitFit | PraisFit | ProbitFit | WlsFit => {
-            fit_values(regression_fit(operation, inputs)?)
+            fit_values(regression_fit(operation, parameters, inputs)?)
         }
         LinearPredict | LogitPredict | ProbitPredict => {
-            Ok(vec![RuntimeValue::Scalar(prediction(operation, inputs)?)])
+            Ok(vec![prediction(operation, parameters, inputs)?])
         }
         AdfTest => {
-            let series = numeric_series(scalar(
-                inputs
-                    .first()
-                    .ok_or_else(|| KernelError::new("ADF requires a series"))?,
-            )?)?;
+            let prepared = prepare_statistics_rows(inputs, &["series".into()], parameters, false)?;
+            let series = &prepared.columns[0];
             let result = crate::sci::api::node_statistics::augmented_dickey_fuller(
-                &series,
+                series,
                 parameters.lags.unwrap_or(1),
                 parameters.regression.as_deref().unwrap_or("constant"),
             )
@@ -343,48 +540,71 @@ fn execute_operation(
             Ok(vec![RuntimeValue::Scalar(protocol_value(result)?)])
         }
         VarLagOrder => {
-            let series = inputs
-                .iter()
-                .map(|input| scalar(input).and_then(numeric_series))
-                .collect::<Result<Vec<_>, _>>()?;
+            let count = participating_series(inputs)?.len();
+            let prepared = prepare_participating_rows(
+                inputs,
+                (0..count)
+                    .map(|index| format!("variables[{index}]").into())
+                    .collect(),
+                parameters,
+            )?;
             require_constant_trend("VAR lag-order selection", parameters)?;
             let result = crate::sci::api::node_statistics::var_lag_order(
-                series,
+                prepared
+                    .columns
+                    .into_vec()
+                    .into_iter()
+                    .map(Vec::from)
+                    .collect(),
                 parameters.max_lags.unwrap_or(4),
             )
             .map_err(KernelError::new)?;
             Ok(vec![RuntimeValue::Scalar(protocol_value(result)?)])
         }
         VecFit => {
-            let series = inputs
-                .iter()
-                .filter_map(|input| match scalar(input) {
-                    Ok(Value::List(_)) => Some(scalar(input).and_then(numeric_series)),
-                    Ok(_) => None,
-                    Err(error) => Some(Err(error)),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+            let count = participating_series(inputs)?.len();
+            let prepared = prepare_participating_rows(
+                inputs,
+                (0..count)
+                    .map(|index| format!("variables[{index}]").into())
+                    .collect(),
+                parameters,
+            )?;
             let result = crate::sci::api::node_statistics::vec_fit(
-                series,
+                prepared
+                    .columns
+                    .into_vec()
+                    .into_iter()
+                    .map(Vec::from)
+                    .collect(),
                 parameters.rank.unwrap_or(1),
                 parameters.lags.unwrap_or(1),
                 parameters.trend.as_deref().unwrap_or("constant"),
             )
             .map_err(KernelError::new)?;
-            let model = protocol_value(result)?;
+            let model = result_with_metadata(result, &prepared.metadata, "vec")?;
             Ok(vec![
                 RuntimeValue::Scalar(model),
-                RuntimeValue::Scalar(Value::Null),
-                RuntimeValue::Scalar(Value::Null),
+                float_series(Vec::new(), "fitted")?,
+                float_series(Vec::new(), "residuals")?,
             ])
         }
         VecRankTest => {
-            let series = inputs
-                .iter()
-                .map(|input| scalar(input).and_then(numeric_series))
-                .collect::<Result<Vec<_>, _>>()?;
+            let count = participating_series(inputs)?.len();
+            let prepared = prepare_participating_rows(
+                inputs,
+                (0..count)
+                    .map(|index| format!("variables[{index}]").into())
+                    .collect(),
+                parameters,
+            )?;
             let result = crate::sci::api::node_statistics::vec_rank_test(
-                series,
+                prepared
+                    .columns
+                    .into_vec()
+                    .into_iter()
+                    .map(Vec::from)
+                    .collect(),
                 parameters.max_lags.unwrap_or(4),
                 parameters.trend.as_deref().unwrap_or("constant"),
             )
@@ -392,10 +612,11 @@ fn execute_operation(
             Ok(vec![RuntimeValue::Scalar(protocol_value(result)?)])
         }
         OlsSummary | GlsSummary | LogitSummary | PraisSummary | ProbitSummary | WlsSummary => {
-            let fit = regression_fit(operation, inputs)?;
+            let fit = regression_fit(operation, parameters, inputs)?;
             let result = protocol_value(
                 serde_json::to_value(&fit).map_err(|error| KernelError::new(error.to_string()))?,
             )?;
+            emit_fit_log(fit.family, &fit.metadata);
             let report = Value::String(format!("{} fit from yss_sci", fit.family).into());
             Ok(vec![
                 RuntimeValue::Scalar(result),
@@ -415,37 +636,56 @@ fn execute_operation(
             ])
         }
         VarSummary => {
-            let series = inputs
-                .iter()
-                .filter_map(|input| match scalar(input) {
-                    Ok(Value::List(_)) => Some(scalar(input).and_then(numeric_series)),
-                    Ok(_) => None,
-                    Err(error) => Some(Err(error)),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
+            let count = participating_series(inputs)?.len();
+            let prepared = prepare_participating_rows(
+                inputs,
+                (0..count)
+                    .map(|index| format!("variables[{index}]").into())
+                    .collect(),
+                parameters,
+            )?;
             require_constant_trend("VAR summary", parameters)?;
-            let result =
-                crate::sci::api::node_statistics::var_fit(series, parameters.lags.unwrap_or(1))
-                    .map_err(KernelError::new)?;
+            let result = crate::sci::api::node_statistics::var_fit(
+                prepared
+                    .columns
+                    .into_vec()
+                    .into_iter()
+                    .map(Vec::from)
+                    .collect(),
+                parameters.lags.unwrap_or(1),
+            )
+            .map_err(KernelError::new)?;
             Ok(vec![
-                RuntimeValue::Scalar(protocol_value(result)?),
+                RuntimeValue::Scalar(result_with_metadata(result, &prepared.metadata, "var")?),
                 RuntimeValue::Scalar(Value::String("VAR estimation from yss_sci".into())),
             ])
         }
         Iv2slsSummary | IvLimlSummary => {
-            let series = inputs
-                .iter()
-                .filter_map(|input| match scalar(input) {
-                    Ok(Value::List(_)) => Some(scalar(input).and_then(numeric_series)),
-                    Ok(_) => None,
-                    Err(error) => Some(Err(error)),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            if series.len() != 4 {
+            let series_count = participating_series(inputs)?.len();
+            if series_count != 4 {
                 return Err(KernelError::new(
-                    "IV summary requires response, one exogenous predictor, one endogenous predictor, and one instrument",
+                    "IV summary requires exactly response, one exogenous predictor, one endogenous predictor, and one instrument",
                 ));
             }
+            let prepared = prepare_participating_rows(
+                inputs,
+                [
+                    "response",
+                    "predictors[0]",
+                    "endogenous[0]",
+                    "instruments[0]",
+                ]
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+                parameters,
+            )?;
+            let series = prepared
+                .columns
+                .into_vec()
+                .into_iter()
+                .map(Vec::from)
+                .collect::<Vec<_>>();
             let kind = if operation == Iv2slsSummary {
                 crate::sci::api::node_statistics::InstrumentalVariableKind::TwoStageLeastSquares
             } else {
@@ -460,27 +700,43 @@ fn execute_operation(
             )
             .map_err(KernelError::new)?;
             Ok(vec![
-                RuntimeValue::Scalar(protocol_value(result)?),
+                RuntimeValue::Scalar(result_with_metadata(
+                    result,
+                    &prepared.metadata,
+                    if operation == Iv2slsSummary {
+                        "iv_2sls"
+                    } else {
+                        "iv_liml"
+                    },
+                )?),
                 RuntimeValue::Scalar(Value::String(
                     format!("{operation:?} result from yss_sci").into(),
                 )),
             ])
         }
         PanelSummary | PanelDidTwfe => {
-            let mut series = inputs
-                .iter()
-                .filter_map(|input| match scalar(input) {
-                    Ok(Value::List(_)) => Some(scalar(input).and_then(numeric_series)),
-                    Ok(_) => None,
-                    Err(error) => Some(Err(error)),
-                })
-                .collect::<Result<Vec<_>, _>>()?;
             let required = if operation == PanelDidTwfe { 5 } else { 4 };
-            if series.len() < required {
+            let series_count = participating_series(inputs)?.len();
+            if series_count < required {
                 return Err(KernelError::new(
                     "panel summary requires response, predictors, entity, time, and optional treatment series",
                 ));
             }
+            let mut labels = vec!["response".into()];
+            let predictor_count = series_count - if operation == PanelDidTwfe { 4 } else { 3 };
+            labels.extend((0..predictor_count).map(|index| format!("predictors[{index}]").into()));
+            labels.push("entity".into());
+            labels.push("time".into());
+            if operation == PanelDidTwfe {
+                labels.push("treatment".into());
+            }
+            let prepared = prepare_participating_rows(inputs, labels, parameters)?;
+            let mut series = prepared
+                .columns
+                .into_vec()
+                .into_iter()
+                .map(Vec::from)
+                .collect::<Vec<_>>();
             let treatment = (operation == PanelDidTwfe).then(|| series.pop().unwrap());
             let time = series.pop().unwrap();
             let entity = series.pop().unwrap();
@@ -490,7 +746,15 @@ fn execute_operation(
             )
             .map_err(KernelError::new)?;
             Ok(vec![
-                RuntimeValue::Scalar(protocol_value(result)?),
+                RuntimeValue::Scalar(result_with_metadata(
+                    result,
+                    &prepared.metadata,
+                    if operation == PanelDidTwfe {
+                        "panel_did_twfe"
+                    } else {
+                        "panel"
+                    },
+                )?),
                 RuntimeValue::Scalar(Value::String(
                     format!("{operation:?} result from yss_sci").into(),
                 )),
@@ -644,7 +908,7 @@ mod tests {
     use super::*;
 
     fn series(values: &[f64]) -> RuntimeValue {
-        RuntimeValue::Scalar(protocol_value(serde_json::json!(values)).unwrap())
+        float_series(values.to_vec(), "test").unwrap()
     }
 
     fn object(value: &RuntimeValue) -> &BTreeMap<Box<str>, Value> {
@@ -668,6 +932,7 @@ mod tests {
                 } else {
                     "none".into()
                 }),
+                ..StatisticsKernelParameters::default()
             };
 
             let outputs = execute_operation(
@@ -696,6 +961,7 @@ mod tests {
             rank: None,
             regression: Some("unexpected".into()),
             trend: Some("constant".into()),
+            ..StatisticsKernelParameters::default()
         };
         let error = execute_operation(
             StatisticsOperation::AdfTest,
@@ -735,7 +1001,12 @@ mod tests {
                 }))
                 .unwrap(),
             );
-            let error = prediction(operation, &[model, series(&[1.0])]).unwrap_err();
+            let error = prediction(
+                operation,
+                &StatisticsKernelParameters::default(),
+                &[model, series(&[1.0])],
+            )
+            .unwrap_err();
 
             assert_eq!(error.to_string(), expected_error);
         }
@@ -756,8 +1027,12 @@ mod tests {
 
         for (model, expected_error) in cases {
             let model = RuntimeValue::Scalar(protocol_value(model).unwrap());
-            let error = prediction(StatisticsOperation::LinearPredict, &[model, series(&[1.0])])
-                .unwrap_err();
+            let error = prediction(
+                StatisticsOperation::LinearPredict,
+                &StatisticsKernelParameters::default(),
+                &[model, series(&[1.0])],
+            )
+            .unwrap_err();
 
             assert_eq!(error.to_string(), expected_error);
         }
@@ -777,6 +1052,7 @@ mod tests {
             rank: None,
             regression: None,
             trend: Some("constant".into()),
+            ..StatisticsKernelParameters::default()
         };
 
         let outputs = execute_operation(
@@ -880,6 +1156,7 @@ mod tests {
             rank: Some(1),
             regression: Some("constant".into()),
             trend: Some("constant".into()),
+            ..StatisticsKernelParameters::default()
         };
         let adf = execute_operation(
             StatisticsOperation::AdfTest,

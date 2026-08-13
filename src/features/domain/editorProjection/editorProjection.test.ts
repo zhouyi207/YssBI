@@ -117,6 +117,9 @@ function validProjection(): EditorGraphProjectionDto {
             multiline: true,
             value: 'y ~ x',
             configuration: null,
+            inheritedValue: null,
+            valueSource: null,
+            options: null,
           },
         ],
         capabilities: {
@@ -652,7 +655,25 @@ describe('validateEditorGraphProjection', () => {
     expect(isEditorGraphProjectionDto(invalid)).toBe(false);
   });
 
+  it('rejects the legacy parameter editor shape without Rust override metadata', () => {
+    const projection = structuredClone(editorProjectionContract) as unknown as Record<string, unknown>;
+    const node = (projection.nodes as Array<Record<string, unknown>>)[0];
+    const editor = (node.parameterEditors as Array<Record<string, unknown>>)[0];
+    delete editor.inheritedValue;
+    delete editor.valueSource;
+    delete editor.options;
+
+    expect(isEditorGraphProjectionDto(projection)).toBe(false);
+  });
+
   it.each([
+    ['missing inheritedValue', (editor: Record<string, unknown>) => { delete editor.inheritedValue; }],
+    ['missing valueSource', (editor: Record<string, unknown>) => { delete editor.valueSource; }],
+    ['missing options', (editor: Record<string, unknown>) => { delete editor.options; }],
+    ['invalid valueSource casing', (editor: Record<string, unknown>) => {
+      editor.valueSource = 'Project';
+    }],
+    ['non-string options', (editor: Record<string, unknown>) => { editor.options = [1]; }],
     ['missing valueType', (editor: Record<string, unknown>) => { delete editor.valueType; }],
     ['string valueType', (editor: Record<string, unknown>) => { editor.valueType = 'Boolean'; }],
     ['malformed valueType', (editor: Record<string, unknown>) => {

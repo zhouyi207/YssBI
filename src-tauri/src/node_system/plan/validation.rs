@@ -1,5 +1,7 @@
 use super::model::*;
-use crate::node_system::protocol::{InputConsumption, OutputProduction};
+use crate::node_system::protocol::{
+    InputConsumption, OutputProduction, TypeCompatibility, type_exprs_compatibility,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -190,7 +192,7 @@ impl ExecutionPlan {
             if let (Some(source), Some(destination)) = (
                 self.value_contracts.get(&dependency.source),
                 self.value_contracts.get(&dependency.destination),
-            ) && source != destination
+            ) && !value_contract_is_assignable(source, destination)
             {
                 errors.push(PlanValidationError::ValueContractMismatch {
                     context: "value dependency",
@@ -376,6 +378,15 @@ impl ExecutionPlan {
             Err(PlanValidationErrors(errors.into_boxed_slice()))
         }
     }
+}
+
+fn value_contract_is_assignable(
+    source: &PlannedValueContract,
+    destination: &PlannedValueContract,
+) -> bool {
+    source.kind == destination.kind
+        && type_exprs_compatibility(&source.type_expr, &destination.type_expr, &[], &[])
+            == TypeCompatibility::Compatible
 }
 
 fn validate_value_contract(

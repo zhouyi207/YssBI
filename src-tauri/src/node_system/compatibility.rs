@@ -394,7 +394,7 @@ pub(crate) fn function_type_expr(type_name: &str) -> Result<TypeExpr, String> {
     data_type_to_type_expr(&resolve_function_data_type(type_name)?)
 }
 
-fn data_type_to_type_expr(data_type: &DataType) -> Result<TypeExpr, String> {
+pub(crate) fn data_type_to_type_expr(data_type: &DataType) -> Result<TypeExpr, String> {
     match data_type {
         DataType::Boolean => concrete_type("core.bool"),
         DataType::Int64 => concrete_type("core.int64"),

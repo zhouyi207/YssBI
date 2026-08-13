@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import editorProjection from '@/tests/fixtures/node-system-contracts/editor-projection.json';
+import functionEditorProjection from '@/tests/fixtures/node-system-contracts/function-editor-projection.json';
 import projectEvents from '@/tests/fixtures/node-system-contracts/project-events.json';
 import {
   parseGraphDeltaEventPayload,
@@ -18,11 +19,8 @@ const delta = {
 const operationId = '00000000-0000-0000-0000-000000000401';
 const nodeId = '00000000-0000-0000-0000-000000000101';
 const instanceId = '00000000-0000-0000-0000-000000000102';
-const functionPath = 'functions/Sales Report 销售预测.yssbi-function';
-const functionSignature = {
-  parameters: [{ id: 'sales', name: 'Observed sales', type_name: 'Float64' }],
-  return_type: 'Array<String>',
-};
+const functionPath = functionEditorProjection.replacement.graphPath;
+const functionSignature = functionEditorProjection.indexRow.functionSignature;
 const resourceResult = {
   operationId,
   projectInstanceId,
@@ -95,11 +93,8 @@ function graphResourceResult(value_type: unknown) {
 }
 
 function functionResourceResult(functionRevision = 1) {
-  const projection = structuredClone(editorProjection) as Record<string, unknown>;
-  projection.graphPath = functionPath;
-  projection.sourceRevision = 1;
-  (projection.basis as Record<string, unknown>).graphPath = functionPath;
-  (projection.basis as Record<string, unknown>).graphRevision = 1;
+  const replacement = structuredClone(functionEditorProjection.replacement);
+  replacement.functionEditorProjection.functionRevision = functionRevision;
   return {
     ...resourceResult,
     deltas: [{
@@ -115,19 +110,7 @@ function functionResourceResult(functionRevision = 1) {
         },
       },
     }],
-    projectionReplacements: [{
-      graphPath: functionPath,
-      projection,
-      functionEditorProjection: {
-        functionRevision,
-        inputs: [{ id: 'sales', name: 'Observed sales', dataType: { kind: 'Float64' } }],
-        outputs: [{
-          id: 'return',
-          name: 'Array<String>',
-          dataType: { kind: 'Array', inner: { kind: 'String' } },
-        }],
-      },
-    }],
+    projectionReplacements: [replacement],
     projectionStatus: { status: 'complete', expectedGraphPaths: [functionPath] },
   };
 }

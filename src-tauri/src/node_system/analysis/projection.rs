@@ -402,6 +402,16 @@ pub struct ParameterEditorDto {
     pub multiline: bool,
     pub value: Option<serde_json::Value>,
     pub configuration: Option<SchemaAwareParameterEditorDto>,
+    pub inherited_value: Option<serde_json::Value>,
+    pub value_source: Option<ParameterValueSourceDto>,
+    pub options: Option<Vec<Box<str>>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ParameterValueSourceDto {
+    Project,
+    Node,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -600,6 +610,7 @@ pub fn build_editor_graph_projection(
         document,
         registry,
         localization,
+        &crate::project::ProjectComputationSettings::default(),
     )
 }
 
@@ -624,6 +635,7 @@ impl EditorGraphProjectionDto {
             document,
             registry,
             localization,
+            &crate::project::ProjectComputationSettings::default(),
         )
     }
 
@@ -634,6 +646,7 @@ impl EditorGraphProjectionDto {
         document: &GraphDocument,
         registry: &NodeRegistry,
         localization: &impl LocalizationLookup,
+        computation_settings: &crate::project::ProjectComputationSettings,
     ) -> Result<Self, ProjectionError> {
         validate_sources(analysis, document, registry)?;
 
@@ -848,6 +861,27 @@ impl EditorGraphProjectionDto {
                                         value.as_ref(),
                                         source_schema,
                                         unavailable_reason,
+                                    ),
+                                    inherited_value: inherited_statistics_parameter_value(
+                                        node.node_type.as_str(),
+                                        parameter.key.as_str(),
+                                        computation_settings,
+                                    ),
+                                    value_source: inherited_statistics_parameter_value(
+                                        node.node_type.as_str(),
+                                        parameter.key.as_str(),
+                                        computation_settings,
+                                    )
+                                    .map(|_| {
+                                        if value.is_some() {
+                                            ParameterValueSourceDto::Node
+                                        } else {
+                                            ParameterValueSourceDto::Project
+                                        }
+                                    }),
+                                    options: statistics_parameter_options(
+                                        node.node_type.as_str(),
+                                        parameter.key.as_str(),
                                     ),
                                 })
                             })
@@ -1237,6 +1271,35 @@ fn project_schema_summary(
     SchemaSummaryDto { kind, fields }
 }
 
+fn inherited_statistics_parameter_value(
+    node_type_id: &str,
+    key: &str,
+    settings: &crate::project::ProjectComputationSettings,
+) -> Option<serde_json::Value> {
+    if !node_type_id.starts_with("yssbi.statistics.") {
+        return None;
+    }
+    match key {
+        "convergence_tolerance" => {
+            serde_json::Number::from_f64(settings.numeric.tolerance.absolute)
+                .map(serde_json::Value::Number)
+        }
+        "missing_value_policy" => Some(serde_json::Value::String(
+            match settings.missing_values.statistics {
+                crate::project::StatisticalMissingValuePolicy::Listwise => "Listwise",
+                crate::project::StatisticalMissingValuePolicy::Reject => "Reject",
+            }
+            .to_owned(),
+        )),
+        _ => None,
+    }
+}
+
+fn statistics_parameter_options(node_type_id: &str, key: &str) -> Option<Vec<Box<str>>> {
+    (node_type_id.starts_with("yssbi.statistics.") && key == "missing_value_policy")
+        .then(|| vec!["Listwise".into(), "Reject".into()])
+}
+
 fn project_schema_aware_editor(
     node_type_id: &str,
     value: Option<&serde_json::Value>,
@@ -1498,16 +1561,6 @@ mod tests {
                 DataType::DataSeries(Box::new(DataType::Int64)),
             ]))
         );
-        for legacy_id in [
-            "tabular.series",
-            "core.data_series.float64",
-            "core.data_series.int64",
-        ] {
-            assert_eq!(
-                project_data_type(&TypeExpr::Concrete(TypeId::new(legacy_id).unwrap())),
-                Some(DataType::Struct(legacy_id.into()))
-            );
-        }
     }
 
     #[test]

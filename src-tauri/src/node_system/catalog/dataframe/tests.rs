@@ -30,10 +30,11 @@ use crate::node_system::plan::{
     RelationalOperatorIndex, RelationalProjection, RelationalRename, ResourceId, ValueRef,
 };
 use crate::node_system::protocol::{
-    InputConsumption, InterfaceResolverId, LiteralPolicy, NodeInterfaceProtocol, NodeTypeId,
-    OutputProduction, ParameterConstraint, ParameterEditorSpec, ParameterKey, PortDirection,
-    PortInstances, PortKey, RelationalScalarType, RenameExpr, SchemaColumnRef, SchemaExpr,
-    SchemaField, SchemaFieldLineage, SchemaResolverId, TypeExpr, TypeId, Value,
+    InputConsumption, InterfaceResolverId, LiteralPolicy, NodeInterfaceProtocol, NodeProtocol,
+    NodeTypeId, OutputProduction, ParameterConstraint, ParameterEditorSpec, ParameterKey,
+    PortDirection, PortInstances, PortKey, RelationalScalarType, RenameExpr, SchemaColumnRef,
+    SchemaExpr, SchemaField, SchemaFieldLineage, SchemaResolverId, TypeExpr, TypeId,
+    TypeParameterId, Value, data_series_type, numeric_data_series_type,
 };
 use crate::node_system::registry::ImplementationKind;
 use crate::node_system::runtime::build_builtin_kernel_registry;
@@ -311,7 +312,7 @@ fn decompose_resolved_ports(
 #[test]
 fn every_legacy_dataframe_node_has_one_stable_id() {
     assert_eq!(LEGACY_NODE_IDS.len(), 26);
-    assert_eq!(NODES.len(), LEGACY_NODE_IDS.len() + 3);
+    assert_eq!(NODES.len(), LEGACY_NODE_IDS.len() + 6);
 
     let legacy = LEGACY_NODE_IDS
         .iter()
@@ -511,12 +512,12 @@ fn decompose_projects_every_column_name_order_and_scalar_type() {
             })
             .collect::<Vec<_>>(),
         vec![
-            DataType::Boolean,
-            DataType::Int64,
-            DataType::Float64,
-            DataType::String,
-            DataType::Date,
-            DataType::Datetime,
+            DataType::DataSeries(Box::new(DataType::Boolean)),
+            DataType::DataSeries(Box::new(DataType::Int64)),
+            DataType::DataSeries(Box::new(DataType::Float64)),
+            DataType::DataSeries(Box::new(DataType::String)),
+            DataType::DataSeries(Box::new(DataType::Date)),
+            DataType::DataSeries(Box::new(DataType::Datetime)),
         ],
     );
 }
@@ -534,12 +535,9 @@ fn dataframe_field_type_unsupported_projects_any_and_port_diagnostic() {
         .next()
         .expect("unknown field remains projected");
 
-    assert_eq!(
-        port.resolved_type
-            .as_ref()
-            .and_then(|summary| summary.data_type.clone()),
-        Some(DataType::Any),
-    );
+    let summary = port.resolved_type.as_ref().unwrap();
+    assert!(!summary.resolved);
+    assert_eq!(summary.data_type, None);
     assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
         diagnostic.code.as_str() == "compiler.dataframe.field_type_unsupported"
             && diagnostic.arguments.get("column").map(Box::as_ref) == Some("opaque")
@@ -562,7 +560,9 @@ fn decompose_orphan_preserves_last_known_label_and_type() {
     };
     let expected_metadata = LastKnownPortMetadata {
         label: "customer_id".into(),
-        value_type: Some(TypeExpr::Concrete(TypeId::new("core.int64").unwrap())),
+        value_type: Some(data_series_type(TypeExpr::Concrete(
+            TypeId::new("core.int64").unwrap(),
+        ))),
     };
     let mut document = dataframe_document(None);
     document.nodes.insert(
@@ -653,7 +653,7 @@ fn decompose_orphan_preserves_last_known_label_and_type() {
             .resolved_type
             .as_ref()
             .and_then(|summary| summary.data_type.clone()),
-        Some(DataType::Int64),
+        Some(DataType::DataSeries(Box::new(DataType::Int64))),
     );
     assert!(projection.connections.iter().any(|connection| {
         connection.connection_id.as_ref() == connection_id.to_string()
@@ -845,7 +845,7 @@ fn dataframe_columns_without_lineage_are_snapshot_scoped() {
 #[test]
 fn dataframe_fragment_contains_every_migrated_protocol() {
     let fragment = build_provider_fragment().expect("dataframe built-in fixture must assemble");
-    assert_eq!(fragment.nodes.len(), LEGACY_NODE_IDS.len() + 3);
+    assert_eq!(fragment.nodes.len(), LEGACY_NODE_IDS.len() + 6);
 }
 
 #[test]
@@ -1594,6 +1594,163 @@ fn dataframe_native_lowerings_have_production_implementations() {
                 spec.id,
                 handle.as_str(),
             );
+        }
+    }
+}
+
+fn dataframe_protocol(id: &str) -> NodeProtocol {
+    build_provider_fragment()
+        .expect("dataframe built-in fixture must assemble")
+        .nodes
+        .into_iter()
+        .find(|node| node.protocol().type_id.as_str() == id)
+        .unwrap_or_else(|| panic!("missing dataframe protocol '{id}'"))
+        .protocol()
+        .clone()
+}
+
+fn protocol_port_type(protocol: &NodeProtocol, key: &str) -> TypeExpr {
+    protocol
+        .interface
+        .ports
+        .iter()
+        .find(|port| port.key.as_str() == key)
+        .unwrap_or_else(|| panic!("missing port '{}:{}'", protocol.type_id, key))
+        .value_type
+        .clone()
+}
+
+#[test]
+fn dataframe_series_protocols_use_canonical_data_series_contracts() {
+    let boolean_series = data_series_type(TypeExpr::Concrete(TypeId::new("core.bool").unwrap()));
+    let int64 = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
+    let float64 = TypeExpr::Concrete(TypeId::new("core.float64").unwrap());
+    let numeric = numeric_data_series_type();
+
+    assert_eq!(
+        protocol_port_type(&dataframe_protocol("yssbi.dataframe.filter"), "condition"),
+        boolean_series,
+    );
+    for id in [
+        "yssbi.dataframe.series.length",
+        "yssbi.dataframe.series.count",
+    ] {
+        let protocol = dataframe_protocol(id);
+        assert_eq!(protocol_port_type(&protocol, "value"), int64.clone());
+    }
+    assert_eq!(
+        protocol_port_type(&dataframe_protocol("yssbi.dataframe.series.sum"), "series"),
+        numeric.clone(),
+    );
+    assert_eq!(
+        protocol_port_type(&dataframe_protocol("yssbi.dataframe.series.mean"), "series"),
+        numeric.clone(),
+    );
+    assert_eq!(
+        protocol_port_type(&dataframe_protocol("yssbi.dataframe.series.mean"), "value"),
+        float64,
+    );
+    for id in [
+        "yssbi.dataframe.series.standardize",
+        "yssbi.dataframe.timeseries.difference",
+        "yssbi.dataframe.panel.difference",
+    ] {
+        let protocol = dataframe_protocol(id);
+        assert_eq!(protocol_port_type(&protocol, "series"), numeric.clone());
+    }
+
+    let lag = dataframe_protocol("yssbi.dataframe.timeseries.lag");
+    let element = TypeParameterId::new("element").unwrap();
+    assert_eq!(lag.interface.type_parameters.as_ref(), [element.clone()]);
+    let generic_series = data_series_type(TypeExpr::Generic(element));
+    assert_eq!(protocol_port_type(&lag, "series"), generic_series);
+    assert_eq!(protocol_port_type(&lag, "result"), generic_series);
+
+    let fragment = crate::node_system::catalog::core_nodes::build_provider_fragment().unwrap();
+    let series_constructors = fragment
+        .type_constructors
+        .iter()
+        .filter(|registration| {
+            registration.id.as_str() == crate::node_system::protocol::DATA_SERIES_CONSTRUCTOR_ID
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(series_constructors.len(), 1);
+    assert_eq!(series_constructors[0].arity, 1);
+    assert_eq!(
+        fragment
+            .types
+            .iter()
+            .filter(|registration| registration.id.as_str()
+                == crate::node_system::protocol::DATA_SERIES_CONSTRUCTOR_ID)
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn dataframe_numeric_and_string_comparisons_remain_separate() {
+    let numeric = numeric_data_series_type();
+    let string = TypeExpr::Concrete(TypeId::new("core.string").unwrap());
+    let string_series = data_series_type(string.clone());
+    let boolean_series = data_series_type(TypeExpr::Concrete(TypeId::new("core.bool").unwrap()));
+
+    for id in [
+        "yssbi.dataframe.series.compare.equal",
+        "yssbi.dataframe.series.compare.not_equal",
+        "yssbi.dataframe.series.compare.greater",
+        "yssbi.dataframe.series.compare.less",
+        "yssbi.dataframe.series.compare.greater_equal",
+        "yssbi.dataframe.series.compare.less_equal",
+    ] {
+        let protocol = dataframe_protocol(id);
+        assert_eq!(protocol_port_type(&protocol, "left"), numeric.clone());
+        assert_eq!(
+            protocol_port_type(&protocol, "result"),
+            boolean_series.clone()
+        );
+    }
+    for id in [
+        "yssbi.dataframe.series.compare.string.equal",
+        "yssbi.dataframe.series.compare.string.not_equal",
+    ] {
+        let protocol = dataframe_protocol(id);
+        assert_eq!(protocol_port_type(&protocol, "left"), string_series.clone());
+        assert_eq!(
+            protocol_port_type(&protocol, "right"),
+            TypeExpr::Union(vec![string.clone(), string_series.clone()])
+        );
+        assert_eq!(
+            protocol_port_type(&protocol, "result"),
+            boolean_series.clone()
+        );
+    }
+}
+
+fn contains_unknown(value: &TypeExpr) -> bool {
+    match value {
+        TypeExpr::Unknown => true,
+        TypeExpr::Applied { arguments, .. } | TypeExpr::Union(arguments) => {
+            arguments.iter().any(contains_unknown)
+        }
+        TypeExpr::Concrete(_) | TypeExpr::Generic(_) => false,
+    }
+}
+
+#[test]
+fn dataframe_unknown_series_types_are_only_resolver_derived() {
+    for node in build_provider_fragment()
+        .expect("dataframe built-in fixture must assemble")
+        .nodes
+    {
+        for port in &node.protocol().interface.ports {
+            if contains_unknown(&port.value_type) {
+                assert!(
+                    matches!(port.instances, PortInstances::Derived { .. }),
+                    "{}:{} uses Unknown without resolver-derived concretization",
+                    node.protocol().type_id,
+                    port.key
+                );
+            }
         }
     }
 }

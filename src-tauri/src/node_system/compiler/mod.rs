@@ -14,6 +14,7 @@ mod schema_analysis;
 mod specialization;
 mod type_analysis;
 
+pub use crate::node_system::protocol::{TypeCompatibility, type_exprs_compatibility};
 pub use crate::node_system::registry::NominalValueHandle;
 pub use coordinator::{
     CompilationSlot, CompilationTask, CompileCancellationToken, CompileCancelled,
@@ -62,7 +63,6 @@ pub use schema_analysis::{
 pub use specialization::{DemandPlanError, ExecutionPlanBasis, NormalizedExecutionDemand};
 #[cfg(test)]
 pub(crate) use type_analysis::type_exprs_assignable;
-pub use type_analysis::{TypeCompatibility, type_exprs_compatibility};
 
 pub fn build_builtin_interface_resolvers() -> InterfaceResolverSet {
     let mut resolvers = InterfaceResolverSet::new();

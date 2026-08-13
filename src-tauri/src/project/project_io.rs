@@ -1634,6 +1634,9 @@ mod tests {
                     "parameter": "stable-parameter",
                 },
                 "order": "stable-order",
+                "last_known": {
+                    "label": "",
+                },
             })
         );
 

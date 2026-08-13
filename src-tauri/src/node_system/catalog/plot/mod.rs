@@ -13,14 +13,11 @@ use crate::node_system::plan::{
     ResourceKind,
 };
 use crate::node_system::protocol::*;
-use crate::node_system::registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
-use std::collections::BTreeSet;
+use crate::node_system::registry::{CategoryRegistration, RegisteredNode};
 use std::sync::Arc;
 
 const CATEGORY: &str = "plot";
-const FLOAT_SERIES: &str = "core.data_series.float64";
-const INTEGER_SERIES: &str = "core.data_series.int64";
-const DATE_SERIES: &str = "core.data_series.date";
+
 const PLOT_SINK: &str = "yssbi.runtime.plot_sink";
 
 #[derive(Clone, Copy)]
@@ -137,22 +134,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     let mut messages = vec![
         ("en-US", "categories.plot.title", Message::Text("Plots")),
         ("zh-CN", "categories.plot.title", Message::Text("绘图")),
-        (
-            "en-US",
-            "types.data_series.date.title",
-            Message::Text("Date Data Series"),
-        ),
-        (
-            "zh-CN",
-            "types.data_series.date.title",
-            Message::Text("日期数据序列"),
-        ),
     ];
-    let types = vec![TypeRegistration {
-        id: type_id(DATE_SERIES)?,
-        title_key: i18n_key("types.data_series.date.title")?,
-        classes: BTreeSet::new(),
-    }];
     let categories = vec![CategoryRegistration {
         id: category_id(CATEGORY)?,
         title_key: i18n_key("categories.plot.title")?,
@@ -169,7 +151,6 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
         ));
     }
     Ok(ProviderFragment {
-        types,
         categories,
         nodes,
         messages,
@@ -185,7 +166,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 spec.id,
                 "x",
                 PortDirection::Input,
-                pair_series_type()?,
+                numeric_data_series_type(),
                 PortInstances::Declared,
                 None,
             )?);
@@ -193,7 +174,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 spec.id,
                 "y",
                 PortDirection::Input,
-                pair_series_type()?,
+                numeric_data_series_type(),
                 PortInstances::Declared,
                 None,
             )?);
@@ -202,7 +183,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             spec.id,
             "values",
             PortDirection::Input,
-            numeric_series_type()?,
+            numeric_data_series_type(),
             PortInstances::Declared,
             None,
         )?),
@@ -210,7 +191,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             spec.id,
             "series",
             PortDirection::Input,
-            numeric_series_type()?,
+            numeric_data_series_type(),
             PortInstances::UserCreated { min: 2, max: None },
             None,
         )?),
@@ -219,7 +200,7 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
                 spec.id,
                 "values",
                 PortDirection::Input,
-                concrete(FLOAT_SERIES)?,
+                numeric_data_series_type(),
                 PortInstances::Declared,
                 None,
             )?);
@@ -431,19 +412,6 @@ fn port_messages(inputs: PlotInputs) -> &'static [(&'static str, &'static str, &
     }
 }
 
-fn pair_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Union(vec![
-        concrete(FLOAT_SERIES)?,
-        concrete(INTEGER_SERIES)?,
-        concrete(DATE_SERIES)?,
-    ]))
-}
-fn numeric_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Union(vec![
-        concrete(FLOAT_SERIES)?,
-        concrete(INTEGER_SERIES)?,
-    ]))
-}
 fn concrete(value: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Concrete(type_id(value)?))
 }
@@ -519,6 +487,49 @@ mod tests {
                 .iter()
                 .all(|spec| spec.id.starts_with("yssbi.plot.") && spec.id.ends_with(".view"))
         );
+    }
+
+    fn input_type(node: &NodeProtocol, key: &str) -> TypeExpr {
+        node.interface
+            .ports
+            .iter()
+            .find(|port| port.direction == PortDirection::Input && port.key.as_str() == key)
+            .unwrap()
+            .value_type
+            .clone()
+    }
+
+    #[test]
+    fn plot_protocols_use_canonical_numeric_series_and_exclude_date() {
+        let numeric = numeric_data_series_type();
+        for id in [
+            "yssbi.plot.scatter.view",
+            "yssbi.plot.line.view",
+            "yssbi.plot.ecdf.view",
+            "yssbi.plot.kde.view",
+            "yssbi.plot.histogram.view",
+        ] {
+            let spec = SPECS.iter().find(|spec| spec.id == id).unwrap();
+            let node = protocol(spec).unwrap();
+            let keys: &[&str] = if matches!(spec.inputs, PlotInputs::Pair) {
+                &["x", "y"]
+            } else {
+                &["values"]
+            };
+            for key in keys {
+                let value_type = input_type(&node, key);
+                assert_eq!(value_type, numeric);
+            }
+        }
+
+        let correlogram = protocol(
+            SPECS
+                .iter()
+                .find(|spec| spec.id == "yssbi.plot.correlogram.view")
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(input_type(&correlogram, "values"), numeric);
     }
 
     #[test]

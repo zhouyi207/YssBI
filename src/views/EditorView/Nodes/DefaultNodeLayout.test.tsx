@@ -94,6 +94,9 @@ describe('DefaultNodeLayout projection authority', () => {
         multiline: false,
         value: 'shown',
         configuration: null,
+        inheritedValue: null,
+        valueSource: null,
+        options: null,
       },
       {
         key: 'detail',
@@ -104,6 +107,9 @@ describe('DefaultNodeLayout projection authority', () => {
         multiline: false,
         value: 'hidden',
         configuration: null,
+        inheritedValue: null,
+        valueSource: null,
+        options: null,
       },
     ];
 
@@ -130,6 +136,9 @@ describe('DefaultNodeLayout projection authority', () => {
       multiline: false,
       value: 42,
       configuration: null,
+      inheritedValue: null,
+      valueSource: null,
+      options: null,
     }];
 
     act(() => root.render(<DefaultNodeLayout node={node} />));

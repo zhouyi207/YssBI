@@ -1208,7 +1208,7 @@ mod tests {
 
     #[test]
     fn compiler_diagnostic_definitions_are_unique_and_template_safe() {
-        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 110);
+        assert_eq!(COMPILER_DIAGNOSTIC_DEFINITIONS.len(), 111);
         validate_compiler_diagnostic_definitions(COMPILER_DIAGNOSTIC_DEFINITIONS).unwrap();
 
         let codes = COMPILER_DIAGNOSTIC_DEFINITIONS
@@ -1511,6 +1511,7 @@ mod tests {
                 .into_node(DiagnosticLocation::Graph),
                 "compiler.node.unknown",
                 "diagnostics.compiler.node.unknown",
+                DiagnosticSeverity::Error,
                 BTreeMap::from([(Box::from("node_type"), Box::from("test.unknown"))]),
             ),
             (
@@ -1520,6 +1521,7 @@ mod tests {
                 .into_node(DiagnosticLocation::Graph),
                 "compiler.input.unbound",
                 "diagnostics.compiler.input.unbound",
+                DiagnosticSeverity::Warning,
                 BTreeMap::from([(Box::from("port"), Box::from("test/input"))]),
             ),
             (
@@ -1530,6 +1532,7 @@ mod tests {
                 .into_node(DiagnosticLocation::Graph),
                 "compiler.type.incompatible",
                 "diagnostics.compiler.type.incompatible",
+                DiagnosticSeverity::Error,
                 BTreeMap::from([
                     (Box::from("actual_type"), Box::from("core.string")),
                     (Box::from("expected_type"), Box::from("core.integer")),
@@ -1537,10 +1540,10 @@ mod tests {
             ),
         ];
 
-        for (diagnostic, code, message_key, arguments) in cases {
+        for (diagnostic, code, message_key, severity, arguments) in cases {
             assert_eq!(diagnostic.code.as_str(), code);
             assert_eq!(diagnostic.message_key.as_str(), message_key);
-            assert_eq!(diagnostic.severity, DiagnosticSeverity::Error);
+            assert_eq!(diagnostic.severity, severity);
             assert_eq!(diagnostic.arguments, arguments);
             assert!(!diagnostic.arguments.contains_key("detail"));
             assert!(diagnostic.related.is_empty());

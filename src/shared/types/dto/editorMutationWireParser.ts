@@ -43,6 +43,13 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isJsonValue(value: unknown): boolean {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (isFiniteNumber(value)) return true;
+  if (Array.isArray(value)) return value.every(isJsonValue);
+  return isRecord(value) && Object.values(value).every(isJsonValue);
+}
+
 function isPosition(value: unknown): boolean {
   return isRecord(value)
     && hasExactKeys(value, ['x', 'y'])
@@ -297,6 +304,7 @@ function isParameterEditor(value: unknown): boolean {
   return isRecord(value)
     && hasExactKeys(value, [
       'key', 'display', 'editor', 'presentation', 'valueType', 'multiline', 'value', 'configuration',
+      'inheritedValue', 'valueSource', 'options',
     ])
     && typeof value.key === 'string'
     && isRecord(value.display)
@@ -307,7 +315,12 @@ function isParameterEditor(value: unknown): boolean {
     && ['detailPanel', 'inlineAndDetail'].includes(value.presentation as string)
     && (value.valueType === null || isDataTypeBackendFormat(value.valueType))
     && typeof value.multiline === 'boolean'
-    && isParameterConfiguration(value.configuration);
+    && isJsonValue(value.value)
+    && isParameterConfiguration(value.configuration)
+    && isJsonValue(value.inheritedValue)
+    && (value.valueSource === null || value.valueSource === 'project' || value.valueSource === 'node')
+    && (value.options === null || (Array.isArray(value.options)
+      && value.options.every((option) => typeof option === 'string')));
 }
 
 function isEditorNode(value: unknown): boolean {

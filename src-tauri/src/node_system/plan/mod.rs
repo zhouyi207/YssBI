@@ -19,7 +19,8 @@ mod tests {
     };
     use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use crate::node_system::protocol::{
-        CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy, Value,
+        CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy,
+        TypeExpr, TypeId, Value, data_series_type,
     };
     use crate::node_system::registry::RegistryFingerprint;
 
@@ -1598,6 +1599,69 @@ mod tests {
                 producer: "branch result",
                 ..
             }
+        )));
+    }
+
+    fn concrete_type(id: &str) -> TypeExpr {
+        TypeExpr::Concrete(TypeId::new(id).expect("test type ID is valid"))
+    }
+
+    fn data_series_contract(element_type: TypeExpr) -> PlannedValueContract {
+        PlannedValueContract {
+            kind: PlannedValueKind::DataSeries,
+            type_expr: data_series_type(element_type),
+        }
+    }
+
+    fn set_dependency_contracts(
+        plan: &mut ExecutionPlan,
+        source: PlannedValueContract,
+        destination: PlannedValueContract,
+    ) {
+        plan.value_contracts
+            .insert(ValueRef::new(0), source.clone());
+        plan.value_contracts
+            .insert(ValueRef::new(1), destination.clone());
+        plan.operations[0].outputs[0].contract = source;
+        plan.operations[1].outputs[0].contract = destination;
+    }
+
+    #[test]
+    fn accepts_value_dependency_assignable_to_destination_union() {
+        let mut plan = valid_plan();
+        set_dependency_contracts(
+            &mut plan,
+            data_series_contract(concrete_type("core.float64")),
+            data_series_contract(TypeExpr::Union(vec![
+                concrete_type("core.int64"),
+                concrete_type("core.float64"),
+            ])),
+        );
+
+        plan.validate()
+            .expect("a concrete numeric series must be assignable to the numeric series union");
+    }
+
+    #[test]
+    fn rejects_value_dependency_outside_destination_union() {
+        let mut plan = valid_plan();
+        set_dependency_contracts(
+            &mut plan,
+            data_series_contract(concrete_type("core.string")),
+            data_series_contract(TypeExpr::Union(vec![
+                concrete_type("core.int64"),
+                concrete_type("core.float64"),
+            ])),
+        );
+
+        assert!(plan.validate().unwrap_err().0.iter().any(|error| matches!(
+            error,
+            PlanValidationError::ValueContractMismatch {
+                context: "value dependency",
+                source,
+                destination,
+                ..
+            } if *source == ValueRef::new(0) && *destination == ValueRef::new(1)
         )));
     }
 

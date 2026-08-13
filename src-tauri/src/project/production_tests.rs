@@ -20,6 +20,94 @@ fn execution_error_retains_typed_internal_compilation_failure() {
 
     assert_eq!(error.internal_compilation_failure(), Some(&failure));
     assert!(error.run_error().is_none());
+    assert_eq!(
+        error.to_string(),
+        "internal compilation failure at Lowering: compiler.lowering.internal_invariant (node 00000000-0000-0000-0000-00000000002a)"
+    );
+}
+
+#[test]
+fn external_project_event_executes_when_diagnostic_path_is_configured() {
+    #[derive(Default)]
+    struct Events(std::sync::Mutex<Vec<crate::node_system::runtime::RunEvent>>);
+    impl crate::node_system::runtime::RunEventSink for Events {
+        fn record(&self, event: crate::node_system::runtime::RunEvent) {
+            self.0.lock().unwrap().push(event);
+        }
+    }
+
+    let Ok(root) = std::env::var("YSSBI_DIAGNOSTIC_PROJECT_ROOT") else {
+        return;
+    };
+    let graph_path = std::env::var("YSSBI_DIAGNOSTIC_GRAPH_PATH")
+        .unwrap_or_else(|_| "events/New Event.yssbi-event".to_string());
+    let data = crate::project::load_project_from_file(&root).unwrap();
+    let state = ProjectState::new();
+    state.activate_project_fixture(root, data);
+    let graph_path = GraphResourcePath::new(graph_path).unwrap();
+    load_graph(&state, &graph_path).unwrap();
+    let report_node = state
+        .project_data
+        .read()
+        .unwrap()
+        .graphs
+        .get(&graph_path)
+        .unwrap()
+        .document
+        .nodes
+        .values()
+        .find(|node| node.node_type.as_str() == "yssbi.statistics.ols.summary")
+        .map(|node| node.id)
+        .expect("external diagnostic graph must contain OLS Summary");
+    let report_output = crate::node_system::plan::GraphOutputRef {
+        graph_path: crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
+        port: crate::node_system::document::PortAddress::declared(
+            report_node,
+            crate::node_system::protocol::PortKey::new("report").unwrap(),
+        ),
+    };
+    let events = Events::default();
+    let result = state.execute_graph_for_current_project_for_test(
+        &graph_path,
+        &crate::node_system::plan::ExecutionDemand::PinPreview {
+            output: report_output,
+            generation: 1,
+        },
+        &events,
+    );
+    assert!(
+        result.is_ok(),
+        "external project execution failed: {result:?}"
+    );
+    let report_source = events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .find_map(|event| match &event.kind {
+            crate::node_system::runtime::RunEventKind::OutputReady {
+                output, source_id, ..
+            } if matches!(
+                &output.port.port,
+                crate::node_system::document::PortRef::Declared { key }
+                    if key.as_str() == "report"
+            ) =>
+            {
+                Some(*source_id)
+            }
+            _ => None,
+        })
+        .expect("OLS Summary report output must be published");
+    let descriptor = state
+        .result_source_descriptor(report_source)
+        .unwrap()
+        .expect("published report descriptor must remain available");
+    assert_eq!(
+        descriptor.presentation,
+        crate::node_system::runtime::ResultSourcePresentation::Report {
+            report: crate::node_system::runtime::ResultReportKind::OlsSummary,
+        }
+    );
 }
 
 fn graph_path() -> GraphResourcePath {
@@ -8556,6 +8644,7 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
             session,
             &crate::node_system::analysis::NOOP_TRACE_SINK,
             &crate::node_system::compiler::CompileCancellationToken::new(),
+            &crate::project::ProjectComputationSettings::default(),
             &mut parameters,
         )
         .unwrap();
@@ -10002,7 +10091,12 @@ fn computation_settings_request(
 
 fn computation_settings_snapshot(
     project: &crate::project::fixtures::TempProject,
-) -> (Vec<u8>, crate::project::ProjectComputationSettings, u64, (String, u64, u64)) {
+) -> (
+    Vec<u8>,
+    crate::project::ProjectComputationSettings,
+    u64,
+    (String, u64, u64),
+) {
     let state = project.state();
     let metadata = std::fs::read(
         state
@@ -10033,8 +10127,8 @@ fn computation_settings_mutation_commits_disk_and_authority_atomically() {
         .update_computation_settings_transaction(request.clone())
         .unwrap();
     let root = state.capture_project_session().unwrap().root;
-    let reloaded = crate::project::load_project_from_file(root.as_path().to_string_lossy().as_ref())
-        .unwrap();
+    let reloaded =
+        crate::project::load_project_from_file(root.as_path().to_string_lossy().as_ref()).unwrap();
 
     assert_eq!(receipt.operation_id, request.operation_id);
     assert_eq!(receipt.project_instance_id, request.project_instance_id);
@@ -10042,7 +10136,10 @@ fn computation_settings_mutation_commits_disk_and_authority_atomically() {
     assert_eq!(receipt.publication_revision, before.1 + 1);
     assert_eq!(receipt.settings, request.settings);
     assert_eq!(reloaded.computation_settings, receipt.settings);
-    assert_eq!(state.get_data().unwrap().computation_settings, receipt.settings);
+    assert_eq!(
+        state.get_data().unwrap().computation_settings,
+        receipt.settings
+    );
     assert_eq!(state.authority_generation_for_test(), before.2 + 1);
 }
 
@@ -12094,22 +12191,23 @@ fn production_decompose_projects_database_column_metadata() {
         vec!["customer_id", "amount", "opaque"],
     );
     assert_eq!(
-        ports
+        ports[..2]
             .iter()
             .map(|port| {
-                port.resolved_type
-                    .as_ref()
-                    .and_then(|summary| summary.data_type.clone())
-                    .unwrap()
+                let summary = port.resolved_type.as_ref().unwrap();
+                assert!(summary.resolved);
+                summary.data_type.clone().unwrap()
             })
             .collect::<Vec<_>>(),
         vec![
-            crate::graph::DataType::Int64,
-            crate::graph::DataType::Float64,
-            crate::graph::DataType::Any,
+            crate::graph::DataType::DataSeries(Box::new(crate::graph::DataType::Int64)),
+            crate::graph::DataType::DataSeries(Box::new(crate::graph::DataType::Float64)),
         ],
     );
     let opaque = ports[2];
+    let opaque_type = opaque.resolved_type.as_ref().unwrap();
+    assert!(!opaque_type.resolved);
+    assert_eq!(opaque_type.data_type, None);
     assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
         diagnostic.code.as_str() == "compiler.dataframe.field_type_unsupported"
             && diagnostic.arguments.get("column").map(Box::as_ref) == Some("opaque")
@@ -12276,8 +12374,10 @@ fn editor_connect_materializes_current_decompose_projection_and_preserves_orphan
         .unwrap();
     let expected_metadata = crate::node_system::document::LastKnownPortMetadata {
         label: "customer_id".into(),
-        value_type: Some(crate::node_system::protocol::TypeExpr::Concrete(
-            crate::node_system::protocol::TypeId::new("core.int64").unwrap(),
+        value_type: Some(crate::node_system::protocol::data_series_type(
+            crate::node_system::protocol::TypeExpr::Concrete(
+                crate::node_system::protocol::TypeId::new("core.int64").unwrap(),
+            ),
         )),
     };
     assert!(matches!(
@@ -12365,7 +12465,9 @@ fn editor_connect_materializes_current_decompose_projection_and_preserves_orphan
             .resolved_type
             .as_ref()
             .and_then(|resolved| resolved.data_type.clone()),
-        Some(crate::graph::DataType::Int64),
+        Some(crate::graph::DataType::DataSeries(Box::new(
+            crate::graph::DataType::Int64,
+        ))),
     );
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -12690,7 +12792,9 @@ fn database_without_name_uses_localized_editor_title() {
             .resolved_type
             .as_ref()
             .and_then(|summary| summary.data_type.clone()),
-        Some(crate::graph::DataType::Int64),
+        Some(crate::graph::DataType::DataSeries(Box::new(
+            crate::graph::DataType::Int64,
+        ))),
     );
     assert!(node.diagnostics.iter().any(|diagnostic| {
         diagnostic.code.as_ref() == "compiler.resource.display_name_unavailable"
