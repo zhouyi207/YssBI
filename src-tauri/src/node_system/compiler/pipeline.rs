@@ -1413,7 +1413,7 @@ impl<'a> AnalysisState<'a> {
             }
             self.validate_binding_templates(node_id, resolved.protocol);
             let provisional_diagnostic_start = self.diagnostics.len();
-            let (ports, deferred_for_schema) = self.resolve_ports(
+            let (ports, port_sequence, deferred_for_schema) = self.resolve_ports(
                 node_id,
                 resolved.protocol,
                 &empty_schemas,
@@ -1966,7 +1966,7 @@ impl<'a> AnalysisState<'a> {
             self.projection_only_ports
                 .retain(|address| address.node_id != node_id);
             self.interface_projections.remove(&node_id);
-            let (ports, port_sequence, _) =
+            let (ports, port_sequence, deferred_for_schema) =
                 self.resolve_ports(node_id, protocol, resolved_schemas, resources, resolvers);
             if let Some(node) = self.nodes.get_mut(&node_id) {
                 node.ports = ports;
