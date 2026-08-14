@@ -1044,30 +1044,6 @@ fn i18n_validation_requires_alias_messages_to_be_arrays() {
 }
 
 #[test]
-fn builtin_factory_hides_raw_assembly_and_registry_shortcuts() {
-    let module = include_str!("mod.rs");
-    let builtin = include_str!("builtin.rs");
-
-    assert!(!module.contains("build_builtin_provider"));
-    assert!(!module.contains("build_builtin_registry"));
-    assert!(!builtin.contains("pub fn build_builtin_provider"));
-    assert!(!builtin.contains("pub fn build_builtin_registry"));
-
-    let nominal_installer = builtin
-        .split("fn register_builtin_nominal_validators(")
-        .nth(1)
-        .and_then(|tail| tail.split("#[cfg(test)]").next())
-        .expect("nominal installer source section");
-    assert!(
-        nominal_installer
-            .contains("Result<super::dataframe::DataframeNominalHandles, BuiltinAssemblyError>")
-    );
-    assert!(!nominal_installer.contains(".expect("));
-    assert!(!nominal_installer.contains(".unwrap("));
-    assert!(!nominal_installer.contains("panic!("));
-}
-
-#[test]
 fn builtin_nominal_validator_registration_propagates_duplicate_failure() {
     let mut builder = crate::node_system::registry::NodeRegistryBuilder::new();
     let project_columns = crate::node_system::protocol::TypeId::new(

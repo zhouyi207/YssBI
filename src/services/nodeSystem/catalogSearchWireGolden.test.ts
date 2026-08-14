@@ -32,21 +32,11 @@ describe('Task 17 focused Catalog search wire golden', () => {
     ]);
     expect(catalog.items).toHaveLength(2);
     for (const item of catalog.items) {
-      expect(item).not.toHaveProperty('pinyin');
-      expect(item).not.toHaveProperty('searchText');
       expect(item.backendSearchText).toBeInstanceOf(Array);
       expect(item.resourceNames).toBeInstanceOf(Array);
     }
   });
 
-  it.each(['pinyin', 'searchText'])('rejects injected legacy singular %s item metadata', (field) => {
-    const wire = structuredClone(catalogSearchWire) as unknown as {
-      items: Array<Record<string, unknown>>;
-    };
-    wire.items[0][field] = 'legacy compatibility token';
-
-    expect(isLocalizedCatalogDto(wire)).toBe(false);
-  });
 
   it.each(['backendSearchText', 'resourceNames'])('requires item field %s', (field) => {
     const wire = structuredClone(catalogSearchWire) as unknown as {

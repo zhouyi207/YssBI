@@ -129,15 +129,10 @@ describe('execution wire parsers', () => {
     expect(() => parseRunEvent({ ...valid, kind: { ...valid.kind, extra: true } })).toThrow();
   });
 
-  it('rejects removed valueReady and requires exact preview generation wire', () => {
-    const valid = executionWire.runEvents[0];
+  it('requires exact outputResultChanged generation wire', () => {
     const outputResultChanged = executionWire.runEvents.find((event) => event.kind.type === 'outputResultChanged');
     if (!outputResultChanged) throw new Error('missing output publication fixture');
 
-    expect(() => parseRunEvent({
-      ...valid,
-      kind: { type: 'outputReady', output: {}, generation: null, resultId: '17' },
-    })).toThrow();
     const missingGeneration = clone(outputResultChanged);
     delete record(record(missingGeneration).kind).generation;
     expect(() => parseRunEvent(missingGeneration)).toThrow();

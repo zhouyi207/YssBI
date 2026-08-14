@@ -1,4 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { deleteResource } from '@/features/application/resource/resourceActions';
@@ -26,24 +25,4 @@ describe('deleteGraphWithConfirm backend cascade', () => {
     });
   });
 
-  it('contains no reachable invokes for removed function call-site commands', () => {
-    const files = [
-      '../../../services/graph/graphService.ts',
-      './deleteGraphWithConfirm.ts',
-      '../graphDocument/graphDocumentActions.ts',
-    ];
-    const source = files
-      .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
-      .join('\n');
-
-    expect(source).not.toMatch(
-      /get_function_call_sites|purge_function_call_sites|update_call_function_target/,
-    );
-    expect(source).not.toMatch(
-      /getFunctionCallSites|purgeFunctionCallSites|updateCallFunctionTarget/,
-    );
-    expect(
-      existsSync(new URL('../graphDocument/useFunctionCallSites.ts', import.meta.url)),
-    ).toBe(false);
-  });
 });

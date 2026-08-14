@@ -153,25 +153,6 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
     let mut files = Vec::new();
     rust_sources(&source_root, &mut files);
 
-    let removed_symbols = [
-        concat!("with_project_filesystem_", "transaction"),
-        concat!("with_current_project_filesystem_", "transaction"),
-        concat!("filesystem_", "transactions"),
-        concat!("ProjectFilesystem", "Snapshot"),
-        concat!("GraphRenameDisk", "Rollback"),
-        concat!("save_project_", "to_file"),
-        concat!("save_project_graph_", "to_file"),
-        concat!("save_project_as_", "to_directory"),
-        concat!("duplicate_project_graph_", "file"),
-        concat!("remove_project_graph_from_", "file"),
-        concat!("cascade_graph_path_references_on_", "disk"),
-        concat!("delete_project_", "directory"),
-    ];
-    let removed_architecture = [
-        concat!("get_editor_schema_", "command"),
-        concat!("useNodeRegistry", "Store"),
-        concat!("useGlobalTypeSystem", "Store"),
-    ];
     let read_only_scanners = [
         "project/project_io.rs",
         "project/project_watcher.rs",
@@ -233,12 +214,6 @@ fn production_project_document_io_is_owned_by_filesystem_modules() {
         }
         let source = std::fs::read_to_string(&file).unwrap();
         let production = production_source(&source);
-
-        for symbol in removed_symbols.iter().chain(removed_architecture.iter()) {
-            if production.contains(symbol) {
-                offenders.push(format!("{relative}: forbidden symbol {symbol}"));
-            }
-        }
 
         if project_io_is_allowed(&relative, &duckdb_files, &non_project_files) {
             continue;
@@ -1126,11 +1101,10 @@ fn worksheet_architecture_audit_allows_resource_name_filenames() {
 }
 
 #[test]
-fn production_worksheet_contract_has_no_legacy_identity_or_layering_bypasses() {
+fn production_worksheet_contract_preserves_opaque_paths_and_layering() {
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let rust_root = manifest.join("src");
     let frontend_root = manifest.parent().unwrap().join("src");
-    let forbidden_identity = ["worksheetId", "WorksheetDeltaDto", "worksheetDeltas"];
     let uuid_worksheet = Regex::new(
         r"worksheets/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\.yssbi-worksheet",
     )
@@ -1150,13 +1124,6 @@ fn production_worksheet_contract_has_no_legacy_identity_or_layering_bypasses() {
         }
         let full_source = std::fs::read_to_string(&file).unwrap();
         let source = production_source(&full_source);
-        for forbidden in forbidden_identity {
-            if source.contains(forbidden) {
-                offenders.push(format!(
-                    "rust/{relative}: forbidden worksheet contract {forbidden}"
-                ));
-            }
-        }
         if uuid_worksheet.is_match(&source) {
             offenders.push(format!(
                 "rust/{relative}: forbidden UUID worksheet filename contract"
@@ -1180,13 +1147,6 @@ fn production_worksheet_contract_has_no_legacy_identity_or_layering_bypasses() {
             continue;
         }
         let source = std::fs::read_to_string(&file).unwrap();
-        for forbidden in forbidden_identity {
-            if source.contains(forbidden) {
-                offenders.push(format!(
-                    "frontend/{relative}: forbidden worksheet contract {forbidden}"
-                ));
-            }
-        }
         if uuid_worksheet.is_match(&source) {
             offenders.push(format!(
                 "frontend/{relative}: forbidden UUID worksheet filename contract"

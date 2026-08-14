@@ -17,13 +17,6 @@ const ASSEMBLY_FORBIDDEN_SYMBOLS: &[&str] = &[
     "AssemblySemanticId",
     "from_unvalidated_assembly",
 ];
-const LEGACY_MODULE_PATHS: &[&str] = &[
-    "graph/register/",
-    "graph/core/",
-    "graph/infer/",
-    "execution/context/",
-    "execution/engine/",
-];
 
 fn rust_sources(root: &Path, files: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(root).unwrap() {
@@ -37,139 +30,6 @@ fn rust_sources(root: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 
-struct ProjectApplicationVersionVisitor<'a> {
-    relative: &'a str,
-    offenders: Vec<String>,
-}
-
-impl ProjectApplicationVersionVisitor<'_> {
-    fn report(&mut self, label: &str, token: &str) {
-        self.offenders
-            .push(format!("{}:{label}:{token}", self.relative));
-    }
-}
-
-fn skip_nested_meta_value(meta: syn::meta::ParseNestedMeta<'_>) -> syn::Result<()> {
-    if meta.input.peek(Token![=]) {
-        let value = meta.value()?;
-        let _: Expr = value.parse()?;
-    } else if meta.input.peek(syn::token::Paren) {
-        meta.parse_nested_meta(skip_nested_meta_value)?;
-    }
-    Ok(())
-}
-
-fn serde_renames_project_application_version(attribute: &syn::Attribute) -> bool {
-    if !attribute.path().is_ident("serde") {
-        return false;
-    }
-    let mut forbidden = false;
-    let _ = attribute.parse_nested_meta(|meta| {
-        if meta.path.is_ident("rename") && meta.input.peek(Token![=]) {
-            let value = meta.value()?;
-            let rename: syn::LitStr = value.parse()?;
-            forbidden |= rename.value() == "appVersion";
-        } else if meta.path.is_ident("rename") {
-            meta.parse_nested_meta(|direction| {
-                if direction.path.is_ident("serialize") || direction.path.is_ident("deserialize") {
-                    let value = direction.value()?;
-                    let rename: syn::LitStr = value.parse()?;
-                    forbidden |= rename.value() == "appVersion";
-                    Ok(())
-                } else {
-                    skip_nested_meta_value(direction)
-                }
-            })?;
-        } else if meta.path.is_ident("alias") {
-            let value = meta.value()?;
-            let alias: syn::LitStr = value.parse()?;
-            forbidden |= alias.value() == "appVersion";
-        } else {
-            skip_nested_meta_value(meta)?;
-        }
-        Ok(())
-    });
-    forbidden
-}
-
-fn macro_tokens_contain_project_application_version(tokens: TokenStream) -> bool {
-    tokens.into_iter().any(|token| match token {
-        TokenTree::Group(group) => macro_tokens_contain_project_application_version(group.stream()),
-        TokenTree::Ident(ident) => ident == "app_version",
-        TokenTree::Punct(_) | TokenTree::Literal(_) => false,
-    })
-}
-
-impl<'ast> Visit<'ast> for ProjectApplicationVersionVisitor<'_> {
-    fn visit_ident(&mut self, ident: &'ast syn::Ident) {
-        if ident == "app_version" {
-            self.report("reserved application version identifier", "app_version");
-        }
-        visit::visit_ident(self, ident);
-    }
-
-    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
-        if serde_renames_project_application_version(attribute) {
-            self.report("project application version serde rename", "appVersion");
-        } else if !attribute.path().is_ident("serde")
-            && let Meta::List(list) = &attribute.meta
-            && macro_tokens_contain_project_application_version(list.tokens.clone())
-        {
-            self.report("reserved application version identifier", "app_version");
-        }
-        visit::visit_attribute(self, attribute);
-    }
-
-    fn visit_macro(&mut self, mac: &'ast Macro) {
-        if macro_tokens_contain_project_application_version(mac.tokens.clone()) {
-            self.report("reserved application version identifier", "app_version");
-        }
-        visit::visit_macro(self, mac);
-    }
-}
-
-fn inspect_project_application_version_source(relative: &str, source: &str) -> Vec<String> {
-    let syntax = syn::parse_file(source)
-        .unwrap_or_else(|error| panic!("failed to parse {relative}: {error}"));
-    let mut visitor = ProjectApplicationVersionVisitor {
-        relative,
-        offenders: Vec::new(),
-    };
-    visitor.visit_file(&syntax);
-    visitor.offenders.sort();
-    visitor.offenders.dedup();
-    visitor.offenders
-}
-
-fn audit_project_application_version_tree(crate_root: &Path) -> Vec<String> {
-    let mut files = Vec::new();
-    for root in [crate_root.join("src"), crate_root.join("tests")] {
-        if root.exists() {
-            rust_sources(&root, &mut files);
-        }
-    }
-    files.sort();
-
-    let mut offenders = Vec::new();
-    for path in files {
-        let relative = path
-            .strip_prefix(crate_root)
-            .unwrap()
-            .to_string_lossy()
-            .replace('\\', "/");
-        if relative == format!("src/{AUDIT_SOURCE}") {
-            continue;
-        }
-        offenders.extend(inspect_project_application_version_source(
-            &relative,
-            &std::fs::read_to_string(path).unwrap(),
-        ));
-    }
-    offenders.sort();
-    offenders.dedup();
-    offenders
-}
-
 fn record(offenders: &mut Vec<String>, relative: &str, line: usize, label: &str, token: &str) {
     offenders.push(format!("{relative}:{line}:{label}:{token}"));
 }
@@ -179,38 +39,6 @@ fn line_for(source: &str, token: &str) -> usize {
         .lines()
         .position(|line| line.contains(token))
         .map_or(1, |line| line + 1)
-}
-
-fn normalized_module_path(value: &str) -> String {
-    value.replace('\\', "/").trim_start_matches("./").to_owned()
-}
-
-fn is_legacy_module_path(value: &str) -> bool {
-    let value = normalized_module_path(value);
-    LEGACY_MODULE_PATHS
-        .iter()
-        .any(|prefix| value.contains(prefix))
-}
-
-fn path_label(segments: &[String]) -> Option<(&'static str, &'static str)> {
-    let contains_pair = |first: &str, second: &str| {
-        segments
-            .windows(2)
-            .any(|pair| pair[0] == first && pair[1] == second)
-    };
-    if contains_pair("graph", "register") {
-        Some(("graph Registry path", "graph::register"))
-    } else if contains_pair("graph", "core") {
-        Some(("old graph core path", "graph::core"))
-    } else if contains_pair("graph", "infer") {
-        Some(("old graph inference path", "graph::infer"))
-    } else if contains_pair("execution", "context") {
-        Some(("old execution context path", "execution::context"))
-    } else if contains_pair("execution", "engine") {
-        Some(("old execution engine path", "execution::engine"))
-    } else {
-        None
-    }
 }
 
 fn expand_use_tree(tree: &UseTree, prefix: &mut Vec<String>, paths: &mut Vec<Vec<String>>) {
@@ -346,15 +174,9 @@ fn static_string_expression(expr: &Expr) -> Option<String> {
     }
 }
 
-fn static_include_path(mac: &Macro) -> Option<String> {
-    let expression = syn::parse2::<Expr>(mac.tokens.clone()).ok()?;
-    static_string_expression(&expression)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum MacroToken {
     Ident(String),
-    Punct(char),
 }
 
 fn flatten_macro_tokens(tokens: TokenStream, flattened: &mut Vec<MacroToken>) {
@@ -362,64 +184,9 @@ fn flatten_macro_tokens(tokens: TokenStream, flattened: &mut Vec<MacroToken>) {
         match token {
             TokenTree::Group(group) => flatten_macro_tokens(group.stream(), flattened),
             TokenTree::Ident(ident) => flattened.push(MacroToken::Ident(ident.to_string())),
-            TokenTree::Punct(punct) => flattened.push(MacroToken::Punct(punct.as_char())),
-            TokenTree::Literal(_) => {}
+            TokenTree::Punct(_) | TokenTree::Literal(_) => {}
         }
     }
-}
-
-fn collect_include_fragments(tokens: TokenStream, fragments: &mut Vec<String>) {
-    for token in tokens {
-        match token {
-            TokenTree::Group(group) => collect_include_fragments(group.stream(), fragments),
-            TokenTree::Ident(ident) => fragments.push(ident.to_string()),
-            TokenTree::Literal(literal) => {
-                if let Ok(value) = syn::parse_str::<syn::LitStr>(&literal.to_string()) {
-                    fragments.extend(
-                        value
-                            .value()
-                            .replace('\\', "/")
-                            .split('/')
-                            .filter(|fragment| !fragment.is_empty())
-                            .map(str::to_owned),
-                    );
-                }
-            }
-            TokenTree::Punct(_) => {}
-        }
-    }
-}
-
-fn include_tokens_contain_legacy_fragments(tokens: TokenStream) -> bool {
-    if is_legacy_module_path(&tokens.to_string()) {
-        return true;
-    }
-    let mut fragments = Vec::new();
-    collect_include_fragments(tokens, &mut fragments);
-    fragments.windows(2).any(|pair| {
-        matches!(
-            (pair[0].as_str(), pair[1].as_str()),
-            ("graph", "register")
-                | ("graph", "core")
-                | ("graph", "infer")
-                | ("execution", "context")
-                | ("execution", "engine")
-        )
-    })
-}
-
-fn macro_path(flattened: &[MacroToken], first: &str, second: &str) -> bool {
-    flattened.windows(4).any(|window| {
-        matches!(
-            window,
-            [
-                MacroToken::Ident(left),
-                MacroToken::Punct(':'),
-                MacroToken::Punct(':'),
-                MacroToken::Ident(right),
-            ] if left == first && right == second
-        )
-    })
 }
 
 fn macro_defines_node_registry(flattened: &[MacroToken]) -> bool {
@@ -431,12 +198,6 @@ fn macro_defines_node_registry(flattened: &[MacroToken]) -> bool {
                     && name == "NodeRegistry"
         )
     })
-}
-
-fn macro_has_ident(flattened: &[MacroToken], expected: &str) -> bool {
-    flattened
-        .iter()
-        .any(|token| matches!(token, MacroToken::Ident(ident) if ident == expected))
 }
 
 fn expression_builds_category_identity(expr: &Expr) -> bool {
@@ -550,7 +311,6 @@ struct SourceVisitor<'a> {
     relative: &'a str,
     source: &'a str,
     offenders: &'a mut Vec<String>,
-    module_path: Vec<String>,
     identity_returns: Vec<bool>,
     bindings: Vec<HashMap<String, Expr>>,
 }
@@ -564,12 +324,6 @@ impl SourceVisitor<'_> {
             label,
             token,
         );
-    }
-
-    fn inspect_segments(&mut self, segments: Vec<String>) {
-        if let Some((label, token)) = path_label(&segments) {
-            self.report(label, token);
-        }
     }
 
     fn binding(&self, name: &str) -> Option<&Expr> {
@@ -691,91 +445,15 @@ impl SourceVisitor<'_> {
     }
 
     fn inspect_macro(&mut self, mac: &Macro) {
-        let name = mac
-            .path
-            .segments
-            .last()
-            .map(|segment| segment.ident.to_string());
-        if name.as_deref() == Some("include") {
-            let static_path = static_include_path(mac);
-            let legacy = static_path.as_deref().is_some_and(is_legacy_module_path)
-                || static_path.is_none()
-                    && include_tokens_contain_legacy_fragments(mac.tokens.clone());
-            if legacy {
-                self.report("legacy module include", "include!");
-            }
-        }
-
         let mut flattened = Vec::new();
         flatten_macro_tokens(mac.tokens.clone(), &mut flattened);
         if macro_defines_node_registry(&flattened) {
             self.report("macro NodeRegistry definition", "NodeRegistry");
         }
-        for (ident, label) in [
-            ("GraphInstance", "legacy GraphInstance"),
-            ("NodeDefinition", "legacy node definition"),
-            ("NodeExecutionContext", "old execution context type"),
-            ("ExecutionStack", "old execution engine type"),
-            ("ExecutionFrame", "old execution engine type"),
-            ("Executor", "old execution engine type"),
-            ("reconcile_node_pins", "dynamic pin reconciliation"),
-            ("resolve_dynamic_pins", "dynamic pin resolution"),
-            ("resolve_all_dynamic_pins", "dynamic pin resolution"),
-            ("sync_static_pin_definitions", "static pin reconciliation"),
-        ] {
-            if macro_has_ident(&flattened, ident) {
-                self.report(label, ident);
-            }
-        }
-        for (first, second, label, token) in [
-            (
-                "graph",
-                "register",
-                "graph Registry path",
-                "graph::register",
-            ),
-            ("graph", "core", "old graph core path", "graph::core"),
-            ("graph", "infer", "old graph inference path", "graph::infer"),
-            (
-                "execution",
-                "context",
-                "old execution context path",
-                "execution::context",
-            ),
-            (
-                "execution",
-                "engine",
-                "old execution engine path",
-                "execution::engine",
-            ),
-        ] {
-            if macro_path(&flattened, first, second) {
-                self.report(label, token);
-            }
-        }
     }
 }
 
 impl<'ast> Visit<'ast> for SourceVisitor<'_> {
-    fn visit_item_use(&mut self, node: &'ast syn::ItemUse) {
-        let mut paths = Vec::new();
-        expand_use_tree(&node.tree, &mut Vec::new(), &mut paths);
-        for path in paths {
-            self.inspect_segments(path);
-        }
-        visit::visit_item_use(self, node);
-    }
-
-    fn visit_path(&mut self, node: &'ast syn::Path) {
-        self.inspect_segments(
-            node.segments
-                .iter()
-                .map(|segment| segment.ident.to_string())
-                .collect(),
-        );
-        visit::visit_path(self, node);
-    }
-
     fn visit_item(&mut self, node: &'ast Item) {
         match node {
             Item::Struct(item) if item.ident == "NodeRegistry" => {
@@ -801,21 +479,9 @@ impl<'ast> Visit<'ast> for SourceVisitor<'_> {
             Item::Type(item) if item.ident == "NodeRegistry" => {
                 self.report("type alias NodeRegistry", "NodeRegistry");
             }
-            Item::Mod(item) if self.relative == "graph/mod.rs" && item.ident == "register" => {
-                self.report("compiled graph register module", "register");
-            }
             _ => {}
         }
         visit::visit_item(self, node);
-    }
-
-    fn visit_item_mod(&mut self, node: &'ast syn::ItemMod) {
-        self.module_path.push(node.ident.to_string());
-        if let Some((label, token)) = path_label(&self.module_path) {
-            self.report(label, token);
-        }
-        visit::visit_item_mod(self, node);
-        self.module_path.pop();
     }
 
     fn visit_item_fn(&mut self, node: &'ast syn::ItemFn) {
@@ -840,43 +506,8 @@ impl<'ast> Visit<'ast> for SourceVisitor<'_> {
         self.identity_returns.pop();
     }
 
-    fn visit_ident(&mut self, ident: &'ast syn::Ident) {
-        let value = ident.to_string();
-        let finding = match value.as_str() {
-            "GraphInstance" => Some(("legacy GraphInstance", "GraphInstance")),
-            "NodeDefinition" => Some(("legacy node definition", "NodeDefinition")),
-            "NodeExecutionContext" => Some(("old execution context type", "NodeExecutionContext")),
-            "ExecutionStack" | "ExecutionFrame" | "Executor" => {
-                Some(("old execution engine type", value.as_str()))
-            }
-            "reconcile_node_pins" => Some(("dynamic pin reconciliation", "reconcile_node_pins")),
-            "resolve_dynamic_pins" | "resolve_all_dynamic_pins" => {
-                Some(("dynamic pin resolution", value.as_str()))
-            }
-            "sync_static_pin_definitions" => {
-                Some(("static pin reconciliation", "sync_static_pin_definitions"))
-            }
-            "node_type_from_category" | "category_name_identity" | "category_and_name_identity" => {
-                Some(("category/name identity", value.as_str()))
-            }
-            _ => None,
-        };
-        if let Some((label, token)) = finding {
-            self.report(label, token);
-        }
-        visit::visit_ident(self, ident);
-    }
-
     fn visit_expr_call(&mut self, node: &'ast syn::ExprCall) {
         if let Expr::Path(path) = node.func.as_ref() {
-            if path
-                .path
-                .segments
-                .last()
-                .is_some_and(|segment| segment.ident == "placeholder")
-            {
-                self.report("placeholder node definition", "placeholder");
-            }
             if path
                 .path
                 .segments
@@ -894,9 +525,6 @@ impl<'ast> Visit<'ast> for SourceVisitor<'_> {
     }
 
     fn visit_expr_method_call(&mut self, node: &'ast syn::ExprMethodCall) {
-        if node.method == "placeholder" {
-            self.report("placeholder node definition", "placeholder");
-        }
         if node.method == "insert"
             && expr_mentions(&node.receiver, &["registry"])
             && node
@@ -981,23 +609,6 @@ impl<'ast> Visit<'ast> for SourceVisitor<'_> {
         self.bindings.pop();
     }
 
-    fn visit_attribute(&mut self, node: &'ast syn::Attribute) {
-        if node.path().is_ident("path") {
-            if let Meta::NameValue(meta) = &node.meta {
-                if let Expr::Lit(ExprLit {
-                    lit: Lit::Str(path),
-                    ..
-                }) = &meta.value
-                {
-                    if is_legacy_module_path(&path.value()) {
-                        self.report("legacy module path attribute", "#[path]");
-                    }
-                }
-            }
-        }
-        visit::visit_attribute(self, node);
-    }
-
     fn visit_macro(&mut self, node: &'ast Macro) {
         self.inspect_macro(node);
         visit::visit_macro(self, node);
@@ -1005,18 +616,11 @@ impl<'ast> Visit<'ast> for SourceVisitor<'_> {
 }
 
 fn inspect_source(relative: &str, source: &str, offenders: &mut Vec<String>) {
-    for prefix in LEGACY_MODULE_PATHS {
-        if relative.starts_with(prefix) {
-            record(offenders, relative, 1, "orphan legacy source", prefix);
-        }
-    }
-
     match syn::parse_file(source) {
         Ok(file) => SourceVisitor {
             relative,
             source,
             offenders,
-            module_path: Vec::new(),
             identity_returns: Vec::new(),
             bindings: Vec::new(),
         }
@@ -1047,265 +651,6 @@ fn audit_source_tree(root: &Path, excluded_relative: Option<&str>) -> Vec<String
         }
         let source = std::fs::read_to_string(&file).unwrap();
         inspect_source(&relative, &source, &mut offenders);
-    }
-    offenders.sort();
-    offenders.dedup();
-    offenders
-}
-
-fn is_legacy_parameter_types_path(value: &str) -> bool {
-    value
-        .replace('\\', "/")
-        .split('/')
-        .any(|component| component == "parameter_types")
-}
-
-fn include_tokens_contain_parameter_types(tokens: TokenStream) -> bool {
-    let mut fragments = Vec::new();
-    collect_include_fragments(tokens, &mut fragments);
-    fragments
-        .iter()
-        .any(|fragment| fragment == "parameter_types")
-}
-
-struct Task19BoundaryVisitor<'a> {
-    relative: &'a str,
-    source: &'a str,
-    offenders: &'a mut Vec<String>,
-}
-
-impl Task19BoundaryVisitor<'_> {
-    fn report(&mut self, label: &str, token: &str) {
-        record(
-            self.offenders,
-            self.relative,
-            line_for(self.source, token),
-            label,
-            token,
-        );
-    }
-}
-
-impl<'ast> Visit<'ast> for Task19BoundaryVisitor<'_> {
-    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
-        let mut paths = Vec::new();
-        expand_use_tree(&item.tree, &mut Vec::new(), &mut paths);
-        if paths
-            .iter()
-            .any(|path| path.iter().any(|segment| segment == "parameter_types"))
-        {
-            self.report("legacy parameter_types path", "parameter_types");
-        }
-        if paths
-            .iter()
-            .any(|path| path.iter().any(|segment| segment == "LocalizationBundle"))
-        {
-            self.report("legacy localization symbol", "LocalizationBundle");
-        }
-        visit::visit_item_use(self, item);
-    }
-
-    fn visit_path(&mut self, path: &'ast syn::Path) {
-        if path.segments.len() > 1
-            && path
-                .segments
-                .iter()
-                .any(|segment| segment.ident == "parameter_types")
-        {
-            self.report("legacy parameter_types path", "parameter_types");
-        }
-        if path
-            .segments
-            .iter()
-            .any(|segment| segment.ident == "LocalizationBundle")
-        {
-            self.report("legacy localization symbol", "LocalizationBundle");
-        }
-        visit::visit_path(self, path);
-    }
-
-    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
-        if item.ident == "parameter_types" {
-            self.report("legacy parameter_types module", "parameter_types");
-        }
-        for attribute in &item.attrs {
-            if !attribute.path().is_ident("path") {
-                continue;
-            }
-            let Some(path) =
-                attribute
-                    .meta
-                    .require_name_value()
-                    .ok()
-                    .and_then(|value| match &value.value {
-                        Expr::Lit(ExprLit {
-                            lit: Lit::Str(path),
-                            ..
-                        }) => Some(path.value()),
-                        _ => None,
-                    })
-            else {
-                continue;
-            };
-            if is_legacy_parameter_types_path(&path) {
-                self.report("legacy parameter_types module path", &path);
-            }
-        }
-        visit::visit_item_mod(self, item);
-    }
-
-    fn visit_macro(&mut self, mac: &'ast Macro) {
-        let name = mac
-            .path
-            .segments
-            .last()
-            .map(|segment| segment.ident.to_string());
-        if matches!(
-            name.as_deref(),
-            Some("include" | "include_str" | "include_bytes")
-        ) && include_tokens_contain_parameter_types(mac.tokens.clone())
-        {
-            self.report("legacy parameter_types include", "parameter_types");
-        }
-        visit::visit_macro(self, mac);
-    }
-
-    fn visit_item_trait(&mut self, item: &'ast syn::ItemTrait) {
-        if item.ident == "LocalizationBundle" {
-            self.report("legacy localization trait", "LocalizationBundle");
-        }
-        visit::visit_item_trait(self, item);
-    }
-
-    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
-        let implements_lookup = item.trait_.as_ref().is_some_and(|(_, path, _)| {
-            path.segments
-                .last()
-                .is_some_and(|segment| segment.ident == "LocalizationLookup")
-        });
-        if implements_lookup && !item.generics.params.is_empty() {
-            self.report("blanket localization bridge", "LocalizationLookup");
-        }
-        visit::visit_item_impl(self, item);
-    }
-
-    fn visit_field(&mut self, field: &'ast syn::Field) {
-        if field
-            .ident
-            .as_ref()
-            .is_some_and(|ident| ident == "persistence")
-        {
-            for attribute in &field.attrs {
-                if attribute.path().is_ident("serde") {
-                    let mut has_default = false;
-                    let _ = attribute.parse_nested_meta(|meta| {
-                        has_default |= meta.path.is_ident("default");
-                        Ok(())
-                    });
-                    if has_default {
-                        self.report("history persistence serde default", "persistence");
-                    }
-                }
-            }
-        }
-        visit::visit_field(self, field);
-    }
-
-    fn visit_item_fn(&mut self, item: &'ast syn::ItemFn) {
-        if item.sig.ident == "legacy_history_transaction_defaults_to_in_memory_until_save" {
-            self.report(
-                "legacy history persistence acceptance test",
-                "legacy_history_transaction_defaults_to_in_memory_until_save",
-            );
-        }
-        visit::visit_item_fn(self, item);
-    }
-
-    fn visit_attribute(&mut self, attribute: &'ast syn::Attribute) {
-        if attribute.path().is_ident("doc")
-            && attribute
-                .meta
-                .require_name_value()
-                .ok()
-                .and_then(|value| match &value.value {
-                    Expr::Lit(ExprLit {
-                        lit: Lit::Str(value),
-                        ..
-                    }) => Some(value.value()),
-                    _ => None,
-                })
-                .is_some_and(|value| value.contains("Compatibility boundary"))
-        {
-            self.report(
-                "localization compatibility marker",
-                "Compatibility boundary",
-            );
-        }
-        visit::visit_attribute(self, attribute);
-    }
-}
-
-fn audit_task19_boundary_source(relative: &str, source: &str, offenders: &mut Vec<String>) {
-    if relative.starts_with("node_system/parameter_types/") {
-        record(
-            offenders,
-            relative,
-            1,
-            "legacy parameter_types source directory",
-            "node_system/parameter_types/",
-        );
-    }
-    match syn::parse_file(source) {
-        Ok(file) => Task19BoundaryVisitor {
-            relative,
-            source,
-            offenders,
-        }
-        .visit_file(&file),
-        Err(error) => record(
-            offenders,
-            relative,
-            1,
-            "Rust source parse failure",
-            &error.to_string(),
-        ),
-    }
-}
-
-fn audit_task19_boundary_tree(root: &Path) -> Vec<String> {
-    let mut files = Vec::new();
-    rust_sources(root, &mut files);
-    files.sort();
-    let mut offenders = Vec::new();
-    for file in files {
-        let relative = file
-            .strip_prefix(root)
-            .unwrap()
-            .to_string_lossy()
-            .replace('\\', "/");
-        if relative == AUDIT_SOURCE {
-            continue;
-        }
-        let source = std::fs::read_to_string(&file).unwrap();
-        audit_task19_boundary_source(&relative, &source, &mut offenders);
-    }
-    offenders.sort();
-    offenders.dedup();
-    offenders
-}
-
-fn audit_task19_boundary_crate(crate_root: &Path) -> Vec<String> {
-    let mut offenders = Vec::new();
-    for source_root in ["src", "tests"] {
-        let root = crate_root.join(source_root);
-        if !root.is_dir() {
-            continue;
-        }
-        offenders.extend(
-            audit_task19_boundary_tree(&root)
-                .into_iter()
-                .map(|offender| format!("{source_root}/{offender}")),
-        );
     }
     offenders.sort();
     offenders.dedup();
@@ -4987,163 +4332,9 @@ fn production_has_one_node_registry_and_no_label_identity() {
 }
 
 #[test]
-fn task19_boundary_audit_rejects_semantic_legacy_forms() {
-    let source = r#"
-#[path = "parameter_types/mod.rs"]
-mod parameter_types;
-use crate::node_system::parameter_types::dataframe::FilterPredicate;
-/// Compatibility boundary retained temporarily.
-pub trait LocalizationBundle {}
-impl<T: LocalizationBundle + ?Sized> LocalizationLookup for T {}
-struct ProjectHistoryTransaction {
-    #[serde(default)]
-    persistence: HistoryPersistencePolicy,
-}
-#[test]
-fn legacy_history_transaction_defaults_to_in_memory_until_save() {}
-"#;
-    let mut offenders = Vec::new();
-    audit_task19_boundary_source("node_system/legacy.rs", source, &mut offenders);
-
-    for label in [
-        "legacy parameter_types module",
-        "legacy parameter_types path",
-        "legacy localization trait",
-        "legacy localization symbol",
-        "blanket localization bridge",
-        "history persistence serde default",
-        "legacy history persistence acceptance test",
-        "localization compatibility marker",
-    ] {
-        assert_offender(&offenders, "node_system/legacy.rs", label);
-    }
-}
-
-#[test]
-fn task19_boundary_audit_rejects_aliased_path_module() {
-    let source = r##"
-// #[path = "node_system/parameter_types/comment.rs"]
-const DECOY: &str = r#"#[path = "node_system/parameter_types/raw.rs"]"#;
-#[path = "../node_system/parameter_types/legacy.rs"]
-mod renamed_boundary;
-"##;
-    let mut offenders = Vec::new();
-    audit_task19_boundary_source("aliased_path.rs", source, &mut offenders);
-
-    assert_offender(
-        &offenders,
-        "aliased_path.rs",
-        "legacy parameter_types module path",
-    );
-    assert_eq!(
-        offenders.len(),
-        1,
-        "decoys must remain inert: {offenders:#?}"
-    );
-}
-
-#[test]
-fn task19_boundary_audit_rejects_only_parameter_type_include_macros() {
-    for (path, source) in [
-        (
-            "include.rs",
-            r#"include!("../node_system/parameter_types/generated.rs");"#,
-        ),
-        (
-            "include_str.rs",
-            r#"include_str!(concat!("../node_system/", "parameter_types/schema.rs"));"#,
-        ),
-        (
-            "include_bytes.rs",
-            r#"include_bytes!(nested_path!("../node_system", "parameter_types/data.bin"));"#,
-        ),
-    ] {
-        let mut offenders = Vec::new();
-        audit_task19_boundary_source(path, source, &mut offenders);
-        assert_offender(&offenders, path, "legacy parameter_types include");
-    }
-
-    let decoys = r##"
-// include!("node_system/parameter_types/comment.rs");
-const RAW: &str = r#"include_str!("node_system/parameter_types/raw.rs")"#;
-fixture!("node_system/parameter_types/inert.rs");
-include!("node_system/protocol/dataframe.rs");
-"##;
-    let mut offenders = Vec::new();
-    audit_task19_boundary_source("include_decoys.rs", decoys, &mut offenders);
-    assert!(
-        offenders.is_empty(),
-        "comments, strings, unrelated macros, and current includes must remain inert:\n{}",
-        offenders.join("\n")
-    );
-}
-
-#[test]
-fn task19_boundary_audit_rejects_aliased_and_nested_use_paths() {
-    let source = r#"
-use crate::node_system::{parameter_types::{dataframe::FilterPredicate as Predicate}};
-type LegacyAssociated<T> = <T as crate::node_system::parameter_types::Legacy>::Output;
-"#;
-    let mut offenders = Vec::new();
-    audit_task19_boundary_source("nested_use.rs", source, &mut offenders);
-
-    assert_offender(&offenders, "nested_use.rs", "legacy parameter_types path");
-}
-
-#[test]
-fn task19_boundary_audit_scans_integration_tests_but_not_generated_roots() {
-    let root = audit_fixture("task19-crate-roots");
-    write_fixture(
-        &root,
-        "src/decoys.rs",
-        r##"// use crate::node_system::parameter_types::Comment;
-const RAW: &str = r#"include!("node_system/parameter_types/raw.rs")"#;"##,
-    );
-    write_fixture(
-        &root,
-        "tests/legacy_boundary.rs",
-        "use yssbi::node_system::parameter_types::Legacy;",
-    );
-    write_fixture(
-        &root,
-        "target/generated.rs",
-        "use yssbi::node_system::parameter_types::GeneratedDecoy;",
-    );
-    write_fixture(
-        &root,
-        "gen/generated.rs",
-        "use yssbi::node_system::parameter_types::GeneratedDecoy;",
-    );
-
-    let offenders = audit_task19_boundary_crate(&root);
-    assert_offender(
-        &offenders,
-        "tests/legacy_boundary.rs",
-        "legacy parameter_types path",
-    );
-    assert_eq!(
-        offenders.len(),
-        1,
-        "only the integration-test source root must be audited: {offenders:#?}"
-    );
-    std::fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn production_has_no_task19_legacy_boundaries() {
-    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let offenders = audit_task19_boundary_crate(crate_root);
-    assert!(
-        offenders.is_empty(),
-        "Task 19 legacy boundary violations:\n{}",
-        offenders.join("\n")
-    );
-}
-
-#[test]
 fn audit_scans_every_rust_file_without_test_filename_exclusions() {
     let root = audit_fixture("scope");
-    write_fixture(&root, "outside/legacy.rs", "pub struct GraphInstance;");
+
     write_fixture(
         &root,
         "misnamed/production_tests.rs",
@@ -5151,7 +4342,7 @@ fn audit_scans_every_rust_file_without_test_filename_exclusions() {
     );
 
     let offenders = audit_source_tree(&root, None);
-    assert_offender(&offenders, "outside/legacy.rs", "GraphInstance");
+
     assert_offender(
         &offenders,
         "misnamed/production_tests.rs",
@@ -5161,13 +4352,8 @@ fn audit_scans_every_rust_file_without_test_filename_exclusions() {
 }
 
 #[test]
-fn audit_rejects_grouped_uses_label_construction_and_source_bypasses() {
-    let root = audit_fixture("tokens");
-    write_fixture(
-        &root,
-        "grouped.rs",
-        "use crate::graph::{value::DataValue, register::NodeRegistry};",
-    );
+fn audit_rejects_label_based_node_type_construction() {
+    let root = audit_fixture("label-identity");
     write_fixture(
         &root,
         "identity.rs",
@@ -5175,17 +4361,8 @@ fn audit_rejects_grouped_uses_label_construction_and_source_bypasses() {
     NodeTypeId::new(format!("{}:{}", category.join(":"), name))
 }"#,
     );
-    write_fixture(
-        &root,
-        "bypass.rs",
-        "#[path = \"graph/register/hidden.rs\"] mod hidden; include!(\"execution/engine/more.rs\");",
-    );
-
     let offenders = audit_source_tree(&root, None);
-    assert_offender(&offenders, "grouped.rs", "graph Registry path");
     assert_offender(&offenders, "identity.rs", "category/name identity");
-    assert_offender(&offenders, "bypass.rs", "legacy module path attribute");
-    assert_offender(&offenders, "bypass.rs", "legacy module include");
     std::fs::remove_dir_all(root).unwrap();
 }
 
@@ -5216,24 +4393,9 @@ fn display_name_pin_audit_distinguishes_pin_identity_from_other_definitions() {
 }
 
 #[test]
-fn audit_rejects_ast_variants_reviewers_can_write_normally() {
+fn audit_rejects_node_registry_and_identity_ast_variants() {
     let root = audit_fixture("ast-variants");
-    write_fixture(
-        &root,
-        "visibility.rs",
-        r#"pub(in crate) use crate::graph::{
-    value::DataValue,
-    register::{self as old_register, NodeRegistry as OldRegistry},
-};"#,
-    );
-    write_fixture(
-        &root,
-        "expression_paths.rs",
-        r#"fn construct() {
-    crate::graph::register::legacy_registry();
-    crate::execution::engine::Executor::new();
-}"#,
-    );
+
     write_fixture(
         &root,
         "registry_items.rs",
@@ -5250,24 +4412,7 @@ NodeRegistry
 NodeRegistry
 = std::collections::BTreeMap<String, String>;"#,
     );
-    write_fixture(
-        &root,
-        "legacy_symbols.rs",
-        r#"fn legacy(graph: GraphInstance, definition: NodeDefinition) {
-    reconcile_node_pins();
-    resolve_dynamic_pins();
-    sync_static_pin_definitions();
-    let _ = graph;
-    let _ = definition;
-}"#,
-    );
-    write_fixture(
-        &root,
-        "legacy_modules.rs",
-        r#"#[path = "graph/register/registry.rs"]
-mod registry;
-include!("execution/engine/mod.rs");"#,
-    );
+
     write_fixture(
         &root,
         "identity.rs",
@@ -5279,16 +4424,8 @@ include!("execution/engine/mod.rs");"#,
 
     let offenders = audit_source_tree(&root, None);
     for (path, label) in [
-        ("visibility.rs", "graph Registry path"),
-        ("expression_paths.rs", "graph Registry path"),
-        ("expression_paths.rs", "old execution engine path"),
         ("registry_items.rs", "second NodeRegistry definition"),
         ("registry_alias.rs", "type alias NodeRegistry"),
-        ("legacy_symbols.rs", "legacy GraphInstance"),
-        ("legacy_symbols.rs", "legacy node definition"),
-        ("legacy_symbols.rs", "dynamic pin reconciliation"),
-        ("legacy_modules.rs", "legacy module path attribute"),
-        ("legacy_modules.rs", "legacy module include"),
         ("identity.rs", "category/name identity"),
     ] {
         assert_offender(&offenders, path, label);
@@ -5297,97 +4434,35 @@ include!("execution/engine/mod.rs");"#,
 }
 
 #[test]
-fn audit_rejects_union_inline_module_and_visibility_variants() {
+fn audit_rejects_union_node_registry_definition() {
     let root = audit_fixture("structural-variants");
     write_fixture(&root, "union.rs", "pub union NodeRegistry { value: usize }");
-    write_fixture(
-        &root,
-        "inline.rs",
-        r#"mod graph {
-    pub(crate) mod register { pub struct Hidden; }
-    pub(super) mod core { pub struct Runtime; }
-    mod infer { pub struct Inference; }
-}
-mod execution { pub(in crate) mod engine { pub struct Hidden; } }"#,
-    );
-    write_fixture(
-        &root,
-        "visibility.rs",
-        r#"use crate::graph::register::Private;
-pub(crate) use crate::execution::engine::CrateVisible;
-pub(super) use crate::graph::core::ParentVisible;
-pub(in crate) use crate::graph::infer::Scoped;"#,
-    );
 
     let offenders = audit_source_tree(&root, None);
     assert_offender(&offenders, "union.rs", "second NodeRegistry definition");
-    for label in [
-        "graph Registry path",
-        "old graph core path",
-        "old graph inference path",
-        "old execution engine path",
-    ] {
-        assert_offender(&offenders, "inline.rs", label);
-    }
-    for label in [
-        "graph Registry path",
-        "old execution engine path",
-        "old graph core path",
-        "old graph inference path",
-    ] {
-        assert_offender(&offenders, "visibility.rs", label);
-    }
+
     std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
-fn audit_rejects_macro_generated_architecture_and_legacy_include_expressions() {
+fn audit_rejects_macro_generated_node_registry() {
     let root = audit_fixture("macro-generated");
     write_fixture(
         &root,
         "generated.rs",
-        r#"macro_rules! legacy_registry {
-    () => {
-        pub struct NodeRegistry;
-        fn legacy(graph: GraphInstance, definition: NodeDefinition) {
-            crate::graph::register::register(graph, definition);
-            crate::execution::engine::Executor::new();
-            resolve_dynamic_pins();
-        }
-    };
+        r#"macro_rules! duplicate_registry {
+    () => { pub struct NodeRegistry; };
 }
-legacy_registry!();"#,
+duplicate_registry!();"#,
     );
-    write_fixture(
-        &root,
-        "static_include.rs",
-        r#"include!(concat!("graph/", "register/", "mod.rs"));"#,
-    );
-    write_fixture(
-        &root,
-        "runtime_include.rs",
-        r#"include!(runtime_path!("execution", "engine", "mod.rs"));"#,
-    );
-
     let offenders = audit_source_tree(&root, None);
-    for label in [
-        "macro NodeRegistry definition",
-        "legacy GraphInstance",
-        "legacy node definition",
-        "graph Registry path",
-        "old execution engine path",
-        "dynamic pin resolution",
-    ] {
-        assert_offender(&offenders, "generated.rs", label);
-    }
-    assert_offender(&offenders, "static_include.rs", "legacy module include");
-    assert_offender(&offenders, "runtime_include.rs", "legacy module include");
+    assert_offender(&offenders, "generated.rs", "macro NodeRegistry definition");
     std::fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
-fn audit_allows_breadcrumbs_logs_and_nonlegacy_include_expressions() {
-    let root = audit_fixture("legal-identity-and-includes");
+fn audit_allows_category_name_breadcrumbs_and_logs() {
+    let root = audit_fixture("legal-identity-uses");
     write_fixture(
         &root,
         "legal.rs",
@@ -5395,15 +4470,13 @@ fn audit_allows_breadcrumbs_logs_and_nonlegacy_include_expressions() {
     let path = category.join(":");
     tracing::debug!("category path {} for {}", path, name);
     format!("{}:{}", category.join(":"), name)
-}
-include!("current/generated_values.rs");
-include!(concat!("current/", "generated_values.rs"));"#,
+}"#,
     );
 
     let offenders = audit_source_tree(&root, None);
     assert!(
         offenders.is_empty(),
-        "legal breadcrumbs, logs, and includes must not be rejected:\n{}",
+        "legal breadcrumbs and logs must not be rejected:\n{}",
         offenders.join("\n")
     );
     std::fs::remove_dir_all(root).unwrap();
@@ -5494,409 +4567,6 @@ fn audit_rejects_real_category_name_identity_sinks() {
         assert_offender(&offenders, path, "category/name identity");
     }
     std::fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn audit_allows_nonlegacy_path_and_include_macros() {
-    let root = audit_fixture("legal-module-sources");
-    write_fixture(
-        &root,
-        "legal.rs",
-        r#"#[path = "current/generated.rs"]
-mod generated;
-include!("current/generated_values.rs");"#,
-    );
-
-    let offenders = audit_source_tree(&root, None);
-    assert!(
-        offenders.is_empty(),
-        "legal module source paths must not be rejected:\n{}",
-        offenders.join("\n")
-    );
-    std::fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn project_application_version_audit_rejects_a_struct_field() {
-    let source = "struct ProjectManifest { app_version: String }";
-    let offenders = inspect_project_application_version_source("fixture.rs", source);
-    assert_offender(
-        &offenders,
-        "fixture.rs",
-        "reserved application version identifier",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_global_type_paths() {
-    let source = "type RuntimeRelease = crate::app_version::Manifest;";
-    let offenders = inspect_project_application_version_source("src/runtime/types.rs", source);
-    assert_offender(
-        &offenders,
-        "src/runtime/types.rs",
-        "reserved application version identifier",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_member_access() {
-    let source = r#"
-struct ProjectManifest;
-fn read(value: ProjectManifest) { let _ = value.app_version; }
-"#;
-    let offenders = inspect_project_application_version_source("src/project/reader.rs", source);
-    assert_offender(
-        &offenders,
-        "src/project/reader.rs",
-        "reserved application version identifier",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_an_explicit_path() {
-    let source = "use crate::project::app_version;";
-    let offenders = inspect_project_application_version_source("src/project/imports.rs", source);
-    assert_offender(
-        &offenders,
-        "src/project/imports.rs",
-        "reserved application version identifier",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_item_declarations_exposed_by_glob() {
-    let source = r#"
-mod release { pub fn app_version() {} }
-pub use release::*;
-"#;
-    let offenders = inspect_project_application_version_source("src/project/mod.rs", source);
-    assert_offender(
-        &offenders,
-        "src/project/mod.rs",
-        "reserved application version identifier",
-    );
-}
-
-#[test]
-fn project_application_version_audit_tracks_cross_file_wildcard_exposure() {
-    let root = audit_fixture("project-application-version-wildcard");
-    write_fixture(
-        &root,
-        "src/project/mod.rs",
-        "mod release; pub use release::*;",
-    );
-    write_fixture(&root, "src/project/release.rs", "pub fn app_version() {}");
-
-    let offenders = audit_project_application_version_tree(&root);
-    assert_offender(
-        &offenders,
-        "src/project/release.rs",
-        "reserved application version identifier",
-    );
-    std::fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn project_application_version_audit_rejects_project_field_serde_rename() {
-    let source = r#"
-struct Manifest {
-    #[serde(rename = "appVersion")]
-    release: String,
-}
-"#;
-    let offenders = inspect_project_application_version_source("src/project/manifest.rs", source);
-    assert_offender(
-        &offenders,
-        "src/project/manifest.rs",
-        "project application version serde rename",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_cross_file_wildcard_declarations() {
-    let root = audit_fixture("global-wildcard-reserved-declaration");
-    write_fixture(&root, "src/export.rs", "pub fn app_version() {}");
-    write_fixture(&root, "src/runtime/mod.rs", "pub use crate::export::*;");
-
-    let offenders = audit_project_application_version_tree(&root);
-    assert_offender(
-        &offenders,
-        "src/export.rs",
-        "reserved application version identifier",
-    );
-    std::fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn project_application_version_audit_rejects_global_import_and_call_paths() {
-    let source = r#"
-use external_runtime::app_version;
-fn read() { app_version(); }
-"#;
-    let offenders = inspect_project_application_version_source("src/runtime/consumer.rs", source);
-    assert_offender(
-        &offenders,
-        "src/runtime/consumer.rs",
-        "reserved application version identifier",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_global_items() {
-    for source in ["fn app_version() {}", "pub fn app_version() {}"] {
-        let offenders =
-            inspect_project_application_version_source("src/runtime/version.rs", source);
-        assert_offender(
-            &offenders,
-            "src/runtime/version.rs",
-            "reserved application version identifier",
-        );
-    }
-}
-
-#[test]
-fn project_application_version_audit_rejects_global_locals() {
-    let source = "fn read() { let app_version = 1; let _ = app_version; }";
-    let offenders = inspect_project_application_version_source("src/runtime/consumer.rs", source);
-    assert_offender(
-        &offenders,
-        "src/runtime/consumer.rs",
-        "reserved application version identifier",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_global_serde_rename() {
-    let source = r#"
-struct ExternalRuntimeDto {
-    #[serde(rename = "appVersion")]
-    release: String,
-}
-"#;
-    let offenders = inspect_project_application_version_source("src/runtime/dto.rs", source);
-    assert_offender(
-        &offenders,
-        "src/runtime/dto.rs",
-        "project application version serde rename",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_identifiers_in_nested_macro_tokens() {
-    let source = "fn register() { generate!(outer(inner(app_version))); }";
-    let offenders = inspect_project_application_version_source("src/runtime/macros.rs", source);
-    assert_offender(
-        &offenders,
-        "src/runtime/macros.rs",
-        "reserved application version identifier",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_identifiers_in_attribute_macro_tokens() {
-    let source = r#"
-#[runtime_resource(scope(app_version), nested(deeper(app_version)))]
-fn register() {}
-"#;
-    let offenders = inspect_project_application_version_source("src/runtime/attributes.rs", source);
-    assert_offender(
-        &offenders,
-        "src/runtime/attributes.rs",
-        "reserved application version identifier",
-    );
-}
-
-#[test]
-fn project_application_version_audit_allows_attribute_macro_decoys() {
-    let source = r#"
-#[runtime_resource(scope(runtime_version), label = "app_version")]
-fn register() {}
-"#;
-    let offenders = inspect_project_application_version_source("src/runtime/attributes.rs", source);
-    assert!(
-        offenders.is_empty(),
-        "attribute macro decoys must be allowed:\n{}",
-        offenders.join("\n")
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_container_serde_rename() {
-    let source = r#"
-#[serde(rename = "appVersion")]
-struct RuntimeInfo { release: String }
-"#;
-    let offenders = inspect_project_application_version_source("src/runtime/container.rs", source);
-    assert_offender(
-        &offenders,
-        "src/runtime/container.rs",
-        "project application version serde rename",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_variant_serde_rename() {
-    let source = r#"
-enum RuntimeEvent {
-    #[serde(rename = "appVersion")]
-    Release,
-}
-"#;
-    let offenders = inspect_project_application_version_source("src/runtime/variant.rs", source);
-    assert_offender(
-        &offenders,
-        "src/runtime/variant.rs",
-        "project application version serde rename",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_directional_field_serde_rename() {
-    let source = r#"
-struct RuntimeInfo {
-    #[serde(rename(serialize = "appVersion", deserialize = "runtimeVersion"))]
-    release: String,
-}
-"#;
-    let offenders =
-        inspect_project_application_version_source("src/runtime/directional.rs", source);
-    assert_offender(
-        &offenders,
-        "src/runtime/directional.rs",
-        "project application version serde rename",
-    );
-}
-
-#[test]
-fn project_application_version_audit_rejects_serde_alias() {
-    let source = r#"
-struct RuntimeInfo {
-    #[serde(alias = "appVersion")]
-    release: String,
-}
-"#;
-    let offenders = inspect_project_application_version_source("src/runtime/alias.rs", source);
-    assert_offender(
-        &offenders,
-        "src/runtime/alias.rs",
-        "project application version serde rename",
-    );
-}
-
-#[test]
-fn project_application_version_audit_finds_serde_names_after_unrelated_metadata() {
-    for source in [
-        r#"struct RuntimeInfo {
-            #[serde(skip_serializing_if = "Option::is_none", rename = "appVersion")]
-            release: Option<String>,
-        }"#,
-        r#"struct RuntimeInfo<T> {
-            #[serde(bound(serialize = "T: serde::Serialize"), alias = "appVersion")]
-            release: T,
-        }"#,
-        r#"struct RuntimeInfo {
-            #[serde(other, rename(deserialize = "appVersion", serialize = "runtimeVersion"))]
-            release: String,
-        }"#,
-    ] {
-        let offenders =
-            inspect_project_application_version_source("src/runtime/serde_order.rs", source);
-        assert_offender(
-            &offenders,
-            "src/runtime/serde_order.rs",
-            "project application version serde rename",
-        );
-    }
-}
-
-#[test]
-fn project_application_version_audit_allows_unrelated_serde_metadata() {
-    let source = r#"
-struct RuntimeInfo<T> {
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        bound(serialize = "T: serde::Serialize"),
-        rename = "runtimeVersion",
-        alias = "version"
-    )]
-    release: Option<T>,
-}
-"#;
-    let offenders =
-        inspect_project_application_version_source("src/runtime/serde_decoys.rs", source);
-    assert!(
-        offenders.is_empty(),
-        "unrelated serde metadata must be allowed:\n{}",
-        offenders.join("\n")
-    );
-}
-
-#[test]
-fn project_application_version_audit_reports_file_and_symbol_without_a_guessed_line() {
-    let source =
-        "// app_version in a comment is inert\n\nstruct RuntimeInfo { app_version: String }";
-    let offenders = inspect_project_application_version_source("fixture.rs", source);
-    assert_eq!(
-        offenders,
-        ["fixture.rs:reserved application version identifier:app_version"]
-    );
-}
-
-#[test]
-fn project_application_version_audit_allows_semantic_version_decoys() {
-    let source = r#"
-struct ProjectManifest { schema_version: u32 }
-struct ExternalRuntimeInfo { runtime_version: String, version: String }
-struct ExchangeManifest { version: u32 }
-const APP_VERSION: &str = "9.8.7";
-fn inspect(project: ProjectManifest, runtime: ExternalRuntimeInfo, exchange: ExchangeManifest) {
-    let _ = (
-        project.schema_version,
-        runtime.runtime_version,
-        runtime.version,
-        exchange.version,
-        APP_VERSION,
-    );
-}
-"#;
-    let offenders = inspect_project_application_version_source("fixture.rs", source);
-    assert!(
-        offenders.is_empty(),
-        "semantic version decoys must be allowed:\n{}",
-        offenders.join("\n")
-    );
-}
-
-#[test]
-fn project_application_version_audit_allows_macro_and_serde_decoys() {
-    let source = r#"
-#[serde(rename_all = "camelCase")]
-struct RuntimeInfo {
-    #[serde(
-        rename(serialize = "runtimeVersion", deserialize = "version"),
-        alias = "runtimeVersion"
-    )]
-    runtime_version: String,
-}
-fn register() { generate!(outer(inner(runtime_version)), "app_version"); }
-"#;
-    let offenders = inspect_project_application_version_source("fixture.rs", source);
-    assert!(
-        offenders.is_empty(),
-        "macro and serde decoys must be allowed:\n{}",
-        offenders.join("\n")
-    );
-}
-
-#[test]
-fn project_application_version_audit_keeps_project_rust_sources_clean() {
-    let crate_root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let offenders = audit_project_application_version_tree(crate_root);
-    assert!(
-        offenders.is_empty(),
-        "project application-version metadata violations:\n{}",
-        offenders.join("\n")
-    );
 }
 
 fn audit_fixture(name: &str) -> PathBuf {

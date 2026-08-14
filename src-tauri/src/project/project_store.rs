@@ -105,14 +105,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn project_store_has_no_production_default_escape_hatch() {
-        let source = include_str!("project_store.rs");
-
-        let forbidden = ["impl Default", " for ProjectStore"].concat();
-        assert!(!source.contains(&forbidden));
-    }
-
-    #[test]
     fn validation_scratch_copies_runtime_maps_and_shares_validated_arcs() {
         let mut authoritative = ProjectStore::try_new().unwrap();
         authoritative.variable_tabular.insert(

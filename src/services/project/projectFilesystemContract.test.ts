@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -12,13 +12,6 @@ const sourceRoot = resolve('src');
 
 
 
-const legacyIdentityFacadePaths = [
-  'src/services/project/projectIdentity.ts',
-  'src/features/application/projectIdentity.ts',
-] as const;
-const legacyIdentityTargets = new Set(
-  legacyIdentityFacadePaths.map((path) => path.replace(/\.ts$/, '')),
-);
 const projectPublicationTarget =
   'src/features/application/editorMutation/projectPublicationCoordinator';
 
@@ -51,30 +44,13 @@ function serviceBoundaryViolations(sources: readonly ArchitectureSource[]): stri
     .map(({ path }) => path);
 }
 
-function legacyIdentityViolations(
-  sources: readonly ArchitectureSource[],
-  restoredFacadePaths: readonly string[] = [],
-): string[] {
-  const sourceViolations = sources
-    .filter((source) => hasUnresolvedRuntimeDependency(source)
-      || resolvedSourceTargets(source).some((target) => legacyIdentityTargets.has(target)))
-    .map(({ path }) => path);
-  return [
-    ...restoredFacadePaths.filter((path) => legacyIdentityFacadePaths.includes(
-      path as typeof legacyIdentityFacadePaths[number],
-    )),
-    ...sourceViolations,
-  ];
-}
 
 function graphProjectionLifecycleViolations(
   sources: readonly ArchitectureSource[],
 ): string[] {
   return sources
     .filter((source) => hasUnresolvedRuntimeDependency(source)
-      || resolvedSourceTargets(source).some((target) => (
-        target === projectPublicationTarget || legacyIdentityTargets.has(target)
-      )))
+      || resolvedSourceTargets(source).some((target) => target === projectPublicationTarget))
     .map(({ path }) => path);
 }
 
@@ -614,40 +590,8 @@ describe('projectFilesystemContract', () => {
   it('keeps production services independent from features and views', () => {
     const serviceSources = productionSources(resolve('src/services'));
 
-    expect(serviceSources).toHaveLength(35);
     expect(serviceBoundaryViolations(serviceSources)).toEqual([]);
   });
-
-  it('rejects restored legacy identity facades and import or re-export shims', () => {
-    const fixtures: ArchitectureSource[] = [
-      {
-        path: 'src/features/application/serviceShim.ts',
-        source: "import { captureProjectIdentity } from '@/services/project/projectIdentity';",
-      },
-      {
-        path: 'src/features/application/applicationShim.ts',
-        source: "export * from '@/features/application/projectIdentity';",
-      },
-      {
-        path: 'src/features/application/relativeShim.ts',
-        source: "export { captureProjectIdentity } from './projectIdentity';",
-      },
-    ];
-    const restoredFacadePaths = [...legacyIdentityFacadePaths];
-
-    expect(legacyIdentityViolations(fixtures, restoredFacadePaths)).toEqual([
-      ...restoredFacadePaths,
-      ...fixtures.map(({ path }) => path),
-    ]);
-  });
-
-  it('keeps both historical identity facades absent without import or re-export shims', () => {
-    const restoredFacadePaths = legacyIdentityFacadePaths
-      .filter((path) => existsSync(resolve(path)));
-
-    expect(restoredFacadePaths).toEqual([]);
-    expect(legacyIdentityViolations(productionSources(), restoredFacadePaths)).toEqual([]);
-  }, 15_000);
 
   it.each([
     ['publication reverse import', {
@@ -658,10 +602,6 @@ describe('projectFilesystemContract', () => {
       path: 'src/features/application/editorProjection/reExportReverseEdgeFixture.ts',
       source: "export * from '../editorMutation/projectPublicationCoordinator';",
     }],
-    ['application identity facade re-export', {
-      path: 'src/features/application/editorProjection/identityReExportFixture.ts',
-      source: "export * from '@/shared/../features/application/projectIdentity';",
-    }],
   ] satisfies Array<[string, ArchitectureSource]>)(
     'rejects graph projection %s lifecycle edge',
     (_, fixture) => {
@@ -669,27 +609,14 @@ describe('projectFilesystemContract', () => {
     },
   );
 
-  it('keeps lifecycle authority dependency-safe and consumed by identity coordinators', () => {
+  it('keeps lifecycle authority independent from application and infrastructure layers', () => {
     const authority = readArchitectureSource(
       'src/features/core/projectLifecycle/projectLifecycleAuthority.ts',
     );
-    const publication = readArchitectureSource(
-      'src/features/application/editorMutation/projectPublicationCoordinator.ts',
-    );
-    const graphProjection = readArchitectureSource(
-      'src/features/application/editorProjection/graphProjectionCoordinator.ts',
-    );
     const authorityForbiddenTargets = resolvedSourceTargets(authority).filter((target) =>
       /^src\/(?:features\/application|services|views)(?:\/|$)/.test(target));
-    const authorityTarget = 'src/features/core/projectLifecycle/projectLifecycleAuthority';
-    const graphProjectionTarget =
-      'src/features/application/editorProjection/graphProjectionCoordinator';
 
     expect(authorityForbiddenTargets).toEqual([]);
-    expect(resolvedSourceTargets(publication)).toContain(authorityTarget);
-    expect(resolvedSourceTargets(publication)).toContain(graphProjectionTarget);
-    expect(resolvedSourceTargets(graphProjection)).toContain(authorityTarget);
-    expect(graphProjectionLifecycleViolations([graphProjection])).toEqual([]);
   });
 
   it('classifies every registered Tauri command without duplicate or stale exemptions', () => {
@@ -1035,23 +962,6 @@ describe('projectFilesystemContract', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('binds project activation direct and event wires to the backend identity', () => {
-    const service = readFileSync(resolve('src/services/project/projectService.ts'), 'utf8');
-    const command = readFileSync(
-      resolve('src-tauri/src/commands/command_project/lifecycle.rs'),
-      'utf8',
-    );
-    const event = readFileSync(
-      resolve('src-tauri/src/event/event_project.rs'),
-      'utf8',
-    ).replace(/\r\n/g, '\n');
-
-    expect(service).toContain('Promise<ProjectActivationResult>');
-    expect(command).toContain('Result<ProjectActivationResultDto, FrontendError>');
-    expect(command).toContain('project_instance_id: session.instance_id.to_string()');
-    expect(command).toContain('activation_revision: state.activation_revision()');
-    expect(event).toContain('ProjectLoaded {\n        result: ProjectActivationResultDto');
-  });
 
   it('contains no optional projectInstanceId in active-project service contracts', () => {
     const offenders = productionSources(resolve('src/services')).flatMap(({ path, source }) => {

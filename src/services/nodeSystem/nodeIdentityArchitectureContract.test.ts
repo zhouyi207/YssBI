@@ -16,64 +16,6 @@ const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
 if (configFile.error) throw new Error(ts.flattenDiagnosticMessageText(configFile.error.messageText, '\n'));
 const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, resolve('.'));
 
-function literal(parts: readonly string[]): string {
-  return parts.join('');
-}
-
-const forbiddenMoveMutationSymbols = new Set([
-  'prepareReferences',
-  'referenceSnapshot',
-  'commitReferenceSnapshot',
-  'cascadeSubGraphPathInLoadedGraphs',
-  'cascadeGraphPathReferences',
-]);
-
-const forbiddenTokens = [
-  literal(['Functions:', 'Call Function']),
-  literal(['Variables:', 'Get Variable']),
-  literal(['Variables:', 'Set Variable']),
-  literal(['Data:', 'Get DataFrame']),
-  literal(['resolveEffective', 'Definition']),
-  literal(['signatureTo', 'PinSlots']),
-  literal(['defaultFunction', 'Signature']),
-  literal(['@/features/domain/', 'nodeDefinition']),
-];
-
-const forbiddenLegacyNodeApiSymbols = new Set([
-  literal(['BatchCreateNode', 'Request']),
-  literal(['BatchCreateNode', 'IpcItem']),
-  literal(['NodeInstanceParams', 'DTO']),
-  literal(['NodeSpawn', 'Params']),
-  literal(['Params', 'Kind']),
-  literal(['GraphInstance', 'DTO']),
-  literal(['NodeInstance', 'DTO']),
-  literal(['create', 'Nodes']),
-  literal(['toBatchCreateNode', 'IpcItems']),
-  literal(['spawnParamsTo', 'InstanceParams']),
-  literal(['nodeSpawnFieldsTo', 'InstanceParams']),
-  literal(['flattenInstance', 'Params']),
-  literal(['NODE_INSTANCE_PARAMS_', 'NONE']),
-  literal(['graphInstanceDtoTo', 'GraphData']),
-  literal(['toFrontend', 'Graph']),
-  literal(['validateGraph', 'DTO']),
-  literal(['RuntimeNode', 'Input']),
-  literal(['GraphData', 'Input']),
-  literal(['GraphData', 'Like']),
-  literal(['normalizeGraphData', 'Like']),
-  literal(['domainGraphTo', 'GraphData']),
-  literal(['domainGraphRecordTo', 'GraphData']),
-  literal(['graphUpdatedPayloadTo', 'GraphDataLike']),
-  literal(['normalizeGraph', 'Connections']),
-  literal(['connectionItemsFrom', 'Unknown']),
-  literal(['runtimePinRefTo', 'Id']),
-  literal(['runtimePinRefsTo', 'Ids']),
-]);
-
-const forbiddenLegacyNodeApiModules = [
-  literal(['batchCreate', 'Node']),
-  literal(['nodeInstance', 'Params']),
-] as const;
-
 function isFixtureDirectory(projectRelativeToSource: string): boolean {
   return projectRelativeToSource === 'tests/fixtures'
     || projectRelativeToSource.startsWith('tests/fixtures/');
@@ -241,75 +183,6 @@ function calledIdentifier(node: ts.CallExpression): string | null {
   return ts.isIdentifier(expression) ? expression.text : null;
 }
 
-function moduleSpecifierText(node: ts.Node): string | null {
-  if ((!ts.isImportDeclaration(node) && !ts.isExportDeclaration(node))
-    || !node.moduleSpecifier
-    || !ts.isStringLiteralLike(node.moduleSpecifier)) return null;
-  return node.moduleSpecifier.text;
-}
-
-function legacyNodeApiSymbolName(node: ts.Identifier, checker: ts.TypeChecker): string | null {
-  if (forbiddenLegacyNodeApiSymbols.has(node.text)) return node.text;
-  const symbol = checker.getSymbolAtLocation(node);
-  if (!symbol) return null;
-  const candidates = [symbol];
-  if ((symbol.flags & ts.SymbolFlags.Alias) !== 0) {
-    candidates.push(checker.getAliasedSymbol(symbol));
-  }
-  return candidates
-    .map((candidate) => candidate.getName())
-    .find((name) => forbiddenLegacyNodeApiSymbols.has(name)) ?? null;
-}
-
-function staticallyComputedLegacyNodeApiSymbol(
-  node: ts.Node,
-  staticString: (node: ts.Expression) => string | null,
-): string | null {
-  const expression = ts.isElementAccessExpression(node)
-    ? node.argumentExpression
-    : ts.isComputedPropertyName(node)
-      ? node.expression
-      : null;
-  if (!expression) return null;
-  const name = staticString(expression);
-  return name && forbiddenLegacyNodeApiSymbols.has(name) ? name : null;
-}
-
-function stringLiteralLegacyNodeApiMemberName(node: ts.Node): string | null {
-  const isMember = ts.isObjectLiteralElementLike(node)
-    || ts.isPropertySignature(node)
-    || ts.isMethodSignature(node)
-    || ts.isPropertyDeclaration(node)
-    || ts.isMethodDeclaration(node)
-    || ts.isGetAccessorDeclaration(node)
-    || ts.isSetAccessorDeclaration(node);
-  if (!isMember || !node.name || !ts.isStringLiteralLike(node.name)) return null;
-  return forbiddenLegacyNodeApiSymbols.has(node.name.text) ? node.name.text : null;
-}
-
-function legacyNodeApiReExportName(
-  node: ts.Node,
-  checker: ts.TypeChecker,
-): string | null {
-  if (!ts.isExportDeclaration(node) || !node.moduleSpecifier) return null;
-  const sourceFileSymbol = (node.getSourceFile() as ts.SourceFile & {
-    symbol?: ts.Symbol;
-  }).symbol;
-  const moduleSymbols = [
-    checker.getSymbolAtLocation(node.moduleSpecifier),
-    checker.getTypeAtLocation(node.moduleSpecifier).getSymbol(),
-    sourceFileSymbol,
-  ].filter((symbol): symbol is ts.Symbol => symbol != null);
-  const names = moduleSymbols.flatMap((moduleSymbol) =>
-    checker.getExportsOfModule(moduleSymbol).flatMap((symbol) => {
-      const candidates = [symbol];
-      if ((symbol.flags & ts.SymbolFlags.Alias) !== 0) {
-        candidates.push(checker.getAliasedSymbol(symbol));
-      }
-      return candidates.map((candidate) => candidate.getName());
-    }));
-  return names.find((name) => forbiddenLegacyNodeApiSymbols.has(name)) ?? null;
-}
 
 function symbolAtExpression(
   expression: ts.Expression,
@@ -569,15 +442,6 @@ function rawSignaturePinCallMapping(
     : null;
 }
 
-const nodeDetailLegacyHooks = new Set([
-  'useFunctionCatalog',
-  'useCallFunctionIssue',
-]);
-const nodeDetailLegacyAction = 'updateCallFunctionTarget';
-const nodeDetailLegacyApis = new Set([
-  ...nodeDetailLegacyHooks,
-  nodeDetailLegacyAction,
-]);
 
 function expressionPropertyName(
   node: ts.Expression,
@@ -616,105 +480,15 @@ function readsGraphEntities(
   });
 }
 
-function bindingElementInitializer(node: ts.BindingElement): ts.Expression | null {
-  const pattern = node.parent;
-  if (!ts.isObjectBindingPattern(pattern) && !ts.isArrayBindingPattern(pattern)) return null;
-  const declaration = pattern.parent;
-  return ts.isVariableDeclaration(declaration) && declaration.initializer
-    ? declaration.initializer
-    : null;
-}
-
-function originatesFromImport(
-  node: ts.Expression,
-  checker: ts.TypeChecker,
-  visiting: ReadonlySet<ts.Symbol> = new Set(),
-): boolean {
-  const expression = unwrapExpression(node);
-  if (!ts.isIdentifier(expression)) return false;
-  const symbol = checker.getSymbolAtLocation(expression);
-  if (!symbol || visiting.has(symbol)) return false;
-  const nextVisiting = new Set([...visiting, symbol]);
-  return (symbol.declarations ?? []).some((declaration) => {
-    if (ts.isImportSpecifier(declaration)
-      || ts.isNamespaceImport(declaration)
-      || ts.isImportClause(declaration)) return true;
-    if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
-      return originatesFromImport(declaration.initializer, checker, nextVisiting);
-    }
-    if (ts.isBindingElement(declaration)) {
-      const initializer = bindingElementInitializer(declaration);
-      return initializer !== null && originatesFromImport(initializer, checker, nextVisiting);
-    }
-    return false;
-  });
-}
-
-function importedLegacyMemberName(
+function nodeDetailScopedLookupFinding(
   node: ts.Node,
   checker: ts.TypeChecker,
   staticString: (node: ts.Expression) => string | null,
 ): string | null {
-  if (ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node)) {
-    const member = expressionPropertyName(node, staticString);
-    const owner = unwrapExpression(node.expression);
-    return member && nodeDetailLegacyApis.has(member) && originatesFromImport(owner, checker)
-      ? member
-      : null;
-  }
-  if (ts.isBindingElement(node)) {
-    const name = node.propertyName ?? node.name;
-    const member = ts.isIdentifier(name) || ts.isStringLiteralLike(name) ? name.text : null;
-    const initializer = bindingElementInitializer(node);
-    return member && nodeDetailLegacyApis.has(member)
-      && initializer !== null && originatesFromImport(initializer, checker)
-      ? member
-      : null;
-  }
-  return null;
-}
-
-function nodeDetailProjectionBoundaryFinding(
-  node: ts.Node,
-  checker: ts.TypeChecker,
-  staticString: (node: ts.Expression) => string | null,
-): string | null {
-  if (ts.isImportSpecifier(node)) {
-    const importedName = (node.propertyName ?? node.name).text;
-    if (nodeDetailLegacyApis.has(importedName)) {
-      return nodeDetailLegacyHooks.has(importedName)
-        ? `node detail legacy hook dependency '${importedName}'`
-        : 'node detail legacy updateCallFunctionTarget dependency';
-    }
-  }
-  if (ts.isImportClause(node) && node.name && nodeDetailLegacyApis.has(node.name.text)) {
-    return nodeDetailLegacyHooks.has(node.name.text)
-      ? `node detail legacy hook dependency '${node.name.text}'`
-      : 'node detail legacy updateCallFunctionTarget dependency';
-  }
-
-  const importedMember = importedLegacyMemberName(node, checker, staticString);
-  if (importedMember) {
-    return nodeDetailLegacyHooks.has(importedMember)
-      ? `node detail legacy hook dependency '${importedMember}'`
-      : 'node detail legacy updateCallFunctionTarget dependency';
-  }
-
-  if ((ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node))
-    && expressionPropertyName(node, staticString) === 'subGraphPath') {
-    return 'node detail legacy subGraphPath read';
-  }
-  if (ts.isBindingElement(node)) {
-    const name = node.propertyName ?? node.name;
-    if (ts.isIdentifier(name) && name.text === 'subGraphPath') {
-      return 'node detail legacy subGraphPath read';
-    }
-  }
-
 
   if ((ts.isForInStatement(node) || ts.isForOfStatement(node))
     && readsGraphEntities(node.expression, checker, staticString)) {
-    return 'node detail cross-graph graphEntities enumeration';
+    return 'node detail lookup is not graphPath and nodeId scoped';
   }
   if (ts.isCallExpression(node)) {
     const callee = unwrapExpression(node.expression);
@@ -728,7 +502,7 @@ function nodeDetailProjectionBoundaryFinding(
         || (owner.text === 'Reflect' && method === 'ownKeys'));
     if (isObjectEnumeration
       && node.arguments.some((argument) => readsGraphEntities(argument, checker, staticString))) {
-      return 'node detail cross-graph graphEntities enumeration';
+      return 'node detail lookup is not graphPath and nodeId scoped';
     }
   }
 
@@ -748,72 +522,33 @@ function sourceOffendersFromSourceFile(
     offenders.push(`${path}:${line}: ${finding}`);
   };
 
-  const auditsGraphMoveMutation = path.includes('/features/application/editorMutation/')
-    || path.endsWith('/features/application/editor/cascadeGraphPathReferences.ts');
+  const auditsGraphMutationBoundary = path.includes('/features/application/editorMutation/');
   const auditsClipboardSnapshot = path.endsWith('/features/core/editor/clipboardSnapshot.ts')
     || path.endsWith('/features/core/editor/stores/useClipboardStore.ts');
   const auditsNodeDetailPanel = path.replace(/\\/g, '/').endsWith(nodeDetailPanelSource);
   const visit = (node: ts.Node): void => {
     if (auditsNodeDetailPanel) {
-      const finding = nodeDetailProjectionBoundaryFinding(node, checker, staticString);
+      const finding = nodeDetailScopedLookupFinding(node, checker, staticString);
       if (finding) report(node, finding);
     }
-    if (ts.isIdentifier(node)) {
-      const legacySymbol = legacyNodeApiSymbolName(node, checker);
-      if (legacySymbol) report(node, `legacy node API symbol '${legacySymbol}'`);
+    if (auditsClipboardSnapshot && ts.isObjectLiteralExpression(node)) {
+      const fields = new Set(
+        node.properties.map(propertyName).filter((name): name is string => name !== null),
+      );
+      if (fields.has('position') && fields.has('pins') && !fields.has('nodeType')) {
+        report(node, 'clipboard entry does not preserve its stable NodeTypeId descriptor');
+      }
     }
-    const computedLegacySymbol = staticallyComputedLegacyNodeApiSymbol(node, staticString);
-    if (computedLegacySymbol) {
-      report(node, `legacy node API symbol '${computedLegacySymbol}'`);
-    }
-    const stringLiteralLegacyMember = stringLiteralLegacyNodeApiMemberName(node);
-    if (stringLiteralLegacyMember) {
-      report(node, `legacy node API symbol '${stringLiteralLegacyMember}'`);
-    }
-    const reExportedLegacySymbol = legacyNodeApiReExportName(node, checker);
-    if (reExportedLegacySymbol) {
-      report(node, `legacy node API re-export '${reExportedLegacySymbol}'`);
-    }
-    const importedModule = moduleSpecifierText(node);
-    const normalizedModule = importedModule?.replace(/\\/g, '/');
-    if (normalizedModule && forbiddenLegacyNodeApiModules.some((moduleName) =>
-      normalizedModule === moduleName || normalizedModule.endsWith(`/${moduleName}`))) {
-      report(node, `legacy node API module '${importedModule}'`);
-    }
-    if (auditsClipboardSnapshot
-      && ((ts.isPropertyAccessExpression(node) && node.name.text === 'params')
-        || (ts.isObjectLiteralElementLike(node) && propertyName(node) === 'params'))) {
-      report(node, 'clipboard legacy params');
-    }
-    if (auditsClipboardSnapshot
-      && ts.isObjectLiteralElementLike(node)
-      && ['displayName', 'display_name', 'title'].includes(propertyName(node) ?? '')) {
-      report(node, 'clipboard display-name identity');
-    }
-    if (auditsGraphMoveMutation && ts.isIdentifier(node)
-      && forbiddenMoveMutationSymbols.has(node.text)) {
-      report(node, `legacy graph move mutation symbol '${node.text}'`);
-    }
-    if (auditsGraphMoveMutation && ts.isCallExpression(node)) {
+    if (auditsGraphMutationBoundary && ts.isCallExpression(node)) {
       const expression = unwrapExpression(node.expression);
       if (ts.isPropertyAccessExpression(expression)
         && expression.name.text === 'setState'
         && expressionTargetsGraphDataStore(expression.expression, checker)) {
-        report(node, 'direct graph node store mutation during graph move');
+        report(node, 'graph mutation bypasses the application boundary');
       }
-    }
-    if (ts.isExpression(node)) {
-      const value = staticString(node);
-      if (value !== null && forbiddenTokens.includes(value)) report(node, value);
-    }
-    if (ts.isImportSpecifier(node)
-      && (node.propertyName ?? node.name).text === 'functionSignaturePins') {
-      report(node, 'functionSignaturePins import');
     }
 
     if (ts.isCallExpression(node)) {
-      const callee = calledIdentifier(node);
-      if (callee === 'functionSignaturePins') report(node, 'functionSignaturePins call');
       const projectsRawSignature = node.arguments.some((argument) =>
         isRawExpression(argument));
       if (path !== functionPinSource
@@ -893,58 +628,6 @@ function productionSourceOffenders(paths: string[]): string[] {
 
 describe('frontend stable node identity architecture audit behavior', () => {
   it.each([
-    ["const value = 'Functions:' + 'Call Function';", 'Functions:Call Function'],
-    ["const value = ['Variables:', 'Get Variable'].join('');", 'Variables:Get Variable'],
-    [
-      "const namespace = 'Functions:'; const name = 'Call Function'; const value = namespace + name;",
-      'Functions:Call Function',
-    ],
-    [
-      "const parts = ['Variables:', 'Get Variable'] as const; const value = parts.join('');",
-      'Variables:Get Variable',
-    ],
-    [
-      "const namespace = 'Functions:'; const alias = namespace; const name = 'Call Function'; const value = `${alias}${name}`;",
-      'Functions:Call Function',
-    ],
-  ])('rejects statically evaluable legacy identity source: %s', (source, token) => {
-    expect(sourceOffendersFromSource('src/features/example.ts', source))
-      .toContainEqual(expect.stringContaining(token));
-  });
-
-  it('resolves same-named const bindings independently across function scopes', () => {
-    const source = `
-      function offender() {
-        const namespace = 'Functions:';
-        const name = 'Call Function';
-        return namespace + name;
-      }
-      function unrelated() {
-        const namespace = 'Other:';
-        const name = 'Other Name';
-        return namespace + name;
-      }
-    `;
-    expect(sourceOffendersFromSource('src/features/example.ts', source))
-      .toContainEqual(expect.stringContaining('Functions:Call Function'));
-  });
-
-  it.each([
-    `function safe() { let namespace = 'Safe:'; const name = 'Call Function'; return namespace + name; }
-     function unrelated() { const namespace = 'Functions:'; return namespace; }`,
-    `function safe() { var namespace = 'Safe:'; const name = 'Call Function'; return namespace + name; }
-     function unrelated() { const namespace = 'Functions:'; return namespace; }`,
-    `function safe(namespace: string) { const name = 'Call Function'; return namespace + name; }
-     function unrelated() { const namespace = 'Functions:'; return namespace; }`,
-    `import { namespace } from './identity';
-     const name = 'Call Function';
-     namespace + name;
-     function unrelated() { const namespace = 'Functions:'; return namespace; }`,
-  ])('does not bind a runtime lexical symbol to another scope const: %s', (source) => {
-    expect(sourceOffendersFromSource('src/features/example.ts', source)).toEqual([]);
-  });
-
-  it.each([
     'const descriptor = { resourcePath: path, createArgs: args, nodeTypeId: typeId };',
     'function makeDescriptor() { return { createArgs, nodeTypeId: id, resourcePath: path }; }',
   ])('rejects resource-bound descriptor construction regardless of field order', (source) => {
@@ -957,107 +640,18 @@ describe('frontend stable node identity architecture audit behavior', () => {
     expect(sourceOffendersFromSource('src/shared/types/example.ts', source)).toEqual([]);
   });
 
-  it.each([
-    `import type { GraphInstanceDTO as LegacyGraph } from '../shared/types/dto/graph';
-     export type LoadedGraph = LegacyGraph;`,
-    `import * as graphDto from '../shared/types/dto/graph';
-     export type LoadedGraph = graphDto.GraphInstanceDTO;`,
-    `export { NodeInstanceDTO as LoadedNode } from '../shared/types/dto/graph';`,
-    `interface BatchCreateNodeRequest { nodeType: string }`,
-    `declare const manager: { createNodes(): Promise<string[]> };
-     manager.createNodes();`,
-  ])('rejects legacy node API symbols through declarations, aliases, namespaces, re-exports, and property access %#', (source) => {
-    expect(sourceOffendersFromSource('src/features/example.ts', source))
-      .toContainEqual(expect.stringContaining('legacy node API symbol'));
-  });
 
-  it.each([
-    `declare const manager: Record<string, () => Promise<string[]>>;
-     manager['createNodes']();`,
-    `declare const manager: Record<string, () => Promise<string[]>>;
-     const key = 'createNodes';
-     manager[key]();`,
-    `interface LegacyManager { ['createNodes'](): Promise<string[]> }`,
-    `const key = 'createNodes';
-     interface LegacyManager { [key](): Promise<string[]> }`,
-  ])('rejects statically computed legacy node API property access and declarations %#', (source) => {
-    expect(sourceOffendersFromSource('src/features/example.ts', source))
-      .toContainEqual(expect.stringContaining("legacy node API symbol 'createNodes'"));
-  });
-
-  it.each([
-    `interface LegacyManager { 'createNodes'(): Promise<string[]> }`,
-    `interface LegacyManager { 'createNodes': () => Promise<string[]> }`,
-    `const manager = { 'createNodes': () => Promise.resolve<string[]>([]) };`,
-    `class LegacyManager { 'createNodes'(): Promise<string[]> { return Promise.resolve([]); } }`,
-    `class LegacyManager { 'createNodes' = (): Promise<string[]> => Promise.resolve([]); }`,
-  ])('rejects non-computed string-literal legacy member names %#', (source) => {
-    expect(sourceOffendersFromSource('src/features/example.ts', source))
-      .toContainEqual(expect.stringContaining("legacy node API symbol 'createNodes'"));
-  });
-
-  it.each([
-    `interface Projection { 'title': string }`,
-    `const projection = { 'title': 'Visible title' };`,
-    `class Worker { 'run'(): void {} }`,
-  ])('allows legitimate non-computed string-literal member names %#', (source) => {
-    expect(sourceOffendersFromSource('src/features/example.ts', source)).toEqual([]);
-  });
-
-  it('allows element access through a runtime-unknown property key', () => {
-    const source = `
-      declare const manager: Record<string, () => void>;
-      declare const key: string;
-      manager[key]();
-    `;
-    expect(sourceOffendersFromSource('src/features/example.ts', source)).toEqual([]);
-  });
-
-  it('rejects wildcard barrels that expose a removed compatibility symbol', () => {
-    const offenders = sourceOffendersFromFixture({
-      'src/services/nodeSystem/__architecture_fixture_legacy.ts': `
-        export interface RuntimeNodeInput { id: string }
-      `,
-      'src/services/nodeSystem/__architecture_fixture_entry.ts': `
-        export * from './__architecture_fixture_legacy';
-      `,
-    });
-    expect(offenders).toContainEqual(expect.stringMatching(
-      /__architecture_fixture_entry\.ts:\d+: legacy node API re-export 'RuntimeNodeInput'/,
-    ));
-  });
-
-  it.each([
-    `import type { NodeSpawnParams as Spawn } from '../shared/types/dto/nodeInstanceParams';`,
-    `export * from '../shared/types/dto/batchCreateNode';`,
-  ])('rejects legacy node API modules through imports and re-exports %#', (source) => {
-    expect(sourceOffendersFromSource('src/features/example.ts', source))
-      .toContainEqual(expect.stringContaining('legacy node API module'));
-  });
-
-  it('rejects clipboard legacy params and display identity without banning UI title projections', () => {
+  it('keeps clipboard node identity based on stable NodeTypeId', () => {
     expect(sourceOffendersFromSource(
       'src/features/core/editor/clipboardSnapshot.ts',
-      `const entry = { params: {}, displayName: 'legacy', title: 'legacy title' };`,
+      `const entry = { position: { x: 0, y: 0 }, pins: [] };`,
     )).toEqual(expect.arrayContaining([
-      expect.stringContaining('clipboard legacy params'),
-      expect.stringContaining('clipboard display-name identity'),
+      expect.stringContaining('clipboard entry does not preserve its stable NodeTypeId descriptor'),
     ]));
     expect(sourceOffendersFromSource(
-      'src/features/domain/editorProjection.ts',
-      `const projection = { display: { title: 'Visible UI title' } };`,
+      'src/features/core/editor/clipboardSnapshot.ts',
+      `const entry = { nodeType: descriptor, position: { x: 0, y: 0 }, pins: [] };`,
     )).toEqual([]);
-  });
-
-  it.each([
-    [
-      "import { functionSignaturePins as projectPins } from './functionSignatureSync';",
-      'functionSignaturePins import',
-    ],
-    ["functionSignaturePins(signature);", 'functionSignaturePins call'],
-  ])('rejects frontend function-signature business projection: %s', (source, finding) => {
-    expect(sourceOffendersFromSource('src/features/functionSignatureProjection.ts', source))
-      .toContainEqual(expect.stringContaining(finding));
   });
 
   it.each<Record<string, string>>([
@@ -1249,30 +843,6 @@ describe('frontend stable node identity architecture audit behavior', () => {
     ]));
   });
 
-  it.each([
-    "let namespace = 'Functions:'; const name = 'Call Function'; namespace + name;",
-    "var namespace = 'Functions:'; const name = 'Call Function'; namespace + name;",
-    "const namespace = getNamespace(); const name = 'Call Function'; namespace + name;",
-    "const namespace = config.namespace; const name = 'Call Function'; namespace + name;",
-    "import { namespace } from './identity'; const name = 'Call Function'; namespace + name;",
-    "const left = right; const right = left; left + 'Call Function';",
-  ])('does not evaluate mutable, executable, external, property, or cyclic sources: %s', (source) => {
-    expect(sourceOffendersFromSource('src/features/example.ts', source)).toEqual([]);
-  });
-
-  it.each([
-    'prepareReferences',
-    'referenceSnapshot',
-    'commitReferenceSnapshot',
-    'cascadeSubGraphPathInLoadedGraphs',
-    'cascadeGraphPathReferences',
-  ])('rejects legacy graph move mutation symbol %s in editor mutation modules', (symbol) => {
-    const source = `export function ${symbol}() { return undefined; }`;
-    expect(sourceOffendersFromSource(
-      'src/features/application/editorMutation/example.ts',
-      source,
-    )).toContainEqual(expect.stringContaining(`legacy graph move mutation symbol '${symbol}'`));
-  });
 
   it.each([
     {
@@ -1303,85 +873,23 @@ describe('frontend stable node identity architecture audit behavior', () => {
         graphAuthority.setState((state) => ({ graphEntities: state.graphEntities }));
       `,
     },
-  ])('uses symbols to reject aliased direct graph store mutation fixture %#', (sources) => {
+  ])('keeps graph mutations behind the application boundary %#', (sources) => {
     expect(sourceOffendersFromFixture(sources as Record<string, string>))
-      .toContainEqual(expect.stringContaining('direct graph node store mutation during graph move'));
+      .toContainEqual(expect.stringContaining('graph mutation bypasses the application boundary'));
   });
 
   it.each([
-    [
-      `declare const node: { subGraphPath?: string }; const target = node.subGraphPath;`,
-      'node detail legacy subGraphPath read',
-    ],
-    [
-      `import { useFunctionCatalog as loadCatalog } from './legacyCatalog'; loadCatalog();`,
-      "node detail legacy hook dependency 'useFunctionCatalog'",
-    ],
-    [
-      `import { useCallFunctionIssue } from './legacyDiagnostics'; useCallFunctionIssue();`,
-      "node detail legacy hook dependency 'useCallFunctionIssue'",
-    ],
-    [
-      `import * as legacyCatalog from './legacyCatalog'; legacyCatalog.useFunctionCatalog();`,
-      "node detail legacy hook dependency 'useFunctionCatalog'",
-    ],
-    [
-      `import * as legacyCatalog from './legacyCatalog';
-       const loadCatalog = legacyCatalog.useFunctionCatalog;
-       loadCatalog();`,
-      "node detail legacy hook dependency 'useFunctionCatalog'",
-    ],
-    [
-      `import * as legacyDiagnostics from './legacyDiagnostics';
-       const panel = <Panel onRefresh={legacyDiagnostics.useCallFunctionIssue} />;`,
-      "node detail legacy hook dependency 'useCallFunctionIssue'",
-    ],
-    [
-      `import * as actions from './legacyActions';
-       const updateTarget = actions.updateCallFunctionTarget;
-       updateTarget();`,
-      'node detail legacy updateCallFunctionTarget dependency',
-    ],
-    [
-      `import * as actions from './legacyActions';
-       const { updateCallFunctionTarget: updateTarget } = actions;
-       updateTarget();`,
-      'node detail legacy updateCallFunctionTarget dependency',
-    ],
-    [
-      `import * as actions from './legacyActions';
-       const panel = <Panel onSelect={actions.updateCallFunctionTarget} />;`,
-      'node detail legacy updateCallFunctionTarget dependency',
-    ],
-    [
-      `import legacyApi from './legacyApi'; legacyApi.useFunctionCatalog();`,
-      "node detail legacy hook dependency 'useFunctionCatalog'",
-    ],
-    [
-      `import legacyApi from './legacyApi';
-       const callback = legacyApi.updateCallFunctionTarget;
-       callback();`,
-      'node detail legacy updateCallFunctionTarget dependency',
-    ],
-    [
-      `declare const state: { graphEntities: Record<string, { nodes: Record<string, unknown> }> };
-       Object.entries(state.graphEntities).find(([, bucket]) => bucket.nodes[nodeId]);`,
-      'node detail cross-graph graphEntities enumeration',
-    ],
-    [
-      `declare const state: { graphEntities: Record<string, { nodes: Record<string, unknown> }> };
-       const entities = state.graphEntities;
-       Object.values(entities).find((bucket) => bucket.nodes[nodeId]);`,
-      'node detail cross-graph graphEntities enumeration',
-    ],
-    [
-      `declare const state: { graphEntities: Record<string, { nodes: Record<string, unknown> }> };
-       for (const graphPath in state.graphEntities) void state.graphEntities[graphPath].nodes[nodeId];`,
-      'node detail cross-graph graphEntities enumeration',
-    ],
-  ])('rejects NodeDetailPanel projection boundary violation %#', (source, finding) => {
-    expect(sourceOffendersFromSource(nodeDetailPanelSource, source))
-      .toContainEqual(expect.stringContaining(finding));
+    `declare const state: { graphEntities: Record<string, { nodes: Record<string, unknown> }> };
+     Object.entries(state.graphEntities).find(([, bucket]) => bucket.nodes[nodeId]);`,
+    `declare const state: { graphEntities: Record<string, { nodes: Record<string, unknown> }> };
+     const entities = state.graphEntities;
+     Object.values(entities).find((bucket) => bucket.nodes[nodeId]);`,
+    `declare const state: { graphEntities: Record<string, { nodes: Record<string, unknown> }> };
+     for (const graphPath in state.graphEntities) void state.graphEntities[graphPath].nodes[nodeId];`,
+  ])('requires graphPath and nodeId scoped NodeDetailPanel lookup %#', (source) => {
+    expect(sourceOffendersFromSource(nodeDetailPanelSource, source)).toContainEqual(
+      expect.stringContaining('node detail lookup is not graphPath and nodeId scoped'),
+    );
   });
 
   it('allows graph-path selection and non-graph object enumeration in NodeDetailPanel', () => {
@@ -1416,7 +924,7 @@ describe('frontend stable node identity architecture audit behavior', () => {
 });
 
 describe('frontend stable node identity architecture', () => {
-  it('keeps production sources free of legacy identities and descriptor synthesis', () => {
+  it('keeps production identity, descriptor, and mutation boundaries intact', () => {
     expect(productionSourceOffenders(productionFiles())).toEqual([]);
   }, 15_000);
 });

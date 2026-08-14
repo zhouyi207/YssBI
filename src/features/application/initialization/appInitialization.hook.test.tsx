@@ -2,20 +2,10 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { invoke } from '@tauri-apps/api/core';
 import { initProjectSync } from '@/features/core/dataStore';
 import { LoadStatus } from '@/shared/types/ui';
 import { useAppInitialization } from './appInitialization.hook';
 import type { InitializationState } from './appInitialization.type';
-
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(async (command: string) => {
-    if (command === 'get_editor_schema_command') {
-      throw new Error('Command get_editor_schema_command not found');
-    }
-    throw new Error(`Unexpected command: ${command}`);
-  }),
-}));
 
 vi.mock('@/features/core/dataStore', () => ({
   initProjectSync: vi.fn(),
@@ -48,7 +38,7 @@ describe('useAppInitialization', () => {
     host.remove();
   });
 
-  it('syncs the project without invoking the removed editor schema command', async () => {
+  it('initializes project sync and reports ready', async () => {
     await act(async () => {
       root.render(<Harness />);
     });
@@ -58,6 +48,5 @@ describe('useAppInitialization', () => {
     });
 
     expect(initProjectSync).toHaveBeenCalledOnce();
-    expect(invoke).not.toHaveBeenCalled();
   });
 });

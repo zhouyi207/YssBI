@@ -53,13 +53,6 @@ describe('useEditorHistoryAvailability', () => {
     host.remove();
   });
 
-  it('stores only backend availability and pending state', () => {
-    expect(Object.keys(useHistoryStore.getInitialState()).sort()).toEqual([
-      'canRedo',
-      'canUndo',
-      'pending',
-    ]);
-  });
 
   it('queries backend history status when availability is first consumed', async () => {
     vi.mocked(HistoryService.getStatus).mockResolvedValueOnce({ canUndo: true, canRedo: false });

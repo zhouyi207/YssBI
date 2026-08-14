@@ -231,10 +231,6 @@ describe('worksheet resource mutation wire', () => {
 
   it.each([
     ['empty resource path', (delta: Record<string, any>) => { delta.resource.key = ''; }],
-    ['legacy document id', (delta: Record<string, any>) => { delta.payload.patch.after.id = 'legacy-id'; }],
-    ['legacy document name', (delta: Record<string, any>) => {
-      delta.payload.patch.after.name = 'persisted document name';
-    }],
   ])('rejects %s', (_case, mutate) => {
     const delta = structuredClone(worksheetDelta()) as unknown as Record<string, any>;
     mutate(delta);

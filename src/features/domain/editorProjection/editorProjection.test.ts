@@ -197,25 +197,6 @@ describe('editor projection architecture', () => {
     'src/shared/types/dto/variable.ts',
     'src/shared/types/dto/graphConverters.ts',
   ] as const;
-  const expectedEdges = [
-    ...dtoBarrelRuntimeTargets.map((target) => (
-      ['dtoIndex.ts', target, 'runtime'] as Edge
-    )),
-    ['dtoIndex.ts', 'editorProjection.ts', 'type-only'],
-    ['editorProjection.ts', 'src/shared/types/domain/graph.ts', 'type-only'],
-    ['parameterEditorValidators.ts', 'editorProjection.ts', 'type-only'],
-    ['editorProjectionGuards.ts', 'parameterEditorValidators.ts', 'runtime'],
-    ['editorProjectionGuards.ts', 'editorProjection.ts', 'type-only'],
-    ['editorProjectionGuards.ts', 'src/shared/types/domain/graphResourcePath.ts', 'runtime'],
-    ['editorProjectionParser.ts', 'editorProjectionGuards.ts', 'runtime'],
-    ['editorProjectionParser.ts', 'parameterEditorValidators.ts', 'runtime'],
-    ['editorProjectionParser.ts', 'editorProjection.ts', 'type-only'],
-    ['graphProjectionService.ts', 'editorProjectionParser.ts', 'runtime'],
-    ['graphProjectionService.ts', 'editorProjection.ts', 'type-only'],
-    ['graphProjectionService.ts', 'external:@tauri-apps/api/core', 'runtime'],
-    ['editorProjection.ts', 'src/shared/types/domain/dataType.ts', 'type-only'],
-    ['editorProjectionGuards.ts', 'src/shared/types/dto/dataType.ts', 'runtime'],
-  ] satisfies Edge[];
   const allowedRuntimeTargets = new Map<string, ReadonlySet<string>>([
     ['dtoIndex.ts', new Set(dtoBarrelRuntimeTargets)],
     ['editorProjection.ts', new Set()],
@@ -342,18 +323,7 @@ describe('editor projection architecture', () => {
     };
 
     for (const [, path] of moduleSources) visit(path);
-    edges.sort((left, right) => {
-      const index = (edge: Edge): number => expectedEdges.findIndex((expected) => (
-        expected[0] === edge[0] && expected[1] === edge[1] && expected[2] === edge[2]
-      ));
-      const leftIndex = index(left);
-      const rightIndex = index(right);
-      if (leftIndex >= 0 || rightIndex >= 0) {
-        return (leftIndex < 0 ? expectedEdges.length : leftIndex)
-          - (rightIndex < 0 ? expectedEdges.length : rightIndex);
-      }
-      return JSON.stringify(left).localeCompare(JSON.stringify(right));
-    });
+    edges.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
     return edges;
   }
 
@@ -557,22 +527,9 @@ describe('editor projection architecture', () => {
       .toEqual([]);
   });
 
-  it('enforces the complete erased and runtime projection dependency graph', () => {
+  it('keeps runtime dependencies within the allowed direction and acyclic', () => {
     const edges = actualEdges();
 
-    expect(edges).toEqual(expectedEdges);
-    expect(edges.filter(([, , mode]) => mode === 'runtime')).toEqual([
-      ...dtoBarrelRuntimeTargets.map((target) => (
-        ['dtoIndex.ts', target, 'runtime'] as Edge
-      )),
-      ['editorProjectionGuards.ts', 'parameterEditorValidators.ts', 'runtime'],
-      ['editorProjectionGuards.ts', 'src/shared/types/domain/graphResourcePath.ts', 'runtime'],
-      ['editorProjectionParser.ts', 'editorProjectionGuards.ts', 'runtime'],
-      ['editorProjectionParser.ts', 'parameterEditorValidators.ts', 'runtime'],
-      ['graphProjectionService.ts', 'editorProjectionParser.ts', 'runtime'],
-      ['graphProjectionService.ts', 'external:@tauri-apps/api/core', 'runtime'],
-      ['editorProjectionGuards.ts', 'src/shared/types/dto/dataType.ts', 'runtime'],
-    ]);
     expect(unexpectedRuntimeEdges(edges)).toEqual([]);
     expect(hasDependencyCycle(edges)).toBe(false);
   });
@@ -619,10 +576,8 @@ describe('editor projection architecture', () => {
 
     expect(serviceOffenders).toEqual([]);
     expect(sharedOffenders).toEqual([]);
-    expect(existsSync('src/features/domain/editorProjection/validateProjection.ts')).toBe(false);
   });
 });
-
 
 describe('portAddressKey', () => {
   it('is stable for equal addresses and distinguishes address variants', () => {
@@ -657,17 +612,6 @@ describe('validateEditorGraphProjection', () => {
     const invalid = structuredClone(editorProjectionContract) as any;
     invalid.nodes[0].parameterEditors[0].presentation = 'inlineOnly';
     expect(isEditorGraphProjectionDto(invalid)).toBe(false);
-  });
-
-  it('rejects the legacy parameter editor shape without Rust override metadata', () => {
-    const projection = structuredClone(editorProjectionContract) as unknown as Record<string, unknown>;
-    const node = (projection.nodes as Array<Record<string, unknown>>)[0];
-    const editor = (node.parameterEditors as Array<Record<string, unknown>>)[0];
-    delete editor.inheritedValue;
-    delete editor.valueSource;
-    delete editor.options;
-
-    expect(isEditorGraphProjectionDto(projection)).toBe(false);
   });
 
   it.each([

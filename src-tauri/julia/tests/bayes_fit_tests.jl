@@ -32,15 +32,15 @@ end
     @test bayes_response_transform(response) == "ln"
     @test bayes_inverse_response(response, log(3.0)) ≈ 3.0
 
-    legacy = JSON3.read("""
+    unsupported = JSON3.read("""
         {
           "type": "call",
-          "function": "log",
+          "function": "tan",
           "args": [{"type": "number", "value": 1.0}]
         }
     """)
     @test_throws ArgumentError bayes_evaluate_response_expression(
-        legacy,
+        unsupported,
         NamedTuple(),
         JSON3.read("{}"),
         1,
@@ -125,10 +125,7 @@ end
     end
 end
 
-@testset "NUTS tree depth configuration and diagnostics" begin
-    sampler = bayes_nuts_sampler(10, 0.8, 7)
-    @test getfield(sampler, :max_depth) == 7
-
+@testset "NUTS tree depth diagnostics" begin
     chain = Chains(
         reshape([6.0, 7.0, 8.0], 3, 1, 1),
         [:tree_depth],

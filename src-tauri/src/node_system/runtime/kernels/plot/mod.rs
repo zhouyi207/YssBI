@@ -616,23 +616,26 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn kernel_fragment_covers_all_migrated_plot_handles() {
+    fn kernel_fragment_matches_current_plot_catalog_inventory() {
+        let node_system = crate::node_system::catalog::build_builtin_node_system().unwrap();
+        let catalog_handles = node_system
+            .registry
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .filter(|handle| handle.starts_with("yssbi.plot.") && handle.ends_with(".view"))
+            .collect::<BTreeSet<_>>();
+        let spec_handles = KERNELS
+            .iter()
+            .map(|spec| spec.handle)
+            .collect::<BTreeSet<_>>();
         let fragment = build_kernel_fragment();
-        assert_eq!(fragment.len(), 7);
-        assert!(!fragment.is_empty());
-        assert_eq!(
-            KERNELS
-                .iter()
-                .map(|spec| spec.handle)
-                .collect::<BTreeSet<_>>()
-                .len(),
-            7
-        );
-        assert!(
-            KERNELS.iter().all(
-                |spec| spec.handle.starts_with("yssbi.plot.") && spec.handle.ends_with(".view")
-            )
-        );
+        let fragment_handles = fragment
+            .handles()
+            .map(|handle| handle.as_str())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(fragment_handles, spec_handles);
+        assert_eq!(fragment_handles, catalog_handles);
     }
 
     #[test]

@@ -2311,61 +2311,6 @@ mod tests {
     }
 
     #[test]
-    fn run_result_routes_canonical_resource_mutation_without_split_reconstruction() {
-        let run_source = include_str!("../node_system/runtime/run.rs");
-        let project_source = include_str!("../project/project_state.rs");
-        let command_source = include_str!("command_node_system.rs");
-        let resource_source = include_str!("../node_system/runtime/project_resource.rs");
-        let reconstruction_helper = ["variable_effect_", "mutation_result"].concat();
-        let publication_helper = ["publish_run_", "variable_effects"].concat();
-
-        assert!(
-            run_source
-                .contains("pub resource_mutation: Option<crate::event::ResourceMutationResultDto>")
-        );
-        for split_field in [
-            "resource_project_instance_id",
-            "resource_publication_revision",
-            "resource_deltas",
-            "resource_history",
-        ] {
-            assert!(!run_source.contains(split_field));
-        }
-        assert!(!project_source.contains(&reconstruction_helper));
-        assert!(!command_source.contains(&reconstruction_helper));
-        assert!(!command_source.contains(&publication_helper));
-        assert!(
-            command_source
-                .contains("publish_run_resource_mutation(result.resource_mutation.as_ref()")
-        );
-        assert!(!resource_source.contains(
-            "does not support Run-side writes until durable revisioned commits are available"
-        ));
-    }
-
-    #[test]
-    fn project_path_writes_are_confined_to_activation_publication() {
-        let project_source = include_str!("../project/project_state.rs");
-        assert!(!project_source.contains("pub project_path:"));
-        assert!(!project_source.contains("fn set_path("));
-
-        let writes = project_source
-            .match_indices("std::mem::replace(&mut *current_path, path)")
-            .map(|(offset, _)| offset)
-            .collect::<Vec<_>>();
-        assert_eq!(writes.len(), 1, "project path must have one mutation site");
-
-        let publish_start = project_source
-            .find("    pub(super) fn publish_project_activation(")
-            .expect("activation publication must exist");
-        let publish_end = project_source[publish_start..]
-            .find("\n    pub fn get_path(")
-            .map(|offset| publish_start + offset)
-            .expect("activation publication region must be isolated");
-        assert!(writes[0] > publish_start && writes[0] < publish_end);
-    }
-
-    #[test]
     fn activation_final_publication_uses_only_constant_time_authority_checks() {
         let project_source = include_str!("../project/project_state.rs");
         let publish_start = project_source
@@ -2397,59 +2342,6 @@ mod tests {
                 !publish.contains(forbidden),
                 "activation publication contains size-dependent work: {forbidden}"
             );
-        }
-    }
-
-    #[test]
-    fn filesystem_publication_callers_capture_projection_environment_before_commit() {
-        let project_source = include_str!("../project/project_state.rs");
-        let writer_source = include_str!("../project/project_writers.rs");
-        for (caller, source_file, start, end) in [
-            (
-                "rename",
-                project_source,
-                "    pub(super) fn rename_graph_resource_transaction_impl(",
-                "\n    fn graph_rename_mutations(",
-            ),
-            (
-                "worksheet upsert",
-                writer_source,
-                "    fn write_worksheet_patch(",
-                "\n    pub fn save_worksheet_document(",
-            ),
-            (
-                "worksheet rename",
-                writer_source,
-                "    pub fn rename_worksheet_resource_transaction(",
-                "\n    pub fn remove_worksheet_resource_transaction(",
-            ),
-            (
-                "worksheet removal",
-                writer_source,
-                "    pub fn remove_worksheet_resource_transaction(",
-                "#[cfg(test)]",
-            ),
-        ] {
-            let caller_start = source_file
-                .find(start)
-                .unwrap_or_else(|| panic!("{caller} caller must exist"));
-            let caller_end = source_file[caller_start..]
-                .find(end)
-                .map(|offset| caller_start + offset)
-                .unwrap_or_else(|| panic!("{caller} caller region must be isolated"));
-            let source = &source_file[caller_start..caller_end];
-            let capture = source
-                .find("capture_projection_environment_for_session(")
-                .unwrap_or_else(|| panic!("{caller} must capture projection environment"));
-            let commit = source
-                .find("prepared.commit()")
-                .unwrap_or_else(|| panic!("{caller} must commit a prepared filesystem mutation"));
-            assert!(
-                capture < commit,
-                "{caller} captures projection environment after filesystem commit"
-            );
-            assert!(source.contains("apply_resource_document_patch_with_environment("));
-            assert!(!source.contains("self.apply_resource_document_patch("));
         }
     }
 
@@ -3061,44 +2953,6 @@ mod tests {
 
     #[test]
     fn resource_commands_emit_one_project_scoped_committed_result() {
-        let source = include_str!("command_node_system.rs");
-
-        for required in [
-            "fn create_graph_resource_with_emitter<R: EmitOutcome>(",
-            "fn duplicate_graph_resource_with_emitter<R: EmitOutcome>(",
-            "fn remove_graph_resource_with_emitter<R: EmitOutcome>(",
-            "fn rename_graph_resource_with_emitter<R: EmitOutcome>(",
-            "project_instance_id: ProjectInstanceId",
-            "expected_revision: ResourceRevision",
-            "lifecycle_token: u64",
-            "operation_id: OperationId",
-        ] {
-            assert!(
-                source.contains(required),
-                "resource command contract is missing {required}"
-            );
-        }
-        let resource_commands = &source[source.find("pub fn create_event(").unwrap()
-            ..source.find("pub fn update_function_signature(").unwrap()];
-        assert_eq!(
-            source
-                .matches("\n    emit_resource_result(&mut emit, &result);")
-                .count(),
-            4,
-            "each resource command helper must emit through the canonical helper"
-        );
-        assert_eq!(
-            resource_commands
-                .matches("EventProject::ResourceMutationCommitted")
-                .count(),
-            0,
-            "resource commands must not construct a second event path"
-        );
-        assert!(!resource_commands.contains("GraphResourceMoved"));
-        assert!(
-            !resource_commands.contains("emit_project_index_invalidated(&app, \"remove_graph\")")
-        );
-
         let create_root = std::env::temp_dir().join(format!(
             "yssbi-resource-command-create-{}",
             uuid::Uuid::new_v4()

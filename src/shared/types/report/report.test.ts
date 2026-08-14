@@ -25,7 +25,7 @@ describe('normalizeSerialTestsResponse', () => {
     expect(result?.q?.lags).toBe(5);
   });
 
-  it('rejects bare number dw (historical bug shape)', () => {
+  it('rejects a bare number for dw', () => {
     expect(normalizeSerialTestsResponse({ dw: 1.85 })).toBeNull();
     expect(normalizeDurbinWatsonResult(1.85)).toBeNull();
   });

@@ -25,7 +25,7 @@ describe('pinSemantics', () => {
     ).toBe('DataSeries<Float64>');
   });
 
-  it('does not use legacy bare type strings for data pin labels', () => {
+  it('requires structured dataType for data pin labels', () => {
     expect(pinTypeLabel({ type: 'object' })).toBe('unknown');
     expect(pinTypeLabel({ type: 'exec' })).toBe('exec');
   });

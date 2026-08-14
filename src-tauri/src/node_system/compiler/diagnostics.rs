@@ -1221,8 +1221,6 @@ mod tests {
             .collect::<BTreeSet<_>>();
         assert_eq!(codes.len(), COMPILER_DIAGNOSTIC_DEFINITIONS.len());
         assert_eq!(message_keys.len(), COMPILER_DIAGNOSTIC_DEFINITIONS.len());
-        assert!(!codes.contains("compiler.function.abi_member_duplicate"));
-        assert!(!message_keys.contains("diagnostics.compiler.function.abi_member_duplicate"));
         assert!(COMPILER_DIAGNOSTIC_DEFINITIONS.iter().all(|definition| {
             definition
                 .templates

@@ -39,7 +39,7 @@ const readyDescriptor = {
 };
 
 describe('result DTO parsers', () => {
-  it('parses every descriptor state and rejects legacy or extra identity keys', () => {
+  it('parses every descriptor state', () => {
     expect(parseResultDescriptor(readyDescriptor)).toEqual(readyDescriptor);
     expect(parseResultDescriptor({
       ...readyDescriptor,
@@ -120,7 +120,7 @@ describe('result DTO parsers', () => {
     ];
     expect(parsePinResultHistory(history)).toEqual(history);
     expect(() => parseResultPage({ ...page, limit: 2 })).toThrow();
-    expect(() => parsePinResultHistory([{ ...history[0], pinId: 'legacy' }])).toThrow();
+    expect(() => parsePinResultHistory([{ ...history[0], unexpectedKey: true }])).toThrow();
   });
 });
 

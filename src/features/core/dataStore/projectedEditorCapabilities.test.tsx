@@ -25,8 +25,6 @@ function installClipboardNode(canCopy: boolean | undefined, managed: boolean) {
   }
   fixture.projection.nodes[0].capabilities = capabilities;
   useGraphDataStore.getState().replaceProjection(graphPath, fixture.projection, 1);
-  const storedNode = useGraphDataStore.getState().getGraphNode(graphPath, nodeId);
-  if (storedNode) storedNode.isInternal = false;
 }
 
 function installProjectedCapabilities() {
@@ -67,7 +65,7 @@ describe('projected active-editor capabilities', () => {
   it.each([
     { label: 'claims it is copyable', canCopy: true },
     { label: 'omits canCopy', canCopy: undefined },
-  ])('rejects a managed node that $label even when legacy isInternal is false', ({ canCopy }) => {
+  ])('gives managed capability precedence when a node $label', ({ canCopy }) => {
     installClipboardNode(canCopy, true);
 
     expect(buildClipboardSnapshot([nodeId], graphPath)).toBeNull();

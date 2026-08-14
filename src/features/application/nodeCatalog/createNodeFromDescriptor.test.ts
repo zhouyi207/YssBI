@@ -121,11 +121,11 @@ describe('createNodeFromDescriptor', () => {
     }));
   });
 
-  it('rejects descriptors with compatibility fields before mutation execution', async () => {
+  it('rejects descriptors with unknown fields before mutation execution', async () => {
     const descriptor = {
       kind: 'static',
       nodeTypeId: 'math.add',
-      parameters: {},
+      unexpected: true,
     } as unknown as NodeCreationDescriptor;
 
     await expect(createNodeFromDescriptor({

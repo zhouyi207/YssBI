@@ -198,23 +198,6 @@ describe('project event wire parser', () => {
     expect(parseResourceMutationCommittedPayload({ result })).toEqual({ result });
   });
 
-  it('rejects removed worksheet side-channel and legacy document identity fields', () => {
-    expect(() => parseResourceMutationCommittedPayload({
-      result: { ...resourceResult, worksheetDeltas: [] },
-    })).toThrow();
-
-    for (const legacy of [{ id: 'legacy-id' }, { name: 'persisted document name' }]) {
-      const result = worksheetResourceResult({
-        kind: 'worksheet',
-        patch: {
-          before: worksheetDocumentState(),
-          after: { ...worksheetDocumentState(), ...legacy },
-        },
-      });
-      expect(() => parseResourceMutationCommittedPayload({ result })).toThrow();
-    }
-  });
-
   it('parses an exact function replacement with Rust-resolved editor pins', () => {
     const result = functionResourceResult();
     expect(parseResourceMutationCommittedPayload({ result })).toEqual({ result });

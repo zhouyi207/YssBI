@@ -80,8 +80,7 @@ describe('loadPresentationWindow', () => {
     expect(ResultService.getPage).not.toHaveBeenCalled();
   });
 
-  it('rejects the removed one-element report sequence workaround', async () => {
-    const report = { title: 'OLS Summary' };
+  it('requires report descriptors to use the scalar value kind', async () => {
     vi.mocked(ResultService.getDescriptor).mockResolvedValue(descriptor('21', { kind: 'ready' }, {
       presentation: { kind: 'report', report: 'olsSummary' },
       valueKind: 'sequence',
@@ -89,17 +88,20 @@ describe('loadPresentationWindow', () => {
     vi.mocked(ResultService.getPage).mockResolvedValue({
       resultId: '21',
       offset: 0,
-      requestedLimit: 1,
+      requestedLimit: 200,
       actualCount: 1,
       totalCount: 1,
       hasMore: false,
       nextOffset: null,
       valueKind: 'sequence',
       metadata: null,
-      values: [report],
+      values: [{ title: 'OLS Summary' }],
     });
 
-    await expect(loadPresentationWindow('21')).resolves.toMatchObject({ status: 'load_failed' });
+    await expect(loadPresentationWindow('21')).resolves.toMatchObject({
+      status: 'load_failed',
+      message: 'Report results require a canonical scalar object',
+    });
   });
 
   it('loads ready paged inspector data through getPage only', async () => {

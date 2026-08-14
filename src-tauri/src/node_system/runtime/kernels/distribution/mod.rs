@@ -521,23 +521,27 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn kernel_fragment_covers_all_migrated_distribution_handles() {
+    fn kernel_fragment_matches_current_distribution_catalog_inventory() {
+        let node_system = crate::node_system::catalog::build_builtin_node_system().unwrap();
+        let catalog_handles = node_system
+            .registry
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .filter(|handle| {
+                handle.starts_with("yssbi.distribution.") && handle.ends_with(".sample")
+            })
+            .collect::<BTreeSet<_>>();
+        let spec_handles = KERNELS
+            .iter()
+            .map(|spec| spec.handle)
+            .collect::<BTreeSet<_>>();
         let fragment = build_kernel_fragment();
-        assert_eq!(fragment.len(), 23);
-        assert!(!fragment.is_empty());
-        assert_eq!(
-            KERNELS
-                .iter()
-                .map(|spec| spec.handle)
-                .collect::<BTreeSet<_>>()
-                .len(),
-            23
-        );
-        assert!(
-            KERNELS
-                .iter()
-                .all(|spec| spec.handle.starts_with("yssbi.distribution.")
-                    && spec.handle.ends_with(".sample"))
-        );
+        let fragment_handles = fragment
+            .handles()
+            .map(|handle| handle.as_str())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(fragment_handles, spec_handles);
+        assert_eq!(fragment_handles, catalog_handles);
     }
 }

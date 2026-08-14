@@ -241,7 +241,7 @@ describe('findAutoConnectPinIndex via Rust-shaped editor projection', () => {
   });
 });
 
-describe('isPinCompatible reuses pinAcceptsType', () => {
+describe('isPinCompatible', () => {
   it('matches output -> input of the same structured type', () => {
     const out = pin({ id: 'o', nodeId: 'a', direction: 'output', dataType: SERIES_FLOAT64 });
     const inSeries = pin({ id: 'i', nodeId: 'b', direction: 'input', dataType: SERIES_FLOAT64 });

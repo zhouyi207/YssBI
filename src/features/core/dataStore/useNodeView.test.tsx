@@ -76,18 +76,6 @@ describe('useNodeView Call Function title projection', () => {
       .toBe('Calculate Sales');
   });
 
-  it('does not override a legacy display identity', () => {
-    useResourceStore.getState().setSnapshot({
-      resources: [buildGraphResourceMeta('function', functionPath, 'Target function')],
-    });
-    installCallProjection('Functions:Call Function', functionPath);
-
-    act(() => root.render(<NodeTitleProbe />));
-
-    expect(container.querySelector('[data-testid="node-title"]')?.textContent)
-      .toBe('Calculate Sales');
-  });
-
   it('keeps the projected call title when the resource store is empty', () => {
     installCallProjection('yssbi.project.function.call', 'functions/Missing.yssbi-function');
 

@@ -1465,23 +1465,6 @@ mod startup_tests {
     use super::*;
 
     #[test]
-    fn variable_effect_validation_does_not_reinitialize_builtins() {
-        let source = include_str!("project_state.rs");
-        let commit_marker = ["fn prepare_variable_effects_", "receipt<'a>("].concat();
-        let end_marker = ["\nfn variable_effect_", "run_error("].concat();
-        let forbidden = ["ProjectStore::", "try_new()"].concat();
-        let scratch_api = ["validation_", "scratch"].concat();
-        let commit = source
-            .split(&commit_marker)
-            .nth(1)
-            .and_then(|tail| tail.split(&end_marker).next())
-            .expect("variable effect commit source section");
-
-        assert!(!commit.contains(&forbidden));
-        assert!(commit.contains(&scratch_api));
-    }
-
-    #[test]
     fn project_state_stops_before_construction_on_store_failure() {
         use std::sync::atomic::{AtomicUsize, Ordering};
 

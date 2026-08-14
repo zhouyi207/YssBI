@@ -23,45 +23,38 @@ mod tests {
     use std::collections::BTreeSet;
 
     #[test]
-    fn kernel_fragment_covers_every_migrated_leaf_kernel() {
-        let expected = [
-            "yssbi.value.convert",
-            "yssbi.data_series.convert.string_to_categorical",
-            "yssbi.data_series.convert.string_to_float64",
-            "yssbi.data_series.convert.string_to_int64",
-            "yssbi.data_series.convert.int64_to_string",
-            "yssbi.data_series.convert.float64_to_string",
-            "yssbi.data_series.convert.int64_to_float64",
-            "yssbi.data_series.convert.float64_to_int64",
-            "yssbi.data_series.convert.int64_to_bool",
-            "yssbi.data_series.convert.float64_to_bool",
-            "yssbi.data_series.convert.categorical_to_string",
-            "yssbi.data_series.convert.int64_to_categorical",
-            "yssbi.data_series.convert.categorical_to_int64",
-            "yssbi.data_series.convert.float64_to_categorical",
-            "yssbi.data_series.convert.categorical_to_float64",
-            "yssbi.numeric.series.add",
-            "yssbi.numeric.series.subtract",
-            "yssbi.numeric.series.multiply",
-            "yssbi.numeric.series.divide",
-            "yssbi.numeric.ln",
-            "yssbi.numeric.log2",
-            "yssbi.numeric.log10",
-            "yssbi.numeric.exp",
-            "yssbi.numeric.sqrt",
-            "yssbi.numeric.square",
-            "yssbi.control.do",
-            "yssbi.control.sleep",
-            "yssbi.debug.print",
-        ]
-        .into_iter()
-        .collect::<BTreeSet<_>>();
+    fn kernel_fragment_matches_current_core_catalog_inventory() {
+        fn belongs_to_core_kernel_inventory(handle: &str) -> bool {
+            handle == "yssbi.value.convert"
+                || handle.starts_with("yssbi.data_series.convert.")
+                || handle.starts_with("yssbi.numeric.series.")
+                || matches!(
+                    handle,
+                    "yssbi.numeric.ln"
+                        | "yssbi.numeric.log2"
+                        | "yssbi.numeric.log10"
+                        | "yssbi.numeric.exp"
+                        | "yssbi.numeric.sqrt"
+                        | "yssbi.numeric.square"
+                        | "yssbi.control.do"
+                        | "yssbi.control.sleep"
+                        | "yssbi.debug.print"
+                )
+        }
+
+        let node_system = crate::node_system::catalog::build_builtin_node_system().unwrap();
+        let catalog_handles = node_system
+            .registry
+            .iter()
+            .map(|(id, _)| id.as_str())
+            .filter(|handle| belongs_to_core_kernel_inventory(handle))
+            .collect::<BTreeSet<_>>();
         let fragment = build_kernel_fragment();
-        let actual = fragment
+        let fragment_handles = fragment
             .handles()
             .map(|handle| handle.as_str())
             .collect::<BTreeSet<_>>();
 
-        assert_eq!(actual, expected);
+        assert_eq!(fragment_handles, catalog_handles);
     }
 }

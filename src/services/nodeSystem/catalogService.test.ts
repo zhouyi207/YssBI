@@ -160,10 +160,10 @@ describe('CatalogService', () => {
       .rejects.toThrow('Invalid localized node catalog response');
   });
 
-  it.each(['pinyin', 'searchText'])('rejects the singular legacy %s field', async (field) => {
+  it('rejects an unknown item field', async () => {
     const catalog = structuredClone(localizedCatalog) as Record<string, unknown>;
     const items = catalog.items as Record<string, unknown>[];
-    items[0][field] = 'legacy flattened search metadata';
+    items[0].unexpectedField = true;
     vi.mocked(invoke).mockResolvedValue(catalog);
 
     await expect(CatalogService.getLocalizedCatalog(

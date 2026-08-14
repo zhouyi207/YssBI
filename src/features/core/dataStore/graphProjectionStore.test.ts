@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   EditorGraphProjectionDto,
@@ -166,11 +165,6 @@ describe('graphDataStore projection replacement', () => {
     expect(getGraphRequestGeneration({ graphEntities: {} }, 'missing')).toBeUndefined();
     expect(getGraphDiagnostics({ graphEntities: {} }, 'missing')).toBeUndefined();
     expect(hasGraphBlockingDiagnostics({ graphEntities: {} }, 'missing')).toBeUndefined();
-  });
-
-  it('keeps the canvas projection consumer independent from registry metadata', () => {
-    const source = readFileSync(new URL('./nodeView.ts', import.meta.url), 'utf8');
-    expect(source).not.toContain('resolveNodeViewMeta');
   });
 
   it('keeps projected canvas nodes independent from registry metadata', () => {

@@ -7,22 +7,15 @@ import {
 } from './identity';
 
 describe('stable node identity', () => {
-  it('classifies stable IDs and rejects every legacy display identity', () => {
+  it('classifies stable IDs and rejects an unknown ID', () => {
     expect(isCallFunctionNodeType(BUILTIN_NODE_TYPE_IDS.callFunction)).toBe(true);
     expect(isVariableNodeType(BUILTIN_NODE_TYPE_IDS.getVariable)).toBe(true);
     expect(isVariableNodeType(BUILTIN_NODE_TYPE_IDS.setVariable)).toBe(true);
     expect(isDatabaseResourceNodeType(BUILTIN_NODE_TYPE_IDS.getDataframe)).toBe(true);
 
-    const legacyIdentities = [
-      'Functions:Call Function',
-      'Variables:Get Variable',
-      'Variables:Set Variable',
-      'Data:Get DataFrame',
-    ];
-    for (const identity of legacyIdentities) {
-      expect(isCallFunctionNodeType(identity)).toBe(false);
-      expect(isVariableNodeType(identity)).toBe(false);
-      expect(isDatabaseResourceNodeType(identity)).toBe(false);
-    }
+    const unknownId = 'unknown.node-type';
+    expect(isCallFunctionNodeType(unknownId)).toBe(false);
+    expect(isVariableNodeType(unknownId)).toBe(false);
+    expect(isDatabaseResourceNodeType(unknownId)).toBe(false);
   });
 });

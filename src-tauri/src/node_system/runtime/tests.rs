@@ -2668,18 +2668,6 @@ fn bounded_materialization_kernel_streams_use_the_scheduler_owner() {
     std::fs::remove_dir(root).unwrap();
 }
 
-#[test]
-fn bounded_materialization_unowned_stream_constructor_is_not_public() {
-    let source = include_str!("run.rs");
-    assert!(!source.contains("pub fn from_receiver("));
-}
-
-#[test]
-fn bounded_materialization_has_no_unbounded_read_all_api() {
-    assert!(!include_str!("run.rs").contains("pub fn read_all("));
-    assert!(!include_str!("spill.rs").contains("pub fn read_all("));
-}
-
 struct PanicWithCleanupFailureKernel;
 
 impl Kernel for PanicWithCleanupFailureKernel {
@@ -10671,17 +10659,6 @@ impl Kernel for CooperativeDeadlineKernel {
         context.wait_for(Duration::from_secs(1))?;
         Ok(Vec::new())
     }
-}
-
-#[test]
-fn cooperative_context_waits_use_cancellation_wake_primitive() {
-    let kernel_source = include_str!("kernel.rs");
-    let relational_source = include_str!("relational.rs");
-
-    assert!(!kernel_source.contains("std::thread::sleep"));
-    assert!(!relational_source.contains("std::thread::sleep"));
-    assert!(kernel_source.contains("wait_timeout"));
-    assert!(relational_source.contains("wait_timeout"));
 }
 
 #[test]

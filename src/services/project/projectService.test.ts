@@ -257,15 +257,6 @@ describe('ProjectService.getProjectIndex function editor projection parser', () 
     }
   });
 
-  it('rejects a legacy project index containing the removed application version key', async () => {
-    const index = projectIndex();
-    index[['app', 'Version'].join('')] = '9.8.7';
-    ipc.response = index;
-
-    await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(
-      'Invalid project index response',
-    );
-  });
 
   it('requires every exact project-index key to be an own property', async () => {
     const index = projectIndex();
@@ -327,17 +318,9 @@ describe('ProjectService.getProjectIndex function editor projection parser', () 
     );
   });
 
-  it('rejects a legacy function row containing only raw functionSignature', async () => {
+  it('requires functionEditorProjection on function rows', async () => {
     const index = projectIndex();
-    const row = functionRow(index);
-    delete row.functionEditorProjection;
-    Object.assign(row, {
-      functionRevision: 11,
-      functionSignature: {
-        parameters: [{ id: 'sales', name: 'Observed sales', type_name: 'DataSeries<Float64>' }],
-        return_type: 'Array<String>',
-      },
-    });
+    delete functionRow(index).functionEditorProjection;
     ipc.response = index;
 
     await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(

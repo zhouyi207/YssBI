@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
+import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
@@ -74,18 +75,31 @@ function installNode(canCopy: boolean | undefined, canDelete: boolean, managed =
 }
 
 describe('editor session node action contract', () => {
-  it('exposes only descriptor-backed creation and deletion actions', () => {
-    const createNode = vi.fn();
-    const deleteNode = vi.fn();
-    const deleteNodes = vi.fn();
+  it('creates nodes from the caller-provided descriptor without reconstruction', async () => {
+    const descriptor: NodeCreationDescriptor = {
+      kind: 'resourceBound',
+      nodeTypeId: 'function.call',
+      resourcePath: 'functions/Helper.yssbi-function',
+      resourceRevision: 3,
+      createArgs: { kind: 'function' },
+    };
+    const position = { x: 12, y: 24 };
+    const createNode = vi.fn(async (
+      receivedDescriptor: NodeCreationDescriptor,
+      receivedPosition: { x: number; y: number },
+    ) => {
+      expect(receivedDescriptor).toBe(descriptor);
+      expect(receivedPosition).toBe(position);
+      return true;
+    });
     const actions = pickEditorSessionNodeActions({
       createNode,
-      createNodes: vi.fn(),
-      deleteNode,
-      deleteNodes,
+      deleteNode: vi.fn(),
+      deleteNodes: vi.fn(),
     } as never);
 
-    expect(actions).toEqual({ createNode, deleteNode, deleteNodes });
+    await expect(actions.createNode(descriptor, position)).resolves.toBe(true);
+    expect(createNode).toHaveBeenCalledWith(descriptor, position);
   });
 });
 
@@ -212,18 +226,8 @@ describe('useEditorOperations projected deletion capabilities', () => {
     );
   });
 
-  it('copies stable projection identity without legacy params or display identity', async () => {
+  it('copies the canonical clipboard snapshot contract', async () => {
     installNode(true, true);
-    const storedNode = useGraphDataStore.getState().getGraphNode(graphPath, nodeId);
-    if (!storedNode) throw new Error('projected node was not installed');
-    Object.assign(storedNode, {
-      paramsKind: 'variable',
-      variableId: 'variable-id',
-      variableName: 'Display variable name',
-      variableType: 'Float64',
-      subGraphPath: 'functions/display-name',
-      dataframeId: 'database-id',
-    });
     await renderOperations();
 
     operations.copy();
@@ -232,7 +236,10 @@ describe('useEditorOperations projected deletion capabilities', () => {
       entries: [{
         nodeType: 'tests.projected-node',
         position: { x: 0, y: 0 },
-        pins: expect.any(Array),
+        pins: [
+          expect.objectContaining({ name: 'Output', direction: 'output' }),
+          expect.objectContaining({ name: 'Input', direction: 'input' }),
+        ],
       }],
       internalConnections: expect.any(Array),
     });

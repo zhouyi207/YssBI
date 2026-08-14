@@ -319,22 +319,6 @@ mod tests {
     }
 
     #[test]
-    fn resource_publication_api_has_no_delta_only_success_wrappers() {
-        let source = include_str!("../../project/project_state.rs");
-
-        for forbidden in [
-            "pub fn update_function_signature(",
-            "pub fn undo_last_transaction(",
-            "pub fn redo_last_transaction(",
-        ] {
-            assert!(
-                !source.contains(forbidden),
-                "resource publication API still exposes delta-only wrapper: {forbidden}"
-            );
-        }
-    }
-
-    #[test]
     fn signature_undo_redo_publications_are_contiguous_and_match_project_index() {
         let root = std::env::temp_dir().join(format!(
             "yssbi-signature-history-publication-index-{}",

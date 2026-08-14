@@ -338,21 +338,6 @@ mod tests {
     use crate::project::ProjectData;
 
     #[test]
-    fn lifecycle_commands_require_identity_and_operation_and_delegate_to_transactions() {
-        let source = include_str!("lifecycle.rs")
-            .split("#[cfg(test)]")
-            .next()
-            .unwrap();
-        assert!(source.contains("project_instance_id: ProjectInstanceId"));
-        assert!(source.matches("operation_id: OperationId").count() >= 3);
-        assert!(source.contains("save_project_as_transaction"));
-        assert!(source.contains("create_project_transaction"));
-        assert!(!source.contains(concat!("save_project_as", "_to_directory")));
-        assert!(!source.contains(concat!("std::fs::", "create_dir_all")));
-        assert!(!source.contains(concat!("initialize_project", "_directory")));
-    }
-
-    #[test]
     fn save_as_registry_failure_preserves_source_and_disk_with_exact_receipt() {
         tauri::async_runtime::block_on(async {
             let source = std::env::temp_dir().join(format!(

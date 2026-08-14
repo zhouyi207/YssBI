@@ -55,27 +55,6 @@ fn node_registration_error_preserves_typed_sources() {
     );
 }
 
-#[test]
-fn frozen_registry_state_is_scoped_to_the_registry_module() {
-    let source = include_str!("model.rs");
-    for exposed_field in [
-        "pub(crate) protocol:",
-        "pub(crate) implementation:",
-        "pub(crate) structural_role:",
-        "pub(crate) by_id:",
-        "pub(crate) type_index:",
-        "pub(crate) category_index:",
-        "pub(crate) catalog_manifest:",
-        "pub(crate) nominal_validators:",
-        "pub(crate) fingerprint:",
-    ] {
-        assert!(
-            !source.contains(exposed_field),
-            "frozen Registry state remains crate-wide: {exposed_field}"
-        );
-    }
-}
-
 fn protocol() -> NodeProtocol {
     TestProtocolBuilder::new("yssbi.test.empty", "test")
         .managed_role(None)

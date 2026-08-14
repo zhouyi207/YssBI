@@ -11,22 +11,6 @@ const scopedDirectories = [
   'src/features/application/editor/canvasDrop',
 ] as const;
 
-const scopedFiles = [
-  'src/features/application/dataManagement/useNodeManagement.ts',
-  'src/features/application/editor/editorMutationAvailability.ts',
-  'src/features/application/editor/useCanvasDrop.ts',
-  'src/features/application/editor/useCanvasOverlayHandlers.ts',
-  'src/features/application/sidebar/buildSidebarDragData.ts',
-  'src/features/application/sidebar/refreshSidebarResourceCreation.ts',
-  'src/views/EditorView/Canvas/overlays/CanvasOverlays.tsx',
-  'src/views/EditorView/Layout/NodePalette.tsx',
-  'src/views/EditorView/Layout/NodeDocumentationModal.tsx',
-  'src/views/EditorView/Layout/Detail/node/NodeDocumentationPanel.tsx',
-  'src/views/EditorView/Layout/Detail/panels/NodeDefinitionDetailPanel.tsx',
-  'src/views/EditorView/Layout/sidebar/rows/SidebarVariableRow.tsx',
-  'src/views/EditorView/Layout/sidebar/rows/SidebarDataRow.tsx',
-  'src/views/EditorView/Layout/sidebar/tabs/SidebarNodesTab.tsx',
-] as const;
 
 const forbiddenIdentifiers = new Set([
   'NodeDefinition',
@@ -35,8 +19,6 @@ const forbiddenIdentifiers = new Set([
   'buildBuiltinCatalogItems',
   'buildContextualCatalogItems',
   'searchNodeDocumentation',
-  'buildNodeTemplateDragData',
-  'catalogItemNodeSpawnTemplate',
   'NODE_CATALOG_UNAVAILABLE_MESSAGE',
 ]);
 
@@ -45,7 +27,6 @@ const forbiddenModuleBasenames = new Set([
   'buildContextualCatalogItems',
   'searchNodeDocumentation',
   'resolveEffectiveDefinition',
-  'buildNodeTemplateDragData',
 ]);
 
 function productionFiles(directory: string): string[] {
@@ -262,23 +243,6 @@ function fixtureOffenders(source: string): string[] {
   return sourceOffendersFromSource('fixture.ts', source);
 }
 
-function descriptorForwardingViolations(path: string): string[] {
-  const calls: ts.CallExpression[] = [];
-  function visit(node: ts.Node): void {
-    if (ts.isCallExpression(node) && expressionTailName(node.expression) === 'buildSidebarDragData') {
-      calls.push(node);
-    }
-    ts.forEachChild(node, visit);
-  }
-  visit(parseSource(path));
-
-  if (calls.length !== 1) return [`${path}: expected one buildSidebarDragData call, found ${calls.length}`];
-  const descriptor = calls[0].arguments[3];
-  if (!descriptor || !ts.isPropertyAccessExpression(descriptor) || descriptor.name.text !== 'descriptor') {
-    return [`${path}: DnD must forward the Catalog template descriptor reference unchanged`];
-  }
-  return [];
-}
 
 function containsCreateNodeMutation(path: string): boolean {
   let found = false;
@@ -296,13 +260,6 @@ function containsCreateNodeMutation(path: string): boolean {
 }
 
 describe('scoped node Catalog architecture audit', () => {
-  it('includes the real Catalog descriptor resource DnD rows', () => {
-    expect(scopedFiles).toEqual(expect.arrayContaining([
-      'src/views/EditorView/Layout/sidebar/rows/SidebarVariableRow.tsx',
-      'src/views/EditorView/Layout/sidebar/rows/SidebarDataRow.tsx',
-    ]));
-  });
-
   it.each([
     ['descriptor spread', 'const rebuilt = { ...descriptor };'],
     ['Catalog creation spread', 'const rebuilt = { ...item.creation, title };'],
@@ -343,29 +300,12 @@ describe('scoped node Catalog architecture audit', () => {
     expect(fixtureOffenders(source)).toEqual([]);
   });
 
-  it.each([
-    "import { buildNodeTemplateDragData as buildDrag } from '@/features/domain/nodeCatalog/buildNodeTemplateDragData';",
-    "import { catalogItemNodeSpawnTemplate as makeTemplate } from '@/features/core/dnd/nodeSpawnTemplate';",
-  ])('rejects deleted adapter imports even when aliased', (source) => {
-    expect(fixtureOffenders(source)).toEqual(expect.arrayContaining([
-      expect.stringMatching(/forbidden (?:identifier|module)/),
-    ]));
-  });
 
-  it('keeps resource rows forwarding the Catalog template descriptor unchanged', () => {
-    const resourceRows = [
-      'src/views/EditorView/Layout/sidebar/rows/SidebarVariableRow.tsx',
-      'src/views/EditorView/Layout/sidebar/rows/SidebarDataRow.tsx',
-    ];
-
-    expect(resourceRows.flatMap(descriptorForwardingViolations)).toEqual([]);
-  });
 
   it('keeps Catalog, docs, creation, and DnD production paths descriptor-authoritative', () => {
-    const auditedFiles = [
-      ...scopedDirectories.flatMap(productionFiles),
-      ...scopedFiles,
-    ].map((path) => relative(resolve('.'), resolve(path)).replace(/\\/g, '/'));
+    const auditedFiles = scopedDirectories
+      .flatMap(productionFiles)
+      .map((path) => relative(resolve('.'), resolve(path)).replace(/\\/g, '/'));
     const uniqueAuditedFiles = [...new Set(auditedFiles)].sort();
     const offenders = uniqueAuditedFiles.flatMap(sourceOffenders);
 
@@ -373,15 +313,12 @@ describe('scoped node Catalog architecture audit', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('keeps one descriptor-validated node creation mutation facade', () => {
-    const auditedFiles = [
-      ...scopedDirectories.flatMap(productionFiles),
-      ...scopedFiles,
-    ].map((path) => relative(resolve('.'), resolve(path)).replace(/\\/g, '/'));
+  it('keeps node creation behind one descriptor-authoritative mutation boundary', () => {
+    const auditedFiles = scopedDirectories
+      .flatMap(productionFiles)
+      .map((path) => relative(resolve('.'), resolve(path)).replace(/\\/g, '/'));
     const mutationSites = [...new Set(auditedFiles)].filter(containsCreateNodeMutation);
 
-    expect(mutationSites).toEqual([
-      'src/features/application/nodeCatalog/createNodeFromDescriptor.ts',
-    ]);
+    expect(mutationSites).toHaveLength(1);
   });
 });

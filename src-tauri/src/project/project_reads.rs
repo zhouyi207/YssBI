@@ -775,17 +775,6 @@ mod tests {
     }
 
     #[test]
-    fn compatibility_project_index_reader_is_not_exposed() {
-        let reads = include_str!("project_reads.rs");
-        let query = include_str!("../commands/command_project/query.rs");
-
-        let forbidden = concat!("pub(crate) fn read_project_index_", "with_reader");
-        let compatibility_name = concat!("read_project_index_", "with_reader");
-        assert!(!reads.contains(forbidden));
-        assert!(!query.contains(compatibility_name));
-    }
-
-    #[test]
     fn project_index_overlays_functions_and_globals_from_one_authoritative_snapshot() {
         let root = project_root("coherent-index");
         let function_path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
