@@ -133,6 +133,8 @@ const activeProjectCommandIdentityFields = {
   get_project_databases_variables: 'projectInstanceId',
   get_project_path: 'projectInstanceId',
   get_project_index: 'projectInstanceId',
+  get_project_computation_settings: 'projectInstanceId',
+  update_project_computation_settings: 'request',
   get_project_resource_path: 'projectInstanceId',
   load_project_graph: 'projectInstanceId',
   unload_project_graph: 'projectInstanceId',
@@ -817,6 +819,15 @@ describe('projectFilesystemContract', () => {
     expect(activeProjectInvokeIdentityViolations(invokes, {
       get_database_rows: 'projectInstanceId',
     })).toEqual([]);
+  });
+
+  it('classifies project computation settings commands as active-project identity-required', () => {
+    expect(activeProjectCommandIdentityFields).toMatchObject({
+      get_project_computation_settings: 'projectInstanceId',
+      update_project_computation_settings: 'request',
+    });
+    expect(identityExemptCommands).not.toContain('get_project_computation_settings');
+    expect(identityExemptCommands).not.toContain('update_project_computation_settings');
   });
 
   it('classifies localized catalog reads as active-project identity-required', () => {

@@ -107,14 +107,26 @@ export type DynamicMemberLocatorDto =
       field: string;
     };
 
+export type TypeExprDto =
+  | { Concrete: string }
+  | { Generic: string }
+  | { Applied: { constructor: string; arguments: TypeExprDto[] } }
+  | { Union: TypeExprDto[] }
+  | 'Unknown';
+
 export type DynamicPortBindingDto =
   | { kind: 'user_created'; order: string }
-  | { kind: 'resolved'; origin: DynamicMemberLocatorDto; order: string }
+  | {
+      kind: 'resolved';
+      origin: DynamicMemberLocatorDto;
+      order: string;
+      last_known?: { label: string; value_type?: TypeExprDto };
+    }
   | {
       kind: 'orphan';
       origin: DynamicMemberLocatorDto;
       order: string;
-      last_known: { label: string };
+      last_known: { label: string; value_type?: TypeExprDto };
     };
 
 export interface InputStateDto {

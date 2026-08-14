@@ -58,6 +58,7 @@ export function installCoreApplicationTestPorts(
       functionUpdated: () => undefined,
       variablesChanged: () => undefined,
       graphDelta: () => undefined,
+      computationSettingsChanged: () => undefined,
       resourceMutationCommitted: async () => undefined,
       applyProjectLifecycleReceipt: async () => undefined,
       clearProject: () => undefined,

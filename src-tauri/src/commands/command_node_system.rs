@@ -548,7 +548,7 @@ fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
     })
 }
 
-pub(super) fn mutate_graph_document_with_emitter(
+pub(crate) fn mutate_graph_document_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
@@ -834,8 +834,60 @@ pub fn get_result_source_descriptor(
 #[derive(Debug, Serialize)]
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum ResultSourceValueDto {
-    Value(crate::node_system::protocol::Value),
-    Sequence(Box<[crate::node_system::protocol::Value]>),
+    Value(serde_json::Value),
+    Sequence(Box<[serde_json::Value]>),
+}
+
+pub(crate) fn result_source_value_to_json(
+    value: &crate::node_system::protocol::Value,
+) -> Result<serde_json::Value, AppError> {
+    use crate::node_system::protocol::Value;
+
+    Ok(match value {
+        Value::Null => serde_json::Value::Null,
+        Value::Bool(value) => (*value).into(),
+        Value::Integer(value) => (*value).into(),
+        Value::Unsigned(value) => (*value).into(),
+        Value::Decimal(value) => value
+            .as_str()
+            .parse::<f64>()
+            .ok()
+            .and_then(serde_json::Number::from_f64)
+            .map(serde_json::Value::Number)
+            .ok_or_else(|| {
+                AppError::new(
+                    "result_source_value_not_json",
+                    format!(
+                        "Result decimal '{}' is not a finite JSON number",
+                        value.as_str()
+                    ),
+                )
+            })?,
+        Value::String(value) => value.as_ref().into(),
+        Value::Bytes(values) => values
+            .iter()
+            .copied()
+            .map(serde_json::Value::from)
+            .collect(),
+        Value::List(values) => values
+            .iter()
+            .map(result_source_value_to_json)
+            .collect::<Result<_, _>>()?,
+        Value::Object(values) => values
+            .iter()
+            .map(|(key, value)| Ok((key.to_string(), result_source_value_to_json(value)?)))
+            .collect::<Result<_, AppError>>()?,
+    })
+}
+
+fn result_source_values_to_json(
+    values: &[crate::node_system::protocol::Value],
+) -> Result<Box<[serde_json::Value]>, AppError> {
+    values
+        .iter()
+        .map(result_source_value_to_json)
+        .collect::<Result<Vec<_>, _>>()
+        .map(Vec::into_boxed_slice)
 }
 
 fn get_result_source_value_from_state(
@@ -848,17 +900,21 @@ fn get_result_source_value_from_state(
         .map_err(AppError::from)?;
     snapshot
         .map(|snapshot| match snapshot.as_ref() {
-            ArtifactSnapshot::Value(value) => Ok(ResultSourceValueDto::Value(value.clone())),
-            ArtifactSnapshot::Sequence(values) => {
-                Ok(ResultSourceValueDto::Sequence(values.clone()))
-            }
+            ArtifactSnapshot::Value(value) => Ok(ResultSourceValueDto::Value(
+                result_source_value_to_json(value)?,
+            )),
+            ArtifactSnapshot::Sequence(values) => Ok(ResultSourceValueDto::Sequence(
+                result_source_values_to_json(values)?,
+            )),
             ArtifactSnapshot::Spilled(_) => Err(AppError::new(
                 "result_source_requires_paging",
                 "Disk-backed result sources must be read through the paged API",
             )),
             ArtifactSnapshot::RuntimeArtifact(artifact) => artifact
                 .in_memory_values()
-                .map(|values| ResultSourceValueDto::Sequence(values.to_vec().into_boxed_slice()))
+                .map(result_source_values_to_json)
+                .transpose()?
+                .map(ResultSourceValueDto::Sequence)
                 .ok_or_else(|| {
                     AppError::new(
                         "result_source_requires_paging",
@@ -1134,6 +1190,40 @@ mod tests {
         fn record(&self, event: crate::node_system::runtime::RunEvent) {
             self.0.lock().unwrap().push(event);
         }
+    }
+
+    #[test]
+    fn result_source_value_dto_serializes_protocol_values_as_plain_json() {
+        use crate::node_system::protocol::{CanonicalDecimal, Value};
+        use std::collections::BTreeMap;
+
+        let report = Value::Object(BTreeMap::from([
+            ("title".into(), Value::String("OLS Summary".into())),
+            (
+                "model_basic_info".into(),
+                Value::Object(BTreeMap::from([(
+                    "r_squared".into(),
+                    Value::Decimal(CanonicalDecimal::new("0.875").unwrap()),
+                )])),
+            ),
+            ("coefficients".into(), Value::List(vec![Value::Integer(1)])),
+        ]));
+
+        let dto = ResultSourceValueDto::Sequence(Box::new([
+            result_source_value_to_json(&report).unwrap()
+        ]));
+
+        assert_eq!(
+            serde_json::to_value(dto).unwrap(),
+            serde_json::json!({
+                "kind": "sequence",
+                "value": [{
+                    "title": "OLS Summary",
+                    "model_basic_info": { "r_squared": 0.875 },
+                    "coefficients": [1],
+                }],
+            }),
+        );
     }
 
     #[test]
@@ -1684,10 +1774,19 @@ mod tests {
                 artifact_id: crate::node_system::runtime::ArtifactId::new(unsafe_id),
                 name: "result".into(),
                 kind: crate::node_system::runtime::ArtifactSnapshotKind::Value,
+                data_series_metadata: None,
                 total_count: 1,
+                presentation: crate::node_system::runtime::ResultSourcePresentation::Report {
+                    report: crate::node_system::runtime::ResultReportKind::OlsSummary,
+                },
                 correlation: correlation.clone(),
                 basis: basis.clone(),
             });
+        let source = serde_json::to_value(source).unwrap();
+        assert_eq!(source["title"], "Results");
+        assert_eq!(source["presentation"]["kind"], "report");
+        assert_eq!(source["presentation"]["report"], "olsSummary");
+
         let result = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
             correlation,
             basis,
@@ -1725,7 +1824,6 @@ mod tests {
             operation["correlation"]["selectionDigest"],
             preview["correlation"]["selectionDigest"]
         );
-        let source = serde_json::to_value(source).unwrap();
         assert_eq!(
             source["correlation"]["selectionDigest"],
             "demand-selection-a"

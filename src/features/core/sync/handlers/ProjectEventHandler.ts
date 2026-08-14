@@ -1,11 +1,12 @@
 // src/features/core/sync/handlers/ProjectEventHandler.ts
 
 import { BaseEventHandler } from './BaseEventHandler';
-import { ProjectLifecycleCommittedPayload, ProjectLoadedPayload, ProjectSavedPayload, EventCallbacks } from '../types';
+import { ComputationSettingsChangedPayload, ProjectLifecycleCommittedPayload, ProjectLoadedPayload, ProjectSavedPayload, EventCallbacks } from '../types';
 import { loadActivatedProject } from '@/features/core/dataStore';
 import { syncApplicationEventPort } from '../applicationEventPort';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
+import { parseComputationSettingsMutationReceipt } from '@/shared/types/dto/projectComputationSettings';
 
 export class ProjectLoadedHandler extends BaseEventHandler<ProjectLoadedPayload> {
     eventType = 'ProjectLoaded';
@@ -53,6 +54,16 @@ export class ProjectLifecycleCommittedHandler extends BaseEventHandler<ProjectLi
                 'ProjectLifecycleCommittedHandler',
             );
         });
+    }
+}
+
+export class ComputationSettingsChangedHandler extends BaseEventHandler<ComputationSettingsChangedPayload> {
+    eventType = 'ComputationSettingsChanged';
+
+    handle(payload: ComputationSettingsChangedPayload): void {
+        syncApplicationEventPort().computationSettingsChanged(
+            parseComputationSettingsMutationReceipt(payload.result),
+        );
     }
 }
 

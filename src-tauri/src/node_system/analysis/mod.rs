@@ -14,9 +14,9 @@ mod trace_store;
 pub use crate::node_system::document::PortAddressDto;
 pub use basis::{
     AnalysisResourceReads, AnalysisResourceResolver, CompilationBasis, CompileId,
-    CompileProjection, ResolvedDatabase, ResolvedFunction, ResolvedFunctionValue, ResolvedResource,
-    ResolvedVariable, ResourceKey, ResourceObservationSet, ResourceObservedState,
-    ResourceResolutionError, ResourceVersion, ResourceVersionSet,
+    CompileProjection, ResolvedDatabase, ResolvedDatabaseValue, ResolvedFunction,
+    ResolvedFunctionValue, ResolvedResource, ResolvedVariable, ResourceKey, ResourceObservationSet,
+    ResourceObservedState, ResourceResolutionError, ResourceVersion, ResourceVersionSet,
 };
 pub use diagnostic::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, Location,

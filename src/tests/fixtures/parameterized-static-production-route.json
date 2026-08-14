@@ -3,6 +3,8 @@
     "categories": [
       {
         "categoryId": "dataframe",
+        "order": 60,
+        "parentCategoryId": null,
         "searchText": "dataframe",
         "title": "DataFrame"
       }
@@ -65,7 +67,7 @@
     ],
     "locale": "en-US",
     "projectInstanceId": "fixture-project",
-    "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+    "registryFingerprint": "5204f97e4ef0727ba5aa2e6aaeee9ffb462e4d2d2d3ec5db29ef0c1dc87db0d3",
     "resourcePublicationRevision": 0
   },
   "connect": {
@@ -130,7 +132,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 3,
-            "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+            "registryFingerprint": "5204f97e4ef0727ba5aa2e6aaeee9ffb462e4d2d2d3ec5db29ef0c1dc87db0d3",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -195,7 +197,7 @@
           ],
           "diagnostics": [
             {
-              "blocking": true,
+              "blocking": false,
               "code": "compiler.input.unbound",
               "location": {
                 "address": {
@@ -207,7 +209,7 @@
               },
               "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
               "related": [],
-              "severity": "error"
+              "severity": "warning"
             },
             {
               "blocking": true,
@@ -240,7 +242,7 @@
                 "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
-                "title": "Get DataFrame",
+                "title": "Main",
                 "userLabel": null
               },
               "graphPath": "events/ProductionChain.yssbi-event",
@@ -254,9 +256,16 @@
                     "title": "dataframe"
                   },
                   "editor": "resource",
+                  "inheritedValue": null,
                   "key": "dataframe",
                   "multiline": false,
-                  "value": "databases/main"
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": "databases/main",
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
@@ -302,8 +311,10 @@
                     "kind": "input"
                   },
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -328,7 +339,7 @@
               },
               "diagnostics": [
                 {
-                  "blocking": true,
+                  "blocking": false,
                   "code": "compiler.input.unbound",
                   "location": {
                     "address": {
@@ -340,7 +351,7 @@
                   },
                   "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
                   "related": [],
-                  "severity": "error"
+                  "severity": "warning"
                 }
               ],
               "display": {
@@ -374,8 +385,11 @@
                     "title": "Predicate"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "predicate",
                   "multiline": false,
+                  "options": null,
+                  "presentation": "detailPanel",
                   "value": {
                     "column": "amount",
                     "operator": "greaterThan",
@@ -383,6 +397,11 @@
                       "type": "integer",
                       "value": "10"
                     }
+                  },
+                  "valueSource": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.filter_predicate",
+                    "kind": "Struct"
                   }
                 }
               ],
@@ -450,8 +469,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -502,12 +523,20 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
+                  "options": null,
+                  "presentation": "detailPanel",
                   "value": [
                     "amount",
                     "region"
-                  ]
+                  ],
+                  "valueSource": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
@@ -574,8 +603,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -617,9 +648,16 @@
                     "title": "Source column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "from",
                   "multiline": false,
-                  "value": "amount"
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": "amount",
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "String"
+                  }
                 },
                 {
                   "configuration": null,
@@ -628,9 +666,16 @@
                     "title": "Destination column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "to",
                   "multiline": false,
-                  "value": "selected_amount"
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": "selected_amount",
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
@@ -697,8 +742,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -740,9 +787,16 @@
                     "title": "rows"
                   },
                   "editor": "number",
+                  "inheritedValue": null,
                   "key": "rows",
                   "multiline": false,
-                  "value": 2
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": 2,
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "Int64"
+                  }
                 }
               ],
               "ports": [
@@ -809,8 +863,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -884,9 +940,17 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
-                  "value": null
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": null,
+                  "valueSource": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
@@ -969,8 +1033,10 @@
                     "kind": "input"
                   },
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -996,6 +1062,7 @@
     "locale": "en-US",
     "mutation": {
       "payload": {
+        "connectFrom": null,
         "descriptor": {
           "kind": "parameterizedStatic",
           "nodeTypeId": "yssbi.dataframe.project",
@@ -1007,8 +1074,7 @@
           "x": 320.0,
           "y": 180.0
         },
-        "userLabel": null,
-        "connectFrom": null
+        "userLabel": null
       },
       "type": "createNode"
     },
@@ -1052,7 +1118,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 2,
-            "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+            "registryFingerprint": "5204f97e4ef0727ba5aa2e6aaeee9ffb462e4d2d2d3ec5db29ef0c1dc87db0d3",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -1103,7 +1169,7 @@
           ],
           "diagnostics": [
             {
-              "blocking": true,
+              "blocking": false,
               "code": "compiler.input.unbound",
               "location": {
                 "address": {
@@ -1115,10 +1181,10 @@
               },
               "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
               "related": [],
-              "severity": "error"
+              "severity": "warning"
             },
             {
-              "blocking": true,
+              "blocking": false,
               "code": "compiler.input.unbound",
               "location": {
                 "address": {
@@ -1130,7 +1196,7 @@
               },
               "message": "Required input 00000000-0000-0000-0000-000000000009:source is unbound.",
               "related": [],
-              "severity": "error"
+              "severity": "warning"
             },
             {
               "blocking": true,
@@ -1163,7 +1229,7 @@
                 "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
-                "title": "Get DataFrame",
+                "title": "Main",
                 "userLabel": null
               },
               "graphPath": "events/ProductionChain.yssbi-event",
@@ -1177,9 +1243,16 @@
                     "title": "dataframe"
                   },
                   "editor": "resource",
+                  "inheritedValue": null,
                   "key": "dataframe",
                   "multiline": false,
-                  "value": "databases/main"
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": "databases/main",
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
@@ -1225,8 +1298,10 @@
                     "kind": "input"
                   },
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1251,7 +1326,7 @@
               },
               "diagnostics": [
                 {
-                  "blocking": true,
+                  "blocking": false,
                   "code": "compiler.input.unbound",
                   "location": {
                     "address": {
@@ -1263,7 +1338,7 @@
                   },
                   "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
                   "related": [],
-                  "severity": "error"
+                  "severity": "warning"
                 }
               ],
               "display": {
@@ -1297,8 +1372,11 @@
                     "title": "Predicate"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "predicate",
                   "multiline": false,
+                  "options": null,
+                  "presentation": "detailPanel",
                   "value": {
                     "column": "amount",
                     "operator": "greaterThan",
@@ -1306,6 +1384,11 @@
                       "type": "integer",
                       "value": "10"
                     }
+                  },
+                  "valueSource": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.filter_predicate",
+                    "kind": "Struct"
                   }
                 }
               ],
@@ -1373,8 +1456,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1425,12 +1510,20 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
+                  "options": null,
+                  "presentation": "detailPanel",
                   "value": [
                     "amount",
                     "region"
-                  ]
+                  ],
+                  "valueSource": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
@@ -1497,8 +1590,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1540,9 +1635,16 @@
                     "title": "Source column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "from",
                   "multiline": false,
-                  "value": "amount"
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": "amount",
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "String"
+                  }
                 },
                 {
                   "configuration": null,
@@ -1551,9 +1653,16 @@
                     "title": "Destination column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "to",
                   "multiline": false,
-                  "value": "selected_amount"
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": "selected_amount",
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
@@ -1620,8 +1729,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1663,9 +1774,16 @@
                     "title": "rows"
                   },
                   "editor": "number",
+                  "inheritedValue": null,
                   "key": "rows",
                   "multiline": false,
-                  "value": 2
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": 2,
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "Int64"
+                  }
                 }
               ],
               "ports": [
@@ -1732,8 +1850,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1758,7 +1878,7 @@
               },
               "diagnostics": [
                 {
-                  "blocking": true,
+                  "blocking": false,
                   "code": "compiler.input.unbound",
                   "location": {
                     "address": {
@@ -1770,7 +1890,7 @@
                   },
                   "message": "Required input 00000000-0000-0000-0000-000000000009:source is unbound.",
                   "related": [],
-                  "severity": "error"
+                  "severity": "warning"
                 },
                 {
                   "blocking": true,
@@ -1809,9 +1929,17 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
-                  "value": null
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": null,
+                  "valueSource": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
@@ -1878,8 +2006,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -1906,7 +2036,7 @@
     "basis": {
       "graphPath": "events/ProductionChain.yssbi-event",
       "graphRevision": 1,
-      "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+      "registryFingerprint": "5204f97e4ef0727ba5aa2e6aaeee9ffb462e4d2d2d3ec5db29ef0c1dc87db0d3",
       "resourceVersions": {
         "databases/main": "revision:0"
       }
@@ -1957,7 +2087,7 @@
     ],
     "diagnostics": [
       {
-        "blocking": true,
+        "blocking": false,
         "code": "compiler.input.unbound",
         "location": {
           "address": {
@@ -1969,11 +2099,11 @@
         },
         "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
         "related": [],
-        "severity": "error"
+        "severity": "warning"
       }
     ],
     "graphPath": "events/ProductionChain.yssbi-event",
-    "hasBlockingDiagnostics": true,
+    "hasBlockingDiagnostics": false,
     "nodes": [
       {
         "capabilities": {
@@ -1990,7 +2120,7 @@
           "description": "Performs a typed tabular operation.",
           "iconId": "builtin.dataframe",
           "styleId": "builtin.dataframe",
-          "title": "Get DataFrame",
+          "title": "Main",
           "userLabel": null
         },
         "graphPath": "events/ProductionChain.yssbi-event",
@@ -2004,9 +2134,16 @@
               "title": "dataframe"
             },
             "editor": "resource",
+            "inheritedValue": null,
             "key": "dataframe",
             "multiline": false,
-            "value": "databases/main"
+            "options": null,
+            "presentation": "detailPanel",
+            "value": "databases/main",
+            "valueSource": null,
+            "valueType": {
+              "kind": "String"
+            }
           }
         ],
         "ports": [
@@ -2052,8 +2189,10 @@
               "kind": "input"
             },
             "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
               "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2078,7 +2217,7 @@
         },
         "diagnostics": [
           {
-            "blocking": true,
+            "blocking": false,
             "code": "compiler.input.unbound",
             "location": {
               "address": {
@@ -2090,7 +2229,7 @@
             },
             "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
             "related": [],
-            "severity": "error"
+            "severity": "warning"
           }
         ],
         "display": {
@@ -2124,8 +2263,11 @@
               "title": "Predicate"
             },
             "editor": "auto",
+            "inheritedValue": null,
             "key": "predicate",
             "multiline": false,
+            "options": null,
+            "presentation": "detailPanel",
             "value": {
               "column": "amount",
               "operator": "greaterThan",
@@ -2133,6 +2275,11 @@
                 "type": "integer",
                 "value": "10"
               }
+            },
+            "valueSource": null,
+            "valueType": {
+              "inner": "yssbi.dataframe.filter_predicate",
+              "kind": "Struct"
             }
           }
         ],
@@ -2200,8 +2347,10 @@
             "orphan": false,
             "resolvedSchema": null,
             "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
               "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2252,12 +2401,20 @@
               "title": "Columns"
             },
             "editor": "auto",
+            "inheritedValue": null,
             "key": "columns",
             "multiline": false,
+            "options": null,
+            "presentation": "detailPanel",
             "value": [
               "amount",
               "region"
-            ]
+            ],
+            "valueSource": null,
+            "valueType": {
+              "inner": "yssbi.dataframe.project_columns",
+              "kind": "Struct"
+            }
           }
         ],
         "ports": [
@@ -2324,8 +2481,10 @@
             "orphan": false,
             "resolvedSchema": null,
             "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
               "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2367,9 +2526,16 @@
               "title": "Source column"
             },
             "editor": "text",
+            "inheritedValue": null,
             "key": "from",
             "multiline": false,
-            "value": "amount"
+            "options": null,
+            "presentation": "detailPanel",
+            "value": "amount",
+            "valueSource": null,
+            "valueType": {
+              "kind": "String"
+            }
           },
           {
             "configuration": null,
@@ -2378,9 +2544,16 @@
               "title": "Destination column"
             },
             "editor": "text",
+            "inheritedValue": null,
             "key": "to",
             "multiline": false,
-            "value": "selected_amount"
+            "options": null,
+            "presentation": "detailPanel",
+            "value": "selected_amount",
+            "valueSource": null,
+            "valueType": {
+              "kind": "String"
+            }
           }
         ],
         "ports": [
@@ -2447,8 +2620,10 @@
             "orphan": false,
             "resolvedSchema": null,
             "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
               "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2490,9 +2665,16 @@
               "title": "rows"
             },
             "editor": "number",
+            "inheritedValue": null,
             "key": "rows",
             "multiline": false,
-            "value": 2
+            "options": null,
+            "presentation": "detailPanel",
+            "value": 2,
+            "valueSource": null,
+            "valueType": {
+              "kind": "Int64"
+            }
           }
         ],
         "ports": [
@@ -2559,8 +2741,10 @@
             "orphan": false,
             "resolvedSchema": null,
             "resolvedType": {
+              "dataType": {
+                "kind": "DataFrame"
+              },
               "display": "tabular.dataframe",
-              "dataType": { "kind": "DataFrame" },
               "resolved": true
             },
             "status": "resolved",
@@ -2575,7 +2759,7 @@
       }
     ],
     "outcome": {
-      "type": "analysisBlocked"
+      "type": "success"
     },
     "sourceRevision": 1
   },
@@ -2659,7 +2843,7 @@
           "basis": {
             "graphPath": "events/ProductionChain.yssbi-event",
             "graphRevision": 4,
-            "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+            "registryFingerprint": "5204f97e4ef0727ba5aa2e6aaeee9ffb462e4d2d2d3ec5db29ef0c1dc87db0d3",
             "resourceVersions": {
               "databases/main": "revision:0"
             }
@@ -2724,7 +2908,7 @@
           ],
           "diagnostics": [
             {
-              "blocking": true,
+              "blocking": false,
               "code": "compiler.input.unbound",
               "location": {
                 "address": {
@@ -2736,11 +2920,11 @@
               },
               "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
               "related": [],
-              "severity": "error"
+              "severity": "warning"
             }
           ],
           "graphPath": "events/ProductionChain.yssbi-event",
-          "hasBlockingDiagnostics": true,
+          "hasBlockingDiagnostics": false,
           "nodes": [
             {
               "capabilities": {
@@ -2757,7 +2941,7 @@
                 "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
-                "title": "Get DataFrame",
+                "title": "Main",
                 "userLabel": null
               },
               "graphPath": "events/ProductionChain.yssbi-event",
@@ -2771,9 +2955,16 @@
                     "title": "dataframe"
                   },
                   "editor": "resource",
+                  "inheritedValue": null,
                   "key": "dataframe",
                   "multiline": false,
-                  "value": "databases/main"
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": "databases/main",
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
@@ -2819,8 +3010,10 @@
                     "kind": "input"
                   },
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -2845,7 +3038,7 @@
               },
               "diagnostics": [
                 {
-                  "blocking": true,
+                  "blocking": false,
                   "code": "compiler.input.unbound",
                   "location": {
                     "address": {
@@ -2857,7 +3050,7 @@
                   },
                   "message": "Required input 00000000-0000-0000-0000-000000000002:source is unbound.",
                   "related": [],
-                  "severity": "error"
+                  "severity": "warning"
                 }
               ],
               "display": {
@@ -2891,8 +3084,11 @@
                     "title": "Predicate"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "predicate",
                   "multiline": false,
+                  "options": null,
+                  "presentation": "detailPanel",
                   "value": {
                     "column": "amount",
                     "operator": "greaterThan",
@@ -2900,6 +3096,11 @@
                       "type": "integer",
                       "value": "10"
                     }
+                  },
+                  "valueSource": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.filter_predicate",
+                    "kind": "Struct"
                   }
                 }
               ],
@@ -2967,8 +3168,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3019,12 +3222,20 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
+                  "options": null,
+                  "presentation": "detailPanel",
                   "value": [
                     "amount",
                     "region"
-                  ]
+                  ],
+                  "valueSource": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
@@ -3091,8 +3302,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3134,9 +3347,16 @@
                     "title": "Source column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "from",
                   "multiline": false,
-                  "value": "amount"
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": "amount",
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "String"
+                  }
                 },
                 {
                   "configuration": null,
@@ -3145,9 +3365,16 @@
                     "title": "Destination column"
                   },
                   "editor": "text",
+                  "inheritedValue": null,
                   "key": "to",
                   "multiline": false,
-                  "value": "selected_amount"
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": "selected_amount",
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "String"
+                  }
                 }
               ],
               "ports": [
@@ -3214,8 +3441,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3257,9 +3486,16 @@
                     "title": "rows"
                   },
                   "editor": "number",
+                  "inheritedValue": null,
                   "key": "rows",
                   "multiline": false,
-                  "value": 2
+                  "options": null,
+                  "presentation": "detailPanel",
+                  "value": 2,
+                  "valueSource": null,
+                  "valueType": {
+                    "kind": "Int64"
+                  }
                 }
               ],
               "ports": [
@@ -3326,8 +3562,10 @@
                   "orphan": false,
                   "resolvedSchema": null,
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3391,12 +3629,20 @@
                     "title": "Columns"
                   },
                   "editor": "auto",
+                  "inheritedValue": null,
                   "key": "columns",
                   "multiline": false,
+                  "options": null,
+                  "presentation": "detailPanel",
                   "value": [
                     "region",
                     "amount"
-                  ]
+                  ],
+                  "valueSource": null,
+                  "valueType": {
+                    "inner": "yssbi.dataframe.project_columns",
+                    "kind": "Struct"
+                  }
                 }
               ],
               "ports": [
@@ -3491,8 +3737,10 @@
                     "kind": "input"
                   },
                   "resolvedType": {
+                    "dataType": {
+                      "kind": "DataFrame"
+                    },
                     "display": "tabular.dataframe",
-                    "dataType": { "kind": "DataFrame" },
                     "resolved": true
                   },
                   "status": "resolved",
@@ -3507,7 +3755,7 @@
             }
           ],
           "outcome": {
-            "type": "analysisBlocked"
+            "type": "success"
           },
           "sourceRevision": 4
         }

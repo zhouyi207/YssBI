@@ -226,11 +226,29 @@ const catalog: LocalizedCatalogResponse = {
   resourcePublicationRevision: 7,
   locale: 'zh-CN',
   categories: [
-    { categoryId: 'math', title: '数学', searchText: '数学 math' },
-    { categoryId: 'output', title: '输出', searchText: '输出 output' },
-    { categoryId: 'functions', title: '函数', searchText: '函数 functions' },
+    { categoryId: 'statistics.regression', parentCategoryId: 'statistics', order: 11, title: '回归', searchText: '回归 regression' },
+    { categoryId: 'math', parentCategoryId: null, order: 20, title: '数学', searchText: '数学 math' },
+    { categoryId: 'output', parentCategoryId: null, order: 30, title: '输出', searchText: '输出 output' },
+    { categoryId: 'functions', parentCategoryId: null, order: 40, title: '函数', searchText: '函数 functions' },
+    { categoryId: 'statistics', parentCategoryId: null, order: 10, title: '统计', searchText: '统计 statistics' },
   ],
   items: [
+    {
+      nodeTypeId: 'statistics.logit.fit',
+      title: '逻辑回归',
+      description: '拟合二元响应模型',
+      documentation: null,
+      categoryId: 'statistics.regression',
+      iconId: 'statistics',
+      styleId: 'default',
+      aliases: ['logit'],
+      technicalTerms: ['logistic regression'],
+      backendSearchText: [],
+      resourceNames: [],
+      ports: [],
+      parameters: [],
+      creation: { kind: 'static', nodeTypeId: 'statistics.logit.fit' },
+    },
     {
       nodeTypeId: 'math.add',
       title: '加法',
@@ -403,8 +421,8 @@ describe('NodePalette', () => {
   it('uses only the backend-compatible catalog for an edge-drop palette', () => {
     const compatibleCatalog = {
       ...catalog,
-      items: [catalog.items[1]],
-      categories: [catalog.categories[1]],
+      items: [catalog.items.find((item) => item.nodeTypeId === 'output.print')!],
+      categories: [catalog.categories.find((category) => category.categoryId === 'output')!],
     };
     compatibleCatalogState.current = {
       status: 'ready',
@@ -482,6 +500,22 @@ describe('NodePalette', () => {
     expect(host.textContent).toContain('打印');
   });
 
+  it('renders child categories beneath their parent in declared order', () => {
+    renderPalette();
+
+    const categories = Array.from(host.querySelectorAll('[data-catalog-category-id]'));
+    expect(categories.map((element) => element.getAttribute('data-catalog-category-id'))).toEqual([
+      'statistics',
+      'statistics.regression',
+      'math',
+      'output',
+      'functions',
+    ]);
+    const regression = host.querySelector('[data-catalog-category-id="statistics.regression"]');
+    expect(regression?.getAttribute('data-catalog-depth')).toBe('1');
+    expect(regression?.textContent).toContain('逻辑回归');
+  });
+
   it.each([
     ['localized title', '加法'],
     ['alias', 'sum'],
@@ -536,7 +570,7 @@ describe('NodePalette', () => {
   });
 
   it('keeps same-type resources distinct across search, refresh, and locale changes', () => {
-    const first = catalog.items[2];
+    const first = catalog.items.find((item) => item.nodeTypeId === 'function.call')!;
     const second = {
       ...first,
       title: '调用 Other',

@@ -100,7 +100,7 @@ export function ScalarSourceView({ payload }: { payload: SourceDescriptor }) {
       ) : (
         <div className="flex min-h-0 flex-1 flex-col rounded-lg border border-border bg-card p-4 font-mono text-sm">
           <div className="mb-1 shrink-0 text-xs text-muted-foreground">
-            {value?.valueType ?? payload.valueType ?? 'Value'}
+            {payload.valueType ?? 'Value'}
           </div>
           <OverlayScrollbar className="min-h-0 flex-1">
             <pre className="break-all text-[var(--accent-color)]">
@@ -127,9 +127,7 @@ export function JsonSourceView({ payload }: { payload: SourceDescriptor }) {
             {payload.handleId ? ` · Handle: ${payload.handleId}` : null}
           </span>
         ) : (
-          (value?.valueType ?? payload.valueType) && (
-            <span>Type: {value?.valueType ?? payload.valueType}</span>
-          )
+          payload.valueType && <span>Type: {payload.valueType}</span>
         )
       }
     >
@@ -147,14 +145,14 @@ export function JsonSourceView({ payload }: { payload: SourceDescriptor }) {
 }
 
 export function NullSourceView({ payload }: { payload: SourceDescriptor }) {
-  const { value, error } = useSourceValue(payload.sourceId);
+  const { error } = useSourceValue(payload.sourceId);
 
   return (
     <SourceViewShell title={payload.title}>
       {error ? (
         <SourceError error={error} />
       ) : (
-        <p className="text-muted-foreground">{value?.message ?? payload.message ?? 'No data'}</p>
+        <p className="text-muted-foreground">{payload.message ?? 'No data'}</p>
       )}
     </SourceViewShell>
   );

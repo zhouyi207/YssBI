@@ -72,6 +72,54 @@ fn assert_graph_content_eq(left: &GraphDocument, right: &GraphDocument) {
     assert_eq!(left.input_states, right.input_states);
 }
 
+#[test]
+fn resolved_binding_serde_defaults_old_documents_and_serializes_metadata() {
+    let old = serde_json::json!({
+        "kind": "resolved",
+        "origin": {
+            "kind": "schema_field",
+            "source": "databases/main",
+            "field": "customer_id"
+        },
+        "order": "a"
+    });
+    let binding: DynamicPortBinding = serde_json::from_value(old).unwrap();
+    assert!(matches!(
+        &binding,
+        DynamicPortBinding::Resolved { last_known, .. }
+            if last_known == &LastKnownPortMetadata::default()
+    ));
+
+    let value = serde_json::to_value(DynamicPortBinding::Resolved {
+        origin: DynamicMemberLocator::SchemaField {
+            source: SchemaSourceIdentity("databases/main".into()),
+            field: SchemaFieldIdentity("customer_id".into()),
+        },
+        order: OrderKey("a".into()),
+        last_known: LastKnownPortMetadata {
+            label: "customer_id".into(),
+            value_type: Some(TypeExpr::Concrete(TypeId::new("core.int64").unwrap())),
+        },
+    })
+    .unwrap();
+    assert_eq!(
+        value,
+        serde_json::json!({
+            "kind": "resolved",
+            "origin": {
+                "kind": "schema_field",
+                "source": "databases/main",
+                "field": "customer_id"
+            },
+            "order": "a",
+            "last_known": {
+                "label": "customer_id",
+                "value_type": { "Concrete": "core.int64" }
+            }
+        })
+    );
+}
+
 fn binding() -> DynamicPortBinding {
     DynamicPortBinding::Resolved {
         origin: DynamicMemberLocator::SchemaField {
@@ -79,6 +127,7 @@ fn binding() -> DynamicPortBinding {
             field: SchemaFieldIdentity("field".into()),
         },
         order: OrderKey("a".into()),
+        last_known: LastKnownPortMetadata::default(),
     }
 }
 
@@ -451,7 +500,8 @@ fn phase1_collection_editor_mutation_wire_is_stable_and_camel_case() {
                         "nodeTypeId": "yssbi.test.editor_mutation"
                     },
                     "position": { "x": 1.0, "y": 2.0 },
-                    "userLabel": "Created"
+                    "userLabel": "Created",
+                    "connectFrom": null
                 }
             }),
         ),
@@ -1516,6 +1566,54 @@ fn incompatible_atomic_create_is_rejected_without_document_effects() {
 }
 
 #[test]
+fn editor_connect_materializes_a_projected_input_on_the_input_side() {
+    let registry = editor_mutation_registry();
+    let path = graph_path("events/projected-editor-input");
+    let source_id = node_id(1203);
+    let target_id = node_id(1204);
+    let mut document = GraphDocument::default();
+    document
+        .create_node(editor_mutation_node(source_id))
+        .unwrap();
+    document
+        .create_node(editor_mutation_node(target_id))
+        .unwrap();
+    let projected = PortAddress::instance(
+        target_id,
+        PortKey::new("inputs").unwrap(),
+        PortInstanceId::from_uuid(Uuid::from_u128(1205)),
+    );
+    let member = projected_member(path.0.as_ref(), document.revision, target_id);
+    let plan = super::ProjectedConnectPlan {
+        projection_address: projected.clone(),
+        direction: PortDirection::Input,
+        kind: PortKind::Data,
+        connections: ConnectionsPerPort::Single,
+        authorization: authorization(member.clone()),
+        member,
+    };
+
+    let patch = EditorGraphMutationDto::Connect {
+        output: declared(source_id, "output").into(),
+        input: projected.into(),
+        order: None,
+    }
+    .into_patch_with_compatibility(&path, &document, &registry, None, None, Some(plan))
+    .unwrap();
+
+    let materialized = match &patch.operations[0] {
+        GraphDocumentOperation::InsertPortBinding { address, .. } => address,
+        operation => panic!("expected binding insertion, got {operation:?}"),
+    };
+    assert!(matches!(
+        &patch.operations[1],
+        GraphDocumentOperation::InsertConnection { connection }
+            if connection.output == declared(source_id, "output")
+                && connection.input == *materialized
+    ));
+}
+
+#[test]
 fn create_connect_and_add_port_allocate_identity_in_rust() {
     let registry = editor_mutation_registry();
     let path = graph_path("events/editor-mutation");
@@ -2218,9 +2316,14 @@ fn projected_member(path: &str, revision: GraphRevision, node_id: NodeId) -> Pro
         compilation_basis(path, revision),
         node_id,
         PortKey::new("fields").unwrap(),
+        PortDirection::Input,
         DynamicMemberLocator::SchemaField {
             source: SchemaSourceIdentity("source".into()),
             field: SchemaFieldIdentity("field".into()),
+        },
+        LastKnownPortMetadata {
+            label: "Field".into(),
+            value_type: Some(TypeExpr::Unknown),
         },
     )
 }
@@ -2292,10 +2395,12 @@ fn projected_member_rejects_authorization_for_another_member() {
         member.basis().clone(),
         target,
         member.template().clone(),
+        PortDirection::Input,
         DynamicMemberLocator::SchemaField {
             source: SchemaSourceIdentity("source".into()),
-            field: SchemaFieldIdentity("forged".into()),
+            field: SchemaFieldIdentity("other".into()),
         },
+        LastKnownPortMetadata::default(),
     );
     let before = store.document().clone();
 

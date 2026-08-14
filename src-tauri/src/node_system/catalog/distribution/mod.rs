@@ -10,13 +10,10 @@ use crate::node_system::compiler::{
 use crate::node_system::document::PortRef;
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::*;
-use crate::node_system::registry::{CategoryRegistration, RegisteredNode, TypeRegistration};
-use std::collections::BTreeSet;
+use crate::node_system::registry::{CategoryRegistration, RegisteredNode};
 use std::sync::Arc;
 
 const CATEGORY: &str = "distribution";
-const FLOAT_SERIES: &str = "core.data_series.float64";
-const INTEGER_SERIES: &str = "core.data_series.int64";
 
 #[derive(Clone, Copy)]
 enum ScalarType {
@@ -463,39 +460,8 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
             "categories.distribution.title",
             Message::Text("概率分布"),
         ),
-        (
-            "en-US",
-            "types.data_series.float64.title",
-            Message::Text("Float64 Data Series"),
-        ),
-        (
-            "zh-CN",
-            "types.data_series.float64.title",
-            Message::Text("Float64 数据序列"),
-        ),
-        (
-            "en-US",
-            "types.data_series.int64.title",
-            Message::Text("Int64 Data Series"),
-        ),
-        (
-            "zh-CN",
-            "types.data_series.int64.title",
-            Message::Text("Int64 数据序列"),
-        ),
     ];
-    let types = vec![
-        TypeRegistration {
-            id: type_id(FLOAT_SERIES)?,
-            title_key: i18n_key("types.data_series.float64.title")?,
-            classes: BTreeSet::new(),
-        },
-        TypeRegistration {
-            id: type_id(INTEGER_SERIES)?,
-            title_key: i18n_key("types.data_series.int64.title")?,
-            classes: BTreeSet::new(),
-        },
-    ];
+    let types = Vec::new();
     let categories = vec![CategoryRegistration {
         id: category_id(CATEGORY)?,
         title_key: i18n_key("categories.distribution.title")?,
@@ -533,15 +499,12 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
             )
         })
         .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
-    let output_type = match spec.output {
-        ScalarType::Float64 => FLOAT_SERIES,
-        ScalarType::Int64 => INTEGER_SERIES,
-    };
+    let element_type = concrete(spec.output.type_id())?;
     ports.push(data_port(
         spec.id,
         "samples",
         PortDirection::Output,
-        concrete(output_type)?,
+        data_series_type(element_type),
     )?);
     Ok(NodeProtocol {
         type_id: node_id(spec.id)?,
@@ -557,6 +520,7 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
         },
         interface: assembled_interface(spec.id, ports, vec![], vec![], vec![])?,
         parameters: assembled_parameters(spec.id, vec![])?,
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::NonDeterministic,
             purity: Purity::Pure,
@@ -647,8 +611,8 @@ fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &Dis
         ("zh-CN", title, Message::Text(spec.zh)),
         ("en-US", description, Message::Text("Draws an in-memory data series from the selected probability distribution.")),
         ("zh-CN", description, Message::Text("从所选概率分布生成内存数据序列。")),
-        ("en-US", documentation, Message::Text("Parameters use the conventional statistical parameterization shown by the port names. Sample count must be non-negative.")),
-        ("zh-CN", documentation, Message::Text("参数采用端口名称所示的标准统计参数化；样本数必须为非负整数。")),
+        ("en-US", documentation, Message::Text("Parameters use the conventional statistical parameterization shown by the port names. Sample count must be a positive integer.")),
+        ("zh-CN", documentation, Message::Text("参数采用端口名称所示的标准统计参数化；样本数必须为正整数。")),
         ("en-US", aliases, Message::Aliases(spec.aliases)),
         ("zh-CN", aliases, Message::Aliases(spec.zh_aliases)),
     ]);

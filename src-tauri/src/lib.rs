@@ -167,6 +167,8 @@ pub fn run() {
             get_project_path,
             get_project_resource_path,
             get_project_index,
+            get_project_computation_settings,
+            update_project_computation_settings,
             load_project_graph,
             default_project_parent_directory,
             validate_new_project_path,

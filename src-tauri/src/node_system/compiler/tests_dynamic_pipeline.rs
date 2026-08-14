@@ -1,6 +1,6 @@
 use super::dynamic_interface::{
-    InterfaceResolver, InterfaceResolverError, InterfaceResolverMember, InterfaceResolverRequest,
-    InterfaceResolverSet, SchemaFieldIdentityGuarantee,
+    InterfaceResolver, InterfaceResolverError, InterfaceResolverMember, InterfaceResolverOutput,
+    InterfaceResolverRequest, InterfaceResolverSet, SchemaFieldIdentityGuarantee,
 };
 use super::*;
 use crate::node_system::analysis::ResourceVersionSet;
@@ -77,8 +77,11 @@ impl InterfaceResolver for FixedResolver {
     fn resolve(
         &self,
         _: InterfaceResolverRequest<'_>,
-    ) -> Result<Box<[InterfaceResolverMember]>, InterfaceResolverError> {
-        Ok(self.members.clone())
+    ) -> Result<InterfaceResolverOutput, InterfaceResolverError> {
+        Ok(InterfaceResolverOutput {
+            members: self.members.clone(),
+            diagnostics: Box::new([]),
+        })
     }
 }
 
@@ -139,6 +142,7 @@ fn protocol() -> NodeProtocol {
         )
         .unwrap(),
         parameters: ParameterSchema::default(),
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
             purity: Purity::Pure,
@@ -190,6 +194,7 @@ fn member(
         basis,
         locator: locator(field),
         label: field.into(),
+        value_type: TypeExpr::Unknown,
         identity,
     }
 }
@@ -279,6 +284,7 @@ fn full_compile_keeps_complete_projection_when_interface_diagnostics_block_lower
         crate::node_system::document::DynamicPortBinding::Resolved {
             origin: locator("gone"),
             order: crate::node_system::document::OrderKey("a".into()),
+            last_known: crate::node_system::document::LastKnownPortMetadata::default(),
         },
     );
     document.port_bindings.insert(
@@ -286,6 +292,7 @@ fn full_compile_keeps_complete_projection_when_interface_diagnostics_block_lower
         crate::node_system::document::DynamicPortBinding::Resolved {
             origin: locator("ephemeral"),
             order: crate::node_system::document::OrderKey("b".into()),
+            last_known: crate::node_system::document::LastKnownPortMetadata::default(),
         },
     );
     document.input_states.insert(
@@ -381,22 +388,26 @@ impl InterfaceResolver for SchemaDependentResolver {
     fn resolve(
         &self,
         request: InterfaceResolverRequest<'_>,
-    ) -> Result<Box<[InterfaceResolverMember]>, InterfaceResolverError> {
+    ) -> Result<InterfaceResolverOutput, InterfaceResolverError> {
         let address = PortAddress::declared(request.node_id, key("dataframe"));
         let schema = request.resolved_schemas.get(&address).ok_or_else(|| {
             InterfaceResolverError::new("staged schema dependency was not supplied")
         })?;
-        Ok(schema
-            .fields
-            .iter()
-            .map(|field| InterfaceResolverMember {
-                basis: request.basis.clone(),
-                locator: locator(field.name.0.as_ref()),
-                label: field.name.0.to_string(),
-                identity: SchemaFieldIdentityGuarantee::SnapshotScoped,
-            })
-            .collect::<Vec<_>>()
-            .into_boxed_slice())
+        Ok(InterfaceResolverOutput {
+            members: schema
+                .fields
+                .iter()
+                .map(|field| InterfaceResolverMember {
+                    basis: request.basis.clone(),
+                    locator: locator(field.name.0.as_ref()),
+                    label: field.name.0.to_string(),
+                    value_type: request.template.value_type.clone(),
+                    identity: SchemaFieldIdentityGuarantee::SnapshotScoped,
+                })
+                .collect::<Vec<_>>()
+                .into_boxed_slice(),
+            diagnostics: Box::new([]),
+        })
     }
 }
 
@@ -583,6 +594,7 @@ fn schema_completion_replaces_provisional_ports_projection_and_diagnostics() {
             order: crate::node_system::document::OrderKey("a".into()),
             last_known: crate::node_system::document::LastKnownPortMetadata {
                 label: "Amount".into(),
+                value_type: None,
             },
         },
     );
@@ -747,6 +759,10 @@ impl ResourceSnapshot for DatabaseResources {
         self.versions.clone()
     }
 
+    fn database_name(&self, id: &str) -> Option<&str> {
+        (id == "main").then_some("Main database")
+    }
+
     fn database_schema(&self, id: &str) -> Option<&[crate::schema::ColumnInfoDTO]> {
         (id == "main").then_some(self.columns.as_slice())
     }
@@ -770,7 +786,7 @@ impl SchemaResolver for DatabaseSourceSchemaResolver {
                 resolver: SchemaResolverId::new("test.fixed_source_schema").unwrap(),
                 dependencies: vec![],
             },
-            database.value.iter().map(|column| SchemaField {
+            database.value.columns.iter().map(|column| SchemaField {
                 name: SchemaColumnRef(column.name.clone().into()),
                 scalar_type: RelationalScalarType::from_database_dtype(&column.dtype),
                 lineage: None,

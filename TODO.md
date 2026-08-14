@@ -341,6 +341,7 @@ src/app/appConfig/appLinks.ts
 - [ ] 将过去的操作尽可能实现后归纳到 v0_0.md 文档
 - [ ] 思考是否有必要多窗口进行跨窗同步，这样就不需要什么多进程的 token 了吧
 - [ ] snapshot 有必要吗？？？？
+- [ ] graph 分为两种，一种是纯计算 graph，一种是目前这种；纯计算 graph 使用 notebook 这种形式，修改节点会污染依赖该节点的下游节点，递归污染；运行到此节点可以做到将上游阶段全部干净，
 
 
 
@@ -388,6 +389,7 @@ node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_r
 - [ ] bayes 中的 ast 感觉可以和 src 下的 ast 放置在一起，在这里好像有 latex -> json ast，json -> julia ast，normal formula -> json ast 等等 ast
 - [ ] bayes 长任务的通知最好是作为复用模块
 - [ ] Failed to install Juliaup: 找不到与输入条件匹配的程序包。安装不了 julia
+- [ ] 在这里似乎日志类的测试感觉没有必要，可以直接删掉
 
 
 函数和事件保持一致性的 API 重复层面：不影响编辑一致性，但维护成本高：

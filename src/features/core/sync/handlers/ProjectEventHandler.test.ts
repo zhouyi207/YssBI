@@ -1,9 +1,16 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { useExecutionStore } from '@/features/core/execution';
-import { ProjectClearedHandler } from './ProjectEventHandler';
+import {
+  ComputationSettingsChangedHandler,
+  ProjectClearedHandler,
+} from './ProjectEventHandler';
 import { registerCoreApplicationPorts } from '@/features/application/initialization/registerCoreApplicationPorts';
+import {
+  installCoreApplicationTestPorts,
+  resetCoreApplicationTestPorts,
+} from '@/features/application/testHelpers/coreApplicationPorts';
 
 registerCoreApplicationPorts();
 
@@ -29,6 +36,33 @@ describe('Project event handlers', () => {
       playbackGraphPath: null,
       isPlaying: false,
     });
+  });
+
+  afterEach(() => {
+    resetCoreApplicationTestPorts();
+    registerCoreApplicationPorts();
+  });
+
+  it('forwards remote computation settings receipts through the application event port', () => {
+    const computationSettingsChanged = vi.fn();
+    installCoreApplicationTestPorts({
+      syncEvents: { computationSettingsChanged },
+    });
+    const receipt = {
+      projectInstanceId,
+      operationId: 'settings-operation',
+      settingsRevision: 5,
+      publicationRevision: 8,
+      settings: {
+        numeric: { tolerance: { absolute: 1e-10, relative: 1e-7 } },
+        missingValues: { statistics: 'reject' as const },
+      },
+    };
+
+    new ComputationSettingsChangedHandler().handle({ result: receipt });
+
+    expect(computationSettingsChanged).toHaveBeenCalledOnce();
+    expect(computationSettingsChanged).toHaveBeenCalledWith(receipt);
   });
 
   it('clears execution state through the shared lifecycle path before its callback', () => {

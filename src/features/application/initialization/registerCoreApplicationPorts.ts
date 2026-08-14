@@ -19,6 +19,7 @@ import { rebuildVariableResourceProjection } from '@/features/application/dataMa
 import { applyProjectLifecycleReceipt } from '@/features/application/projectLifecycleReceipt';
 import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
+import { reconcileProjectComputationSettingsEvent } from '@/features/application/projectSettings/useProjectComputationSettings';
 
 export function registerCoreApplicationPorts(): void {
   registerProjectIOApplicationPort({
@@ -47,6 +48,7 @@ export function registerCoreApplicationPorts(): void {
     functionUpdated: (payload) => syncFunctionSignatureFromGraph(payload as never),
     variablesChanged: rebuildVariableResourceProjection,
     graphDelta: (graphPath) => { void invalidateGraphProjection(graphPath); },
+    computationSettingsChanged: reconcileProjectComputationSettingsEvent,
     resourceMutationCommitted: async (result) => { await projectPublicationCoordinator.submit({ result: result as never }); },
     applyProjectLifecycleReceipt: async (result, onProjectCleared, dependencies) => {
       await applyProjectLifecycleReceipt(

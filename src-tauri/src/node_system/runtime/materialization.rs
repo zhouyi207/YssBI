@@ -1,7 +1,8 @@
 use super::{
-    Artifact, ArtifactKind, CancellationToken, MaterializedArtifact, ReplayArtifact, RunDeadline,
-    RunError, RunId, RunPhase, RuntimeValue, SpillArtifact, StreamReceiveError, StreamSendError,
-    StreamValue, bounded_stream_channel_with_deadline, check_terminal,
+    Artifact, ArtifactKind, ArtifactValueKind, CancellationToken, DataSeriesMetadata,
+    MaterializedArtifact, ReplayArtifact, RunDeadline, RunError, RunId, RunPhase, RuntimeValue,
+    SpillArtifact, StreamReceiveError, StreamSendError, StreamValue,
+    bounded_stream_channel_with_deadline, check_terminal,
 };
 use crate::node_system::plan::{MaterializationLimits, PlannedAdapter};
 use crate::node_system::protocol::Value;
@@ -297,6 +298,8 @@ impl RunResourceOwner {
     ) -> Result<Artifact, RunError> {
         let RuntimeValue::Artifact(artifact) = materialize_values(
             kind,
+            ArtifactValueKind::Sequence,
+            None,
             Box::new(values),
             self.budgets.materialization_memory_bytes,
             None,
@@ -542,13 +545,19 @@ pub fn execute_planned_adapter(
             cancellation,
         ),
         PlannedAdapter::Spill { .. } => {
+            let (value_kind, metadata) = artifact_payload(&value);
             let spill = owner.spill_values(runtime_values(value)?)?;
-            Ok(RuntimeValue::Artifact(Artifact::from_materialized(
-                ArtifactKind::Spilled,
-                MaterializedArtifact::Spilled(spill),
-            )))
+            Ok(RuntimeValue::Artifact(
+                Artifact::from_materialized_with_payload(
+                    ArtifactKind::Spilled,
+                    value_kind,
+                    metadata,
+                    MaterializedArtifact::Spilled(spill),
+                ),
+            ))
         }
         PlannedAdapter::Replay => {
+            let (value_kind, metadata) = artifact_payload(&value);
             let spill = match value {
                 RuntimeValue::Artifact(artifact) => {
                     let existing = match artifact.materialized() {
@@ -565,10 +574,14 @@ pub fn execute_planned_adapter(
                 }
                 value => owner.spill_values(runtime_values(value)?)?,
             };
-            Ok(RuntimeValue::Artifact(Artifact::from_materialized(
-                ArtifactKind::Replayable,
-                MaterializedArtifact::Replayable(ReplayArtifact::new(spill)),
-            )))
+            Ok(RuntimeValue::Artifact(
+                Artifact::from_materialized_with_payload(
+                    ArtifactKind::Replayable,
+                    value_kind,
+                    metadata,
+                    MaterializedArtifact::Replayable(ReplayArtifact::new(spill)),
+                ),
+            ))
         }
     };
     check_terminal(cancellation, owner.deadline, RunPhase::AdapterIo)?;
@@ -583,8 +596,11 @@ fn materialize(
     owner: &RunResourceOwner,
     cancellation: &CancellationToken,
 ) -> Result<RuntimeValue, RunError> {
+    let (value_kind, metadata) = artifact_payload(&value);
     materialize_values(
         kind,
+        value_kind,
+        metadata,
         runtime_values(value)?,
         memory_limit,
         limits,
@@ -595,6 +611,8 @@ fn materialize(
 
 fn materialize_values(
     kind: ArtifactKind,
+    value_kind: ArtifactValueKind,
+    metadata: Option<DataSeriesMetadata>,
     mut source: Box<dyn Iterator<Item = Result<Value, RunError>> + '_>,
     memory_limit: u64,
     limits: Option<&MaterializationLimits>,
@@ -634,20 +652,36 @@ fn materialize_values(
                 .map(Ok)
                 .chain(source);
             let spill = owner.spill_values(values)?;
-            return Ok(RuntimeValue::Artifact(Artifact::from_materialized(
-                kind,
-                MaterializedArtifact::Spilled(spill),
-            )));
+            return Ok(RuntimeValue::Artifact(
+                Artifact::from_materialized_with_payload(
+                    kind,
+                    value_kind,
+                    metadata,
+                    MaterializedArtifact::Spilled(spill),
+                ),
+            ));
         }
         buffered.push(value);
     }
     Ok(RuntimeValue::Artifact(
         Artifact::from_materialized_with_reservation(
             kind,
+            value_kind,
+            metadata,
             MaterializedArtifact::InMemory(buffered.into_boxed_slice()),
             reservation,
         ),
     ))
+}
+
+fn artifact_payload(value: &RuntimeValue) -> (ArtifactValueKind, Option<DataSeriesMetadata>) {
+    match value {
+        RuntimeValue::Artifact(artifact) => (
+            artifact.value_kind(),
+            artifact.data_series_metadata().cloned(),
+        ),
+        RuntimeValue::Scalar(_) | RuntimeValue::Stream(_) => (ArtifactValueKind::Sequence, None),
+    }
 }
 
 fn runtime_values(

@@ -998,6 +998,7 @@ export const enUS = {
         system: "SYS",
         graph: "GRAPH",
         data: "DATA",
+        notify: "NOTIFY",
       },
     },
     nodeDoc: {

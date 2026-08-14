@@ -1,5 +1,7 @@
 use super::{ConnectionId, GraphRevision, NodeId, PortInstanceId};
-use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey, PortMemberGroupSpec};
+use crate::node_system::protocol::{
+    NodeTypeId, ParameterKey, PortKey, PortMemberGroupSpec, TypeExpr,
+};
 use serde::{Deserialize, Serialize};
 pub type TypedValue = serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -156,6 +158,8 @@ pub enum DynamicPortBinding {
     Resolved {
         origin: DynamicMemberLocator,
         order: OrderKey,
+        #[serde(default)]
+        last_known: LastKnownPortMetadata,
     },
     Orphan {
         origin: DynamicMemberLocator,
@@ -190,9 +194,11 @@ string_identity!(FunctionParameterId);
 string_identity!(SchemaSourceIdentity);
 string_identity!(SchemaFieldIdentity);
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LastKnownPortMetadata {
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value_type: Option<TypeExpr>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

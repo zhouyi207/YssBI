@@ -52,13 +52,19 @@ pub struct ResolvedResource<T> {
 }
 
 pub struct ResolvedFunctionValue<'a> {
+    pub name: Option<&'a str>,
     pub function: &'a FunctionDocument,
     pub graph: &'a GraphDocument,
 }
 
+pub struct ResolvedDatabaseValue<'a> {
+    pub name: Option<&'a str>,
+    pub columns: &'a [crate::schema::ColumnInfoDTO],
+}
+
 pub type ResolvedFunction<'a> = ResolvedResource<ResolvedFunctionValue<'a>>;
 pub type ResolvedVariable<'a> = ResolvedResource<&'a crate::variable::VariableInstance>;
-pub type ResolvedDatabase<'a> = ResolvedResource<&'a [crate::schema::ColumnInfoDTO]>;
+pub type ResolvedDatabase<'a> = ResolvedResource<ResolvedDatabaseValue<'a>>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResourceResolutionError {

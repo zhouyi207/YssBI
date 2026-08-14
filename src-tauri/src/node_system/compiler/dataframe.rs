@@ -1,11 +1,16 @@
+use super::CompilerDiagnostic;
 use super::dynamic_interface::{
-    InterfaceResolver, InterfaceResolverError, InterfaceResolverMember, InterfaceResolverRequest,
+    InterfaceResolver, InterfaceResolverDiagnostic, InterfaceResolverError,
+    InterfaceResolverMember, InterfaceResolverOutput, InterfaceResolverRequest,
     InterfaceResolverSet, SchemaFieldIdentityGuarantee,
 };
 use crate::node_system::document::{
     DynamicMemberLocator, PortAddress, SchemaFieldIdentity, SchemaSourceIdentity,
 };
-use crate::node_system::protocol::{InterfaceResolverId, PortKey};
+use crate::node_system::protocol::{
+    InterfaceResolverId, PortKey, RelationalScalarType, SchemaField, TypeExpr, TypeId,
+    data_series_type,
+};
 use std::collections::BTreeSet;
 use std::sync::{Arc, OnceLock};
 
@@ -26,7 +31,7 @@ impl InterfaceResolver for DataframeColumnsResolver {
     fn resolve(
         &self,
         request: InterfaceResolverRequest<'_>,
-    ) -> Result<Box<[InterfaceResolverMember]>, InterfaceResolverError> {
+    ) -> Result<InterfaceResolverOutput, InterfaceResolverError> {
         let input = PortAddress::declared(
             request.node_id,
             PortKey::new(DATAFRAME_INPUT).expect("built-in port key is valid"),
@@ -36,6 +41,7 @@ impl InterfaceResolver for DataframeColumnsResolver {
         })?;
         let mut locators = BTreeSet::new();
         let mut members = Vec::with_capacity(schema.fields.len());
+        let mut diagnostics = Vec::new();
 
         for field in &schema.fields {
             let (source, identity, guarantee) = match &field.lineage {
@@ -56,18 +62,54 @@ impl InterfaceResolver for DataframeColumnsResolver {
                 )));
             }
 
+            let locator = DynamicMemberLocator::SchemaField {
+                source: SchemaSourceIdentity(source),
+                field: SchemaFieldIdentity(identity),
+            };
+            let (element_type, diagnostic) = dataframe_field_type(field);
+            let value_type = match element_type {
+                TypeExpr::Unknown => TypeExpr::Unknown,
+                element_type => data_series_type(element_type),
+            };
+            if let Some(diagnostic) = diagnostic {
+                diagnostics.push(InterfaceResolverDiagnostic {
+                    locator: locator.clone(),
+                    diagnostic,
+                });
+            }
             members.push(InterfaceResolverMember {
                 basis: request.basis.clone(),
-                locator: DynamicMemberLocator::SchemaField {
-                    source: SchemaSourceIdentity(source),
-                    field: SchemaFieldIdentity(identity),
-                },
+                locator,
                 label: field.name.0.to_string(),
+                value_type,
                 identity: guarantee,
             });
         }
 
-        Ok(members.into_boxed_slice())
+        Ok(InterfaceResolverOutput {
+            members: members.into_boxed_slice(),
+            diagnostics: diagnostics.into_boxed_slice(),
+        })
+    }
+}
+
+fn dataframe_field_type(field: &SchemaField) -> (TypeExpr, Option<CompilerDiagnostic>) {
+    let concrete = |id: &str| TypeExpr::Concrete(TypeId::new(id).expect("built-in type ID"));
+    match field.scalar_type {
+        RelationalScalarType::Boolean => (concrete("core.bool"), None),
+        RelationalScalarType::Int64 => (concrete("core.int64"), None),
+        RelationalScalarType::Float64 => (concrete("core.float64"), None),
+        RelationalScalarType::String => (concrete("core.string"), None),
+        RelationalScalarType::Date => (concrete("core.date"), None),
+        RelationalScalarType::DateTime => (concrete("core.datetime"), None),
+        RelationalScalarType::Unknown => (
+            TypeExpr::Unknown,
+            Some(CompilerDiagnostic::DataframeFieldTypeUnsupported {
+                column: field.name.0.clone(),
+                schema_type: "unknown".into(),
+                reason: "no concrete node type is registered for the schema field".into(),
+            }),
+        ),
     }
 }
 

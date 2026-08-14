@@ -8,8 +8,8 @@ use crate::node_system::catalog::{
 };
 use crate::node_system::document::{
     DynamicMemberLocator, EditorMutationError, EditorMutationErrorCode, FunctionParameterId,
-    GraphDocument, GraphResourcePath, GraphRevision, OrderKey, PortAddress, PortAddressDto,
-    PortRef,
+    GraphDocument, GraphResourcePath, GraphRevision, LastKnownPortMetadata, OrderKey, PortAddress,
+    PortAddressDto, PortRef,
 };
 use crate::node_system::protocol::{
     ConnectionsPerPort, NodeProtocol, NodeTypeId, PortDirection, PortInstances, PortKey, PortKind,
@@ -322,6 +322,7 @@ pub(crate) struct CandidatePort {
 pub(crate) struct DynamicCandidate {
     pub origin: DynamicMemberLocator,
     pub order: OrderKey,
+    pub last_known: LastKnownPortMetadata,
 }
 
 pub(crate) fn source_from_projection(
@@ -571,6 +572,10 @@ fn candidate_ports(
                             parameter: parameter.id.clone(),
                         },
                         order: OrderKey(format!("{index:05}").into()),
+                        last_known: LastKnownPortMetadata {
+                            label: parameter.name.clone(),
+                            value_type: Some(function_type_expr(&parameter.type_name)?),
+                        },
                     }),
                 });
             }
@@ -596,6 +601,10 @@ fn candidate_ports(
                         parameter: FunctionParameterId("return".into()),
                     },
                     order: OrderKey("00000".into()),
+                    last_known: LastKnownPortMetadata {
+                        label: return_type.to_owned(),
+                        value_type: Some(function_type_expr(return_type)?),
+                    },
                 }),
             });
         }
@@ -686,11 +695,11 @@ fn resource_type_override(
     }
 }
 
-fn function_type_expr(type_name: &str) -> Result<TypeExpr, String> {
+pub(crate) fn function_type_expr(type_name: &str) -> Result<TypeExpr, String> {
     data_type_to_type_expr(&resolve_function_data_type(type_name)?)
 }
 
-fn data_type_to_type_expr(data_type: &DataType) -> Result<TypeExpr, String> {
+pub(crate) fn data_type_to_type_expr(data_type: &DataType) -> Result<TypeExpr, String> {
     match data_type {
         DataType::Boolean => concrete_type("core.bool"),
         DataType::Int64 => concrete_type("core.int64"),
@@ -760,20 +769,21 @@ fn ports_are_compatible(source: &SourcePort, candidate: &CandidatePort) -> bool 
     {
         return false;
     }
-    match source.direction {
-        PortDirection::Output => crate::node_system::compiler::type_exprs_assignable(
+    let compatibility = match source.direction {
+        PortDirection::Output => crate::node_system::compiler::type_exprs_compatibility(
             &source.value_type,
             &candidate.value_type,
             &source.type_parameters,
             &candidate.type_parameters,
         ),
-        PortDirection::Input => crate::node_system::compiler::type_exprs_assignable(
+        PortDirection::Input => crate::node_system::compiler::type_exprs_compatibility(
             &candidate.value_type,
             &source.value_type,
             &candidate.type_parameters,
             &source.type_parameters,
         ),
-    }
+    };
+    compatibility != crate::node_system::compiler::TypeCompatibility::Incompatible
 }
 
 fn direction(port: &ResolvedPortDto) -> PortDirection {
@@ -1049,12 +1059,13 @@ mod tests {
 
     #[test]
     fn compatibility_uses_exact_type_expr_ids_and_compiler_source_union_semantics() {
-        let tabular_series = source_expr(concrete_type("tabular.series").unwrap());
-        let concrete_float_series = candidate(concrete_type("core.data_series.float64").unwrap());
-        assert!(!ports_are_compatible(
-            &tabular_series,
-            &concrete_float_series
+        let string_series = source_expr(crate::node_system::protocol::data_series_type(
+            concrete_type("core.string").unwrap(),
         ));
+        let float_series = candidate(crate::node_system::protocol::data_series_type(
+            concrete_type("core.float64").unwrap(),
+        ));
+        assert!(!ports_are_compatible(&string_series, &float_series));
 
         let source_union = source_expr(TypeExpr::Union(vec![
             concrete_type("core.int64").unwrap(),

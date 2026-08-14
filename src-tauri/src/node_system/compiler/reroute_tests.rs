@@ -583,6 +583,10 @@ fn phase2_reroute_compile_called_function_is_transparent_to_dependency_lowering(
             )])
         }
 
+        fn function_name(&self, path: &GraphResourcePath) -> Option<&str> {
+            (path == &self.path).then_some("Reroute callee")
+        }
+
         fn function_document(
             &self,
             path: &GraphResourcePath,

@@ -47,6 +47,7 @@ pub(super) fn resolved_function_port(
                         parameter: parameter.clone(),
                     },
                     order: OrderKey(order.into()),
+                    last_known: crate::node_system::document::LastKnownPortMetadata::default(),
                 },
             )
             .is_none()

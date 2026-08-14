@@ -1,11 +1,11 @@
 use super::dynamic_interface::{
-    InterfaceResolver, InterfaceResolverError, InterfaceResolverMember, InterfaceResolverRequest,
-    InterfaceResolverSet, SchemaFieldIdentityGuarantee,
+    InterfaceResolver, InterfaceResolverError, InterfaceResolverMember, InterfaceResolverOutput,
+    InterfaceResolverRequest, InterfaceResolverSet, SchemaFieldIdentityGuarantee,
 };
 use crate::node_system::document::{
     DynamicMemberLocator, FunctionDocument, FunctionParameterId, GraphResourcePath,
 };
-use crate::node_system::protocol::InterfaceResolverId;
+use crate::node_system::protocol::{InterfaceResolverId, TypeExpr};
 use std::sync::Arc;
 
 pub const FUNCTION_CALL_ARGUMENTS_RESOLVER: &str = "yssbi.project.function.call.arguments";
@@ -66,20 +66,24 @@ impl InterfaceResolver for FunctionInterfaceResolver {
     fn resolve(
         &self,
         request: InterfaceResolverRequest<'_>,
-    ) -> Result<Box<[InterfaceResolverMember]>, InterfaceResolverError> {
+    ) -> Result<InterfaceResolverOutput, InterfaceResolverError> {
         let function = function_path(&request)?;
         let resolved = request
             .resources
             .resolve_function(&function)
             .map_err(|error| InterfaceResolverError::from_resource(&error))?;
         let document = resolved.value.function.clone();
-        Ok(match self.projection {
+        let members = match self.projection {
             FunctionInterfaceProjection::Parameters => {
-                parameter_members(request.basis, &function, &document)
+                parameter_members(request.basis, &function, &document)?
             }
             FunctionInterfaceProjection::Result => {
-                result_members(request.basis, &function, &document)
+                result_members(request.basis, &function, &document)?
             }
+        };
+        Ok(InterfaceResolverOutput {
+            members,
+            diagnostics: Box::new([]),
         })
     }
 }
@@ -115,22 +119,25 @@ fn parameter_members(
     >,
     function: &GraphResourcePath,
     document: &FunctionDocument,
-) -> Box<[InterfaceResolverMember]> {
+) -> Result<Box<[InterfaceResolverMember]>, InterfaceResolverError> {
     document
         .signature
         .parameters
         .iter()
-        .map(|parameter| InterfaceResolverMember {
-            basis: basis.clone(),
-            locator: DynamicMemberLocator::FunctionParameter {
-                function: function.clone(),
-                parameter: parameter.id.clone(),
-            },
-            label: parameter.name.clone(),
-            identity: SchemaFieldIdentityGuarantee::Stable,
+        .map(|parameter| {
+            Ok(InterfaceResolverMember {
+                basis: basis.clone(),
+                locator: DynamicMemberLocator::FunctionParameter {
+                    function: function.clone(),
+                    parameter: parameter.id.clone(),
+                },
+                label: parameter.name.clone(),
+                value_type: function_type(&parameter.type_name)?,
+                identity: SchemaFieldIdentityGuarantee::Stable,
+            })
         })
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
+        .collect::<Result<Vec<_>, _>>()
+        .map(Vec::into_boxed_slice)
 }
 
 fn result_members(
@@ -139,23 +146,32 @@ fn result_members(
     >,
     function: &GraphResourcePath,
     document: &FunctionDocument,
-) -> Box<[InterfaceResolverMember]> {
+) -> Result<Box<[InterfaceResolverMember]>, InterfaceResolverError> {
     document
         .signature
         .return_type
         .as_ref()
-        .map(|return_type| InterfaceResolverMember {
-            basis: basis.clone(),
-            locator: DynamicMemberLocator::FunctionParameter {
-                function: function.clone(),
-                parameter: FunctionParameterId("return".into()),
-            },
-            label: return_type.clone(),
-            identity: SchemaFieldIdentityGuarantee::Stable,
+        .map(|return_type| {
+            Ok(InterfaceResolverMember {
+                basis: basis.clone(),
+                locator: DynamicMemberLocator::FunctionParameter {
+                    function: function.clone(),
+                    parameter: FunctionParameterId("return".into()),
+                },
+                label: return_type.clone(),
+                value_type: function_type(return_type)?,
+                identity: SchemaFieldIdentityGuarantee::Stable,
+            })
         })
         .into_iter()
-        .collect::<Vec<_>>()
-        .into_boxed_slice()
+        .collect::<Result<Vec<_>, _>>()
+        .map(Vec::into_boxed_slice)
+}
+
+fn function_type(value: &str) -> Result<TypeExpr, InterfaceResolverError> {
+    crate::node_system::compatibility::function_type_expr(value).map_err(|error| {
+        InterfaceResolverError::new(format!("invalid function type '{value}': {error}"))
+    })
 }
 
 fn resolver_id(value: &str) -> InterfaceResolverId {

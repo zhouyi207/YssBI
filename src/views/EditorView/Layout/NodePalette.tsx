@@ -4,6 +4,10 @@ import { useCompatibleNodeCatalog } from '@/features/application/nodeCatalog/use
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import {
+  buildLocalizedCatalogTree,
+  type LocalizedCatalogTreeNode,
+} from '@/features/domain/nodeCatalog/localizedCatalogTree';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -14,6 +18,57 @@ export function nodePaletteItemKey(item: LocalizedCatalogItem): string {
   return item.creation.kind === 'resourceBound'
     ? `${item.creation.kind}:${item.nodeTypeId}:${item.creation.resourcePath}`
     : `${item.creation.kind}:${item.nodeTypeId}`;
+}
+
+function CatalogCategorySection({
+  node,
+  depth,
+  locale,
+  onSelect,
+}: {
+  node: LocalizedCatalogTreeNode;
+  depth: number;
+  locale: string;
+  onSelect: (descriptor: NodeCreationDescriptor, locale: string) => void;
+}) {
+  return (
+    <section
+      data-catalog-category-id={node.category.categoryId}
+      data-catalog-depth={depth}
+      aria-labelledby={`node-palette-${node.category.categoryId}`}
+    >
+      <h3
+        id={`node-palette-${node.category.categoryId}`}
+        className="py-1 text-xs font-medium text-muted-foreground"
+        style={{ paddingLeft: `${depth * 12 + 8}px` }}
+      >
+        {node.category.title}
+      </h3>
+      <div className="space-y-0.5">
+        {node.items.map((item) => (
+          <Button
+            key={nodePaletteItemKey(item)}
+            type="button"
+            variant="ghost"
+            className="h-auto w-full justify-start rounded-sm py-1.5 text-left font-normal"
+            style={{ paddingLeft: `${depth * 12 + 8}px`, paddingRight: '8px' }}
+            onClick={() => onSelect(item.creation, locale)}
+          >
+            {item.title}
+          </Button>
+        ))}
+      </div>
+      {node.children.map((child) => (
+        <CatalogCategorySection
+          key={child.category.categoryId}
+          node={child}
+          depth={depth + 1}
+          locale={locale}
+          onSelect={onSelect}
+        />
+      ))}
+    </section>
+  );
 }
 
 export function NodePalette({
@@ -42,6 +97,10 @@ export function NodePalette({
   const { status, error, catalog, searchIndex } = sourcePort ? compatible : localized;
   const [query, setQuery] = useState('');
   const items = useMemo(() => searchIndex?.search(query) ?? [], [query, searchIndex]);
+  const categoryTree = useMemo(
+    () => catalog ? buildLocalizedCatalogTree(catalog.categories, items) : [],
+    [catalog, items],
+  );
 
   return (
     <Card
@@ -72,34 +131,15 @@ export function NodePalette({
                 <p className="px-2 py-3 text-center text-muted-foreground">
                   {t('canvas.nodePalette.noMatches')}
                 </p>
-              ) : catalog.categories.map((category) => {
-                const categoryItems = items.filter((item) => item.categoryId === category.categoryId);
-                if (categoryItems.length === 0) return null;
-
-                return (
-                  <section key={category.categoryId} aria-labelledby={`node-palette-${category.categoryId}`}>
-                    <h3
-                      id={`node-palette-${category.categoryId}`}
-                      className="px-2 py-1 text-xs font-medium text-muted-foreground"
-                    >
-                      {category.title}
-                    </h3>
-                    <div className="space-y-0.5">
-                      {categoryItems.map((item) => (
-                        <Button
-                          key={nodePaletteItemKey(item)}
-                          type="button"
-                          variant="ghost"
-                          className="h-auto w-full justify-start rounded-sm px-2 py-1.5 text-left font-normal"
-                          onClick={() => onSelect(item.creation, catalog.locale)}
-                        >
-                          {item.title}
-                        </Button>
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
+              ) : categoryTree.map((node) => (
+                <CatalogCategorySection
+                  key={node.category.categoryId}
+                  node={node}
+                  depth={0}
+                  locale={catalog.locale}
+                  onSelect={onSelect}
+                />
+              ))}
             </div>
           </OverlayScrollbar>
         </>

@@ -43,7 +43,7 @@ describe('pinViewTarget', () => {
       pinResults: pinResultsMap([{ graphPath: 'g1', pinId: 'out-1' }]),
     });
     expect(state.enabled).toBe(true);
-    expect(state.refs[0]).toEqual({ kind: 'runtimePin', graphPath: 'g1', pinId: 'out-1' });
+    expect(state.refs[0]).toEqual({ kind: 'window', sourceId: 'src-out-1' });
   });
 
   it('resolves connected input via upstream cache', () => {
@@ -56,10 +56,7 @@ describe('pinViewTarget', () => {
       pinResults: pinResultsMap([{ graphPath: 'g1', pinId: 'out-1' }]),
     });
     expect(state.enabled).toBe(true);
-    expect(state.refs[0]?.kind).toBe('runtimePin');
-    if (state.refs[0]?.kind === 'runtimePin') {
-      expect(state.refs[0].pinId).toBe('out-1');
-    }
+    expect(state.refs[0]).toEqual({ kind: 'window', sourceId: 'src-out-1' });
   });
 
   it('hides view for exec and unconnected input', () => {
@@ -114,16 +111,10 @@ describe('pinViewTarget', () => {
       pinResults,
     });
 
-    expect(refs).toEqual([
-      {
-        kind: 'runtimePin',
-        graphPath: 'functions/Helper.yssbi-function',
-        pinId: 'out-1',
-      },
-    ]);
+    expect(refs).toEqual([{ kind: 'window', sourceId: 'src-out-1' }]);
   });
 
-  it('evaluatePinViewState enables completed run without cache', () => {
+  it('evaluatePinViewState leaves completed runs without cache to pin preview', () => {
     const idle = evaluatePinViewState({
       graphPath: 'g1',
       pinId: 'out-1',
@@ -142,6 +133,7 @@ describe('pinViewTarget', () => {
       pinResults: new Map(),
       executionStatus: 'completed',
     });
-    expect(completed.enabled).toBe(true);
+    expect(completed.enabled).toBe(false);
+    expect(completed.disabledReason).toBe('no_run');
   });
 });

@@ -1,7 +1,8 @@
 use super::{
-    DynamicMemberLocator, DynamicPortBinding, GraphResourcePath, GraphRevision, NodeId, OrderKey,
+    DynamicMemberLocator, DynamicPortBinding, GraphResourcePath, GraphRevision,
+    LastKnownPortMetadata, NodeId, OrderKey,
 };
-use crate::node_system::protocol::PortKey;
+use crate::node_system::protocol::{PortDirection, PortKey};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -93,7 +94,10 @@ pub struct ProjectedMemberRef {
     basis: CompilationBasisToken,
     node_id: NodeId,
     template: PortKey,
+    direction: PortDirection,
     locator: DynamicMemberLocator,
+    #[serde(default)]
+    last_known: LastKnownPortMetadata,
 }
 
 impl ProjectedMemberRef {
@@ -101,13 +105,17 @@ impl ProjectedMemberRef {
         basis: CompilationBasisToken,
         node_id: NodeId,
         template: PortKey,
+        direction: PortDirection,
         locator: DynamicMemberLocator,
+        last_known: LastKnownPortMetadata,
     ) -> Self {
         Self {
             basis,
             node_id,
             template,
+            direction,
             locator,
+            last_known,
         }
     }
 
@@ -123,8 +131,16 @@ impl ProjectedMemberRef {
         &self.template
     }
 
+    pub const fn direction(&self) -> PortDirection {
+        self.direction
+    }
+
     pub const fn locator(&self) -> &DynamicMemberLocator {
         &self.locator
+    }
+
+    pub const fn last_known(&self) -> &LastKnownPortMetadata {
+        &self.last_known
     }
 }
 
@@ -156,6 +172,7 @@ impl MaterializationAuthorization {
         DynamicPortBinding::Resolved {
             origin: self.member.locator,
             order: self.order,
+            last_known: self.member.last_known,
         }
     }
 }

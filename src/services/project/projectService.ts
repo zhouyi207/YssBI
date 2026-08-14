@@ -21,6 +21,13 @@ import {
   isGraphResourcePath,
 } from '@/shared/types/dto/editorProjectionGuards';
 import type { CleanupInvalidProjectsResult, LifecycleMutationResultDto, ProjectPathValidation, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
+import {
+  parseComputationSettingsMutationReceipt,
+  parseComputationSettingsSnapshot,
+  type ComputationSettingsMutationReceiptDto,
+  type ComputationSettingsMutationRequestDto,
+  type ComputationSettingsSnapshotDto,
+} from '@/shared/types/dto/projectComputationSettings';
 
 import { logger } from '@/utils/appLogger';
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
@@ -360,6 +367,20 @@ export class ProjectService {
     static async getProjectIndex(projectInstanceId: string): Promise<ProjectIndexRow> {
         const value = await invoke<unknown>("get_project_index", { projectInstanceId });
         return parseProjectIndexRow(value);
+    }
+
+    static async getProjectComputationSettings(
+      projectInstanceId: string,
+    ): Promise<ComputationSettingsSnapshotDto> {
+      const value = await invoke<unknown>('get_project_computation_settings', { projectInstanceId });
+      return parseComputationSettingsSnapshot(value);
+    }
+
+    static async updateProjectComputationSettings(
+      request: ComputationSettingsMutationRequestDto,
+    ): Promise<ComputationSettingsMutationReceiptDto> {
+      const value = await invoke<unknown>('update_project_computation_settings', { request });
+      return parseComputationSettingsMutationReceipt(value);
     }
 
     /**

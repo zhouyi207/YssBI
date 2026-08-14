@@ -255,6 +255,7 @@ fn insert_materialization_adapters(
     value_count: &mut u32,
     operations: &mut Vec<PlannedOperation>,
     value_sources: &[PlanValueSource],
+    value_contracts: &mut BTreeMap<ValueRef, crate::node_system::plan::PlannedValueContract>,
     dependencies: &mut Vec<ValueDependency>,
     root_region: &mut StructuredControlRegion,
 ) -> Result<(), DemandPlanError> {
@@ -423,6 +424,15 @@ fn insert_materialization_adapters(
                     "adapter": &adapter,
                 }),
             )?);
+        let contract = value_contracts.get(&source).cloned().ok_or_else(|| {
+            DemandPlanError::InvalidDerivedPlan(
+                format!(
+                    "materialization source {} has no value contract",
+                    source.index()
+                )
+                .into(),
+            )
+        })?;
         let semantics_version =
             ExecutionSemanticsVersion::from_bytes(crate::node_system::registry::hash_canonical(
                 "yssbi.execution-semantics.materialization-fanout.v1",
@@ -437,6 +447,8 @@ fn insert_materialization_adapters(
         *value_count += 1;
         let adapter_output = ValueRef::new(*value_count);
         *value_count += 1;
+        value_contracts.insert(adapter_input, contract.clone());
+        value_contracts.insert(adapter_output, contract.clone());
         let operation_index = OperationIndex::new(operations.len() as u32);
         let source_node_id = producer
             .map(|producer| operations[producer].source_node_id)
@@ -451,11 +463,13 @@ fn insert_materialization_adapters(
             kernel: PlannedKernel::Adapter(adapter),
             inputs: Box::new([PlannedInput {
                 value: adapter_input,
+                contract: contract.clone(),
                 consumption: input_consumption,
                 bound_value: None,
             }]),
             outputs: Box::new([PlannedOutput {
                 value: adapter_output,
+                contract,
                 production: output_production,
             }]),
             params: CompiledParameterHandle::new("adapter.fanout")
@@ -497,11 +511,22 @@ fn insert_materialization_adapters(
             production,
             consumption,
         );
+        let contract = value_contracts.get(&source).cloned().ok_or_else(|| {
+            DemandPlanError::InvalidDerivedPlan(
+                format!(
+                    "materialization source {} has no value contract",
+                    source.index()
+                )
+                .into(),
+            )
+        })?;
         let adapter = adapter_plan.adapter.clone();
         let adapter_input = ValueRef::new(*value_count);
         *value_count += 1;
         let adapter_output = ValueRef::new(*value_count);
         *value_count += 1;
+        value_contracts.insert(adapter_input, contract.clone());
+        value_contracts.insert(adapter_output, contract.clone());
         let stable_id =
             OperationStableId::from_digest(crate::node_system::registry::hash_canonical(
                 "yssbi.operation-stable-id.materialization-adapter.v1",
@@ -538,11 +563,13 @@ fn insert_materialization_adapters(
             kernel: PlannedKernel::Adapter(adapter),
             inputs: Box::new([PlannedInput {
                 value: adapter_input,
+                contract: contract.clone(),
                 consumption: adapter_plan.input_consumption,
                 bound_value: None,
             }]),
             outputs: Box::new([PlannedOutput {
                 value: adapter_output,
+                contract,
                 production: adapter_plan.output_production,
             }]),
             params: CompiledParameterHandle::new("adapter.none")
@@ -982,11 +1009,13 @@ impl ExecutionPlanBasis {
         let mut root_region = remap_region(retained_region, &dense_by_intermediate);
         deduplicate_region_operations(&mut root_region);
         let mut value_count = self.value_count;
+        let mut value_contracts = self.value_contracts.clone();
         insert_materialization_adapters(
             &self.provenance,
             &mut value_count,
             &mut operations,
             &self.value_sources,
+            &mut value_contracts,
             &mut value_dependencies,
             &mut root_region,
         )?;
@@ -1007,10 +1036,19 @@ impl ExecutionPlanBasis {
             provenance: self.provenance.clone(),
             value_count,
             operations: operations.into_boxed_slice(),
+            value_contracts,
             value_sources: value_sources
                 .into_iter()
                 .collect::<Vec<_>>()
                 .into_boxed_slice(),
+            bound_values: self
+                .bound_values
+                .iter()
+                .filter(|(value, _)| {
+                    required_values.is_none_or(|required| required.contains(value))
+                })
+                .map(|(value, bound)| (*value, bound.clone()))
+                .collect(),
             value_dependencies: value_dependencies.into_boxed_slice(),
             root_region,
             effect_dependencies: effect_dependencies.into_boxed_slice(),
@@ -1128,6 +1166,7 @@ mod materialization_tests {
             inputs: match input {
                 Some(value) => vec![PlannedInput {
                     value,
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     consumption: InputConsumption::FullyMaterialized,
                     bound_value: None,
                 }]
@@ -1136,6 +1175,7 @@ mod materialization_tests {
             },
             outputs: Box::new([PlannedOutput {
                 value: output,
+                contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 production: OutputProduction::Streaming,
             }]),
             params: CompiledParameterHandle::new("test.params").unwrap(),
@@ -1208,11 +1248,20 @@ mod materialization_tests {
             compile_id: CompileId::new(1),
         };
         let mut value_count = 3;
+        let mut value_contracts = (0..value_count)
+            .map(|value| {
+                (
+                    ValueRef::new(value),
+                    crate::node_system::plan::PlannedValueContract::opaque(),
+                )
+            })
+            .collect();
         insert_materialization_adapters(
             &provenance,
             &mut value_count,
             &mut operations,
             &[],
+            &mut value_contracts,
             &mut dependencies,
             &mut region,
         )
@@ -1285,6 +1334,14 @@ mod materialization_tests {
             compile_id: CompileId::new(1),
         };
         let mut value_count = 6;
+        let mut value_contracts = (0..value_count)
+            .map(|value| {
+                (
+                    ValueRef::new(value),
+                    crate::node_system::plan::PlannedValueContract::opaque(),
+                )
+            })
+            .collect();
 
         insert_materialization_adapters(
             &provenance,
@@ -1297,6 +1354,7 @@ mod materialization_tests {
                     OutputProduction::FullyMaterialized,
                 ),
             ],
+            &mut value_contracts,
             &mut dependencies,
             &mut region,
         )
@@ -1393,6 +1451,14 @@ mod materialization_tests {
             compile_id: CompileId::new(1),
         };
         let mut value_count = 7;
+        let mut value_contracts = (0..value_count)
+            .map(|value| {
+                (
+                    ValueRef::new(value),
+                    crate::node_system::plan::PlannedValueContract::opaque(),
+                )
+            })
+            .collect();
 
         insert_materialization_adapters(
             &provenance,
@@ -1408,6 +1474,7 @@ mod materialization_tests {
                     OutputProduction::FullyMaterialized,
                 ),
             ],
+            &mut value_contracts,
             &mut dependencies,
             &mut region,
         )
@@ -1469,12 +1536,21 @@ mod materialization_tests {
             compile_id: CompileId::new(1),
         };
         let mut value_count = 3;
+        let mut value_contracts = (0..value_count)
+            .map(|value| {
+                (
+                    ValueRef::new(value),
+                    crate::node_system::plan::PlannedValueContract::opaque(),
+                )
+            })
+            .collect();
 
         insert_materialization_adapters(
             &provenance,
             &mut value_count,
             &mut operations,
             &[],
+            &mut value_contracts,
             &mut dependencies,
             &mut region,
         )

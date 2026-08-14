@@ -998,6 +998,7 @@ export const zhCN = {
         system: "SYS",
         graph: "GRAPH",
         data: "DATA",
+        notify: "NOTIFY",
       },
     },
     nodeDoc: {

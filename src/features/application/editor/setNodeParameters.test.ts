@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeEditorMutation } from '@/features/application/editorMutation/editorMutationCoordinator';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { setNodeParameters } from './setNodeParameters';
 
 vi.mock('@/features/application/editorMutation/editorMutationCoordinator', () => ({
@@ -36,5 +37,36 @@ describe('setNodeParameters', () => {
         payload: { nodeId: 'node-1', parameters },
       },
     });
+  });
+
+  it('removes a null override while preserving the complete atomic parameter map', async () => {
+    const outcome = { status: 'applied' as const, result: {} as never };
+    vi.mocked(executeEditorMutation).mockResolvedValue(outcome);
+    vi.spyOn(useGraphDataStore, 'getState').mockReturnValue({
+      getGraphNode: () => ({
+        parameterEditors: [
+          { key: 'constant', value: true },
+          { key: 'convergence_tolerance', value: 1e-7 },
+          { key: 'missing_value_policy', value: 'Reject' },
+        ],
+      }),
+    } as never);
+
+    await setNodeParameters({
+      graphPath: 'events/Main.yssbi-event',
+      nodeId: 'node-1',
+      locale: 'en-US',
+      parameters: { convergence_tolerance: null },
+    });
+
+    expect(executeEditorMutation).toHaveBeenCalledWith(expect.objectContaining({
+      mutation: {
+        type: 'setParameters',
+        payload: {
+          nodeId: 'node-1',
+          parameters: { constant: true, missing_value_policy: 'Reject' },
+        },
+      },
+    }));
   });
 });

@@ -152,12 +152,16 @@ fn validate_abi(
             message: "ABI provenance does not exactly match its plan".into(),
         });
     }
-    if abi.results.keys().collect::<BTreeSet<_>>()
-        != abi.result_productions.keys().collect::<BTreeSet<_>>()
+    if abi.parameters.keys().collect::<BTreeSet<_>>()
+        != abi.parameter_contracts.keys().collect::<BTreeSet<_>>()
+        || abi.results.keys().collect::<BTreeSet<_>>()
+            != abi.result_contracts.keys().collect::<BTreeSet<_>>()
+        || abi.results.keys().collect::<BTreeSet<_>>()
+            != abi.result_productions.keys().collect::<BTreeSet<_>>()
     {
         return Err(FunctionPlanStoreError::InvalidBasis {
             path: path.clone(),
-            message: "ABI results and result productions must have identical keys".into(),
+            message: "ABI values, productions, and value contracts must have identical keys".into(),
         });
     }
     for (result, value) in &abi.results {
@@ -201,6 +205,34 @@ fn validate_abi(
                         value.index()
                     )
                     .into(),
+                });
+            }
+            let declared_contract = if direction == "parameter" {
+                &abi.parameter_contracts
+            } else {
+                &abi.result_contracts
+            };
+            let Some(actual_contract) = plan.value_contracts.get(value) else {
+                return Err(FunctionPlanStoreError::InvalidBasis {
+                    path: path.clone(),
+                    message: format!(
+                        "ABI {direction} value {} has no plan contract",
+                        value.index()
+                    )
+                    .into(),
+                });
+            };
+            if declared_contract.get(
+                members
+                    .iter()
+                    .find_map(|(parameter, candidate)| (candidate == value).then_some(parameter))
+                    .expect("current ABI value has a member"),
+            ) != Some(actual_contract)
+            {
+                return Err(FunctionPlanStoreError::AbiValueContractMismatch {
+                    path: path.clone(),
+                    direction,
+                    value: *value,
                 });
             }
             let source_is_valid = match direction {
@@ -283,6 +315,11 @@ fn validate_plan(
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FunctionPlanStoreError {
+    AbiValueContractMismatch {
+        path: GraphResourcePath,
+        direction: &'static str,
+        value: crate::node_system::plan::ValueRef,
+    },
     Stale {
         path: GraphResourcePath,
         message: Box<str>,
@@ -299,6 +336,16 @@ pub enum FunctionPlanStoreError {
 impl fmt::Display for FunctionPlanStoreError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::AbiValueContractMismatch {
+                path,
+                direction,
+                value,
+            } => write!(
+                formatter,
+                "function plan '{}' ABI {direction} value {} has a mismatched value contract",
+                path.0,
+                value.index()
+            ),
             Self::Stale { path, message } => {
                 write!(formatter, "function plan '{}' is stale: {message}", path.0)
             }

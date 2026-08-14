@@ -3,6 +3,7 @@ use super::{
     RunResourceOwner, RunResourceSet, RuntimeValue,
 };
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
+use crate::project::{NumericTolerance, ProjectComputationSettings, StatisticalMissingValuePolicy};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
@@ -68,10 +69,32 @@ impl fmt::Display for KernelError {
 
 impl std::error::Error for KernelError {}
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EffectiveComputationSettings {
+    pub numeric_tolerance: NumericTolerance,
+    pub statistical_missing_value_policy: StatisticalMissingValuePolicy,
+}
+
+impl From<&ProjectComputationSettings> for EffectiveComputationSettings {
+    fn from(settings: &ProjectComputationSettings) -> Self {
+        Self {
+            numeric_tolerance: settings.numeric.tolerance,
+            statistical_missing_value_policy: settings.missing_values.statistics,
+        }
+    }
+}
+
+impl Default for EffectiveComputationSettings {
+    fn default() -> Self {
+        Self::from(&ProjectComputationSettings::default())
+    }
+}
+
 pub struct KernelContext<'a> {
     pub run_id: RunId,
     pub frame_id: FrameId,
     pub activation_id: ActivationId,
+    pub(crate) computation_settings: EffectiveComputationSettings,
     pub params: &'a CompiledParameterHandle,
     pub compiled_parameters: Option<&'a CompiledParameterStore>,
     pub resources: &'a RunResourceSet,
@@ -81,6 +104,10 @@ pub struct KernelContext<'a> {
 }
 
 impl KernelContext<'_> {
+    pub fn computation_settings(&self) -> EffectiveComputationSettings {
+        self.computation_settings
+    }
+
     pub fn check_terminal(&self) -> Result<(), KernelError> {
         self.cancellation
             .check()

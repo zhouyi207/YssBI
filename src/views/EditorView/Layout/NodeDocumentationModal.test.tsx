@@ -60,7 +60,7 @@ function catalog(locale: string, localized: {
     registryFingerprint: `registry-${locale}`,
     resourcePublicationRevision: 17,
     locale,
-    categories: [{ categoryId: 'functions', title: 'Functions', searchText: 'Functions' }],
+    categories: [{ categoryId: 'functions', parentCategoryId: null, order: 0, title: 'Functions', searchText: 'Functions' }],
     items: [{
       nodeTypeId: 'function.call',
       title: localized.title,

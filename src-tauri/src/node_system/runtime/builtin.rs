@@ -1,4 +1,7 @@
-use super::{Kernel, KernelContext, KernelError, KernelRegistry, RuntimeValue};
+use super::{
+    ArtifactKind, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
+    KernelRegistry, RuntimeValue,
+};
 use crate::node_system::plan::{KernelHandle, ResourceId};
 use crate::node_system::protocol::{CanonicalDecimal, Value};
 use std::cmp::Ordering;
@@ -148,18 +151,149 @@ impl Kernel for VariableKernel {
             .ok_or_else(|| KernelError::new("bound project variable resource is unavailable"))?;
         if self.write {
             expect_arity(inputs, 1)?;
-            let value = runtime_scalar(inputs, 0)?;
-            lease
-                .write(protocol_to_data_value(value)?)
-                .map_err(KernelError::new)?;
+            let variable = lease.read().map_err(KernelError::new)?;
+            let value = runtime_to_variable_value(&variable, &inputs[0])?;
+            lease.write(value).map_err(KernelError::new)?;
             Ok(Vec::new())
         } else {
             expect_arity(inputs, 0)?;
             let variable = lease.read().map_err(KernelError::new)?;
-            Ok(vec![RuntimeValue::Scalar(data_value_to_protocol(
-                &variable.data_value,
-            )?)])
+            Ok(vec![variable_runtime_value(&variable)?])
         }
+    }
+}
+
+fn variable_runtime_value(
+    variable: &crate::variable::VariableInstance,
+) -> Result<RuntimeValue, KernelError> {
+    let crate::graph::value::DataType::DataSeries(element_type) = &variable.data_type else {
+        return Ok(RuntimeValue::Scalar(data_value_to_protocol(
+            &variable.data_value,
+        )?));
+    };
+    let snapshot = variable
+        .tabular
+        .as_ref()
+        .ok_or_else(|| KernelError::new("DataSeries variable has no persisted tabular snapshot"))?;
+    let (name, values) = snapshot.columns.iter().next().ok_or_else(|| {
+        KernelError::new("DataSeries variable snapshot must contain exactly one column")
+    })?;
+    if snapshot.columns.len() != 1 {
+        return Err(KernelError::new(
+            "DataSeries variable snapshot must contain exactly one column",
+        ));
+    }
+    let element_type = data_series_element_type(element_type)?;
+    let values = values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| json_series_value(element_type, value, index))
+        .collect::<Result<Vec<_>, _>>()?;
+    let artifact = DataSeriesBuilder::new(element_type)
+        .values(values)
+        .name(name.as_str())
+        .build(ArtifactKind::Replayable)
+        .map_err(|error| KernelError::new(error.to_string()))?;
+    Ok(RuntimeValue::Artifact(artifact))
+}
+
+fn data_series_element_type(
+    data_type: &crate::graph::value::DataType,
+) -> Result<DataSeriesElementType, KernelError> {
+    use crate::graph::value::DataType;
+    match data_type {
+        DataType::Int64 => Ok(DataSeriesElementType::Int64),
+        DataType::Float64 => Ok(DataSeriesElementType::Float64),
+        DataType::String => Ok(DataSeriesElementType::String),
+        DataType::Boolean => Ok(DataSeriesElementType::Boolean),
+        DataType::Date => Ok(DataSeriesElementType::Date),
+        DataType::Datetime => Ok(DataSeriesElementType::Datetime),
+        DataType::Categorical => Ok(DataSeriesElementType::Categorical),
+        unsupported => Err(KernelError::new(format!(
+            "DataSeries variable element type {unsupported:?} is not executable"
+        ))),
+    }
+}
+
+fn json_series_value(
+    element_type: DataSeriesElementType,
+    value: &serde_json::Value,
+    index: usize,
+) -> Result<Value, KernelError> {
+    if value.is_null() {
+        return Ok(Value::Null);
+    }
+    let converted = match element_type {
+        DataSeriesElementType::Int64 => value.as_i64().map(Value::Integer),
+        DataSeriesElementType::Float64 => value.as_f64().and_then(|value| {
+            CanonicalDecimal::new(value.to_string())
+                .ok()
+                .map(Value::Decimal)
+        }),
+        DataSeriesElementType::Boolean => value.as_bool().map(Value::Bool),
+        DataSeriesElementType::String
+        | DataSeriesElementType::Date
+        | DataSeriesElementType::Datetime
+        | DataSeriesElementType::Categorical => value
+            .as_str()
+            .map(|value| Value::String(value.to_owned().into_boxed_str())),
+    };
+    converted.ok_or_else(|| {
+        KernelError::new(format!(
+            "DataSeries variable element {index} is incompatible with {element_type}"
+        ))
+    })
+}
+
+fn runtime_to_variable_value(
+    variable: &crate::variable::VariableInstance,
+    value: &RuntimeValue,
+) -> Result<crate::graph::value::DataValue, KernelError> {
+    let crate::graph::value::DataType::DataSeries(declared_element) = &variable.data_type else {
+        return protocol_to_data_value(runtime_scalar(std::slice::from_ref(value), 0)?);
+    };
+    let artifact = super::require_data_series(value)?;
+    let metadata = artifact
+        .data_series_metadata()
+        .ok_or_else(|| KernelError::new("DataSeries Artifact metadata is unavailable"))?;
+    let declared_runtime_type = data_series_element_type(declared_element)?;
+    if metadata.element_type != declared_runtime_type {
+        return Err(KernelError::new(format!(
+            "DataSeries variable expects {declared_runtime_type}, received {}",
+            metadata.element_type
+        )));
+    }
+    let column_name = metadata.name.as_deref().unwrap_or(variable.name.as_str());
+    let values = artifact
+        .cursor()
+        .map_err(|error| KernelError::new(error.to_string()))?
+        .map(|value| {
+            value
+                .map_err(|error| KernelError::new(error.to_string()))
+                .and_then(protocol_series_value_to_json)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let json = serde_json::to_string(&serde_json::json!({column_name: values}))
+        .map_err(|error| KernelError::new(error.to_string()))?;
+    Ok(crate::graph::value::DataValue::DataSeries(
+        crate::graph::value::DataSeriesValue::with_element_type(
+            json,
+            declared_element.as_ref().clone(),
+        ),
+    ))
+}
+
+fn protocol_series_value_to_json(value: Value) -> Result<serde_json::Value, KernelError> {
+    match value {
+        Value::Null => Ok(serde_json::Value::Null),
+        Value::Bool(value) => Ok(serde_json::Value::Bool(value)),
+        Value::Integer(value) => Ok(serde_json::json!(value)),
+        Value::Decimal(value) => serde_json::from_str(value.as_str())
+            .map_err(|_| KernelError::new("DataSeries decimal is not valid JSON numeric storage")),
+        Value::String(value) => Ok(serde_json::Value::String(value.into())),
+        unsupported => Err(KernelError::new(format!(
+            "DataSeries Artifact contains unsupported {unsupported:?} storage"
+        ))),
     }
 }
 

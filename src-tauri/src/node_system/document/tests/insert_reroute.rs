@@ -449,6 +449,7 @@ fn phase2_insert_reroute_document_rejects_orphan_malformed_and_mismatched_endpoi
             order: OrderKey("orphan".into()),
             last_known: LastKnownPortMetadata {
                 label: "Orphan".into(),
+                value_type: None,
             },
         },
     );

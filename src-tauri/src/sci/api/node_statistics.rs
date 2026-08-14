@@ -22,12 +22,14 @@ pub enum RegressionKind {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RegressionFit {
     pub family: &'static str,
     pub coefficients: Vec<f64>,
     pub fitted: Vec<f64>,
     pub residuals: Vec<f64>,
     pub statistics: serde_json::Value,
+    pub metadata: crate::sci::models::regression::StatisticalObservationMetadata,
 }
 
 pub fn fit_regression(
@@ -35,6 +37,7 @@ pub fn fit_regression(
     response: Vec<f64>,
     predictors: Vec<Vec<f64>>,
     weights: Option<Vec<f64>>,
+    metadata: crate::sci::models::regression::StatisticalObservationMetadata,
 ) -> Result<RegressionFit, String> {
     let y = Array1::from_vec(response);
     let x = design_matrix(&predictors, y.len(), true)?;
@@ -62,7 +65,9 @@ pub fn fit_regression(
                     "fPValue": result.f_p_value,
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
+                    "conditionNumber": result.cond_no,
                 }),
+                metadata,
             )
         }
         RegressionKind::Gls => {
@@ -86,6 +91,7 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             )
         }
         RegressionKind::Wls => {
@@ -117,6 +123,7 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             )
         }
         RegressionKind::Prais => {
@@ -139,6 +146,7 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             )
         }
         RegressionKind::Logit => {
@@ -170,6 +178,7 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             })
         }
         RegressionKind::Probit => {
@@ -202,9 +211,117 @@ pub fn fit_regression(
                     "standardErrors": result.stds.to_vec(),
                     "pValues": result.pvalues.to_vec(),
                 }),
+                metadata,
             })
         }
     }
+}
+
+fn stable_report_number(value: f64) -> f64 {
+    (value * 1e12).round() / 1e12
+}
+
+pub fn regression_report(fit: &RegressionFit) -> serde_json::Value {
+    let observations = fit.metadata.used_observation_count;
+    let parameters = fit.coefficients.len();
+    let df_model = parameters.saturating_sub(1);
+    let df_residual = observations.saturating_sub(parameters);
+    let df_total = observations.saturating_sub(1);
+    let ss_residual = fit.residuals.iter().map(|value| value * value).sum::<f64>();
+    let mean = if fit.fitted.is_empty() {
+        0.0
+    } else {
+        fit.fitted.iter().sum::<f64>() / fit.fitted.len() as f64
+    };
+    let ss_model = fit
+        .fitted
+        .iter()
+        .map(|value| (value - mean) * (value - mean))
+        .sum::<f64>();
+    let ss_total = ss_model + ss_residual;
+    let standard_errors = fit.statistics["standardErrors"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let p_values = fit.statistics["pValues"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let coefficients = fit
+        .coefficients
+        .iter()
+        .enumerate()
+        .map(|(index, coefficient)| {
+            let standard_error = standard_errors
+                .get(index)
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(0.0);
+            let p_value = p_values
+                .get(index)
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(1.0);
+            serde_json::json!({
+                "variable": if index == 0 { "_cons".to_string() } else { format!("x{index}") },
+                "coef": coefficient,
+                "std_err": standard_error,
+                "t_value": if standard_error == 0.0 { 0.0 } else { coefficient / standard_error },
+                "p_value": p_value,
+                "confidence_interval_0.025": stable_report_number(coefficient - 1.96 * standard_error),
+                "confidence_interval_0.975": stable_report_number(coefficient + 1.96 * standard_error),
+                "is_significant": p_value < 0.05,
+            })
+        })
+        .collect::<Vec<_>>();
+    let r_squared = fit.statistics["r2"].as_f64().unwrap_or(0.0);
+    let adjusted_r_squared = fit.statistics["adjustedR2"].as_f64().unwrap_or(r_squared);
+    let f_statistic = fit.statistics["fStatistic"].as_f64().unwrap_or(0.0);
+    let f_p_value = fit.statistics["fPValue"].as_f64().unwrap_or(1.0);
+    let ms_model = if df_model == 0 {
+        0.0
+    } else {
+        ss_model / df_model as f64
+    };
+    let ms_residual = if df_residual == 0 {
+        0.0
+    } else {
+        ss_residual / df_residual as f64
+    };
+    let ms_total = if df_total == 0 {
+        0.0
+    } else {
+        ss_total / df_total as f64
+    };
+
+    serde_json::json!({
+        "title": format!("{} Summary", fit.family.to_uppercase()),
+        "endog_name": "response",
+        "model_basic_info": {
+            "model_type": fit.family.to_uppercase(),
+            "method": if matches!(fit.family, "logit" | "probit") { "Maximum Likelihood" } else { "Least Squares" },
+            "num_observation": observations,
+            "r_squared": r_squared,
+            "adj_r_squared": adjusted_r_squared,
+            "f_statistic": f_statistic,
+            "prob_f_statistic": f_p_value,
+            "df_model": df_model,
+            "df_residual": df_residual,
+            "df_total": df_total,
+            "ss_model": ss_model,
+            "ss_residual": ss_residual,
+            "ss_total": ss_total,
+            "ms_model": ms_model,
+            "ms_residual": ms_residual,
+            "ms_total": ms_total,
+            "covariance_type": "nonrobust",
+        },
+        "coefficients": coefficients,
+        "diagnostic_info": {
+            "cond_no": fit.statistics["conditionNumber"].as_f64().unwrap_or(0.0),
+            "fitted_values": fit.fitted,
+            "residuals": fit.residuals,
+        },
+        "betas": fit.coefficients,
+    })
 }
 
 fn linear_fit(
@@ -213,6 +330,7 @@ fn linear_fit(
     x: &Array2<f64>,
     coefficients: Vec<f64>,
     statistics: serde_json::Value,
+    metadata: crate::sci::models::regression::StatisticalObservationMetadata,
 ) -> Result<RegressionFit, String> {
     let fitted = x.dot(&Array1::from_vec(coefficients.clone())).to_vec();
     Ok(RegressionFit {
@@ -221,6 +339,7 @@ fn linear_fit(
         fitted,
         coefficients,
         statistics,
+        metadata,
     })
 }
 

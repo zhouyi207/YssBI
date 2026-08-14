@@ -42,6 +42,7 @@ export function isValidEventType(type: string): boolean {
     const validTypes = [
         // Project
         'ProjectLoaded', 'ProjectCleared', 'ProjectLifecycleCommitted', 'ProjectSaved',
+        'ComputationSettingsChanged',
         // Graph
         'EventUpdated', 'EventDeleted',
         'FunctionUpdated', 'FunctionDeleted',

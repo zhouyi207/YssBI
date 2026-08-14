@@ -38,10 +38,17 @@
             "description": "The constant value.",
             "title": "Value"
           },
-          "editor": "auto",
+          "editor": "toggle",
+          "inheritedValue": null,
           "key": "value",
           "multiline": false,
-          "value": true
+          "options": null,
+          "presentation": "inlineAndDetail",
+          "value": true,
+          "valueSource": null,
+          "valueType": {
+            "kind": "Boolean"
+          }
         }
       ],
       "ports": [

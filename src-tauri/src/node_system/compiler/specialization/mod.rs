@@ -55,6 +55,7 @@ pub enum DemandPlanError {
     InputPort(GraphOutputRef),
     ControlPort(GraphOutputRef),
     EffectPort(GraphOutputRef),
+    UnboundInput(PortAddress),
     InvalidDerivedPlan(Box<str>),
     CanonicalEncoding(crate::node_system::registry::CanonicalEncodingError),
 }
@@ -91,6 +92,7 @@ impl fmt::Display for DemandPlanError {
             Self::EffectPort(output) => {
                 write!(formatter, "requested port is effect: {}", output.port)
             }
+            Self::UnboundInput(port) => write!(formatter, "required input is unbound: {port}"),
             Self::InvalidDerivedPlan(message) => {
                 write!(formatter, "derived execution plan is invalid: {message}")
             }
@@ -158,12 +160,15 @@ pub struct ExecutionPlanBasis {
     pub(crate) provenance: CompileProvenance,
     pub(crate) value_count: u32,
     pub(crate) operations: Box<[IntermediateOperation]>,
+    pub(crate) value_contracts: BTreeMap<ValueRef, crate::node_system::plan::PlannedValueContract>,
     pub(crate) value_sources: Box<[PlanValueSource]>,
     pub(crate) value_dependencies: Box<[ValueDependency]>,
     pub(crate) effect_dependencies: Box<[(usize, usize)]>,
     pub(crate) root_region: StructuredControlRegion,
     pub(crate) relational_connections: Box<[RelationalConnection]>,
     pub(crate) port_facts: BTreeMap<PortAddress, DemandPortFact>,
+    pub(crate) unbound_inputs: BTreeMap<ValueRef, PortAddress>,
+    pub(crate) bound_values: BTreeMap<ValueRef, crate::node_system::protocol::Value>,
     pub(crate) nodes: BTreeSet<NodeId>,
     pub(crate) output_results: BTreeMap<GraphOutputRef, PlanResult>,
     pub(crate) default_outputs: BTreeSet<GraphOutputRef>,
@@ -203,6 +208,13 @@ impl ExecutionPlanBasis {
         let normalized = self.normalize_demand(demand)?;
         let selected_outputs = self.selected_outputs(&normalized);
         let retained = self.retained_plan(&selected_outputs);
+        if let Some(port) = retained
+            .required_values
+            .iter()
+            .find_map(|value| self.unbound_inputs.get(value))
+        {
+            return Err(DemandPlanError::UnboundInput(port.clone()));
+        }
         self.finalize(
             &retained.operations,
             &selected_outputs,

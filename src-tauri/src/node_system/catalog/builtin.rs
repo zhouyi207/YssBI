@@ -54,6 +54,13 @@ pub enum BuiltinAssemblyError {
         locale: Box<str>,
         key: Box<str>,
     },
+    UnsupportedBuiltinConfiguration {
+        context: &'static str,
+        value: Box<str>,
+    },
+    UnsupportedStatisticsPredictionFamily {
+        family: Box<str>,
+    },
     Registration(NodeRegistrationError),
 }
 
@@ -110,6 +117,13 @@ impl std::fmt::Display for BuiltinAssemblyError {
                 formatter,
                 "built-in localization key '{key}' has conflicting values for '{locale}'",
             ),
+            Self::UnsupportedBuiltinConfiguration { context, value } => {
+                write!(formatter, "unsupported built-in {context}: '{value}'")
+            }
+            Self::UnsupportedStatisticsPredictionFamily { family } => write!(
+                formatter,
+                "statistics prediction does not support the '{family}' model family",
+            ),
             Self::Registration(error) => error.fmt(formatter),
         }
     }
@@ -124,7 +138,9 @@ impl std::error::Error for BuiltinAssemblyError {
             Self::InvalidParameterSchema { source, .. } => Some(source),
             Self::InvalidDecimal { source, .. } => Some(source),
             Self::InvalidDefaultBinding { source, .. } => Some(source),
-            Self::LocalizationConflict { .. } => None,
+            Self::LocalizationConflict { .. }
+            | Self::UnsupportedBuiltinConfiguration { .. }
+            | Self::UnsupportedStatisticsPredictionFamily { .. } => None,
             Self::Registration(error) => Some(error),
         }
     }
@@ -673,7 +689,11 @@ fn assemble_builtin_parts_with(
                 Ok(TypeRegistration {
                     id: sid(leak(format!("core.{name}")), TypeId::new)?,
                     title_key: iid(leak(format!("types.{name}.title")))?,
-                    classes: BTreeSet::new(),
+                    classes: if matches!(name, "int64" | "float64") {
+                        BTreeSet::from([sid(NUMERIC_TYPE_CLASS_ID, TypeClassId::new)?])
+                    } else {
+                        BTreeSet::new()
+                    },
                 })
             })
             .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?,
@@ -720,6 +740,7 @@ fn assemble_builtin_parts_with(
     let mut provider = ProviderRegistration::new(sid(PROVIDER, ProviderId::new)?);
     provider.types = fragment.types.into_boxed_slice();
     provider.type_constructors = fragment.type_constructors.into_boxed_slice();
+    provider.type_classes = vec![sid(NUMERIC_TYPE_CLASS_ID, TypeClassId::new)?].into_boxed_slice();
     provider.categories = fragment.categories.into_boxed_slice();
     provider.i18n = i18n;
     provider.interface_resolvers = fragment.interface_resolvers.into_boxed_slice();
@@ -740,6 +761,17 @@ fn constant_protocol(
     ty: &'static str,
     value: Value,
 ) -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let editor = match ty {
+        "core.bool" => ParameterEditorSpec::Toggle,
+        "core.int64" | "core.float64" => ParameterEditorSpec::Number,
+        "core.string" => ParameterEditorSpec::Text { multiline: false },
+        _ => {
+            return Err(BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
+                context: "constant type",
+                value: ty.into(),
+            });
+        }
+    };
     protocol(
         id,
         "constants",
@@ -754,7 +786,8 @@ fn constant_protocol(
                 value,
             }),
             constraints: vec![],
-            editor: ParameterEditorSpec::Auto,
+            editor,
+            presentation: ParameterPresentation::InlineAndDetail,
         }],
         pure(),
     )
@@ -843,6 +876,7 @@ fn protocol(
         },
         interface: assembled_interface(id, ports, vec![], vec![], vec![])?,
         parameters: assembled_parameters(id, parameters)?,
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution,
         scope: NodeScope::Any,
         managed_role: None,

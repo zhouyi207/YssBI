@@ -3,8 +3,11 @@ import type {
   PlotChart,
   ReportKind,
   SourceDescriptor,
-  SourceValue,
 } from '@/features/core/resultSource';
+import {
+  reportSourceValuePayload,
+  sourceValuePayload,
+} from '@/features/core/resultSource/sourceValuePayload';
 import { parsePlotChartFromLocation } from './parsePresentationWindowQuery';
 
 export type PresentationWindowState =
@@ -19,9 +22,6 @@ export type PresentationPayload =
   | { mode: 'plot'; chart: PlotChart; data: unknown }
   | { mode: 'report'; report: ReportKind; data: unknown };
 
-function extractPayload(value: SourceValue): unknown {
-  return value.value ?? value.structured ?? value;
-}
 
 function resolvePlotChart(descriptor: SourceDescriptor): PlotChart {
   if (descriptor.presentation.kind === 'plot') {
@@ -74,7 +74,7 @@ export async function loadPresentationWindow(
           payload: {
             mode: 'plot',
             chart: resolvePlotChart(descriptor),
-            data: extractPayload(value),
+            data: sourceValuePayload(value),
           },
         };
       }
@@ -88,7 +88,7 @@ export async function loadPresentationWindow(
           payload: {
             mode: 'report',
             report: descriptor.presentation.report,
-            data: extractPayload(value),
+            data: reportSourceValuePayload(value),
           },
         };
       }

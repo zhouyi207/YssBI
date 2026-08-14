@@ -14,6 +14,7 @@ import {
     ProjectClearedHandler,
     ProjectLifecycleCommittedHandler,
     ProjectSavedHandler,
+    ComputationSettingsChangedHandler,
 } from './ProjectEventHandler';
 import {
     EventUpdatedHandler,
@@ -50,6 +51,7 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         new ProjectClearedHandler() as EventHandler<unknown>,
         new ProjectLifecycleCommittedHandler() as EventHandler<unknown>,
         new ProjectSavedHandler() as EventHandler<unknown>,
+        new ComputationSettingsChangedHandler() as EventHandler<unknown>,
         
         // Event
         new EventUpdatedHandler() as EventHandler<unknown>,

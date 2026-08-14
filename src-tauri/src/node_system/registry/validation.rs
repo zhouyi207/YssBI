@@ -461,6 +461,32 @@ fn validate_node(
         }
         validate_parameter_constraints(parameter).map_err(&fail)?;
     }
+    if let NodeInstanceDisplaySpec::ResourceParameter { parameter, kind } =
+        &protocol.instance_display
+    {
+        let Some(parameter_spec) = parameter_specs.get(parameter) else {
+            return Err(fail(format!(
+                "instance display parameter '{parameter}' does not exist"
+            )));
+        };
+        match &parameter_spec.editor {
+            ParameterEditorSpec::Resource {
+                kind: parameter_kind,
+            } if parameter_kind == kind => {}
+            ParameterEditorSpec::Resource {
+                kind: parameter_kind,
+            } => {
+                return Err(fail(format!(
+                    "instance display resource kind '{kind:?}' is incompatible with parameter '{parameter}' kind '{parameter_kind:?}'"
+                )));
+            }
+            _ => {
+                return Err(fail(format!(
+                    "instance display parameter '{parameter}' must use the resource editor"
+                )));
+            }
+        }
+    }
     for constraint in &protocol.interface.type_constraints {
         validate_constraint(
             constraint,
@@ -628,6 +654,7 @@ mod nominal_schema_tests {
             default_value: None,
             constraints: vec![ParameterConstraint::Required],
             editor: ParameterEditorSpec::Auto,
+            presentation: ParameterPresentation::DetailPanel,
         }
     }
 

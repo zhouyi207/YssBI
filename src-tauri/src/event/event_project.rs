@@ -161,6 +161,10 @@ pub enum EventProject {
     ProjectSaved {
         result: crate::project::project_writers::ProjectSaveResultDto,
     },
+    #[serde(rename_all = "camelCase")]
+    ComputationSettingsChanged {
+        result: crate::project::ComputationSettingsMutationReceipt,
+    },
 }
 
 #[cfg(test)]

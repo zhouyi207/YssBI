@@ -7,6 +7,7 @@ use crate::node_system::compiler::{
     FragmentMetadata, KernelFragment as CompiledKernelFragment, LoweredKernel, LoweredNode,
     LoweringContext, LoweringError, LoweringInvariant, NodeImplementation, NodeLowerer,
 };
+use crate::node_system::document::PortAddress;
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{
@@ -95,6 +96,7 @@ impl NodeKeys {
 struct CoreKernelLowerer {
     handle: &'static str,
     effect: EffectSemantics,
+    result: Option<(&'static str, &'static str)>,
 }
 
 impl NodeLowerer for CoreKernelLowerer {
@@ -108,6 +110,17 @@ impl NodeLowerer for CoreKernelLowerer {
                 kernel,
                 metadata: FragmentMetadata {
                     effect: self.effect,
+                    results: match self.result {
+                        Some((name, port)) => vec![crate::node_system::compiler::FragmentResult {
+                            name: name.into(),
+                            output: PortAddress::declared(
+                                context.node_id,
+                                PortKey::new(port).expect("static core result port is valid"),
+                            ),
+                        }]
+                        .into_boxed_slice(),
+                        None => Box::new([]),
+                    },
                     ..FragmentMetadata::default()
                 },
             }),
@@ -123,6 +136,24 @@ pub(crate) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNo
         Arc::new(NodeImplementation::new(CoreKernelLowerer {
             handle: kernel,
             effect,
+            result: None,
+        })),
+    )
+}
+
+pub(crate) fn result_leaf(
+    protocol: NodeProtocol,
+    kernel: &'static str,
+    result_name: &'static str,
+    result_port: &'static str,
+) -> RegisteredNode {
+    let effect = protocol.execution.effects;
+    RegisteredNode::leaf(
+        Arc::new(protocol),
+        Arc::new(NodeImplementation::new(CoreKernelLowerer {
+            handle: kernel,
+            effect,
+            result: Some((result_name, result_port)),
         })),
     )
 }
@@ -162,6 +193,7 @@ pub(crate) fn protocol(
         },
         interface: assembled_interface(id, ports, type_parameters, type_constraints, vec![])?,
         parameters: assembled_parameters(id, parameters)?,
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution,
         scope: NodeScope::Any,
         managed_role: None,
@@ -243,6 +275,7 @@ pub(crate) fn parameter(
         default_value,
         constraints,
         editor,
+        presentation: ParameterPresentation::DetailPanel,
     })
 }
 

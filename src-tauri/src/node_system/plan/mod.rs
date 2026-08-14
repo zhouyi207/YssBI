@@ -19,7 +19,8 @@ mod tests {
     };
     use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use crate::node_system::protocol::{
-        CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy, Value,
+        CachePolicy, InputConsumption, NodeTypeId, OutputProduction, PortKey, RetryPolicy,
+        TypeExpr, TypeId, Value, data_series_type,
     };
     use crate::node_system::registry::RegistryFingerprint;
 
@@ -36,6 +37,7 @@ mod tests {
             inputs: Box::new([]),
             outputs: Box::new([PlannedOutput {
                 value: ValueRef::new(output),
+                contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 production: OutputProduction::FullyMaterialized,
             }]),
             params: id("params-1", CompiledParameterHandle::new),
@@ -69,6 +71,9 @@ mod tests {
             },
             value_count: 8,
             operations: Box::new([operation(0), operation(1)]),
+            value_contracts: (0..8)
+                .map(|value| (ValueRef::new(value), PlannedValueContract::opaque()))
+                .collect(),
             value_sources: Box::new([
                 PlanValueSource::ExternalInput(
                     ValueRef::new(3),
@@ -95,6 +100,7 @@ mod tests {
                     OutputProduction::FullyMaterialized,
                 ),
             ]),
+            bound_values: Default::default(),
             value_dependencies: Box::new([ValueDependency {
                 source: ValueRef::new(0),
                 destination: ValueRef::new(1),
@@ -1419,6 +1425,9 @@ mod tests {
     fn accepts_declared_external_and_control_produced_input_sources() {
         let mut external = valid_plan();
         external.value_count = 9;
+        external
+            .value_contracts
+            .insert(ValueRef::new(8), PlannedValueContract::opaque());
         external.value_sources = external
             .value_sources
             .into_vec()
@@ -1431,6 +1440,7 @@ mod tests {
             .into_boxed_slice();
         external.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(8),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);
@@ -1440,6 +1450,7 @@ mod tests {
         let mut control_produced = valid_plan();
         control_produced.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(5),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);
@@ -1452,17 +1463,20 @@ mod tests {
         let mut first = operation(1);
         first.inputs = Box::new([PlannedInput {
             value: ValueRef::new(0),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: InputConsumption::FullyMaterialized,
             bound_value: Some(Value::Integer(7)),
         }]);
         let mut second = operation(2);
         second.inputs = Box::new([PlannedInput {
             value: ValueRef::new(1),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);
         let mut plan = valid_plan();
         plan.value_count = 3;
+        plan.value_contracts.retain(|value, _| value.index() < 3);
         plan.operations = Box::new([first, second]);
         plan.value_sources = Box::new([]);
         plan.value_dependencies = Box::new([]);
@@ -1588,12 +1602,76 @@ mod tests {
         )));
     }
 
+    fn concrete_type(id: &str) -> TypeExpr {
+        TypeExpr::Concrete(TypeId::new(id).expect("test type ID is valid"))
+    }
+
+    fn data_series_contract(element_type: TypeExpr) -> PlannedValueContract {
+        PlannedValueContract {
+            kind: PlannedValueKind::DataSeries,
+            type_expr: data_series_type(element_type),
+        }
+    }
+
+    fn set_dependency_contracts(
+        plan: &mut ExecutionPlan,
+        source: PlannedValueContract,
+        destination: PlannedValueContract,
+    ) {
+        plan.value_contracts
+            .insert(ValueRef::new(0), source.clone());
+        plan.value_contracts
+            .insert(ValueRef::new(1), destination.clone());
+        plan.operations[0].outputs[0].contract = source;
+        plan.operations[1].outputs[0].contract = destination;
+    }
+
+    #[test]
+    fn accepts_value_dependency_assignable_to_destination_union() {
+        let mut plan = valid_plan();
+        set_dependency_contracts(
+            &mut plan,
+            data_series_contract(concrete_type("core.float64")),
+            data_series_contract(TypeExpr::Union(vec![
+                concrete_type("core.int64"),
+                concrete_type("core.float64"),
+            ])),
+        );
+
+        plan.validate()
+            .expect("a concrete numeric series must be assignable to the numeric series union");
+    }
+
+    #[test]
+    fn rejects_value_dependency_outside_destination_union() {
+        let mut plan = valid_plan();
+        set_dependency_contracts(
+            &mut plan,
+            data_series_contract(concrete_type("core.string")),
+            data_series_contract(TypeExpr::Union(vec![
+                concrete_type("core.int64"),
+                concrete_type("core.float64"),
+            ])),
+        );
+
+        assert!(plan.validate().unwrap_err().0.iter().any(|error| matches!(
+            error,
+            PlanValidationError::ValueContractMismatch {
+                context: "value dependency",
+                source,
+                destination,
+                ..
+            } if *source == ValueRef::new(0) && *destination == ValueRef::new(1)
+        )));
+    }
+
     #[test]
     fn rejects_undeclared_dependency_root_as_input_source() {
         let mut plan = valid_plan();
         plan.value_count = 10;
         plan.operations[1].inputs = Box::new([PlannedInput {
             value: ValueRef::new(9),
+            contract: crate::node_system::plan::PlannedValueContract::opaque(),
             consumption: crate::node_system::protocol::InputConsumption::FullyMaterialized,
             bound_value: None,
         }]);

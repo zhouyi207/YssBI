@@ -1,6 +1,6 @@
 use super::{CompilerDiagnostic, CompilerDiagnosticLocation};
 use crate::node_system::analysis::DiagnosticLocation;
-use crate::node_system::document::{ConnectionId, NodeId, PortAddress};
+use crate::node_system::document::{ConnectionId, NodeId, PortAddress, PortRef};
 use crate::node_system::protocol::{
     NodeProtocol, ParameterKey, PortKey, TypeClassId, TypeConstraint, TypeConstructorId, TypeExpr,
     TypeId, TypeParameterId, TypeTerm,
@@ -88,11 +88,11 @@ impl TypeConstraintGraph {
         }
     }
 
-    pub(crate) fn add_node(
+    pub(crate) fn add_node<'a>(
         &mut self,
         node_id: NodeId,
         protocol: &NodeProtocol,
-        ports: impl Iterator<Item = PortAddress>,
+        ports: impl Iterator<Item = (&'a PortAddress, &'a TypeExpr)>,
     ) {
         let generic_variables: BTreeMap<_, _> = protocol
             .interface
@@ -113,20 +113,46 @@ impl TypeConstraintGraph {
             .collect();
         let ports = ports.collect::<Vec<_>>();
 
-        for address in &ports {
+        for &(address, value_type) in &ports {
             let variable = self.variable(VariableOrigin::Port);
             self.port_variables.insert(address.clone(), variable);
-            if let Some(spec) = protocol
-                .interface
-                .ports
-                .iter()
-                .find(|spec| spec.key == *port_template(address))
-            {
-                let declared = instantiate(&spec.value_type, &generic_variables);
-                self.constraints.push(Constraint {
-                    kind: ConstraintKind::Equal(TypeValue::Variable(variable), declared),
-                    location: DiagnosticLocation::Port(address.clone()),
-                });
+            let declared = instantiate(value_type, &generic_variables);
+            self.constraints.push(Constraint {
+                kind: ConstraintKind::Equal(TypeValue::Variable(variable), declared),
+                location: DiagnosticLocation::Port(address.clone()),
+            });
+        }
+
+        for group in protocol.interface.member_groups.iter() {
+            let mut instances = BTreeMap::new();
+            for (address, _) in &ports {
+                let PortRef::Instance {
+                    template,
+                    instance_id,
+                } = &address.port
+                else {
+                    continue;
+                };
+                if group.templates.contains(template) {
+                    instances
+                        .entry(*instance_id)
+                        .or_insert_with(Vec::new)
+                        .push((*address).clone());
+                }
+            }
+            for addresses in instances.values() {
+                if let Some((first, rest)) = addresses.split_first() {
+                    let first = self.port_variables[first];
+                    for address in rest {
+                        self.constraints.push(Constraint {
+                            kind: ConstraintKind::Equal(
+                                TypeValue::Variable(first),
+                                TypeValue::Variable(self.port_variables[address]),
+                            ),
+                            location: DiagnosticLocation::Port(address.clone()),
+                        });
+                    }
+                }
             }
         }
 
@@ -134,7 +160,10 @@ impl TypeConstraintGraph {
             self.add_protocol_constraint(
                 node_id,
                 constraint,
-                &ports,
+                &ports
+                    .iter()
+                    .map(|(address, _)| (*address).clone())
+                    .collect::<Vec<_>>(),
                 &parameter_types,
                 &generic_variables,
             );

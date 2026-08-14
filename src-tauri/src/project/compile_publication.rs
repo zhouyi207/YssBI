@@ -65,11 +65,17 @@ struct CurrentBasis {
 
 impl CurrentCompilation {
     fn into_products(self) -> PublishedProducts {
-        let plan = self.plan.map(|projection| CompileProjection {
-            graph_path: projection.graph_path,
-            basis: projection.basis,
-            compile_id: projection.compile_id,
-            payload: projection.payload.full_plan().clone(),
+        let plan = self.plan.and_then(|projection| {
+            projection
+                .payload
+                .full_plan()
+                .cloned()
+                .map(|payload| CompileProjection {
+                    graph_path: projection.graph_path,
+                    basis: projection.basis,
+                    compile_id: projection.compile_id,
+                    payload,
+                })
         });
         (self.analysis, plan)
     }
@@ -340,19 +346,15 @@ impl ProjectState {
         let has_blocking_diagnostics =
             publication_blocks_plan(&result.outcome, result.analysis.has_blocking_errors())?;
         let plan = match &result.outcome {
-            CompilationOutcome::Succeeded => {
-                result
-                    .plan
-                    .zip(result.execution_basis)
-                    .map(|(plan, execution_basis)| {
-                        Arc::new(PublishedExecutionPlan::new(plan, execution_basis))
-                    })
-            }
+            CompilationOutcome::Succeeded => result.execution_basis.map(|execution_basis| {
+                Arc::new(PublishedExecutionPlan::new(result.plan, execution_basis))
+            }),
             CompilationOutcome::AnalysisBlocked | CompilationOutcome::InternalFailure(_) => None,
         };
         let products = CompileProducts {
             analysis: PublishedCompileAnalysis {
                 analysis: result.analysis,
+                interface_projection: result.interface_projection,
                 semantic: result.semantic,
                 outcome: result.outcome,
             },

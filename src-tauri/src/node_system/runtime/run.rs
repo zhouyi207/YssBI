@@ -1,6 +1,7 @@
 use super::{
-    BoundedStreamReceiver, KernelErrorKind, RelationalError, RelationalErrorCode, ReplayArtifact,
-    RunResourceBudgets, SchedulingPolicy, SpillArtifact, StreamReceiveError,
+    BoundedStreamReceiver, DataSeriesContractError, DataSeriesMetadata, KernelErrorKind,
+    RelationalError, RelationalErrorCode, ReplayArtifact, RunResourceBudgets, SchedulingPolicy,
+    SpillArtifact, StreamReceiveError,
 };
 use crate::node_system::analysis::{CompileProvenance, CorrelationContext, RunId};
 use crate::node_system::plan::{OperationIndex, RelationalBackendId, ResourceId, ValueRef};
@@ -88,6 +89,13 @@ pub enum ArtifactKind {
     Replayable,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ArtifactValueKind {
+    Sequence,
+    DataSeries,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum MaterializedArtifact {
     InMemory(Box<[Value]>),
@@ -127,6 +135,8 @@ impl MaterializedArtifact {
 
 #[derive(Debug)]
 struct ArtifactStorage {
+    value_kind: ArtifactValueKind,
+    data_series_metadata: Option<DataSeriesMetadata>,
     materialized: MaterializedArtifact,
     _memory_reservation: Option<super::materialization::MemoryReservation>,
 }
@@ -142,10 +152,36 @@ impl Artifact {
         Self::from_materialized(kind, MaterializedArtifact::InMemory(values.into()))
     }
 
+    pub fn new_data_series(
+        kind: ArtifactKind,
+        metadata: DataSeriesMetadata,
+        values: impl Into<Box<[Value]>>,
+    ) -> Result<Self, DataSeriesContractError> {
+        let values = values.into();
+        super::data_series::validate_data_series_values(&metadata, &values)?;
+        Ok(Self::from_materialized_with_payload(
+            kind,
+            ArtifactValueKind::DataSeries,
+            Some(metadata),
+            MaterializedArtifact::InMemory(values),
+        ))
+    }
+
     pub fn from_materialized(kind: ArtifactKind, materialized: MaterializedArtifact) -> Self {
+        Self::from_materialized_with_payload(kind, ArtifactValueKind::Sequence, None, materialized)
+    }
+
+    pub(crate) fn from_materialized_with_payload(
+        kind: ArtifactKind,
+        value_kind: ArtifactValueKind,
+        data_series_metadata: Option<DataSeriesMetadata>,
+        materialized: MaterializedArtifact,
+    ) -> Self {
         Self {
             kind,
             storage: Arc::new(ArtifactStorage {
+                value_kind,
+                data_series_metadata,
                 materialized,
                 _memory_reservation: None,
             }),
@@ -154,12 +190,16 @@ impl Artifact {
 
     pub(crate) fn from_materialized_with_reservation(
         kind: ArtifactKind,
+        value_kind: ArtifactValueKind,
+        data_series_metadata: Option<DataSeriesMetadata>,
         materialized: MaterializedArtifact,
         memory_reservation: super::materialization::MemoryReservation,
     ) -> Self {
         Self {
             kind,
             storage: Arc::new(ArtifactStorage {
+                value_kind,
+                data_series_metadata,
                 materialized,
                 _memory_reservation: Some(memory_reservation),
             }),
@@ -168,6 +208,14 @@ impl Artifact {
 
     pub const fn kind(&self) -> ArtifactKind {
         self.kind
+    }
+
+    pub fn value_kind(&self) -> ArtifactValueKind {
+        self.storage.value_kind
+    }
+
+    pub fn data_series_metadata(&self) -> Option<&DataSeriesMetadata> {
+        self.storage.data_series_metadata.as_ref()
     }
 
     pub fn materialized(&self) -> &MaterializedArtifact {
@@ -204,7 +252,10 @@ impl Artifact {
 
 impl PartialEq for Artifact {
     fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind && self.storage.materialized == other.storage.materialized
+        self.kind == other.kind
+            && self.storage.value_kind == other.storage.value_kind
+            && self.storage.data_series_metadata == other.storage.data_series_metadata
+            && self.storage.materialized == other.storage.materialized
     }
 }
 

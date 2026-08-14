@@ -8,8 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { i18n, type AppLanguage } from "@/app/i18n";
+import { useProjectComputationSettings } from '@/features/application/projectSettings/useProjectComputationSettings';
 
-export const SettingsView: React.FC = () => {
+interface SettingsViewProps {
+    onRequestClose?: () => void;
+    onDirtyChange?: (dirty: boolean) => void;
+}
+
+export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDirtyChange }) => {
     const { t } = useTranslation();
     const theme = useSettingsStore((s) => s.theme);
     const editor = useSettingsStore((s) => s.editor);
@@ -25,6 +31,7 @@ export const SettingsView: React.FC = () => {
     const resetEditorToDefaults = useSettingsStore((s) => s.resetEditorToDefaults);
     const resetAppearanceToDefaults = useSettingsStore((s) => s.resetAppearanceToDefaults);
 
+    const computation = useProjectComputationSettings();
     const [activeSection, setActiveSection] = useState("editor");
     const [isResetting, setIsResetting] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
@@ -32,6 +39,7 @@ export const SettingsView: React.FC = () => {
     const sections = [
         { id: "editor", label: t("settings.sections.editor") },
         { id: "project", label: t("settings.sections.project") },
+        { id: "computation", label: t("settings.sections.computation") },
         { id: "appearance", label: t("settings.sections.appearance") },
         { id: "color", label: t("settings.sections.color") }
     ];
@@ -47,6 +55,33 @@ export const SettingsView: React.FC = () => {
             setActiveSection(visibleSections[0].id);
         }
     }, [activeSection, visibleSections]);
+
+    useEffect(() => {
+        onDirtyChange?.(computation.isDirty);
+        return () => onDirtyChange?.(false);
+    }, [computation.isDirty, onDirtyChange]);
+
+    const confirmDiscardComputation = async (): Promise<boolean> => {
+        if (!computation.isDirty) return true;
+        return uiStore.confirm({
+            title: "Discard computation changes?",
+            message: "Your unapplied project computation settings will be lost.",
+            confirmText: "Discard",
+            cancelText: "Keep Editing",
+            type: "danger",
+        });
+    };
+
+    const requestSection = async (section: string) => {
+        if (section === activeSection) return;
+        if (!(await confirmDiscardComputation())) return;
+        setActiveSection(section);
+    };
+
+    const requestClose = async () => {
+        if (!(await confirmDiscardComputation())) return;
+        onRequestClose?.();
+    };
 
     const languageOptions = [
         { label: t("language.zhCN"), value: "zh-CN" },
@@ -294,6 +329,80 @@ export const SettingsView: React.FC = () => {
                             </div>
                         </div>
                     </div>
+                );
+            case "computation":
+                return (
+                    <fieldset
+                        role="group"
+                        aria-label="settings.computation.groupLabel"
+                        aria-disabled={!computation.enabled}
+                        disabled={!computation.enabled || computation.isLoading || computation.isApplying}
+                        className="space-y-6"
+                    >
+                        <div>
+                            <h2 className="mb-2 text-xl text-foreground">{t("settings.sections.computation")}</h2>
+                            <p className="text-sm text-muted-foreground">
+                                Project-authoritative numeric comparison and statistical missing-value behavior.
+                            </p>
+                        </div>
+                        <SettingItem
+                            label="Absolute tolerance"
+                            description="The fixed lower bound used for approximate numeric equality."
+                            type="text"
+                            value={computation.draft.absolute}
+                            onChange={(absolute) => computation.setDraft({ absolute })}
+                            disabled={!computation.enabled}
+                        />
+                        <SettingItem
+                            label="Relative tolerance"
+                            description="The scale-dependent bound used for approximate numeric equality."
+                            type="text"
+                            value={computation.draft.relative}
+                            onChange={(relative) => computation.setDraft({ relative })}
+                            disabled={!computation.enabled}
+                        />
+                        <div className="rounded-md border border-border bg-muted/20 p-3 font-mono text-xs text-muted-foreground">
+                            |a - b| ≤ max(absolute, relative × max(|a|, |b|))
+                        </div>
+                        <SettingItem
+                            label="Statistical missing values"
+                            description="Listwise removes rows containing missing values; Reject reports an error."
+                            type="select"
+                            value={computation.draft.statistics}
+                            options={[
+                                { label: "Listwise", value: "listwise" },
+                                { label: "Reject", value: "reject" },
+                            ]}
+                            onChange={(statistics) => computation.setDraft({
+                                statistics: statistics as "listwise" | "reject",
+                            })}
+                            disabled={!computation.enabled}
+                        />
+                        {computation.validationError && (
+                            <p role="alert" className="text-sm text-destructive">{computation.validationError}</p>
+                        )}
+                        {computation.error && (
+                            <p role="alert" className="text-sm text-destructive">{computation.error}</p>
+                        )}
+                        <div className="flex items-center justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={computation.restoreRecommended}
+                                disabled={!computation.enabled || computation.isApplying}
+                            >
+                                Restore Recommended Values
+                            </Button>
+                            <Button
+                                type="button"
+                                onClick={() => void computation.apply()}
+                                disabled={!computation.enabled || !computation.isDirty
+                                    || Boolean(computation.validationError) || computation.isApplying}
+                            >
+                                {computation.isApplying ? "Applying…" : "Apply"}
+                            </Button>
+                        </div>
+                    </fieldset>
                 );
             case "appearance":
                 return (
@@ -584,7 +693,7 @@ export const SettingsView: React.FC = () => {
     return (
         <div className="w-full h-full bg-[var(--workbench-bg)] text-foreground flex flex-col overflow-hidden font-sans">
             {/* Header / Search Area */}
-            <div className="h-12 border-b border-border flex items-center px-6 shrink-0 bg-[var(--workbench-bg)]">
+            <div className="h-12 border-b border-border flex items-center gap-3 px-6 shrink-0 bg-[var(--workbench-bg)]">
                 <div className="flex-1 relative">
                     <Input
                         type="text"
@@ -594,6 +703,17 @@ export const SettingsView: React.FC = () => {
                         className="h-8"
                     />
                 </div>
+                {onRequestClose && (
+                    <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Close settings"
+                        onClick={() => void requestClose()}
+                    >
+                        ×
+                    </Button>
+                )}
             </div>
 
             <div className="flex-1 flex overflow-hidden min-h-0">
@@ -606,7 +726,7 @@ export const SettingsView: React.FC = () => {
                                 type="button"
                                 variant={activeSection === section.id ? "secondary" : "ghost"}
                                 key={section.id}
-                                onClick={() => setActiveSection(section.id)}
+                                onClick={() => void requestSection(section.id)}
                                 className="w-full justify-start"
                             >
                                 {section.label}
@@ -723,6 +843,7 @@ const SettingItem: React.FC<SettingItemProps> = (props) => {
                             options={props.options || []}
                             value={props.value || (props.options?.[0]?.value || "")}
                             onChange={(val) => props.onChange?.(val)}
+                            disabled={disabled}
                         />
                     </div>
                 )}

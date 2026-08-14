@@ -36,6 +36,21 @@ describe('graphDataStore projected entity truth', () => {
     });
   });
 
+  it('preserves unresolved projected types without materializing Any', () => {
+    const fixture = makeEditorProjectionFixture({ graphPath: 'graph-1' });
+    fixture.projection.nodes[0].ports[1].resolvedType = {
+      display: 'Unknown',
+      resolved: false,
+      dataType: null,
+    };
+
+    useGraphDataStore.getState().replaceProjection('graph-1', fixture.projection, 1);
+
+    const input = useGraphDataStore.getState().graphEntities['graph-1'].pins[fixture.inputKey];
+    expect(input.resolvedType).toEqual({ display: 'Unknown', resolved: false, dataType: null });
+    expect(input.dataType).toBeUndefined();
+  });
+
   it('stores projected connection topology and required metadata', () => {
     const fixture = makeEditorProjectionFixture({ graphPath: 'graph-1' });
 

@@ -1,6 +1,6 @@
 import { useUIStore } from "@/features/core/ui/useUIStore";
 import { uiStore } from "@/features/core/ui/UIStore";
-import { Toaster } from "@/components/ui/sonner";
+
 import {
   ExcelSheetSelectModal,
   ImportModal,
@@ -10,21 +10,17 @@ import {
   SqlConnectionModal,
   SqliteTableSelectModal,
   SqlRemoteTableSelectModal,
-  Toast,
+
 } from "@/shared/ui";
 
 export const UIHost = () => {
-  const messages = useUIStore((s) => s.messages);
+
   const modals = useUIStore((s) => s.modals);
   const progress = useUIStore((s) => s.progress);
   const top = modals[modals.length - 1];
 
   return (
     <>
-      <Toaster />
-      {messages.map((message) => (
-        <Toast key={message.id} message={message} onClose={() => uiStore.closeToast(message.id)} />
-      ))}
 
       {progress && <ProgressOverlay progress={progress} />}
 

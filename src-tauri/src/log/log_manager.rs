@@ -170,6 +170,20 @@ impl LogManager {
         self.emit_log(log);
     }
 
+    /// 发送用户通知日志
+    pub fn log_notify(&self, level: LogLevel, message: String, source: Option<String>) {
+        let log = LogMessage {
+            timestamp: chrono::Local::now()
+                .format("%Y-%m-%d %H:%M:%S%.3f")
+                .to_string(),
+            level,
+            log_type: LogType::Notify,
+            message,
+            source,
+        };
+        self.emit_log(log);
+    }
+
     /// 获取当前日志文件路径
     pub fn get_log_file_path(&self) -> Option<PathBuf> {
         self.log_file_path.lock().unwrap().clone()
@@ -189,6 +203,38 @@ pub fn init_log_manager(app_handle: AppHandle) {
 /// 获取日志管理器
 pub fn get_log_manager() -> Option<&'static LogManager> {
     LOG_MANAGER.get()
+}
+
+pub fn emit_execution_log(level: LogLevel, message: String, source: Option<String>) {
+    #[cfg(test)]
+    TEST_LOGS.with(|logs| {
+        logs.borrow_mut().push(LogMessage {
+            timestamp: String::new(),
+            level,
+            log_type: LogType::Execution,
+            message: message.clone(),
+            source: source.clone(),
+        });
+    });
+
+    if let Some(manager) = get_log_manager() {
+        manager.log_execution(level, message, source);
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_LOGS: std::cell::RefCell<Vec<LogMessage>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[cfg(test)]
+pub(crate) fn clear_test_logs() {
+    TEST_LOGS.with(|logs| logs.borrow_mut().clear());
+}
+
+#[cfg(test)]
+pub(crate) fn take_test_logs() -> Vec<LogMessage> {
+    TEST_LOGS.with(|logs| std::mem::take(&mut *logs.borrow_mut()))
 }
 
 /// 读取日志文件（分页，从末尾开始）

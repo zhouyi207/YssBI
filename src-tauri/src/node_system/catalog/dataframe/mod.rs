@@ -93,6 +93,20 @@ fn registered_node(spec: &NodeSpec) -> Result<RegisteredNode, BuiltinAssemblyErr
 
 fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
     let (ports, parameters) = interface(spec.interface)?;
+    let type_parameters = match spec.interface {
+        InterfaceKind::Combine
+        | InterfaceKind::SeriesSelect
+        | InterfaceKind::SeriesLength
+        | InterfaceKind::SeriesCount
+        | InterfaceKind::DummyInfo
+        | InterfaceKind::TimeLag => vec![sid("element", TypeParameterId::new)?],
+        InterfaceKind::TimeAlign => vec![sid("time", TypeParameterId::new)?],
+        InterfaceKind::PanelAlign => vec![
+            sid("entity", TypeParameterId::new)?,
+            sid("time", TypeParameterId::new)?,
+        ],
+        _ => vec![],
+    };
     Ok(NodeProtocol {
         type_id: sid(spec.id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
@@ -105,8 +119,15 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             style_id: sid("builtin.dataframe", NodeStyleId::new)?,
             hidden: false,
         },
-        interface: assembled_interface(spec.id, ports, vec![], vec![], vec![])?,
+        interface: assembled_interface(spec.id, ports, type_parameters, vec![], vec![])?,
         parameters: assembled_parameters(spec.id, parameters)?,
+        instance_display: match spec.interface {
+            InterfaceKind::DataframeSource => NodeInstanceDisplaySpec::ResourceParameter {
+                parameter: sid("dataframe", ParameterKey::new)?,
+                kind: ResourceDisplayKind::Database,
+            },
+            _ => NodeInstanceDisplaySpec::Static,
+        },
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
             purity: Purity::Pure,
@@ -194,7 +215,7 @@ fn interface(
         )),
         Combine => Ok((
             vec![
-                user_input("series", series_type()?, 1)?,
+                user_input("series", generic_series_type("element")?, 1)?,
                 data_output(
                     "dataframe",
                     dataframe_type()?,
@@ -223,7 +244,7 @@ fn interface(
         SeriesSelect => Ok((
             vec![
                 data_input("dataframe", dataframe_type()?, None)?,
-                data_output("series", series_type()?, None)?,
+                data_output("series", generic_series_type("element")?, None)?,
             ],
             vec![column_parameter("column")?],
         )),
@@ -236,24 +257,46 @@ fn interface(
             ],
             vec![],
         )),
-        SeriesUnaryScalar => Ok((
+        SeriesLength | SeriesCount => Ok((
             vec![
-                data_input("series", series_type()?, None)?,
+                data_input("series", generic_series_type("element")?, None)?,
+                data_output("value", concrete("core.int64")?, None)?,
+            ],
+            vec![],
+        )),
+        SeriesSum => Ok((
+            vec![
+                data_input("series", numeric_series_type(), None)?,
+                data_output("value", numeric_scalar_type()?, None)?,
+            ],
+            vec![],
+        )),
+        SeriesMean => Ok((
+            vec![
+                data_input("series", numeric_series_type(), None)?,
                 data_output("value", float_type()?, None)?,
             ],
             vec![],
         )),
-        SeriesCompare => Ok((
+        NumericCompare => Ok((
             vec![
-                data_input("left", series_type()?, None)?,
-                data_input("right", series_or_scalar_type()?, None)?,
+                data_input("left", numeric_series_type(), None)?,
+                data_input("right", numeric_series_or_scalar_type()?, None)?,
+                data_output("result", bool_series_type()?, None)?,
+            ],
+            vec![],
+        )),
+        StringCompare => Ok((
+            vec![
+                data_input("left", string_series_type()?, None)?,
+                data_input("right", string_series_or_scalar_type()?, None)?,
                 data_output("result", bool_series_type()?, None)?,
             ],
             vec![],
         )),
         Standardize => Ok((
             vec![
-                data_input("series", float_series_type()?, None)?,
+                data_input("series", numeric_series_type(), None)?,
                 data_output("standardized", float_series_type()?, None)?,
                 data_output("mean", float_type()?, None)?,
                 data_output("standard_deviation", float_type()?, None)?,
@@ -271,15 +314,15 @@ fn interface(
         )),
         DummyInfo => Ok((
             vec![
-                data_input("source", series_type()?, None)?,
-                data_output("result", series_type()?, None)?,
+                data_input("source", generic_series_type("element")?, None)?,
+                data_output("result", generic_series_type("element")?, None)?,
             ],
             vec![text_parameter("base_level", false)?],
         )),
         TimeAlign => Ok((
             vec![
                 data_input("dataframe", dataframe_type()?, None)?,
-                data_input("time", series_type()?, None)?,
+                data_input("time", generic_series_type("time")?, None)?,
                 data_output(
                     "aligned",
                     dataframe_type()?,
@@ -290,23 +333,30 @@ fn interface(
         )),
         TimeUnary => Ok((
             vec![
-                data_input("series", float_series_type()?, None)?,
+                data_input("series", numeric_series_type(), None)?,
                 data_output("result", float_series_type()?, None)?,
             ],
             vec![positive_integer_parameter("order", 1)?],
         )),
         TimeWindow => Ok((
             vec![
-                data_input("series", float_series_type()?, None)?,
+                data_input("series", numeric_series_type(), None)?,
                 data_output("result", float_series_type()?, None)?,
+            ],
+            vec![positive_integer_parameter("window", 1)?],
+        )),
+        TimeLag => Ok((
+            vec![
+                data_input("series", generic_series_type("element")?, None)?,
+                data_output("result", generic_series_type("element")?, None)?,
             ],
             vec![positive_integer_parameter("window", 1)?],
         )),
         PanelAlign => Ok((
             vec![
                 data_input("dataframe", dataframe_type()?, None)?,
-                data_input("entity", series_type()?, None)?,
-                data_input("time", series_type()?, None)?,
+                data_input("entity", generic_series_type("entity")?, None)?,
+                data_input("time", generic_series_type("time")?, None)?,
                 data_output(
                     "aligned",
                     dataframe_type()?,
@@ -321,7 +371,7 @@ fn interface(
         PanelDifference => Ok((
             vec![
                 data_input("aligned", dataframe_type()?, None)?,
-                data_input("series", float_series_type()?, None)?,
+                data_input("series", numeric_series_type(), None)?,
                 data_output("result", float_series_type()?, None)?,
             ],
             vec![positive_integer_parameter("order", 1)?],
@@ -453,7 +503,9 @@ fn resource_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssembl
     parameter(
         key,
         concrete("core.string")?,
-        ParameterEditorSpec::Resource,
+        ParameterEditorSpec::Resource {
+            kind: ResourceDisplayKind::Database,
+        },
         None,
         vec![ParameterConstraint::Required],
     )
@@ -562,13 +614,13 @@ fn parameter(
         default_value,
         constraints,
         editor,
+        presentation: ParameterPresentation::DetailPanel,
     })
 }
 
 fn dataframe_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
     [
         ("tabular.dataframe", "types.dataframe.title"),
-        ("tabular.series", "types.series.title"),
         (
             crate::node_system::protocol::dataframe::PROJECT_COLUMNS_TYPE_ID,
             "types.dataframe_project_columns.title",
@@ -967,22 +1019,60 @@ fn dataframe_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("tabular.dataframe")
 }
 fn series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    concrete("tabular.series")
+    Ok(data_series_type(TypeExpr::Unknown))
+}
+fn generic_series_type(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(data_series_type(TypeExpr::Generic(sid(
+        id,
+        TypeParameterId::new,
+    )?)))
+}
+fn numeric_series_type() -> TypeExpr {
+    numeric_data_series_type()
 }
 fn float_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("core.float64")
 }
+fn numeric_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    normalized_union(
+        "dataframe numeric scalar union",
+        vec![concrete("core.int64")?, concrete("core.float64")?],
+    )
+}
 fn int_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    series_type()
+    Ok(data_series_type(concrete("core.int64")?))
 }
 fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    series_type()
+    Ok(data_series_type(concrete("core.float64")?))
+}
+fn string_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(data_series_type(concrete("core.string")?))
 }
 fn bool_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    series_type()
+    Ok(data_series_type(concrete("core.bool")?))
 }
-fn series_or_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    Ok(TypeExpr::Union(vec![series_type()?, float_type()?]))
+fn numeric_series_or_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    normalized_union(
+        "dataframe numeric series/scalar union",
+        vec![numeric_series_type(), numeric_scalar_type()?],
+    )
+}
+fn string_series_or_scalar_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    normalized_union(
+        "dataframe string series/scalar union",
+        vec![string_series_type()?, concrete("core.string")?],
+    )
+}
+fn normalized_union(
+    context: &'static str,
+    members: Vec<TypeExpr>,
+) -> Result<TypeExpr, BuiltinAssemblyError> {
+    normalize_type_expr(TypeExpr::Union(members)).map_err(|error| {
+        BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
+            context,
+            value: error.to_string().into(),
+        }
+    })
 }
 fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))

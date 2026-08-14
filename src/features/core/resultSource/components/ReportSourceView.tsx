@@ -1,6 +1,7 @@
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { ReportView } from '@/views/InfoView/ReportView';
 import type { SourceDescriptor } from '../types';
+import { reportSourceValuePayload } from '../sourceValuePayload';
 import { useSourceValue } from '../useSourceValue';
 
 export interface ReportSourceViewProps {
@@ -29,7 +30,7 @@ export function ReportSourceView({
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
 
-  const data = preloadedData ?? value?.value ?? value?.structured ?? value;
+  const data = preloadedData ?? (value ? reportSourceValuePayload(value) : value);
   const content = <ReportView report={report} data={data} />;
 
   return (

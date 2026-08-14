@@ -105,17 +105,14 @@ fn register_series_operator(
         id,
         title: spec.title,
         zh_title: spec.zh_title,
-        description: "Applies a deterministic element-wise Float64 operation to materialized DataSeries values.",
-        zh_description: "对完全物化的 DataSeries 值执行确定性的逐元素 Float64 运算。",
+        description: "Applies deterministic element-wise numeric operations to materialized DataSeries values.",
+        zh_description: "对完全物化的 DataSeries 值执行确定性的逐元素数值运算。",
         documentation: "Scalar inputs are broadcast to the DataSeries length. DataSeries operands must have equal lengths.",
         zh_documentation: "标量输入会广播到 DataSeries 长度；多个 DataSeries 操作数的长度必须一致。",
         aliases: spec.aliases,
         zh_aliases: spec.zh_aliases,
     })?;
-    let numeric = TypeExpr::Union(vec![
-        concrete("core.float64")?,
-        data_series("core.float64")?,
-    ]);
+    let numeric = numeric_value_type()?;
     let operands = if spec.operation == "add" {
         data_port_with_instances(
             id,
@@ -131,12 +128,12 @@ fn register_series_operator(
     if spec.operation != "add" {
         ports.push(data_port(id, "right", PortDirection::Input, numeric)?);
     }
-    ports.push(data_port(
-        id,
-        "result",
-        PortDirection::Output,
-        data_series("core.float64")?,
-    )?);
+    let result_type = if spec.operation == "divide" {
+        data_series("core.float64")?
+    } else {
+        numeric_data_series_type()
+    };
+    ports.push(data_port(id, "result", PortDirection::Output, result_type)?);
     let labels = if spec.operation == "add" {
         &[
             ("operands", "Operands", "操作数"),
@@ -178,7 +175,8 @@ fn register_unary(
         id,
         &[("input", "Input", "输入"), ("result", "Result", "结果")],
     )?;
-    let numeric = TypeExpr::Union(vec![
+    let numeric = numeric_value_type()?;
+    let output = TypeExpr::Union(vec![
         concrete("core.float64")?,
         data_series("core.float64")?,
     ]);
@@ -187,8 +185,8 @@ fn register_unary(
             id,
             "numeric",
             vec![
-                data_port(id, "input", PortDirection::Input, numeric.clone())?,
-                data_port(id, "result", PortDirection::Output, numeric)?,
+                data_port(id, "input", PortDirection::Input, numeric)?,
+                data_port(id, "result", PortDirection::Output, output)?,
             ],
             vec![],
             vec![],
@@ -198,4 +196,13 @@ fn register_unary(
         id,
     ));
     Ok(())
+}
+
+fn numeric_value_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Union(vec![
+        concrete("core.int64")?,
+        concrete("core.float64")?,
+        data_series("core.int64")?,
+        data_series("core.float64")?,
+    ]))
 }

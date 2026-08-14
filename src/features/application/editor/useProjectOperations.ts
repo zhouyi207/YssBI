@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   loadActivatedProject,
   resolveActiveProjectPath,
+  useGraphDataStore,
 } from '@/features/core/dataStore';
 import { listEditorGroupTabIds } from '@/features/core/layout/editorTabStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
@@ -19,6 +20,8 @@ import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { cancelActiveGraphRun } from './cancelActiveGraphRun';
 import { observeGraphRunEvent, type GraphRunOutcomeState } from './observeGraphRunEvent';
+import { openInspectableSource } from '@/features/application/execution/openInspectableSource';
+import { windowSourceRef } from '@/features/core/resultSource';
 import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
 import {
   captureSettledGraphSaveCommandContext,
@@ -256,6 +259,12 @@ export function useProjectOperations() {
         (event) => {
           if (!isCurrentProjectIdentity(project)) return;
           observeGraphRunEvent(graphPath, event, runState);
+          if (event.kind.type !== 'outputReady' || event.kind.generation !== null) return;
+          const node = useGraphDataStore.getState().graphEntities[graphPath]
+            ?.nodes[event.kind.output.port.nodeId];
+          if (node?.nodeType === 'yssbi.debug.view') {
+            void openInspectableSource(windowSourceRef(event.kind.sourceId), t);
+          }
         },
       );
 

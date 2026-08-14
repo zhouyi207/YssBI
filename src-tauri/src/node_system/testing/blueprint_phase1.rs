@@ -12,9 +12,10 @@ use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy,
     ExecutionSemantics, I18nKey, IconId, InputBindingSpec, LiteralPolicy, ManagedNodeRole,
-    NodeCatalogProtocol, NodeCategoryId, NodeInterfaceProtocol, NodeProtocol, NodeScope,
-    NodeStyleId, NodeTypeId, ParameterSchema, PortDirection, PortEditorSpec, PortInstances,
-    PortKey, PortKind, PortSpec, ProviderId, Purity, TypeExpr, TypeId,
+    NodeCatalogProtocol, NodeCategoryId, NodeInstanceDisplaySpec, NodeInterfaceProtocol,
+    NodeProtocol, NodeScope, NodeStyleId, NodeTypeId, ParameterSchema, PortDirection,
+    PortEditorSpec, PortInstances, PortKey, PortKind, PortSpec, ProviderId, Purity, TypeExpr,
+    TypeId,
 };
 use crate::node_system::registry::{
     CategoryRegistration, I18nManifest, NodeRegistry, NodeRegistryBuilder, ProviderRegistration,
@@ -863,6 +864,7 @@ fn protocol(
         },
         interface: NodeInterfaceProtocol::new(ports, vec![], vec![]).unwrap(),
         parameters: ParameterSchema::default(),
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
             purity: Purity::Pure,

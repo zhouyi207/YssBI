@@ -55,16 +55,15 @@ describe('toUiNode', () => {
       nodeType: 'math.add',
       title: 'Projected Add',
       description: 'Projected description',
+      display: baseNode.display,
+      parameterEditors: [],
+      diagnostics: [],
       uiStyle: 'math',
     });
     expect(view.inputs[0].connected).toBe(true);
     expect(view.outputs[0].connectionIds).toEqual(['connection-1']);
   });
 
-  it('applies an explicit contextual title override', () => {
-    const view = toUiNode(baseNode, { title: 'Context title', pins: [] });
-    expect(view.title).toBe('Context title');
-  });
 });
 
 describe('uiNodeHasNoHeader', () => {

@@ -1,7 +1,7 @@
 use super::{
     I18nKey, IconId, InterfaceResolverId, InvalidSemanticId, NodeCategoryId, NodeStyleId,
-    NodeTypeId, ParameterSchema, PortKey, SchemaExpr, TypeConstraint, TypeExpr, TypeParameterId,
-    TypedValue,
+    NodeTypeId, ParameterKey, ParameterSchema, PortKey, SchemaExpr, TypeConstraint, TypeExpr,
+    TypeParameterId, TypedValue,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -14,9 +14,28 @@ pub struct NodeProtocol {
     pub catalog: NodeCatalogProtocol,
     pub interface: NodeInterfaceProtocol,
     pub parameters: ParameterSchema,
+    #[serde(default)]
+    pub instance_display: NodeInstanceDisplaySpec,
     pub execution: ExecutionSemantics,
     pub scope: NodeScope,
     pub managed_role: Option<ManagedNodeRole>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum NodeInstanceDisplaySpec {
+    #[default]
+    Static,
+    ResourceParameter {
+        parameter: ParameterKey,
+        kind: ResourceDisplayKind,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResourceDisplayKind {
+    Function,
+    Variable,
+    Database,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

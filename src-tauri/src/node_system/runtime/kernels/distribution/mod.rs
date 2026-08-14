@@ -1,10 +1,12 @@
 use super::KernelFragment;
 use crate::node_system::protocol::{CanonicalDecimal, Value};
-use crate::node_system::runtime::{Kernel, KernelContext, KernelError, RuntimeValue};
+use crate::node_system::runtime::{
+    ArtifactKind, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
+    RuntimeValue,
+};
 use rand::SeedableRng;
 use rand::distributions::Distribution;
 use rand::rngs::StdRng;
-use std::collections::BTreeMap;
 
 #[derive(Clone, Copy)]
 enum DistributionKind {
@@ -348,7 +350,7 @@ impl Kernel for DistributionKernel {
             .cancellation
             .check()
             .map_err(|error| KernelError::cancelled(error.to_string()))?;
-        Ok(vec![RuntimeValue::Scalar(output)])
+        Ok(vec![RuntimeValue::Artifact(output)])
     }
 }
 
@@ -357,14 +359,14 @@ fn sample_float(
     arity: usize,
     name: &str,
     sample: impl FnOnce(usize) -> Result<Vec<f64>, KernelError>,
-) -> Result<Value, KernelError> {
+) -> Result<crate::node_system::runtime::Artifact, KernelError> {
     expect_arity(inputs, arity)?;
     let count = sample_count(inputs, arity - 1)?;
     let values = sample(count)?
         .into_iter()
         .map(decimal_value)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(series_value(name, values, "number"))
+    build_series(DataSeriesElementType::Float64, name, values)
 }
 
 fn sample_integer(
@@ -372,22 +374,27 @@ fn sample_integer(
     arity: usize,
     name: &str,
     sample: impl FnOnce(usize) -> Result<Vec<i64>, KernelError>,
-) -> Result<Value, KernelError> {
+) -> Result<crate::node_system::runtime::Artifact, KernelError> {
     expect_arity(inputs, arity)?;
     let count = sample_count(inputs, arity - 1)?;
-    Ok(series_value(
+    build_series(
+        DataSeriesElementType::Int64,
         name,
         sample(count)?.into_iter().map(Value::Integer).collect(),
-        "number",
-    ))
+    )
 }
 
-fn series_value(name: &str, values: Vec<Value>, format: &str) -> Value {
-    Value::Object(BTreeMap::from([
-        ("name".into(), Value::String(name.into())),
-        ("values".into(), Value::List(values)),
-        ("format".into(), Value::String(format.into())),
-    ]))
+fn build_series(
+    element_type: DataSeriesElementType,
+    name: &str,
+    values: Vec<Value>,
+) -> Result<crate::node_system::runtime::Artifact, KernelError> {
+    DataSeriesBuilder::new(element_type)
+        .name(name)
+        .format("number")
+        .values(values)
+        .build(ArtifactKind::Collected)
+        .map_err(|error| KernelError::new(error.to_string()))
 }
 
 fn unsigned_samples(
@@ -458,13 +465,8 @@ fn float_input(inputs: &[RuntimeValue], index: usize) -> Result<f64, KernelError
 fn integer_input(inputs: &[RuntimeValue], index: usize) -> Result<i64, KernelError> {
     match scalar(inputs, index)? {
         Value::Integer(value) => Ok(*value),
-        Value::Decimal(value) => value
-            .as_str()
-            .parse::<f64>()
-            .map(|value| value as i64)
-            .map_err(|_| KernelError::new(format!("input {index} is not an integer"))),
         _ => Err(KernelError::new(format!(
-            "input {index} must be an integer"
+            "input {index} must be an Int64 scalar"
         ))),
     }
 }
@@ -480,6 +482,9 @@ fn non_negative_integer(
 
 fn sample_count(inputs: &[RuntimeValue], index: usize) -> Result<usize, KernelError> {
     let count = non_negative_integer(inputs, index, "sample_count")?;
+    if count == 0 {
+        return Err(KernelError::new("sample_count must be positive"));
+    }
     usize::try_from(count).map_err(|_| KernelError::new("sample_count exceeds platform capacity"))
 }
 

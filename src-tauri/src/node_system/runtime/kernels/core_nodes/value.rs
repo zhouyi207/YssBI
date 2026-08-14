@@ -1,6 +1,9 @@
 use super::support::{KernelFragment, expect_arity};
 use crate::node_system::protocol::{CanonicalDecimal, Value};
-use crate::node_system::runtime::{Kernel, KernelContext, KernelError, RunError, RuntimeValue};
+use crate::node_system::runtime::{
+    Artifact, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
+    RuntimeValue, require_data_series,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConvertTarget {
@@ -135,60 +138,64 @@ struct SeriesConvertKernel {
 impl Kernel for SeriesConvertKernel {
     fn execute(
         &self,
-        context: &KernelContext<'_>,
+        _context: &KernelContext<'_>,
         inputs: &[RuntimeValue],
     ) -> Result<Vec<RuntimeValue>, KernelError> {
         expect_arity(inputs, 1)?;
-        let RuntimeValue::Artifact(artifact) = &inputs[0] else {
-            return Err(KernelError::new(
-                "DataSeries conversion expects a fully materialized artifact",
-            ));
-        };
+        let artifact = require_data_series(&inputs[0])?;
+        let metadata = artifact
+            .data_series_metadata()
+            .expect("required DataSeries has metadata");
+        let expected = element_type(self.source);
+        if metadata.element_type != expected {
+            return Err(KernelError::new(format!(
+                "expected {expected} DataSeries, received {}",
+                metadata.element_type
+            )));
+        }
         let values = artifact
             .cursor()
             .map_err(|error| KernelError::new(error.to_string()))?
             .enumerate()
             .map(|(index, value)| {
-                let value = value?;
-                if matches!(value, Value::Null) {
-                    return Ok(Value::Null);
-                }
-                require_kind(&value, self.source)
-                    .and_then(|()| convert(&value, self.target))
-                    .map_err(|error| {
-                        RunError::Stream(format!("DataSeries element {index}: {error}").into())
-                    })
-            });
-        let output = context
-            .resource_owner
-            .materialize_artifact(artifact.kind(), values)
-            .map_err(kernel_error_from_run)?;
+                let value = value.map_err(|error| KernelError::new(error.to_string()))?;
+                convert(&value, self.target).map_err(|error| {
+                    KernelError::new(format!("DataSeries element {index}: {error}"))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let output = build_series_output(artifact, self.target, values)?;
         Ok(vec![RuntimeValue::Artifact(output)])
     }
 }
 
-fn kernel_error_from_run(error: RunError) -> KernelError {
-    match error {
-        RunError::Stream(message) => KernelError::new(message),
-        error => KernelError::new(error.to_string()),
+fn build_series_output(
+    source: &Artifact,
+    target: ValueKind,
+    values: Vec<Value>,
+) -> Result<Artifact, KernelError> {
+    let metadata = source
+        .data_series_metadata()
+        .expect("required DataSeries has metadata");
+    let mut builder = DataSeriesBuilder::new(element_type(target)).values(values);
+    if let Some(name) = &metadata.name {
+        builder = builder.name(name.clone());
     }
+    if let Some(format) = &metadata.format {
+        builder = builder.format(format.clone());
+    }
+    builder
+        .build(source.kind())
+        .map_err(|error| KernelError::new(error.to_string()))
 }
 
-fn require_kind(value: &Value, expected: ValueKind) -> Result<(), KernelError> {
-    let accepted = match expected {
-        ValueKind::Bool => matches!(value, Value::Bool(_)),
-        ValueKind::Int64 => matches!(value, Value::Integer(_)),
-        ValueKind::Float64 => matches!(value, Value::Decimal(_)),
-        ValueKind::String | ValueKind::Categorical => matches!(value, Value::String(_)),
-    };
-    if accepted {
-        Ok(())
-    } else {
-        Err(KernelError::new(format!(
-            "expected {}, got {}",
-            kind_name(expected),
-            value_name(value)
-        )))
+fn element_type(kind: ValueKind) -> DataSeriesElementType {
+    match kind {
+        ValueKind::Bool => DataSeriesElementType::Boolean,
+        ValueKind::Int64 => DataSeriesElementType::Int64,
+        ValueKind::Float64 => DataSeriesElementType::Float64,
+        ValueKind::String => DataSeriesElementType::String,
+        ValueKind::Categorical => DataSeriesElementType::Categorical,
     }
 }
 
@@ -226,10 +233,15 @@ fn to_int64(value: &Value) -> Result<i64, KernelError> {
         Value::Integer(value) => Ok(*value),
         Value::Decimal(value) => {
             let value = parse_decimal(value)?;
-            if value < i64::MIN as f64 || value > i64::MAX as f64 {
+            if value.fract() != 0.0 {
+                return Err(KernelError::new(
+                    "Float64 value is not an integral Int64 value",
+                ));
+            }
+            if value < i64::MIN as f64 || value >= -(i64::MIN as f64) {
                 return Err(KernelError::new("Float64 value is outside the Int64 range"));
             }
-            Ok(value.trunc() as i64)
+            Ok(value as i64)
         }
         Value::String(value) => value
             .parse::<i64>()
@@ -322,16 +334,6 @@ fn expand_exponent(value: &str) -> Result<String, KernelError> {
 
 fn unsupported(value: &Value, target: &str) -> KernelError {
     KernelError::new(format!("cannot convert {} to {target}", value_name(value)))
-}
-
-fn kind_name(kind: ValueKind) -> &'static str {
-    match kind {
-        ValueKind::Bool => "Boolean",
-        ValueKind::Int64 => "Int64",
-        ValueKind::Float64 => "Float64",
-        ValueKind::String => "String",
-        ValueKind::Categorical => "Categorical",
-    }
 }
 
 fn value_name(value: &Value) -> &'static str {

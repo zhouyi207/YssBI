@@ -52,6 +52,8 @@ pub(crate) type ProjectActivationTestHook = Arc<dyn Fn() + Send + Sync>;
 type ActivationPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 #[cfg(test)]
 type LifecycleLockTestHook = Arc<dyn Fn() + Send + Sync>;
+#[cfg(test)]
+type ComputationSettingsPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,9 +75,13 @@ impl ProjectExecutionError {
     pub fn internal_compilation(
         failure: crate::node_system::compiler::InternalCompilationFailure,
     ) -> Self {
+        let node_context = failure
+            .node_id
+            .map(|node_id| format!(" (node {node_id})"))
+            .unwrap_or_default();
         Self {
             message: format!(
-                "internal compilation failure at {:?}: {}",
+                "internal compilation failure at {:?}: {}{node_context}",
                 failure.stage, failure.code
             )
             .into(),
@@ -451,6 +457,7 @@ pub(super) struct MutationPublication {
     pub(super) project_instance_id: String,
     pub(super) resource_revision: u64,
     authority_generation: u64,
+    computation_settings_revision: u64,
 }
 
 pub(super) struct VariableStagingBasis {
@@ -464,6 +471,7 @@ impl Default for MutationPublication {
             project_instance_id: uuid::Uuid::new_v4().to_string(),
             resource_revision: 0,
             authority_generation: 0,
+            computation_settings_revision: 0,
         }
     }
 }
@@ -493,6 +501,7 @@ impl MutationPublication {
         let previous = std::mem::replace(&mut self.project_instance_id, project_instance_id);
         self.resource_revision = 0;
         self.authority_generation = 0;
+        self.computation_settings_revision = 0;
         previous
     }
 }
@@ -1318,6 +1327,7 @@ impl ProjectionSourceSnapshot {
             &document,
             self.environment.registry.as_ref(),
             &self.environment.catalog.localization(locale),
+            &self.data.computation_settings,
         )
         .map_err(|error| error.to_string())
     }
@@ -1437,6 +1447,9 @@ pub struct ProjectState {
     activation_preparation_after_read_test_hook: Arc<RwLock<Option<ActivationPublicationTestHook>>>,
     #[cfg(test)]
     activation_final_rebuild_test_hook: Arc<RwLock<Option<ActivationPublicationTestHook>>>,
+    #[cfg(test)]
+    computation_settings_publication_test_hook:
+        Arc<RwLock<Option<ComputationSettingsPublicationTestHook>>>,
 }
 
 #[cfg(test)]
@@ -1703,12 +1716,155 @@ impl ProjectState {
             activation_preparation_after_read_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             activation_final_rebuild_test_hook: Arc::new(RwLock::new(None)),
+            #[cfg(test)]
+            computation_settings_publication_test_hook: Arc::new(RwLock::new(None)),
         }
     }
 
     pub fn get_data(&self) -> Result<ProjectData, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         Ok(self.project_data.read().unwrap().clone())
+    }
+
+    pub fn get_computation_settings(
+        &self,
+    ) -> Result<crate::project::ComputationSettingsSnapshot, ProjectFilesystemError> {
+        self.ensure_project_operational()?;
+        let publication = self.mutation_publication.lock().unwrap();
+        let data = self.project_data.read().unwrap();
+        Ok(crate::project::ComputationSettingsSnapshot {
+            project_instance_id: ProjectInstanceId::from_existing(
+                publication.project_instance_id.clone(),
+            ),
+            settings_revision: publication.computation_settings_revision,
+            publication_revision: publication.resource_revision,
+            settings: data.computation_settings.clone(),
+        })
+    }
+
+    pub fn update_computation_settings_transaction(
+        &self,
+        request: crate::project::ComputationSettingsMutationRequest,
+    ) -> Result<crate::project::ComputationSettingsMutationReceipt, ProjectFilesystemError> {
+        self.ensure_project_operational()?;
+        request.settings.validate().map_err(|error| {
+            ProjectFilesystemError::TransactionPrepareFailed {
+                message: error.to_string(),
+            }
+        })?;
+        let session = self.capture_project_session()?;
+        if session.instance_id != request.project_instance_id {
+            return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                message: "computation settings request belongs to another project".into(),
+            });
+        }
+        let (authority_generation, current_revision, mut next_data) = {
+            let publication = self.mutation_publication.lock().unwrap();
+            let data = self.project_data.read().unwrap();
+            if publication.computation_settings_revision != request.expected_revision {
+                return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                    message: format!(
+                        "expected computation settings revision {}, current revision is {}",
+                        request.expected_revision, publication.computation_settings_revision
+                    ),
+                });
+            }
+            (
+                publication.authority_generation(),
+                publication.computation_settings_revision,
+                data.clone(),
+            )
+        };
+        next_data.computation_settings = request.settings.clone();
+        let contents = crate::project::project_io::serialize_project_manifest(&next_data).map_err(
+            |error| ProjectFilesystemError::TransactionPrepareFailed {
+                message: error.to_string(),
+            },
+        )?;
+        let lease = self.filesystem.acquire(session.root.clone())?;
+        let context = ProjectTransactionContext {
+            session: session.clone(),
+            operation_id: request.operation_id,
+            affected_resources: Vec::new(),
+            expected_revisions: Default::default(),
+            expected_absent_resources: Default::default(),
+            recovery_marker: Some(self.project_recovery_marker()),
+        };
+        let prepared = ProjectFilesystemTransaction::prepare_with_validator(
+            context,
+            lease,
+            vec![StagedFilesystemMutation::Write {
+                relative_path: crate::project::PROJECT_METADATA_FILE.into(),
+                contents,
+            }],
+            |_, staged| {
+                serde_json::from_slice::<crate::project::project_io::ProjectManifest>(staged)
+                    .map(|_| ())
+                    .map_err(|error| error.to_string())
+            },
+        )?;
+        self.validate_project_session(&session)?;
+        let committed = prepared.commit()?;
+
+        let publication_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut publication = self.mutation_publication.lock().unwrap();
+            let mut data = self.project_data.write().unwrap();
+            self.ensure_project_operational()?;
+            if publication.project_instance_id != request.project_instance_id.as_str()
+                || publication.authority_generation() != authority_generation
+            {
+                return Err(ProjectFilesystemError::StaleProjectLifecycle {
+                    message: "project authority changed during computation settings commit".into(),
+                });
+            }
+            if publication.computation_settings_revision != current_revision {
+                return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                    message: "computation settings changed during commit".into(),
+                });
+            }
+            #[cfg(test)]
+            if let Some(hook) = self
+                .computation_settings_publication_test_hook
+                .write()
+                .unwrap()
+                .take()
+            {
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| hook())).is_err() {
+                    return Err(ProjectFilesystemError::TransactionCommitFailed {
+                        message: "computation settings authority publication failed".into(),
+                    });
+                }
+            }
+            data.computation_settings = request.settings.clone();
+            publication.computation_settings_revision = current_revision
+                .checked_add(1)
+                .expect("computation settings revision overflowed");
+            let publication_revision = publication.allocate_resource_revision();
+            Ok(crate::project::ComputationSettingsMutationReceipt {
+                project_instance_id: request.project_instance_id.clone(),
+                operation_id: request.operation_id,
+                settings_revision: publication.computation_settings_revision,
+                publication_revision,
+                settings: request.settings.clone(),
+            })
+        }));
+
+        match publication_result {
+            Ok(Ok(receipt)) => {
+                committed.finalize();
+                Ok(receipt)
+            }
+            Ok(Err(error)) => {
+                committed.rollback()?;
+                Err(error)
+            }
+            Err(_) => {
+                committed.rollback()?;
+                Err(ProjectFilesystemError::TransactionCommitFailed {
+                    message: "computation settings authority publication failed".into(),
+                })
+            }
+        }
     }
 
     pub(super) fn capture_variable_staging_basis(
@@ -2632,6 +2788,17 @@ impl ProjectState {
         hook: ActivationPublicationTestHook,
     ) {
         *self.activation_final_rebuild_test_hook.write().unwrap() = Some(hook);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_computation_settings_publication_test_hook(
+        &self,
+        hook: ComputationSettingsPublicationTestHook,
+    ) {
+        *self
+            .computation_settings_publication_test_hook
+            .write()
+            .unwrap() = Some(hook);
     }
 
     #[cfg(test)]
@@ -4874,6 +5041,87 @@ impl ProjectState {
         } else {
             None
         };
+        let (projected_connect, projected_connect_authority_generation) =
+            if let EditorGraphMutationDto::Connect { output, input, .. } = &request.payload {
+                let output = crate::node_system::document::PortAddress::try_from(output.clone())
+                    .map_err(|message: String| {
+                        MutationConflict::InvalidEditorMutation(message.into())
+                    })?;
+                let input = crate::node_system::document::PortAddress::try_from(input.clone())
+                    .map_err(|message: String| {
+                        MutationConflict::InvalidEditorMutation(message.into())
+                    })?;
+                let source = self
+                    .capture_projection_source(graph_path)
+                    .map_err(|error| MutationConflict::Projection(error.into()))?;
+                if source.project_instance_id != project_instance_id.as_str() {
+                    return Err(MutationConflict::StaleProjectLifecycle(
+                        "project changed before projected connection resolution".into(),
+                    ));
+                }
+                let (analysis, _) = self
+                    .get_or_compile_current_from_source(graph_path, &source)
+                    .map_err(|error| MutationConflict::Projection(error.into()))?;
+                let projection = &analysis.payload.interface_projection;
+                if projection.basis.graph_revision != request.base_revision {
+                    return Err(MutationConflict::CompilationBasisStale {
+                        basis_revision: projection.basis.graph_revision,
+                        current_revision: request.base_revision,
+                    });
+                }
+                let candidates: Vec<(
+                    crate::node_system::document::PortAddress,
+                    &crate::node_system::compiler::ValidatedProjectedMember,
+                )> = [output.clone(), input.clone()]
+                    .into_iter()
+                    .filter_map(|address| {
+                        projection
+                            .materialization_candidate(&address)
+                            .map(|candidate| (address, candidate))
+                    })
+                    .collect();
+                if candidates.len() > 1 {
+                    return Err(MutationConflict::InvalidEditorMutation(
+                        "connections between two projected members are not supported".into(),
+                    ));
+                }
+                if candidates.is_empty() {
+                    let document = &source
+                        .data
+                        .graphs
+                        .get(graph_path)
+                        .expect("captured projection source contains the target graph")
+                        .document;
+                    let has_unbound_instance = [&output, &input].into_iter().any(|address| {
+                        address.is_instance() && !document.port_bindings.contains_key(address)
+                    });
+                    if has_unbound_instance {
+                        return Err(MutationConflict::InvalidEditorMutation(
+                            "projected connection endpoint is stale or unavailable".into(),
+                        ));
+                    }
+                }
+                let plan = candidates.into_iter().next().map(|(address, candidate)| {
+                    let direction = candidate.direction();
+                    let kind = candidate.kind();
+                    let connections = candidate.connections();
+                    let (member, authorization) = projection
+                        .authorize_materialization_candidate(node_path.clone(), &address)
+                        .expect("the selected current candidate remains authorizable");
+                    crate::node_system::document::ProjectedConnectPlan {
+                        projection_address: address,
+                        direction,
+                        kind,
+                        connections,
+                        member,
+                        authorization,
+                    }
+                });
+                let authority_generation = plan.as_ref().map(|_| source.authority_generation);
+                (plan, authority_generation)
+            } else {
+                (None, None)
+            };
         if catalog_snapshot.is_some() {
             self.run_catalog_mutation_before_publication_test_hook();
         }
@@ -4885,6 +5133,8 @@ impl ProjectState {
             catalog_snapshot.as_ref(),
             compatibility_source.as_ref(),
             mutation_validation.as_ref(),
+            projected_connect,
+            projected_connect_authority_generation,
             #[cfg(test)]
             allocate_connection_id,
         )?;
@@ -4996,6 +5246,7 @@ impl ProjectState {
             None,
             None,
             None,
+            None,
             move |_, _| Ok(payload),
         )
     }
@@ -5012,6 +5263,8 @@ impl ProjectState {
             crate::node_system::compatibility::EditorMutationValidationSnapshot,
             ProjectionEnvironmentSnapshot,
         )>,
+        projected_connect: Option<crate::node_system::document::ProjectedConnectPlan>,
+        projected_connect_authority_generation: Option<u64>,
         #[cfg(test)] allocate_connection_id: Option<&(dyn Fn() -> ConnectionId + Send + Sync)>,
     ) -> Result<CommittedGraphMutation, MutationConflict> {
         let MutationRequest {
@@ -5030,6 +5283,7 @@ impl ProjectState {
             Some(project_instance_id),
             catalog_snapshot,
             mutation_validation.map(|(_, environment)| environment.clone()),
+            projected_connect_authority_generation,
             move |document, registry| {
                 #[cfg(test)]
                 if let Some(allocate_connection_id) = allocate_connection_id {
@@ -5040,16 +5294,18 @@ impl ProjectState {
                         catalog_snapshot,
                         compatibility_source,
                         mutation_validation.map(|(snapshot, _)| snapshot),
+                        projected_connect,
                         allocate_connection_id,
                     );
                 }
-                payload.into_patch_with_editor_validation(
+                payload.into_patch_with_editor_validation_and_projected_connect(
                     &node_path,
                     document,
                     registry,
                     catalog_snapshot,
                     compatibility_source,
                     mutation_validation.map(|(snapshot, _)| snapshot),
+                    projected_connect,
                 )
             },
         )
@@ -5065,6 +5321,7 @@ impl ProjectState {
         project_instance_id: Option<&ProjectInstanceId>,
         catalog_snapshot: Option<&crate::project::CatalogMutationValidationSnapshot>,
         projection_environment: Option<ProjectionEnvironmentSnapshot>,
+        expected_authority_generation: Option<u64>,
         plan: impl FnOnce(
             &crate::node_system::document::GraphDocument,
             &crate::node_system::registry::NodeRegistry,
@@ -5152,6 +5409,18 @@ impl ProjectState {
             return Err(MutationConflict::StaleProjectLifecycle(
                 "caller project changed before graph authority commit".into(),
             ));
+        }
+        if expected_authority_generation
+            .is_some_and(|expected| publication.authority_generation() != expected)
+        {
+            return Err(MutationConflict::CompilationBasisStale {
+                basis_revision: base_revision,
+                current_revision: data
+                    .graphs
+                    .get(graph_path)
+                    .map(|graph| graph.document.revision)
+                    .unwrap_or(base_revision),
+            });
         }
         if let Some(snapshot) = catalog_snapshot {
             if publication.project_instance_id != snapshot.project_instance_id.as_str()
@@ -7085,7 +7354,13 @@ impl ProjectState {
             execution.variable_revisions.clone(),
             execution.database_revisions.clone(),
         );
-        if compile_resources.versions != compilation.authority.basis.resource_versions {
+        let resource_basis_matches = compilation
+            .authority
+            .basis
+            .resource_versions
+            .iter()
+            .all(|(key, expected)| compile_resources.versions.get(key) == Some(expected));
+        if !resource_basis_matches {
             return Err("stale_project_lifecycle: execution resource basis changed".into());
         }
         let resource_snapshot = snapshot_execution_resources(&execution, compile_resources)?;
@@ -7098,9 +7373,11 @@ impl ProjectState {
             execution.registry.as_ref(),
             execution.functions.as_ref(),
             &resource_snapshot.compile,
+            Some(plan.as_ref()),
             execution.session_id.clone(),
             trace_sink.as_ref(),
             &compile_cancellation,
+            &execution.data.computation_settings,
             &mut compiled_parameters,
         )?;
         #[cfg(test)]
@@ -7120,7 +7397,12 @@ impl ProjectState {
         if let Some(observer) = self.project_resource_lease_observer.read().unwrap().clone() {
             resources.set_lease_observer(observer);
         }
-        build_run_parameters(&mut compiled_parameters, &execution.document, plan.as_ref())?;
+        build_run_parameters(
+            &mut compiled_parameters,
+            &execution.document,
+            plan.as_ref(),
+            &execution.data.computation_settings,
+        )?;
         let mut relational_backends = crate::node_system::runtime::RelationalBackendRegistry::new();
         #[cfg(test)]
         let production_relational_backend = self
@@ -7227,6 +7509,7 @@ impl ProjectState {
         .with_relational_backends(&relational_backends)
         .with_compiled_parameters(&compiled_parameters)
         .with_run_registry(execution.runs.as_ref())
+        .with_computation_settings_snapshot(&execution.data.computation_settings)
         .with_selection_digest(selected.selection_digest)
         .with_trace_sink(trace_sink.as_ref())
         .with_event_sink(events)
@@ -8104,6 +8387,7 @@ impl std::fmt::Display for VariableEffectCommitError {
 pub(super) struct CompileResourceSnapshot {
     pub(super) versions: crate::node_system::analysis::ResourceVersionSet,
     resource_states: crate::node_system::analysis::ResourceObservationSet,
+    function_names: BTreeMap<crate::node_system::document::GraphResourcePath, Box<str>>,
     functions: BTreeMap<
         crate::node_system::document::GraphResourcePath,
         crate::node_system::document::FunctionDocument,
@@ -8114,6 +8398,7 @@ pub(super) struct CompileResourceSnapshot {
     >,
     variables:
         std::collections::HashMap<crate::variable::VariableId, crate::variable::VariableInstance>,
+    database_names: BTreeMap<crate::node_system::plan::ResourceId, Box<str>>,
     database_schemas:
         BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
 }
@@ -8169,7 +8454,7 @@ impl crate::node_system::compiler::SchemaResolver for ProjectDatabaseSchemaResol
             .map_err(|error| {
                 crate::node_system::compiler::SchemaResolutionError::from_resource(&error)
             })?;
-        let fields = fields.value;
+        let fields = fields.value.columns;
         Ok(crate::node_system::compiler::SchemaFact::new(
             crate::node_system::protocol::SchemaExpr::Input(
                 crate::node_system::protocol::PortKey::new("dataframe").unwrap(),
@@ -8212,6 +8497,13 @@ impl ResourceSnapshot for CompileResourceSnapshot {
         )
     }
 
+    fn function_name(
+        &self,
+        path: &crate::node_system::document::GraphResourcePath,
+    ) -> Option<&str> {
+        self.function_names.get(path).map(AsRef::as_ref)
+    }
+
     fn function_document(
         &self,
         path: &crate::node_system::document::GraphResourcePath,
@@ -8231,6 +8523,11 @@ impl ResourceSnapshot for CompileResourceSnapshot {
         id: &crate::variable::VariableId,
     ) -> Option<&crate::variable::VariableInstance> {
         self.variables.get(id)
+    }
+
+    fn database_name(&self, id: &str) -> Option<&str> {
+        let resource = crate::node_system::plan::ResourceId::new(format!("databases/{id}")).ok()?;
+        self.database_names.get(&resource).map(AsRef::as_ref)
     }
 
     fn database_schema(&self, id: &str) -> Option<&[crate::schema::ColumnInfoDTO]> {
@@ -8331,6 +8628,7 @@ fn candidate_projection_replacement(
         document,
         source.environment.registry.as_ref(),
         &source.environment.catalog.localization(locale),
+        &source.data.computation_settings,
     )
     .map_err(|error| MutationConflict::Projection(error.to_string().into()))?;
     let function_editor_projection = source
@@ -8444,6 +8742,18 @@ pub(super) fn compile_resources_from_data(
 ) -> Result<CompileResourceSnapshot, String> {
     use crate::node_system::analysis::{ResourceKey as AnalysisResourceKey, ResourceVersion};
 
+    let function_names = data
+        .graphs
+        .iter()
+        .filter_map(|(path, graph)| {
+            graph.function.as_ref().map(|_| {
+                (
+                    crate::node_system::document::GraphResourcePath(path.as_str().into()),
+                    graph.name.clone().into_boxed_str(),
+                )
+            })
+        })
+        .collect::<BTreeMap<_, _>>();
     let functions = data
         .graphs
         .iter()
@@ -8472,12 +8782,11 @@ pub(super) fn compile_resources_from_data(
     for (path, function) in &functions {
         let graph_path =
             GraphResourcePath::new(path.0.as_ref()).map_err(|error| error.to_string())?;
-        let graph_document = &data
+        let graph = data
             .graphs
             .get(&graph_path)
-            .ok_or_else(|| format!("function '{}' graph is not loaded", graph_path))?
-            .document;
-        let version = serde_json::to_string(&(function, graph_document))
+            .ok_or_else(|| format!("function '{}' graph is not loaded", graph_path))?;
+        let version = serde_json::to_string(&(graph.name.as_str(), function, &graph.document))
             .map_err(|error| error.to_string())?;
         versions.insert(
             AnalysisResourceKey::new(path.0.as_ref()),
@@ -8508,6 +8817,21 @@ pub(super) fn compile_resources_from_data(
         );
     }
 
+    let database_names = data
+        .databases
+        .iter()
+        .filter_map(|(id, declaration)| {
+            declaration
+                .name
+                .as_deref()
+                .filter(|name| !name.is_empty())
+                .and_then(|name| {
+                    crate::node_system::plan::ResourceId::new(format!("databases/{id}"))
+                        .ok()
+                        .map(|resource| (resource, name.into()))
+                })
+        })
+        .collect();
     let resource_states = versions
         .iter()
         .map(|(key, version)| {
@@ -8520,9 +8844,11 @@ pub(super) fn compile_resources_from_data(
     Ok(CompileResourceSnapshot {
         versions,
         resource_states,
+        function_names,
         functions,
         function_graphs,
         variables: data.variables.clone(),
+        database_names,
         database_schemas,
     })
 }
@@ -8611,8 +8937,20 @@ pub(super) fn snapshot_project_resources(
         (store.project_session_id.clone(), loaded)
     };
 
-    let (function_resources, function_graphs) = {
+    let (function_names, function_resources, function_graphs) = {
         let data = state.project_data.read().unwrap();
+        let names = data
+            .graphs
+            .iter()
+            .filter_map(|(path, graph)| {
+                graph.function.as_ref().map(|_| {
+                    (
+                        crate::node_system::document::GraphResourcePath(path.as_str().into()),
+                        graph.name.clone().into_boxed_str(),
+                    )
+                })
+            })
+            .collect::<BTreeMap<_, _>>();
         let resources = data
             .graphs
             .iter()
@@ -8637,15 +8975,18 @@ pub(super) fn snapshot_project_resources(
                 })
             })
             .collect::<BTreeMap<_, _>>();
-        (resources, graphs)
+        (names, resources, graphs)
     };
     let mut versions = crate::node_system::analysis::ResourceVersionSet::new();
     for (path, function) in &function_resources {
         let graph = function_graphs
             .get(path)
             .ok_or_else(|| format!("function '{}' graph is not loaded", path.0))?;
+        let name = function_names
+            .get(path)
+            .ok_or_else(|| format!("function '{}' name is missing", path.0))?;
         let version =
-            serde_json::to_string(&(function, graph)).map_err(|error| error.to_string())?;
+            serde_json::to_string(&(name, function, graph)).map_err(|error| error.to_string())?;
         versions.insert(
             AnalysisResourceKey::new(path.0.as_ref()),
             ResourceVersion::new(version),
@@ -8671,6 +9012,20 @@ pub(super) fn snapshot_project_resources(
     let project_root = state
         .get_path()
         .map(|path| crate::project::project_root_from_path(&path));
+    let database_names = databases
+        .iter()
+        .filter_map(|(id, declaration)| {
+            declaration
+                .name
+                .as_deref()
+                .filter(|name| !name.is_empty())
+                .and_then(|name| {
+                    ResourceId::new(format!("databases/{id}"))
+                        .ok()
+                        .map(|resource| (resource, name.into()))
+                })
+        })
+        .collect();
     let mut database_schemas = BTreeMap::new();
     let variable_revisions = state.variable_revisions.read().unwrap().clone();
     let compile_variables = variables.clone();
@@ -8726,9 +9081,11 @@ pub(super) fn snapshot_project_resources(
                 })
                 .collect(),
             versions,
+            function_names,
             functions: function_resources,
             function_graphs,
             variables: compile_variables,
+            database_names,
             database_schemas,
         },
         runtime,
@@ -8891,13 +9248,49 @@ pub(super) fn replace_project_documents(
     }
 }
 
+fn function_targets(
+    region: &crate::node_system::plan::StructuredControlRegion,
+) -> std::collections::BTreeSet<crate::node_system::document::GraphResourcePath> {
+    use crate::node_system::plan::{ControlStep, StructuredControlRegion};
+
+    let mut targets = std::collections::BTreeSet::new();
+    match region {
+        StructuredControlRegion::Sequence(steps) => {
+            for step in steps {
+                if let ControlStep::Region(region) = step {
+                    targets.extend(function_targets(region));
+                }
+            }
+        }
+        StructuredControlRegion::If {
+            then_region,
+            else_region,
+            ..
+        } => {
+            targets.extend(function_targets(then_region));
+            targets.extend(function_targets(else_region));
+        }
+        StructuredControlRegion::Loop { body, .. } => {
+            targets.extend(function_targets(body));
+        }
+        StructuredControlRegion::Call { target, .. } => {
+            targets.insert(crate::node_system::document::GraphResourcePath(
+                target.as_str().into(),
+            ));
+        }
+    }
+    targets
+}
+
 pub(super) fn publish_function_plans(
     registry: &crate::node_system::registry::NodeRegistry,
     store: &crate::node_system::runtime::FunctionPlanStore,
     resources: &CompileResourceSnapshot,
+    root_plan: Option<&crate::node_system::plan::ExecutionPlan>,
     session_id: crate::node_system::analysis::ProjectSessionId,
     trace_sink: &dyn crate::node_system::analysis::TraceSink,
     cancellation: &crate::node_system::compiler::CompileCancellationToken,
+    computation_settings: &crate::project::ProjectComputationSettings,
     parameters: &mut crate::node_system::runtime::CompiledParameterStore,
 ) -> Result<crate::node_system::runtime::FunctionPlanGeneration, ProjectExecutionError> {
     let compiler = GraphCompiler::with_resolvers(
@@ -8908,7 +9301,21 @@ pub(super) fn publish_function_plans(
     )
     .with_observability(session_id, trace_sink);
     let mut entries = Vec::with_capacity(resources.function_graphs.len());
-    for (document_path, document) in &resources.function_graphs {
+    let mut pending = root_plan
+        .map(|plan| function_targets(&plan.root_region))
+        .unwrap_or_else(|| resources.function_graphs.keys().cloned().collect());
+    let mut published = std::collections::BTreeSet::new();
+    while let Some(document_path) = pending.pop_first() {
+        cancellation
+            .checkpoint()
+            .map_err(|error| error.to_string())?;
+        if !published.insert(document_path.clone()) {
+            continue;
+        }
+        let document = resources
+            .function_graphs
+            .get(&document_path)
+            .ok_or_else(|| format!("required function '{}' is unavailable", document_path.0))?;
         let snapshot = compiler.snapshot(document_path.clone(), document);
         let products = compiler
             .compile_snapshot(&snapshot, cancellation)
@@ -8948,7 +9355,8 @@ pub(super) fn publish_function_plans(
                 },
             )
         })?;
-        build_run_parameters(parameters, &document, &plan)?;
+        pending.extend(function_targets(&plan.root_region));
+        build_run_parameters(parameters, document, &plan, computation_settings)?;
         let resource_key = crate::node_system::analysis::ResourceKey::new(document_path.0.as_ref());
         let version = resources
             .versions
@@ -8975,6 +9383,7 @@ fn build_run_parameters(
     parameters: &mut crate::node_system::runtime::CompiledParameterStore,
     document: &crate::node_system::document::GraphDocument,
     plan: &crate::node_system::plan::ExecutionPlan,
+    computation_settings: &crate::project::ProjectComputationSettings,
 ) -> Result<(), String> {
     for operation in &plan.operations {
         let node_type = operation.source_node_type_id.as_str();
@@ -9015,10 +9424,34 @@ fn build_run_parameters(
                     .and_then(serde_json::Value::as_u64)
                     .map(|value| value as usize)
             };
+            let convergence_override = parameter("convergence_tolerance")
+                .map(|value| {
+                    value
+                        .as_f64()
+                        .filter(|value| value.is_finite() && *value > 0.0)
+                        .ok_or_else(|| {
+                            "statistics convergence tolerance must be finite and greater than zero"
+                                .to_string()
+                        })
+                })
+                .transpose()?;
             parameters
                 .insert(
                     operation.params.clone(),
                     crate::node_system::runtime::StatisticsKernelParameters {
+                        data_series_input_indices: Some(
+                            operation
+                                .inputs
+                                .iter()
+                                .enumerate()
+                                .filter_map(|(index, input)| {
+                                    (input.contract.kind
+                                        == crate::node_system::plan::PlannedValueKind::DataSeries)
+                                        .then_some(index)
+                                })
+                                .collect::<Vec<_>>()
+                                .into_boxed_slice(),
+                        ),
                         lags: positive_integer("lags"),
                         max_lags: positive_integer("max_lags"),
                         rank: positive_integer("rank"),
@@ -9028,6 +9461,31 @@ fn build_run_parameters(
                         trend: parameter("trend")
                             .and_then(serde_json::Value::as_str)
                             .map(Into::into),
+                        convergence_tolerance: convergence_override
+                            .unwrap_or(computation_settings.numeric.tolerance.absolute),
+                        convergence_tolerance_source: if parameter("convergence_tolerance")
+                            .is_some()
+                        {
+                            crate::sci::models::regression::StatisticalSettingSource::Node
+                        } else {
+                            crate::sci::models::regression::StatisticalSettingSource::Project
+                        },
+                        missing_value_policy: match parameter("missing_value_policy")
+                            .and_then(serde_json::Value::as_str)
+                        {
+                            Some("Reject") => crate::project::StatisticalMissingValuePolicy::Reject,
+                            Some("Listwise") => crate::project::StatisticalMissingValuePolicy::Listwise,
+                            Some(other) => return Err(format!(
+                                "statistics missing-value policy must be Listwise or Reject, got '{other}'"
+                            )),
+                            None => computation_settings.missing_values.statistics,
+                        },
+                        missing_value_policy_source: if parameter("missing_value_policy").is_some()
+                        {
+                            crate::sci::models::regression::StatisticalSettingSource::Node
+                        } else {
+                            crate::sci::models::regression::StatisticalSettingSource::Project
+                        },
                     },
                 )
                 .map_err(|error| error.to_string())?;
@@ -9052,12 +9510,69 @@ fn build_run_parameters(
                 .or_else(|| parameter("window"))
                 .and_then(serde_json::Value::as_u64)
                 .map(|value| value as usize);
+            let columns = if node_type == "yssbi.dataframe.decompose" {
+                let mut columns = document
+                    .port_bindings
+                    .iter()
+                    .filter_map(|(address, binding)| {
+                        if address.node_id != operation.source_node_id {
+                            return None;
+                        }
+                        let crate::node_system::document::PortRef::Instance { template, .. } =
+                            &address.port
+                        else {
+                            return None;
+                        };
+                        if template.as_str() != "columns" {
+                            return None;
+                        }
+                        match binding {
+                            crate::node_system::document::DynamicPortBinding::Resolved {
+                                origin:
+                                    crate::node_system::document::DynamicMemberLocator::SchemaField {
+                                        field,
+                                        ..
+                                    },
+                                order,
+                                ..
+                            }
+                            | crate::node_system::document::DynamicPortBinding::Orphan {
+                                origin:
+                                    crate::node_system::document::DynamicMemberLocator::SchemaField {
+                                        field,
+                                        ..
+                                    },
+                                order,
+                                ..
+                            } => Some((order.clone(), field.0.clone())),
+                            _ => None,
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                columns.sort_by(|left, right| left.0.cmp(&right.0));
+                let columns = columns
+                    .into_iter()
+                    .map(|(_, column)| column)
+                    .collect::<Vec<_>>();
+                if columns.len() != operation.outputs.len() {
+                    return Err(format!(
+                        "dataframe decompose node '{}' has {} compiled outputs but {} bound columns",
+                        operation.source_node_id,
+                        operation.outputs.len(),
+                        columns.len()
+                    ));
+                }
+                Some(columns.into_boxed_slice())
+            } else {
+                None
+            };
             parameters
                 .insert(
                     operation.params.clone(),
                     crate::node_system::runtime::DataframeKernelParameters {
                         resource,
                         column,
+                        columns,
                         order,
                     },
                 )
@@ -9594,6 +10109,25 @@ mod run_parameter_tests {
             .collect()
     }
 
+    fn populate_plan_value_contracts(plan: &mut ExecutionPlan) {
+        plan.value_contracts = plan
+            .operations
+            .iter()
+            .flat_map(|operation| {
+                operation
+                    .inputs
+                    .iter()
+                    .map(|input| (input.value, input.contract.clone()))
+                    .chain(
+                        operation
+                            .outputs
+                            .iter()
+                            .map(|output| (output.value, output.contract.clone())),
+                    )
+            })
+            .collect();
+    }
+
     fn parameter_plan(node: &DocumentNode, params: CompiledParameterHandle) -> ExecutionPlan {
         use crate::node_system::analysis::{
             CompilationBasis, CompileId, CompileProvenance, ProjectSessionId,
@@ -9615,7 +10149,9 @@ mod run_parameter_tests {
                 compile_id: CompileId::new(1),
             },
             value_count: 0,
+            value_contracts: BTreeMap::new(),
             value_sources: Box::new([]),
+            bound_values: BTreeMap::new(),
             operations: Box::new([PlannedOperation {
                 stable_id: OperationStableId::new(format!("test.operation.{}", node.id)).unwrap(),
                 source_node_id: node.id,
@@ -9700,9 +10236,11 @@ mod run_parameter_tests {
         let resources = CompileResourceSnapshot {
             versions: crate::node_system::analysis::ResourceVersionSet::new(),
             resource_states: crate::node_system::analysis::ResourceObservationSet::new(),
+            function_names: BTreeMap::new(),
             functions: BTreeMap::new(),
             function_graphs: BTreeMap::new(),
             variables: std::collections::HashMap::new(),
+            database_names: BTreeMap::new(),
             database_schemas: BTreeMap::new(),
         };
         let mut parameters = crate::node_system::runtime::CompiledParameterStore::new();
@@ -9711,14 +10249,168 @@ mod run_parameter_tests {
             &registry,
             &store,
             &resources,
+            None,
             session,
             &crate::node_system::analysis::NOOP_TRACE_SINK,
             &crate::node_system::compiler::CompileCancellationToken::new(),
+            &crate::project::ProjectComputationSettings::default(),
             &mut parameters,
         )
         .unwrap();
 
         assert_eq!(generation.plan_count(), 0);
+    }
+
+    #[test]
+    fn statistics_default_node_compiles_with_inherited_project_settings() {
+        let node_type = NodeTypeId::new("yssbi.statistics.ols.fit").unwrap();
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(4));
+        let node = DocumentNode {
+            id: node_id,
+            node_type: node_type.clone(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: catalog_defaults(&node_type),
+            user_label: None,
+        };
+        assert!(
+            !node
+                .parameters
+                .contains_key(&ParameterKey::new("convergence_tolerance").unwrap())
+        );
+        assert!(
+            !node
+                .parameters
+                .contains_key(&ParameterKey::new("missing_value_policy").unwrap())
+        );
+        let mut document = GraphDocument::default();
+        document.nodes.insert(node_id, node.clone());
+        let handle = CompiledParameterHandle::new("inherited-statistics-settings").unwrap();
+        let plan = parameter_plan(&node, handle.clone());
+        let mut store = crate::node_system::runtime::CompiledParameterStore::new();
+        let project_settings = crate::project::ProjectComputationSettings {
+            numeric: crate::project::NumericSettings {
+                tolerance: crate::project::NumericTolerance {
+                    absolute: 2e-6,
+                    relative: 3e-5,
+                },
+            },
+            missing_values: crate::project::MissingValueSettings {
+                statistics: crate::project::StatisticalMissingValuePolicy::Reject,
+            },
+        };
+
+        build_run_parameters(&mut store, &document, &plan, &project_settings).unwrap();
+        let compiled = store
+            .get::<crate::node_system::runtime::StatisticsKernelParameters>(&handle)
+            .unwrap()
+            .unwrap();
+        assert_eq!(compiled.convergence_tolerance, 2e-6);
+        assert_eq!(
+            compiled.convergence_tolerance_source,
+            crate::sci::models::regression::StatisticalSettingSource::Project
+        );
+        assert_eq!(
+            compiled.missing_value_policy,
+            crate::project::StatisticalMissingValuePolicy::Reject
+        );
+        assert_eq!(
+            compiled.missing_value_policy_source,
+            crate::sci::models::regression::StatisticalSettingSource::Project
+        );
+    }
+
+    #[test]
+    fn statistics_node_overrides_project_settings_in_compiled_parameters() {
+        let node_type = NodeTypeId::new("yssbi.statistics.ols.fit").unwrap();
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(2));
+        let mut node_parameters = catalog_defaults(&node_type);
+        node_parameters.insert(
+            ParameterKey::new("convergence_tolerance").unwrap(),
+            serde_json::json!(1e-7),
+        );
+        node_parameters.insert(
+            ParameterKey::new("missing_value_policy").unwrap(),
+            serde_json::json!("Reject"),
+        );
+        let node = DocumentNode {
+            id: node_id,
+            node_type,
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: node_parameters,
+            user_label: None,
+        };
+        let mut document = GraphDocument::default();
+        document.nodes.insert(node_id, node.clone());
+        let handle = CompiledParameterHandle::new("statistics-settings").unwrap();
+        let plan = parameter_plan(&node, handle.clone());
+        let mut store = crate::node_system::runtime::CompiledParameterStore::new();
+        let project_settings = crate::project::ProjectComputationSettings {
+            numeric: crate::project::NumericSettings {
+                tolerance: crate::project::NumericTolerance {
+                    absolute: 1e-5,
+                    relative: 1e-4,
+                },
+            },
+            missing_values: crate::project::MissingValueSettings {
+                statistics: crate::project::StatisticalMissingValuePolicy::Listwise,
+            },
+        };
+
+        build_run_parameters(&mut store, &document, &plan, &project_settings).unwrap();
+        let compiled = store
+            .get::<crate::node_system::runtime::StatisticsKernelParameters>(&handle)
+            .unwrap()
+            .unwrap();
+        assert_eq!(compiled.convergence_tolerance, 1e-7);
+        assert_eq!(
+            compiled.convergence_tolerance_source,
+            crate::sci::models::regression::StatisticalSettingSource::Node
+        );
+        assert_eq!(
+            compiled.missing_value_policy,
+            crate::project::StatisticalMissingValuePolicy::Reject
+        );
+        assert_eq!(
+            compiled.missing_value_policy_source,
+            crate::sci::models::regression::StatisticalSettingSource::Node
+        );
+    }
+
+    #[test]
+    fn statistics_rejects_nonpositive_convergence_override() {
+        let node_type = NodeTypeId::new("yssbi.statistics.ols.fit").unwrap();
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(3));
+        let mut node_parameters = catalog_defaults(&node_type);
+        node_parameters.insert(
+            ParameterKey::new("convergence_tolerance").unwrap(),
+            serde_json::json!(0.0),
+        );
+        let node = DocumentNode {
+            id: node_id,
+            node_type,
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: node_parameters,
+            user_label: None,
+        };
+        let mut document = GraphDocument::default();
+        document.nodes.insert(node_id, node.clone());
+        let plan = parameter_plan(
+            &node,
+            CompiledParameterHandle::new("invalid-statistics-settings").unwrap(),
+        );
+        let mut store = crate::node_system::runtime::CompiledParameterStore::new();
+
+        let error = build_run_parameters(
+            &mut store,
+            &document,
+            &plan,
+            &crate::project::ProjectComputationSettings::default(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error,
+            "statistics convergence tolerance must be finite and greater than zero"
+        );
     }
 
     #[test]
@@ -9747,7 +10439,13 @@ mod run_parameter_tests {
         let plan = parameter_plan(&node, handle.clone());
         let mut store = crate::node_system::runtime::CompiledParameterStore::new();
 
-        build_run_parameters(&mut store, &document, &plan).unwrap();
+        build_run_parameters(
+            &mut store,
+            &document,
+            &plan,
+            &crate::project::ProjectComputationSettings::default(),
+        )
+        .unwrap();
 
         let parameters = store
             .get::<crate::node_system::runtime::StatisticsKernelParameters>(&handle)
@@ -9796,7 +10494,43 @@ mod run_parameter_tests {
             Vec<crate::node_system::runtime::RuntimeValue>,
             crate::node_system::runtime::KernelError,
         > {
-            Ok(vec![self.0.clone().into()])
+            let Value::List(values) = &self.0 else {
+                return Err(crate::node_system::runtime::KernelError::new(
+                    "test series fixture requires a list",
+                ));
+            };
+            let values = values
+                .iter()
+                .map(|value| {
+                    let decimal = match value {
+                        Value::Integer(value) => {
+                            crate::node_system::protocol::CanonicalDecimal::new(value.to_string())
+                        }
+                        Value::Unsigned(value) => {
+                            crate::node_system::protocol::CanonicalDecimal::new(value.to_string())
+                        }
+                        Value::Decimal(value) => return Ok(Value::Decimal(value.clone())),
+                        _ => {
+                            return Err(crate::node_system::runtime::KernelError::new(
+                                "test series fixture requires numeric values",
+                            ));
+                        }
+                    }
+                    .map_err(|error| {
+                        crate::node_system::runtime::KernelError::new(error.to_string())
+                    })?;
+                    Ok(Value::Decimal(decimal))
+                })
+                .collect::<Result<Vec<_>, crate::node_system::runtime::KernelError>>()?;
+            let artifact = crate::node_system::runtime::DataSeriesBuilder::new(
+                crate::node_system::runtime::DataSeriesElementType::Float64,
+            )
+            .values(values)
+            .build(crate::node_system::runtime::ArtifactKind::Replayable)
+            .map_err(|error| crate::node_system::runtime::KernelError::new(error.to_string()))?;
+            Ok(vec![crate::node_system::runtime::RuntimeValue::Artifact(
+                artifact,
+            )])
         }
     }
 
@@ -9845,6 +10579,10 @@ mod run_parameter_tests {
             &adf_node,
             CompiledParameterHandle::new("adf-production-chain").unwrap(),
         );
+        let series_contract = crate::node_system::plan::PlannedValueContract {
+            kind: crate::node_system::plan::PlannedValueKind::DataSeries,
+            type_expr: crate::node_system::protocol::numeric_data_series_type(),
+        };
         plan.value_count = 2;
         plan.operations = Box::new([
             PlannedOperation {
@@ -9857,6 +10595,7 @@ mod run_parameter_tests {
                 inputs: Box::new([]),
                 outputs: Box::new([PlannedOutput {
                     value: ValueRef::new(0),
+                    contract: series_contract.clone(),
                     production: OutputProduction::FullyMaterialized,
                 }]),
                 params: CompiledParameterHandle::new("adf-series").unwrap(),
@@ -9876,11 +10615,13 @@ mod run_parameter_tests {
                 ),
                 inputs: Box::new([PlannedInput {
                     value: ValueRef::new(0),
+                    contract: series_contract,
                     consumption: InputConsumption::FullyMaterialized,
                     bound_value: None,
                 }]),
                 outputs: Box::new([PlannedOutput {
                     value: ValueRef::new(1),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production: OutputProduction::FullyMaterialized,
                 }]),
                 params: CompiledParameterHandle::new("adf-production-chain").unwrap(),
@@ -9909,6 +10650,7 @@ mod run_parameter_tests {
             output: adf_output,
             value: ValueRef::new(1),
         }]);
+        populate_plan_value_contracts(&mut plan);
 
         let mut kernels = crate::node_system::runtime::build_builtin_kernel_registry();
         kernels
@@ -9919,7 +10661,13 @@ mod run_parameter_tests {
             .unwrap();
         let run = |document: &GraphDocument| {
             let mut store = crate::node_system::runtime::CompiledParameterStore::new();
-            build_run_parameters(&mut store, document, &plan).unwrap();
+            build_run_parameters(
+                &mut store,
+                document,
+                &plan,
+                &crate::project::ProjectComputationSettings::default(),
+            )
+            .unwrap();
             RunExecutor::new(&kernels, &NoResources, &NoFunctions)
                 .with_compiled_parameters(&store)
                 .run(&plan, CancellationToken::new())
@@ -10024,6 +10772,7 @@ mod run_parameter_tests {
             inputs: Box::new([]),
             outputs: Box::new([PlannedOutput {
                 value: ValueRef::new(index as u32),
+                contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 production: OutputProduction::FullyMaterialized,
             }]),
             params: CompiledParameterHandle::new(format!("series-{index}")).unwrap(),
@@ -10044,11 +10793,13 @@ mod run_parameter_tests {
             inputs: Box::new([
                 PlannedInput {
                     value: ValueRef::new(0),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     consumption: InputConsumption::FullyMaterialized,
                     bound_value: None,
                 },
                 PlannedInput {
                     value: ValueRef::new(1),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     consumption: InputConsumption::FullyMaterialized,
                     bound_value: None,
                 },
@@ -10056,10 +10807,12 @@ mod run_parameter_tests {
             outputs: Box::new([
                 PlannedOutput {
                     value: ValueRef::new(2),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production: OutputProduction::FullyMaterialized,
                 },
                 PlannedOutput {
                     value: ValueRef::new(3),
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production: OutputProduction::FullyMaterialized,
                 },
             ]),
@@ -10091,8 +10844,15 @@ mod run_parameter_tests {
             output: var_output,
             value: ValueRef::new(2),
         }]);
+        populate_plan_value_contracts(&mut plan);
         let mut store = crate::node_system::runtime::CompiledParameterStore::new();
-        build_run_parameters(&mut store, &document, &plan).unwrap();
+        build_run_parameters(
+            &mut store,
+            &document,
+            &plan,
+            &crate::project::ProjectComputationSettings::default(),
+        )
+        .unwrap();
 
         let mut kernels = crate::node_system::runtime::build_builtin_kernel_registry();
         for (index, values) in [

@@ -6,12 +6,18 @@ use crate::node_system::analysis::{
     CompilationBasis, DiagnosticLocation, NodeDiagnostic, ResolvedInterface, ResolvedPort,
     ResolvedPortStatus, ResourceVersionSet,
 };
+use crate::node_system::document::materialization::ProjectedMemberRef;
+use crate::node_system::document::{
+    CompilationBasisToken, CompilationRegistryFingerprint, CompilationResourceKey,
+    CompilationResourceVersion, MaterializationAuthorization,
+};
 use crate::node_system::document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphRevision,
     LastKnownPortMetadata, NodeId, OrderKey, PortAddress, PortInstanceId, PortRef,
 };
 use crate::node_system::protocol::{
     InterfaceResolverId, NodeProtocol, PortInstances, PortKey, PortSpec, ResolvedSchemaFact,
+    TypeExpr,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -38,7 +44,20 @@ pub struct InterfaceResolverMember {
     pub basis: CompilationBasis<GraphRevision>,
     pub locator: DynamicMemberLocator,
     pub label: String,
+    pub value_type: TypeExpr,
     pub identity: SchemaFieldIdentityGuarantee,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InterfaceResolverDiagnostic {
+    pub locator: DynamicMemberLocator,
+    pub diagnostic: CompilerDiagnostic,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InterfaceResolverOutput {
+    pub members: Box<[InterfaceResolverMember]>,
+    pub diagnostics: Box<[InterfaceResolverDiagnostic]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,7 +108,7 @@ pub trait InterfaceResolver: Send + Sync {
     fn resolve(
         &self,
         request: InterfaceResolverRequest<'_>,
-    ) -> Result<Box<[InterfaceResolverMember]>, InterfaceResolverError>;
+    ) -> Result<InterfaceResolverOutput, InterfaceResolverError>;
 }
 
 #[derive(Default)]
@@ -156,6 +175,9 @@ pub enum ProjectedDynamicPortBinding {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ValidatedProjectedMember {
     template: PortKey,
+    direction: crate::node_system::protocol::PortDirection,
+    kind: crate::node_system::protocol::PortKind,
+    connections: crate::node_system::protocol::ConnectionsPerPort,
     member: InterfaceResolverMember,
     projection_address: PortAddress,
     bound_address: Option<PortAddress>,
@@ -164,6 +186,18 @@ pub struct ValidatedProjectedMember {
 impl ValidatedProjectedMember {
     pub const fn template(&self) -> &PortKey {
         &self.template
+    }
+
+    pub(crate) const fn direction(&self) -> crate::node_system::protocol::PortDirection {
+        self.direction
+    }
+
+    pub(crate) const fn kind(&self) -> crate::node_system::protocol::PortKind {
+        self.kind
+    }
+
+    pub(crate) const fn connections(&self) -> crate::node_system::protocol::ConnectionsPerPort {
+        self.connections
     }
 
     pub const fn member(&self) -> &InterfaceResolverMember {
@@ -176,6 +210,42 @@ impl ValidatedProjectedMember {
 
     pub const fn bound_address(&self) -> Option<&PortAddress> {
         self.bound_address.as_ref()
+    }
+
+    pub(crate) fn authorize_materialization(
+        &self,
+        graph_path: crate::node_system::document::GraphResourcePath,
+        basis: &CompilationBasis<GraphRevision>,
+        order: OrderKey,
+    ) -> (ProjectedMemberRef, MaterializationAuthorization) {
+        let token = CompilationBasisToken::new(
+            graph_path,
+            basis.graph_revision,
+            CompilationRegistryFingerprint::from_bytes(*basis.registry_fingerprint.as_bytes()),
+            basis
+                .resource_versions
+                .iter()
+                .map(|(key, version)| {
+                    (
+                        CompilationResourceKey::new(key.as_str()),
+                        CompilationResourceVersion::new(version.as_str()),
+                    )
+                })
+                .collect(),
+        );
+        let member = ProjectedMemberRef::new(
+            token,
+            self.projection_address.node_id,
+            self.template.clone(),
+            self.direction,
+            self.member.locator.clone(),
+            LastKnownPortMetadata {
+                label: self.member.label.clone(),
+                value_type: Some(self.member.value_type.clone()),
+            },
+        );
+        let authorization = MaterializationAuthorization::new(member.clone(), order);
+        (member, authorization)
     }
 }
 
@@ -205,6 +275,28 @@ impl ValidatedInterfaceProjection {
                     && candidate.bound_address.is_none()
                     && candidate.member.identity.permits_persistent_state()
             })
+    }
+
+    pub(crate) fn authorize_materialization_candidate(
+        &self,
+        graph_path: crate::node_system::document::GraphResourcePath,
+        projection_address: &PortAddress,
+    ) -> Option<(ProjectedMemberRef, MaterializationAuthorization)> {
+        let node = self.nodes.get(&projection_address.node_id)?;
+        let (index, candidate) =
+            node.available_members
+                .iter()
+                .enumerate()
+                .find(|(_, candidate)| {
+                    candidate.projection_address == *projection_address
+                        && candidate.bound_address.is_none()
+                        && candidate.member.identity.permits_persistent_state()
+                })?;
+        Some(candidate.authorize_materialization(
+            graph_path,
+            &self.basis,
+            OrderKey(format!("{index:05}").into()),
+        ))
     }
 }
 
@@ -288,7 +380,16 @@ pub(crate) fn materialize_dynamic_interface_with_resources(
                     resolved_schemas,
                     resources,
                 }) {
-                    Ok(members) => state.add_resolved_instances(basis, spec, members),
+                    Ok(output) => {
+                        if state.add_resolved_instances(basis, spec, output).is_err() {
+                            state.push_node_diagnostic(
+                                CompilerDiagnostic::InterfaceResolverFailed {
+                                    resolver_id: resolver.to_string().into(),
+                                },
+                            );
+                            state.add_existing_instances(spec, None);
+                        }
+                    }
                     Err(error) => {
                         if let Some((resource_key, reason)) = error.resource {
                             state.push_node_diagnostic(
@@ -416,7 +517,13 @@ impl<'a> MaterializationState<'a> {
         let address = PortAddress::declared(self.node_id, spec.key.clone());
         self.insert_port(
             address.clone(),
-            resolved_port(address, spec, ResolvedPortStatus::Resolved),
+            resolved_port(
+                address,
+                spec,
+                None,
+                spec.value_type.clone(),
+                ResolvedPortStatus::Resolved,
+            ),
         );
     }
 
@@ -424,8 +531,12 @@ impl<'a> MaterializationState<'a> {
         &mut self,
         basis: &CompilationBasis<GraphRevision>,
         spec: &PortSpec,
-        members: Box<[InterfaceResolverMember]>,
-    ) {
+        output: InterfaceResolverOutput,
+    ) -> Result<(), InterfaceResolverError> {
+        let InterfaceResolverOutput {
+            members,
+            diagnostics,
+        } = output;
         let mut ordered_members = Vec::new();
         let mut locator_indices = BTreeMap::new();
         let mut duplicated = BTreeSet::new();
@@ -465,32 +576,96 @@ impl<'a> MaterializationState<'a> {
             .filter_map(Option::as_ref)
             .map(|member| (member.locator.clone(), member.clone()))
             .collect::<BTreeMap<_, _>>();
+        if let Some(unlocatable) = diagnostics
+            .iter()
+            .find(|diagnostic| !by_locator.contains_key(&diagnostic.locator))
+        {
+            return Err(InterfaceResolverError::new(format!(
+                "interface resolver diagnostic locator '{}' is absent from validated members",
+                locator_detail(&unlocatable.locator),
+            )));
+        }
 
-        self.add_existing_instances(spec, Some(&by_locator));
+        let mut addresses_by_locator = BTreeMap::new();
         for member in ordered_members.into_iter().flatten() {
-            let bound_address = self
+            let binding = self
                 .find_binding(spec, &member.locator)
-                .map(|(address, _)| address.clone());
+                .map(|(address, binding)| (address.clone(), binding.clone()));
+            let bound_address = binding.as_ref().map(|(address, _)| address.clone());
             let projection_address = bound_address
                 .clone()
                 .unwrap_or_else(|| self.unbound_projection_address(basis, spec, &member.locator));
-            if bound_address.is_none() {
+            if let Some((address, binding)) = binding {
+                self.add_current_instance(spec, address, &binding, &member);
+            } else {
                 self.insert_port(
                     projection_address.clone(),
                     resolved_port(
                         projection_address.clone(),
                         spec,
+                        Some(member.label.clone().into()),
+                        member.value_type.clone(),
                         ResolvedPortStatus::Resolved,
                     ),
                 );
             }
+            addresses_by_locator.insert(member.locator.clone(), projection_address.clone());
             self.available_members.push(ValidatedProjectedMember {
                 template: spec.key.clone(),
+                direction: spec.direction,
+                kind: spec.kind,
+                connections: spec.connections,
                 member,
                 projection_address,
                 bound_address,
             });
         }
+        self.add_existing_instances(spec, Some(&by_locator));
+        for diagnostic in diagnostics {
+            let address = addresses_by_locator
+                .get(&diagnostic.locator)
+                .expect("resolver diagnostic locators were validated");
+            self.push_port_diagnostic(diagnostic.diagnostic, address);
+        }
+        Ok(())
+    }
+
+    fn add_current_instance(
+        &mut self,
+        spec: &PortSpec,
+        address: PortAddress,
+        binding: &DynamicPortBinding,
+        member: &InterfaceResolverMember,
+    ) {
+        let Some((origin, order, _)) = binding_parts(binding) else {
+            return;
+        };
+        if !member.identity.permits_persistent_state() {
+            self.diagnose_forbidden_state(&address);
+        }
+        let last_known = LastKnownPortMetadata {
+            label: member.label.clone(),
+            value_type: Some(member.value_type.clone()),
+        };
+        self.projected_bindings.insert(
+            address.clone(),
+            ProjectedDynamicPortBinding::Resolved {
+                origin: origin.clone(),
+                order: order.clone(),
+                last_known,
+                identity: member.identity,
+            },
+        );
+        self.insert_port(
+            address.clone(),
+            resolved_port(
+                address,
+                spec,
+                Some(member.label.clone().into()),
+                member.value_type.clone(),
+                ResolvedPortStatus::Resolved,
+            ),
+        );
     }
 
     fn add_existing_instances(
@@ -517,6 +692,11 @@ impl<'a> MaterializationState<'a> {
         );
 
         for (address, binding) in bindings {
+            if members.is_some_and(|values| {
+                binding_origin(&binding).is_some_and(|origin| values.contains_key(origin))
+            }) {
+                continue;
+            }
             if let DynamicPortBinding::UserCreated { .. } = &binding {
                 let status = if matches!(spec.instances, PortInstances::UserCreated { .. }) {
                     ResolvedPortStatus::Resolved
@@ -530,7 +710,10 @@ impl<'a> MaterializationState<'a> {
                     );
                     ResolvedPortStatus::Orphan
                 };
-                self.insert_port(address.clone(), resolved_port(address, spec, status));
+                self.insert_port(
+                    address.clone(),
+                    resolved_port(address, spec, None, spec.value_type.clone(), status),
+                );
                 continue;
             }
             if matches!(spec.instances, PortInstances::UserCreated { .. }) {
@@ -543,7 +726,13 @@ impl<'a> MaterializationState<'a> {
                 );
                 self.insert_port(
                     address.clone(),
-                    resolved_port(address, spec, ResolvedPortStatus::Orphan),
+                    resolved_port(
+                        address,
+                        spec,
+                        None,
+                        spec.value_type.clone(),
+                        ResolvedPortStatus::Orphan,
+                    ),
                 );
                 continue;
             }
@@ -558,15 +747,22 @@ impl<'a> MaterializationState<'a> {
             } else {
                 ResolvedPortStatus::Resolved
             };
-            let last_known = member
+            let mut last_known = member
                 .map(|value| LastKnownPortMetadata {
                     label: value.label.clone(),
+                    value_type: Some(value.value_type.clone()),
                 })
                 .or_else(|| old_last_known.cloned())
-                .unwrap_or_else(|| LastKnownPortMetadata {
-                    label: locator_detail(origin),
-                });
+                .unwrap_or_default();
+            if last_known.label.is_empty() {
+                last_known.label = locator_detail(origin);
+            }
 
+            let instance_label: Box<str> = last_known.label.clone().into();
+            let value_type = last_known
+                .value_type
+                .clone()
+                .unwrap_or_else(|| spec.value_type.clone());
             let projection = match (status, member) {
                 (ResolvedPortStatus::Resolved, Some(member)) => {
                     if !member.identity.permits_persistent_state() {
@@ -600,7 +796,10 @@ impl<'a> MaterializationState<'a> {
                 }
             };
             self.projected_bindings.insert(address.clone(), projection);
-            self.insert_port(address.clone(), resolved_port(address, spec, status));
+            self.insert_port(
+                address.clone(),
+                resolved_port(address, spec, Some(instance_label), value_type, status),
+            );
         }
     }
 
@@ -712,7 +911,11 @@ fn binding_parts(
 )> {
     match binding {
         DynamicPortBinding::UserCreated { .. } => None,
-        DynamicPortBinding::Resolved { origin, order } => Some((origin, order, None)),
+        DynamicPortBinding::Resolved {
+            origin,
+            order,
+            last_known,
+        } => Some((origin, order, Some(last_known))),
         DynamicPortBinding::Orphan {
             origin,
             order,
@@ -724,6 +927,8 @@ fn binding_parts(
 fn resolved_port(
     address: PortAddress,
     spec: &PortSpec,
+    instance_label: Option<Box<str>>,
+    value_type: TypeExpr,
     status: ResolvedPortStatus,
 ) -> ResolvedPort<PortAddress> {
     ResolvedPort {
@@ -731,6 +936,8 @@ fn resolved_port(
         template: spec.key.clone(),
         direction: spec.direction,
         kind: spec.kind,
+        instance_label,
+        value_type,
         status,
     }
 }

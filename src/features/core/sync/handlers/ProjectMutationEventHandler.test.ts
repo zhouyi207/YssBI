@@ -209,6 +209,7 @@ describe('Project mutation event synchronization', () => {
       functionUpdated: vi.fn(),
       variablesChanged: vi.fn(),
       graphDelta,
+      computationSettingsChanged: vi.fn(),
       resourceMutationCommitted: (result) =>
         projectPublicationCoordinator.submit({ result: result as ResourceMutationResultDto }),
       applyProjectLifecycleReceipt: vi.fn(),

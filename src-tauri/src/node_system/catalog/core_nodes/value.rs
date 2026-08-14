@@ -149,13 +149,14 @@ fn register_scalar_convert(fragment: &mut ProviderFragment) -> Result<(), Builti
         ],
         ParameterEditorSpec::Select,
     )?;
+    let scalar_types = scalar_conversion_types()?;
     fragment.nodes.push(leaf(
         protocol(
             ID,
             "conversion",
             vec![
-                data_port(ID, "input", PortDirection::Input, TypeExpr::Unknown)?,
-                data_port(ID, "output", PortDirection::Output, TypeExpr::Unknown)?,
+                data_port(ID, "input", PortDirection::Input, scalar_types.clone())?,
+                data_port(ID, "output", PortDirection::Output, scalar_types)?,
             ],
             vec![],
             vec![],
@@ -231,6 +232,15 @@ fn register_series_convert(
         id,
     ));
     Ok(())
+}
+
+fn scalar_conversion_types() -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(TypeExpr::Union(vec![
+        concrete("core.bool")?,
+        concrete("core.int64")?,
+        concrete("core.float64")?,
+        concrete("core.string")?,
+    ]))
 }
 
 fn core_type(kind: &'static str) -> Result<&'static str, BuiltinAssemblyError> {

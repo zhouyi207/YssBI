@@ -3,6 +3,8 @@ use super::{
     TypeId, TypeParameterId,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TypeExpr {
@@ -14,6 +16,226 @@ pub enum TypeExpr {
     },
     Union(Vec<TypeExpr>),
     Unknown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeCompatibility {
+    Compatible,
+    Incompatible,
+    Indeterminate,
+}
+
+pub fn type_exprs_compatibility(
+    source: &TypeExpr,
+    target: &TypeExpr,
+    source_type_parameters: &[TypeParameterId],
+    target_type_parameters: &[TypeParameterId],
+) -> TypeCompatibility {
+    let source_generics = source_type_parameters
+        .iter()
+        .enumerate()
+        .map(|(index, parameter)| (parameter.clone(), index))
+        .collect::<BTreeMap<_, _>>();
+    let target_generics = target_type_parameters
+        .iter()
+        .enumerate()
+        .map(|(index, parameter)| (parameter.clone(), source_type_parameters.len() + index))
+        .collect::<BTreeMap<_, _>>();
+
+    compatibility(
+        &CompatibilityValue::instantiate(source, &source_generics),
+        &CompatibilityValue::instantiate(target, &target_generics),
+    )
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CompatibilityValue {
+    Variable(usize),
+    Concrete(TypeId),
+    Applied {
+        constructor: TypeConstructorId,
+        arguments: Vec<CompatibilityValue>,
+    },
+    Union(Vec<CompatibilityValue>),
+    Unknown,
+}
+
+impl CompatibilityValue {
+    fn instantiate(expr: &TypeExpr, generics: &BTreeMap<TypeParameterId, usize>) -> Self {
+        match expr {
+            TypeExpr::Concrete(id) => Self::Concrete(id.clone()),
+            TypeExpr::Generic(id) => generics
+                .get(id)
+                .copied()
+                .map(Self::Variable)
+                .unwrap_or(Self::Unknown),
+            TypeExpr::Applied {
+                constructor,
+                arguments,
+            } => Self::Applied {
+                constructor: constructor.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|argument| Self::instantiate(argument, generics))
+                    .collect(),
+            },
+            TypeExpr::Union(values) => Self::Union(
+                values
+                    .iter()
+                    .map(|value| Self::instantiate(value, generics))
+                    .collect(),
+            ),
+            TypeExpr::Unknown => Self::Unknown,
+        }
+    }
+}
+
+fn compatibility(source: &CompatibilityValue, target: &CompatibilityValue) -> TypeCompatibility {
+    use TypeCompatibility::{Compatible, Incompatible, Indeterminate};
+
+    match (source, target) {
+        (CompatibilityValue::Union(sources), target) => {
+            combine_every(sources.iter().map(|source| compatibility(source, target)))
+        }
+        (source, CompatibilityValue::Union(targets)) => {
+            combine_any(targets.iter().map(|target| compatibility(source, target)))
+        }
+        (CompatibilityValue::Unknown | CompatibilityValue::Variable(_), _)
+        | (_, CompatibilityValue::Unknown | CompatibilityValue::Variable(_)) => Indeterminate,
+        (CompatibilityValue::Concrete(source), CompatibilityValue::Concrete(target)) => {
+            if source == target {
+                Compatible
+            } else {
+                Incompatible
+            }
+        }
+        (
+            CompatibilityValue::Applied {
+                constructor: source_constructor,
+                arguments: source_arguments,
+            },
+            CompatibilityValue::Applied {
+                constructor: target_constructor,
+                arguments: target_arguments,
+            },
+        ) if source_constructor == target_constructor
+            && source_arguments.len() == target_arguments.len() =>
+        {
+            combine_every(
+                source_arguments
+                    .iter()
+                    .zip(target_arguments)
+                    .map(|(source, target)| compatibility(source, target)),
+            )
+        }
+        _ => Incompatible,
+    }
+}
+
+fn combine_every(values: impl IntoIterator<Item = TypeCompatibility>) -> TypeCompatibility {
+    let mut outcome = TypeCompatibility::Compatible;
+    for value in values {
+        match value {
+            TypeCompatibility::Incompatible => return TypeCompatibility::Incompatible,
+            TypeCompatibility::Indeterminate => outcome = TypeCompatibility::Indeterminate,
+            TypeCompatibility::Compatible => {}
+        }
+    }
+    outcome
+}
+
+fn combine_any(values: impl IntoIterator<Item = TypeCompatibility>) -> TypeCompatibility {
+    let mut outcome = TypeCompatibility::Incompatible;
+    for value in values {
+        match value {
+            TypeCompatibility::Compatible => return TypeCompatibility::Compatible,
+            TypeCompatibility::Indeterminate => outcome = TypeCompatibility::Indeterminate,
+            TypeCompatibility::Incompatible => {}
+        }
+    }
+    outcome
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeNormalizationError {
+    EmptyUnion,
+}
+
+impl fmt::Display for TypeNormalizationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::EmptyUnion => formatter.write_str("type unions must contain at least one member"),
+        }
+    }
+}
+
+impl std::error::Error for TypeNormalizationError {}
+
+pub fn normalize_type_expr(value: TypeExpr) -> Result<TypeExpr, TypeNormalizationError> {
+    match value {
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } => Ok(TypeExpr::Applied {
+            constructor,
+            arguments: arguments
+                .into_iter()
+                .map(normalize_type_expr)
+                .collect::<Result<_, _>>()?,
+        }),
+        TypeExpr::Union(members) => normalize_union(members),
+        value => Ok(value),
+    }
+}
+
+fn normalize_union(members: Vec<TypeExpr>) -> Result<TypeExpr, TypeNormalizationError> {
+    if members.is_empty() {
+        return Err(TypeNormalizationError::EmptyUnion);
+    }
+
+    let mut normalized = Vec::new();
+    for member in members {
+        match normalize_type_expr(member)? {
+            TypeExpr::Union(nested) => normalized.extend(nested),
+            member => normalized.push(member),
+        }
+    }
+    normalized.sort_by_key(type_expr_sort_key);
+    normalized.dedup();
+
+    match normalized.len() {
+        0 => Err(TypeNormalizationError::EmptyUnion),
+        1 => Ok(normalized.pop().expect("single normalized union member")),
+        _ => Ok(TypeExpr::Union(normalized)),
+    }
+}
+
+fn type_expr_sort_key(value: &TypeExpr) -> String {
+    match value {
+        TypeExpr::Concrete(id) => format!("0:{}", id.as_str()),
+        TypeExpr::Generic(id) => format!("1:{}", id.as_str()),
+        TypeExpr::Applied {
+            constructor,
+            arguments,
+        } => format!(
+            "2:{}<{}>",
+            constructor.as_str(),
+            arguments
+                .iter()
+                .map(type_expr_sort_key)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        TypeExpr::Union(members) => format!(
+            "3:{}",
+            members
+                .iter()
+                .map(type_expr_sort_key)
+                .collect::<Vec<_>>()
+                .join("|")
+        ),
+        TypeExpr::Unknown => "4".to_string(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

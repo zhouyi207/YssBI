@@ -8,6 +8,7 @@ export const ALL_LOG_TYPES: LogType[] = [
   LogType.System,
   LogType.Graph,
   LogType.Data,
+  LogType.Notify,
 ];
 
 export const LOG_TYPE_TAB_ORDER: LogTypeTabId[] = ['all', ...ALL_LOG_TYPES];

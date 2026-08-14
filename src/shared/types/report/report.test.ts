@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   normalizeDurbinWatsonResult,
@@ -161,6 +163,15 @@ describe('parseRegressionResultData', () => {
 describe('parseReportPayload', () => {
   it('dispatches regression reports through shared parser', () => {
     expect(parseReportPayload('olsSummary', MINIMAL_REGRESSION)).not.toBeNull();
+  });
+
+  it('accepts the Rust OLS Summary report output', () => {
+    const payload: unknown = JSON.parse(readFileSync(
+      resolve('src/tests/fixtures/node-system-contracts/ols-summary-report.json'),
+      'utf8',
+    ));
+
+    expect(parseReportPayload('olsSummary', payload)).not.toBeNull();
   });
 
   it('rejects panel_did without kind discriminator', () => {

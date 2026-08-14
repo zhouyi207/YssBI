@@ -2,7 +2,8 @@ use super::KernelFragment;
 use crate::node_system::plan::ResourceId;
 use crate::node_system::protocol::Value;
 use crate::node_system::runtime::{
-    Kernel, KernelContext, KernelError, ResourceLease, RuntimeValue,
+    Kernel, KernelContext, KernelError, NullPolicy, NumericSeriesView, ResourceLease, RuntimeValue,
+    numeric_series, require_data_series,
 };
 use crate::sci::api::time_series::acf_pacf::{AcfPacfInput, compute_acf_pacf};
 use crate::sci::engine::SciContext;
@@ -539,80 +540,29 @@ struct NumericSeries {
 }
 
 fn series(inputs: &[RuntimeValue], index: usize, node: &str) -> Result<NumericSeries, KernelError> {
-    let value = match inputs.get(index) {
-        Some(RuntimeValue::Scalar(value)) => value,
-        Some(_) => {
-            return Err(KernelError::new(format!(
-                "{node}: input {index} must be a materialized data series"
-            )));
-        }
-        None => {
-            return Err(KernelError::new(format!(
-                "{node}: input {index} is missing"
-            )));
-        }
-    };
-    match value {
-        Value::List(values) => Ok(NumericSeries {
-            name: None,
-            format: "number".to_owned(),
-            values: numeric_values(values, node, index)?,
-        }),
-        Value::Object(fields) => {
-            let values = match fields.get("values") {
-                Some(Value::List(values)) => numeric_values(values, node, index)?,
-                _ => {
-                    return Err(KernelError::new(format!(
-                        "{node}: input {index} data series has no values"
-                    )));
-                }
-            };
-            let name = fields.get("name").and_then(|value| match value {
-                Value::String(value) if !value.is_empty() => Some(value.to_string()),
-                _ => None,
-            });
-            let format = fields
-                .get("format")
-                .and_then(|value| match value {
-                    Value::String(value) => Some(value.to_string()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| "number".to_owned());
-            Ok(NumericSeries {
-                name,
-                format,
-                values,
-            })
-        }
-        _ => Err(KernelError::new(format!(
-            "{node}: input {index} must be a data series"
-        ))),
+    let value = inputs
+        .get(index)
+        .ok_or_else(|| KernelError::new(format!("{node}: input {index} is missing")))?;
+    let artifact = require_data_series(value)?;
+    let view = numeric_series(artifact, NullPolicy::Propagate)?;
+    let metadata = match &view {
+        NumericSeriesView::Int64(series) => series.metadata(),
+        NumericSeriesView::Float64(series) => series.metadata(),
     }
-}
-
-fn numeric_values(
-    values: &[Value],
-    node: &str,
-    index: usize,
-) -> Result<Vec<Option<f64>>, KernelError> {
-    values
-        .iter()
-        .map(|value| match value {
-            Value::Null => Ok(None),
-            Value::Integer(value) => Ok(Some(*value as f64)),
-            Value::Unsigned(value) => Ok(Some(*value as f64)),
-            Value::Decimal(value) => value
-                .as_str()
-                .parse::<f64>()
-                .map(|value| value.is_finite().then_some(value))
-                .map_err(|_| {
-                    KernelError::new(format!("{node}: input {index} contains an invalid float64"))
-                }),
-            _ => Err(KernelError::new(format!(
-                "{node}: input {index} contains a non-numeric value"
-            ))),
-        })
-        .collect()
+    .clone();
+    let values = match view {
+        NumericSeriesView::Int64(series) => series
+            .values()
+            .iter()
+            .map(|value| value.map(|value| value as f64))
+            .collect(),
+        NumericSeriesView::Float64(series) => series.values().to_vec(),
+    };
+    Ok(NumericSeries {
+        name: metadata.name.as_deref().map(str::to_owned),
+        format: metadata.format.as_deref().unwrap_or("number").to_owned(),
+        values,
+    })
 }
 
 fn finite_values(series: &NumericSeries) -> Vec<f64> {

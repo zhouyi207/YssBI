@@ -16,10 +16,11 @@ use crate::node_system::document::mutation::{
 };
 use crate::node_system::protocol::{
     InputBindingSpec, InterfaceResolverId, LiteralPolicy, NodeInterfaceProtocol, NodeProtocol,
-    ParameterConstraint, ParameterEditorSpec, ParameterKey, ParameterSchema, ParameterSpec,
-    TypeConstructorId, TypeExpr, TypeId, TypeParameterId, Value,
+    ParameterConstraint, ParameterEditorSpec, ParameterKey, ParameterPresentation, ParameterSchema,
+    ParameterSpec, TypeConstructorId, TypeExpr, TypeId, TypeParameterId, Value, data_series_type,
+    numeric_data_series_type,
 };
-use crate::node_system::registry::TypeRegistration;
+use crate::node_system::registry::{TypeConstructorRegistration, TypeRegistration};
 
 const NODE_TYPE: &str = "yssbi.test.editor_validation";
 
@@ -63,6 +64,36 @@ fn validation_registry() -> NodeRegistry {
                 ordered: false,
             },
             None,
+        ),
+        port(
+            "string_series_out",
+            PortDirection::Output,
+            PortKind::Data,
+            PortInstances::Declared,
+            ConnectionsPerPort::Multiple {
+                max: None,
+                ordered: false,
+            },
+            None,
+        ),
+        port(
+            "unknown_series_out",
+            PortDirection::Output,
+            PortKind::Data,
+            PortInstances::Declared,
+            ConnectionsPerPort::Multiple {
+                max: None,
+                ordered: false,
+            },
+            None,
+        ),
+        port(
+            "numeric_series_in",
+            PortDirection::Input,
+            PortKind::Data,
+            PortInstances::Declared,
+            ConnectionsPerPort::Single,
+            Some(LiteralPolicy::Forbidden),
         ),
         port(
             "data_in",
@@ -123,6 +154,21 @@ fn validation_registry() -> NodeRegistry {
     ];
     ports
         .iter_mut()
+        .find(|port| port.key.as_str() == "string_series_out")
+        .unwrap()
+        .value_type = data_series_type(TypeExpr::Concrete(TypeId::new("core.string").unwrap()));
+    ports
+        .iter_mut()
+        .find(|port| port.key.as_str() == "unknown_series_out")
+        .unwrap()
+        .value_type = data_series_type(TypeExpr::Unknown);
+    ports
+        .iter_mut()
+        .find(|port| port.key.as_str() == "numeric_series_in")
+        .unwrap()
+        .value_type = numeric_data_series_type();
+    ports
+        .iter_mut()
         .find(|port| port.key.as_str() == "data_in")
         .unwrap()
         .value_type = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
@@ -141,6 +187,7 @@ fn validation_registry() -> NodeRegistry {
                 },
             ],
             editor: ParameterEditorSpec::Number,
+            presentation: ParameterPresentation::DetailPanel,
         },
         ParameterSpec {
             key: ParameterKey::new("mode").unwrap(),
@@ -153,6 +200,7 @@ fn validation_registry() -> NodeRegistry {
                 Value::String("beta".into()),
             ])],
             editor: ParameterEditorSpec::Select,
+            presentation: ParameterPresentation::DetailPanel,
         },
         ParameterSpec {
             key: ParameterKey::new("label").unwrap(),
@@ -165,6 +213,7 @@ fn validation_registry() -> NodeRegistry {
                 max: Some(4),
             }],
             editor: ParameterEditorSpec::Text { multiline: false },
+            presentation: ParameterPresentation::DetailPanel,
         },
     ];
     let protocol = TestProtocolBuilder::new(NODE_TYPE, "test")
@@ -182,11 +231,22 @@ fn validation_registry() -> NodeRegistry {
             classes: BTreeSet::new(),
         },
         TypeRegistration {
+            id: TypeId::new("core.float64").unwrap(),
+            title_key: I18nKey::new("types.float64.title").unwrap(),
+            classes: BTreeSet::new(),
+        },
+        TypeRegistration {
             id: TypeId::new("core.string").unwrap(),
             title_key: I18nKey::new("types.string.title").unwrap(),
             classes: BTreeSet::new(),
         },
     ]
+    .into_boxed_slice();
+    provider.type_constructors = vec![TypeConstructorRegistration {
+        id: crate::node_system::protocol::TypeConstructorId::new("core.data_series").unwrap(),
+        title_key: I18nKey::new("types.data_series.title").unwrap(),
+        arity: 1,
+    }]
     .into_boxed_slice();
     provider.categories = vec![CategoryRegistration {
         id: NodeCategoryId::new("test").unwrap(),
@@ -200,9 +260,14 @@ fn validation_registry() -> NodeRegistry {
         keys: [
             "categories.test.title",
             "types.int64.title",
+            "types.float64.title",
             "types.string.title",
+            "types.data_series.title",
             "nodes.test.editor_validation.title",
             "nodes.test.editor_validation.data_out",
+            "nodes.test.editor_validation.string_series_out",
+            "nodes.test.editor_validation.unknown_series_out",
+            "nodes.test.editor_validation.numeric_series_in",
             "nodes.test.editor_validation.data_in",
             "nodes.test.editor_validation.forbidden_in",
             "nodes.test.editor_validation.control_in",
@@ -246,6 +311,7 @@ fn editor_parameter_validation_applies_registered_nominal_codec() {
         default_value: None,
         constraints: vec![ParameterConstraint::Required],
         editor: ParameterEditorSpec::Auto,
+        presentation: ParameterPresentation::DetailPanel,
     }])
     .unwrap();
 
@@ -2699,6 +2765,48 @@ fn editor_mutation_rejects_connection_direction_and_kind_mismatches() {
 }
 
 #[test]
+fn editor_mutation_rejects_proven_incompatible_connection() {
+    let registry = validation_registry();
+    let first = node_id(1_003);
+    let second = node_id(1_004);
+    let document = validation_document(&[first, second]);
+
+    let error = plan(
+        EditorGraphMutationDto::Connect {
+            output: declared(first, "string_series_out").into(),
+            input: declared(second, "numeric_series_in").into(),
+            order: None,
+        },
+        &document,
+        &registry,
+    )
+    .unwrap_err();
+
+    assert!(error.to_string().contains("types are incompatible"));
+}
+
+#[test]
+fn editor_mutation_allows_indeterminate_connection_for_backend_analysis() {
+    let registry = validation_registry();
+    let first = node_id(1_005);
+    let second = node_id(1_006);
+    let document = validation_document(&[first, second]);
+
+    assert!(
+        plan(
+            EditorGraphMutationDto::Connect {
+                output: declared(first, "unknown_series_out").into(),
+                input: declared(second, "numeric_series_in").into(),
+                order: None,
+            },
+            &document,
+            &registry,
+        )
+        .is_ok()
+    );
+}
+
+#[test]
 fn editor_mutation_enforces_connection_capacity_and_order_policy() {
     let registry = validation_registry();
     let first = node_id(1_011);
@@ -2794,6 +2902,7 @@ fn editor_mutation_rejects_orphan_and_binding_policy_mismatches() {
             order: OrderKey("a".into()),
             last_known: LastKnownPortMetadata {
                 label: "Field".to_owned(),
+                value_type: None,
             },
         },
     );

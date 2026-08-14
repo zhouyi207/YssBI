@@ -2,13 +2,14 @@ use super::relational::RunRelationalBackends;
 use super::scheduling::ClassScheduler;
 use super::{
     ACTIVATION_IDS, ActivationId, ActivationIdAllocator, CancellationToken, CompiledParameterStore,
-    DemandFingerprint, FrameId, KernelContext, KernelErrorKind, KernelRegistry,
-    NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey, PendingResultSource,
-    ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider, RelationalContext,
-    ResourceErrorKind, ResourceProvider, ResultSourceDescriptor, ResultStore, RunDeadline,
-    RunError, RunErrorOutcome, RunEvent, RunEventKind, RunEventSink, RunMemoization, RunOptions,
-    RunPhase, RunResourceBudgets, RunResourceOwner, RunResourceSet, RunResult, RuntimeValue,
-    SchedulingPolicy, check_terminal, execute_planned_adapter,
+    DemandFingerprint, EffectiveComputationSettings, FrameId, KernelContext, KernelErrorKind,
+    KernelRegistry, NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey,
+    PendingResultSource, ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider,
+    RelationalContext, ResourceErrorKind, ResourceProvider, ResultReportKind,
+    ResultSourceDescriptor, ResultSourcePresentation, ResultStore, RunDeadline, RunError,
+    RunErrorOutcome, RunEvent, RunEventKind, RunEventSink, RunMemoization, RunOptions, RunPhase,
+    RunResourceBudgets, RunResourceOwner, RunResourceSet, RunResult, RuntimeValue,
+    SchedulingPolicy, check_terminal, execute_planned_adapter, validate_data_series_type_expr,
 };
 use crate::node_system::analysis::{
     CorrelationContext, NOOP_TRACE_SINK, ParentCallId, ResourceVersionSet, RunId,
@@ -18,7 +19,7 @@ use crate::node_system::analysis::{
 use crate::node_system::plan::{
     AttemptId, CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan,
     FunctionPlanHandle, GraphOutputRef, OperationIndex, PlannedKernel, PlannedPublication,
-    StructuredControlRegion, ValueRef, WorkloadClass,
+    PlannedValueKind, StructuredControlRegion, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::{CachePolicy, RetryPolicy, Value};
 use std::cell::Cell;
@@ -72,6 +73,78 @@ enum PendingSourceEvent {
         output: GraphOutputRef,
         generation: u64,
     },
+}
+
+impl PendingSourceEvent {
+    fn output(&self) -> &GraphOutputRef {
+        match self {
+            Self::GraphResult { output } | Self::PinPreview { output, .. } => output,
+        }
+    }
+}
+
+fn report_kind_for_node_type(node_type: &str) -> Option<ResultReportKind> {
+    Some(match node_type {
+        "yssbi.statistics.ols.summary"
+        | "yssbi.statistics.gls.summary"
+        | "yssbi.statistics.wls.summary" => ResultReportKind::OlsSummary,
+        "yssbi.statistics.logit.summary" | "yssbi.statistics.probit.summary" => {
+            ResultReportKind::BinarySummary
+        }
+        "yssbi.statistics.iv.2sls.summary" => ResultReportKind::Iv2slsSummary,
+        "yssbi.statistics.iv.liml.summary" => ResultReportKind::IvLimlSummary,
+        "yssbi.statistics.prais.summary" => ResultReportKind::PraisSummary,
+        "yssbi.statistics.var.summary" => ResultReportKind::VarSummary,
+        "yssbi.statistics.var.lag_order" => ResultReportKind::VarSoc,
+        "yssbi.statistics.panel.summary" => ResultReportKind::PanelSummary,
+        "yssbi.statistics.panel.did.twfe" => ResultReportKind::PanelDid,
+        "yssbi.statistics.adf.summary" => ResultReportKind::DfAdfSummary,
+        "yssbi.statistics.vec.fit" => ResultReportKind::VecSummary,
+        "yssbi.statistics.vec.rank_test" => ResultReportKind::VecRankSummary,
+        _ => return None,
+    })
+}
+
+fn report_kind_for_value(
+    plan: &ExecutionPlan,
+    value: crate::node_system::plan::ValueRef,
+) -> Option<ResultReportKind> {
+    let producer = plan
+        .operations
+        .iter()
+        .find(|operation| operation.outputs.iter().any(|output| output.value == value))?;
+    if let Some(report) = report_kind_for_node_type(producer.source_node_type_id.as_str()) {
+        return Some(report);
+    }
+    let preserves_presentation = producer.source_node_type_id.as_str() == "yssbi.debug.view"
+        || matches!(producer.kernel, PlannedKernel::Adapter(_));
+    if !preserves_presentation {
+        return None;
+    }
+    let input = producer.inputs.first()?.value;
+    let source = plan
+        .value_dependencies
+        .iter()
+        .find(|dependency| dependency.destination == input)?
+        .source;
+    report_kind_for_value(plan, source)
+}
+
+pub(super) fn result_presentation(
+    plan: &ExecutionPlan,
+    output: &GraphOutputRef,
+) -> ResultSourcePresentation {
+    let Some(value) = plan
+        .results
+        .iter()
+        .find(|result| result.output == *output)
+        .map(|result| result.value)
+    else {
+        return ResultSourcePresentation::Inspector;
+    };
+    report_kind_for_value(plan, value)
+        .map(|report| ResultSourcePresentation::Report { report })
+        .unwrap_or(ResultSourcePresentation::Inspector)
 }
 
 struct PendingSourcePublication {
@@ -141,6 +214,7 @@ struct AdmissionBookkeeping {
 struct OperationWorkerContext<'a> {
     run_id: RunId,
     frame_id: FrameId,
+    computation_settings: EffectiveComputationSettings,
     plan: &'a ExecutionPlan,
     kernels: &'a KernelRegistry,
     compiled_parameters: Option<&'a CompiledParameterStore>,
@@ -557,6 +631,7 @@ pub struct RunExecutor<'a> {
     compiled_parameters: Option<&'a CompiledParameterStore>,
     run_registry: Option<&'a ProjectRunRegistry>,
     selection_digest: Option<[u8; 32]>,
+    computation_settings: EffectiveComputationSettings,
     recursion_limit: usize,
     trace: &'a dyn TraceSink,
     events: &'a dyn RunEventSink,
@@ -595,6 +670,7 @@ impl<'a> RunExecutor<'a> {
             compiled_parameters: None,
             run_registry: None,
             selection_digest: None,
+            computation_settings: EffectiveComputationSettings::default(),
             recursion_limit: functions.recursion_limit().max(1),
             trace: &NOOP_TRACE_SINK,
             events: &NOOP_RUN_EVENT_SINK,
@@ -635,6 +711,14 @@ impl<'a> RunExecutor<'a> {
 
     pub fn with_selection_digest(mut self, digest: [u8; 32]) -> Self {
         self.selection_digest = Some(digest);
+        self
+    }
+
+    pub fn with_computation_settings_snapshot(
+        mut self,
+        settings: &crate::project::ProjectComputationSettings,
+    ) -> Self {
+        self.computation_settings = EffectiveComputationSettings::from(settings);
         self
     }
 
@@ -1070,10 +1154,12 @@ impl<'a> RunExecutor<'a> {
                     )
                 }
             };
-            if let Some(source) = results.prepare_runtime_value(
+            let presentation = result_presentation(plan, event.output());
+            if let Some(source) = results.prepare_runtime_value_with_presentation(
                 correlation.clone(),
                 plan.provenance.basis.clone(),
                 name,
+                presentation,
                 value,
             ) {
                 pending_sources.push(PendingSourcePublication { source, event });
@@ -1172,6 +1258,7 @@ impl<'a> RunExecutor<'a> {
             &cancellation,
         )?;
         let mut frame = Frame::new(plan.value_count);
+        frame.bind(&plan.bound_values)?;
         let memoization = RunMemoization::new();
         let root_demand = DemandFingerprint::for_root(plan, self.selection_digest);
         let result = (|| {
@@ -1409,6 +1496,7 @@ impl<'a> RunExecutor<'a> {
                         cancellation,
                     )?;
                     let mut callee_frame = Frame::new(callee.value_count);
+                    callee_frame.bind(&callee.bound_values)?;
                     let callee_demand =
                         DemandFingerprint::for_callee(&callee, target, arguments, results);
                     let result = (|| {
@@ -1584,6 +1672,7 @@ impl<'a> RunExecutor<'a> {
         let worker_context = OperationWorkerContext {
             run_id,
             frame_id: frame.id,
+            computation_settings: self.computation_settings,
             plan,
             kernels: self.kernels,
             compiled_parameters: self.compiled_parameters,
@@ -2145,13 +2234,36 @@ impl<'a> RunExecutor<'a> {
             .inputs
             .iter()
             .map(|input| {
-                if frame.has(input.value) {
+                let value = if frame.has(input.value) {
                     frame.value(input.value).cloned()
                 } else if let Some(value) = &input.bound_value {
                     Ok(RuntimeValue::Scalar(value.clone()))
                 } else {
                     frame.value(input.value).cloned()
+                }?;
+                if input.contract.kind == PlannedValueKind::DataSeries {
+                    let RuntimeValue::Artifact(artifact) = &value else {
+                        return Err(RunError::InvalidPlan(
+                            format!(
+                                "DataSeries input value {} did not receive a DataSeries Artifact",
+                                input.value.index()
+                            )
+                            .into(),
+                        ));
+                    };
+                    let metadata = artifact.data_series_metadata().ok_or_else(|| {
+                        RunError::InvalidPlan(
+                            format!(
+                                "DataSeries input value {} did not receive a DataSeries Artifact",
+                                input.value.index()
+                            )
+                            .into(),
+                        )
+                    })?;
+                    validate_data_series_type_expr(metadata, &input.contract.type_expr)
+                        .map_err(|error| RunError::InvalidPlan(error.to_string().into()))?;
                 }
+                Ok(value)
             })
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice();
@@ -2772,6 +2884,7 @@ fn execute_operation_worker_inner(
                 run_id: context.run_id,
                 frame_id: context.frame_id,
                 activation_id: job.activation,
+                computation_settings: context.computation_settings,
                 params: &operation.params,
                 compiled_parameters: context.compiled_parameters,
                 resources: context.resources,
@@ -3048,6 +3161,13 @@ impl Frame {
                 value.close_stream();
             }
         }
+    }
+
+    fn bind(&mut self, values: &BTreeMap<ValueRef, Value>) -> Result<(), RunError> {
+        for (reference, value) in values {
+            self.set(*reference, RuntimeValue::Scalar(value.clone()))?;
+        }
+        Ok(())
     }
 
     fn has(&self, reference: ValueRef) -> bool {

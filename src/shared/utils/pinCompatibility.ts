@@ -16,35 +16,55 @@ export type ConnectionCandidatePin = Pin & Partial<
   Pick<PinData, 'connections' | 'kind' | 'orphan' | 'resolvedType'>
 >;
 
-/**
- * Mirror of backend DataType.can_accept():
- * exact match, Any wildcard, recursive container check.
- */
+export type TypeCompatibility = 'compatible' | 'incompatible' | 'indeterminate';
+
+function everyCompatibility(results: TypeCompatibility[]): TypeCompatibility {
+  if (results.some((result) => result === 'incompatible')) return 'incompatible';
+  if (results.some((result) => result === 'indeterminate')) return 'indeterminate';
+  return 'compatible';
+}
+
+function someCompatibility(results: TypeCompatibility[]): TypeCompatibility {
+  if (results.some((result) => result === 'compatible')) return 'compatible';
+  if (results.some((result) => result === 'indeterminate')) return 'indeterminate';
+  return 'incompatible';
+}
+
+export function getDataTypeCompatibility(
+  source: DataType | null | undefined,
+  target: DataType | null | undefined,
+  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
+): TypeCompatibility {
+  if (!source || !target) return 'indeterminate';
+  if (source.kind === 'OneOf') {
+    return everyCompatibility(source.inner.map((member) =>
+      getDataTypeCompatibility(member, target, typeSystem)));
+  }
+  if (target.kind === 'OneOf') {
+    return someCompatibility(target.inner.map((member) =>
+      getDataTypeCompatibility(source, member, typeSystem)));
+  }
+  if (target.kind !== source.kind) return 'incompatible';
+  if (target.kind === 'Array' && source.kind === 'Array') {
+    return getDataTypeCompatibility(source.inner, target.inner, typeSystem);
+  }
+  if (target.kind === 'DataSeries' && source.kind === 'DataSeries') {
+    return getDataTypeCompatibility(source.inner, target.inner, typeSystem);
+  }
+  if (target.kind === 'Struct' && source.kind === 'Struct') {
+    return structCanAccept(target.inner, source.inner, typeSystem)
+      ? 'compatible'
+      : 'incompatible';
+  }
+  return 'compatible';
+}
+
 function canAcceptDataType(
   target: DataType,
   source: DataType,
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
-  if (target.kind === source.kind) {
-    if (target.kind === 'Array' && source.kind === 'Array') {
-      return canAcceptDataType(target.inner, source.inner, typeSystem);
-    }
-    if (target.kind === 'DataSeries' && source.kind === 'DataSeries') {
-      return canAcceptDataType(target.inner, source.inner, typeSystem);
-    }
-    if (target.kind === 'Struct' && source.kind === 'Struct') {
-      return structCanAccept(target.inner, source.inner, typeSystem);
-    }
-    return true;
-  }
-  if (target.kind === 'Any' || source.kind === 'Any') return true;
-  if (target.kind === 'OneOf') {
-    return target.inner.some(t => canAcceptDataType(t, source, typeSystem));
-  }
-  if (source.kind === 'OneOf') {
-    return source.inner.some(s => canAcceptDataType(target, s, typeSystem));
-  }
-  return false;
+  return getDataTypeCompatibility(source, target, typeSystem) === 'compatible';
 }
 
 /**
@@ -79,7 +99,37 @@ export function isPinCompatible(
   dragged: ConnectionCandidatePin,
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
-  return canConnectPins(candidate, dragged, typeSystem);
+  const source = candidate.direction === 'output' ? candidate : dragged;
+  const target = candidate.direction === 'input' ? candidate : dragged;
+  return getPinCompatibility(source, target, typeSystem) === 'compatible';
+}
+
+function projectedPinDataType(pin: ConnectionCandidatePin): DataType | null | undefined {
+  if (pin.resolvedType) {
+    return pin.resolvedType.resolved ? pin.resolvedType.dataType : null;
+  }
+  return pin.dataType;
+}
+
+export function getPinCompatibility(
+  source: ConnectionCandidatePin,
+  target: ConnectionCandidatePin,
+  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
+): TypeCompatibility {
+  if (source.id === target.id
+    || source.nodeId === target.nodeId
+    || source.direction !== 'output'
+    || target.direction !== 'input') return 'incompatible';
+
+  const sourceIsExec = isExecPin(source);
+  const targetIsExec = isExecPin(target);
+  if (sourceIsExec !== targetIsExec) return 'incompatible';
+  if (sourceIsExec) return 'compatible';
+  return getDataTypeCompatibility(
+    projectedPinDataType(source),
+    projectedPinDataType(target),
+    typeSystem,
+  );
 }
 
 export type ConnectionInvalidReason =
@@ -126,8 +176,8 @@ export function resolveConnectionCompatibility(
     return { kind: 'invalid', reason: 'capacityReached' };
   }
 
-  if (sourceKind === 'data' && source.dataType && target.dataType
-    && !canAcceptDataType(target.dataType, source.dataType, typeSystem)) {
+  if (sourceKind === 'data'
+    && getPinCompatibility(source, target, typeSystem) === 'incompatible') {
     return { kind: 'invalid', reason: 'typeMismatch' };
   }
 

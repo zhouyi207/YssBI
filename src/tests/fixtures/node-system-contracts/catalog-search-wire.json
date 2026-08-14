@@ -2,11 +2,15 @@
   "categories": [
     {
       "categoryId": "numeric",
+      "order": 20,
+      "parentCategoryId": null,
       "searchText": "numeric",
       "title": "Numeric"
     },
     {
       "categoryId": "project",
+      "order": 50,
+      "parentCategoryId": null,
       "searchText": "project",
       "title": "Project"
     }

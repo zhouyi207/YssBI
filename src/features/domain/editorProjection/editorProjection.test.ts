@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import editorProjectionContract from '@/tests/fixtures/node-system-contracts/editor-projection.json';
 import {
   moduleDependencies,
   resolveSourceSpecifier,
@@ -12,6 +13,7 @@ import type {
   EditorGraphProjectionDto,
   PortAddressDto,
 } from '@/shared/types/dto/editorProjection';
+import { isEditorGraphProjectionDto } from '@/shared/types/dto/editorProjectionGuards';
 import { validateEditorGraphProjection } from '@/shared/types/dto/editorProjectionParser';
 import {
   portAddressKey,
@@ -114,9 +116,14 @@ function validProjection(): EditorGraphProjectionDto {
             key: 'formula',
             display: { title: '公式', description: '模型公式' },
             editor: 'text',
+            presentation: 'inlineAndDetail',
+            valueType: { kind: 'Int64' },
             multiline: true,
             value: 'y ~ x',
             configuration: null,
+            inheritedValue: null,
+            valueSource: null,
+            options: null,
           },
         ],
         capabilities: {
@@ -640,6 +647,56 @@ describe('portAddressKey', () => {
 });
 
 describe('validateEditorGraphProjection', () => {
+  it('requires strict parameter editor presentation metadata', () => {
+    expect(isEditorGraphProjectionDto(editorProjectionContract)).toBe(true);
+
+    const missing = structuredClone(editorProjectionContract) as any;
+    delete missing.nodes[0].parameterEditors[0].presentation;
+    expect(isEditorGraphProjectionDto(missing)).toBe(false);
+
+    const invalid = structuredClone(editorProjectionContract) as any;
+    invalid.nodes[0].parameterEditors[0].presentation = 'inlineOnly';
+    expect(isEditorGraphProjectionDto(invalid)).toBe(false);
+  });
+
+  it('rejects the legacy parameter editor shape without Rust override metadata', () => {
+    const projection = structuredClone(editorProjectionContract) as unknown as Record<string, unknown>;
+    const node = (projection.nodes as Array<Record<string, unknown>>)[0];
+    const editor = (node.parameterEditors as Array<Record<string, unknown>>)[0];
+    delete editor.inheritedValue;
+    delete editor.valueSource;
+    delete editor.options;
+
+    expect(isEditorGraphProjectionDto(projection)).toBe(false);
+  });
+
+  it.each([
+    ['missing inheritedValue', (editor: Record<string, unknown>) => { delete editor.inheritedValue; }],
+    ['missing valueSource', (editor: Record<string, unknown>) => { delete editor.valueSource; }],
+    ['missing options', (editor: Record<string, unknown>) => { delete editor.options; }],
+    ['invalid valueSource casing', (editor: Record<string, unknown>) => {
+      editor.valueSource = 'Project';
+    }],
+    ['non-string options', (editor: Record<string, unknown>) => { editor.options = [1]; }],
+    ['missing valueType', (editor: Record<string, unknown>) => { delete editor.valueType; }],
+    ['string valueType', (editor: Record<string, unknown>) => { editor.valueType = 'Boolean'; }],
+    ['malformed valueType', (editor: Record<string, unknown>) => {
+      editor.valueType = { kind: 'Array' };
+    }],
+    ['valueType with an extra key', (editor: Record<string, unknown>) => {
+      editor.valueType = { kind: 'Boolean', extra: true };
+    }],
+    ['parameter editor with an extra key', (editor: Record<string, unknown>) => {
+      editor.extra = true;
+    }],
+  ])('rejects parameter editor %s', (_, mutate) => {
+    const projection = structuredClone(editorProjectionContract) as unknown as Record<string, unknown>;
+    const node = (projection.nodes as Array<Record<string, unknown>>)[0];
+    const editor = (node.parameterEditors as Array<Record<string, unknown>>)[0];
+    mutate(editor);
+    expect(isEditorGraphProjectionDto(projection)).toBe(false);
+  });
+
   it('returns a valid projection unchanged', () => {
     const projection = validProjection();
     expect(validateEditorGraphProjection(projection)).toBe(projection);

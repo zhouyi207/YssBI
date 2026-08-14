@@ -2,6 +2,7 @@ import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath'
 import type { ResourceDeltaDto } from '@/shared/types/dto/editorMutation';
 import { isRustDataValueWire } from '@/shared/types/dto/dataValue';
 import { isGraphResourcePath } from '@/shared/types/dto/editorProjectionGuards';
+import { isTypeExprWire } from '@/shared/types/dto/editorMutationWireParser';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -64,14 +65,25 @@ function isDynamicMemberLocator(value: unknown): boolean {
     && typeof value.field === 'string';
 }
 
+function isLastKnownPortMetadata(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.label !== 'string') return false;
+  return hasExactKeys(value, ['label'])
+    || (hasExactKeys(value, ['label', 'value_type']) && isTypeExprWire(value.value_type));
+}
+
 function isDynamicPortBinding(value: unknown): boolean {
   if (!isRecord(value) || typeof value.order !== 'string') return false;
-  if (value.kind === 'user_created') return true;
-  if (value.kind === 'resolved') return isDynamicMemberLocator(value.origin);
+  if (value.kind === 'user_created') return hasExactKeys(value, ['kind', 'order']);
+  if (value.kind === 'resolved') {
+    return isDynamicMemberLocator(value.origin)
+      && (hasExactKeys(value, ['kind', 'origin', 'order'])
+        || (hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])
+          && isLastKnownPortMetadata(value.last_known)));
+  }
   return value.kind === 'orphan'
+    && hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])
     && isDynamicMemberLocator(value.origin)
-    && isRecord(value.last_known)
-    && typeof value.last_known.label === 'string';
+    && isLastKnownPortMetadata(value.last_known);
 }
 
 function isDocumentConnection(value: unknown): boolean {

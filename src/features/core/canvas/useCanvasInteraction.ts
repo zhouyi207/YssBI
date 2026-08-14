@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { getGraphByPath } from '@/features/core/dataStore';
 import { getEditorGroupSelectedNodeIds, useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import {
   updateEditorGroupSelectedConnectionIds,
@@ -14,6 +15,7 @@ import type { Pin } from '@/shared/types/domain';
 import type { PinData } from '@/shared/types/store/graph';
 import type { EditorViewport } from '@/features/core/viewport';
 import { logger } from '@/utils/appLogger';
+import { getPinCompatibility } from '@/shared/utils/pinCompatibility';
 
 import { getCanvasWorldPoint, resolveTabId } from './canvasInteractionUtils';
 import { attachCanvasPointerLoop, registerCanvasPointerScope } from './canvasPointerLoop';
@@ -126,6 +128,19 @@ export function useCanvasInteraction({
   const connectPins = useCallback(async (groupId: string, pinA: string, pinB: string) => {
     const graphPath = resolveTabId(groupId, activeTabIdRef);
     if (!graphPath) return;
+
+    const graph = getGraphByPath(graphPath);
+    const first = graph?.pins.find((pin) => pin.id === pinA);
+    const second = graph?.pins.find((pin) => pin.id === pinB);
+    if (first && second) {
+      const source = first.direction === 'output' ? first : second;
+      const target = first.direction === 'input' ? first : second;
+      if (getPinCompatibility(source, target) === 'incompatible') {
+        logger.graph.warn('Ignored type-mismatched pin connection attempt', 'CanvasInteraction');
+        return;
+      }
+    }
+
     const applied = await executeCommand(graphPath, 'ConnectPins', { pinA, pinB });
     if (!applied) logger.graph.error('Failed to connect ports', 'CanvasInteraction');
   }, [activeTabIdRef]);

@@ -52,6 +52,7 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         },
         interface: assembled_interface(spec.id, ports(spec)?, vec![], vec![], vec![])?,
         parameters: assembled_parameters(spec.id, parameters(spec)?)?,
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution: execution(spec.stage),
         scope: NodeScope::Any,
         managed_role: None,
@@ -63,7 +64,7 @@ fn ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         Stage::Constant => Ok(vec![data_output("covariance", config_type()?)?]),
         Stage::Configure => configure_ports(spec.family),
         Stage::Fit => fit_ports(spec),
-        Stage::Summary => summary_ports(spec.family),
+        Stage::Summary => summary_ports(spec),
         Stage::Predict => prediction_ports(spec.family),
         Stage::Test => test_ports(spec.family),
     }
@@ -90,17 +91,18 @@ fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         ports.push(data_input("weights", series_type()?)?);
     }
     ports.push(optional_data_input("configuration", config_type()?)?);
-    ports.push(data_output("model", model_type()?)?);
-    ports.push(data_output("fitted", series_type()?)?);
-    ports.push(data_output("residuals", series_type()?)?);
+    ports.push(data_output("model", model_type(spec)?)?);
+    ports.push(data_output("fitted", float_series_type()?)?);
+    ports.push(data_output("residuals", float_series_type()?)?);
     ports.push(control_output("then")?);
     Ok(ports)
 }
 
-fn summary_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
+fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
+    let family = spec.family;
     let mut ports = vec![control_input("enter")?];
     match family {
-        Family::Adf => ports.push(data_input("test_result", result_type()?)?),
+        Family::Adf => ports.push(data_input("test_result", result_type(Family::Adf)?)?),
         Family::PanelDid => {
             ports.extend(regression_inputs(Family::Panel)?);
             ports.push(data_input("treatment", series_type()?)?);
@@ -108,24 +110,34 @@ fn summary_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> 
         Family::Var => ports.push(user_data_input("variables", series_type()?, 2)?),
         Family::Iv2sls | Family::IvLiml => {
             ports.extend(regression_inputs(family)?);
-            ports.push(user_data_input("endogenous", series_type()?, 1)?);
-            ports.push(user_data_input("instruments", series_type()?, 1)?);
+            ports.push(bounded_user_data_input(
+                "endogenous",
+                series_type()?,
+                1,
+                Some(1),
+            )?);
+            ports.push(bounded_user_data_input(
+                "instruments",
+                series_type()?,
+                1,
+                Some(1),
+            )?);
         }
         _ => ports.extend(regression_inputs(family)?),
     }
     ports.push(optional_data_input("configuration", config_type()?)?);
-    ports.push(data_output("result", result_type()?)?);
+    ports.push(data_output("result", summary_result_type(spec)?)?);
     ports.push(data_output("report", report_type()?)?);
     ports.push(control_output("then")?);
     Ok(ports)
 }
 
-fn prediction_ports(_family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
+fn prediction_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     Ok(vec![
         control_input("enter")?,
-        data_input("model", model_type()?)?,
+        data_input("model", prediction_model_type(family)?)?,
         user_data_input("predictors", series_type()?, 1)?,
-        data_output("prediction", series_type()?)?,
+        data_output("prediction", float_series_type()?)?,
         control_output("then")?,
     ])
 }
@@ -139,7 +151,7 @@ fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
         }
         _ => ports.push(data_input("series", series_type()?)?),
     }
-    ports.push(data_output("result", result_type()?)?);
+    ports.push(data_output("result", result_type(family)?)?);
     ports.push(control_output("then")?);
     Ok(ports)
 }
@@ -157,7 +169,7 @@ fn regression_inputs(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyErr
 }
 
 fn parameters(spec: &NodeSpec) -> Result<Vec<ParameterSpec>, BuiltinAssemblyError> {
-    let parameters = match spec.stage {
+    let mut parameters = match spec.stage {
         Stage::Constant => vec![],
         Stage::Predict | Stage::Fit | Stage::Summary if spec.family == Family::Prediction => vec![],
         _ if spec.id == "yssbi.statistics.ols.vce.fixed_scale" => {
@@ -197,6 +209,13 @@ fn parameters(spec: &NodeSpec) -> Result<Vec<ParameterSpec>, BuiltinAssemblyErro
         ],
         _ => vec![],
     };
+    if matches!(
+        spec.stage,
+        Stage::Fit | Stage::Summary | Stage::Predict | Stage::Test
+    ) {
+        parameters.push(inherited_decimal_parameter("convergence_tolerance")?);
+        parameters.push(inherited_select_parameter("missing_value_policy")?);
+    }
     Ok(parameters)
 }
 
@@ -301,11 +320,19 @@ fn user_data_input(
     value_type: TypeExpr,
     min: u16,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
+    bounded_user_data_input(key, value_type, min, None)
+}
+fn bounded_user_data_input(
+    key: &'static str,
+    value_type: TypeExpr,
+    min: u16,
+    max: Option<u16>,
+) -> Result<PortSpec, BuiltinAssemblyError> {
     data_port(
         key,
         PortDirection::Input,
         value_type,
-        PortInstances::UserCreated { min, max: None },
+        PortInstances::UserCreated { min, max },
         false,
     )
 }
@@ -380,6 +407,44 @@ fn decimal_parameter(
         vec![],
     )
 }
+fn inherited_decimal_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    optional_parameter(
+        key,
+        concrete("core.float64")?,
+        ParameterEditorSpec::Number,
+        vec![],
+    )
+}
+fn inherited_select_parameter(key: &'static str) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    optional_parameter(
+        key,
+        concrete("core.string")?,
+        ParameterEditorSpec::Select,
+        vec![ParameterConstraint::OneOf(vec![
+            Value::String("Listwise".into()),
+            Value::String("Reject".into()),
+        ])],
+    )
+}
+fn optional_parameter(
+    key: &'static str,
+    value_type: TypeExpr,
+    editor: ParameterEditorSpec,
+    constraints: Vec<ParameterConstraint>,
+) -> Result<ParameterSpec, BuiltinAssemblyError> {
+    Ok(ParameterSpec {
+        key: sid(key, ParameterKey::new)?,
+        title_key: iid(leak(format!("parameters.statistics.{key}.title")))?,
+        description_key: Some(iid(leak(format!(
+            "parameters.statistics.{key}.description"
+        )))?),
+        default_value: None,
+        value_type,
+        constraints,
+        editor,
+        presentation: ParameterPresentation::DetailPanel,
+    })
+}
 fn toggle_parameter(
     key: &'static str,
     default: bool,
@@ -440,6 +505,7 @@ fn parameter(
         value_type,
         constraints,
         editor,
+        presentation: ParameterPresentation::DetailPanel,
     })
 }
 
@@ -449,8 +515,50 @@ fn statistics_types() -> Result<Vec<TypeRegistration>, BuiltinAssemblyError> {
             "statistics.configuration",
             "types.statistics_configuration.title",
         ),
-        ("statistics.model", "types.statistics_model.title"),
-        ("statistics.result", "types.statistics_result.title"),
+        ("statistics.model.ols", "types.statistics_model_ols.title"),
+        ("statistics.model.gls", "types.statistics_model_gls.title"),
+        (
+            "statistics.model.logit",
+            "types.statistics_model_logit.title",
+        ),
+        (
+            "statistics.model.probit",
+            "types.statistics_model_probit.title",
+        ),
+        (
+            "statistics.model.prais",
+            "types.statistics_model_prais.title",
+        ),
+        ("statistics.model.wls", "types.statistics_model_wls.title"),
+        ("statistics.model.vec", "types.statistics_model_vec.title"),
+        (
+            "statistics.model.iv_2sls",
+            "types.statistics_model_iv_2sls.title",
+        ),
+        (
+            "statistics.model.iv_liml",
+            "types.statistics_model_iv_liml.title",
+        ),
+        (
+            "statistics.model.panel",
+            "types.statistics_model_panel.title",
+        ),
+        (
+            "statistics.model.panel_did",
+            "types.statistics_model_panel_did.title",
+        ),
+        ("statistics.model.var", "types.statistics_model_var.title"),
+        ("statistics.model.adf", "types.statistics_model_adf.title"),
+        (
+            "statistics.model.vec_rank",
+            "types.statistics_model_vec_rank.title",
+        ),
+        ("statistics.result.ols", "types.statistics_result.title"),
+        ("statistics.result.gls", "types.statistics_result.title"),
+        ("statistics.result.logit", "types.statistics_result.title"),
+        ("statistics.result.probit", "types.statistics_result.title"),
+        ("statistics.result.prais", "types.statistics_result.title"),
+        ("statistics.result.wls", "types.statistics_result.title"),
         ("statistics.report", "types.statistics_report.title"),
     ]
     .into_iter()
@@ -494,16 +602,88 @@ fn concrete(id: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
     Ok(TypeExpr::Concrete(sid(id, TypeId::new)?))
 }
 fn series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    concrete("tabular.series")
+    Ok(numeric_data_series_type())
 }
 fn config_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("statistics.configuration")
 }
-fn model_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    concrete("statistics.model")
+fn model_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
+    let id = if spec.id == "yssbi.statistics.wls.fit" {
+        "statistics.model.wls"
+    } else {
+        match spec.family {
+            Family::Ols | Family::Prediction => "statistics.model.ols",
+            Family::Gls => "statistics.model.gls",
+            Family::Logit => "statistics.model.logit",
+            Family::Probit => "statistics.model.probit",
+            Family::Prais => "statistics.model.prais",
+            Family::Vec => "statistics.model.vec",
+            Family::Adf
+            | Family::Iv2sls
+            | Family::IvLiml
+            | Family::Panel
+            | Family::PanelDid
+            | Family::Var
+            | Family::VecRank => {
+                return Err(BuiltinAssemblyError::UnsupportedBuiltinConfiguration {
+                    context: "statistics fit model family",
+                    value: format!("{:?}", spec.family).into(),
+                });
+            }
+        }
+    };
+    concrete(id)
 }
-fn result_type() -> Result<TypeExpr, BuiltinAssemblyError> {
-    concrete("statistics.result")
+fn prediction_model_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
+    let id = match family {
+        Family::Ols | Family::Prediction => "statistics.model.ols",
+        Family::Logit => "statistics.model.logit",
+        Family::Probit => "statistics.model.probit",
+        Family::Adf
+        | Family::Gls
+        | Family::Iv2sls
+        | Family::IvLiml
+        | Family::Prais
+        | Family::Panel
+        | Family::PanelDid
+        | Family::Var
+        | Family::Vec
+        | Family::VecRank => {
+            return Err(
+                BuiltinAssemblyError::UnsupportedStatisticsPredictionFamily {
+                    family: format!("{family:?}").into(),
+                },
+            );
+        }
+    };
+    concrete(id)
+}
+fn float_series_type() -> Result<TypeExpr, BuiltinAssemblyError> {
+    Ok(data_series_type(concrete("core.float64")?))
+}
+fn summary_result_type(spec: &NodeSpec) -> Result<TypeExpr, BuiltinAssemblyError> {
+    if spec.id == "yssbi.statistics.wls.summary" {
+        concrete("statistics.result.wls")
+    } else {
+        result_type(spec.family)
+    }
+}
+fn result_type(family: Family) -> Result<TypeExpr, BuiltinAssemblyError> {
+    concrete(match family {
+        Family::Adf => "statistics.model.adf",
+        Family::Ols | Family::Prediction => "statistics.result.ols",
+        Family::Gls => "statistics.result.gls",
+        Family::Iv2sls => "statistics.model.iv_2sls",
+        Family::IvLiml => "statistics.model.iv_liml",
+        Family::Logit => "statistics.result.logit",
+        Family::Probit => "statistics.result.probit",
+        Family::Prais => "statistics.result.prais",
+        Family::Panel => "statistics.model.panel",
+        Family::PanelDid => "statistics.model.panel_did",
+        Family::Var => "statistics.model.var",
+        Family::Vec => "statistics.model.vec",
+        Family::VecRank => "statistics.model.vec_rank",
+    })
 }
 fn report_type() -> Result<TypeExpr, BuiltinAssemblyError> {
     concrete("statistics.report")
@@ -554,10 +734,51 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
             "Statistical Configuration",
             "统计配置",
         ),
+        ("types.statistics_model_ols.title", "OLS Model", "OLS 模型"),
+        ("types.statistics_model_gls.title", "GLS Model", "GLS 模型"),
         (
-            "types.statistics_model.title",
-            "Statistical Model",
-            "统计模型",
+            "types.statistics_model_logit.title",
+            "Logit Model",
+            "Logit 模型",
+        ),
+        (
+            "types.statistics_model_probit.title",
+            "Probit Model",
+            "Probit 模型",
+        ),
+        (
+            "types.statistics_model_prais.title",
+            "Prais Model",
+            "Prais 模型",
+        ),
+        ("types.statistics_model_wls.title", "WLS Model", "WLS 模型"),
+        ("types.statistics_model_vec.title", "VEC Model", "VEC 模型"),
+        (
+            "types.statistics_model_iv_2sls.title",
+            "IV 2SLS Model",
+            "IV 2SLS 模型",
+        ),
+        (
+            "types.statistics_model_iv_liml.title",
+            "IV LIML Model",
+            "IV LIML 模型",
+        ),
+        (
+            "types.statistics_model_panel.title",
+            "Panel Model",
+            "面板模型",
+        ),
+        (
+            "types.statistics_model_panel_did.title",
+            "Panel DID Model",
+            "面板 DID 模型",
+        ),
+        ("types.statistics_model_var.title", "VAR Model", "VAR 模型"),
+        ("types.statistics_model_adf.title", "ADF Result", "ADF 结果"),
+        (
+            "types.statistics_model_vec_rank.title",
+            "VEC Rank Result",
+            "VEC 秩检验结果",
         ),
         (
             "types.statistics_result.title",
@@ -634,6 +855,8 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         "rank",
         "event_study",
         "placebo_repetitions",
+        "convergence_tolerance",
+        "missing_value_policy",
     ] {
         let title = leak(format!("parameters.statistics.{key}.title"));
         let description = leak(format!("parameters.statistics.{key}.description"));

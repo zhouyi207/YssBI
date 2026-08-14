@@ -181,13 +181,20 @@ export type SchemaSummaryKindDto =
 
 export type ResolvedPortStatusDto = 'resolved' | 'orphan';
 
+export type ParameterPresentationDto = 'detailPanel' | 'inlineAndDetail';
+
 export interface ParameterEditorDto {
   key: string;
   display: ParameterDisplayDto;
   editor: ParameterEditorKindDto;
+  presentation: ParameterPresentationDto;
+  valueType: DataType | null;
   multiline: boolean;
   value: unknown | null;
   configuration: SchemaAwareParameterEditorDto | null;
+  inheritedValue: unknown | null;
+  valueSource: 'project' | 'node' | null;
+  options: string[] | null;
 }
 
 export interface DataframeColumnOptionDto {

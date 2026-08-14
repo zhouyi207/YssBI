@@ -52,16 +52,25 @@ pub(super) fn register(
 }
 
 fn branch_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
+    let bool_type = TypeExpr::Concrete(sid("core.bool", TypeId::new)?);
+    let mut condition = data_port(
+        "condition",
+        PortDirection::Input,
+        bool_type.clone(),
+        PortInstances::Declared,
+    )?;
+    condition.input_binding = Some(InputBindingSpec {
+        literal_policy: LiteralPolicy::Allowed,
+        default_value: Some(TypedValue {
+            value_type: bool_type,
+            value: Value::Bool(true),
+        }),
+    });
     protocol(
         "yssbi.control.branch",
         vec![
             control_port("enter", PortDirection::Input, PortInstances::Declared)?,
-            data_port(
-                "condition",
-                PortDirection::Input,
-                TypeExpr::Concrete(sid("core.bool", TypeId::new)?),
-                PortInstances::Declared,
-            )?,
+            condition,
             data_port(
                 "then_source",
                 PortDirection::Input,
@@ -192,6 +201,7 @@ fn protocol(
         },
         interface: assembled_interface(id, ports, vec![], vec![], member_groups)?,
         parameters: assembled_parameters(id, parameters)?,
+        instance_display: NodeInstanceDisplaySpec::Static,
         execution: ExecutionSemantics {
             determinism: Determinism::Deterministic,
             purity: Purity::Effectful,
@@ -292,6 +302,7 @@ fn parameter(
         default_value: None,
         constraints,
         editor,
+        presentation: ParameterPresentation::DetailPanel,
     })
 }
 

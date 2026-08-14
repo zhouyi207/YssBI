@@ -1,15 +1,13 @@
 import React, { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel } from "@/shared/types/domain";
 import type { UINode } from "@/shared/types/ui";
-import { useVariableStore, useDatabaseStore } from "@/features/core/dataStore";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";
-import {
-  isDatabaseResourceNodeType,
-  isVariableNodeType,
-} from "@/features/domain/nodeCatalog";
+import { DEFAULT_LANGUAGE } from "@/shared/types/settings/LanguageSettings";
+import { InlineParameterEditor } from "./InlineParameterEditor";
 
 interface DefaultNodeLayoutProps {
   node: UINode;
@@ -30,7 +28,7 @@ interface DefaultNodeLayoutProps {
  * 
  * 职责：
  * - 渲染默认节点布局（标题 + Pins）
- * - get_variable/set_variable/get_dataframe 标题保持节点语义，资源名显示在 data pin 上
+ * - 直接渲染后端投影的标题、副标题和 Pin 元数据
  */
 export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   node,
@@ -44,34 +42,14 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   onPinPointerDown,
   onPinValueChange,
 }) => {
-  const variable = useVariableStore((s) =>
-    node.variableId && isVariableNodeType(node.nodeType)
-      ? s.variables[node.variableId]
-      : null
-  );
-  const database = useDatabaseStore((s) =>
-    node.dataframeId && isDatabaseResourceNodeType(node.nodeType)
-      ? s.databases[node.dataframeId]
-      : null
-  );
-  const displayTitle = node.title;
-  const isConstantNode = node.category?.[1] === "Constants";
-  const resolveResourcePin = useCallback((pin: PinModel): PinModel => {
-    if (isExecPin(pin)) return pin;
-    if (variable && isVariableNodeType(node.nodeType)) {
-      return { ...pin, name: variable.name };
-    }
-    if (database && isDatabaseResourceNodeType(node.nodeType)) {
-      const name = database.name;
-      return name ? { ...pin, name } : pin;
-    }
-    return pin;
-  }, [database, node.nodeType, variable]);
-
+  const { i18n } = useTranslation();
+  const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
+  const inlineParameters = (node.parameterEditors ?? [])
+    .filter((parameter) => parameter.presentation === 'inlineAndDetail');
   const inputsExec = node.inputs.filter(isExecPin);
-  const inputsData = node.inputs.filter((p) => !isExecPin(p)).map(resolveResourcePin);
+  const inputsData = node.inputs.filter((p) => !isExecPin(p));
   const outputsExec = node.outputs.filter(isExecPin);
-  const outputsData = node.outputs.filter((p) => !isExecPin(p)).map(resolveResourcePin);
+  const outputsData = node.outputs.filter((p) => !isExecPin(p));
 
   const hasRepeatableInput = node.inputs.some(
     (pin) => !isExecPin(pin) && pin.instanceKind === "userCreated",
@@ -98,12 +76,36 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
         className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm font-semibold rounded-t border-b border-[var(--node-border)] bg-[var(--node-header-bg)] text-[var(--node-header-fg)]"
       >
         <div className="flex items-center gap-2">
-          <span>{displayTitle}</span>
+          <span>{node.title}</span>
+          {node.display?.userLabel ? (
+            <span className="text-[10px] font-normal opacity-70">
+              {node.display.userLabel}
+            </span>
+          ) : null}
         </div>
         <div className="text-[10px] opacity-40 font-mono uppercase tracking-tighter">
           {node.category}
         </div>
       </div>
+
+      {inlineParameters.length > 0 ? (
+        <div className="flex flex-col gap-1 border-b border-[var(--node-border)] px-2 py-1.5">
+          {inlineParameters.map((parameter) => graphPath ? (
+            <InlineParameterEditor
+              key={parameter.key}
+              graphPath={graphPath}
+              nodeId={node.id}
+              locale={locale}
+              parameter={parameter}
+            />
+          ) : (
+            <div key={parameter.key} className="flex items-center justify-between gap-2 text-xs">
+              <span className="truncate">{parameter.display.title}</span>
+              <span className="truncate opacity-70">{String(parameter.value ?? '')}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {/* Body */}
       <div className="flex flex-col min-h-[60px]">
@@ -189,7 +191,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   onPinPointerDown={onPinPointerDown}
                   onValueChange={onPinValueChange}
                   onRemovePin={removePinHandler}
-                  forceShowInput={isConstantNode}
                 />
               );
             })}

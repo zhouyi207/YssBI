@@ -1,5 +1,7 @@
 use super::{CompilationBasis, DiagnosticSeverity, NodeDiagnostic, ValidatedSemanticGraph};
-use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortDirection, PortKey, PortKind};
+use crate::node_system::protocol::{
+    NodeTypeId, ParameterKey, PortDirection, PortKey, PortKind, TypeExpr,
+};
 use crate::node_system::registry::ProtocolFingerprint;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -49,6 +51,8 @@ pub struct AnalyzedNode<NodeId, ParameterValue> {
     pub node_type_id: NodeTypeId,
     pub protocol_fingerprint: ProtocolFingerprint,
     pub normalized_parameters: BTreeMap<ParameterKey, ParameterValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_title: Option<Box<str>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,6 +67,9 @@ pub struct ResolvedPort<PortAddress> {
     pub template: PortKey,
     pub direction: PortDirection,
     pub kind: PortKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instance_label: Option<Box<str>>,
+    pub value_type: TypeExpr,
     pub status: ResolvedPortStatus,
 }
 

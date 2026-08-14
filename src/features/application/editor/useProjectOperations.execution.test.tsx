@@ -10,6 +10,7 @@ import {
   startProjectLifecycle,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import type { RunEvent } from '@/shared/types/dto/runEvent';
+import { openInspectableSource } from '@/features/application/execution/openInspectableSource';
 import { useProjectOperations } from './useProjectOperations';
 
 const projectInstanceId = 'project-instance-1';
@@ -64,6 +65,25 @@ vi.mock('@/features/core/execution', () => ({
 vi.mock('@/features/core/execution/executionRecording', () => ({
   ensureGraphExecutionTerminal: vi.fn(),
 }));
+vi.mock('@/features/application/execution/openInspectableSource', () => ({
+  openInspectableSource: vi.fn().mockResolvedValue(true),
+}));
+vi.mock('@/features/core/dataStore', () => ({
+  loadActivatedProject: vi.fn(),
+  resolveActiveProjectPath: vi.fn(),
+  useGraphDataStore: {
+    getState: () => ({
+      graphEntities: {
+        [graphPath]: {
+          nodes: {
+            'view-node': { nodeType: 'yssbi.debug.view' },
+            'other-node': { nodeType: 'yssbi.statistics.ols.summary' },
+          },
+        },
+      },
+    }),
+  },
+}));
 vi.mock('@/features/application/graphDiagnostics/warnCallFunctionIssues', () => ({
   warnCallFunctionIssuesBeforeSave: vi.fn(),
 }));
@@ -109,6 +129,39 @@ describe('useProjectOperations execution demand', () => {
       projectInstanceId,
       graphPath,
       { type: 'default' },
+      expect.any(Function),
+    );
+  });
+
+  it('opens an ordinary View Data output without opening other or preview outputs', async () => {
+    vi.mocked(ProjectService.executeGraphDocument).mockImplementation(
+      async (_projectInstanceId, _graphPath, _demand, onEvent) => {
+        const outputReady = (nodeId: string, generation: number | null, sourceId: string): RunEvent => ({
+          ...runStartedEvent(),
+          kind: {
+            type: 'outputReady',
+            output: {
+              graphPath,
+              port: { kind: 'declared', nodeId, portKey: 'snapshot' },
+            },
+            generation,
+            sourceId,
+          },
+        });
+        onEvent?.(outputReady('other-node', null, 'source-other'));
+        onEvent?.(outputReady('view-node', 1, 'source-preview'));
+        onEvent?.(outputReady('view-node', null, 'source-view'));
+        return { runId: 'run-1' };
+      },
+    );
+
+    await act(async () => {
+      await operations.executeGraph();
+    });
+
+    expect(openInspectableSource).toHaveBeenCalledOnce();
+    expect(openInspectableSource).toHaveBeenCalledWith(
+      { kind: 'window', sourceId: 'source-view' },
       expect.any(Function),
     );
   });
