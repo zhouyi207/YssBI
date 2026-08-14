@@ -8,10 +8,12 @@ import {
 
 const EMPTY_TAB_IDS: string[] = [];
 const EMPTY_SELECTED: string[] = [];
+const EMPTY_SELECTED_CONNECTIONS: string[] = [];
 const EMPTY_PLACEMENT = {
   tabIds: EMPTY_TAB_IDS,
   activeTabId: null as string | null,
   selectedNodeIds: EMPTY_SELECTED,
+  selectedConnectionIds: EMPTY_SELECTED_CONNECTIONS,
 };
 export const EMPTY_GROUP_TABS: LayoutTab[] = [];
 
@@ -29,6 +31,7 @@ export interface EditorGroupPlacementSlice {
   tabIds: string[];
   activeTabId: string | null;
   selectedNodeIds: string[];
+  selectedConnectionIds: string[];
   tabs: LayoutTab[];
 }
 
@@ -45,6 +48,7 @@ export function useEditorGroupPlacement(groupId: string): EditorGroupPlacementSl
         tabIds: p.tabIds,
         activeTabId: p.activeTabId,
         selectedNodeIds: p.selectedNodeIds,
+        selectedConnectionIds: p.selectedConnectionIds,
       };
     }),
   );
@@ -58,8 +62,15 @@ export function useEditorGroupPlacement(groupId: string): EditorGroupPlacementSl
       tabIds: placement.tabIds,
       activeTabId: placement.activeTabId,
       selectedNodeIds: placement.selectedNodeIds,
+      selectedConnectionIds: placement.selectedConnectionIds,
       tabs,
     }),
-    [placement.tabIds, placement.activeTabId, placement.selectedNodeIds, tabs],
+    [
+      placement.tabIds,
+      placement.activeTabId,
+      placement.selectedNodeIds,
+      placement.selectedConnectionIds,
+      tabs,
+    ],
   );
 }

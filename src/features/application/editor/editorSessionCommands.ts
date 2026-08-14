@@ -15,7 +15,6 @@ export type EditorSessionCommands = Omit<
   | 'groups'
   | 'contextMenu'
   | 'detailFocus'
-  | 'pendingConnection'
   | 'canUndo'
   | 'canRedo'
   | 'pending'

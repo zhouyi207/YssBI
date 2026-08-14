@@ -8,6 +8,10 @@
  * 执行中样式由 [data-exec-state] + App.css 承担（live/replay 阶段）。
  */
 
+export const REROUTE_NODE_WIDTH_PX = 32;
+export const REROUTE_NODE_HEIGHT_PX = 20;
+export const REROUTE_GRIP_SIZE_PX = 8;
+
 interface NodeClassNameOptions {
   selected?: boolean;
   hasError?: boolean;
@@ -60,7 +64,15 @@ export function getNodeBackgroundStyle({
 /**
  * 获取节点最小尺寸
  */
-export function getNodeMinSize(noHeader?: boolean) {
+export function getNodeMinSize(noHeader?: boolean, compactReroute = false) {
+  if (compactReroute) {
+    return {
+      width: REROUTE_NODE_WIDTH_PX,
+      height: REROUTE_NODE_HEIGHT_PX,
+      minWidth: REROUTE_NODE_WIDTH_PX,
+      minHeight: REROUTE_NODE_HEIGHT_PX,
+    };
+  }
   return {
     minWidth: noHeader ? 120 : 160,
     minHeight: noHeader ? 60 : undefined,

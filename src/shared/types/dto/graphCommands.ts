@@ -8,10 +8,7 @@ export interface ConnectPinsResult {
   toPin: string;
   autoDisconnected: AutoDisconnected[];
 }
-export interface RemovedConnection { fromPin: string; toPin: string; }
-export interface DisconnectPinResult {
-  removedConnections: RemovedConnection[];
-}
+
 export interface AddRepeatablePinResult { pinId: string; pin: PinData; }
 export interface RemoveRepeatablePinResult {
   removedPinId: string;

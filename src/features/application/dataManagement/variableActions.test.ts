@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Variable } from '@/shared/types/domain';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
@@ -9,6 +9,10 @@ import { uiStore } from '@/features/core/ui/UIStore';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/ProjectMutationEventHandler';
 import { createVariableAction, deleteVariableAction, updateVariableAction } from './variableActions';
+import {
+  installCoreApplicationTestPorts,
+  resetCoreApplicationTestPorts,
+} from '@/features/application/testHelpers/coreApplicationPorts';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -85,8 +89,16 @@ describe('variable command lifecycle guards', () => {
       resourcePath: variableResourcePath,
     });
     useVariableStore.getState().setVariableRevision(original.id, 1);
+    installCoreApplicationTestPorts({
+      syncEvents: {
+        resourceMutationCommitted: (result) =>
+          projectPublicationCoordinator.submit({ result: result as ResourceMutationResultDto }),
+      },
+    });
     startProject('project-a');
   });
+
+  afterEach(resetCoreApplicationTestPorts);
 
   it('does not invoke or publish when the project is replaced inside revision authority read', async () => {
     const authority = useVariableStore.getState();

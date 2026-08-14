@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
@@ -6,6 +6,11 @@ import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { useExecutionStore } from '@/features/core/execution';
+import { useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
+import {
+  registerCanvasInteractionCleanup,
+  resetCanvasInteractionCleanupForTests,
+} from '@/features/core/canvas/canvasInteractionCleanup';
 import { useResourceStore } from '@/features/core/resource';
 import { ProjectService } from '@/services/project/projectService';
 import type { LifecycleMutationResultDto, ProjectRecordRow } from '@/shared/types/dto/project';
@@ -23,6 +28,10 @@ import {
   getWorksheetPreview,
 } from '@/services/worksheet/worksheetPreviewCache';
 import type { WorksheetDocument } from '@/shared/types/domain';
+import {
+  installCoreApplicationTestPorts,
+  resetCoreApplicationTestPorts,
+} from '@/features/application/testHelpers/coreApplicationPorts';
 
 const projectA = '00000000-0000-0000-0000-000000000601';
 const projectB = '00000000-0000-0000-0000-000000000602';
@@ -89,6 +98,12 @@ describe('production project lifecycle hydration dependency', () => {
     vi.restoreAllMocks();
     clearWorksheetPreviewCache();
     resetProjectLifecycleReceiptHandlerForTests();
+    installCoreApplicationTestPorts({
+      projectIO: {
+        startPublication: (id, revision) =>
+          projectPublicationCoordinator.startProject(id, revision),
+      },
+    });
     useProjectIOStore.setState({
       projectInstanceId: projectA,
       currentPath: 'C:/project-a/metadata.yssbi',
@@ -106,6 +121,8 @@ describe('production project lifecycle hydration dependency', () => {
     });
     vi.spyOn(ProjectService, 'listRegisteredProjects').mockResolvedValue([record()]);
   });
+
+  afterEach(resetCoreApplicationTestPorts);
 
   it.each([
     ['database', () => useDatabaseStore.subscribe],
@@ -165,6 +182,27 @@ describe('production project lifecycle hydration dependency', () => {
       });
     },
   );
+
+  it('synchronously clears active canvas interaction state before project replacement callbacks', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const cleanup = vi.fn();
+    useGraphInteractionStore.getState().startInteraction(graphPath, {
+      type: 'draggingNodes',
+      session: { groupId: 'group-1', nodeId: 'node-1', lastX: 0, lastY: 0, moved: true, nodeIds: ['node-1'], delta: { x: 3, y: 4 } },
+    });
+    useGraphInteractionStore.getState().setPositionOverride(graphPath, 'node-1', { x: 3, y: 4 });
+    registerCanvasInteractionCleanup(
+      { graphPath, groupId: 'group-1', interactionType: 'draggingNodes' },
+      cleanup,
+    );
+    const onProjectCleared = vi.fn(() => {
+      expect(useGraphInteractionStore.getState()).toMatchObject({ interactions: {}, positionOverrides: {} });
+      expect(cleanup).toHaveBeenCalledOnce();
+    });
+
+    createProjectLifecycleReceiptDependencies(onProjectCleared).clearProject();
+    resetCanvasInteractionCleanupForTests();
+  });
 
   it('synchronously clears execution state before replacement callbacks run', () => {
     const graphPath = 'events/Main.yssbi-event';

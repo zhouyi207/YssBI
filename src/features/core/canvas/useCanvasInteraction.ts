@@ -1,182 +1,261 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { getGraphByPath } from "@/features/core/dataStore";
-import { getEditorGroupSelectedNodeIds } from '@/features/core/layout/editorTabStore';
-import { useGestureStore } from "@/features/core/gesture";
-import { persistGraphViewport, editorViewportScope } from '@/features/core/viewport';
-import { useEditorStore } from "@/features/core/editor";
-import { executeCommand } from "@/features/core/history";
-import { Pin } from "@/shared/types/domain";
-import type { EditorViewport } from "@/features/core/viewport";
-import { logger } from '@/utils/appLogger';
-import { canConnectPins } from "@/shared/utils/pinCompatibility";
-
-import { getCanvasWorldPoint, resolveTabId } from "./canvasInteractionUtils";
-import { attachCanvasPointerLoop } from "./canvasPointerLoop";
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import { getEditorGroupSelectedNodeIds, useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import {
-    startSelectionSession,
-    abortSelectionSession,
-} from "./selectionSession";
+  updateEditorGroupSelectedConnectionIds,
+  updateEditorGroupSelectedNodeIds,
+} from '@/features/core/layout/layoutTabQueries';
+import type { GraphSelection } from '@/features/core/layout';
 
-interface UseCanvasInteractionProps {
-    activeGroupIdRef: React.RefObject<string>;
-    activeTabIdRef: React.RefObject<string | null>;
-    viewportRef: React.RefObject<EditorViewport>;
-    setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
-    /** 为 false 时不注册全局 pointer 监听器，供 Sidebar 等非 Canvas 组件使用 */
-    enabled?: boolean;
+import { persistGraphViewport, editorViewportScope } from '@/features/core/viewport';
+import { useEditorStore } from '@/features/core/editor';
+import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
+import { executeCommand } from '@/features/core/history';
+import type { Pin } from '@/shared/types/domain';
+import type { PinData } from '@/shared/types/store/graph';
+import type { EditorViewport } from '@/features/core/viewport';
+import { logger } from '@/utils/appLogger';
+
+import { getCanvasWorldPoint, resolveTabId } from './canvasInteractionUtils';
+import { attachCanvasPointerLoop, registerCanvasPointerScope } from './canvasPointerLoop';
+import { cancelCanvasInteraction, startCanvasInteraction } from './canvasInteractionCleanup';
+import type { CanvasInteractionHandlers } from './canvasMutationContracts';
+
+export type { CanvasInteractionHandlers } from './canvasMutationContracts';
+
+type PinPointerAction = 'none' | 'disconnect' | 'move' | 'draw';
+
+interface DoubleClickSelectionSnapshot {
+  before: GraphSelection;
+  temporary: GraphSelection;
 }
 
-const DISABLED_UI = {
-    contextMenu: null,
-    pendingConnection: null,
-} as const;
+function selectionMatches(
+  placement: { selectedNodeIds: string[]; selectedConnectionIds: string[] },
+  expected: GraphSelection,
+): boolean {
+  return placement.selectedNodeIds.length === expected.nodeIds.size
+    && placement.selectedNodeIds.every((id) => expected.nodeIds.has(id))
+    && placement.selectedConnectionIds.length === expected.connectionIds.size
+    && placement.selectedConnectionIds.every((id) => expected.connectionIds.has(id));
+}
+
+function restoreGraphSelection(groupId: string, selection: GraphSelection): void {
+  if (selection.nodeIds.size > 0) {
+    updateEditorGroupSelectedNodeIds([...selection.nodeIds], groupId);
+  } else {
+    updateEditorGroupSelectedConnectionIds([...selection.connectionIds], groupId);
+  }
+}
+
+type PinPointerModifiers = Pick<
+  MouseEvent,
+  'button' | 'altKey' | 'ctrlKey' | 'metaKey'
+>;
+
+export function resolvePinPointerAction(
+  event: Partial<PinPointerModifiers> & Pick<PinPointerModifiers, 'button'>,
+  capability: Pick<NonNullable<PinData['connections']>, 'current' | 'canAppend' | 'canReplace' | 'canMove'>,
+): PinPointerAction {
+  if (event.button !== 0) return 'none';
+  if (event.altKey) return capability.canMove ? 'disconnect' : 'none';
+  if (event.ctrlKey || event.metaKey) {
+    return capability.canMove && capability.current > 0 ? 'move' : 'none';
+  }
+  return capability.canAppend || capability.canReplace ? 'draw' : 'none';
+}
+
+interface UseCanvasInteractionProps {
+  activeGroupIdRef: React.RefObject<string>;
+  activeTabIdRef: React.RefObject<string | null>;
+  viewportRef: React.RefObject<EditorViewport>;
+  setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
+  handlers: CanvasInteractionHandlers;
+  enabled?: boolean;
+  uiEnabled?: boolean;
+}
 
 export function useCanvasInteraction({
-    activeGroupIdRef,
-    activeTabIdRef,
-    viewportRef,
-    setSelectedNodeIds,
-    enabled = true,
+  activeGroupIdRef,
+  activeTabIdRef,
+  viewportRef,
+  setSelectedNodeIds,
+  handlers,
+  enabled = true,
+  uiEnabled = enabled,
 }: UseCanvasInteractionProps) {
+  const contextMenu = useEditorStore((state) => uiEnabled ? state.contextMenu : null);
+  const setContextMenu = useEditorStore((state) => state.setContextMenu);
+  const activeGraphPath = activeTabIdRef.current;
+  const pendingInteraction = useGraphInteractionStore((state) =>
+    activeGraphPath
+      ? getCanvasInteraction(state, activeGraphPath, activeGroupIdRef.current)
+      : { type: 'idle' as const });
+  const pendingConnection = pendingInteraction?.type === 'pendingNodeCreation'
+    ? pendingInteraction.session.source as Pin | null
+    : null;
+  const setSelectedNodeIdsRef = useRef(setSelectedNodeIds);
+  setSelectedNodeIdsRef.current = setSelectedNodeIds;
 
-    const contextMenu = useEditorStore((s) => (enabled ? s.contextMenu : null));
-    const setContextMenu = useEditorStore((s) => s.setContextMenu);
-    const pendingConnection = useEditorStore((s) => (enabled ? s.pendingConnection : null));
-    const setPendingConnection = useEditorStore((s) => s.setPendingConnection);
+  const persistViewport = useCallback((pane?: { groupId: string; graphPath: string } | null) => {
+    const groupId = pane?.groupId ?? activeGroupIdRef.current;
+    const graphPath = pane?.graphPath ?? activeTabIdRef.current;
+    if (groupId && graphPath) persistGraphViewport(editorViewportScope(groupId, graphPath));
+  }, [activeGroupIdRef, activeTabIdRef]);
 
-    const setSelectedNodeIdsRef = useRef(setSelectedNodeIds);
-    setSelectedNodeIdsRef.current = setSelectedNodeIds;
+  const setPendingConnection = useCallback((pin: Pin | null) => {
+    const groupId = activeGroupIdRef.current;
+    const graphPath = resolveTabId(groupId, activeTabIdRef);
+    if (!graphPath) return;
+    if (!pin) {
+      cancelCanvasInteraction(graphPath, groupId);
+      return;
+    }
+    const menu = useEditorStore.getState().contextMenu;
+    startCanvasInteraction(graphPath, {
+      type: 'pendingNodeCreation',
+      session: {
+        groupId,
+        graphPath,
+        source: pin as PinData,
+        screenX: menu?.x ?? 0,
+        screenY: menu?.y ?? 0,
+      },
+    });
+  }, [activeGroupIdRef, activeTabIdRef]);
 
-    const persistViewport = useCallback((pane?: { groupId: string; graphPath: string } | null) => {
-      const groupId = pane?.groupId ?? activeGroupIdRef.current;
-      const graphPath = pane?.graphPath ?? activeTabIdRef.current;
-      if (groupId && graphPath) {
-        persistGraphViewport(editorViewportScope(groupId, graphPath));
-      }
-    }, [activeGroupIdRef, activeTabIdRef]);
+  const connectPins = useCallback(async (groupId: string, pinA: string, pinB: string) => {
+    const graphPath = resolveTabId(groupId, activeTabIdRef);
+    if (!graphPath) return;
+    const applied = await executeCommand(graphPath, 'ConnectPins', { pinA, pinB });
+    if (!applied) logger.graph.error('Failed to connect ports', 'CanvasInteraction');
+  }, [activeTabIdRef]);
 
-    const connectPins = useCallback(async (groupId: string, a: string, b: string) => {
-        const tid = resolveTabId(groupId, activeTabIdRef);
-        if (!tid) return;
+  const insertRerouteAtConnection = useCallback(async (
+    connectionId: string,
+    position: Readonly<{ x: number; y: number }>,
+    graphPath: string,
+    groupId: string,
+    selection: DoubleClickSelectionSnapshot,
+  ) => {
+    const placement = useEditorTabStore.getState().getPlacement(groupId);
+    if (placement.activeTabId !== graphPath) return false;
+    let outcome;
+    try {
+      outcome = await handlers.insertRerouteAtConnection({ graphPath, connectionId, position });
+    } catch {
+      outcome = false as const;
+    }
+    const currentPlacement = useEditorTabStore.getState().getPlacement(groupId);
+    if (currentPlacement.activeTabId !== graphPath
+      || !selectionMatches(currentPlacement, selection.temporary)) return outcome;
 
-        const graph = getGraphByPath(tid);
-        const pinA = graph?.pins.find((pin) => pin.id === a);
-        const pinB = graph?.pins.find((pin) => pin.id === b);
-        if (pinA && pinB && !canConnectPins(pinA as Pin, pinB as Pin)) {
-            logger.graph.warn('Ignored type-mismatched pin connection attempt', 'CanvasInteraction');
-            return;
-        }
+    if (outcome !== false && outcome.status === 'applied') {
+      updateEditorGroupSelectedConnectionIds(
+        [...selection.temporary.connectionIds].filter((id) => id !== connectionId),
+        groupId,
+      );
+    } else {
+      restoreGraphSelection(groupId, selection.before);
+    }
+    return outcome;
+  }, [handlers]);
 
-        const applied = await executeCommand(tid, 'ConnectPins', { pinA: a, pinB: b });
-        if (!applied) logger.graph.error('Failed to connect ports', 'CanvasInteraction');
-    }, [activeTabIdRef]);
+  const onCanvasPointerDown = useCallback((event: React.PointerEvent, groupId?: string) => {
+    const gid = groupId ?? activeGroupIdRef.current;
+    const graphPath = resolveTabId(gid, activeTabIdRef);
+    if (!graphPath) return;
+    if (event.button === 1 || event.button === 2 || (event.button === 0 && event.altKey)) {
+      registerCanvasPointerScope({ graphPath, groupId: gid });
+      startCanvasInteraction(graphPath, {
+        type: 'panning',
+        session: { groupId: gid, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false },
+      });
+    } else if (event.button === 0) {
+      registerCanvasPointerScope({ graphPath, groupId: gid });
+      startCanvasInteraction(graphPath, {
+        type: 'selecting',
+        session: { groupId: gid, startX: event.clientX, startY: event.clientY, currentX: event.clientX, currentY: event.clientY, preserveSelection: event.shiftKey },
+      });
+    }
+  }, [activeGroupIdRef, activeTabIdRef]);
 
-    const onCanvasPointerDown = useCallback((e: React.PointerEvent, groupId?: string) => {
-        if (e.button === 1 || e.button === 2 || (e.button === 0 && e.altKey)) {
-            useGestureStore.getState().setGesture({
-                type: "pan",
-                startX: e.clientX,
-                startY: e.clientY,
-                lastX: e.clientX,
-                lastY: e.clientY,
-                moved: false,
-                groupId,
-            });
-            return;
-        }
-        if (e.button === 0 && groupId) {
-            abortSelectionSession(groupId);
-            startSelectionSession({
-                groupId,
-                startX: e.clientX,
-                startY: e.clientY,
-                preserveSelection: e.shiftKey,
-            });
-        }
-    }, [activeTabIdRef]);
+  const onNodePointerDown = useCallback((nodeId: string, event: React.PointerEvent, groupId?: string) => {
+    event.stopPropagation();
+    if (event.button !== 0) return;
+    const gid = groupId ?? activeGroupIdRef.current;
+    const graphPath = resolveTabId(gid, activeTabIdRef);
+    if (!graphPath) return;
+    const selected = getEditorGroupSelectedNodeIds(gid);
+    const toggleSelection = event.shiftKey || event.ctrlKey || event.metaKey;
+    const nodeIds = toggleSelection
+      ? (selected.includes(nodeId)
+        ? selected.filter((id) => id !== nodeId)
+        : [...selected, nodeId])
+      : [nodeId];
+    setSelectedNodeIdsRef.current(nodeIds, gid);
+    registerCanvasPointerScope({ graphPath, groupId: gid });
+    startCanvasInteraction(graphPath, {
+      type: 'draggingNodes',
+      session: { groupId: gid, nodeId, lastX: event.clientX, lastY: event.clientY, moved: false, nodeIds, delta: { x: 0, y: 0 } },
+    });
+  }, [activeGroupIdRef, activeTabIdRef]);
 
-    const onNodePointerDown = useCallback((nodeId: string, e: React.PointerEvent, groupId?: string) => {
-        e.stopPropagation();
-        const gid = groupId || activeGroupIdRef.current;
-        abortSelectionSession(gid);
-        if (e.button !== 0) return;
+  const onPinPointerDown = useCallback(async (pin: Pin, event: React.PointerEvent, groupId?: string) => {
+    event.stopPropagation();
+    if (event.button !== 0) return;
+    const gid = groupId ?? activeGroupIdRef.current;
+    const graphPath = resolveTabId(gid, activeTabIdRef);
+    const projected = pin as PinData;
+    if (!graphPath || !projected.connections || !projected.address) return;
+    const action = resolvePinPointerAction(event, projected.connections);
+    if (action === 'disconnect') {
+      await handlers.disconnectPort(graphPath, projected.id);
+      return;
+    }
+    if (action === 'none') return;
+    const world = getCanvasWorldPoint(gid, graphPath, event.clientX, event.clientY);
+    registerCanvasPointerScope({ graphPath, groupId: gid });
+    startCanvasInteraction(graphPath, {
+      type: action === 'move' ? 'movingConnections' : 'drawingConnection',
+      session: {
+        groupId: gid,
+        graphPath,
+        source: projected,
+        screenX: event.clientX,
+        screenY: event.clientY,
+        worldX: world.x,
+        worldY: world.y,
+        hoveredTarget: null,
+        snappedTarget: null,
+        snappedWorld: null,
+        feedback: null,
+      },
+    });
+  }, [activeGroupIdRef, activeTabIdRef, handlers]);
 
-        const currentSelected = getEditorGroupSelectedNodeIds(gid);
+  useEffect(() => {
+    if (!enabled) return;
+    return attachCanvasPointerLoop({
+      activeGroupIdRef,
+      activeTabIdRef,
+      viewportRef,
+      setSelectedNodeIds: (updater, groupId) => setSelectedNodeIdsRef.current(updater, groupId),
+      persistViewport,
+      setContextMenu,
+      submitConnection: handlers.submitConnection,
+      reportMutationFailure: handlers.reportMutationFailure,
+    });
+  }, [enabled, activeGroupIdRef, activeTabIdRef, viewportRef, persistViewport, setContextMenu, handlers]);
 
-        let dragNodeIds = currentSelected;
-        if (e.shiftKey) {
-            if (currentSelected.includes(nodeId)) {
-                dragNodeIds = currentSelected.filter((id: string) => id !== nodeId);
-                setSelectedNodeIdsRef.current(dragNodeIds, gid);
-            } else {
-                dragNodeIds = [...currentSelected, nodeId];
-                setSelectedNodeIdsRef.current(dragNodeIds, gid);
-            }
-        } else if (!currentSelected.includes(nodeId)) {
-            dragNodeIds = [nodeId];
-            setSelectedNodeIdsRef.current([nodeId], gid);
-        }
-
-        const finalDragNodeIds = dragNodeIds.includes(nodeId) ? dragNodeIds : [nodeId, ...dragNodeIds];
-        useGestureStore.getState().setGesture({ type: "drag", nodeId, lastX: e.clientX, lastY: e.clientY, moved: false, groupId: gid, dragNodeIds: finalDragNodeIds, dragDelta: { x: 0, y: 0 } });
-    }, [activeGroupIdRef]);
-
-    const onPinPointerDown = useCallback(async (pin: Pin, e: React.PointerEvent, groupId?: string) => {
-        e.stopPropagation();
-        abortSelectionSession(groupId || activeGroupIdRef.current);
-
-        if (e.altKey && e.button === 0) {
-            const gid = groupId || activeGroupIdRef.current;
-            const tid = resolveTabId(gid, activeTabIdRef);
-            if (!tid) return;
-
-            const applied = await executeCommand(tid, 'DisconnectPin', { pinId: pin.id });
-            if (!applied) logger.graph.error('Failed to disconnect port', 'CanvasInteraction');
-            return;
-        }
-
-        if (e.button !== 0) return;
-
-        const gid = groupId || activeGroupIdRef.current;
-        const tid = resolveTabId(gid, activeTabIdRef);
-        if (!tid) return;
-
-        const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, tid, e.clientX, e.clientY);
-        useGestureStore.getState().setGesture({ type: "connect", startPin: pin, startX: e.clientX, startY: e.clientY, currentX: e.clientX, currentY: e.clientY, worldX, worldY, groupId });
-    }, [activeGroupIdRef, activeTabIdRef]);
-
-    useEffect(() => {
-        if (!enabled) return;
-        return attachCanvasPointerLoop({
-            activeGroupIdRef,
-            activeTabIdRef,
-            viewportRef,
-            setSelectedNodeIds: (updater, targetGroupId) => setSelectedNodeIdsRef.current(updater, targetGroupId),
-            connectPins,
-            persistViewport,
-            setContextMenu,
-            setPendingConnection,
-        });
-    }, [enabled, activeGroupIdRef, activeTabIdRef, viewportRef, connectPins, persistViewport, setContextMenu, setPendingConnection]);
-
-    return useMemo(() => ({
-        contextMenu: enabled ? contextMenu : DISABLED_UI.contextMenu,
-        setContextMenu,
-        pendingConnection: enabled ? pendingConnection : DISABLED_UI.pendingConnection,
-        setPendingConnection,
-        connectPins,
-        onCanvasPointerDown,
-        onNodePointerDown,
-        onPinPointerDown
-    }), [
-        enabled,
-        contextMenu,
-        setContextMenu,
-        pendingConnection,
-        setPendingConnection,
-        connectPins,
-        onCanvasPointerDown,
-        onNodePointerDown,
-        onPinPointerDown,
-    ]);
+  return useMemo(() => ({
+    contextMenu: uiEnabled ? contextMenu : null,
+    setContextMenu,
+    pendingConnection: uiEnabled ? pendingConnection : null,
+    setPendingConnection,
+    connectPins,
+    insertRerouteAtConnection,
+    onCanvasPointerDown,
+    onNodePointerDown,
+    onPinPointerDown,
+  }), [uiEnabled, contextMenu, setContextMenu, pendingConnection, setPendingConnection, connectPins, insertRerouteAtConnection, onCanvasPointerDown, onNodePointerDown, onPinPointerDown]);
 }

@@ -9,7 +9,7 @@ import {
 } from '../types';
 import { useVariableStore } from '@/features/core/dataStore';
 import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
-import { rebuildVariableResourceProjection } from '@/features/application/dataManagement/variableActions';
+import { syncApplicationEventPort } from '../applicationEventPort';
 import { markVariableScopeDirty } from '@/features/core/variable/variableDirty';
 
 export class VariableCreatedHandler extends BaseEventHandler<VariableCreatedPayload> {
@@ -20,7 +20,7 @@ export class VariableCreatedHandler extends BaseEventHandler<VariableCreatedPayl
 
     const variable = normalizeVariableFromBackend(payload.data);
     useVariableStore.getState().addVariable(payload.variableId, variable);
-    rebuildVariableResourceProjection();
+    syncApplicationEventPort().variablesChanged();
     markVariableScopeDirty(payload.variableScope);
 
     callbacks?.onVariableCreated?.(payload.variableId, variable);
@@ -35,7 +35,7 @@ export class VariableUpdatedHandler extends BaseEventHandler<VariableUpdatedPayl
 
     const variable = normalizeVariableFromBackend(payload.data);
     useVariableStore.getState().updateVariable(payload.variableId, variable);
-    rebuildVariableResourceProjection();
+    syncApplicationEventPort().variablesChanged();
     markVariableScopeDirty(payload.variableScope);
 
     callbacks?.onVariableUpdated?.(payload.variableId, variable);
@@ -49,7 +49,7 @@ export class VariableDeletedHandler extends BaseEventHandler<VariableDeletedPayl
     this.log('Variable deleted:', payload.variableId);
 
     useVariableStore.getState().deleteVariable(payload.variableId);
-    rebuildVariableResourceProjection();
+    syncApplicationEventPort().variablesChanged();
     markVariableScopeDirty(payload.variableScope);
 
     callbacks?.onVariableDeleted?.(payload.variableId);

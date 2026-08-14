@@ -19,7 +19,7 @@ const graphPath = 'functions/Main.yssbi-function';
 const projectedNodeId = '00000000-0000-0000-0000-000000000603';
 
 function deleteNodeMutation(): EditorGraphMutationDto {
-  return { type: 'deleteNode', payload: { nodeId: 'local-node' } };
+  return { type: 'deleteNodes', payload: { nodeIds: ['local-node'] } };
 }
 
 function graphResult(
@@ -34,7 +34,18 @@ function graphResult(
       fromRevision,
       toRevision,
       causedBy: operationId,
-      payload: { operations: [] },
+      payload: {
+        operations: [{
+          operation: 'remove_node',
+          node: {
+            id: '00000000-0000-0000-0000-000000000604',
+            node_type: 'tests.node',
+            position: { x: 0, y: 0 },
+            parameters: {},
+            user_label: null,
+          },
+        }],
+      },
     },
     projectionReplacement: {
       graphPath,

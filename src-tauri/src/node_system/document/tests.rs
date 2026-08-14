@@ -5,6 +5,9 @@ use crate::node_system::analysis::ResourceVersionSet;
 use crate::node_system::catalog::{
     build_builtin_node_system, builtin_bundle_parts_for_test, validate_builtin_bundle_for_test,
 };
+use crate::node_system::compatibility::{
+    EditorMutationPortType, EditorMutationPortValidation, EditorMutationValidationSnapshot,
+};
 use crate::node_system::compiler::{
     GraphCompiler, LoweredNode, LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
     ResourceSnapshot,
@@ -13,7 +16,7 @@ use crate::node_system::protocol::{
     CachePolicy, ConnectionsPerPort, Determinism, EffectSemantics, EvaluationPolicy, I18nKey,
     InputBindingSpec, LiteralPolicy, NodeCategoryId, NodeScope, NodeTypeId, ParameterKey,
     PortDirection, PortEditorSpec, PortInstances, PortKey, PortKind, PortSpec, ProviderId, Purity,
-    TypeExpr, TypeId,
+    TypeExpr, TypeId, TypeParameterId,
 };
 use crate::node_system::registry::{
     CategoryRegistration, I18nManifest, NodeRegistry, NodeRegistryBuilder, ProviderRegistration,
@@ -26,6 +29,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 mod editor_mutation_validation;
+mod insert_reroute;
 
 fn node_id(value: u128) -> NodeId {
     NodeId::from_uuid(Uuid::from_u128(value))
@@ -311,7 +315,114 @@ fn canonical_editor_mutation_address_wire_instance() {
 }
 
 #[test]
-fn editor_mutation_wire_is_stable_and_camel_case() {
+fn phase1_move_connections_wire_contains_only_source_and_target() {
+    let source = declared(node_id(905), "data_out");
+    let target = declared(node_id(906), "data_out");
+    let mutation = EditorGraphMutationDto::MoveConnections {
+        source: source.clone().into(),
+        target: target.clone().into(),
+    };
+    let expected = json!({
+        "type": "moveConnections",
+        "payload": {
+            "source": PortAddressDto::from(source),
+            "target": PortAddressDto::from(target),
+        }
+    });
+
+    assert_eq!(serde_json::to_value(&mutation).unwrap(), expected);
+    assert_eq!(
+        serde_json::from_value::<EditorGraphMutationDto>(expected).unwrap(),
+        mutation
+    );
+}
+
+#[test]
+fn phase1_error_protocol_domain_codes_are_stable() {
+    use super::mutation::EditorMutationErrorCode;
+
+    let cases = [
+        (
+            EditorMutationErrorCode::GraphPortNotFound,
+            "graph_port_not_found",
+        ),
+        (
+            EditorMutationErrorCode::GraphNodeNotFound,
+            "graph_node_not_found",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionNotFound,
+            "graph_connection_not_found",
+        ),
+        (
+            EditorMutationErrorCode::GraphPortOrphan,
+            "graph_port_orphan",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionDirectionMismatch,
+            "graph_connection_direction_mismatch",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionKindMismatch,
+            "graph_connection_kind_mismatch",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionTypeMismatch,
+            "graph_connection_type_mismatch",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionTypeUnavailable,
+            "graph_connection_type_unavailable",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionTypeUnresolved,
+            "graph_connection_type_unresolved",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionLimitReached,
+            "graph_connection_limit_reached",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionOrderRequired,
+            "graph_connection_order_required",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionOrderForbidden,
+            "graph_connection_order_forbidden",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionAlreadyExists,
+            "graph_connection_already_exists",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionMoveSourceEmpty,
+            "graph_connection_move_source_empty",
+        ),
+        (
+            EditorMutationErrorCode::GraphConnectionMoveSamePort,
+            "graph_connection_move_same_port",
+        ),
+        (
+            EditorMutationErrorCode::GraphMutationEmptyTargets,
+            "graph_mutation_empty_targets",
+        ),
+        (
+            EditorMutationErrorCode::GraphMutationDuplicateTarget,
+            "graph_mutation_duplicate_target",
+        ),
+        (
+            EditorMutationErrorCode::GraphManagedNodeDeleteForbidden,
+            "graph_managed_node_delete_forbidden",
+        ),
+    ];
+
+    for (code, expected) in cases {
+        assert_eq!(code.as_str(), expected);
+    }
+}
+
+#[test]
+fn phase1_collection_editor_mutation_wire_is_stable_and_camel_case() {
     let first = node_id(901);
     let second = node_id(902);
     let connection = connection_id(903);
@@ -345,8 +456,10 @@ fn editor_mutation_wire_is_stable_and_camel_case() {
             }),
         ),
         (
-            EditorGraphMutationDto::DeleteNode { node_id: first },
-            json!({ "type": "deleteNode", "payload": { "nodeId": first } }),
+            EditorGraphMutationDto::DeleteNodes {
+                node_ids: vec![first],
+            },
+            json!({ "type": "deleteNodes", "payload": { "nodeIds": [first] } }),
         ),
         (
             EditorGraphMutationDto::MoveNodes {
@@ -374,10 +487,23 @@ fn editor_mutation_wire_is_stable_and_camel_case() {
             }),
         ),
         (
-            EditorGraphMutationDto::Disconnect {
-                connection_id: connection,
+            EditorGraphMutationDto::DisconnectConnections {
+                connection_ids: vec![connection],
             },
-            json!({ "type": "disconnect", "payload": { "connectionId": connection } }),
+            json!({
+                "type": "disconnectConnections",
+                "payload": { "connectionIds": [connection] }
+            }),
+        ),
+        (
+            EditorGraphMutationDto::DisconnectPort {
+                address: input.clone(),
+            },
+            json!({ "type": "disconnectPort", "payload": { "address": input.clone() } }),
+        ),
+        (
+            EditorGraphMutationDto::DisconnectNode { node_id: second },
+            json!({ "type": "disconnectNode", "payload": { "nodeId": second } }),
         ),
         (
             EditorGraphMutationDto::SetLiteral {
@@ -418,6 +544,22 @@ fn editor_mutation_wire_is_stable_and_camel_case() {
             serde_json::from_value::<EditorGraphMutationDto>(serialized).unwrap(),
             mutation
         );
+    }
+}
+
+#[test]
+fn phase1_collection_wire_rejects_removed_singular_variants() {
+    for value in [
+        json!({
+            "type": "deleteNode",
+            "payload": { "nodeId": node_id(901) }
+        }),
+        json!({
+            "type": "disconnect",
+            "payload": { "connectionId": connection_id(903) }
+        }),
+    ] {
+        assert!(serde_json::from_value::<EditorGraphMutationDto>(value).is_err());
     }
 }
 
@@ -980,6 +1122,26 @@ fn partial_member_does_not_consume_group_maximum() {
     );
 }
 
+fn create_connect_validation_snapshot(
+    document: &GraphDocument,
+    address: PortAddress,
+    direction: PortDirection,
+    port_type: EditorMutationPortType,
+) -> EditorMutationValidationSnapshot {
+    EditorMutationValidationSnapshot {
+        graph_revision: document.revision,
+        ports: BTreeMap::from([(
+            address,
+            EditorMutationPortValidation {
+                direction,
+                kind: PortKind::Data,
+                orphan: false,
+                port_type,
+            },
+        )]),
+    }
+}
+
 fn compatibility_snapshot() -> crate::project::CatalogMutationValidationSnapshot {
     crate::project::CatalogMutationValidationSnapshot {
         project_instance_id: crate::project::ProjectInstanceId::new(),
@@ -1011,7 +1173,17 @@ fn create_node_with_connect_from_builds_one_atomic_patch_in_both_directions() {
         direction: PortDirection::Output,
         kind: PortKind::Data,
         value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+        type_parameters: Box::new([]),
     };
+    let output_validation = create_connect_validation_snapshot(
+        &output_document,
+        output.clone(),
+        PortDirection::Output,
+        EditorMutationPortType::Ready {
+            expression: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+            type_parameters: Box::new([]),
+        },
+    );
     let output_patch = EditorGraphMutationDto::CreateNode {
         descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
             node_type_id: NodeTypeId::new("yssbi.numeric.add.int64").unwrap(),
@@ -1020,12 +1192,13 @@ fn create_node_with_connect_from_builds_one_atomic_patch_in_both_directions() {
         user_label: None,
         connect_from: Some(output.clone().into()),
     }
-    .into_patch_with_compatibility(
+    .into_patch_with_editor_validation(
         &path,
         &output_document,
         &registry,
         Some(&snapshot),
         Some(&output_source),
+        Some(&output_validation),
     )
     .unwrap();
     assert!(matches!(
@@ -1050,7 +1223,17 @@ fn create_node_with_connect_from_builds_one_atomic_patch_in_both_directions() {
         direction: PortDirection::Input,
         kind: PortKind::Data,
         value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+        type_parameters: Box::new([]),
     };
+    let input_validation = create_connect_validation_snapshot(
+        &input_document,
+        input.clone(),
+        PortDirection::Input,
+        EditorMutationPortType::Ready {
+            expression: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+            type_parameters: Box::new([]),
+        },
+    );
     let input_patch = EditorGraphMutationDto::CreateNode {
         descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
             node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
@@ -1059,18 +1242,214 @@ fn create_node_with_connect_from_builds_one_atomic_patch_in_both_directions() {
         user_label: None,
         connect_from: Some(input.clone().into()),
     }
-    .into_patch_with_compatibility(
+    .into_patch_with_editor_validation(
         &path,
         &input_document,
         &registry,
         Some(&snapshot),
         Some(&input_source),
+        Some(&input_validation),
     )
     .unwrap();
     assert!(matches!(
         input_patch.operations.last(),
         Some(GraphDocumentOperation::InsertConnection { connection }) if connection.input == input
     ));
+}
+
+#[test]
+fn phase1_connection_capability_create_and_connect_replaces_occupied_single_source() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let path = graph_path("events/atomic-create-replace");
+    let snapshot = compatibility_snapshot();
+    let input_node = node_id(1210);
+    let incumbent_node = node_id(1211);
+    let incumbent_id = connection_id(1212);
+    let input = declared(input_node, "left");
+    let mut document = GraphDocument::default();
+    document
+        .create_node(DocumentNode {
+            id: input_node,
+            node_type: NodeTypeId::new("yssbi.numeric.add.int64").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+    document
+        .create_node(DocumentNode {
+            id: incumbent_node,
+            node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+            position: NodePosition { x: -10.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+    document.connections.insert(
+        incumbent_id,
+        DocumentConnection {
+            id: incumbent_id,
+            output: declared(incumbent_node, "value"),
+            input: input.clone(),
+            order: None,
+        },
+    );
+    let source = crate::node_system::compatibility::SourcePort {
+        address: input.clone(),
+        direction: PortDirection::Input,
+        kind: PortKind::Data,
+        value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+        type_parameters: Box::new([]),
+    };
+
+    let validation = create_connect_validation_snapshot(
+        &document,
+        input.clone(),
+        PortDirection::Input,
+        EditorMutationPortType::Ready {
+            expression: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+            type_parameters: Box::new([]),
+        },
+    );
+    let patch = EditorGraphMutationDto::CreateNode {
+        descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+            node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+        },
+        position: NodePosition { x: 10.0, y: 20.0 },
+        user_label: None,
+        connect_from: Some(input.clone().into()),
+    }
+    .into_patch_with_editor_validation(
+        &path,
+        &document,
+        &registry,
+        Some(&snapshot),
+        Some(&source),
+        Some(&validation),
+    )
+    .unwrap();
+
+    assert!(patch.operations.iter().any(|operation| matches!(
+        operation,
+        GraphDocumentOperation::RemoveConnection { connection }
+            if connection.id == incumbent_id
+    )));
+    assert!(matches!(
+        patch.operations.last(),
+        Some(GraphDocumentOperation::InsertConnection { connection }) if connection.input == input
+    ));
+    let mut committed = document;
+    committed.apply_patch(&patch).unwrap();
+    assert!(!committed.connections.contains_key(&incumbent_id));
+    assert_eq!(
+        committed
+            .connections
+            .values()
+            .filter(|connection| connection.input == input)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn phase1_connection_capability_create_and_connect_rejects_untrusted_source_types_before_replacement()
+ {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let path = graph_path("events/atomic-create-replace-type-errors");
+    let catalog = compatibility_snapshot();
+    let input_node = node_id(1220);
+    let incumbent_node = node_id(1221);
+    let input = declared(input_node, "left");
+    let mut document = GraphDocument::default();
+    document
+        .create_node(DocumentNode {
+            id: input_node,
+            node_type: NodeTypeId::new("yssbi.numeric.add.int64").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+    document
+        .create_node(DocumentNode {
+            id: incumbent_node,
+            node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+            position: NodePosition { x: -10.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+    let incumbent_id = connection_id(1222);
+    document.connections.insert(
+        incumbent_id,
+        DocumentConnection {
+            id: incumbent_id,
+            output: declared(incumbent_node, "value"),
+            input: input.clone(),
+            order: None,
+        },
+    );
+    let best_effort_source = crate::node_system::compatibility::SourcePort {
+        address: input.clone(),
+        direction: PortDirection::Input,
+        kind: PortKind::Data,
+        value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+        type_parameters: Box::new([]),
+    };
+    let cases = [
+        (
+            EditorMutationPortType::Ready {
+                expression: TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
+                type_parameters: Box::new([]),
+            },
+            EditorMutationErrorCode::GraphConnectionTypeMismatch,
+        ),
+        (
+            EditorMutationPortType::MissingInternalTypeExpr,
+            EditorMutationErrorCode::GraphConnectionTypeUnavailable,
+        ),
+        (
+            EditorMutationPortType::Unresolved {
+                expression: TypeExpr::Generic(TypeParameterId::new("missing").unwrap()),
+                type_parameters: Box::new([]),
+            },
+            EditorMutationErrorCode::GraphConnectionTypeUnresolved,
+        ),
+    ];
+
+    for (port_type, expected) in cases {
+        let before = document.clone();
+        let validation = create_connect_validation_snapshot(
+            &document,
+            input.clone(),
+            PortDirection::Input,
+            port_type,
+        );
+        let error = EditorGraphMutationDto::CreateNode {
+            descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
+                node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
+            },
+            position: NodePosition { x: 10.0, y: 20.0 },
+            user_label: None,
+            connect_from: Some(input.clone().into()),
+        }
+        .into_patch_with_editor_validation(
+            &path,
+            &document,
+            &registry,
+            Some(&catalog),
+            Some(&best_effort_source),
+            Some(&validation),
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            MutationConflict::Editor(EditorMutationError { code, .. }) if code == expected
+        ));
+        assert_graph_content_eq(&document, &before);
+        assert!(document.connections.contains_key(&incumbent_id));
+    }
 }
 
 #[test]
@@ -1096,8 +1475,18 @@ fn incompatible_atomic_create_is_rejected_without_document_effects() {
         direction: PortDirection::Output,
         kind: PortKind::Data,
         value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+        type_parameters: Box::new([]),
     };
 
+    let validation = create_connect_validation_snapshot(
+        &document,
+        address.clone(),
+        PortDirection::Output,
+        EditorMutationPortType::Ready {
+            expression: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+            type_parameters: Box::new([]),
+        },
+    );
     let error = EditorGraphMutationDto::CreateNode {
         descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
             node_type_id: NodeTypeId::new("yssbi.logic.not").unwrap(),
@@ -1106,10 +1495,23 @@ fn incompatible_atomic_create_is_rejected_without_document_effects() {
         user_label: None,
         connect_from: Some(address.into()),
     }
-    .into_patch_with_compatibility(&path, &document, &registry, Some(&snapshot), Some(&source))
+    .into_patch_with_editor_validation(
+        &path,
+        &document,
+        &registry,
+        Some(&snapshot),
+        Some(&source),
+        Some(&validation),
+    )
     .unwrap_err();
 
-    assert!(error.to_string().contains("no compatible"));
+    assert!(matches!(
+        error,
+        MutationConflict::Editor(EditorMutationError {
+            code: EditorMutationErrorCode::GraphConnectionTypeMismatch,
+            ..
+        })
+    ));
     assert_graph_content_eq(&document, &before);
 }
 
@@ -1166,12 +1568,46 @@ fn create_connect_and_add_port_allocate_identity_in_rust() {
     assert!(matches!(input.port, PortRef::Instance { .. }));
     document.apply_patch(&add_patch).unwrap();
 
+    let output = declared(created_id, "output");
+    let type_parameters = registry
+        .protocol(&document.nodes[&created_id].node_type)
+        .unwrap()
+        .interface
+        .type_parameters
+        .clone();
+    let ready_int64 = || crate::node_system::compatibility::EditorMutationPortType::Ready {
+        expression: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
+        type_parameters: type_parameters.clone(),
+    };
+    let validation = crate::node_system::compatibility::EditorMutationValidationSnapshot {
+        graph_revision: document.revision,
+        ports: BTreeMap::from([
+            (
+                output.clone(),
+                crate::node_system::compatibility::EditorMutationPortValidation {
+                    direction: PortDirection::Output,
+                    kind: PortKind::Data,
+                    orphan: false,
+                    port_type: ready_int64(),
+                },
+            ),
+            (
+                input.clone(),
+                crate::node_system::compatibility::EditorMutationPortValidation {
+                    direction: PortDirection::Input,
+                    kind: PortKind::Data,
+                    orphan: false,
+                    port_type: ready_int64(),
+                },
+            ),
+        ]),
+    };
     let connect_patch = EditorGraphMutationDto::Connect {
-        output: declared(created_id, "output").into(),
+        output: output.into(),
         input: input.clone().into(),
         order: None,
     }
-    .into_patch(&path, &document, &registry)
+    .into_patch_with_editor_validation(&path, &document, &registry, None, None, Some(&validation))
     .unwrap();
     let allocated_connection = match &connect_patch.operations[..] {
         [GraphDocumentOperation::InsertConnection { connection }] => connection,

@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { portAddressKey } from '@/features/domain/editorProjection';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-
 import { useExecutionStore } from '@/features/core/execution';
-import { executeCommand } from './commandExecutor';
+import { executeCommand, executeCommandOutcome } from './commandExecutor';
+import { ensureGraphMutationPortRegistered } from '@/features/application/editorMutation/registerGraphMutationPort';
 
 const executeEditorMutation = vi.hoisted(() => vi.fn());
 
@@ -16,6 +16,8 @@ vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', as
   currentProjectionLocale: () => 'en-US',
   hydrateGraphProjection: vi.fn(async () => true),
 }));
+
+ensureGraphMutationPortRegistered();
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -71,13 +73,46 @@ describe('forward-only editor commands', () => {
         type: 'connect',
         payload: { output: fixture.outputAddress, input: fixture.inputAddress, order: null },
       }),
-      multiple: false,
     },
     {
-      type: 'DisconnectPin' as const,
+      type: 'DisconnectPort' as const,
       build: (fixture: ReturnType<typeof installProjection>) => ({ pinId: fixture.inputKey }),
-      mutation: () => ({ type: 'disconnect', payload: { connectionId: 'local-connection' } }),
-      multiple: true,
+      mutation: (fixture: ReturnType<typeof installProjection>) => ({
+        type: 'disconnectPort',
+        payload: { address: fixture.inputAddress },
+      }),
+    },
+    {
+      type: 'DisconnectNode' as const,
+      build: () => ({ nodeId: 'local-node' }),
+      mutation: () => ({ type: 'disconnectNode', payload: { nodeId: 'local-node' } }),
+    },
+    {
+      type: 'DisconnectConnections' as const,
+      build: () => ({ connectionIds: ['connection-a', 'connection-b'] }),
+      mutation: () => ({
+        type: 'disconnectConnections',
+        payload: { connectionIds: ['connection-a', 'connection-b'] },
+      }),
+    },
+    {
+      type: 'MoveConnections' as const,
+      build: (fixture: ReturnType<typeof installProjection>) => ({
+        sourcePinId: fixture.outputKey,
+        targetPinId: fixture.inputKey,
+      }),
+      mutation: (fixture: ReturnType<typeof installProjection>) => ({
+        type: 'moveConnections',
+        payload: { source: fixture.outputAddress, target: fixture.inputAddress },
+      }),
+    },
+    {
+      type: 'InsertReroute' as const,
+      build: () => ({ connectionId: 'edge-1', position: { x: 120, y: 80 } }),
+      mutation: () => ({
+        type: 'insertReroute',
+        payload: { connectionId: 'edge-1', position: { x: 120, y: 80 } },
+      }),
     },
     {
       type: 'SetPinValue' as const,
@@ -90,13 +125,11 @@ describe('forward-only editor commands', () => {
         type: 'setLiteral',
         payload: { address: fixture.inputAddress, literal: 42 },
       }),
-      multiple: false,
     },
     {
       type: 'DeleteNodes' as const,
-      build: () => ({ nodeIds: ['local-node'] }),
-      mutation: () => ({ type: 'deleteNode', payload: { nodeId: 'local-node' } }),
-      multiple: true,
+      build: () => ({ nodeIds: ['node-a', 'node-b'] }),
+      mutation: () => ({ type: 'deleteNodes', payload: { nodeIds: ['node-a', 'node-b'] } }),
     },
     {
       type: 'AddRepeatablePin' as const,
@@ -105,7 +138,6 @@ describe('forward-only editor commands', () => {
         type: 'addPortInstance',
         payload: { nodeId: 'local-node', template: 'inputs', order: null },
       }),
-      multiple: false,
     },
     {
       type: 'RemoveRepeatablePin' as const,
@@ -117,9 +149,8 @@ describe('forward-only editor commands', () => {
         type: 'removePortInstance',
         payload: { address: fixture.inputAddress },
       }),
-      multiple: false,
     },
-  ])('sends $type as a high-level intent without pre-response entity edits', async ({
+  ])('sends $type as exactly one high-level intent without pre-response entity edits', async ({
     type,
     build,
     mutation,
@@ -146,6 +177,39 @@ describe('forward-only editor commands', () => {
     randomId.mockRestore();
   });
 
+  it('sends InsertReroute without a disconnect, create, store write, or ID allocation', async () => {
+    installProjection();
+    const before = useGraphDataStore.getState().graphEntities[graphPath];
+    const pending = deferred<{ status: 'applied' }>();
+    executeEditorMutation.mockReturnValueOnce(pending.promise);
+    const randomId = vi.spyOn(crypto, 'randomUUID');
+
+    const command = executeCommand(graphPath, 'InsertReroute', {
+      connectionId: 'edge-1',
+      position: { x: 120, y: 80 },
+    });
+
+    expect(executeEditorMutation).toHaveBeenCalledTimes(1);
+    expect(executeEditorMutation).toHaveBeenCalledWith({
+      graphPath,
+      locale: 'en-US',
+      mutation: {
+        type: 'insertReroute',
+        payload: { connectionId: 'edge-1', position: { x: 120, y: 80 } },
+      },
+    });
+    expect(executeEditorMutation.mock.calls.flatMap(([input]) => input.mutation.type))
+      .not.toContain('disconnectConnections');
+    expect(executeEditorMutation.mock.calls.flatMap(([input]) => input.mutation.type))
+      .not.toContain('createNode');
+    expect(useGraphDataStore.getState().graphEntities[graphPath]).toBe(before);
+    expect(randomId).not.toHaveBeenCalled();
+
+    pending.resolve({ status: 'applied' });
+    await expect(command).resolves.toBe(true);
+    randomId.mockRestore();
+  });
+
   it('keeps MoveNodes forward-only and sends final positions unchanged', async () => {
     installProjection();
     executeEditorMutation.mockResolvedValueOnce({ status: 'applied' });
@@ -154,6 +218,7 @@ describe('forward-only editor commands', () => {
       positions: [{ nodeId: 'local-node', position: { x: 11, y: 29 } }],
     })).resolves.toBe(true);
 
+    expect(executeEditorMutation).toHaveBeenCalledTimes(1);
     expect(executeEditorMutation).toHaveBeenCalledWith({
       graphPath,
       locale: 'en-US',
@@ -166,70 +231,96 @@ describe('forward-only editor commands', () => {
     });
   });
 
-  it('stops delete sequencing on conflict and does not mark the graph dirty', async () => {
+  it.each([
+    ['DeleteNodes', { nodeIds: [] }],
+    ['DisconnectConnections', { connectionIds: [] }],
+  ] as const)('rejects empty direct arrays for %s before service invocation', async (type, args) => {
     installProjection();
-    const markGraphDirty = vi.spyOn(useExecutionStore.getState(), 'markGraphDirty');
-    executeEditorMutation
-      .mockResolvedValueOnce({ status: 'applied' })
-      .mockResolvedValueOnce({ status: 'conflict' });
 
-    await expect(executeCommand(graphPath, 'DeleteNodes', {
-      nodeIds: ['node-1', 'node-2', 'node-3'],
-    })).resolves.toBe(false);
+    await expect(executeCommand(graphPath, type, args as never)).resolves.toBe(false);
 
-    expect(executeEditorMutation).toHaveBeenCalledTimes(2);
-    expect(executeEditorMutation.mock.calls[1]?.[0].mutation).toEqual({
-      type: 'deleteNode',
-      payload: { nodeId: 'node-2' },
-    });
-    expect(markGraphDirty).not.toHaveBeenCalled();
+    expect(executeEditorMutation).not.toHaveBeenCalled();
   });
 
-  it('stops disconnect sequencing on stale without using the remaining connection snapshot', async () => {
+  it('preserves a typed rejection for interaction callers without structural notification', async () => {
     const fixture = installProjection();
-    useGraphDataStore.setState((state) => {
-      const bucket = state.graphEntities[graphPath];
-      return {
-        graphEntities: {
-          ...state.graphEntities,
-          [graphPath]: {
-            ...bucket,
-            connections: {
-              ...bucket.connections,
-              'connection-2': {
-                ...bucket.connections['local-connection'],
-                id: 'connection-2',
-              },
-            },
-            pinConnections: {
-              ...bucket.pinConnections,
-              [fixture.inputKey]: ['local-connection', 'connection-2'],
-            },
-          },
-        },
-      };
-    });
     const markGraphDirty = vi.spyOn(useExecutionStore.getState(), 'markGraphDirty');
-    executeEditorMutation.mockResolvedValueOnce({ status: 'stale', result: {} });
+    const rejection = {
+      status: 'rejected' as const,
+      code: 'graph_connection_type_mismatch' as const,
+    };
+    executeEditorMutation.mockResolvedValueOnce(rejection);
 
-    await expect(executeCommand(graphPath, 'DisconnectPin', {
-      pinId: fixture.inputKey,
-    })).resolves.toBe(false);
+    await expect(executeCommandOutcome(graphPath, 'ConnectPins', {
+      pinA: fixture.inputKey,
+      pinB: fixture.outputKey,
+    })).resolves.toEqual(rejection);
 
     expect(executeEditorMutation).toHaveBeenCalledTimes(1);
     expect(markGraphDirty).not.toHaveBeenCalled();
   });
 
-  it('returns false for rejected commands without structural notification', async () => {
+  it.each([
+    { status: 'applied' as const, dirtyCalls: 1 },
+    { status: 'noop' as const, result: {} as never, dirtyCalls: 0 },
+    { status: 'rejected' as const, code: 'graph_connection_type_mismatch' as const, dirtyCalls: 0 },
+    { status: 'conflict' as const, dirtyCalls: 0 },
+  ])('marks InsertReroute dirty only for $status', async (outcome) => {
     installProjection();
     const markGraphDirty = vi.spyOn(useExecutionStore.getState(), 'markGraphDirty');
-    executeEditorMutation.mockRejectedValueOnce(new Error('backend unavailable'));
+    executeEditorMutation.mockResolvedValueOnce(outcome);
 
-    await expect(executeCommand(graphPath, 'ConnectPins', {
-      pinA: installProjection().inputKey,
-      pinB: installProjection().outputKey,
-    })).resolves.toBe(false);
+    await expect(executeCommandOutcome(graphPath, 'InsertReroute', {
+      connectionId: 'edge-1',
+      position: { x: 120, y: 80 },
+    })).resolves.toEqual(outcome);
+
+    expect(markGraphDirty).toHaveBeenCalledTimes(outcome.dirtyCalls);
+    if (outcome.dirtyCalls === 1) expect(markGraphDirty).toHaveBeenCalledWith(graphPath);
+  });
+
+  it('preserves noop without structural notification', async () => {
+    installProjection();
+    const markGraphDirty = vi.spyOn(useExecutionStore.getState(), 'markGraphDirty');
+    const noop = { status: 'noop' as const, result: {} as never };
+    executeEditorMutation.mockResolvedValueOnce(noop);
+
+    await expect(executeCommandOutcome(graphPath, 'DeleteNodes', {
+      nodeIds: ['local-node'],
+    })).resolves.toEqual(noop);
 
     expect(markGraphDirty).not.toHaveBeenCalled();
+  });
+
+  it('infers graph mutation command outcomes at runtime without erasing the discriminant', async () => {
+    const fixture = installProjection();
+    executeEditorMutation.mockResolvedValueOnce({
+      status: 'rejected',
+      code: 'graph_connection_type_mismatch',
+    });
+
+    const outcome = await executeCommandOutcome(graphPath, 'ConnectPins', {
+      pinA: fixture.inputKey,
+      pinB: fixture.outputKey,
+    });
+
+    if (outcome !== false && outcome.status === 'rejected') {
+      expect(outcome.code).toBe('graph_connection_type_mismatch');
+    } else {
+      expect.unreachable('unexpected non-rejected outcome');
+    }
+  });
+
+  it('keeps the boolean command compatibility contract for rejected outcomes', async () => {
+    const fixture = installProjection();
+    executeEditorMutation.mockResolvedValueOnce({
+      status: 'rejected',
+      code: 'graph_connection_type_mismatch',
+    });
+
+    await expect(executeCommand(graphPath, 'ConnectPins', {
+      pinA: fixture.inputKey,
+      pinB: fixture.outputKey,
+    })).resolves.toBe(false);
   });
 });

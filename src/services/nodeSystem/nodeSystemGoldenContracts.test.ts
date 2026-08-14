@@ -158,6 +158,17 @@ describe('Rust-generated node-system golden contracts', () => {
     },
   );
 
+  it('freezes the six-field authoritative port connection capability', () => {
+    expect(editorProjection.nodes[0].ports[0].connections).toEqual({
+      current: 0,
+      maximum: 1,
+      ordered: false,
+      canAppend: true,
+      canReplace: false,
+      canMove: false,
+    });
+  });
+
   it('accepts the authoritative editor projection through the real strict parser', () => {
     expect(editorProjection).toHaveProperty('outcome', { type: 'success' });
     expect(isEditorGraphProjectionDto(editorProjection)).toBe(true);

@@ -42,6 +42,24 @@ describe('handleGraphResourceDrop', () => {
     });
   });
 
+  it('opens a pinned Function graph on merge drop', async () => {
+    const functionResource = {
+      id: 'functions/Revenue.yssbi-function',
+      name: 'Revenue',
+      type: 'function' as const,
+    };
+
+    await handleGraphResourceDrop(functionResource, 'editor-b');
+
+    expect(openGraphInEditor).toHaveBeenCalledWith(
+      functionResource.id,
+      functionResource.name,
+      'function',
+      'editor-b',
+      { pinned: true },
+    );
+  });
+
   it('splits editor group when dropping on a split zone', async () => {
     vi.mocked(EditorGroupsService.splitGroupAtEdge).mockReturnValue('editor-new');
 

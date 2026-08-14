@@ -1,5 +1,6 @@
 import type {
   GraphDeltaDto,
+  EditorGraphMutationDto,
   GraphDocumentPatchDto,
   GraphMutationResultDto,
   HistoryStatusDto,
@@ -47,6 +48,32 @@ function isPosition(value: unknown): boolean {
     && hasExactKeys(value, ['x', 'y'])
     && isFiniteNumber(value.x)
     && isFiniteNumber(value.y);
+}
+
+export function parseEditorGraphMutationDto(
+  value: unknown,
+): Extract<EditorGraphMutationDto, { type: 'insertReroute' }> {
+  if (!isRecord(value)
+    || value.type !== 'insertReroute'
+    || !hasExactKeys(value, ['type', 'payload'])
+    || !isRecord(value.payload)
+    || !hasExactKeys(value.payload, ['connectionId', 'position'])
+    || typeof value.payload.connectionId !== 'string'
+    || value.payload.connectionId.trim().length === 0
+    || !isPosition(value.payload.position)) {
+    throw new Error('InsertReroute mutation must have exact connectionId and finite position fields');
+  }
+
+  return {
+    type: 'insertReroute',
+    payload: {
+      connectionId: value.payload.connectionId,
+      position: {
+        x: (value.payload.position as { x: number }).x,
+        y: (value.payload.position as { y: number }).y,
+      },
+    },
+  };
 }
 
 function isDocumentPortAddress(value: unknown): boolean {
@@ -196,11 +223,15 @@ function isProjectionBasis(value: unknown): boolean {
 
 function isPortConnections(value: unknown): boolean {
   return isRecord(value)
-    && hasExactKeys(value, ['current', 'maximum', 'ordered', 'canConnect'])
+    && hasExactKeys(value, [
+      'current', 'maximum', 'ordered', 'canAppend', 'canReplace', 'canMove',
+    ])
     && isSafeRevision(value.current)
     && (value.maximum === null || isSafeRevision(value.maximum))
     && typeof value.ordered === 'boolean'
-    && typeof value.canConnect === 'boolean';
+    && typeof value.canAppend === 'boolean'
+    && typeof value.canReplace === 'boolean'
+    && typeof value.canMove === 'boolean';
 }
 
 function isResolvedType(value: unknown): boolean {
@@ -402,9 +433,12 @@ export function parseGraphDeltaDto(value: unknown): GraphDeltaDto {
     throw new Error('GraphDelta must have exact graphPath, revision, causedBy, and payload fields');
   }
   if (!isGraphResourcePath(value.graphPath)) throw new Error('GraphDelta graphPath is malformed');
+  const payload = parseGraphPatch(value.payload);
   if (!isSafeRevision(value.fromRevision)
     || !isSafeRevision(value.toRevision)
-    || value.toRevision !== value.fromRevision + 1) {
+    || (payload.operations.length === 0
+      ? value.toRevision !== value.fromRevision
+      : value.toRevision !== value.fromRevision + 1)) {
     throw new Error('GraphDelta revision is malformed');
   }
   if (value.causedBy !== null && !isUuid(value.causedBy)) {
@@ -415,17 +449,22 @@ export function parseGraphDeltaDto(value: unknown): GraphDeltaDto {
     fromRevision: value.fromRevision,
     toRevision: value.toRevision,
     causedBy: value.causedBy,
-    payload: parseGraphPatch(value.payload),
+    payload,
   };
 }
 
-export function parseGraphMutationResultDto(value: unknown): GraphMutationResultDto {
+export function parseGraphMutationResultDto(
+  value: unknown,
+  expectedProjectInstanceId: string,
+): GraphMutationResultDto {
   if (!isRecord(value)
     || !hasExactKeys(value, ['projectInstanceId', 'delta', 'projectionReplacement', 'history'])) {
     throw new Error('Graph mutation result must have exact projectInstanceId, delta, projectionReplacement, and history fields');
   }
-  if (typeof value.projectInstanceId !== 'string' || value.projectInstanceId.length === 0) {
-    throw new Error('Graph mutation result projectInstanceId is malformed');
+  if (typeof value.projectInstanceId !== 'string'
+    || value.projectInstanceId.length === 0
+    || value.projectInstanceId !== expectedProjectInstanceId) {
+    throw new Error('Graph mutation result projectInstanceId is malformed or mismatched');
   }
   const delta = parseGraphDeltaDto(value.delta);
   const projectionReplacement = parseGraphProjectionReplacementDto(value.projectionReplacement);

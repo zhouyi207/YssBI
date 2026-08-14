@@ -6,6 +6,7 @@ import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import { useWorksheetStore } from './worksheetStore';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { registerCoreApplicationPorts } from '@/features/application/initialization/registerCoreApplicationPorts';
 import {
   isResourceDocumentDirty,
   markResourceDirty,
@@ -13,6 +14,8 @@ import {
   useDocumentStateStore,
   useResourceStore,
 } from '@/features/core/resource';
+
+registerCoreApplicationPorts();
 
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';
 const worksheetPath = 'worksheets/Report.yssbi-worksheet';

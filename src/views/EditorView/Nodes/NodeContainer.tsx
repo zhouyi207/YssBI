@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from "react";
 import type { UINode } from "@/shared/types/ui";
-import { uiNodeHasNoHeader } from "@/features/core/dataStore";
+import { uiNodeHasNoHeader, uiNodeIsReroute } from "@/features/core/dataStore";
 import { useNodeExecution } from "@/features/core/node";
 import { useExecutionStore } from "@/features/core/execution";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
@@ -74,7 +74,7 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
     isCompleted,
   });
 
-  const minSize = getNodeMinSize(uiNodeHasNoHeader(node));
+  const minSize = getNodeMinSize(uiNodeHasNoHeader(node), uiNodeIsReroute(node));
 
   return (
     <div

@@ -1,5 +1,5 @@
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import type { CommandHandler } from '../types';
+import type { CommandHandler, GraphMutationCommandResult } from '../types';
 import { executeGraphIntent } from './executeGraphIntent';
 
 export interface ConnectPinsArgs {
@@ -7,7 +7,7 @@ export interface ConnectPinsArgs {
   pinB: string;
 }
 
-export const connectPinsCommand: CommandHandler<ConnectPinsArgs> = {
+export const connectPinsCommand: CommandHandler<ConnectPinsArgs, GraphMutationCommandResult> = {
   execute(graphPath, args) {
     const store = useGraphDataStore.getState();
     const pinA = store.getGraphPin(graphPath, args.pinA);

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore';
 import {
   buildGraphResourceMeta,
@@ -8,6 +8,8 @@ import {
   useResourceStore,
 } from '@/features/core/resource';
 import {
+  beginGraphLoadLifecycle,
+  loadGraphProjection,
   resetGraphProjectionCoordinator,
 } from '@/features/application/editorProjection/graphProjectionCoordinator';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
@@ -15,6 +17,11 @@ import { GraphService } from '@/services/graph/graphService';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { unloadGraphDocument } from './graphDocumentUnload';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import {
+  installCoreApplicationTestPorts,
+  resetCoreApplicationTestPorts,
+  type CoreApplicationTestPorts,
+} from '@/features/application/testHelpers/coreApplicationPorts';
 
 vi.mock('@/features/application/editor/graphDocumentRetention', () => ({
   shouldRetainGraphDocument: () => false,
@@ -43,10 +50,17 @@ function deferred<T>() {
 
 describe('graph document lifecycle ownership', () => {
   const graphPath = 'events/Main.yssbi-event';
+  let ports: CoreApplicationTestPorts;
 
   beforeEach(() => {
     vi.clearAllMocks();
     resetGraphProjectionCoordinator();
+    ports = installCoreApplicationTestPorts({
+      projectIO: {
+        beginGraphLoad: vi.fn(beginGraphLoadLifecycle),
+        loadGraphProjection: vi.fn(loadGraphProjection),
+      },
+    });
     projectPublicationCoordinator.cancelProject();
     projectPublicationCoordinator.startProject('project-instance-1', 0);
     useGraphDataStore.setState({ graphEntities: {} });
@@ -59,6 +73,8 @@ describe('graph document lifecycle ownership', () => {
     });
     vi.mocked(GraphService.unloadProjectGraph).mockResolvedValue();
   });
+
+  afterEach(resetCoreApplicationTestPorts);
 
   it('starts a new load when an initial pending load is unloaded and immediately reopened', async () => {
     const oldFixture = makeEditorProjectionFixture({ graphPath, title: 'Old load' });
@@ -73,9 +89,9 @@ describe('graph document lifecycle ownership', () => {
     await unloadGraphDocument(graphPath);
     const reopened = useProjectIOStore.getState().loadGraph(graphPath);
 
-    expect(GraphProjectionService.loadGraph).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(GraphProjectionService.loadGraph).mock.calls[0]?.[2]).toBeLessThan(
-      vi.mocked(GraphProjectionService.loadGraph).mock.calls[1]?.[2] ?? 0,
+    expect(ports.projectIO.loadGraphProjection).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(ports.projectIO.loadGraphProjection).mock.calls[0]?.[1]).toBeLessThan(
+      vi.mocked(ports.projectIO.loadGraphProjection).mock.calls[1]?.[1] ?? 0,
     );
 
     oldLoad.resolve(oldFixture.projection);
@@ -110,7 +126,7 @@ describe('graph document lifecycle ownership', () => {
     expect(vi.mocked(GraphService.unloadProjectGraph).mock.calls[0]?.[2])
       .toBe('project-instance-1');
     expect(vi.mocked(GraphService.unloadProjectGraph).mock.calls[0]?.[1]).toBeLessThan(
-      vi.mocked(GraphProjectionService.loadGraph).mock.calls[0]?.[2] ?? 0,
+      vi.mocked(ports.projectIO.loadGraphProjection).mock.calls[0]?.[1] ?? 0,
     );
   });
 });

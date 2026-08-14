@@ -8,7 +8,9 @@ use super::{
 };
 use crate::node_system::catalog::{
     CatalogResourcePath, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
+    reroute_node_type_for_kind,
 };
+use crate::node_system::compatibility::EditorMutationValidationSnapshot;
 use crate::node_system::protocol::{
     ConnectionsPerPort, LiteralPolicy, NodeProtocol, NodeScope, NodeTypeId, PortDirection,
     PortInstances, PortKey, PortKind, PortMemberGroupSpec, PortSpec,
@@ -24,7 +26,7 @@ use std::fmt;
 /// `operation_id` is correlation metadata only. The store echoes it in the
 /// committed event and does not use it for identity or deduplication.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MutationRequest<T> {
     pub resource: ResourceKey,
     pub base_revision: ResourceRevision,
@@ -85,6 +87,59 @@ pub fn detect_revision_gap<T>(
     })
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum EditorMutationErrorCode {
+    GraphPortNotFound,
+    GraphNodeNotFound,
+    GraphConnectionNotFound,
+    GraphPortOrphan,
+    GraphConnectionDirectionMismatch,
+    GraphConnectionKindMismatch,
+    GraphConnectionTypeMismatch,
+    GraphConnectionTypeUnavailable,
+    GraphConnectionTypeUnresolved,
+    GraphConnectionLimitReached,
+    GraphConnectionOrderRequired,
+    GraphConnectionOrderForbidden,
+    GraphConnectionAlreadyExists,
+    GraphConnectionMoveSourceEmpty,
+    GraphConnectionMoveSamePort,
+    GraphMutationEmptyTargets,
+    GraphMutationDuplicateTarget,
+    GraphManagedNodeDeleteForbidden,
+}
+
+impl EditorMutationErrorCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GraphPortNotFound => "graph_port_not_found",
+            Self::GraphNodeNotFound => "graph_node_not_found",
+            Self::GraphConnectionNotFound => "graph_connection_not_found",
+            Self::GraphPortOrphan => "graph_port_orphan",
+            Self::GraphConnectionDirectionMismatch => "graph_connection_direction_mismatch",
+            Self::GraphConnectionKindMismatch => "graph_connection_kind_mismatch",
+            Self::GraphConnectionTypeMismatch => "graph_connection_type_mismatch",
+            Self::GraphConnectionTypeUnavailable => "graph_connection_type_unavailable",
+            Self::GraphConnectionTypeUnresolved => "graph_connection_type_unresolved",
+            Self::GraphConnectionLimitReached => "graph_connection_limit_reached",
+            Self::GraphConnectionOrderRequired => "graph_connection_order_required",
+            Self::GraphConnectionOrderForbidden => "graph_connection_order_forbidden",
+            Self::GraphConnectionAlreadyExists => "graph_connection_already_exists",
+            Self::GraphConnectionMoveSourceEmpty => "graph_connection_move_source_empty",
+            Self::GraphConnectionMoveSamePort => "graph_connection_move_same_port",
+            Self::GraphMutationEmptyTargets => "graph_mutation_empty_targets",
+            Self::GraphMutationDuplicateTarget => "graph_mutation_duplicate_target",
+            Self::GraphManagedNodeDeleteForbidden => "graph_managed_node_delete_forbidden",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorMutationError {
+    pub code: EditorMutationErrorCode,
+    pub detail: Box<str>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum MutationConflict {
     RecoveryRequired(Box<str>),
@@ -108,6 +163,7 @@ pub enum MutationConflict {
     StaleProjectLifecycle(Box<str>),
     CatalogResourceStale(Box<str>),
     CatalogDescriptorInvalid(Box<str>),
+    Editor(EditorMutationError),
     InvalidEditorMutation(Box<str>),
     Projection(Box<str>),
     History(Box<str>),
@@ -121,6 +177,7 @@ impl MutationConflict {
             Self::StaleProjectLifecycle(_) => "stale_project_lifecycle",
             Self::CatalogResourceStale(_) => "catalog_resource_stale",
             Self::CatalogDescriptorInvalid(_) => "catalog_descriptor_invalid",
+            Self::Editor(error) => error.code.as_str(),
             _ => "mutation_conflict",
         }
     }
@@ -166,6 +223,7 @@ impl fmt::Display for MutationConflict {
             | Self::CatalogResourceStale(message)
             | Self::CatalogDescriptorInvalid(message)
             | Self::InvalidEditorMutation(message) => formatter.write_str(message),
+            Self::Editor(error) => formatter.write_str(&error.detail),
             Self::Projection(message) => {
                 write!(formatter, "committed graph projection failed: {message}")
             }
@@ -275,8 +333,8 @@ pub enum EditorGraphMutationDto {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         connect_from: Option<PortAddressDto>,
     },
-    DeleteNode {
-        node_id: NodeId,
+    DeleteNodes {
+        node_ids: Vec<NodeId>,
     },
     SetParameters {
         node_id: NodeId,
@@ -290,8 +348,22 @@ pub enum EditorGraphMutationDto {
         input: PortAddressDto,
         order: Option<OrderKey>,
     },
-    Disconnect {
+    MoveConnections {
+        source: PortAddressDto,
+        target: PortAddressDto,
+    },
+    DisconnectConnections {
+        connection_ids: Vec<ConnectionId>,
+    },
+    InsertReroute {
         connection_id: ConnectionId,
+        position: NodePosition,
+    },
+    DisconnectPort {
+        address: PortAddressDto,
+    },
+    DisconnectNode {
+        node_id: NodeId,
     },
     SetLiteral {
         address: PortAddressDto,
@@ -341,6 +413,97 @@ impl EditorGraphMutationDto {
         registry: &NodeRegistry,
         catalog_validation: Option<&crate::project::CatalogMutationValidationSnapshot>,
         compatibility_source: Option<&crate::node_system::compatibility::SourcePort>,
+    ) -> Result<GraphDocumentPatch, MutationConflict> {
+        self.into_patch_with_editor_validation(
+            graph_path,
+            document,
+            registry,
+            catalog_validation,
+            compatibility_source,
+            None,
+        )
+    }
+
+    pub(crate) fn into_patch_with_editor_validation(
+        self,
+        graph_path: &GraphResourcePath,
+        document: &GraphDocument,
+        registry: &NodeRegistry,
+        catalog_validation: Option<&crate::project::CatalogMutationValidationSnapshot>,
+        compatibility_source: Option<&crate::node_system::compatibility::SourcePort>,
+        mutation_validation: Option<&EditorMutationValidationSnapshot>,
+    ) -> Result<GraphDocumentPatch, MutationConflict> {
+        self.into_patch_with_editor_validation_impl(
+            graph_path,
+            document,
+            registry,
+            catalog_validation,
+            compatibility_source,
+            mutation_validation,
+            #[cfg(test)]
+            None,
+            #[cfg(test)]
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn into_patch_with_editor_validation_and_allocator(
+        self,
+        graph_path: &GraphResourcePath,
+        document: &GraphDocument,
+        registry: &NodeRegistry,
+        catalog_validation: Option<&crate::project::CatalogMutationValidationSnapshot>,
+        compatibility_source: Option<&crate::node_system::compatibility::SourcePort>,
+        mutation_validation: Option<&EditorMutationValidationSnapshot>,
+        allocate_connection_id: &dyn Fn() -> ConnectionId,
+    ) -> Result<GraphDocumentPatch, MutationConflict> {
+        self.into_patch_with_editor_validation_impl(
+            graph_path,
+            document,
+            registry,
+            catalog_validation,
+            compatibility_source,
+            mutation_validation,
+            None,
+            Some(allocate_connection_id),
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn into_patch_with_editor_validation_and_allocators(
+        self,
+        graph_path: &GraphResourcePath,
+        document: &GraphDocument,
+        registry: &NodeRegistry,
+        catalog_validation: Option<&crate::project::CatalogMutationValidationSnapshot>,
+        compatibility_source: Option<&crate::node_system::compatibility::SourcePort>,
+        mutation_validation: Option<&EditorMutationValidationSnapshot>,
+        allocate_node_id: &dyn Fn() -> NodeId,
+        allocate_connection_id: &dyn Fn() -> ConnectionId,
+    ) -> Result<GraphDocumentPatch, MutationConflict> {
+        self.into_patch_with_editor_validation_impl(
+            graph_path,
+            document,
+            registry,
+            catalog_validation,
+            compatibility_source,
+            mutation_validation,
+            Some(allocate_node_id),
+            Some(allocate_connection_id),
+        )
+    }
+
+    fn into_patch_with_editor_validation_impl(
+        self,
+        graph_path: &GraphResourcePath,
+        document: &GraphDocument,
+        registry: &NodeRegistry,
+        catalog_validation: Option<&crate::project::CatalogMutationValidationSnapshot>,
+        compatibility_source: Option<&crate::node_system::compatibility::SourcePort>,
+        mutation_validation: Option<&EditorMutationValidationSnapshot>,
+        #[cfg(test)] allocate_node_id: Option<&dyn Fn() -> NodeId>,
+        #[cfg(test)] allocate_connection_id: Option<&dyn Fn() -> ConnectionId>,
     ) -> Result<GraphDocumentPatch, MutationConflict> {
         let operations = match self {
             Self::CreateNode {
@@ -453,15 +616,15 @@ impl EditorGraphMutationDto {
                             "connectFrom no longer resolves to the analyzed source port",
                         ));
                     }
-                    validate_connection_capacity(
-                        document,
-                        &source_address,
-                        source_port.spec.connections,
-                    )?;
                     let resources = catalog_validation.ok_or_else(|| {
                         invalid_editor_mutation("catalog compatibility snapshot is unavailable")
                     })?;
-                    let candidate = crate::node_system::compatibility::first_compatible_port(
+                    let validation = mutation_validation.ok_or_else(|| {
+                        MutationConflict::Projection(
+                            "create-and-connect validation snapshot is unavailable".into(),
+                        )
+                    })?;
+                    let candidates = crate::node_system::compatibility::connection_candidates(
                         graph_path,
                         &connection_descriptor,
                         registry,
@@ -469,6 +632,26 @@ impl EditorGraphMutationDto {
                         source,
                     )
                     .map_err(invalid_editor_mutation)?;
+                    let mut first_type_error = None;
+                    let candidate = candidates
+                        .into_iter()
+                        .find(|candidate| {
+                            match validation.validate_create_connection(&source_address, candidate)
+                            {
+                                Ok(()) => true,
+                                Err(error) => {
+                                    first_type_error.get_or_insert(error);
+                                    false
+                                }
+                            }
+                        })
+                        .ok_or_else(|| {
+                            MutationConflict::Editor(
+                                first_type_error.expect(
+                                    "same-kind connection candidates produce a type result",
+                                ),
+                            )
+                        })?;
                     append_atomic_connection(
                         document,
                         registry,
@@ -479,18 +662,19 @@ impl EditorGraphMutationDto {
                 }
                 operations
             }
-            Self::DeleteNode { node_id } => {
-                delete_editor_node_operations(document, registry, node_id)?
+            Self::DeleteNodes { node_ids } => {
+                delete_editor_node_operations(document, registry, node_ids)?
             }
             Self::SetParameters {
                 node_id,
                 parameters,
             } => {
-                let before = document
-                    .nodes
-                    .get(&node_id)
-                    .cloned()
-                    .ok_or(DocumentError::NodeNotFound(node_id))?;
+                let before = document.nodes.get(&node_id).cloned().ok_or_else(|| {
+                    editor_error(
+                        EditorMutationErrorCode::GraphNodeNotFound,
+                        format!("node '{node_id}' does not exist"),
+                    )
+                })?;
                 let protocol = registry.protocol(&before.node_type).ok_or_else(|| {
                     invalid_editor_mutation(format!("unknown node type '{}'", before.node_type))
                 })?;
@@ -509,23 +693,100 @@ impl EditorGraphMutationDto {
                 output,
                 input,
                 order,
-            } => connect_operations(
-                document,
-                registry,
-                output.try_into().map_err(invalid_editor_mutation)?,
-                input.try_into().map_err(invalid_editor_mutation)?,
-                order,
-            )?,
-            Self::Disconnect { connection_id } => {
-                let connection = document
-                    .connections
-                    .get(&connection_id)
-                    .cloned()
-                    .ok_or(DocumentError::ConnectionNotFound(connection_id))?;
-                vec![GraphDocumentOperation::RemoveConnection { connection }]
+            } => {
+                let validation = mutation_validation.ok_or_else(|| {
+                    MutationConflict::Projection(
+                        "editor mutation validation snapshot is unavailable".into(),
+                    )
+                })?;
+                let output = output.try_into().map_err(|detail| {
+                    editor_error(EditorMutationErrorCode::GraphPortNotFound, detail)
+                })?;
+                let input = input.try_into().map_err(|detail| {
+                    editor_error(EditorMutationErrorCode::GraphPortNotFound, detail)
+                })?;
+                #[cfg(test)]
+                if let Some(allocate) = allocate_connection_id {
+                    return connect_operations_with_id_allocator(
+                        document, registry, validation, output, input, order, allocate,
+                    )
+                    .map(GraphDocumentPatch::new);
+                }
+                connect_operations(document, registry, validation, output, input, order)?
+            }
+            Self::MoveConnections { source, target } => {
+                let validation = mutation_validation.ok_or_else(|| {
+                    MutationConflict::Projection(
+                        "editor mutation validation snapshot is unavailable".into(),
+                    )
+                })?;
+                let source = source.try_into().map_err(|detail| {
+                    editor_error(EditorMutationErrorCode::GraphPortNotFound, detail)
+                })?;
+                let target = target.try_into().map_err(|detail| {
+                    editor_error(EditorMutationErrorCode::GraphPortNotFound, detail)
+                })?;
+                #[cfg(test)]
+                if let Some(allocate) = allocate_connection_id {
+                    return move_connection_operations_with_id_allocator(
+                        document, registry, validation, source, target, allocate,
+                    )
+                    .map(GraphDocumentPatch::new);
+                }
+                move_connection_operations(document, registry, validation, source, target)?
+            }
+            Self::DisconnectConnections { connection_ids } => {
+                validate_direct_targets(&connection_ids)?;
+                disconnect_connection_operations(document, connection_ids)?
+            }
+            Self::InsertReroute {
+                connection_id,
+                position,
+            } => {
+                #[cfg(test)]
+                if let (Some(allocate_node_id), Some(allocate_connection_id)) =
+                    (allocate_node_id, allocate_connection_id)
+                {
+                    return insert_reroute_operations_with_allocators(
+                        document,
+                        registry,
+                        connection_id,
+                        position,
+                        allocate_node_id,
+                        allocate_connection_id,
+                    )
+                    .map(GraphDocumentPatch::new);
+                }
+                insert_reroute_operations(document, registry, connection_id, position)?
+            }
+            Self::DisconnectPort { address } => {
+                let address = address.try_into().map_err(|detail| {
+                    editor_error(EditorMutationErrorCode::GraphPortNotFound, detail)
+                })?;
+                resolve_mutation_port(document, registry, &address)?;
+                let connection_ids = document.connections.values().filter_map(|connection| {
+                    (connection.output == address || connection.input == address)
+                        .then_some(connection.id)
+                });
+                disconnect_connection_operations(document, connection_ids)?
+            }
+            Self::DisconnectNode { node_id } => {
+                if !document.nodes.contains_key(&node_id) {
+                    return Err(editor_error(
+                        EditorMutationErrorCode::GraphNodeNotFound,
+                        format!("node '{node_id}' does not exist"),
+                    ));
+                }
+                let connection_ids = document.connections.values().filter_map(|connection| {
+                    (connection.output.node_id == node_id || connection.input.node_id == node_id)
+                        .then_some(connection.id)
+                });
+                disconnect_connection_operations(document, connection_ids)?
             }
             Self::SetLiteral { address, literal } => {
-                let address = address.try_into().map_err(invalid_editor_mutation)?;
+                let address = address.try_into().map_err(|detail| {
+                    editor_error(EditorMutationErrorCode::GraphPortNotFound, detail)
+                })?;
                 validate_literal_target(document, registry, &address, literal.as_ref())?;
                 let before = document.input_states.get(&address).cloned();
                 vec![GraphDocumentOperation::SetInputState {
@@ -544,11 +805,20 @@ impl EditorGraphMutationDto {
             Self::RemovePortInstance { address } => remove_port_instance_operations(
                 document,
                 registry,
-                address.try_into().map_err(invalid_editor_mutation)?,
+                address.try_into().map_err(|detail| {
+                    editor_error(EditorMutationErrorCode::GraphPortNotFound, detail)
+                })?,
             )?,
         };
         Ok(GraphDocumentPatch::new(operations))
     }
+}
+
+fn editor_error(code: EditorMutationErrorCode, detail: impl Into<Box<str>>) -> MutationConflict {
+    MutationConflict::Editor(EditorMutationError {
+        code,
+        detail: detail.into(),
+    })
 }
 
 fn invalid_editor_mutation(message: impl Into<Box<str>>) -> MutationConflict {
@@ -722,25 +992,212 @@ fn validate_variable_scope(
     }
 }
 
+fn validate_direct_targets<T: Ord + Copy>(targets: &[T]) -> Result<BTreeSet<T>, MutationConflict> {
+    if targets.is_empty() {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphMutationEmptyTargets,
+            "graph mutation requires at least one target",
+        ));
+    }
+    let selected = targets.iter().copied().collect::<BTreeSet<_>>();
+    if selected.len() != targets.len() {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphMutationDuplicateTarget,
+            "graph mutation contains a duplicate direct target",
+        ));
+    }
+    Ok(selected)
+}
+
 fn delete_editor_node_operations(
     document: &GraphDocument,
     registry: &NodeRegistry,
-    node_id: NodeId,
+    node_ids: Vec<NodeId>,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    let node = document
-        .nodes
-        .get(&node_id)
-        .ok_or(DocumentError::NodeNotFound(node_id))?;
-    let protocol = registry.protocol(&node.node_type).ok_or_else(|| {
-        invalid_editor_mutation(format!("unknown node type '{}'", node.node_type))
-    })?;
-    if protocol.managed_role.is_some() {
-        return Err(invalid_editor_mutation(format!(
-            "managed node '{}' cannot be deleted by an editor mutation",
-            node.node_type
-        )));
+    let selected = validate_direct_targets(&node_ids)?;
+    for node_id in &selected {
+        let node = document.nodes.get(node_id).ok_or_else(|| {
+            editor_error(
+                EditorMutationErrorCode::GraphNodeNotFound,
+                format!("node '{node_id}' does not exist"),
+            )
+        })?;
+        let protocol = registry.protocol(&node.node_type).ok_or_else(|| {
+            invalid_editor_mutation(format!("unknown node type '{}'", node.node_type))
+        })?;
+        if protocol.managed_role.is_some() {
+            return Err(editor_error(
+                EditorMutationErrorCode::GraphManagedNodeDeleteForbidden,
+                format!(
+                    "managed node '{}' cannot be deleted by an editor mutation",
+                    node.node_type
+                ),
+            ));
+        }
     }
-    delete_node_operations(document, node_id).map_err(MutationConflict::from)
+
+    let connection_ids = document.connections.values().filter_map(|connection| {
+        (selected.contains(&connection.output.node_id)
+            || selected.contains(&connection.input.node_id))
+        .then_some(connection.id)
+    });
+    let mut operations = disconnect_connection_operations(document, connection_ids)?;
+    operations.extend(document.input_states.iter().filter_map(|(address, state)| {
+        selected
+            .contains(&address.node_id)
+            .then(|| GraphDocumentOperation::SetInputState {
+                address: address.clone(),
+                before: Some(state.clone()),
+                after: None,
+            })
+    }));
+    operations.extend(
+        document
+            .port_bindings
+            .iter()
+            .filter_map(|(address, binding)| {
+                selected.contains(&address.node_id).then(|| {
+                    GraphDocumentOperation::RemovePortBinding {
+                        address: address.clone(),
+                        binding: binding.clone(),
+                    }
+                })
+            }),
+    );
+    operations.extend(
+        selected
+            .into_iter()
+            .map(|node_id| GraphDocumentOperation::RemoveNode {
+                node: document.nodes[&node_id].clone(),
+            }),
+    );
+    Ok(operations)
+}
+
+fn insert_reroute_operations(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    connection_id: ConnectionId,
+    position: NodePosition,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    insert_reroute_operations_with_allocators(
+        document,
+        registry,
+        connection_id,
+        position,
+        &NodeId::new,
+        &ConnectionId::new,
+    )
+}
+
+fn insert_reroute_operations_with_allocators(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    connection_id: ConnectionId,
+    position: NodePosition,
+    allocate_node_id: &dyn Fn() -> NodeId,
+    allocate_connection_id: &dyn Fn() -> ConnectionId,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    validate_position(position)?;
+    let original = document
+        .connections
+        .get(&connection_id)
+        .cloned()
+        .ok_or(DocumentError::ConnectionNotFound(connection_id))?;
+    let output = resolve_mutation_port(document, registry, &original.output)?;
+    let input = resolve_mutation_port(document, registry, &original.input)?;
+    if matches!(output.binding, Some(DynamicPortBinding::Orphan { .. }))
+        || matches!(input.binding, Some(DynamicPortBinding::Orphan { .. }))
+    {
+        return Err(invalid_editor_mutation(
+            "reroute endpoints must not be orphaned",
+        ));
+    }
+    if output.spec.direction != PortDirection::Output
+        || input.spec.direction != PortDirection::Input
+    {
+        return Err(invalid_editor_mutation(
+            "reroute connection endpoints have invalid directions",
+        ));
+    }
+    if output.spec.kind != input.spec.kind {
+        return Err(invalid_editor_mutation(
+            "reroute connection endpoints have different port kinds",
+        ));
+    }
+
+    let reroute_node_type = reroute_node_type_for_kind(output.spec.kind);
+    let registered = registry.get(&reroute_node_type).ok_or_else(|| {
+        invalid_editor_mutation(format!("unknown reroute node type '{reroute_node_type}'"))
+    })?;
+    let contract = crate::node_system::catalog::validate_reroute_protocol_contract(
+        registered,
+        output.spec.kind,
+    )
+    .map_err(|detail| MutationConflict::Projection(detail.into()))?;
+
+    let reroute_id = allocate_node_id();
+    let source_connection_id = allocate_connection_id();
+    let target_connection_id = allocate_connection_id();
+    let operations = vec![
+        GraphDocumentOperation::RemoveConnection {
+            connection: original.clone(),
+        },
+        GraphDocumentOperation::InsertNode {
+            node: DocumentNode {
+                id: reroute_id,
+                node_type: reroute_node_type,
+                position,
+                parameters: ParameterValues::new(),
+                user_label: None,
+            },
+        },
+        GraphDocumentOperation::InsertConnection {
+            connection: DocumentConnection {
+                id: source_connection_id,
+                output: original.output.clone(),
+                input: PortAddress::declared(reroute_id, contract.input_key),
+                order: None,
+            },
+        },
+        GraphDocumentOperation::InsertConnection {
+            connection: DocumentConnection {
+                id: target_connection_id,
+                output: PortAddress::declared(reroute_id, contract.output_key),
+                input: original.input.clone(),
+                order: original.order.clone(),
+            },
+        },
+    ];
+    let mut staged = document.clone();
+    staged.apply_patch(&GraphDocumentPatch::new(operations.clone()))?;
+    Ok(operations)
+}
+
+fn disconnect_connection_operations(
+    document: &GraphDocument,
+    connection_ids: impl IntoIterator<Item = ConnectionId>,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    let connection_ids = connection_ids.into_iter().collect::<BTreeSet<_>>();
+    let connections = connection_ids
+        .into_iter()
+        .map(|connection_id| {
+            document
+                .connections
+                .get(&connection_id)
+                .cloned()
+                .ok_or_else(|| {
+                    editor_error(
+                        EditorMutationErrorCode::GraphConnectionNotFound,
+                        format!("connection '{connection_id}' does not exist"),
+                    )
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(connections
+        .into_iter()
+        .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
+        .collect())
 }
 
 fn validate_node_scope(
@@ -831,7 +1288,9 @@ fn append_atomic_connection(
     };
     let mut staged = document.clone();
     staged.apply_patch(&GraphDocumentPatch::new(operations.clone()))?;
-    operations.extend(connect_operations(&staged, registry, output, input, order)?);
+    operations.extend(connect_operations_prevalidated_type(
+        &staged, registry, output, input, order,
+    )?);
     Ok(())
 }
 
@@ -961,25 +1420,35 @@ fn move_node_operations(
     document: &GraphDocument,
     positions: Vec<NodePositionMutationDto>,
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
-    let mut seen = BTreeSet::new();
-    for target in &positions {
+    if positions.is_empty() {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphMutationEmptyTargets,
+            "node move requires at least one target",
+        ));
+    }
+    let mut targets = BTreeMap::new();
+    for target in positions {
         validate_position(target.position)?;
-        if !seen.insert(target.node_id) {
-            return Err(invalid_editor_mutation(format!(
-                "node '{}' appears more than once in a move",
-                target.node_id
-            )));
+        if targets.contains_key(&target.node_id) {
+            return Err(editor_error(
+                EditorMutationErrorCode::GraphMutationDuplicateTarget,
+                format!("node '{}' appears more than once in a move", target.node_id),
+            ));
         }
         if !document.nodes.contains_key(&target.node_id) {
-            return Err(DocumentError::NodeNotFound(target.node_id).into());
+            return Err(editor_error(
+                EditorMutationErrorCode::GraphNodeNotFound,
+                format!("node '{}' does not exist", target.node_id),
+            ));
         }
+        targets.insert(target.node_id, target.position);
     }
-    Ok(positions
+    Ok(targets
         .into_iter()
-        .map(|target| {
-            let before = document.nodes[&target.node_id].clone();
+        .map(|(node_id, position)| {
+            let before = document.nodes[&node_id].clone();
             let mut after = before.clone();
-            after.position = target.position;
+            after.position = position;
             GraphDocumentOperation::UpdateNode { before, after }
         })
         .collect())
@@ -995,10 +1464,12 @@ fn resolve_mutation_port<'a>(
     registry: &'a NodeRegistry,
     address: &PortAddress,
 ) -> Result<MutationPort<'a>, MutationConflict> {
-    let node = document
-        .nodes
-        .get(&address.node_id)
-        .ok_or(DocumentError::EndpointNodeNotFound(address.node_id))?;
+    let node = document.nodes.get(&address.node_id).ok_or_else(|| {
+        editor_error(
+            EditorMutationErrorCode::GraphPortNotFound,
+            format!("endpoint node '{}' does not exist", address.node_id),
+        )
+    })?;
     let protocol = registry.protocol(&node.node_type).ok_or_else(|| {
         invalid_editor_mutation(format!("unknown node type '{}'", node.node_type))
     })?;
@@ -1011,21 +1482,29 @@ fn resolve_mutation_port<'a>(
         .ports
         .iter()
         .find(|spec| &spec.key == template)
-        .ok_or_else(|| invalid_editor_mutation(format!("unknown port '{address}'")))?;
+        .ok_or_else(|| {
+            editor_error(
+                EditorMutationErrorCode::GraphPortNotFound,
+                format!("unknown port '{address}'"),
+            )
+        })?;
     let binding = match &address.port {
         PortRef::Declared { .. } => {
             if !matches!(spec.instances, PortInstances::Declared) {
-                return Err(invalid_editor_mutation(format!(
-                    "port '{address}' requires an instance address"
-                )));
+                return Err(editor_error(
+                    EditorMutationErrorCode::GraphPortNotFound,
+                    format!("port '{address}' requires an instance address"),
+                ));
             }
             None
         }
         PortRef::Instance { .. } => {
-            let binding = document
-                .port_bindings
-                .get(address)
-                .ok_or_else(|| DocumentError::MissingPortBinding(address.clone()))?;
+            let binding = document.port_bindings.get(address).ok_or_else(|| {
+                editor_error(
+                    EditorMutationErrorCode::GraphPortNotFound,
+                    format!("instance port '{address}' has no binding"),
+                )
+            })?;
             let compatible = matches!(
                 (&spec.instances, binding),
                 (
@@ -1047,7 +1526,227 @@ fn resolve_mutation_port<'a>(
     Ok(MutationPort { spec, binding })
 }
 
+pub(super) fn move_connection_operations(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    snapshot: &EditorMutationValidationSnapshot,
+    source: PortAddress,
+    target: PortAddress,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    move_connection_operations_with_id_allocator(
+        document,
+        registry,
+        snapshot,
+        source,
+        target,
+        &ConnectionId::new,
+    )
+}
+
+pub(super) fn move_connection_operations_with_id_allocator(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    snapshot: &EditorMutationValidationSnapshot,
+    source: PortAddress,
+    target: PortAddress,
+    allocate: &dyn Fn() -> ConnectionId,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    if snapshot.graph_revision != document.revision {
+        return Err(MutationConflict::Projection(
+            "editor mutation validation snapshot revision does not match the document".into(),
+        ));
+    }
+    let source_port = resolve_mutation_port(document, registry, &source)?;
+    let target_port = resolve_mutation_port(document, registry, &target)?;
+    validate_move_endpoints(snapshot, &source, &target)?;
+    if source == target {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphConnectionMoveSamePort,
+            "connection source and target ports are identical",
+        ));
+    }
+
+    let moved = document
+        .connections
+        .values()
+        .filter(|connection| match source_port.spec.direction {
+            PortDirection::Output => connection.output == source,
+            PortDirection::Input => connection.input == source,
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if moved.is_empty() {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphConnectionMoveSourceEmpty,
+            "connection move source has no authoritative connections",
+        ));
+    }
+
+    let proposals = moved
+        .iter()
+        .cloned()
+        .map(|mut connection| {
+            match source_port.spec.direction {
+                PortDirection::Output => connection.output = target.clone(),
+                PortDirection::Input => connection.input = target.clone(),
+            }
+            snapshot
+                .validate_connection_types(&connection.output, &connection.input)
+                .map_err(MutationConflict::Editor)?;
+            Ok(connection)
+        })
+        .collect::<Result<Vec<_>, MutationConflict>>()?;
+
+    let mut removals = moved
+        .iter()
+        .cloned()
+        .map(|connection| (connection.id, connection))
+        .collect::<BTreeMap<_, _>>();
+    let mut staged = document.clone();
+    staged.apply_patch(&GraphDocumentPatch::new(
+        removals
+            .values()
+            .cloned()
+            .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
+            .collect::<Vec<_>>(),
+    ))?;
+    match endpoint_capacity(&staged, &target, target_port.spec.connections)? {
+        EndpointCapacity::Append => {}
+        EndpointCapacity::Replace(incumbents) => {
+            for connection in incumbents {
+                removals.insert(connection.id, connection);
+            }
+        }
+    }
+
+    let removal_operations = removals
+        .values()
+        .cloned()
+        .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
+        .collect::<Vec<_>>();
+    staged = document.clone();
+    staged.apply_patch(&GraphDocumentPatch::new(removal_operations.clone()))?;
+    for proposal in &proposals {
+        if staged.connections.values().any(|connection| {
+            connection.output == proposal.output && connection.input == proposal.input
+        }) {
+            return Err(editor_error(
+                EditorMutationErrorCode::GraphConnectionAlreadyExists,
+                "a moved connection endpoint pair already exists",
+            ));
+        }
+        let output = resolve_mutation_port(&staged, registry, &proposal.output)?;
+        let input = resolve_mutation_port(&staged, registry, &proposal.input)?;
+        validate_connection_order(input.spec.connections, proposal.order.as_ref())?;
+        validate_connection_capacity(&staged, &proposal.output, output.spec.connections)?;
+        validate_connection_capacity(&staged, &proposal.input, input.spec.connections)?;
+        staged.apply_patch(&GraphDocumentPatch::new(vec![
+            GraphDocumentOperation::InsertConnection {
+                connection: proposal.clone(),
+            },
+        ]))?;
+    }
+
+    let mut operations = removal_operations;
+    operations.extend(proposals.into_iter().map(|mut connection| {
+        connection.id = allocate();
+        GraphDocumentOperation::InsertConnection { connection }
+    }));
+    Ok(operations)
+}
+
+fn validate_move_endpoints(
+    snapshot: &EditorMutationValidationSnapshot,
+    source: &PortAddress,
+    target: &PortAddress,
+) -> Result<(), MutationConflict> {
+    let source_port = snapshot.ports.get(source).ok_or_else(|| {
+        editor_error(
+            EditorMutationErrorCode::GraphPortNotFound,
+            format!("move source port '{source}' is absent from validation snapshot"),
+        )
+    })?;
+    let target_port = snapshot.ports.get(target).ok_or_else(|| {
+        editor_error(
+            EditorMutationErrorCode::GraphPortNotFound,
+            format!("move target port '{target}' is absent from validation snapshot"),
+        )
+    })?;
+    if source_port.orphan || target_port.orphan {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphPortOrphan,
+            "orphan ports cannot be move endpoints",
+        ));
+    }
+    if source_port.direction != target_port.direction {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphConnectionDirectionMismatch,
+            "connection move endpoints have different directions",
+        ));
+    }
+    if source_port.kind != target_port.kind {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphConnectionKindMismatch,
+            "connection move endpoints have different kinds",
+        ));
+    }
+    Ok(())
+}
+
 fn connect_operations(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    validation: &EditorMutationValidationSnapshot,
+    output: PortAddress,
+    input: PortAddress,
+    order: Option<OrderKey>,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    connect_operations_with_id_allocator(
+        document,
+        registry,
+        validation,
+        output,
+        input,
+        order,
+        ConnectionId::new,
+    )
+}
+
+pub(super) fn connect_operations_with_id_allocator(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    validation: &EditorMutationValidationSnapshot,
+    output: PortAddress,
+    input: PortAddress,
+    order: Option<OrderKey>,
+    allocate: impl FnOnce() -> ConnectionId,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    if validation.graph_revision != document.revision {
+        return Err(MutationConflict::Projection(
+            "editor mutation validation snapshot revision does not match the document".into(),
+        ));
+    }
+    let output_port = resolve_mutation_port(document, registry, &output)?;
+    let input_port = resolve_mutation_port(document, registry, &input)?;
+    validation
+        .validate_connection_endpoints(&output, &input)
+        .map_err(MutationConflict::Editor)?;
+    validate_connection_does_not_exist(document, &output, &input)?;
+    validation
+        .validate_connection_types(&output, &input)
+        .map_err(MutationConflict::Editor)?;
+    plan_connection_operations_after_type_validation(
+        document,
+        output_port.spec.connections,
+        input_port.spec.connections,
+        output,
+        input,
+        order,
+        allocate,
+    )
+}
+
+fn connect_operations_prevalidated_type(
     document: &GraphDocument,
     registry: &NodeRegistry,
     output: PortAddress,
@@ -1056,48 +1755,156 @@ fn connect_operations(
 ) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
     let output_port = resolve_mutation_port(document, registry, &output)?;
     let input_port = resolve_mutation_port(document, registry, &input)?;
-    if matches!(output_port.binding, Some(DynamicPortBinding::Orphan { .. }))
-        || matches!(input_port.binding, Some(DynamicPortBinding::Orphan { .. }))
+    validate_document_connection_endpoints(&output_port, &input_port)?;
+    validate_connection_does_not_exist(document, &output, &input)?;
+    plan_connection_operations_after_type_validation(
+        document,
+        output_port.spec.connections,
+        input_port.spec.connections,
+        output,
+        input,
+        order,
+        ConnectionId::new,
+    )
+}
+
+fn validate_connection_does_not_exist(
+    document: &GraphDocument,
+    output: &PortAddress,
+    input: &PortAddress,
+) -> Result<(), MutationConflict> {
+    if document
+        .connections
+        .values()
+        .any(|connection| connection.output == *output && connection.input == *input)
     {
-        return Err(invalid_editor_mutation("orphan ports cannot be connected"));
+        Err(editor_error(
+            EditorMutationErrorCode::GraphConnectionAlreadyExists,
+            "the requested connection already exists",
+        ))
+    } else {
+        Ok(())
     }
-    if output_port.spec.direction != PortDirection::Output
-        || input_port.spec.direction != PortDirection::Input
-    {
-        return Err(invalid_editor_mutation(
-            "connection endpoints have invalid directions",
-        ));
-    }
-    if output_port.spec.kind != input_port.spec.kind {
-        return Err(invalid_editor_mutation(
-            "connection endpoint kinds do not match",
-        ));
-    }
-    validate_connection_capacity(document, &output, output_port.spec.connections)?;
-    validate_connection_capacity(document, &input, input_port.spec.connections)?;
-    match input_port.spec.connections {
-        ConnectionsPerPort::Multiple { ordered: true, .. } if order.is_none() => {
-            return Err(invalid_editor_mutation(
-                "ordered input connections require an order key",
-            ));
+}
+
+fn plan_connection_operations_after_type_validation(
+    document: &GraphDocument,
+    output_connections: ConnectionsPerPort,
+    input_connections: ConnectionsPerPort,
+    output: PortAddress,
+    input: PortAddress,
+    order: Option<OrderKey>,
+    allocate: impl FnOnce() -> ConnectionId,
+) -> Result<Vec<GraphDocumentOperation>, MutationConflict> {
+    validate_connection_order(input_connections, order.as_ref())?;
+    let output_capacity = endpoint_capacity(document, &output, output_connections)?;
+    let input_capacity = endpoint_capacity(document, &input, input_connections)?;
+    let mut incumbents = BTreeMap::new();
+    for capacity in [output_capacity, input_capacity] {
+        if let EndpointCapacity::Replace(connections) = capacity {
+            for connection in connections {
+                incumbents.insert(connection.id, connection);
+            }
         }
-        ConnectionsPerPort::Single | ConnectionsPerPort::Multiple { ordered: false, .. }
-            if order.is_some() =>
-        {
-            return Err(invalid_editor_mutation(
-                "unordered input connections cannot carry an order key",
-            ));
-        }
-        _ => {}
     }
-    Ok(vec![GraphDocumentOperation::InsertConnection {
+    let mut operations = incumbents
+        .into_values()
+        .map(|connection| GraphDocumentOperation::RemoveConnection { connection })
+        .collect::<Vec<_>>();
+    let mut staged = document.clone();
+    staged.apply_patch(&GraphDocumentPatch::new(operations.clone()))?;
+    validate_connection_capacity(&staged, &output, output_connections)?;
+    validate_connection_capacity(&staged, &input, input_connections)?;
+    operations.push(GraphDocumentOperation::InsertConnection {
         connection: DocumentConnection {
-            id: ConnectionId::new(),
+            id: allocate(),
             output,
             input,
             order,
         },
-    }])
+    });
+    Ok(operations)
+}
+
+fn validate_document_connection_endpoints(
+    output: &MutationPort<'_>,
+    input: &MutationPort<'_>,
+) -> Result<(), MutationConflict> {
+    if matches!(output.binding, Some(DynamicPortBinding::Orphan { .. }))
+        || matches!(input.binding, Some(DynamicPortBinding::Orphan { .. }))
+    {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphPortOrphan,
+            "orphan ports cannot be connected",
+        ));
+    }
+    if output.spec.direction != PortDirection::Output
+        || input.spec.direction != PortDirection::Input
+    {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphConnectionDirectionMismatch,
+            "connection endpoints have invalid directions",
+        ));
+    }
+    if output.spec.kind != input.spec.kind {
+        return Err(editor_error(
+            EditorMutationErrorCode::GraphConnectionKindMismatch,
+            "connection endpoint kinds do not match",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_connection_order(
+    input_connections: ConnectionsPerPort,
+    order: Option<&OrderKey>,
+) -> Result<(), MutationConflict> {
+    match input_connections {
+        ConnectionsPerPort::Multiple { ordered: true, .. } if order.is_none() => Err(editor_error(
+            EditorMutationErrorCode::GraphConnectionOrderRequired,
+            "ordered input connections require an order key",
+        )),
+        ConnectionsPerPort::Single | ConnectionsPerPort::Multiple { ordered: false, .. }
+            if order.is_some() =>
+        {
+            Err(editor_error(
+                EditorMutationErrorCode::GraphConnectionOrderForbidden,
+                "unordered input connections cannot carry an order key",
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
+enum EndpointCapacity {
+    Append,
+    Replace(Vec<DocumentConnection>),
+}
+
+fn endpoint_capacity(
+    document: &GraphDocument,
+    address: &PortAddress,
+    capability: ConnectionsPerPort,
+) -> Result<EndpointCapacity, MutationConflict> {
+    let connections = document
+        .connections
+        .values()
+        .filter(|connection| connection.output == *address || connection.input == *address)
+        .cloned()
+        .collect::<Vec<_>>();
+    match capability {
+        ConnectionsPerPort::Single if connections.is_empty() => Ok(EndpointCapacity::Append),
+        ConnectionsPerPort::Single => Ok(EndpointCapacity::Replace(connections)),
+        ConnectionsPerPort::Multiple { max, .. }
+            if max.is_some_and(|maximum| connections.len() >= usize::from(maximum)) =>
+        {
+            Err(editor_error(
+                EditorMutationErrorCode::GraphConnectionLimitReached,
+                format!("port '{address}' has reached its connection limit"),
+            ))
+        }
+        ConnectionsPerPort::Multiple { .. } => Ok(EndpointCapacity::Append),
+    }
 }
 
 fn validate_connection_capacity(
@@ -1105,22 +1912,13 @@ fn validate_connection_capacity(
     address: &PortAddress,
     capability: ConnectionsPerPort,
 ) -> Result<(), MutationConflict> {
-    let current = document
-        .connections
-        .values()
-        .filter(|connection| connection.output == *address || connection.input == *address)
-        .count();
-    let maximum = match capability {
-        ConnectionsPerPort::Single => Some(1usize),
-        ConnectionsPerPort::Multiple { max, .. } => max.map(usize::from),
-    };
-    if maximum.is_some_and(|maximum| current >= maximum) {
-        Err(invalid_editor_mutation(format!(
-            "port '{address}' has reached its connection limit"
-        )))
-    } else {
-        Ok(())
-    }
+    endpoint_capacity(document, address, capability).and_then(|capacity| match capacity {
+        EndpointCapacity::Append => Ok(()),
+        EndpointCapacity::Replace(_) => Err(editor_error(
+            EditorMutationErrorCode::GraphConnectionLimitReached,
+            format!("port '{address}' has reached its connection limit"),
+        )),
+    })
 }
 
 fn validate_literal_target(
@@ -1223,7 +2021,12 @@ fn remove_port_instance_operations(
         .port_bindings
         .get(&address)
         .cloned()
-        .ok_or_else(|| DocumentError::PortBindingNotFound(address.clone()))?;
+        .ok_or_else(|| {
+            editor_error(
+                EditorMutationErrorCode::GraphPortNotFound,
+                format!("port binding '{address}' does not exist"),
+            )
+        })?;
     if !matches!(binding, DynamicPortBinding::UserCreated { .. }) {
         return Err(invalid_editor_mutation(
             "only user-created port instances can be removed",
@@ -1306,10 +2109,12 @@ fn user_created_port_contract<'a>(
     node_id: NodeId,
     template: &PortKey,
 ) -> Result<UserCreatedPortContract<'a>, MutationConflict> {
-    let node = document
-        .nodes
-        .get(&node_id)
-        .ok_or(DocumentError::NodeNotFound(node_id))?;
+    let node = document.nodes.get(&node_id).ok_or_else(|| {
+        editor_error(
+            EditorMutationErrorCode::GraphNodeNotFound,
+            format!("node '{node_id}' does not exist"),
+        )
+    })?;
     let protocol = registry.protocol(&node.node_type).ok_or_else(|| {
         invalid_editor_mutation(format!("unknown node type '{}'", node.node_type))
     })?;
@@ -1319,9 +2124,10 @@ fn user_created_port_contract<'a>(
         .iter()
         .find(|spec| &spec.key == template)
         .ok_or_else(|| {
-            invalid_editor_mutation(format!(
-                "node '{node_id}' does not own port template '{template}'"
-            ))
+            editor_error(
+                EditorMutationErrorCode::GraphPortNotFound,
+                format!("node '{node_id}' does not own port template '{template}'"),
+            )
         })?;
     if !matches!(spec.instances, PortInstances::UserCreated { .. }) {
         return Err(invalid_editor_mutation(format!(
@@ -1360,16 +2166,10 @@ pub enum GraphMutation {
     CreateNode {
         node: DocumentNode,
     },
-    DeleteNode {
-        node_id: NodeId,
-    },
     Connect {
         output: PortAddress,
         input: PortAddress,
         order: Option<OrderKey>,
-    },
-    Disconnect {
-        connection_id: ConnectionId,
     },
     SetLiteral {
         address: PortAddress,
@@ -1393,7 +2193,6 @@ impl GraphMutation {
             Self::CreateNode { node } => {
                 vec![GraphDocumentOperation::InsertNode { node }]
             }
-            Self::DeleteNode { node_id } => delete_node_operations(document, node_id)?,
             Self::Connect {
                 output,
                 input,
@@ -1406,14 +2205,6 @@ impl GraphMutation {
                     order,
                 },
             }],
-            Self::Disconnect { connection_id } => {
-                let connection = document
-                    .connections
-                    .get(&connection_id)
-                    .cloned()
-                    .ok_or(DocumentError::ConnectionNotFound(connection_id))?;
-                vec![GraphDocumentOperation::RemoveConnection { connection }]
-            }
             Self::SetLiteral { address, literal } => {
                 let before = document.input_states.get(&address).cloned();
                 vec![GraphDocumentOperation::SetInputState {
@@ -1485,53 +2276,6 @@ fn materialize_projected_member_operations(
             },
         },
     ])
-}
-
-fn delete_node_operations(
-    document: &GraphDocument,
-    node_id: NodeId,
-) -> Result<Vec<GraphDocumentOperation>, DocumentError> {
-    let node = document
-        .nodes
-        .get(&node_id)
-        .cloned()
-        .ok_or(DocumentError::NodeNotFound(node_id))?;
-    let mut operations = Vec::new();
-    operations.extend(
-        document
-            .connections
-            .values()
-            .filter(|connection| {
-                connection.output.node_id == node_id || connection.input.node_id == node_id
-            })
-            .cloned()
-            .map(|connection| GraphDocumentOperation::RemoveConnection { connection }),
-    );
-    operations.extend(
-        document
-            .input_states
-            .iter()
-            .filter(|(address, _)| address.node_id == node_id)
-            .map(|(address, state)| GraphDocumentOperation::SetInputState {
-                address: address.clone(),
-                before: Some(state.clone()),
-                after: None,
-            }),
-    );
-    operations.extend(
-        document
-            .port_bindings
-            .iter()
-            .filter(|(address, _)| address.node_id == node_id)
-            .map(
-                |(address, binding)| GraphDocumentOperation::RemovePortBinding {
-                    address: address.clone(),
-                    binding: binding.clone(),
-                },
-            ),
-    );
-    operations.push(GraphDocumentOperation::RemoveNode { node });
-    Ok(operations)
 }
 
 /// Authoritative in-memory wrapper for one graph document.

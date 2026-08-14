@@ -4,6 +4,8 @@ import type { UINode } from "@/shared/types/ui";
 import { NodeContainer } from "./NodeContainer";
 import { DefaultNodeLayout } from "./DefaultNodeLayout";
 import { MathNodeLayout } from "./MathNodeLayout";
+import { RerouteNodeLayout } from './RerouteNodeLayout';
+import { uiNodeIsReroute } from '@/features/core/dataStore';
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 
 export interface NodeProps {
@@ -57,7 +59,9 @@ export const Node = React.memo<NodeProps>((props) => {
       onPointerDown={onPointerDown}
       dimmed={nodeDimmed}
     >
-      {node.uiStyle === "math" ? (
+      {uiNodeIsReroute(node) ? (
+        <RerouteNodeLayout {...props} />
+      ) : node.uiStyle === "math" ? (
         <MathNodeLayout {...props} />
       ) : (
         <DefaultNodeLayout {...props} />

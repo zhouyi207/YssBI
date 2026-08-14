@@ -1,7 +1,7 @@
 use crate::commands::node_system_execution_dto::{
     ExecutionDemandDto, ResultSourceDescriptorDto, ResultSourcePageDto, RunEventDto,
 };
-use crate::error::AppError;
+use crate::error::{AppError, GraphMutationErrorDetailsDto};
 use crate::event::{
     Event, EventProject, GraphMutationResultDto, ResourceMutationResultDto, emit_project_event,
 };
@@ -18,6 +18,10 @@ use serde::Serialize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use tauri::{AppHandle, State, ipc::Channel};
+
+#[cfg(test)]
+#[path = "command_node_system_reroute_tests.rs"]
+mod command_node_system_reroute_tests;
 
 fn parse_graph_path(value: String) -> Result<GraphResourcePath, AppError> {
     GraphResourcePath::new(value).map_err(AppError::from)
@@ -46,9 +50,46 @@ fn mutation_conflict_to_app_error(
         | crate::node_system::document::MutationConflict::CatalogDescriptorInvalid(_)) => {
             AppError::new(catalog_error.code(), catalog_error.to_string())
         }
-        crate::node_system::document::MutationConflict::StaleRevision { .. } => {
-            AppError::new(revision_conflict_code, error.to_string())
+        crate::node_system::document::MutationConflict::Document(
+            crate::node_system::document::DocumentError::ConnectionNotFound(_),
+        ) => {
+            tauri_plugin_log::log::warn!(
+                target: "yssbi::node_system::graph_mutation",
+                "graph mutation rejected: {error}"
+            );
+            AppError {
+                code: "graph_connection_not_found".into(),
+                message: "Graph mutation rejected".into(),
+                details: Some(
+                    serde_json::to_value(GraphMutationErrorDetailsDto::VALUE).unwrap(),
+                ),
+            }
         }
+        crate::node_system::document::MutationConflict::Editor(error) => {
+            tauri_plugin_log::log::warn!(
+                target: "yssbi::node_system::graph_mutation",
+                "graph mutation rejected: {}",
+                error.detail
+            );
+            AppError {
+                code: error.code.as_str().into(),
+                message: "Graph mutation rejected".into(),
+                details: Some(
+                    serde_json::to_value(GraphMutationErrorDetailsDto::VALUE).unwrap(),
+                ),
+            }
+        }
+        crate::node_system::document::MutationConflict::StaleRevision { .. } => AppError {
+            code: revision_conflict_code.into(),
+            message: if revision_conflict_code == "graph_revision_conflict" {
+                "Graph revision changed".into()
+            } else {
+                error.to_string()
+            },
+            details: (revision_conflict_code == "graph_revision_conflict").then(|| {
+                serde_json::to_value(GraphMutationErrorDetailsDto::VALUE).unwrap()
+            }),
+        },
         crate::node_system::document::MutationConflict::StaleProjectLifecycle(message) => {
             AppError::new("stale_project_lifecycle", message)
         }
@@ -107,9 +148,12 @@ fn get_compatible_node_catalog_from_state(
             "registry authority changed during compatibility resolution",
         ));
     }
-    let mut source =
-        crate::node_system::compatibility::source_from_projection(&projection, source_port)
-            .map_err(|message| AppError::new("compatible_source_invalid", message))?;
+    let mut source = crate::node_system::compatibility::source_from_projection(
+        &projection,
+        snapshot.registry.as_ref(),
+        source_port,
+    )
+    .map_err(|message| AppError::new("compatible_source_invalid", message))?;
     let document = state
         .get_data()?
         .graphs
@@ -504,7 +548,7 @@ fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
     })
 }
 
-fn mutate_graph_document_with_emitter(
+pub(super) fn mutate_graph_document_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
@@ -521,10 +565,12 @@ fn mutate_graph_document_with_emitter(
             request,
         )
         .map_err(|error| mutation_conflict_to_app_error(error, "graph_revision_conflict"))?;
-    emit(Event::Project(EventProject::GraphDelta {
-        project_instance_id: result.project_instance_id.clone(),
-        delta: result.delta.clone(),
-    }));
+    if !result.delta.payload.operations.is_empty() {
+        emit(Event::Project(EventProject::GraphDelta {
+            project_instance_id: result.project_instance_id.clone(),
+            delta: result.delta.clone(),
+        }));
+    }
     Ok(result)
 }
 
@@ -2007,6 +2053,147 @@ mod tests {
             );
             assert!(source.contains("apply_resource_document_patch_with_environment("));
             assert!(!source.contains("self.apply_resource_document_patch("));
+        }
+    }
+
+    #[test]
+    fn phase1_error_protocol_editor_rejections_are_safe_and_stable() {
+        use crate::node_system::document::{
+            EditorMutationError, EditorMutationErrorCode, MutationConflict,
+        };
+
+        let detail = "port events/Main:node/00000000-0000-0000-0000-000000000123/data_out";
+        let cases = [
+            (
+                EditorMutationErrorCode::GraphPortNotFound,
+                "graph_port_not_found",
+            ),
+            (
+                EditorMutationErrorCode::GraphNodeNotFound,
+                "graph_node_not_found",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionNotFound,
+                "graph_connection_not_found",
+            ),
+            (
+                EditorMutationErrorCode::GraphPortOrphan,
+                "graph_port_orphan",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionDirectionMismatch,
+                "graph_connection_direction_mismatch",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionKindMismatch,
+                "graph_connection_kind_mismatch",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionTypeMismatch,
+                "graph_connection_type_mismatch",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionTypeUnavailable,
+                "graph_connection_type_unavailable",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionTypeUnresolved,
+                "graph_connection_type_unresolved",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionLimitReached,
+                "graph_connection_limit_reached",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionOrderRequired,
+                "graph_connection_order_required",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionOrderForbidden,
+                "graph_connection_order_forbidden",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionAlreadyExists,
+                "graph_connection_already_exists",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionMoveSourceEmpty,
+                "graph_connection_move_source_empty",
+            ),
+            (
+                EditorMutationErrorCode::GraphConnectionMoveSamePort,
+                "graph_connection_move_same_port",
+            ),
+            (
+                EditorMutationErrorCode::GraphMutationEmptyTargets,
+                "graph_mutation_empty_targets",
+            ),
+            (
+                EditorMutationErrorCode::GraphMutationDuplicateTarget,
+                "graph_mutation_duplicate_target",
+            ),
+            (
+                EditorMutationErrorCode::GraphManagedNodeDeleteForbidden,
+                "graph_managed_node_delete_forbidden",
+            ),
+        ];
+
+        for (code, expected_code) in cases {
+            let error = mutation_conflict_to_app_error(
+                MutationConflict::Editor(EditorMutationError {
+                    code,
+                    detail: detail.into(),
+                }),
+                "graph_revision_conflict",
+            );
+            let serialized = serde_json::to_value(error).unwrap();
+            assert_eq!(serialized["code"], expected_code);
+            assert_eq!(serialized["message"], "Graph mutation rejected");
+            assert_eq!(
+                serialized["details"],
+                serde_json::json!({ "category": "graphMutation" })
+            );
+            let wire = serialized.to_string();
+            assert!(!wire.contains("00000000-0000-0000-0000-000000000123"));
+            assert!(!wire.contains("events/Main"));
+            assert!(!wire.contains("data_out"));
+        }
+    }
+
+    #[test]
+    fn phase1_error_protocol_stale_revision_is_safe_and_stable() {
+        let error = mutation_conflict_to_app_error(
+            crate::node_system::document::MutationConflict::StaleRevision {
+                base_revision: ResourceRevision::new(4),
+                current_revision: ResourceRevision::new(5),
+            },
+            "graph_revision_conflict",
+        );
+
+        assert_eq!(
+            serde_json::to_value(error).unwrap(),
+            serde_json::json!({
+                "code": "graph_revision_conflict",
+                "message": "Graph revision changed",
+                "details": { "category": "graphMutation" }
+            })
+        );
+    }
+
+    #[test]
+    fn phase1_error_protocol_unexpected_conflicts_remain_internal() {
+        use crate::node_system::document::{DocumentError, MutationConflict, NodeId};
+
+        for conflict in [
+            MutationConflict::Projection("projection detail".into()),
+            MutationConflict::History("history detail".into()),
+            MutationConflict::Document(DocumentError::NodeNotFound(NodeId::from_uuid(
+                uuid::Uuid::from_u128(123),
+            ))),
+        ] {
+            let error = mutation_conflict_to_app_error(conflict, "graph_revision_conflict");
+            assert_eq!(error.code, "internal_error");
+            assert!(error.details.is_none());
         }
     }
 

@@ -37,6 +37,10 @@ import {
 import { useHistoryStore } from '@/features/core/history';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { useEditorTabStore, type EditorTabMemento } from '@/features/core/layout/editorTabStore';
+import {
+  remapPlacementActiveTab,
+  replacePlacementActiveTab,
+} from '@/features/core/layout/editorGraphSelectionPlacement';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useViewportStore } from '@/features/core/viewport';
 import { parseViewportScopeKey, viewportScopeKey } from '@/features/core/viewport/viewportScope';
@@ -376,7 +380,7 @@ function remapTabs(
     for (const placement of Object.values(tabs.placements)) {
       placement.tabIds = placement.tabIds.map((id) => id === from ? to : id);
       placement.selectedTabIds = placement.selectedTabIds.map((id) => id === from ? to : id);
-      if (placement.activeTabId === from) placement.activeTabId = to;
+      remapPlacementActiveTab(placement, from, to);
     }
   }
   return tabs;
@@ -400,7 +404,10 @@ function reconcileTabs(
       placement.selectedTabIds.filter((tabId) => placement.tabIds.includes(tabId)),
     )];
     if (!placement.activeTabId || !placement.tabIds.includes(placement.activeTabId)) {
-      placement.activeTabId = placement.tabIds[placement.tabIds.length - 1] ?? null;
+      replacePlacementActiveTab(
+        placement,
+        placement.tabIds[placement.tabIds.length - 1] ?? null,
+      );
     }
     if (placement.tabIds.length === 0) delete tabs.placements[groupId];
   }

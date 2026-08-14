@@ -15,7 +15,11 @@ import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGen
 import { ProjectService } from '@/services/project/projectService';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
-import { Pin } from './Pin';
+import {
+  Pin,
+  pinConnectionFeedbackAttributes,
+  pinConnectionFeedbackClass,
+} from './Pin';
 
 const katexWarningSpy = vi.hoisted(() => {
   const warn = console.warn.bind(console);
@@ -40,6 +44,21 @@ vi.mock('react-i18next', async (importOriginal) => ({
   .IS_REACT_ACT_ENVIRONMENT = true;
 
 const graphPath = 'events/Main.yssbi-event';
+
+describe('Pin connection feedback', () => {
+  it('maps structured feedback to safe metadata and visible rings', () => {
+    expect(pinConnectionFeedbackAttributes({ kind: 'append' })).toEqual({
+      'data-connection-feedback': 'append',
+    });
+    expect(pinConnectionFeedbackAttributes({ kind: 'invalid', reason: 'capacity' })).toEqual({
+      'data-connection-feedback': 'invalid',
+      'data-connection-invalid-reason': 'capacity',
+    });
+    expect(pinConnectionFeedbackClass({ kind: 'append' })).toContain('ring-emerald-500');
+    expect(pinConnectionFeedbackClass({ kind: 'replace', displacedConnectionIds: [] })).toContain('ring-amber-500');
+    expect(pinConnectionFeedbackClass({ kind: 'invalid', reason: 'capacity' })).toContain('ring-red-500');
+  });
+});
 
 describe('Pin preview production path', () => {
   afterAll(() => katexWarningSpy.mockRestore());

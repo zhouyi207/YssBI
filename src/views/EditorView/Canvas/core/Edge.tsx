@@ -66,6 +66,12 @@ interface EdgeProps {
   isError?: boolean;
   isRunning?: boolean;
   dimmed?: boolean;
+  replacementPreview?: boolean;
+  selected?: boolean;
+  onPointerDown?: (event: React.PointerEvent<SVGPathElement>) => void;
+  onClick?: (event: React.MouseEvent<SVGPathElement>) => void;
+  onContextMenu?: (event: React.MouseEvent<SVGPathElement>) => void;
+  onDoubleClick?: (event: React.MouseEvent<SVGPathElement>) => void;
 }
 
 export function drawEdge(
@@ -113,7 +119,14 @@ export const Edge = React.memo<EdgeProps>(({
   isError = false,
   isRunning = false,
   dimmed = false,
+  replacementPreview = false,
+  selected = false,
+  onPointerDown,
+  onClick,
+  onContextMenu,
+  onDoubleClick,
 }) => {
+  const [hovered, setHovered] = React.useState(false);
   const pathData = computeEdgePath(x1, y1, x2, y2, startIsInput);
   const flow = FLOW_EDGE_STYLE[edgeKind];
   const showPull = edgeKind === "data" && isPullActive && !isError;
@@ -126,19 +139,35 @@ export const Edge = React.memo<EdgeProps>(({
       : showPull
         ? DATA_PULL_STYLE.stroke
         : color;
-  const strokeW = (isError || highlighted) ? thickness + 1 : thickness;
+  const strokeW = (isError || highlighted || replacementPreview) ? thickness + 1 : thickness;
   const animatePullMotion = isRunning && showPull;
   const animateFlow = isRunning && showFlow;
 
   return (
     <g
       data-edge-id={edgeId}
+      data-selected={selected}
+      data-hovered={hovered}
       style={dimmed ? { opacity: 0.25, transition: "opacity 150ms" } : { transition: "opacity 150ms" }}
     >
+      {(selected || hovered) && (
+        <path
+          data-edge-selection-visual={selected || undefined}
+          data-edge-hover-visual={!selected && hovered || undefined}
+          d={pathData}
+          fill="none"
+          stroke="var(--ring)"
+          strokeOpacity={selected ? 0.55 : 0.35}
+          strokeWidth={selected ? thickness + 14 : thickness + 5}
+          strokeLinecap="round"
+          className="pointer-events-none"
+        />
+      )}
+
       <path
         d={pathData}
         fill="none"
-        stroke={strokeColor}
+        stroke={replacementPreview ? '#f59e0b' : strokeColor}
         strokeWidth={strokeW}
         strokeLinecap="round"
         strokeDasharray={showPull && !showFlow && !animatePullMotion ? DATA_PULL_STYLE.dasharray : undefined}
@@ -225,6 +254,23 @@ export const Edge = React.memo<EdgeProps>(({
           strokeDasharray="6 4"
           className="pointer-events-none"
           style={{ filter: "blur(4px)" }}
+        />
+      )}
+
+      {(onPointerDown || onClick || onContextMenu || onDoubleClick) && (
+        <path
+          data-edge-hit-target={edgeId}
+          d={pathData}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={12}
+          pointerEvents="stroke"
+          onPointerEnter={() => setHovered(true)}
+          onPointerLeave={() => setHovered(false)}
+          onPointerDown={onPointerDown}
+          onClick={onClick}
+          onContextMenu={onContextMenu}
+          onDoubleClick={onDoubleClick}
         />
       )}
     </g>

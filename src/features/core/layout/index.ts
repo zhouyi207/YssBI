@@ -62,8 +62,13 @@ export {
   getActiveLayoutTab,
   resolveEditorGroupId,
   resolveEditorTargetGroupId,
+  createGraphSelection,
+  getEditorGroupGraphSelection,
   updateEditorGroupSelectedNodeIds,
+  updateEditorGroupSelectedConnectionIds,
+  clearEditorGroupGraphSelection,
 } from './layoutTabQueries';
+export type { GraphSelection } from './layoutTabQueries';
 export {
   isEditorGridSash,
   listEditorGroupIds,

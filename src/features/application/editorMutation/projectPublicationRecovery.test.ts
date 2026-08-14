@@ -345,6 +345,95 @@ it('recovers an A to B to C worksheet move chain from duplicate historical owner
   expect(prepared.projections.size).toBe(0);
 });
 
+it.each(['node', 'connection'] as const)(
+  'clears %s selection when recovery replaces the removed active graph',
+  (selectionKind) => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000705';
+    const kept = 'events/Kept.yssbi-event';
+    const removed = 'events/Removed.yssbi-event';
+    useEditorTabStore.setState({ registry: {}, placements: {} });
+    useEditorTabStore.getState().initGroupPlacement('editor', [
+      { id: kept, component: 'GraphEditor', type: 'event' },
+      { id: removed, component: 'GraphEditor', type: 'event' },
+    ], removed);
+    if (selectionKind === 'node') {
+      useEditorTabStore.getState().setSelectedNodeIds('editor', ['node-a']);
+    } else {
+      useEditorTabStore.getState().setSelectedConnectionIds('editor', ['edge-a']);
+    }
+
+    const prepared = prepareProjectRecoveryCommit({
+      projectInstanceId,
+      epoch: 1,
+      publicationRevision: 1,
+      index: {
+        projectInstanceId,
+        projectName: 'Recovered replacement',
+        exportTime: '',
+        publicationRevision: 1,
+        history: { canUndo: false, canRedo: false },
+        graphs: [{ path: kept, name: 'Kept', type: 'event', revision: 1 }],
+        variables: [],
+        worksheets: [],
+        databases: [],
+      },
+      projections: new Map(),
+      graphPathsLoadedAtStart: new Set(),
+      pathRemaps: new Map(),
+    });
+
+    expect(prepared.storeState.tabs.placements.editor).toMatchObject({
+      activeTabId: kept,
+      selectedNodeIds: [],
+      selectedConnectionIds: [],
+    });
+  },
+);
+
+it.each(['node', 'connection'] as const)(
+  'preserves %s selection when recovery remaps the same graph resource',
+  (selectionKind) => {
+    const projectInstanceId = '00000000-0000-0000-0000-000000000706';
+    const from = 'events/Before.yssbi-event';
+    const to = 'events/After.yssbi-event';
+    useEditorTabStore.setState({ registry: {}, placements: {} });
+    useEditorTabStore.getState().initGroupPlacement('editor', [
+      { id: from, component: 'GraphEditor', type: 'event' },
+    ], from);
+    if (selectionKind === 'node') {
+      useEditorTabStore.getState().setSelectedNodeIds('editor', ['node-a']);
+    } else {
+      useEditorTabStore.getState().setSelectedConnectionIds('editor', ['edge-a']);
+    }
+
+    const prepared = prepareProjectRecoveryCommit({
+      projectInstanceId,
+      epoch: 1,
+      publicationRevision: 1,
+      index: {
+        projectInstanceId,
+        projectName: 'Recovered remap',
+        exportTime: '',
+        publicationRevision: 1,
+        history: { canUndo: false, canRedo: false },
+        graphs: [{ path: to, name: 'After', type: 'event', revision: 1 }],
+        variables: [],
+        worksheets: [],
+        databases: [],
+      },
+      projections: new Map(),
+      graphPathsLoadedAtStart: new Set(),
+      pathRemaps: new Map([[from, to]]),
+    });
+
+    expect(prepared.storeState.tabs.placements.editor).toMatchObject({
+      activeTabId: to,
+      selectedNodeIds: selectionKind === 'node' ? ['node-a'] : [],
+      selectedConnectionIds: selectionKind === 'connection' ? ['edge-a'] : [],
+    });
+  },
+);
+
 it('clears worksheet detail focus absent from a committed authoritative recovery', () => {
   const projectInstanceId = '00000000-0000-0000-0000-000000000703';
   const removedPath = 'worksheets/Removed During Recovery.yssbi-worksheet';

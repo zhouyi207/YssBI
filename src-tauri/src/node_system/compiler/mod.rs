@@ -9,6 +9,7 @@ mod lowering;
 mod pipeline;
 mod project;
 pub mod relational;
+mod reroute;
 mod schema_analysis;
 mod specialization;
 mod type_analysis;
@@ -57,6 +58,8 @@ pub use specialization::{DemandPlanError, ExecutionPlanBasis, NormalizedExecutio
 pub(crate) use type_analysis::type_exprs_assignable;
 pub use type_analysis::{TypeConstraintGraph, TypeEnvironment};
 
+#[cfg(test)]
+mod reroute_tests;
 #[cfg(test)]
 mod task1_tests;
 #[cfg(test)]

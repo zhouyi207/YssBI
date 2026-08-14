@@ -8,6 +8,7 @@ import {
   pinAcceptsType,
   isPinCompatible,
   canConnectPins,
+  resolveConnectionCompatibility,
   findAutoConnectPinIndex,
   type ConnectionCandidatePin,
 } from './pinCompatibility';
@@ -164,65 +165,135 @@ describe('isPinCompatible reuses pinAcceptsType', () => {
   });
 });
 
-describe('canConnectPins', () => {
-  it('allows Rust to validate projected data ports without a legacy type-system snapshot', () => {
-    const output = pin({
-      id: 'projected-output',
-      nodeId: 'source',
-      direction: 'output',
-      kind: 'data',
-      connections: { current: 0, maximum: null, ordered: false, canConnect: true },
-      resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
-    });
-    const input = pin({
-      id: 'projected-input',
-      nodeId: 'target',
-      direction: 'input',
-      kind: 'data',
-      connections: { current: 0, maximum: 1, ordered: false, canConnect: true },
-      resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
-    });
+describe('resolveConnectionCompatibility', () => {
+  const appendCapability = {
+    current: 0,
+    maximum: 1,
+    ordered: false,
+    canAppend: true,
+    canReplace: false,
+    canMove: false,
+  };
 
-    expect(canConnectPins(output, input)).toBe(true);
+  const output = pin({
+    id: 'output',
+    nodeId: 'source',
+    direction: 'output',
+    kind: 'data',
+    dataType: FLOAT64,
+    connections: appendCapability,
+  });
+  const input = pin({
+    id: 'input',
+    nodeId: 'target',
+    direction: 'input',
+    kind: 'data',
+    dataType: FLOAT64,
+    connections: appendCapability,
   });
 
-  it('rejects projected ports whose Rust-authored connection capability is disabled', () => {
-    const output = pin({
-      id: 'projected-output',
-      nodeId: 'source',
-      direction: 'output',
-      kind: 'data',
-      connections: { current: 0, maximum: null, ordered: false, canConnect: true },
-      resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
-    });
-    const input = pin({
-      id: 'projected-input',
-      nodeId: 'target',
-      direction: 'input',
-      kind: 'data',
-      connections: { current: 1, maximum: 1, ordered: false, canConnect: false },
-      resolvedType: { display: 'Float64', resolved: true, dataType: { kind: 'Float64' } },
-    });
-
-    expect(canConnectPins(output, input)).toBe(false);
+  it('returns append for compatible append-capable endpoints', () => {
+    expect(resolveConnectionCompatibility(output, input)).toEqual({ kind: 'append' });
   });
 
-  it('accepts compatible pins regardless of argument order', () => {
-    const out = pin({ id: 'modelOut', nodeId: 'ols', direction: 'output', dataType: OLS_MODEL });
-    const input = pin({ id: 'modelIn', nodeId: 'predict', direction: 'input', dataType: MODEL });
+  it('returns replace without displaced connection IDs', () => {
+    const replaceable = pin({
+      ...input,
+      connections: {
+        ...appendCapability,
+        current: 1,
+        canAppend: false,
+        canReplace: true,
+      },
+    });
 
-    expect(canConnectPins(out, input, TYPE_SYSTEM)).toBe(true);
-    expect(canConnectPins(input, out, TYPE_SYSTEM)).toBe(true);
+    expect(resolveConnectionCompatibility(output, replaceable)).toEqual({ kind: 'replace' });
   });
 
-  it('rejects same-node, same-direction, and unrelated Struct pins', () => {
-    const out = pin({ id: 'modelOut', nodeId: 'ols', direction: 'output', dataType: OLS_MODEL });
-    const sameNodeInput = pin({ id: 'same', nodeId: 'ols', direction: 'input', dataType: MODEL });
-    const otherOutput = pin({ id: 'otherOut', nodeId: 'other', direction: 'output', dataType: OLS_MODEL });
+  it.each([
+    ['samePort', output, output],
+    ['sameNode', output, pin({ ...input, nodeId: output.nodeId })],
+    ['directionMismatch', output, pin({ ...input, direction: 'output' })],
+    ['kindMismatch', output, pin({ ...input, type: 'exec', kind: 'control', dataType: undefined })],
+    ['typeMismatch', output, pin({ ...input, dataType: STRING })],
+    ['orphan', output, pin({ ...input, orphan: true })],
+    ['capacityReached', output, pin({
+      ...input,
+      connections: {
+        ...appendCapability,
+        current: 1,
+        canAppend: false,
+        canReplace: false,
+      },
+    })],
+  ] as const)('returns the %s invalid reason', (reason, source, target) => {
+    expect(resolveConnectionCompatibility(source, target)).toEqual({ kind: 'invalid', reason });
+  });
+
+  it.each(['control', 'effect'] as const)('checks %s capability before succeeding', (kind) => {
+    const source = pin({
+      ...output,
+      type: 'exec',
+      kind,
+      dataType: undefined,
+    });
+    const fullTarget = pin({
+      ...input,
+      type: 'exec',
+      kind,
+      dataType: undefined,
+      connections: {
+        ...appendCapability,
+        current: 1,
+        canAppend: false,
+        canReplace: false,
+      },
+    });
+
+    expect(resolveConnectionCompatibility(source, fullTarget)).toEqual({
+      kind: 'invalid',
+      reason: 'capacityReached',
+    });
+  });
+
+  it('does not allow control and effect exec pins to interconnect', () => {
+    const control = pin({ ...output, type: 'exec', kind: 'control', dataType: undefined });
+    const effect = pin({ ...input, type: 'exec', kind: 'effect', dataType: undefined });
+
+    expect(resolveConnectionCompatibility(control, effect)).toEqual({
+      kind: 'invalid',
+      reason: 'kindMismatch',
+    });
+  });
+
+  it('preserves structured data type compatibility and argument-order independence', () => {
+    const modelOutput = pin({ id: 'modelOut', nodeId: 'ols', direction: 'output', dataType: OLS_MODEL });
+    const modelInput = pin({ id: 'modelIn', nodeId: 'predict', direction: 'input', dataType: MODEL });
     const resultInput = pin({ id: 'resultIn', nodeId: 'consumer', direction: 'input', dataType: OLS_RESULT });
 
-    expect(canConnectPins(out, sameNodeInput, TYPE_SYSTEM)).toBe(false);
-    expect(canConnectPins(out, otherOutput, TYPE_SYSTEM)).toBe(false);
-    expect(canConnectPins(out, resultInput, TYPE_SYSTEM)).toBe(false);
+    expect(resolveConnectionCompatibility(modelOutput, modelInput, TYPE_SYSTEM)).toEqual({ kind: 'append' });
+    expect(resolveConnectionCompatibility(modelInput, modelOutput, TYPE_SYSTEM)).toEqual({ kind: 'append' });
+    expect(resolveConnectionCompatibility(modelOutput, resultInput, TYPE_SYSTEM)).toEqual({
+      kind: 'invalid',
+      reason: 'typeMismatch',
+    });
+  });
+
+  it('keeps canConnectPins as a boolean wrapper over the resolver', () => {
+    const cases = [
+      [output, input],
+      [output, output],
+      [output, pin({ ...input, dataType: STRING })],
+      [output, pin({
+        ...input,
+        connections: { ...appendCapability, canAppend: false, canReplace: true },
+      })],
+    ] as const;
+
+    for (const [source, target] of cases) {
+      expect(canConnectPins(source, target)).toBe(
+        resolveConnectionCompatibility(source, target).kind !== 'invalid',
+      );
+    }
   });
 });

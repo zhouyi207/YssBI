@@ -34,7 +34,9 @@ describe('openEditorTab insertIndex', () => {
     expect(placement.activeTabId).toBe('g3');
   });
 
-  it('reorders an existing tab within the same editor group', () => {
+  it('reorders and activates an existing tab while clearing stale graph selection', () => {
+    useEditorTabStore.getState().setSelectedConnectionIds('default_editor', ['edge-from-g1']);
+
     openEditorTab(
       { id: 'g2', component: 'GraphEditor', type: 'event', pinned: true },
       { targetGroupId: 'default_editor', insertIndex: 0, pinned: true },
@@ -43,6 +45,8 @@ describe('openEditorTab insertIndex', () => {
     const placement = useEditorTabStore.getState().getPlacement('default_editor');
     expect(placement.tabIds).toEqual(['g2', 'g1']);
     expect(placement.activeTabId).toBe('g2');
+    expect(placement.selectedNodeIds).toEqual([]);
+    expect(placement.selectedConnectionIds).toEqual([]);
   });
 });
 

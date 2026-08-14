@@ -19,8 +19,9 @@ export function useNodeDragPreview(
     const root = canvasElementRef.current;
     if (!root || !graphPath || !groupId) return;
 
+    const scope = { graphPath, groupId };
     const apply = () => {
-      const preview = getDragPreview();
+      const preview = getDragPreview(scope);
       const appliesHere = preview.active && preview.groupId === groupId;
       const store = useGraphDataStore.getState();
 
@@ -49,7 +50,7 @@ export function useNodeDragPreview(
 
     const tick = () => {
       apply();
-      if (getDragPreview().active) {
+      if (getDragPreview(scope).active) {
         rafRef.current = requestAnimationFrame(tick);
       }
     };
@@ -57,7 +58,7 @@ export function useNodeDragPreview(
     const unsub = subscribeDragPreview(() => {
       cancelAnimationFrame(rafRef.current);
       apply();
-      if (getDragPreview().active) {
+      if (getDragPreview(scope).active) {
         rafRef.current = requestAnimationFrame(tick);
       }
     });

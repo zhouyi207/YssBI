@@ -3,7 +3,11 @@
 import { act, useLayoutEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ConnectionLine } from './ConnectionLine';
+import {
+  ConnectionLine,
+  connectionFeedbackAttributes,
+  connectionFeedbackColor,
+} from './ConnectionLine';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -66,6 +70,24 @@ function renderConnectionLine(root: Root) {
     );
   });
 }
+
+describe('ConnectionLine feedback', () => {
+  it('maps append, replacement, and invalid feedback to visible safe metadata', () => {
+    expect(connectionFeedbackAttributes({ kind: 'append' })).toEqual({
+      'data-connection-feedback': 'append',
+    });
+    expect(connectionFeedbackAttributes({ kind: 'replace', displacedConnectionIds: ['visual-id'] })).toEqual({
+      'data-connection-feedback': 'replace',
+    });
+    expect(connectionFeedbackAttributes({ kind: 'invalid', reason: 'type-mismatch' })).toEqual({
+      'data-connection-feedback': 'invalid',
+      'data-connection-invalid-reason': 'type-mismatch',
+    });
+    expect(connectionFeedbackColor({ kind: 'append' }, '#000')).toBe('#22c55e');
+    expect(connectionFeedbackColor({ kind: 'replace', displacedConnectionIds: [] }, '#000')).toBe('#f59e0b');
+    expect(connectionFeedbackColor({ kind: 'invalid', reason: 'capacity' }, '#000')).toBe('#ef4444');
+  });
+});
 
 describe('ConnectionLine canvas sizing', () => {
   let host: HTMLDivElement;

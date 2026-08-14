@@ -897,6 +897,7 @@ fn freeze_rejects_node_without_executable_interpretation() {
         protocol: Arc::new(protocol()),
         implementation: None,
         structural_role: None,
+        transparent_role: None,
     };
 
     assert!(matches!(
@@ -919,15 +920,69 @@ fn freeze_rejects_node_with_both_leaf_and_structural_interpretations() {
 }
 
 #[test]
-fn leaf_and_structural_nodes_are_the_only_frozen_forms() {
+fn leaf_structural_and_transparent_nodes_are_the_only_frozen_forms() {
     for node in [
         RegisteredNode::leaf(Arc::new(protocol()), implementation()),
         RegisteredNode::structural(Arc::new(protocol()), StructuralNodeRole::Branch),
+        RegisteredNode::transparent(Arc::new(protocol()), TransparentNodeRole::Reroute),
     ] {
         let mut builder = NodeRegistryBuilder::new();
         builder.register_provider(provider_with(node)).unwrap();
         builder.freeze().expect("executable node freezes");
     }
+}
+
+#[test]
+fn phase2_transparent_registry_exposes_only_the_reroute_role() {
+    let registered =
+        RegisteredNode::transparent(Arc::new(protocol()), TransparentNodeRole::Reroute);
+
+    assert_eq!(
+        registered.transparent_role(),
+        Some(TransparentNodeRole::Reroute)
+    );
+    assert!(registered.implementation().is_none());
+    assert!(registered.structural_role().is_none());
+}
+
+#[test]
+fn phase2_transparent_registry_rejects_mixed_behavior_fixtures() {
+    let mut with_leaf =
+        RegisteredNode::transparent(Arc::new(protocol()), TransparentNodeRole::Reroute);
+    with_leaf.implementation = Some(implementation());
+    assert!(matches!(
+        error(provider_with(with_leaf)),
+        RegistryValidationError::InvalidNode { reason, .. }
+            if reason == "leaf, structural, and transparent behaviors are mutually exclusive"
+    ));
+
+    let mut with_structural =
+        RegisteredNode::transparent(Arc::new(protocol()), TransparentNodeRole::Reroute);
+    with_structural.structural_role = Some(StructuralNodeRole::Branch);
+    assert!(matches!(
+        error(provider_with(with_structural)),
+        RegistryValidationError::InvalidNode { reason, .. }
+            if reason == "leaf, structural, and transparent behaviors are mutually exclusive"
+    ));
+}
+
+#[test]
+fn phase2_transparent_registry_fingerprint_encodes_role() {
+    let provider = provider_with(RegisteredNode::transparent(
+        Arc::new(protocol()),
+        TransparentNodeRole::Reroute,
+    ));
+    let protocol_fingerprints = BTreeMap::from([(
+        provider.nodes[0].protocol().type_id.clone(),
+        fingerprint::protocol_fingerprint(provider.nodes[0].protocol()).unwrap(),
+    )]);
+
+    let canonical = canonical_registry(&[provider], &protocol_fingerprints, &BTreeMap::new());
+
+    assert_eq!(
+        canonical["providers"][0]["nodes"][0][2],
+        serde_json::json!({ "kind": "Transparent", "role": "Reroute" })
+    );
 }
 
 #[test]

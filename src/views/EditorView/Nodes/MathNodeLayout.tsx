@@ -12,6 +12,7 @@ interface MathNodeLayoutProps {
   activePinId?: string | null;
   activePin?: PinModel | null;
   graphPath?: string;
+  groupId?: string;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
@@ -31,6 +32,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
   activePinId,
   activePin,
   graphPath,
+  groupId,
   onAddInput,
   onRemovePin,
   onPinClick,
@@ -90,6 +92,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
                 key={pin.id}
                 {...pin}
                 graphPath={graphPath}
+                    groupId={groupId}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
                 onPinClick={onPinClick}
@@ -105,6 +108,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
                 key={pin.id}
                 {...pin}
                 graphPath={graphPath}
+                    groupId={groupId}
                 isActive={activePinId === pin.id}
                 pinDragState={getPinDragState(pin)}
                 onPinClick={onPinClick}
@@ -124,6 +128,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               key={pin.id}
               {...pin}
               graphPath={graphPath}
+                    groupId={groupId}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}
               onPinClick={onPinClick}
@@ -155,6 +160,7 @@ export const MathNodeLayout: React.FC<MathNodeLayoutProps> = ({
               key={pin.id}
               {...pin}
               graphPath={graphPath}
+                    groupId={groupId}
               isActive={activePinId === pin.id}
               pinDragState={getPinDragState(pin)}
               onPinClick={onPinClick}

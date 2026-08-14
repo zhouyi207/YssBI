@@ -10,6 +10,7 @@ use super::dynamic_interface::{
     materialize_dynamic_interface_with_resources,
 };
 use super::relational::{RelationalConnection, RelationalFragment};
+use super::reroute::collapse_transparent_nodes;
 use super::schema_analysis::{SchemaAnalysisIssue, SchemaAnalyzer, SchemaResolverSet};
 use super::specialization::{
     DemandPortFact, ExecutionPlanBasis, IntermediateKernel, IntermediateOperation,
@@ -51,7 +52,7 @@ use crate::node_system::protocol::{
 };
 use crate::node_system::registry::{
     NodeRegistry, PreparedNominalValue, ProtocolFingerprint, RegistryFingerprint,
-    StructuralNodeRole, hash_canonical,
+    StructuralNodeRole, TransparentNodeRole, hash_canonical,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -88,19 +89,24 @@ pub enum RegistryNodeBehavior<'a> {
     Leaf(&'a NodeImplementation),
     ProtocolOnly,
     Structural(StructuralNodeRole),
+    Transparent(TransparentNodeRole),
 }
 
 impl RegistryNode<'_> {
     fn implementation(&self) -> Option<&NodeImplementation> {
         match self.behavior {
             RegistryNodeBehavior::Leaf(implementation) => Some(implementation),
-            RegistryNodeBehavior::ProtocolOnly | RegistryNodeBehavior::Structural(_) => None,
+            RegistryNodeBehavior::ProtocolOnly
+            | RegistryNodeBehavior::Structural(_)
+            | RegistryNodeBehavior::Transparent(_) => None,
         }
     }
 
     fn structural_role(&self) -> Option<StructuralNodeRole> {
         match self.behavior {
-            RegistryNodeBehavior::Leaf(_) | RegistryNodeBehavior::ProtocolOnly => None,
+            RegistryNodeBehavior::Leaf(_)
+            | RegistryNodeBehavior::ProtocolOnly
+            | RegistryNodeBehavior::Transparent(_) => None,
             RegistryNodeBehavior::Structural(role) => Some(role),
         }
     }
@@ -163,18 +169,21 @@ impl CompilerRegistry for NodeRegistry {
 
     fn resolve(&self, node_type: &NodeTypeId) -> Option<RegistryNode<'_>> {
         let registered = self.get(node_type)?;
-        let behavior = match (registered.implementation(), registered.structural_role()) {
-            (Some(implementation), None) => RegistryNodeBehavior::Leaf(
+        let behavior = match (
+            registered.implementation(),
+            registered.structural_role(),
+            registered.transparent_role(),
+        ) {
+            (Some(implementation), None, None) => RegistryNodeBehavior::Leaf(
                 implementation
                     .as_any()
                     .downcast_ref::<NodeImplementation>()
                     .expect("registry freeze guarantees compiler lowering capability"),
             ),
-            (None, None) => RegistryNodeBehavior::ProtocolOnly,
-            (None, Some(role)) => RegistryNodeBehavior::Structural(role),
-            (Some(_), Some(_)) => {
-                unreachable!("registry freeze guarantees one validated node behavior")
-            }
+            (None, None, None) => RegistryNodeBehavior::ProtocolOnly,
+            (None, Some(role), None) => RegistryNodeBehavior::Structural(role),
+            (None, None, Some(role)) => RegistryNodeBehavior::Transparent(role),
+            _ => unreachable!("registry freeze guarantees one validated node behavior"),
         };
         Some(RegistryNode {
             protocol: registered.protocol(),
@@ -660,7 +669,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         }
 
         let semantic = state.semantic_graph();
-        let mut semantic = match analysis.validated(semantic) {
+        let semantic = match analysis.validated(semantic) {
             Ok(graph) => graph,
             Err(_) => {
                 analysis.diagnostics = append_diagnostic(
@@ -689,6 +698,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 ));
             }
         };
+        let mut semantic = semantic_for_lowering(self.registry, semantic);
         analysis_span.finish(SpanOutcome::Success);
         let mut lowering_span = start_span_safely(
             self.trace,
@@ -1044,7 +1054,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         }
         let interface_projection = state.interface_projection();
         let semantic = match analysis.validated(provisional_semantic) {
-            Ok(semantic) => semantic,
+            Ok(semantic) => semantic_for_lowering(self.registry, semantic),
             Err(_) => {
                 return Ok((
                     CallDependencyNode {
@@ -2491,6 +2501,13 @@ impl<'a> AnalysisState<'a> {
             resolved_schemas: self.resolved_schema_facts.clone(),
         }
     }
+}
+
+fn semantic_for_lowering<R: CompilerRegistry>(
+    registry: &R,
+    semantic: CompilerSemanticGraph,
+) -> CompilerSemanticGraph {
+    collapse_transparent_nodes(registry, semantic)
 }
 
 enum LowerGraphFailure {

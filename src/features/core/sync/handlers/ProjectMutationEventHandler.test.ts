@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   registerPendingMutation,
   resetPendingMutations,
@@ -24,6 +24,14 @@ import {
   GraphDeltaHandler,
   ResourceMutationCommittedHandler,
 } from './ProjectMutationEventHandler';
+import {
+  registerSyncApplicationEventPort,
+  resetSyncApplicationEventPort,
+} from '../applicationEventPort';
+import {
+  registerPendingMutationPort,
+  resetPendingMutationPort,
+} from '@/features/core/history/pendingMutationPort';
 
 vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/application/editorProjection/graphProjectionCoordinator')>()),
@@ -42,6 +50,7 @@ vi.mock('@/services/nodeSystem/graphProjectionService', () => ({
     hydrateGraph: vi.fn(),
   },
 }));
+
 
 const graphPath = 'events/Main.yssbi-event';
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';
@@ -184,16 +193,37 @@ function recoveryIndex(publicationRevision: number) {
 }
 
 describe('Project mutation event synchronization', () => {
+  let graphDelta: ReturnType<typeof vi.fn<(path: string) => void>>;
+
   beforeEach(() => {
-    projectPublicationCoordinator.cancelProject();
-    projectPublicationCoordinator.startProject(projectInstanceId, 0);
     vi.restoreAllMocks();
     vi.clearAllMocks();
+    projectPublicationCoordinator.cancelProject();
+    projectPublicationCoordinator.startProject(projectInstanceId, 0);
+    registerPendingMutationPort({
+      graphPathFor: (id) => pendingMutationRegistry.getPendingMutation(id)?.graphPath,
+    });
+    graphDelta = vi.fn<(path: string) => void>();
+    registerSyncApplicationEventPort({
+      eventUpdated: vi.fn(),
+      functionUpdated: vi.fn(),
+      variablesChanged: vi.fn(),
+      graphDelta,
+      resourceMutationCommitted: (result) =>
+        projectPublicationCoordinator.submit({ result: result as ResourceMutationResultDto }),
+      applyProjectLifecycleReceipt: vi.fn(),
+      clearProject: vi.fn(),
+    });
     resetPendingMutations();
     useGraphDataStore.setState({ graphEntities: {} });
     useDatabaseStore.setState({ databases: {}, revisions: {} });
     useNodeCatalogStore.getState().clear();
     useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false }, true);
+  });
+
+  afterEach(() => {
+    resetPendingMutationPort();
+    resetSyncApplicationEventPort();
   });
 
   it('suppresses only the GraphDelta echo whose operation ID is pending', () => {
@@ -203,7 +233,7 @@ describe('Project mutation event synchronization', () => {
       projectInstanceId,
       delta: {
         graphPath,
-        fromRevision: 1,
+        fromRevision: 2,
         toRevision: 2,
         causedBy: operationId,
         payload: { operations: [] },
@@ -224,15 +254,14 @@ describe('Project mutation event synchronization', () => {
       projectInstanceId,
       delta: {
         graphPath,
-        fromRevision: 1,
+        fromRevision: 2,
         toRevision: 2,
         causedBy: null,
         payload: { operations: [] },
       },
     });
-
-    expect(invalidateGraphProjection).toHaveBeenCalledOnce();
-    expect(invalidateGraphProjection).toHaveBeenCalledWith(graphPath);
+    expect(graphDelta).toHaveBeenCalledOnce();
+    expect(graphDelta).toHaveBeenCalledWith(graphPath);
   });
 
   it('lets downstream invalidation reject a pending response after project replacement', async () => {
@@ -247,9 +276,8 @@ describe('Project mutation event synchronization', () => {
       typeof import('@/features/application/editorProjection/graphProjectionCoordinator')
     >('@/features/application/editorProjection/graphProjectionCoordinator');
     let invalidation!: Promise<boolean>;
-    vi.mocked(invalidateGraphProjection).mockImplementationOnce((path) => {
+    graphDelta.mockImplementationOnce((path) => {
       invalidation = actualCoordinator.invalidateGraphProjection(path);
-      return invalidation;
     });
     useGraphDataStore.getState().replaceProjection(graphPath, current.projection, 1);
     markResourceLoaded({ id: graphPath, kind: 'event' });
@@ -259,7 +287,7 @@ describe('Project mutation event synchronization', () => {
       projectInstanceId,
       delta: {
         graphPath,
-        fromRevision: 1,
+        fromRevision: 2,
         toRevision: 2,
         causedBy: null,
         payload: { operations: [] },

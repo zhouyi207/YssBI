@@ -4,7 +4,10 @@ import type {
   GraphMutationResultDto,
   MutationRequestDto,
 } from '@/shared/types/dto/editorMutation';
-import { parseGraphMutationResultDto } from '@/shared/types/dto/editorMutationWireParser';
+import {
+  parseEditorGraphMutationDto,
+  parseGraphMutationResultDto,
+} from '@/shared/types/dto/editorMutationWireParser';
 
 export class GraphMutationService {
   static async mutateGraph(
@@ -13,12 +16,15 @@ export class GraphMutationService {
     locale: string,
     request: MutationRequestDto<EditorGraphMutationDto>,
   ): Promise<GraphMutationResultDto> {
+    const wireRequest = request.payload.type === 'insertReroute'
+      ? { ...request, payload: parseEditorGraphMutationDto(request.payload) }
+      : request;
     const response: unknown = await invoke('mutate_graph_document', {
       projectInstanceId,
       graphPath,
       locale,
-      request,
+      request: wireRequest,
     });
-    return parseGraphMutationResultDto(response);
+    return parseGraphMutationResultDto(response, projectInstanceId);
   }
 }

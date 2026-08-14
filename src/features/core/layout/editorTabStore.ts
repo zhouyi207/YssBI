@@ -7,12 +7,18 @@ import {
   normalizeLayoutTabs,
 } from './layoutTabModel';
 import { listEditorGroupIds } from './editorGridLayout';
+import {
+  normalizePlacementGraphSelection,
+  remapPlacementActiveTab,
+  replacePlacementActiveTab,
+} from './editorGraphSelectionPlacement';
 
 /** Per-group tab ordering and volatile editor chrome state. */
 export interface EditorGroupPlacement {
   tabIds: string[];
   activeTabId: string | null;
   selectedNodeIds: string[];
+  selectedConnectionIds: string[];
   /** VS Code multi-tab selection within the group. */
   selectedTabIds: string[];
   /** VS Code locked editor group — tabs cannot leave the group. */
@@ -57,6 +63,8 @@ export interface EditorTabState {
   toggleTabInSelection: (groupId: string, tabId: string) => void;
   setGroupLocked: (groupId: string, locked: boolean) => void;
   setSelectedNodeIds: (groupId: string, selectedNodeIds: string[]) => void;
+  setSelectedConnectionIds: (groupId: string, selectedConnectionIds: string[]) => void;
+  clearGraphSelection: (groupId: string) => void;
   moveTabs: (
     sourceGroupId: string,
     tabIds: string[],
@@ -90,11 +98,18 @@ const EMPTY_PLACEMENT: EditorGroupPlacement = {
   tabIds: [],
   activeTabId: null,
   selectedNodeIds: [],
+  selectedConnectionIds: [],
   selectedTabIds: [],
 };
 
 function createEmptyPlacement(): EditorGroupPlacement {
-  return { tabIds: [], activeTabId: null, selectedNodeIds: [], selectedTabIds: [] };
+  return {
+    tabIds: [],
+    activeTabId: null,
+    selectedNodeIds: [],
+    selectedConnectionIds: [],
+    selectedTabIds: [],
+  };
 }
 
 function registerTab(state: { registry: Record<string, LayoutTab> }, tab: LayoutTab): void {
@@ -113,6 +128,15 @@ function pruneRegistry(state: { registry: Record<string, LayoutTab>; placements:
 
 function clearSelection(placement: EditorGroupPlacement): void {
   placement.selectedNodeIds = [];
+  placement.selectedConnectionIds = [];
+}
+
+function uniqueIds(ids: readonly string[]): string[] {
+  return [...new Set(ids)];
+}
+
+function setActiveGraph(placement: EditorGroupPlacement, activeTabId: string | null): void {
+  replacePlacementActiveTab(placement, activeTabId);
 }
 
 export const useEditorTabStore = create<EditorTabState>()(
@@ -122,10 +146,12 @@ export const useEditorTabStore = create<EditorTabState>()(
 
     getPlacement: (groupId) => {
       const placement = get().placements[groupId] ?? EMPTY_PLACEMENT;
-      if (placement.selectedTabIds) return placement;
+      if (placement.selectedTabIds && placement.selectedConnectionIds) return placement;
       return {
         ...placement,
-        selectedTabIds: placement.activeTabId ? [placement.activeTabId] : [],
+        selectedConnectionIds: placement.selectedConnectionIds ?? [],
+        selectedTabIds: placement.selectedTabIds
+          ?? (placement.activeTabId ? [placement.activeTabId] : []),
       };
     },
 
@@ -175,6 +201,7 @@ export const useEditorTabStore = create<EditorTabState>()(
         tabIds: normalized.map((tab) => tab.id),
         activeTabId: activeTabId ?? (normalized.length > 0 ? normalized[normalized.length - 1].id : null),
         selectedNodeIds: [],
+        selectedConnectionIds: [],
         selectedTabIds: activeTabId
           ? [activeTabId]
           : (normalized.length > 0 ? [normalized[normalized.length - 1].id] : []),
@@ -195,8 +222,7 @@ export const useEditorTabStore = create<EditorTabState>()(
 
       const existingIndex = placement.tabIds.indexOf(tab.id);
       if (existingIndex !== -1) {
-        if (placement.activeTabId !== tab.id) clearSelection(placement);
-        placement.activeTabId = tab.id;
+        setActiveGraph(placement, tab.id);
         if (insertIndex !== undefined && insertIndex !== existingIndex) {
           const [existing] = placement.tabIds.splice(existingIndex, 1);
           const adjustedIndex = insertIndex > existingIndex ? insertIndex - 1 : insertIndex;
@@ -210,8 +236,7 @@ export const useEditorTabStore = create<EditorTabState>()(
       } else {
         placement.tabIds.push(tab.id);
       }
-      clearSelection(placement);
-      placement.activeTabId = tab.id;
+      setActiveGraph(placement, tab.id);
     }),
 
     removeTab: (groupId, tabId) => set((state) => {
@@ -225,8 +250,7 @@ export const useEditorTabStore = create<EditorTabState>()(
       placement.selectedTabIds = (placement.selectedTabIds ?? []).filter((id) => id !== tabId);
 
       if (placement.tabIds.length === 0) {
-        placement.activeTabId = null;
-        placement.selectedNodeIds = [];
+        setActiveGraph(placement, null);
         delete state.placements[groupId];
         pruneRegistry(state);
         return;
@@ -234,8 +258,7 @@ export const useEditorTabStore = create<EditorTabState>()(
 
       if (placement.activeTabId === tabId) {
         const nextIndex = Math.max(0, closingIndex - 1);
-        placement.activeTabId = placement.tabIds[nextIndex] ?? null;
-        clearSelection(placement);
+        setActiveGraph(placement, placement.tabIds[nextIndex] ?? null);
       }
     }),
 
@@ -262,13 +285,12 @@ export const useEditorTabStore = create<EditorTabState>()(
         sourcePlacement.tabIds.splice(sourceIndex, 1);
         if (sourcePlacement.activeTabId === tabId) {
           const nextIndex = Math.max(0, sourceIndex - 1);
-          sourcePlacement.activeTabId = sourcePlacement.tabIds[nextIndex] ?? null;
-          if (sourcePlacement.activeTabId !== tabId) clearSelection(sourcePlacement);
+          setActiveGraph(sourcePlacement, sourcePlacement.tabIds[nextIndex] ?? null);
         }
         if (sourcePlacement.tabIds.length === 0) {
           delete state.placements[sourceGroupId];
         }
-        targetPlacement.activeTabId = tabId;
+        setActiveGraph(targetPlacement, tabId);
         return;
       }
 
@@ -282,7 +304,6 @@ export const useEditorTabStore = create<EditorTabState>()(
         } else {
           sourcePlacement.tabIds.push(removed);
         }
-        sourcePlacement.activeTabId = tabId;
         return;
       }
 
@@ -290,8 +311,7 @@ export const useEditorTabStore = create<EditorTabState>()(
       sourcePlacement.tabIds.splice(closingIndex, 1);
       if (sourcePlacement.activeTabId === tabId) {
         const nextIndex = Math.max(0, closingIndex - 1);
-        sourcePlacement.activeTabId = sourcePlacement.tabIds[nextIndex] ?? null;
-        if (sourcePlacement.activeTabId !== tabId) clearSelection(sourcePlacement);
+        setActiveGraph(sourcePlacement, sourcePlacement.tabIds[nextIndex] ?? null);
       }
       if (sourcePlacement.tabIds.length === 0) {
         delete state.placements[sourceGroupId];
@@ -302,7 +322,7 @@ export const useEditorTabStore = create<EditorTabState>()(
       } else {
         targetPlacement.tabIds.push(tabId);
       }
-      targetPlacement.activeTabId = tabId;
+      setActiveGraph(targetPlacement, tabId);
     }),
 
     setActiveTab: (groupId, tabId) => set((state) => {
@@ -313,9 +333,8 @@ export const useEditorTabStore = create<EditorTabState>()(
       if (placement.activeTabId === nextActiveId) return;
       if (nextActiveId != null && !placement.tabIds.includes(nextActiveId)) return;
 
-      placement.activeTabId = nextActiveId;
+      setActiveGraph(placement, nextActiveId);
       placement.selectedTabIds = nextActiveId ? [nextActiveId] : [];
-      clearSelection(placement);
     }),
 
     setTabPinned: (groupId, tabId, pinned) => set((state) => {
@@ -347,7 +366,7 @@ export const useEditorTabStore = create<EditorTabState>()(
       if (selected.has(tabId)) selected.delete(tabId);
       else selected.add(tabId);
       placement.selectedTabIds = placement.tabIds.filter((id) => selected.has(id));
-      placement.activeTabId = tabId;
+      setActiveGraph(placement, tabId);
     }),
 
     setGroupLocked: (groupId, locked) => set((state) => {
@@ -371,7 +390,23 @@ export const useEditorTabStore = create<EditorTabState>()(
       if (!state.placements[groupId]) {
         state.placements[groupId] = createEmptyPlacement();
       }
-      state.placements[groupId].selectedNodeIds = selectedNodeIds;
+      const placement = state.placements[groupId];
+      placement.selectedNodeIds = uniqueIds(selectedNodeIds);
+      placement.selectedConnectionIds = [];
+    }),
+
+    setSelectedConnectionIds: (groupId, selectedConnectionIds) => set((state) => {
+      if (!state.placements[groupId]) {
+        state.placements[groupId] = createEmptyPlacement();
+      }
+      const placement = state.placements[groupId];
+      placement.selectedNodeIds = [];
+      placement.selectedConnectionIds = uniqueIds(selectedConnectionIds);
+    }),
+
+    clearGraphSelection: (groupId) => set((state) => {
+      const placement = state.placements[groupId];
+      if (placement) clearSelection(placement);
     }),
 
     closeAllGraphTabs: () => set((state) => {
@@ -387,9 +422,12 @@ export const useEditorTabStore = create<EditorTabState>()(
 
         placement.tabIds = remainingIds;
         const activeStillPresent = placement.activeTabId != null && remainingIds.includes(placement.activeTabId);
-        placement.activeTabId = activeStillPresent
-          ? placement.activeTabId
-          : (remainingIds.length > 0 ? remainingIds[remainingIds.length - 1] : null);
+        setActiveGraph(
+          placement,
+          activeStillPresent
+            ? placement.activeTabId
+            : (remainingIds.length > 0 ? remainingIds[remainingIds.length - 1] : null),
+        );
 
         if (remainingIds.length === 0) {
           delete state.placements[groupId];
@@ -439,9 +477,9 @@ export const useEditorTabStore = create<EditorTabState>()(
       }
 
       if (activeFromSource) {
-        target.activeTabId = activeFromSource;
+        setActiveGraph(target, activeFromSource);
       } else if (!target.activeTabId && target.tabIds.length > 0) {
-        target.activeTabId = target.tabIds[target.tabIds.length - 1] ?? null;
+        setActiveGraph(target, target.tabIds[target.tabIds.length - 1] ?? null);
       }
     }),
 
@@ -460,7 +498,7 @@ export const useEditorTabStore = create<EditorTabState>()(
           target.tabIds.push(tabId);
         }
       }
-      target.activeTabId = tabId;
+      setActiveGraph(target, tabId);
     }),
 
     duplicateGroupTabs: (sourceGroupId, targetGroupId, insertIndex) => set((state) => {
@@ -476,12 +514,12 @@ export const useEditorTabStore = create<EditorTabState>()(
         if (!tab) continue;
         registerTab(state, applyTabPinState(tab, true));
         if (target.tabIds.includes(tabId)) {
-          target.activeTabId = tabId;
+          setActiveGraph(target, tabId);
           continue;
         }
         target.tabIds.splice(cursor, 0, tabId);
         cursor += 1;
-        target.activeTabId = tabId;
+        setActiveGraph(target, tabId);
       }
     }),
 
@@ -492,7 +530,7 @@ export const useEditorTabStore = create<EditorTabState>()(
       delete state.registry[from];
       for (const placement of Object.values(state.placements)) {
         placement.tabIds = placement.tabIds.map((tabId) => (tabId === from ? to : tabId));
-        if (placement.activeTabId === from) placement.activeTabId = to;
+        remapPlacementActiveTab(placement, from, to);
       }
     }),
 
@@ -507,6 +545,7 @@ export const useEditorTabStore = create<EditorTabState>()(
               tabIds: [...placement.tabIds],
               activeTabId: placement.activeTabId,
               selectedNodeIds: [...placement.selectedNodeIds],
+              selectedConnectionIds: [...(placement.selectedConnectionIds ?? [])],
               selectedTabIds: [...(placement.selectedTabIds ?? [])],
               locked: placement.locked,
             },
@@ -520,16 +559,19 @@ export const useEditorTabStore = create<EditorTabState>()(
         Object.entries(memento.registry).map(([tabId, tab]) => [tabId, normalizeLayoutTab(tab)]),
       );
       state.placements = Object.fromEntries(
-        Object.entries(memento.placements).map(([groupId, placement]) => [
-          groupId,
-          {
-            tabIds: [...placement.tabIds],
-            activeTabId: placement.activeTabId,
-            selectedNodeIds: [...placement.selectedNodeIds],
-            selectedTabIds: [...(placement.selectedTabIds ?? [])],
-            locked: placement.locked,
-          },
-        ]),
+        Object.entries(memento.placements).map(([groupId, placement]) => {
+          const selection = normalizePlacementGraphSelection(placement);
+          return [
+            groupId,
+            {
+              tabIds: [...placement.tabIds],
+              activeTabId: placement.activeTabId,
+              ...selection,
+              selectedTabIds: [...(placement.selectedTabIds ?? [])],
+              locked: placement.locked,
+            },
+          ];
+        }),
       );
     }),
 

@@ -1,5 +1,5 @@
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import type { CommandHandler } from '../types';
+import type { CommandHandler, GraphMutationCommandResult } from '../types';
 import { executeGraphIntent } from './executeGraphIntent';
 
 export interface SetPinValueArgs {
@@ -8,7 +8,7 @@ export interface SetPinValueArgs {
   newValue: unknown;
 }
 
-export const setPinValueCommand: CommandHandler<SetPinValueArgs> = {
+export const setPinValueCommand: CommandHandler<SetPinValueArgs, GraphMutationCommandResult> = {
   execute(graphPath, args) {
     const pin = useGraphDataStore.getState().getGraphPin(graphPath, args.pinId);
     if (!pin?.address) throw new Error(`Port '${args.pinId}' has no structured address`);

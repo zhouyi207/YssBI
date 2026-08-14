@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useSyncExternalStore } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Edge } from "./Edge";
 import { useExecutionStore, connectionKey, getExecutionVisual, subscribeExecutionVisual } from "@/features/core/execution";
@@ -6,13 +6,53 @@ import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { useEdgeDragPreview } from "@/features/core/canvas/useEdgeDragPreview";
+import { getConnectPreview, subscribeConnectPreview } from '@/features/core/canvas/connectPreview';
 import { resolvePinVisualSpec } from '@/shared/types/domain/pinVisual';
 import type { ConnectionData, PinData } from "@/shared/types";
+import { ConnectionContextMenu } from '@/views/EditorView/ContextMenu';
+
+export function replacementEdgeAttributes(
+  connectionId: string,
+  highlightedConnectionIds: ReadonlySet<string>,
+) {
+  return highlightedConnectionIds.has(connectionId)
+    ? { 'data-replacement-preview': true as const }
+    : {};
+}
+
+
+export interface EdgeDoubleClickSelectionSnapshot {
+  before: { nodeIds: Set<string>; connectionIds: Set<string> };
+  temporary: { nodeIds: Set<string>; connectionIds: Set<string> };
+}
 
 interface EdgesOverlayProps {
   graphPath: string;
+  groupId: string;
   getPinWorldPos: (pinId: string) => { x: number; y: number } | null;
+  getCanvasLocalPoint: (clientX: number, clientY: number) => { x: number; y: number };
   dimmed?: boolean;
+  interactive?: boolean;
+  selectedNodeIds?: readonly string[];
+  selectedConnectionIds?: readonly string[];
+  onSelectedConnectionIdsChange?: (connectionIds: string[], graphPath: string, groupId: string) => void;
+  onBreakConnections?: (
+    connectionIds: string[],
+    graphPath: string,
+    groupId: string,
+  ) => boolean | void | Promise<boolean | void>;
+  onEdgeDoubleClick?: (
+    connectionId: string,
+    position: Readonly<{ x: number; y: number }>,
+    graphPath: string,
+    groupId: string,
+    selection: EdgeDoubleClickSelectionSnapshot,
+  ) => void;
+}
+
+interface EdgeContextMenuDescriptor {
+  position: { x: number; y: number };
+  connectionIds: string[];
 }
 
 export interface EdgeData {
@@ -52,9 +92,110 @@ export function buildEdgeData(
   return result;
 }
 
-export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphPath, getPinWorldPos, dimmed }) => {
+export const EdgesOverlay = React.memo<EdgesOverlayProps>(({
+  graphPath,
+  groupId,
+  getPinWorldPos,
+  getCanvasLocalPoint,
+  dimmed,
+  interactive = true,
+  selectedNodeIds = [],
+  selectedConnectionIds = [],
+  onSelectedConnectionIdsChange,
+  onBreakConnections,
+  onEdgeDoubleClick,
+}) => {
   const { theme } = useTheme();
   const visual = useSyncExternalStore(subscribeExecutionVisual, getExecutionVisual, getExecutionVisual);
+  const getScopedConnectPreview = () => getConnectPreview({ graphPath, groupId });
+  const connectPreview = useSyncExternalStore(
+    subscribeConnectPreview,
+    getScopedConnectPreview,
+    getScopedConnectPreview,
+  );
+  const highlightedConnectionIds = new Set(connectPreview.highlightedConnectionIds);
+  const selectedConnectionIdSet = useMemo(
+    () => new Set(selectedConnectionIds),
+    [selectedConnectionIds],
+  );
+  const [edgeContextMenu, setEdgeContextMenu] = useState<EdgeContextMenuDescriptor | null>(null);
+  const pendingDoubleClickRef = useRef<{
+    connectionId: string;
+    snapshot: EdgeDoubleClickSelectionSnapshot;
+  } | null>(null);
+  useEffect(() => {
+    if (!interactive) setEdgeContextMenu(null);
+  }, [interactive]);
+
+  const handleEdgePointerDown = useCallback((event: React.PointerEvent<SVGPathElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
+  const handleEdgeClick = useCallback((connectionId: string, event: React.MouseEvent<SVGPathElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.button !== 0 || !onSelectedConnectionIdsChange || event.detail !== 1) return;
+    const toggle = event.ctrlKey || event.metaKey || event.shiftKey;
+    const next = toggle
+      ? (selectedConnectionIdSet.has(connectionId)
+        ? selectedConnectionIds.filter((id) => id !== connectionId)
+        : [...selectedConnectionIds, connectionId])
+      : [connectionId];
+    pendingDoubleClickRef.current = {
+      connectionId,
+      snapshot: {
+        before: {
+          nodeIds: new Set(selectedNodeIds),
+          connectionIds: new Set(selectedConnectionIds),
+        },
+        temporary: {
+          nodeIds: new Set(),
+          connectionIds: new Set(next),
+        },
+      },
+    };
+    onSelectedConnectionIdsChange([...next], graphPath, groupId);
+    setEdgeContextMenu(null);
+  }, [graphPath, groupId, onSelectedConnectionIdsChange, selectedConnectionIdSet, selectedConnectionIds, selectedNodeIds]);
+
+  const handleEdgeDoubleClick = useCallback((connectionId: string, event: React.MouseEvent<SVGPathElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!onEdgeDoubleClick) return;
+    const position = getCanvasLocalPoint(event.clientX, event.clientY);
+    const pending = pendingDoubleClickRef.current;
+    const snapshot = pending?.connectionId === connectionId
+      ? pending.snapshot
+      : {
+          before: {
+            nodeIds: new Set(selectedNodeIds),
+            connectionIds: new Set(selectedConnectionIds),
+          },
+          temporary: {
+            nodeIds: new Set(selectedNodeIds),
+            connectionIds: new Set(selectedConnectionIds),
+          },
+        };
+    pendingDoubleClickRef.current = null;
+    onEdgeDoubleClick(connectionId, position, graphPath, groupId, snapshot);
+  }, [getCanvasLocalPoint, graphPath, groupId, onEdgeDoubleClick, selectedConnectionIds, selectedNodeIds]);
+
+  const handleEdgeContextMenu = useCallback((connectionId: string, event: React.MouseEvent<SVGPathElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!onSelectedConnectionIdsChange || !onBreakConnections) return;
+    const connectionIds = selectedConnectionIdSet.has(connectionId)
+      ? [...selectedConnectionIds]
+      : [connectionId];
+    if (!selectedConnectionIdSet.has(connectionId)) {
+      onSelectedConnectionIdsChange(connectionIds, graphPath, groupId);
+    }
+    setEdgeContextMenu({
+      position: { x: event.clientX, y: event.clientY },
+      connectionIds,
+    });
+  }, [graphPath, groupId, onBreakConnections, onSelectedConnectionIdsChange, selectedConnectionIdSet, selectedConnectionIds]);
   const graphState = useExecutionStore((s) => s.graphs[graphPath]);
   const isReplay = useExecutionStore((s) => s.isPlaying && s.playbackGraphPath === graphPath);
 
@@ -87,7 +228,7 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphPath, getPinWo
   }, [connections, graphNodeIds, sourcePins, targetPins]);
 
   const svgRef = useRef<SVGSVGElement>(null);
-  useEdgeDragPreview(svgRef, edges, getPinWorldPos);
+  useEdgeDragPreview(svgRef, edges, getPinWorldPos, { graphPath, groupId });
 
   return (
     <svg
@@ -121,8 +262,8 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphPath, getPinWo
         const edgeKind = edge.edgeKind;
 
         return (
+          <g key={edge.id} {...replacementEdgeAttributes(edge.id, highlightedConnectionIds)}>
           <Edge
-            key={edge.id}
             edgeId={edge.id}
             fromPinId={edge.fromPinId}
             toPinId={edge.toPinId}
@@ -138,9 +279,38 @@ export const EdgesOverlay = React.memo<EdgesOverlayProps>(({ graphPath, getPinWo
             isError={isError}
             isRunning={isRunning}
             dimmed={dimmed}
+            replacementPreview={highlightedConnectionIds.has(edge.id)}
+            selected={selectedConnectionIdSet.has(edge.id)}
+            onPointerDown={interactive && onSelectedConnectionIdsChange
+              ? handleEdgePointerDown
+              : undefined}
+            onClick={interactive && onSelectedConnectionIdsChange
+              ? (event) => handleEdgeClick(edge.id, event)
+              : undefined}
+            onContextMenu={interactive && onBreakConnections
+              ? (event) => handleEdgeContextMenu(edge.id, event)
+              : undefined}
+            onDoubleClick={interactive && onEdgeDoubleClick
+              ? (event) => handleEdgeDoubleClick(edge.id, event)
+              : undefined}
           />
+          </g>
         );
       })}
+      {interactive && edgeContextMenu && (
+        <ConnectionContextMenu
+          position={edgeContextMenu.position}
+          selectedCount={edgeContextMenu.connectionIds.length}
+          onBreak={() => {
+            void onBreakConnections?.(
+              edgeContextMenu.connectionIds,
+              graphPath,
+              groupId,
+            );
+          }}
+          onClose={() => setEdgeContextMenu(null)}
+        />
+      )}
     </svg>
   );
 });

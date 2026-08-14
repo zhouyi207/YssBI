@@ -155,10 +155,13 @@ describe('resource sidebar rows', () => {
   ])('uses the exact current variable Get descriptor for a %s variable', (_scope, isGlobal) => {
     renderVariable(variablePath, isGlobal);
 
-    expect(mocks.draggableInputs[mocks.draggableInputs.length - 1]).toMatchObject({
+    const input = mocks.draggableInputs[mocks.draggableInputs.length - 1];
+    expect(input).toMatchObject({
       disabled: false,
       data: { type: 'node-template', template: { title: 'Counter', descriptor: variableGet } },
     });
+    const dragData = input?.data as { template?: { descriptor?: unknown } };
+    expect(dragData.template?.descriptor).toBe(variableGet);
   });
 
   it('forwards pointer down to the dnd-kit drag listener', () => {
@@ -174,10 +177,13 @@ describe('resource sidebar rows', () => {
   it('uses the exact current database source descriptor', () => {
     renderDatabase();
 
-    expect(mocks.draggableInputs[mocks.draggableInputs.length - 1]).toMatchObject({
+    const input = mocks.draggableInputs[mocks.draggableInputs.length - 1];
+    expect(input).toMatchObject({
       disabled: false,
       data: { type: 'node-template', template: { title: 'Sales', descriptor: databaseSource } },
     });
+    const dragData = input?.data as { template?: { descriptor?: unknown } };
+    expect(dragData.template?.descriptor).toBe(databaseSource);
   });
 
   it.each([

@@ -188,6 +188,12 @@ pub(crate) mod fixtures {
 }
 
 #[cfg(test)]
+mod blueprint_graph_phase1_tests;
+#[cfg(test)]
+mod editor_reroute_mutation_tests;
+#[cfg(test)]
+mod move_connections_project_state_tests;
+#[cfg(test)]
 mod production_tests;
 #[cfg(test)]
 mod project_trace_query_tests;

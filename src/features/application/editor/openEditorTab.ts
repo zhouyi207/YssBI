@@ -50,6 +50,7 @@ export function openEditorTab(tab: LayoutTab, options?: OpenEditorTabOptions): v
 
     if (needsMove) {
       layoutStore.moveTab(fromNodeId, tab.id, editorGroupId, insertIndex);
+      applyEditorTabSelection(editorGroupId, tab.id);
     } else if (tabStore.getPlacement(fromNodeId).activeTabId !== tab.id) {
       applyEditorTabSelection(fromNodeId, tab.id);
     }

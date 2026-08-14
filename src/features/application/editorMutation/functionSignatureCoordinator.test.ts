@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
@@ -19,6 +19,10 @@ import {
   type FunctionSignatureCoordinatorDependencies,
 } from './functionSignatureCoordinator';
 import { projectPublicationCoordinator } from './projectPublicationCoordinator';
+import {
+  installCoreApplicationTestPorts,
+  resetCoreApplicationTestPorts,
+} from '@/features/application/testHelpers/coreApplicationPorts';
 
 const functionPath = 'functions/Compute.yssbi-function';
 const operationId = '00000000-0000-0000-0000-000000000501';
@@ -138,11 +142,19 @@ describe('executeFunctionSignatureMutation', () => {
       makeEditorProjectionFixture({ graphPath, sourceRevision: 7 }).projection);
     resetPendingMutations();
     resetFunctionSignatureCoordinator();
+    installCoreApplicationTestPorts({
+      syncEvents: {
+        resourceMutationCommitted: (committed) =>
+          projectPublicationCoordinator.submit({ result: committed as ResourceMutationResultDto }),
+      },
+    });
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
     useHistoryStore.setState({ canUndo: false, canRedo: false, pending: false }, true);
     useVariableStore.setState({ variables: {} });
     installState();
   });
+
+  afterEach(resetCoreApplicationTestPorts);
 
   it('does not invoke, publish, or mutate when project replacement occurs inside authority read', async () => {
     const authority = useGraphMetaStore.getState();

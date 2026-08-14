@@ -146,11 +146,15 @@ function isPortDisplay(value: unknown): boolean {
 }
 
 function isConnectionCapability(value: unknown): boolean {
-  return hasExactKeys(value, ['current', 'maximum', 'ordered', 'canConnect'])
+  return hasExactKeys(value, [
+    'current', 'maximum', 'ordered', 'canAppend', 'canReplace', 'canMove',
+  ])
     && isNonNegativeSafeInteger(value.current)
     && (value.maximum === null || isNonNegativeSafeInteger(value.maximum))
     && typeof value.ordered === 'boolean'
-    && typeof value.canConnect === 'boolean';
+    && typeof value.canAppend === 'boolean'
+    && typeof value.canReplace === 'boolean'
+    && typeof value.canMove === 'boolean';
 }
 
 function isInputBinding(value: unknown): boolean {

@@ -1,5 +1,5 @@
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import type { CommandHandler } from '../types';
+import type { CommandHandler, GraphMutationCommandResult } from '../types';
 import { executeGraphIntent } from './executeGraphIntent';
 
 export interface AddRepeatablePinArgs {
@@ -7,7 +7,7 @@ export interface AddRepeatablePinArgs {
   template: string;
 }
 
-export const addRepeatablePinCommand: CommandHandler<AddRepeatablePinArgs> = {
+export const addRepeatablePinCommand: CommandHandler<AddRepeatablePinArgs, GraphMutationCommandResult> = {
   execute(graphPath, args) {
     return executeGraphIntent(graphPath, {
       type: 'addPortInstance',
@@ -21,7 +21,7 @@ export interface RemoveRepeatablePinArgs {
   pinId: string;
 }
 
-export const removeRepeatablePinCommand: CommandHandler<RemoveRepeatablePinArgs> = {
+export const removeRepeatablePinCommand: CommandHandler<RemoveRepeatablePinArgs, GraphMutationCommandResult> = {
   execute(graphPath, args) {
     const pin = useGraphDataStore.getState().getGraphPin(graphPath, args.pinId);
     if (!pin?.address || pin.address.kind !== 'instance') {

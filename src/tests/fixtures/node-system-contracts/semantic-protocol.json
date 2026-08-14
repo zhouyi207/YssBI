@@ -10728,6 +10728,200 @@
       "protocolFingerprint": "8e7448378242c18a08837df309a1b04e72b9a965b44a38fc54ab09a6381de724"
     },
     {
+      "nodeTypeId": "yssbi.reroute.control",
+      "protocol": {
+        "execution": {
+          "cache": "PerRun",
+          "determinism": "Deterministic",
+          "effects": "None",
+          "evaluation": "DemandDriven",
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
+        },
+        "interface": {
+          "member_groups": [],
+          "ports": [
+            {
+              "connections": "Single",
+              "consumption": null,
+              "direction": "Input",
+              "editor": "Default",
+              "input_binding": null,
+              "instances": "Declared",
+              "key": "input",
+              "kind": "Control",
+              "label_key": "nodes.yssbi.reroute.control.ports.input.label",
+              "production": null,
+              "schema": null,
+              "value_type": "Unknown"
+            },
+            {
+              "connections": {
+                "Multiple": {
+                  "max": null,
+                  "ordered": false
+                }
+              },
+              "consumption": null,
+              "direction": "Output",
+              "editor": "Default",
+              "input_binding": null,
+              "instances": "Declared",
+              "key": "output",
+              "kind": "Control",
+              "label_key": "nodes.yssbi.reroute.control.ports.output.label",
+              "production": null,
+              "schema": null,
+              "value_type": "Unknown"
+            }
+          ],
+          "type_constraints": [],
+          "type_parameters": []
+        },
+        "managedRole": null,
+        "parameters": {
+          "parameters": []
+        },
+        "scope": "Any",
+        "typeId": "yssbi.reroute.control"
+      },
+      "protocolFingerprint": "9a32fbe6335e10612a8a260785ced127768c910e022284aa9138aea233bb048e"
+    },
+    {
+      "nodeTypeId": "yssbi.reroute.data",
+      "protocol": {
+        "execution": {
+          "cache": "PerRun",
+          "determinism": "Deterministic",
+          "effects": "None",
+          "evaluation": "DemandDriven",
+          "idempotent": false,
+          "purity": "Pure",
+          "retry": null
+        },
+        "interface": {
+          "member_groups": [],
+          "ports": [
+            {
+              "connections": "Single",
+              "consumption": "FullyMaterialized",
+              "direction": "Input",
+              "editor": "Default",
+              "input_binding": {
+                "default_value": null,
+                "literal_policy": "Forbidden"
+              },
+              "instances": "Declared",
+              "key": "input",
+              "kind": "Data",
+              "label_key": "nodes.yssbi.reroute.data.ports.input.label",
+              "production": null,
+              "schema": null,
+              "value_type": {
+                "Generic": "t"
+              }
+            },
+            {
+              "connections": {
+                "Multiple": {
+                  "max": null,
+                  "ordered": false
+                }
+              },
+              "consumption": null,
+              "direction": "Output",
+              "editor": "Default",
+              "input_binding": null,
+              "instances": "Declared",
+              "key": "output",
+              "kind": "Data",
+              "label_key": "nodes.yssbi.reroute.data.ports.output.label",
+              "production": "FullyMaterialized",
+              "schema": {
+                "Input": "input"
+              },
+              "value_type": {
+                "Generic": "t"
+              }
+            }
+          ],
+          "type_constraints": [],
+          "type_parameters": [
+            "t"
+          ]
+        },
+        "managedRole": null,
+        "parameters": {
+          "parameters": []
+        },
+        "scope": "Any",
+        "typeId": "yssbi.reroute.data"
+      },
+      "protocolFingerprint": "8427cc2190c5fdaaf8a844d4e722b0b2b843df74b221893178edf408b4fe4dc3"
+    },
+    {
+      "nodeTypeId": "yssbi.reroute.effect",
+      "protocol": {
+        "execution": {
+          "cache": "Disabled",
+          "determinism": "EnvironmentDependent",
+          "effects": "Ordered",
+          "evaluation": "EagerWhenRegionEntered",
+          "idempotent": false,
+          "purity": "Effectful",
+          "retry": null
+        },
+        "interface": {
+          "member_groups": [],
+          "ports": [
+            {
+              "connections": "Single",
+              "consumption": null,
+              "direction": "Input",
+              "editor": "Default",
+              "input_binding": null,
+              "instances": "Declared",
+              "key": "input",
+              "kind": "Effect",
+              "label_key": "nodes.yssbi.reroute.effect.ports.input.label",
+              "production": null,
+              "schema": null,
+              "value_type": "Unknown"
+            },
+            {
+              "connections": {
+                "Multiple": {
+                  "max": null,
+                  "ordered": false
+                }
+              },
+              "consumption": null,
+              "direction": "Output",
+              "editor": "Default",
+              "input_binding": null,
+              "instances": "Declared",
+              "key": "output",
+              "kind": "Effect",
+              "label_key": "nodes.yssbi.reroute.effect.ports.output.label",
+              "production": null,
+              "schema": null,
+              "value_type": "Unknown"
+            }
+          ],
+          "type_constraints": [],
+          "type_parameters": []
+        },
+        "managedRole": null,
+        "parameters": {
+          "parameters": []
+        },
+        "scope": "Any",
+        "typeId": "yssbi.reroute.effect"
+      },
+      "protocolFingerprint": "5a423c4dc1a7ca7e46f8227407562fa93994c2543e7faf3e6ac6ae6af8970c52"
+    },
+    {
       "nodeTypeId": "yssbi.statistics.adf.summary",
       "protocol": {
         "execution": {

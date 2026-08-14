@@ -81,6 +81,272 @@ fn editor_projection(locale: &str) -> EditorGraphProjectionDto {
 }
 
 #[test]
+fn phase2_reroute_protocol_validator_rejects_each_malformed_contract() {
+    use crate::node_system::catalog::{
+        REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT, validate_reroute_protocol_contract,
+    };
+    use crate::node_system::protocol::{
+        ConnectionsPerPort, EffectSemantics, LiteralPolicy, PortDirection, PortKind, Purity,
+        SchemaExpr, TypeExpr,
+    };
+    use crate::node_system::registry::{RegisteredNode, TransparentNodeRole};
+    use std::sync::Arc;
+
+    let builtin = build_builtin_node_system().unwrap();
+    for kind in [PortKind::Data, PortKind::Control, PortKind::Effect] {
+        let node_type = crate::node_system::catalog::reroute_node_type_for_kind(kind);
+        let registered = builtin.registry.get(&node_type).unwrap();
+        assert!(validate_reroute_protocol_contract(registered, kind).is_ok());
+
+        let malformed = |mutate: fn(&mut crate::node_system::protocol::NodeProtocol)| {
+            let mut protocol = registered.protocol().clone();
+            mutate(&mut protocol);
+            RegisteredNode::transparent(Arc::new(protocol), TransparentNodeRole::Reroute)
+        };
+        let mut cases = vec![
+            malformed(|protocol| protocol.catalog.hidden = false),
+            malformed(|protocol| {
+                protocol.catalog.style_id =
+                    crate::node_system::protocol::NodeStyleId::new("wrong").unwrap()
+            }),
+            malformed(|protocol| {
+                protocol.parameters.parameters = vec![crate::node_system::protocol::ParameterSpec {
+                    key: crate::node_system::protocol::ParameterKey::new("wrong").unwrap(),
+                    title_key: crate::node_system::protocol::I18nKey::new("nodes.wrong").unwrap(),
+                    description_key: None,
+                    value_type: TypeExpr::Unknown,
+                    default_value: None,
+                    constraints: Vec::new(),
+                    editor: crate::node_system::protocol::ParameterEditorSpec::Auto,
+                }]
+                .into_boxed_slice()
+            }),
+            malformed(|protocol| {
+                protocol.interface.member_groups =
+                    vec![crate::node_system::protocol::PortMemberGroupSpec {
+                        templates: vec![
+                            crate::node_system::protocol::PortKey::new(REROUTE_INPUT_PORT).unwrap(),
+                        ]
+                        .into_boxed_slice(),
+                        min: 0,
+                        max: None,
+                    }]
+                    .into_boxed_slice()
+            }),
+            malformed(|protocol| {
+                protocol.managed_role =
+                    Some(crate::node_system::protocol::ManagedNodeRole::EventBegin)
+            }),
+            malformed(|protocol| protocol.interface.ports.swap(0, 1)),
+            malformed(|protocol| protocol.interface.ports[0].direction = PortDirection::Output),
+            malformed(|protocol| protocol.interface.ports[1].direction = PortDirection::Input),
+            malformed(|protocol| {
+                protocol.interface.ports[0].connections = ConnectionsPerPort::Multiple {
+                    max: None,
+                    ordered: false,
+                }
+            }),
+            malformed(|protocol| {
+                protocol.interface.ports[1].connections = ConnectionsPerPort::Single
+            }),
+            malformed(|protocol| {
+                protocol.interface.ports[0].label_key =
+                    crate::node_system::protocol::I18nKey::new("nodes.wrong.ports.input").unwrap()
+            }),
+            malformed(|protocol| {
+                protocol.interface.ports[0].key =
+                    crate::node_system::protocol::PortKey::new("wrong").unwrap()
+            }),
+            malformed(|protocol| {
+                protocol.interface.ports[1].key =
+                    crate::node_system::protocol::PortKey::new("wrong").unwrap()
+            }),
+        ];
+        if kind == PortKind::Data {
+            cases.extend([
+                malformed(|protocol| protocol.interface.type_parameters = Box::new([])),
+                malformed(|protocol| {
+                    protocol.interface.type_constraints =
+                        vec![crate::node_system::protocol::TypeConstraint::Implements(
+                            crate::node_system::protocol::TypeTerm::Expr(TypeExpr::Generic(
+                                crate::node_system::protocol::TypeParameterId::new("t").unwrap(),
+                            )),
+                            crate::node_system::protocol::TypeClassId::new("test.wrong").unwrap(),
+                        )]
+                        .into_boxed_slice()
+                }),
+                malformed(|protocol| protocol.interface.ports[1].value_type = TypeExpr::Unknown),
+                malformed(|protocol| {
+                    protocol.interface.ports[0]
+                        .input_binding
+                        .as_mut()
+                        .unwrap()
+                        .literal_policy = LiteralPolicy::Allowed
+                }),
+                malformed(|protocol| protocol.interface.ports[1].schema = None),
+            ]);
+        } else {
+            cases.extend([
+                malformed(|protocol| {
+                    protocol.interface.ports[0].value_type = TypeExpr::Generic(
+                        crate::node_system::protocol::TypeParameterId::new("t").unwrap(),
+                    )
+                }),
+                malformed(|protocol| {
+                    protocol.interface.ports[1].schema = Some(SchemaExpr::Input(
+                        crate::node_system::protocol::PortKey::new(REROUTE_INPUT_PORT).unwrap(),
+                    ))
+                }),
+                if kind == PortKind::Effect {
+                    malformed(|protocol| protocol.execution.purity = Purity::Pure)
+                } else {
+                    malformed(|protocol| protocol.execution.purity = Purity::Effectful)
+                },
+                if kind == PortKind::Effect {
+                    malformed(|protocol| protocol.execution.effects = EffectSemantics::None)
+                } else {
+                    malformed(|protocol| protocol.execution.effects = EffectSemantics::Ordered)
+                },
+            ]);
+        }
+        for malformed in cases {
+            assert!(validate_reroute_protocol_contract(&malformed, kind).is_err());
+        }
+        assert_eq!(
+            registered.protocol().interface.ports[0].key.as_str(),
+            REROUTE_INPUT_PORT
+        );
+        assert_eq!(
+            registered.protocol().interface.ports[1].key.as_str(),
+            REROUTE_OUTPUT_PORT
+        );
+    }
+}
+
+#[test]
+fn phase2_reroute_protocol_contracts_are_exact_for_all_port_kinds() {
+    use crate::node_system::catalog::{
+        CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
+        REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT, reroute_node_type_for_kind,
+    };
+    use crate::node_system::protocol::{
+        EffectSemantics, InputBindingSpec, LiteralPolicy, Purity, SchemaExpr, TypeParameterId,
+    };
+    use crate::node_system::registry::TransparentNodeRole;
+
+    let builtin = build_builtin_node_system().unwrap();
+    let generic = TypeParameterId::new("t").unwrap();
+    let cases = [
+        (PortKind::Data, DATA_REROUTE_NODE_TYPE),
+        (PortKind::Control, CONTROL_REROUTE_NODE_TYPE),
+        (PortKind::Effect, EFFECT_REROUTE_NODE_TYPE),
+    ];
+
+    for (kind, stable_id) in cases {
+        let node_type = reroute_node_type_for_kind(kind);
+        assert_eq!(node_type.as_str(), stable_id);
+        let registered = builtin.registry.get(&node_type).unwrap();
+        let contract =
+            crate::node_system::catalog::validate_reroute_protocol_contract(registered, kind)
+                .unwrap();
+        let protocol = registered.protocol();
+        assert_eq!(contract.input_key.as_str(), REROUTE_INPUT_PORT);
+        assert_eq!(contract.output_key.as_str(), REROUTE_OUTPUT_PORT);
+
+        assert_eq!(
+            registered.transparent_role(),
+            Some(TransparentNodeRole::Reroute)
+        );
+        assert!(registered.implementation().is_none());
+        assert!(registered.structural_role().is_none());
+        assert!(protocol.catalog.hidden);
+        assert_eq!(protocol.catalog.style_id.as_str(), "builtin.reroute");
+        assert!(protocol.parameters.parameters.is_empty());
+        assert!(protocol.interface.member_groups.is_empty());
+        assert_eq!(protocol.managed_role, None);
+        assert_eq!(protocol.interface.ports.len(), 2);
+
+        let input = &protocol.interface.ports[0];
+        let output = &protocol.interface.ports[1];
+        assert_eq!(input.key.as_str(), REROUTE_INPUT_PORT);
+        assert_eq!(output.key.as_str(), REROUTE_OUTPUT_PORT);
+        assert_eq!(input.direction, PortDirection::Input);
+        assert_eq!(output.direction, PortDirection::Output);
+        assert_eq!(input.kind, kind);
+        assert_eq!(output.kind, kind);
+        assert_eq!(input.instances, PortInstances::Declared);
+        assert_eq!(output.instances, PortInstances::Declared);
+        assert_eq!(input.connections, ConnectionsPerPort::Single);
+        assert_eq!(
+            output.connections,
+            ConnectionsPerPort::Multiple {
+                max: None,
+                ordered: false,
+            }
+        );
+
+        match kind {
+            PortKind::Data => {
+                assert_eq!(
+                    protocol.interface.type_parameters.as_ref(),
+                    &[generic.clone()]
+                );
+                assert_eq!(input.value_type, TypeExpr::Generic(generic.clone()));
+                assert_eq!(output.value_type, TypeExpr::Generic(generic.clone()));
+                assert_eq!(
+                    input.input_binding,
+                    Some(InputBindingSpec {
+                        literal_policy: LiteralPolicy::Forbidden,
+                        default_value: None,
+                    })
+                );
+                assert_eq!(output.schema, Some(SchemaExpr::Input(input.key.clone())));
+                assert_eq!(protocol.execution.purity, Purity::Pure);
+                assert_eq!(protocol.execution.effects, EffectSemantics::None);
+            }
+            PortKind::Control | PortKind::Effect => {
+                assert!(protocol.interface.type_parameters.is_empty());
+                assert_eq!(input.value_type, TypeExpr::Unknown);
+                assert_eq!(output.value_type, TypeExpr::Unknown);
+                assert_eq!(input.input_binding, None);
+                assert_eq!(input.schema, None);
+                assert_eq!(output.schema, None);
+                if kind == PortKind::Effect {
+                    assert_eq!(protocol.execution.purity, Purity::Effectful);
+                    assert_eq!(protocol.execution.effects, EffectSemantics::Ordered);
+                } else {
+                    assert_eq!(protocol.execution.purity, Purity::Pure);
+                    assert_eq!(protocol.execution.effects, EffectSemantics::None);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn phase2_reroute_protocol_hidden_nodes_are_absent_from_localized_palette_search() {
+    use crate::node_system::catalog::{
+        CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
+    };
+
+    let builtin = build_builtin_node_system().unwrap();
+    let localized = builtin.catalog.localize(&builtin.registry, "en-US");
+    let palette_ids = localized
+        .items
+        .iter()
+        .map(|item| item.node_type_id.as_ref())
+        .collect::<BTreeSet<_>>();
+
+    for stable_id in [
+        DATA_REROUTE_NODE_TYPE,
+        CONTROL_REROUTE_NODE_TYPE,
+        EFFECT_REROUTE_NODE_TYPE,
+    ] {
+        assert!(!palette_ids.contains(stable_id));
+    }
+}
+
+#[test]
 fn english_and_chinese_project_the_same_stable_node_ids() {
     let builtin = build_builtin_node_system().unwrap();
     let registry = builtin.registry;

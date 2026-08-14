@@ -5,6 +5,7 @@
 import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
 import { DEFAULT_EDITOR_GROUP_ID } from '@/features/core/layout/workbenchLayoutDefaults';
 import { useEditorGroupPlacement } from './useEditorGroupPlacement';
+import { createGraphSelection } from '@/features/core/layout/layoutTabQueries';
 
 export function useActiveEditorGroup(overrideGroupId?: string | null) {
   const focusedEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
@@ -19,6 +20,11 @@ export function useActiveEditorGroup(overrideGroupId?: string | null) {
     activeTabId: placement.activeTabId,
     tabs: placement.tabs,
     selectedNodeIds: placement.selectedNodeIds,
+    selectedConnectionIds: placement.selectedConnectionIds,
+    selection: createGraphSelection(
+      placement.selectedNodeIds,
+      placement.selectedConnectionIds,
+    ),
     node,
   };
 }

@@ -427,7 +427,7 @@ fn project_events_contract() -> Value {
         delta: GraphDeltaEvent {
             graph_path: GraphResourcePath(GRAPH_PATH.into()),
             from_revision: ResourceRevision::new(7),
-            to_revision: ResourceRevision::new(8),
+            to_revision: ResourceRevision::new(7),
             caused_by: Some(operation_id),
             payload: GraphDocumentPatch::new([]),
         },

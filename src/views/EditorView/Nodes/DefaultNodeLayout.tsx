@@ -16,6 +16,7 @@ interface DefaultNodeLayoutProps {
   activePinId?: string | null;
   activePin?: PinModel | null;
   graphPath?: string;
+  groupId?: string;
   onAddInput?: (id: string) => void;
   onRemovePin?: (nodeId: string, pinId: string) => void;
   onPinClick?: (pinId: string, direction: "input" | "output") => void;
@@ -36,6 +37,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   activePinId,
   activePin,
   graphPath,
+  groupId,
   onAddInput,
   onRemovePin,
   onPinClick,
@@ -116,6 +118,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                     key={pin.id}
                     {...pin}
                     graphPath={graphPath}
+                    groupId={groupId}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
                     onPinClick={onPinClick}
@@ -135,6 +138,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                     key={pin.id}
                     {...pin}
                     graphPath={graphPath}
+                    groupId={groupId}
                     isActive={activePinId === pin.id}
                     pinDragState={ds}
                     onPinClick={onPinClick}
@@ -158,6 +162,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   key={pin.id}
                   {...pin}
                   graphPath={graphPath}
+                    groupId={groupId}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
                   onPinClick={onPinClick}
@@ -177,6 +182,7 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
                   key={pin.id}
                   {...pin}
                   graphPath={graphPath}
+                    groupId={groupId}
                   isActive={activePinId === pin.id}
                   pinDragState={ds}
                   onPinClick={onPinClick}

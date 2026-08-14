@@ -1,17 +1,31 @@
 import type { RefObject } from 'react';
 import { useGestureStore } from '@/features/core/gesture';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
+import {
+  getCanvasInteraction,
+  useGraphInteractionStore,
+  type CanvasInteraction,
+  type CanvasInteractionScope,
+} from '@/features/core/graphInteraction/graphInteractionStore';
 import { commitViewport, setViewportLive, editorViewportScope } from '@/features/core/viewport';
 import { applyCanvasDetailFocus } from '@/features/core/editor/detail/detailFocusCommands';
 import { executeCommand } from '@/features/core/history';
-import type { Pin } from '@/shared/types/domain';
 import type { EditorViewport } from '@/features/core/viewport';
-import type { EditorGesture } from '@/shared/types/ui';
 import { logger } from '@/utils/appLogger';
+import type { CanvasInteractionHandlers } from './canvasMutationContracts';
 import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from '@/app/appConfig/default';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
-import { getCanvasWorldPoint, getGestureScreenMovement, resolveTabId } from './canvasInteractionUtils';
+import { getCanvasWorldPoint, resolveTabId } from './canvasInteractionUtils';
+import { resolveConnectionTarget, type ConnectionCandidate } from './connectionInteraction';
+import {
+  cancelCanvasInteraction,
+  registerCanvasInteractionCleanup,
+  startCanvasInteraction,
+} from './canvasInteractionCleanup';
+import {
+  clearCanvasPointerScope,
+  getCanvasPointerScope,
+} from './pointerScope';
 import {
   collectSelectionHitTargets,
   hitTestSelection,
@@ -19,265 +33,308 @@ import {
   syncSelectionPreview,
   clearAllSelectionPreview,
 } from './selectionHitTargets';
-import {
-  getSelectionSession,
-  updateSelectionSession,
-  endSelectionSession,
-  abortSelectionSession,
-  getSelectionPreviewIds,
-  setSelectionPreviewIds,
-  selectionScreenRect,
-  selectionSessionMoved,
-} from './selectionSession';
 
 export type CanvasPointerLoopDeps = {
   activeGroupIdRef: RefObject<string>;
   activeTabIdRef: RefObject<string | null>;
   viewportRef: RefObject<EditorViewport>;
   setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
-  connectPins: (groupId: string, pinA: string, pinB: string) => Promise<void>;
   persistViewport: (scope?: { groupId: string; graphPath: string } | null) => void;
   setContextMenu: (menu: { x: number; y: number; visible: boolean }) => void;
-  setPendingConnection: (pin: Pin | null) => void;
-};
+} & Pick<CanvasInteractionHandlers, 'submitConnection' | 'reportMutationFailure'>;
 
 let attachCount = 0;
 let removeWindowListeners: (() => void) | null = null;
 const depsRef: { current: CanvasPointerLoopDeps | null } = { current: null };
+export { registerCanvasPointerScope } from './pointerScope';
+
+function activeInteraction(deps: CanvasPointerLoopDeps): [CanvasInteractionScope, CanvasInteraction] | null {
+  const scope = getCanvasPointerScope() ?? (() => {
+    const groupId = deps.activeGroupIdRef.current;
+    const graphPath = resolveTabId(groupId, deps.activeTabIdRef);
+    return graphPath ? { graphPath, groupId } : null;
+  })();
+  if (!scope) return null;
+  return [scope, getCanvasInteraction(useGraphInteractionStore.getState(), scope.graphPath, scope.groupId)];
+}
+
+
+function selectionRect(session: Extract<CanvasInteraction, { type: 'selecting' }>['session']) {
+  return {
+    x1: Math.min(session.startX, session.currentX),
+    y1: Math.min(session.startY, session.currentY),
+    x2: Math.max(session.startX, session.currentX),
+    y2: Math.max(session.startY, session.currentY),
+  };
+}
 
 function installPointerLoop(): () => void {
   let rAFId: number | null = null;
   let latestEvent: PointerEvent | null = null;
-
-  const processSelectionFrame = (e: PointerEvent) => {
-    const session = getSelectionSession();
-    if (!session.active) return;
-
-    updateSelectionSession(e.clientX, e.clientY);
-    const canvasEl = queryCanvasElement(session.groupId);
-    if (!canvasEl) return;
-
-    const rect = selectionScreenRect({
-      ...session,
-      currentX: e.clientX,
-      currentY: e.clientY,
-    });
-    const newSelectedIds = hitTestSelection(collectSelectionHitTargets(canvasEl), rect);
-    syncSelectionPreview(canvasEl, getSelectionPreviewIds(), newSelectedIds);
-    setSelectionPreviewIds(newSelectedIds);
+  const selectionPreviewIds = new Map<string, string[]>();
+  const selectionCleanupRegistrations = new Map<string, () => void>();
+  const scopeKey = (scope: CanvasInteractionScope) => `${scope.graphPath}\u0000${scope.groupId}`;
+  const ensureSelectionCleanup = (scope: CanvasInteractionScope) => {
+    const key = scopeKey(scope);
+    if (selectionCleanupRegistrations.has(key)) return;
+    const unregister = registerCanvasInteractionCleanup(
+      { ...scope, interactionType: 'selecting' },
+      () => {
+        const canvas = queryCanvasElement(scope.groupId);
+        if (canvas) clearAllSelectionPreview(canvas);
+        selectionPreviewIds.delete(key);
+        selectionCleanupRegistrations.delete(key);
+      },
+    );
+    selectionCleanupRegistrations.set(key, unregister);
   };
 
-  const processGestureFrame = (e: PointerEvent) => {
+  const processConnectionFrame = (
+    graphPath: string,
+    interaction: Extract<CanvasInteraction, { type: 'drawingConnection' | 'movingConnections' }>,
+    event: PointerEvent,
+  ) => {
+    const { session } = interaction;
+    const canvas = queryCanvasElement(session.groupId);
+    if (!canvas) return;
+    const bucket = useGraphDataStore.getState().graphEntities[graphPath];
+    if (!bucket) {
+      cancelCanvasInteraction(graphPath, session.groupId);
+      clearCanvasPointerScope(graphPath);
+      return;
+    }
+    const candidates: ConnectionCandidate[] = [];
+    canvas?.querySelectorAll<HTMLElement>('[data-pin-id]').forEach((element) => {
+      const pinId = element.dataset.pinId;
+      const pin = pinId ? bucket?.pins[pinId] : undefined;
+      if (!pin) return;
+      const rect = element.getBoundingClientRect();
+      candidates.push({
+        pin,
+        center: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+        connectionIds: bucket.pinConnections[pin.id] ?? [],
+      });
+    });
+    const target = resolveConnectionTarget({
+      source: session.source,
+      sourceConnectionIds: bucket.pinConnections[session.source.id] ?? [],
+      pointer: { x: event.clientX, y: event.clientY },
+      candidates,
+    });
+    const pointerWorld = getCanvasWorldPoint(
+      session.groupId,
+      graphPath,
+      event.clientX,
+      event.clientY,
+    );
+    const snappedWorld = target.snappedCenter
+      ? getCanvasWorldPoint(session.groupId, graphPath, target.snappedCenter.x, target.snappedCenter.y)
+      : null;
+    useGraphInteractionStore.getState().updateInteraction(graphPath, session.groupId, (current) =>
+      current.type === interaction.type
+        ? {
+            ...current,
+            session: {
+              ...current.session,
+              screenX: event.clientX,
+              screenY: event.clientY,
+              worldX: pointerWorld.x,
+              worldY: pointerWorld.y,
+              hoveredTarget: target.hoveredTarget,
+              snappedTarget: target.snappedTarget,
+              snappedWorld,
+              feedback: target.feedback,
+            },
+          }
+        : current);
+  };
+
+  const processFrame = (event: PointerEvent) => {
     const deps = depsRef.current;
     if (!deps) return;
+    const active = activeInteraction(deps);
+    if (!active) return;
+    const [scope, interaction] = active;
+    const { graphPath } = scope;
+    const store = useGraphInteractionStore.getState();
 
-    const g = useGestureStore.getState().gesture;
-    if (!g) return;
-
-    let nextGesture: EditorGesture = null;
-
-    if (g.type === 'pan') {
-      const dx = e.clientX - g.lastX;
-      const dy = e.clientY - g.lastY;
-      const layoutGroupId = g.groupId || deps.activeGroupIdRef.current;
-      const graphPath = resolveTabId(layoutGroupId, deps.activeTabIdRef);
-      if (graphPath) {
-        setViewportLive(editorViewportScope(layoutGroupId, graphPath), (prev) => ({
-          ...prev,
-          x: prev.x + dx,
-          y: prev.y + dy,
-        }));
+    if (interaction.type === 'panning') {
+      const session = interaction.session;
+      const dx = event.clientX - session.lastX;
+      const dy = event.clientY - session.lastY;
+      setViewportLive(editorViewportScope(session.groupId, graphPath), (viewport) => ({
+        ...viewport,
+        x: viewport.x + dx,
+        y: viewport.y + dy,
+      }));
+      store.updateInteraction(graphPath, session.groupId, () => ({
+        type: 'panning',
+        session: { ...session, lastX: event.clientX, lastY: event.clientY, moved: true },
+      }));
+    } else if (interaction.type === 'selecting') {
+      const session = { ...interaction.session, currentX: event.clientX, currentY: event.clientY };
+      const key = scopeKey(scope);
+      ensureSelectionCleanup(scope);
+      const canvas = queryCanvasElement(session.groupId);
+      if (canvas) {
+        const ids = hitTestSelection(collectSelectionHitTargets(canvas), selectionRect(session));
+        syncSelectionPreview(canvas, selectionPreviewIds.get(key) ?? [], ids);
+        selectionPreviewIds.set(key, ids);
       }
-      nextGesture = { ...g, lastX: e.clientX, lastY: e.clientY, moved: true };
-    } else if (g.type === 'connect') {
-      const gid = g.groupId || deps.activeGroupIdRef.current;
-      const tid = resolveTabId(gid, deps.activeTabIdRef);
-      const { x: worldX, y: worldY } = getCanvasWorldPoint(gid, tid, e.clientX, e.clientY);
-      nextGesture = { ...g, currentX: e.clientX, currentY: e.clientY, worldX, worldY };
-      useGestureStore.getState().setGesture(nextGesture);
-      nextGesture = null;
-    } else if (g.type === 'drag') {
-      const viewport = deps.viewportRef.current ?? { scale: 1 };
-      const scale = viewport.scale || 1;
-      const dx = (e.clientX - g.lastX) / scale;
-      const dy = (e.clientY - g.lastY) / scale;
-
-      let moved = g.moved;
-      let lastX = g.lastX;
-      let lastY = g.lastY;
-      const prevDelta = g.dragDelta || { x: 0, y: 0 };
-      let dragDelta = prevDelta;
-
-      if (Math.abs(dx) > 0.01 || Math.abs(dy) > 0.01) {
-        moved = true;
-        dragDelta = { x: prevDelta.x + dx, y: prevDelta.y + dy };
-        lastX = e.clientX;
-        lastY = e.clientY;
+      store.updateInteraction(graphPath, session.groupId, () => ({ type: 'selecting', session }));
+    } else if (interaction.type === 'draggingNodes') {
+      const session = interaction.session;
+      const scale = deps.viewportRef.current?.scale || 1;
+      const dx = (event.clientX - session.lastX) / scale;
+      const dy = (event.clientY - session.lastY) / scale;
+      const delta = { x: session.delta.x + dx, y: session.delta.y + dy };
+      for (const nodeId of session.nodeIds) {
+        const position = useGraphDataStore.getState().getGraphNode(graphPath, nodeId)?.position;
+        if (position) store.setPositionOverride(graphPath, nodeId, {
+          x: position.x + delta.x,
+          y: position.y + delta.y,
+        });
       }
-      nextGesture = { ...g, moved, lastX, lastY, dragDelta };
-
-      const gid = g.groupId || deps.activeGroupIdRef.current;
-      const graphPath = resolveTabId(gid, deps.activeTabIdRef);
-      if (graphPath) {
-        const graphStore = useGraphDataStore.getState();
-        const interactionStore = useGraphInteractionStore.getState();
-        for (const nodeId of g.dragNodeIds ?? []) {
-          const committed = graphStore.getGraphNode(graphPath, nodeId)?.position;
-          if (!committed) continue;
-          interactionStore.setPositionOverride(graphPath, nodeId, {
-            x: committed.x + dragDelta.x,
-            y: committed.y + dragDelta.y,
-          });
-        }
-      }
-    }
-
-    if (nextGesture) {
-      useGestureStore.getState().setGesture(nextGesture);
+      store.updateInteraction(graphPath, session.groupId, () => ({
+        type: 'draggingNodes',
+        session: { ...session, moved: true, lastX: event.clientX, lastY: event.clientY, delta },
+      }));
+    } else if (interaction.type === 'drawingConnection' || interaction.type === 'movingConnections') {
+      processConnectionFrame(graphPath, interaction, event);
     }
   };
 
   const flushMove = () => {
-    if (!latestEvent) return;
-    const e = latestEvent;
+    const event = latestEvent;
     latestEvent = null;
     rAFId = null;
-
-    if (getSelectionSession().active) {
-      processSelectionFrame(e);
-    } else {
-      processGestureFrame(e);
-    }
+    if (event) processFrame(event);
   };
 
-  const onMove = (e: PointerEvent) => {
-    latestEvent = e;
-    if (rAFId === null) {
-      rAFId = requestAnimationFrame(flushMove);
-    }
+  const onMove = (event: PointerEvent) => {
+    latestEvent = event;
+    if (rAFId === null) rAFId = requestAnimationFrame(flushMove);
   };
 
-  const finalizeSelection = (e: PointerEvent) => {
-    const deps = depsRef.current;
-    const session = getSelectionSession();
-    if (!session.active || !deps) return false;
-
-    const gid = session.groupId;
-    const canvasEl = queryCanvasElement(gid);
-    const finalSession = { ...session, currentX: e.clientX, currentY: e.clientY };
-    const hadMovement = selectionSessionMoved(finalSession, CONTEXT_MENU_MOVE_THRESHOLD_PX);
-    const rect = selectionScreenRect(finalSession);
-    const newSelectedIds = canvasEl
-      ? hitTestSelection(collectSelectionHitTargets(canvasEl), rect)
-      : [];
-
-    if (canvasEl) clearAllSelectionPreview(canvasEl);
-    endSelectionSession();
-
-    if (hadMovement) {
-      deps.setSelectedNodeIds(newSelectedIds, gid);
-      applyCanvasDetailFocus({ type: 'box-select', groupId: gid, selectedIds: newSelectedIds });
-    } else {
-      if (!session.preserveSelection) deps.setSelectedNodeIds([], gid);
-      applyCanvasDetailFocus({ type: 'blank-click', groupId: gid });
-    }
-
-    return true;
-  };
-
-  const onUp = (e: PointerEvent) => {
+  const onUp = (event: PointerEvent) => {
     const deps = depsRef.current;
     if (!deps) return;
-
-    if (rAFId) {
+    if (rAFId !== null) {
       cancelAnimationFrame(rAFId);
       rAFId = null;
     }
     latestEvent = null;
+    const active = activeInteraction(deps);
+    if (!active) return;
+    const [scope] = active;
+    const { graphPath, groupId } = scope;
+    processFrame(event);
+    const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
+    const store = useGraphInteractionStore.getState();
 
-    finalizeSelection(e);
-    processGestureFrame(e);
-
-    const g = useGestureStore.getState().gesture;
-    if (!g) return;
-
-    if (g.type === 'pan') {
-      if (!g.moved && e.button === 2) {
-        deps.setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
-      } else if (g.moved) {
-        const layoutGroupId = g.groupId || deps.activeGroupIdRef.current;
-        const graphPath = resolveTabId(layoutGroupId, deps.activeTabIdRef);
-        if (graphPath) {
-          commitViewport(editorViewportScope(layoutGroupId, graphPath));
-          deps.persistViewport({ groupId: layoutGroupId, graphPath });
-        }
-      }
-    } else if (g.type === 'connect') {
-      const gid = g.groupId || deps.activeGroupIdRef.current;
-      const target = (e.target as HTMLElement).closest('[data-pin-id]');
-      if (target) deps.connectPins(gid, g.startPin.id, target.getAttribute('data-pin-id')!);
-      else {
-        deps.setPendingConnection(g.startPin);
-        deps.setContextMenu({ x: e.clientX, y: e.clientY, visible: true });
-      }
-    } else if (g.type === 'drag') {
-      const gid = g.groupId || deps.activeGroupIdRef.current;
-      if (g.moved) {
-        const dragIds = g.dragNodeIds || [];
-        const graphPath = resolveTabId(gid, deps.activeTabIdRef);
-        if (graphPath && dragIds.length > 0) {
-          const overrides = useGraphInteractionStore.getState().positionOverrides[graphPath] ?? {};
-          const positions = dragIds.flatMap((nodeId) => {
-            const position = overrides[nodeId];
-            return position ? [{ nodeId, position }] : [];
+    if (interaction.type === 'drawingConnection' || interaction.type === 'movingConnections') {
+      const { source, snappedTarget, feedback } = interaction.session;
+      if (snappedTarget && feedback && feedback.kind !== 'invalid') {
+        const moving = interaction.type === 'movingConnections';
+        const intentType = moving ? 'moveConnections' : 'connect';
+        const outcome = deps.submitConnection({
+          graphPath,
+          intent: intentType,
+          sourcePinId: source.id,
+          targetPinId: snappedTarget.id,
+        });
+        void Promise.resolve(outcome)
+          .then((result) => {
+            if (result.status === 'failed' && result.message) {
+              deps.reportMutationFailure({ graphPath, intent: intentType, message: result.message });
+            }
+          })
+          .catch(() => {
+            logger.graph.warn(
+              `Graph mutation command failed graphPath=${graphPath} intent=${intentType}`,
+              'CanvasInteraction',
+            );
           });
-          if (positions.length === 0) {
-            useGraphInteractionStore.getState().clearPositionOverrides(graphPath, dragIds);
-          } else {
-            void executeCommand(graphPath, 'MoveNodes', { positions })
-              .then((applied) => {
-                if (!applied) logger.graph.warn('MoveNodes command was not applied', 'CanvasInteraction');
-              })
-              .catch((err) =>
-                logger.graph.warn(
-                  `MoveNodes command failed: ${err instanceof Error ? err.message : String(err)}`,
-                  'CanvasInteraction',
-                ),
-              )
-              .finally(() => {
-                useGraphInteractionStore.getState().clearPositionOverrides(graphPath, dragIds);
-              });
-          }
-        }
+        cancelCanvasInteraction(graphPath, groupId);
+      } else if (interaction.type === 'drawingConnection'
+        && !interaction.session.hoveredTarget
+        && !interaction.session.feedback) {
+        startCanvasInteraction(graphPath, {
+          type: 'pendingNodeCreation',
+          session: {
+            groupId: interaction.session.groupId,
+            graphPath,
+            source,
+            screenX: event.clientX,
+            screenY: event.clientY,
+          },
+        });
+        deps.setContextMenu({ x: event.clientX, y: event.clientY, visible: true });
       } else {
-        applyCanvasDetailFocus({ type: 'node-click', groupId: gid, nodeId: g.nodeId! });
+        cancelCanvasInteraction(graphPath, groupId);
       }
+      clearCanvasPointerScope();
+      return;
     }
 
-    useGestureStore.getState().endConnection();
-    const hadMovement = getGestureScreenMovement(g, deps.viewportRef.current?.scale ?? 1);
-    useGestureStore.getState().clearGesture(hadMovement);
+    if (interaction.type === 'panning') {
+      if (!interaction.session.moved && event.button === 2) {
+        deps.setContextMenu({ x: event.clientX, y: event.clientY, visible: true });
+      } else if (interaction.session.moved) {
+        commitViewport(editorViewportScope(interaction.session.groupId, graphPath));
+        deps.persistViewport({ groupId: interaction.session.groupId, graphPath });
+      }
+      useGestureStore.getState().clearGesture(interaction.session.moved);
+      cancelCanvasInteraction(graphPath, groupId);
+    } else if (interaction.type === 'selecting') {
+      const session = interaction.session;
+      const ids = selectionPreviewIds.get(scopeKey(scope)) ?? [];
+      const moved = Math.abs(session.currentX - session.startX) > CONTEXT_MENU_MOVE_THRESHOLD_PX
+        || Math.abs(session.currentY - session.startY) > CONTEXT_MENU_MOVE_THRESHOLD_PX;
+      if (moved) {
+        deps.setSelectedNodeIds(ids, session.groupId);
+        applyCanvasDetailFocus({ type: 'box-select', groupId: session.groupId, selectedIds: ids });
+      } else {
+        if (!session.preserveSelection) deps.setSelectedNodeIds([], session.groupId);
+        applyCanvasDetailFocus({ type: 'blank-click', groupId: session.groupId });
+      }
+      cancelCanvasInteraction(graphPath, groupId);
+    } else if (interaction.type === 'draggingNodes') {
+      const session = interaction.session;
+      if (session.moved) {
+        const overrides = store.positionOverrides[graphPath] ?? {};
+        const positions = session.nodeIds.flatMap((nodeId) =>
+          overrides[nodeId] ? [{ nodeId, position: overrides[nodeId] }] : []);
+        if (positions.length > 0) void Promise.resolve(executeCommand(graphPath, 'MoveNodes', { positions }))
+          .catch(() => logger.graph.warn(
+            `MoveNodes command failed graphPath=${graphPath}`,
+            'CanvasInteraction',
+          ))
+          .finally(() => store.clearPositionOverrides(graphPath, session.nodeIds));
+      } else {
+        applyCanvasDetailFocus({ type: 'node-click', groupId: session.groupId, nodeId: session.nodeId });
+      }
+      store.finishInteraction(graphPath, groupId);
+    }
+    clearCanvasPointerScope();
   };
 
   const cleanupPointerMove = addGlobalEventListener(window, 'pointermove', onMove);
   const cleanupPointerUp = addGlobalEventListener(window, 'pointerup', onUp);
-
   return () => {
     cleanupPointerMove();
     cleanupPointerUp();
-    if (rAFId) cancelAnimationFrame(rAFId);
-    const session = getSelectionSession();
-    if (session.active) abortSelectionSession(session.groupId);
+    if (rAFId !== null) cancelAnimationFrame(rAFId);
+    for (const unregister of selectionCleanupRegistrations.values()) unregister();
+    selectionCleanupRegistrations.clear();
+    clearCanvasPointerScope();
   };
 }
 
-/** One window-level pointer loop shared by all canvases (ref-counted). */
 export function attachCanvasPointerLoop(deps: CanvasPointerLoopDeps): () => void {
   depsRef.current = deps;
   attachCount += 1;
-  if (attachCount === 1) {
-    removeWindowListeners = installPointerLoop();
-  }
+  if (attachCount === 1) removeWindowListeners = installPointerLoop();
   return () => {
     attachCount -= 1;
     if (attachCount === 0 && removeWindowListeners) {

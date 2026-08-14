@@ -39,6 +39,7 @@ export function useEdgeDragPreview(
   svgRef: React.RefObject<SVGSVGElement | null>,
   edges: EdgeData[],
   getPinWorldPos: (pinId: string) => { x: number; y: number } | null,
+  scope: { graphPath: string; groupId: string },
 ): void {
   const edgesRef = useRef(edges);
   const getPinWorldPosRef = useRef(getPinWorldPos);
@@ -52,7 +53,7 @@ export function useEdgeDragPreview(
       const svg = svgRef.current;
       if (!svg) return;
 
-      const preview = getDragPreview();
+      const preview = getDragPreview(scope);
       const getPos = getPinWorldPosRef.current;
       const currentEdges = edgesRef.current;
 
@@ -68,5 +69,5 @@ export function useEdgeDragPreview(
     };
 
     return subscribeDragPreview(sync);
-  }, [svgRef]);
+  }, [svgRef, scope.graphPath, scope.groupId]);
 }

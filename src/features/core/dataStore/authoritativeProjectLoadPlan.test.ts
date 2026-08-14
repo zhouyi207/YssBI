@@ -66,6 +66,7 @@ describe('authoritative project load layout normalization', () => {
               tabIds: ['settings', stalePath, validPath],
               activeTabId: validPath,
               selectedNodeIds: ['node-kept'],
+              selectedConnectionIds: [],
               selectedTabIds: [validPath, stalePath],
             },
           },
@@ -102,6 +103,7 @@ describe('authoritative project load layout normalization', () => {
       tabIds: ['settings', validPath],
       activeTabId: validPath,
       selectedNodeIds: [],
+      selectedConnectionIds: [],
       selectedTabIds: [validPath],
     });
   });
@@ -131,6 +133,7 @@ describe('authoritative project load layout normalization', () => {
               tabIds: ['settings'],
               activeTabId: 'settings',
               selectedNodeIds: [],
+              selectedConnectionIds: [],
               selectedTabIds: ['settings'],
             },
           },
@@ -165,6 +168,7 @@ describe('authoritative project load layout normalization', () => {
           tabIds: ['settings'],
           activeTabId: 'settings',
           selectedNodeIds: [],
+          selectedConnectionIds: [],
           selectedTabIds: ['settings'],
         },
       },

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { EditorGraphMutationDto } from './editorMutation';
 import {
+  parseEditorGraphMutationDto,
   parseGraphDeltaDto,
   parseGraphMutationResultDto,
   parseGraphProjectionReplacementDto,
@@ -16,6 +18,17 @@ const instanceAddress = {
   node_id: nodeId,
   port: { kind: 'instance', template: 'input', instance_id: instanceId },
 };
+const projectedDeclaredAddress = { kind: 'declared' as const, nodeId, portKey: 'value' };
+const phase1Mutations = [
+  { type: 'deleteNodes', payload: { nodeIds: [nodeId] } },
+  { type: 'disconnectConnections', payload: { connectionIds: [connectionId] } },
+  { type: 'disconnectPort', payload: { address: projectedDeclaredAddress } },
+  { type: 'disconnectNode', payload: { nodeId } },
+  {
+    type: 'moveConnections',
+    payload: { source: projectedDeclaredAddress, target: projectedDeclaredAddress },
+  },
+] satisfies EditorGraphMutationDto[];
 const node = {
   id: nodeId,
   node_type: 'core.constant',
@@ -110,7 +123,14 @@ function projectionWithResolvedType(resolvedType: unknown): Record<string, unkno
       instanceKind: 'declared',
       orphan: false,
       canRemove: false,
-      connections: { current: 0, maximum: null, ordered: false, canConnect: true },
+      connections: {
+        current: 0,
+        maximum: null,
+        ordered: false,
+        canAppend: true,
+        canReplace: false,
+        canMove: false,
+      },
       input: null,
       resolvedType,
       resolvedSchema: null,
@@ -152,6 +172,91 @@ function graphResult() {
 }
 
 describe('editor mutation wire parser', () => {
+  it('parses the exact InsertReroute DTO wire shape', () => {
+    const mutation = {
+      type: 'insertReroute',
+      payload: {
+        connectionId: 'edge-1',
+        position: { x: 120, y: 80 },
+      },
+    };
+
+    expect(parseEditorGraphMutationDto(mutation)).toEqual(mutation);
+  });
+
+  it.each([
+    { type: 'insertReroute', payload: { connectionId: '', position: { x: 120, y: 80 } } },
+    { type: 'insertReroute', payload: { connectionId: '   ', position: { x: 120, y: 80 } } },
+    { type: 'unknownReroute', payload: { connectionId: 'edge-1', position: { x: 120, y: 80 } } },
+    { type: 'insertReroute', payload: { connectionId: 'edge-1', position: { x: Infinity, y: 80 } } },
+    { type: 'insertReroute', payload: { connectionId: 'edge-1', position: { x: -Infinity, y: 80 } } },
+    { type: 'insertReroute', payload: { connectionId: 'edge-1', position: { x: 120, y: NaN } } },
+    { type: 'insertReroute', payload: { connectionId: 'edge-1', position: { x: '120', y: 80 } } },
+    { type: 'insertReroute', payload: { connectionId: 1, position: { x: 120, y: 80 } } },
+    { type: 'insertReroute', payload: { connectionId: 'edge-1', position: { x: 120 } } },
+    {
+      type: 'insertReroute',
+      payload: { connectionId: 'edge-1', position: { x: 120, y: 80, z: 0 } },
+    },
+    {
+      type: 'insertReroute',
+      payload: { connectionId: 'edge-1', position: { x: 120, y: 80 }, extra: true },
+    },
+    {
+      type: 'insertReroute',
+      payload: { connectionId: 'edge-1', position: { x: 120, y: 80 } },
+      extra: true,
+    },
+  ])('rejects malformed InsertReroute DTO wire shape %#', (mutation) => {
+    expect(() => parseEditorGraphMutationDto(mutation)).toThrow('InsertReroute');
+  });
+
+  it('exposes all Phase 1 collection and connection intent DTO variants', () => {
+    expect(phase1Mutations.map((mutation) => mutation.type)).toEqual([
+      'deleteNodes',
+      'disconnectConnections',
+      'disconnectPort',
+      'disconnectNode',
+      'moveConnections',
+    ]);
+  });
+
+  it('requires all six exact connection capability fields', () => {
+    const valid = projectionWithResolvedType({
+      display: 'Float64',
+      resolved: true,
+      dataType: { kind: 'Float64' },
+    });
+    const node = (valid.nodes as Array<Record<string, unknown>>)[0];
+    const port = (node.ports as Array<Record<string, unknown>>)[0];
+    const capability = port.connections as Record<string, unknown>;
+
+    expect(parseGraphProjectionReplacementDto({ graphPath, projection: valid }))
+      .toEqual({ graphPath, projection: valid });
+
+    for (const key of ['current', 'maximum', 'ordered', 'canAppend', 'canReplace', 'canMove']) {
+      const malformed = structuredClone(valid);
+      const malformedNode = (malformed.nodes as Array<Record<string, unknown>>)[0];
+      const malformedPort = (malformedNode.ports as Array<Record<string, unknown>>)[0];
+      delete (malformedPort.connections as Record<string, unknown>)[key];
+      expect(() => parseGraphProjectionReplacementDto({ graphPath, projection: malformed }))
+        .toThrow('projection replacement');
+    }
+
+    for (const key of ['canAppend', 'canReplace', 'canMove']) {
+      const malformed = structuredClone(valid);
+      const malformedNode = (malformed.nodes as Array<Record<string, unknown>>)[0];
+      const malformedPort = (malformedNode.ports as Array<Record<string, unknown>>)[0];
+      (malformedPort.connections as Record<string, unknown>)[key] = 'yes';
+      expect(() => parseGraphProjectionReplacementDto({ graphPath, projection: malformed }))
+        .toThrow('projection replacement');
+    }
+
+    capability.extra = false;
+    expect(() => parseGraphProjectionReplacementDto({ graphPath, projection: valid }))
+      .toThrow('projection replacement');
+  });
+
   it('requires an exact structured dataType on every non-null resolved type', () => {
     const malformedResolvedTypes = [
       { display: 'Float64', resolved: true },
@@ -244,6 +349,20 @@ describe('editor mutation wire parser', () => {
     expect(parseGraphDeltaDto(nested)).toEqual(nested);
   });
 
+  it('accepts only empty operations for a same-revision graph delta', () => {
+    const noop = { ...delta(), toRevision: 4, payload: { operations: [] } };
+
+    expect(parseGraphDeltaDto(noop)).toEqual(noop);
+    expect(() => parseGraphDeltaDto({
+      ...noop,
+      payload: { operations: [operations[0]] },
+    })).toThrow('revision');
+    expect(() => parseGraphDeltaDto({
+      ...noop,
+      toRevision: 5,
+    })).toThrow('revision');
+  });
+
   it('rejects malformed graph delta identity, revisions, operations, and extra fields', () => {
     for (const malformedPath of [
       '',
@@ -268,18 +387,21 @@ describe('editor mutation wire parser', () => {
 
   it('requires project identity and exact projection and history fields in graph results', () => {
     const result = graphResult();
-    expect(parseGraphMutationResultDto(result).projectInstanceId).toBe('project-a');
-    expect(() => parseGraphMutationResultDto({ ...result, projectInstanceId: undefined })).toThrow(
-      'projectInstanceId',
-    );
-    expect(() => parseGraphMutationResultDto({ ...result, extra: true })).toThrow('exact');
+    expect(parseGraphMutationResultDto(result, 'project-a').projectInstanceId).toBe('project-a');
+    expect(() => parseGraphMutationResultDto(result, 'project-b')).toThrow('projectInstanceId');
+    expect(() => parseGraphMutationResultDto(
+      { ...result, projectInstanceId: undefined },
+      'project-a',
+    )).toThrow('projectInstanceId');
+    expect(() => parseGraphMutationResultDto({ ...result, extra: true }, 'project-a'))
+      .toThrow('exact');
     expect(() => parseGraphMutationResultDto({
       ...result,
       projectionReplacement: { ...result.projectionReplacement, extra: true },
-    })).toThrow('projection');
+    }, 'project-a')).toThrow('projection');
     expect(() => parseGraphMutationResultDto({
       ...result,
       history: { ...result.history, extra: true },
-    })).toThrow('history');
+    }, 'project-a')).toThrow('history');
   });
 });

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Pin } from '@/shared/types/domain';
+
 import type { DetailFocus } from '../detail/types';
 
 interface ContextMenuState {
@@ -20,8 +20,6 @@ interface EditorStore {
   variablesGraphScopePath: string | null;
   setVariablesGraphScope: (graphPath: string | null) => void;
 
-  pendingConnection: Pin | null;
-  setPendingConnection: (pin: Pin | null) => void;
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
@@ -34,7 +32,4 @@ export const useEditorStore = create<EditorStore>((set) => ({
 
   variablesGraphScopePath: null,
   setVariablesGraphScope: (graphPath) => set({ variablesGraphScopePath: graphPath }),
-
-  pendingConnection: null,
-  setPendingConnection: (pin) => set({ pendingConnection: pin }),
 }));

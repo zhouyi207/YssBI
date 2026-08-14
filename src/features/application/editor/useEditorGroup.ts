@@ -9,12 +9,18 @@ import { useOptionalEditorSessionUi } from './useEditorSessionUi';
 import { useEditorGroupWorkspace } from '@/features/core/editor/hooks/useEditorGroupWorkspace';
 import type { Pin } from '@/shared/types/domain';
 import type { EditorViewport } from '@/features/core/viewport';
+import { useCanvasMutationHandlers } from './useCanvasMutationHandlers';
 import {
   composeEditorGroupSession,
   type EditorGroupInteractionSlice,
   type EditorGroupSession,
   type EditorGroupWorkspaceSlice,
 } from './editorSessionTypes';
+
+type CanvasInteractionProjection = Pick<
+  ReturnType<typeof useCanvasInteraction>,
+  'contextMenu' | 'setContextMenu' | 'pendingConnection' | 'setPendingConnection'
+>;
 
 export type UseEditorGroupOptions = {
   /** Mount the global canvas pointer loop. Only the active group's Canvas should pass true. */
@@ -29,7 +35,7 @@ const noopConnectPins = async () => {};
  * Group-scoped editor API: stable commands + shared resources + per-group workspace.
  * Canvas handlers are always wired so preview groups can activate on first pointerdown.
  */
-export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSession {
+export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSession & CanvasInteractionProjection {
   const commands = useEditorSessionCommandsContext();
   const shared = useEditorSessionSharedContext();
   const workspace = useEditorGroupWorkspace();
@@ -37,13 +43,16 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
   const withCanvasUi = options?.withCanvasUi ?? withCanvasPointerLoop;
 
   const ui = useOptionalEditorSessionUi(withCanvasUi);
+  const canvasMutationHandlers = useCanvasMutationHandlers();
 
   const canvasInteraction = useCanvasInteraction({
     activeGroupIdRef: commands.activeGroupIdRef as React.RefObject<string>,
     activeTabIdRef: commands.activeTabIdRef,
     viewportRef: commands.viewportRef,
     setSelectedNodeIds: commands.setSelectedNodeIds,
+    handlers: canvasMutationHandlers,
     enabled: withCanvasPointerLoop,
+    uiEnabled: withCanvasUi,
   });
 
   const { groupId } = workspace;
@@ -90,6 +99,8 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
       tabs: workspace.tabs,
       activeTabId: workspace.activeTabId,
       selectedNodeIds: workspace.selectedNodeIds,
+      selectedConnectionIds: workspace.selectedConnectionIds,
+      selection: workspace.selection,
     }),
     [workspace],
   );
@@ -100,6 +111,7 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
       onNodePointerDown: wrappedOnNodePointerDown,
       onPinPointerDown: wrappedOnPinPointerDown,
       connectPins: withCanvasPointerLoop ? canvasInteraction.connectPins : noopConnectPins,
+      insertRerouteAtConnection: canvasInteraction.insertRerouteAtConnection,
       setCanvas: wrappedSetCanvas,
     }),
     [
@@ -108,9 +120,18 @@ export function useEditorGroup(options?: UseEditorGroupOptions): EditorGroupSess
       wrappedOnNodePointerDown,
       wrappedOnPinPointerDown,
       canvasInteraction.connectPins,
+      canvasInteraction.insertRerouteAtConnection,
       wrappedSetCanvas,
     ],
   );
 
-  return composeEditorGroupSession(shared, ui, commands, workspaceSlice, interaction);
+  return Object.assign(
+    composeEditorGroupSession(shared, ui, commands, workspaceSlice, interaction),
+    {
+      contextMenu: canvasInteraction.contextMenu,
+      setContextMenu: canvasInteraction.setContextMenu,
+      pendingConnection: canvasInteraction.pendingConnection,
+      setPendingConnection: canvasInteraction.setPendingConnection,
+    },
+  );
 }

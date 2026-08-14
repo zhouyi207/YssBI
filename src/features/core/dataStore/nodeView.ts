@@ -6,6 +6,8 @@ import type { NodeData, PinData, PinView } from '@/shared/types/store/graph';
 import type { UINode } from '@/shared/types/ui';
 import { derivePinConnectionView } from './pinLinks';
 
+export const REROUTE_NODE_STYLE_ID = 'builtin.reroute';
+
 export interface UiNodePinSlice {
   pin: PinData;
   connectionIds: string[];
@@ -17,9 +19,13 @@ export interface ToUiNodeOptions {
   pins: UiNodePinSlice[];
 }
 
-/** math 布局无独立 header 区域 */
+export function uiNodeIsReroute(node: Pick<UINode, 'uiStyle'>): boolean {
+  return node.uiStyle === REROUTE_NODE_STYLE_ID;
+}
+
+/** math and compact reroute layouts have no independent header area. */
 export function uiNodeHasNoHeader(node: Pick<UINode, 'uiStyle'>): boolean {
-  return node.uiStyle === 'math';
+  return node.uiStyle === 'math' || uiNodeIsReroute(node);
 }
 
 /** 由 store 节点数据与 graph-scoped pin 切片构建画布节点视图 */

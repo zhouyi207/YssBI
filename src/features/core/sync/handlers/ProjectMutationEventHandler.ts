@@ -1,8 +1,8 @@
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { getPendingMutation } from '@/features/application/editorMutation/pendingMutationRegistry';
+import { syncApplicationEventPort } from '../applicationEventPort';
+import { pendingMutationGraphPath } from '@/features/core/history/pendingMutationPort';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useNodeCatalogStore } from '@/features/core/nodeCatalog/nodeCatalogStore';
-import { invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
+
 import type { GraphDeltaDto } from '@/shared/types/dto/editorMutation';
 import { BaseEventHandler } from './BaseEventHandler';
 import type {
@@ -69,14 +69,14 @@ export class GraphDeltaHandler extends BaseEventHandler<GraphDeltaEventPayload> 
     const identity = captureCurrentProjectEventIdentity(parsed.projectInstanceId);
     if (!identity) return;
 
-    const pending = delta.causedBy ? getPendingMutation(delta.causedBy) : undefined;
-    if (pending?.graphPath === delta.graphPath) return;
+    const pendingGraphPath = delta.causedBy ? pendingMutationGraphPath(delta.causedBy) : undefined;
+    if (pendingGraphPath === delta.graphPath) return;
 
     const current = useGraphDataStore.getState().graphEntities[delta.graphPath];
     if (current && delta.toRevision <= current.sourceRevision) return;
     if (!isCurrentProjectIdentity(identity)) return;
 
-    void invalidateGraphProjection(delta.graphPath);
+    syncApplicationEventPort().graphDelta(delta.graphPath);
   }
 }
 
@@ -93,9 +93,7 @@ export class ResourceMutationCommittedHandler extends BaseEventHandler<ResourceM
     const committed = parsed.result;
     const identity = captureCurrentProjectEventIdentity(committed.projectInstanceId);
     if (!identity) return;
-    void projectPublicationCoordinator.submit({
-      result: committed,
-    }).then(() => {
+    void syncApplicationEventPort().resourceMutationCommitted(committed).then(() => {
       if (!isCurrentProjectIdentity(identity)) return;
       useNodeCatalogStore.getState().observeResourcePublication(
         committed.projectInstanceId,

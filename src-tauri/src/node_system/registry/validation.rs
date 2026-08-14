@@ -331,19 +331,28 @@ fn validate_node(
         node: protocol.type_id.clone(),
         reason,
     };
-    match (&node.implementation, node.structural_role) {
-        (Some(implementation), None)
+    match (
+        &node.implementation,
+        node.structural_role,
+        node.transparent_role,
+    ) {
+        (Some(implementation), None, None)
             if implementation.capability() == ImplementationKind::CompilerLowering => {}
-        (Some(_), None) => {
+        (Some(_), None, None) => {
             return Err(fail(
                 "leaf implementation does not provide lowerer capability".into(),
             ));
         }
-        (None, Some(_)) => {}
-        (None, None) => return Err(fail("node has no executable interpretation".into())),
-        (Some(_), Some(_)) => {
+        (None, Some(_), None) | (None, None, Some(_)) => {}
+        (None, None, None) => return Err(fail("node has no executable interpretation".into())),
+        (Some(_), Some(_), None) => {
             return Err(fail(
                 "leaf implementation and structural role are mutually exclusive".into(),
+            ));
+        }
+        _ => {
+            return Err(fail(
+                "leaf, structural, and transparent behaviors are mutually exclusive".into(),
             ));
         }
     }

@@ -8,4 +8,4 @@ Task 1: complete (no commit; focused tests 72/72; review clean)
 Task 2: complete (no commit; focused tests 20/20; review approved; minor: extra blank lines in three tests)
 Task 3: complete (no commit; focused tests 51/51; typecheck passed; review clean)
 Task 4: complete (no commit; focused tests 76/76; architecture tests 79/79; typecheck passed; review approved; minor: report header omits architecture test file)
-Task 5: pending
+Task 5: complete (fresh frontend focused verification and typecheck passed; one pre-existing projectFilesystemContract failure recorded separately)

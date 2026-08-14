@@ -219,6 +219,7 @@ function prepareTabs(
       tabIds: mergedIds,
       activeTabId: activeTabId ?? mergedIds[mergedIds.length - 1] ?? null,
       selectedNodeIds: [],
+      selectedConnectionIds: [],
       selectedTabIds,
     },
   };

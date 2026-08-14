@@ -21,6 +21,11 @@ pub(crate) use builtin::{
     builtin_bundle_parts_for_test, register_builtin_nominal_validators_for_test,
     validate_builtin_bundle_for_test,
 };
+pub(crate) const DATA_REROUTE_NODE_TYPE: &str = "yssbi.reroute.data";
+pub(crate) const CONTROL_REROUTE_NODE_TYPE: &str = "yssbi.reroute.control";
+pub(crate) const EFFECT_REROUTE_NODE_TYPE: &str = "yssbi.reroute.effect";
+pub(crate) const REROUTE_INPUT_PORT: &str = "input";
+pub(crate) const REROUTE_OUTPUT_PORT: &str = "output";
 pub use dataframe::DATAFRAME_RESOURCE_SCHEMA_RESOLVER;
 pub(crate) use localization::authoritative_static_descriptor;
 pub use localization::{
@@ -29,6 +34,15 @@ pub use localization::{
     LocalizedCatalogItemDto, LocalizedCategoryDto, LocalizedParameterDto, LocalizedPortDto,
     NodeCreationDescriptor, ResourceBoundCreateArgsDto, normalize_search_text,
 };
+
+pub(in crate::node_system) use core_nodes::reroute::validate_reroute_protocol_contract;
+
+pub(in crate::node_system) fn reroute_node_type_for_kind(
+    kind: crate::node_system::protocol::PortKind,
+) -> crate::node_system::protocol::NodeTypeId {
+    crate::node_system::protocol::NodeTypeId::new(core_nodes::reroute::node_type_for_kind(kind))
+        .expect("built-in reroute node type IDs are valid")
+}
 
 #[cfg(test)]
 mod tests;

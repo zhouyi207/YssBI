@@ -78,10 +78,32 @@ export function resolveEditorGroupId(
   return groupId ?? ctx.activeEditorGroupId ?? null;
 }
 
-function areStringArraysEqual(a: string[], b: string[]): boolean {
-  if (a.length !== b.length) return false;
-  const set = new Set(a);
-  return b.every((value) => set.has(value));
+function normalizeIds(ids: readonly string[]): string[] {
+  return [...new Set(ids)];
+}
+
+function areStringArraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+export interface GraphSelection {
+  nodeIds: Set<string>;
+  connectionIds: Set<string>;
+}
+
+export function createGraphSelection(
+  nodeIds: readonly string[],
+  connectionIds: readonly string[],
+): GraphSelection {
+  return {
+    nodeIds: new Set(nodeIds),
+    connectionIds: new Set(connectionIds),
+  };
+}
+
+export function getEditorGroupGraphSelection(groupId: string): GraphSelection {
+  const placement = useEditorTabStore.getState().getPlacement(groupId);
+  return createGraphSelection(placement.selectedNodeIds, placement.selectedConnectionIds);
 }
 
 /** 更新编辑器组内画布选中节点（目标组由 `resolveEditorGroupId` 解析） */
@@ -93,7 +115,28 @@ export function updateEditorGroupSelectedNodeIds(
   if (!gid) return;
 
   const current = useEditorTabStore.getState().getPlacement(gid).selectedNodeIds;
-  const next = typeof updater === 'function' ? updater(current) : updater;
-  if (areStringArraysEqual(current, next)) return;
+  const next = normalizeIds(typeof updater === 'function' ? updater(current) : updater);
+  const placement = useEditorTabStore.getState().getPlacement(gid);
+  if (areStringArraysEqual(current, next) && placement.selectedConnectionIds.length === 0) return;
   useEditorTabStore.getState().setSelectedNodeIds(gid, next);
+}
+
+export function updateEditorGroupSelectedConnectionIds(
+  updater: string[] | ((prev: string[]) => string[]),
+  targetGroupId?: string | null,
+): void {
+  const gid = resolveEditorGroupId(targetGroupId);
+  if (!gid) return;
+
+  const placement = useEditorTabStore.getState().getPlacement(gid);
+  const current = placement.selectedConnectionIds;
+  const next = normalizeIds(typeof updater === 'function' ? updater(current) : updater);
+  if (areStringArraysEqual(current, next) && placement.selectedNodeIds.length === 0) return;
+  useEditorTabStore.getState().setSelectedConnectionIds(gid, next);
+}
+
+export function clearEditorGroupGraphSelection(targetGroupId?: string | null): void {
+  const gid = resolveEditorGroupId(targetGroupId);
+  if (!gid) return;
+  useEditorTabStore.getState().clearGraphSelection(gid);
 }

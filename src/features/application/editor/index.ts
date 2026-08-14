@@ -17,6 +17,10 @@ export {
 } from './useEditorSessionSlices';
 export { useEditorHistoryAvailability } from './useEditorHistoryAvailability';
 export { useEditorOperations } from './useEditorOperations';
+export {
+  disconnectConnectionsById,
+  insertRerouteAtConnection,
+} from './edgeOperations';
 export { useEditorKeyboard } from './useEditorKeyboard';
 export { useTabManagement } from './useTabManagement';
 export {
