@@ -7,15 +7,296 @@ use crate::node_system::catalog::{
     LocalizedCatalogDto, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
 };
 use crate::node_system::document::{
-    DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath, OrderKey,
-    PortAddress, PortAddressDto, PortRef,
+    DynamicMemberLocator, EditorMutationError, EditorMutationErrorCode, FunctionParameterId,
+    GraphDocument, GraphResourcePath, GraphRevision, OrderKey, PortAddress, PortAddressDto,
+    PortRef,
 };
 use crate::node_system::protocol::{
-    ConnectionsPerPort, NodeProtocol, PortDirection, PortInstances, PortKey, PortKind,
+    ConnectionsPerPort, NodeProtocol, NodeTypeId, PortDirection, PortInstances, PortKey, PortKind,
     TypeConstructorId, TypeExpr, TypeId, TypeParameterId,
 };
 use crate::node_system::registry::NodeRegistry;
 use crate::project::{CatalogMutationResource, CatalogMutationValidationSnapshot};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EditorMutationValidationSnapshot {
+    pub graph_revision: GraphRevision,
+    pub(crate) ports: BTreeMap<PortAddress, EditorMutationPortValidation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct EditorMutationPortValidation {
+    pub direction: PortDirection,
+    pub kind: PortKind,
+    pub orphan: bool,
+    pub port_type: EditorMutationPortType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum EditorMutationPortType {
+    NotApplicable,
+    Ready {
+        expression: TypeExpr,
+        type_parameters: Box<[TypeParameterId]>,
+    },
+    MissingResolvedType,
+    MissingInternalTypeExpr,
+    Unresolved {
+        expression: TypeExpr,
+        type_parameters: Box<[TypeParameterId]>,
+    },
+}
+
+impl EditorMutationValidationSnapshot {
+    pub(crate) fn from_projection(
+        projection: &EditorGraphProjectionDto,
+        registry: &NodeRegistry,
+    ) -> Result<Self, String> {
+        let mut ports = BTreeMap::new();
+        for node in &projection.nodes {
+            let node_type = NodeTypeId::new(node.node_type_id.as_ref())
+                .map_err(|error| format!("invalid projected node type: {error}"))?;
+            let protocol = registry
+                .protocol(&node_type)
+                .ok_or_else(|| format!("projected node type '{node_type}' is not registered"))?;
+            for port in &node.ports {
+                let address: PortAddress = port.address.clone().try_into()?;
+                let kind = kind(port);
+                let port_type = match kind {
+                    PortKind::Control | PortKind::Effect => EditorMutationPortType::NotApplicable,
+                    PortKind::Data => match port.resolved_type.as_ref() {
+                        None => EditorMutationPortType::MissingResolvedType,
+                        Some(summary) => match summary.internal_type_expr.clone() {
+                            None => EditorMutationPortType::MissingInternalTypeExpr,
+                            Some(expression) => {
+                                let type_parameters = protocol.interface.type_parameters.clone();
+                                if type_expr_is_unresolved(&expression, &type_parameters) {
+                                    EditorMutationPortType::Unresolved {
+                                        expression,
+                                        type_parameters,
+                                    }
+                                } else {
+                                    EditorMutationPortType::Ready {
+                                        expression,
+                                        type_parameters,
+                                    }
+                                }
+                            }
+                        },
+                    },
+                };
+                if ports
+                    .insert(
+                        address.clone(),
+                        EditorMutationPortValidation {
+                            direction: direction(port),
+                            kind,
+                            orphan: port.orphan,
+                            port_type,
+                        },
+                    )
+                    .is_some()
+                {
+                    return Err(format!("duplicate projected port address '{address}'"));
+                }
+            }
+        }
+        Ok(Self {
+            graph_revision: GraphRevision::new(projection.basis.graph_revision),
+            ports,
+        })
+    }
+
+    pub(crate) fn validate_connection_endpoints(
+        &self,
+        output: &PortAddress,
+        input: &PortAddress,
+    ) -> Result<(), EditorMutationError> {
+        let (output_port, input_port) = self.connection_ports(output, input)?;
+        validate_port_endpoints(output_port, input_port)
+    }
+
+    pub(crate) fn validate_connection_types(
+        &self,
+        output: &PortAddress,
+        input: &PortAddress,
+    ) -> Result<(), EditorMutationError> {
+        let (output_port, input_port) = self.connection_ports(output, input)?;
+        validate_port_endpoints(output_port, input_port)?;
+        validate_port_types(output_port, input_port)
+    }
+
+    pub(crate) fn validate_create_connection(
+        &self,
+        source: &PortAddress,
+        candidate: &CandidatePort,
+    ) -> Result<(), EditorMutationError> {
+        let source_port = self.ports.get(source).ok_or_else(|| {
+            mutation_validation_error(
+                EditorMutationErrorCode::GraphPortNotFound,
+                format!(
+                    "create-and-connect source port '{source}' is absent from validation snapshot"
+                ),
+            )
+        })?;
+        let candidate_port = EditorMutationPortValidation {
+            direction: candidate.direction,
+            kind: candidate.kind,
+            orphan: false,
+            port_type: candidate_validation_type(candidate),
+        };
+        let (output_port, input_port) = match source_port.direction {
+            PortDirection::Output => (source_port, &candidate_port),
+            PortDirection::Input => (&candidate_port, source_port),
+        };
+        validate_port_endpoints(output_port, input_port)?;
+        validate_port_types(output_port, input_port)
+    }
+
+    fn connection_ports(
+        &self,
+        output: &PortAddress,
+        input: &PortAddress,
+    ) -> Result<(&EditorMutationPortValidation, &EditorMutationPortValidation), EditorMutationError>
+    {
+        let output_port = self.ports.get(output).ok_or_else(|| {
+            mutation_validation_error(
+                EditorMutationErrorCode::GraphPortNotFound,
+                format!("output port '{output}' is absent from validation snapshot"),
+            )
+        })?;
+        let input_port = self.ports.get(input).ok_or_else(|| {
+            mutation_validation_error(
+                EditorMutationErrorCode::GraphPortNotFound,
+                format!("input port '{input}' is absent from validation snapshot"),
+            )
+        })?;
+        Ok((output_port, input_port))
+    }
+}
+
+fn validate_port_endpoints(
+    output: &EditorMutationPortValidation,
+    input: &EditorMutationPortValidation,
+) -> Result<(), EditorMutationError> {
+    if output.orphan || input.orphan {
+        return Err(mutation_validation_error(
+            EditorMutationErrorCode::GraphPortOrphan,
+            "orphan ports cannot be connected",
+        ));
+    }
+    if output.direction != PortDirection::Output || input.direction != PortDirection::Input {
+        return Err(mutation_validation_error(
+            EditorMutationErrorCode::GraphConnectionDirectionMismatch,
+            "connection endpoints have invalid directions",
+        ));
+    }
+    if output.kind != input.kind {
+        return Err(mutation_validation_error(
+            EditorMutationErrorCode::GraphConnectionKindMismatch,
+            "connection endpoint kinds do not match",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_port_types(
+    output: &EditorMutationPortValidation,
+    input: &EditorMutationPortValidation,
+) -> Result<(), EditorMutationError> {
+    match (&output.port_type, &input.port_type) {
+        (EditorMutationPortType::NotApplicable, EditorMutationPortType::NotApplicable) => Ok(()),
+        (
+            EditorMutationPortType::MissingResolvedType
+            | EditorMutationPortType::MissingInternalTypeExpr,
+            _,
+        )
+        | (
+            _,
+            EditorMutationPortType::MissingResolvedType
+            | EditorMutationPortType::MissingInternalTypeExpr,
+        ) => Err(mutation_validation_error(
+            EditorMutationErrorCode::GraphConnectionTypeUnavailable,
+            "connection endpoint projection has no authoritative type expression",
+        )),
+        (EditorMutationPortType::Unresolved { .. }, _)
+        | (_, EditorMutationPortType::Unresolved { .. }) => Err(mutation_validation_error(
+            EditorMutationErrorCode::GraphConnectionTypeUnresolved,
+            "connection endpoint type expression is unresolved",
+        )),
+        (
+            EditorMutationPortType::Ready {
+                expression: source,
+                type_parameters: source_type_parameters,
+            },
+            EditorMutationPortType::Ready {
+                expression: target,
+                type_parameters: target_type_parameters,
+            },
+        ) if crate::node_system::compiler::type_exprs_assignable(
+            source,
+            target,
+            source_type_parameters,
+            target_type_parameters,
+        ) =>
+        {
+            Ok(())
+        }
+        (EditorMutationPortType::Ready { .. }, EditorMutationPortType::Ready { .. }) => {
+            Err(mutation_validation_error(
+                EditorMutationErrorCode::GraphConnectionTypeMismatch,
+                "connection endpoint types are not assignable",
+            ))
+        }
+        _ => Err(mutation_validation_error(
+            EditorMutationErrorCode::GraphConnectionKindMismatch,
+            "connection endpoint kinds do not match",
+        )),
+    }
+}
+
+fn candidate_validation_type(candidate: &CandidatePort) -> EditorMutationPortType {
+    if candidate.kind != PortKind::Data {
+        return EditorMutationPortType::NotApplicable;
+    }
+    if type_expr_is_unresolved(&candidate.value_type, &candidate.type_parameters) {
+        EditorMutationPortType::Unresolved {
+            expression: candidate.value_type.clone(),
+            type_parameters: candidate.type_parameters.clone(),
+        }
+    } else {
+        EditorMutationPortType::Ready {
+            expression: candidate.value_type.clone(),
+            type_parameters: candidate.type_parameters.clone(),
+        }
+    }
+}
+
+fn mutation_validation_error(
+    code: EditorMutationErrorCode,
+    detail: impl Into<Box<str>>,
+) -> EditorMutationError {
+    EditorMutationError {
+        code,
+        detail: detail.into(),
+    }
+}
+
+fn type_expr_is_unresolved(expression: &TypeExpr, parameters: &[TypeParameterId]) -> bool {
+    let declared = parameters.iter().collect::<BTreeSet<_>>();
+    fn visit(expression: &TypeExpr, declared: &BTreeSet<&TypeParameterId>) -> bool {
+        match expression {
+            TypeExpr::Concrete(_) => false,
+            TypeExpr::Generic(id) => !declared.contains(id),
+            TypeExpr::Applied { arguments, .. } | TypeExpr::Union(arguments) => {
+                arguments.iter().any(|argument| visit(argument, declared))
+            }
+            TypeExpr::Unknown => true,
+        }
+    }
+    visit(expression, &declared)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct SourcePort {
@@ -23,6 +304,7 @@ pub(crate) struct SourcePort {
     pub direction: PortDirection,
     pub kind: PortKind,
     pub value_type: TypeExpr,
+    pub type_parameters: Box<[TypeParameterId]>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,18 +326,33 @@ pub(crate) struct DynamicCandidate {
 
 pub(crate) fn source_from_projection(
     projection: &EditorGraphProjectionDto,
+    registry: &NodeRegistry,
     source_port: PortAddressDto,
 ) -> Result<SourcePort, String> {
     let address: PortAddress = source_port.try_into()?;
-    let port = projection
+    let node = projection
         .nodes
         .iter()
-        .flat_map(|node| node.ports.iter())
+        .find(|node| node.node_id.as_ref() == address.node_id.to_string())
+        .ok_or_else(|| {
+            format!(
+                "source node '{}' is not present in the current graph",
+                address.node_id
+            )
+        })?;
+    let port = node
+        .ports
+        .iter()
         .find(|port| port.address == PortAddressDto::from(&address))
         .ok_or_else(|| format!("source port '{address}' is not present in the current graph"))?;
-    if port.orphan || !port.connections.can_connect {
+    let node_type = NodeTypeId::new(node.node_type_id.as_ref())
+        .map_err(|error| format!("invalid projected source node type: {error}"))?;
+    let protocol = registry
+        .protocol(&node_type)
+        .ok_or_else(|| format!("projected source node type '{node_type}' is not registered"))?;
+    if port.orphan || (!port.connections.can_append && !port.connections.can_replace) {
         return Err(format!(
-            "source port '{address}' cannot accept another connection"
+            "source port '{address}' cannot append or replace a connection"
         ));
     }
     Ok(SourcePort {
@@ -67,6 +364,7 @@ pub(crate) fn source_from_projection(
             .as_ref()
             .and_then(|summary| summary.internal_type_expr.clone())
             .unwrap_or(TypeExpr::Unknown),
+        type_parameters: protocol.interface.type_parameters.clone(),
     })
 }
 
@@ -180,17 +478,24 @@ pub(crate) fn compatible_catalog(
     dto
 }
 
-pub(crate) fn first_compatible_port(
+pub(crate) fn connection_candidates(
     graph_path: &GraphResourcePath,
     descriptor: &NodeCreationDescriptor,
     registry: &NodeRegistry,
     resources: &CatalogMutationValidationSnapshot,
     source: &SourcePort,
-) -> Result<CandidatePort, String> {
-    candidate_ports(graph_path, descriptor, registry, resources)?
+) -> Result<Vec<CandidatePort>, String> {
+    let candidates = candidate_ports(graph_path, descriptor, registry, resources)?
         .into_iter()
-        .find(|candidate| ports_are_compatible(source, candidate))
-        .ok_or_else(|| "created node has no compatible initial opposite-direction port".into())
+        .filter(|candidate| {
+            source.direction != candidate.direction && source.kind == candidate.kind
+        })
+        .collect::<Vec<_>>();
+    if candidates.is_empty() {
+        Err("created node has no opposite-direction port with the same kind".into())
+    } else {
+        Ok(candidates)
+    }
 }
 
 fn candidate_ports(
@@ -450,18 +755,23 @@ fn ports_are_compatible(source: &SourcePort, candidate: &CandidatePort) -> bool 
     if source.kind != PortKind::Data {
         return true;
     }
+    if type_expr_is_unresolved(&source.value_type, &source.type_parameters)
+        || type_expr_is_unresolved(&candidate.value_type, &candidate.type_parameters)
+    {
+        return false;
+    }
     match source.direction {
         PortDirection::Output => crate::node_system::compiler::type_exprs_assignable(
             &source.value_type,
             &candidate.value_type,
-            &[],
+            &source.type_parameters,
             &candidate.type_parameters,
         ),
         PortDirection::Input => crate::node_system::compiler::type_exprs_assignable(
             &candidate.value_type,
             &source.value_type,
             &candidate.type_parameters,
-            &[],
+            &source.type_parameters,
         ),
     }
 }
@@ -484,6 +794,7 @@ fn kind(port: &ResolvedPortDto) -> PortKind {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::node_system::analysis::PortConnectionCapabilityDto;
     use crate::node_system::catalog::{
         CatalogResourceEntry, CatalogResourcePath, build_builtin_node_system,
     };
@@ -504,6 +815,7 @@ mod tests {
             direction: PortDirection::Output,
             kind: PortKind::Data,
             value_type,
+            type_parameters: Box::new([]),
         }
     }
 
@@ -538,6 +850,181 @@ mod tests {
             },
             authority_generation: 0,
         }
+    }
+
+    fn projection_with_source_capability(
+        orphan: bool,
+        connections: PortConnectionCapabilityDto,
+    ) -> (EditorGraphProjectionDto, PortAddressDto) {
+        let node_id = crate::node_system::document::NodeId::new();
+        let address = PortAddressDto::Declared {
+            node_id: node_id.to_string().into(),
+            port_key: "value".into(),
+        };
+        let projection = EditorGraphProjectionDto {
+            basis: crate::node_system::analysis::ProjectionBasis {
+                graph_path: "events/main".into(),
+                graph_revision: 0,
+                registry_fingerprint: crate::node_system::registry::RegistryFingerprint::from_bytes(
+                    [0; 32],
+                ),
+                resource_versions: BTreeMap::new(),
+            },
+            graph_path: "events/main".into(),
+            source_revision: 0,
+            nodes: vec![crate::node_system::analysis::EditorNodeProjectionDto {
+                graph_path: "events/main".into(),
+                source_revision: 0,
+                node_id: node_id.to_string().into(),
+                node_type_id: "yssbi.constant.int64".into(),
+                position: crate::node_system::analysis::NodePositionDto { x: 0.0, y: 0.0 },
+                display: crate::node_system::analysis::NodeDisplayDto {
+                    title: "Source".into(),
+                    description: None,
+                    user_label: None,
+                    icon_id: None,
+                    style_id: None,
+                },
+                ports: vec![ResolvedPortDto {
+                    address: address.clone(),
+                    template_key: "value".into(),
+                    display: crate::node_system::analysis::PortDisplayDto {
+                        label: "Value".into(),
+                        instance_label: None,
+                    },
+                    direction: PortDirectionDto::Output,
+                    kind: PortKindDto::Data,
+                    instance_kind: crate::node_system::analysis::PortInstanceKindDto::Declared,
+                    orphan,
+                    can_remove: false,
+                    connections,
+                    input: None,
+                    resolved_type: Some(crate::node_system::analysis::TypeSummaryDto {
+                        display: "core.int64".into(),
+                        resolved: true,
+                        data_type: Some(DataType::Int64),
+                        internal_type_expr: Some(concrete_type("core.int64").unwrap()),
+                    }),
+                    resolved_schema: None,
+                    status: if orphan {
+                        crate::node_system::analysis::ResolvedPortStatusDto::Orphan
+                    } else {
+                        crate::node_system::analysis::ResolvedPortStatusDto::Resolved
+                    },
+                }],
+                parameter_editors: Vec::new(),
+                capabilities: crate::node_system::analysis::NodeCapabilitiesDto {
+                    managed: false,
+                    can_copy: true,
+                    can_delete: true,
+                    can_edit_label: true,
+                    can_edit_parameters: false,
+                    has_dynamic_ports: false,
+                    supports_inline_literals: false,
+                },
+                diagnostics: Vec::new(),
+            }],
+            connections: Vec::new(),
+            diagnostics: Vec::new(),
+            outcome: crate::node_system::analysis::CompilationOutcomeDto::Success,
+            has_blocking_diagnostics: false,
+        };
+        (projection, address)
+    }
+
+    #[test]
+    fn compatibility_accepts_replaceable_source_and_appendable_source() {
+        let registry = build_builtin_node_system().unwrap().registry;
+        for connections in [
+            PortConnectionCapabilityDto {
+                current: 0,
+                maximum: Some(1),
+                ordered: false,
+                can_append: true,
+                can_replace: false,
+                can_move: false,
+            },
+            PortConnectionCapabilityDto {
+                current: 1,
+                maximum: Some(1),
+                ordered: false,
+                can_append: false,
+                can_replace: true,
+                can_move: true,
+            },
+        ] {
+            let (projection, address) = projection_with_source_capability(false, connections);
+            assert!(source_from_projection(&projection, &registry, address).is_ok());
+        }
+    }
+
+    #[test]
+    fn phase1_connection_capability_source_rejects_full_multiple_and_orphan() {
+        let registry = build_builtin_node_system().unwrap().registry;
+        let full = PortConnectionCapabilityDto {
+            current: 2,
+            maximum: Some(2),
+            ordered: false,
+            can_append: false,
+            can_replace: false,
+            can_move: true,
+        };
+        let (projection, address) = projection_with_source_capability(false, full.clone());
+        assert!(source_from_projection(&projection, &registry, address).is_err());
+
+        let (projection, address) = projection_with_source_capability(true, full);
+        assert!(source_from_projection(&projection, &registry, address).is_err());
+    }
+
+    #[test]
+    fn phase1_connection_capability_create_candidate_uses_owning_type_parameters() {
+        let address = PortAddress::declared(
+            crate::node_system::document::NodeId::new(),
+            PortKey::new("value").unwrap(),
+        );
+        let snapshot = EditorMutationValidationSnapshot {
+            graph_revision: GraphRevision::new(0),
+            ports: BTreeMap::from([(
+                address.clone(),
+                EditorMutationPortValidation {
+                    direction: PortDirection::Output,
+                    kind: PortKind::Data,
+                    orphan: false,
+                    port_type: EditorMutationPortType::Ready {
+                        expression: concrete_type("core.int64").unwrap(),
+                        type_parameters: Box::new([]),
+                    },
+                },
+            )]),
+        };
+        let parameter = TypeParameterId::new("item").unwrap();
+        let mut candidate_port = CandidatePort {
+            template: PortKey::new("input").unwrap(),
+            direction: PortDirection::Input,
+            kind: PortKind::Data,
+            connections: ConnectionsPerPort::Single,
+            value_type: TypeExpr::Generic(parameter.clone()),
+            type_parameters: vec![parameter].into_boxed_slice(),
+            dynamic: None,
+        };
+
+        assert!(
+            snapshot
+                .validate_create_connection(&address, &candidate_port)
+                .is_ok()
+        );
+        candidate_port.type_parameters = Box::new([]);
+        assert_eq!(
+            snapshot
+                .validate_create_connection(&address, &candidate_port)
+                .unwrap_err()
+                .code,
+            EditorMutationErrorCode::GraphConnectionTypeUnresolved
+        );
+        assert!(!ports_are_compatible(
+            &source_expr(TypeExpr::Unknown),
+            &candidate(TypeExpr::Concrete(TypeId::new("core.int64").unwrap()))
+        ));
     }
 
     #[test]

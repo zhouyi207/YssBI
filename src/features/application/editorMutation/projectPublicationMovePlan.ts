@@ -6,6 +6,7 @@ import {
   useEditorTabStore,
   type EditorTabMemento,
 } from '@/features/core/layout/editorTabStore';
+import { remapPlacementActiveTab } from '@/features/core/layout/editorGraphSelectionPlacement';
 import {
   buildGraphResourceMeta,
   lookupGraphResource,
@@ -112,7 +113,7 @@ function prepareTabs(from: string, to: string): PreparedTabMoveSnapshot {
   for (const placement of Object.values(after.placements)) {
     placement.tabIds = placement.tabIds.map((id) => id === from ? to : id);
     placement.selectedTabIds = placement.selectedTabIds.map((id) => id === from ? to : id);
-    if (placement.activeTabId === from) placement.activeTabId = to;
+    remapPlacementActiveTab(placement, from, to);
   }
   return { before, after };
 }

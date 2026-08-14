@@ -15,9 +15,7 @@ import { useVariableStore } from './variableStore';
 import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
 
-import { hydrateFunctionSignaturesFromProjectIndex } from '@/features/application/graphDocument/functionSignatureSync';
-import { resetFunctionSignatureCoordinator } from '@/features/application/editorMutation/functionSignatureCoordinator';
-import { resetHistoryCoordinator } from '@/features/application/editorMutation/historyCoordinator';
+import { projectIOApplicationPort } from './projectIOApplicationPort';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { buildGraphResourceMeta, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
 import {
@@ -54,7 +52,7 @@ export type {
   AuthoritativeProjectLoadPlanDependencies,
   PreparedAuthoritativeProjectLoad,
 } from './authoritativeProjectLoadPlan';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+
 import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
@@ -64,12 +62,7 @@ import {
 import { useHistoryStore } from '@/features/core/history';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 import { isGraphCachedInMemory } from './graphDocumentLoadPolicy';
-import { reconcileOpenLayoutTabsWithResources } from '@/features/application/editor/reconcileOpenLayoutTabs';
-import {
-  beginGraphLoadLifecycle,
-  loadGraphProjection,
-  resetGraphProjectionCoordinator,
-} from '@/features/application/editorProjection/graphProjectionCoordinator';
+
 
 export type GraphLoadStatus = 'loading' | 'ready' | 'error';
 
@@ -228,8 +221,8 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
       resources,
       graphOrder,
     });
-    hydrateFunctionSignaturesFromProjectIndex(index.graphs);
-    reconcileOpenLayoutTabsWithResources();
+    projectIOApplicationPort().hydrateFunctionSignatures(index.graphs);
+    projectIOApplicationPort().reconcileOpenTabs();
     return true;
   } catch (err) {
     if (!isCurrentProjectIdentity(identity)) return false;
@@ -272,7 +265,7 @@ export async function prepareAuthoritativeProjectLoad(
     {
       ...defaultAuthoritativeProjectLoadPlanDependencies,
       validateCoordinatorStart: (projectInstanceId, publicationRevision) => {
-        projectPublicationCoordinator.validateProjectStart(projectInstanceId, publicationRevision);
+        projectIOApplicationPort().validatePublicationStart(projectInstanceId, publicationRevision);
       },
       ...dependencyOverrides,
     },
@@ -297,17 +290,17 @@ function commitProjectLoadStep(label: string, assignment: () => void): void {
 export function commitPreparedAuthoritativeProjectLoad(
   prepared: PreparedAuthoritativeProjectLoad,
 ): ProjectData {
-  projectPublicationCoordinator.startProject(
+  projectIOApplicationPort().startPublication(
     prepared.index.projectInstanceId,
     prepared.index.publicationRevision,
   );
-  commitProjectLoadStep('graph projection coordinator', resetGraphProjectionCoordinator);
+  commitProjectLoadStep('graph projection coordinator', () => projectIOApplicationPort().resetGraphProjection());
   loadGraphInFlight.clear();
   commitProjectLoadStep('graph load status', () => useProjectIOStore.setState({
     graphLoadStatus: {},
   }));
-  commitProjectLoadStep('function signature coordinator', resetFunctionSignatureCoordinator);
-  commitProjectLoadStep('history coordinator', resetHistoryCoordinator);
+  commitProjectLoadStep('function signature coordinator', () => projectIOApplicationPort().resetFunctionSignatures());
+  commitProjectLoadStep('history coordinator', () => projectIOApplicationPort().resetHistory());
 
   commitProjectLoadStep('layout', () => useLayoutStore.setState({
     nodes: prepared.storeState.layout.nodes,
@@ -405,7 +398,7 @@ async function loadProjectForIdentity(
 export function loadActivatedProject(
   activation: ProjectActivationResult,
 ): Promise<ProjectData | null> {
-  if (!projectPublicationCoordinator.acceptProjectActivation(
+  if (!projectIOApplicationPort().acceptProjectActivation(
     activation.projectInstanceId,
     activation.activationRevision,
   )) {
@@ -440,7 +433,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
   refreshResourceIndex: refreshProjectResourceIndex,
 
   loadProjectFromData: (project, path) => {
-    resetGraphProjectionCoordinator();
+    projectIOApplicationPort().resetGraphProjection();
     loadGraphInFlight.clear();
     resetClientProjectState();
     set({ graphLoadStatus: {} });
@@ -463,7 +456,7 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
       }),
       graphOrder: Object.values(project.graphs).map((graph) => graph.path),
     });
-    reconcileOpenLayoutTabsWithResources();
+    projectIOApplicationPort().reconcileOpenTabs();
     set({ status: LoadStatus.Ready, currentPath: path ? formatDisplayPath(path) : null });
   },
 
@@ -481,8 +474,8 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
     set((state) => ({
       graphLoadStatus: { ...state.graphLoadStatus, [graphPath]: 'loading' },
     }));
-    const lifecycleToken = beginGraphLoadLifecycle(graphPath);
-    const pending = loadGraphProjection(graphPath, lifecycleToken)
+    const lifecycleToken = projectIOApplicationPort().beginGraphLoad(graphPath);
+    const pending = projectIOApplicationPort().loadGraphProjection(graphPath, lifecycleToken)
       .catch((err) => {
         const errorMessage = formatErrorMessage(err, 'Failed to load graph projection');
         logger.sys.error('Failed to load graph projection: ' + errorMessage, 'ProjectIOStore');

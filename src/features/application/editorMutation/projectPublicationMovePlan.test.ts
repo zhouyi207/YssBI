@@ -158,6 +158,30 @@ describe('project publication graph resource move plan', () => {
     });
   });
 
+  it.each(['node', 'connection'] as const)(
+    'preserves %s selection when publication renames the same graph resource',
+    (selectionKind) => {
+      if (selectionKind === 'node') {
+        useEditorTabStore.getState().setSelectedNodeIds('editor', ['node-a']);
+      } else {
+        useEditorTabStore.getState().setSelectedConnectionIds('editor', ['edge-a']);
+      }
+
+      const prepared = prepareGraphResourceMove({
+        from,
+        to,
+        kind: 'event',
+        name: 'New',
+      }, true);
+
+      expect(prepared.tabSnapshot.after.placements.editor).toMatchObject({
+        activeTabId: to,
+        selectedNodeIds: selectionKind === 'node' ? ['node-a'] : [],
+        selectedConnectionIds: selectionKind === 'connection' ? ['edge-a'] : [],
+      });
+    },
+  );
+
   it('commits the prepared move synchronously and preserves document flags and owners', () => {
     const destination = makeEditorProjectionFixture({ graphPath: to, title: 'New' }).projection;
     const move = { from, to, kind: 'event' as const, name: 'New' };

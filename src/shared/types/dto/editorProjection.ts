@@ -129,7 +129,9 @@ export interface PortConnectionCapabilityDto {
   current: number;
   maximum: number | null;
   ordered: boolean;
-  canConnect: boolean;
+  canAppend: boolean;
+  canReplace: boolean;
+  canMove: boolean;
 }
 
 export interface EditorInputBindingDto {

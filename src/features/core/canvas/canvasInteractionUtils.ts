@@ -1,8 +1,8 @@
 import type { RefObject } from 'react';
-import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from '@/app/appConfig/default';
+
 import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
 import { getViewport, editorViewportScope } from '@/features/core/viewport';
-import type { EditorGesture } from '@/shared/types/ui';
+
 import { queryCanvasElement } from './selectionHitTargets';
 
 export function resolveTabId(groupId: string, activeTabIdRef: RefObject<string | null>): string | null {
@@ -28,22 +28,4 @@ export function getCanvasWorldPoint(
     x: (clientX - rect.left - viewport.x) / viewport.scale,
     y: (clientY - rect.top - viewport.y) / viewport.scale,
   };
-}
-
-export function getGestureScreenMovement(gesture: EditorGesture, scale = 1): boolean {
-  if (!gesture) return false;
-
-  if (gesture.type === 'pan') {
-    const dx = gesture.lastX - gesture.startX;
-    const dy = gesture.lastY - gesture.startY;
-    return Math.sqrt(dx * dx + dy * dy) > CONTEXT_MENU_MOVE_THRESHOLD_PX;
-  }
-
-  if (gesture.type === 'drag' && gesture.dragDelta) {
-    const screenDx = Math.abs(gesture.dragDelta.x * scale);
-    const screenDy = Math.abs(gesture.dragDelta.y * scale);
-    return screenDx > CONTEXT_MENU_MOVE_THRESHOLD_PX || screenDy > CONTEXT_MENU_MOVE_THRESHOLD_PX;
-  }
-
-  return false;
 }

@@ -54,6 +54,10 @@ import {
   type ResourceKey,
 } from '@/features/core/resource';
 import { useEditorTabStore, type EditorTabMemento } from '@/features/core/layout/editorTabStore';
+import {
+  remapPlacementActiveTab,
+  replacePlacementActiveTab,
+} from '@/features/core/layout/editorGraphSelectionPlacement';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { useViewportStore } from '@/features/core/viewport';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
@@ -289,7 +293,10 @@ function removeTabFromMemento(memento: EditorTabMemento, tabId: string): void {
     placement.tabIds = placement.tabIds.filter((id) => id !== tabId);
     placement.selectedTabIds = placement.selectedTabIds.filter((id) => id !== tabId);
     if (placement.activeTabId === tabId) {
-      placement.activeTabId = placement.tabIds[Math.max(0, closingIndex - 1)] ?? null;
+      replacePlacementActiveTab(
+        placement,
+        placement.tabIds[Math.max(0, closingIndex - 1)] ?? null,
+      );
     }
     if (placement.tabIds.length === 0) delete memento.placements[groupId];
   }
@@ -349,7 +356,7 @@ function renameTabInMemento(tabs: EditorTabMemento, from: string, to: string): v
   for (const placement of Object.values(tabs.placements)) {
     placement.tabIds = placement.tabIds.map((id) => id === from ? to : id);
     placement.selectedTabIds = placement.selectedTabIds.map((id) => id === from ? to : id);
-    if (placement.activeTabId === from) placement.activeTabId = to;
+    remapPlacementActiveTab(placement, from, to);
   }
 }
 

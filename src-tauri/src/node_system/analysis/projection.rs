@@ -316,7 +316,9 @@ pub struct PortConnectionCapabilityDto {
     pub current: u32,
     pub maximum: Option<u32>,
     pub ordered: bool,
-    pub can_connect: bool,
+    pub can_append: bool,
+    pub can_replace: bool,
+    pub can_move: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1102,7 +1104,9 @@ fn project_connection_capability(
         current,
         maximum,
         ordered,
-        can_connect: !orphan && maximum.is_none_or(|maximum| current < maximum),
+        can_append: !orphan && maximum.is_none_or(|maximum| current < maximum),
+        can_replace: !orphan && capability == ConnectionsPerPort::Single && current == 1,
+        can_move: !orphan && current > 0,
     }
 }
 
@@ -1438,17 +1442,22 @@ impl From<DiagnosticSeverity> for DiagnosticSeverityDto {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::catalog::build_builtin_node_system;
-    use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
+    use crate::node_system::analysis::SemanticDependency;
+    use crate::node_system::catalog::{
+        CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
+        REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT, build_builtin_node_system,
+    };
+    use crate::node_system::compiler::{CompilationOutcome, GraphCompiler, ResourceSnapshot};
     use crate::node_system::document::{
         DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
         FunctionParameterId, GraphResourcePath, InputState, LastKnownPortMetadata, NodePosition,
         OrderKey, PortInstanceId,
     };
     use crate::node_system::protocol::{
-        NodeTypeId, ParameterKey, PortKey, TypeConstructorId, TypeExpr, TypeId,
+        CanonicalDecimal, NodeTypeId, ParameterKey, PortKey, TypeConstructorId, TypeExpr, TypeId,
+        TypedValue, Value,
     };
-    use crate::node_system::registry::RegistryFingerprint;
+    use crate::node_system::registry::{RegistryFingerprint, TransparentNodeRole};
     use serde_json::json;
     use uuid::Uuid;
 
@@ -1484,11 +1493,481 @@ mod tests {
         );
     }
 
+    fn connection_capability(
+        capability: ConnectionsPerPort,
+        orphan: bool,
+        current: u128,
+    ) -> PortConnectionCapabilityDto {
+        let address = PortAddress::declared(
+            NodeId::from_uuid(Uuid::from_u128(10)),
+            PortKey::new("port").unwrap(),
+        );
+        let mut document = GraphDocument::default();
+        for index in 0..current {
+            let connection_id = ConnectionId::from_uuid(Uuid::from_u128(100 + index));
+            document.connections.insert(
+                connection_id,
+                DocumentConnection {
+                    id: connection_id,
+                    output: address.clone(),
+                    input: PortAddress::declared(
+                        NodeId::from_uuid(Uuid::from_u128(1_000 + index)),
+                        PortKey::new("input").unwrap(),
+                    ),
+                    order: None,
+                },
+            );
+        }
+        project_connection_capability(&document, &address, capability, orphan)
+    }
+
+    #[test]
+    fn projects_connection_capabilities_single_append_replace_and_move_truth_table() {
+        assert_eq!(
+            connection_capability(ConnectionsPerPort::Single, false, 0),
+            PortConnectionCapabilityDto {
+                current: 0,
+                maximum: Some(1),
+                ordered: false,
+                can_append: true,
+                can_replace: false,
+                can_move: false,
+            }
+        );
+        let occupied = connection_capability(ConnectionsPerPort::Single, false, 1);
+        assert_eq!(
+            occupied,
+            PortConnectionCapabilityDto {
+                current: 1,
+                maximum: Some(1),
+                ordered: false,
+                can_append: false,
+                can_replace: true,
+                can_move: true,
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(occupied).unwrap(),
+            json!({
+                "current": 1,
+                "maximum": 1,
+                "ordered": false,
+                "canAppend": false,
+                "canReplace": true,
+                "canMove": true
+            })
+        );
+    }
+
+    #[test]
+    fn projects_connection_capabilities_loaded_single_overflow_is_never_replaceable() {
+        assert_eq!(
+            connection_capability(ConnectionsPerPort::Single, false, 2),
+            PortConnectionCapabilityDto {
+                current: 2,
+                maximum: Some(1),
+                ordered: false,
+                can_append: false,
+                can_replace: false,
+                can_move: true,
+            }
+        );
+    }
+
+    #[test]
+    fn projects_connection_capabilities_multiple_capacity_and_order_truth_table() {
+        let bounded = ConnectionsPerPort::Multiple {
+            max: Some(2),
+            ordered: false,
+        };
+        assert_eq!(
+            connection_capability(bounded, false, 1),
+            PortConnectionCapabilityDto {
+                current: 1,
+                maximum: Some(2),
+                ordered: false,
+                can_append: true,
+                can_replace: false,
+                can_move: true,
+            }
+        );
+        assert_eq!(
+            connection_capability(bounded, false, 2),
+            PortConnectionCapabilityDto {
+                current: 2,
+                maximum: Some(2),
+                ordered: false,
+                can_append: false,
+                can_replace: false,
+                can_move: true,
+            }
+        );
+        assert_eq!(
+            connection_capability(
+                ConnectionsPerPort::Multiple {
+                    max: None,
+                    ordered: true,
+                },
+                false,
+                2,
+            ),
+            PortConnectionCapabilityDto {
+                current: 2,
+                maximum: None,
+                ordered: true,
+                can_append: true,
+                can_replace: false,
+                can_move: true,
+            }
+        );
+    }
+
+    #[test]
+    fn projects_connection_capabilities_disable_orphans_and_track_connected_control_effect_ports() {
+        assert_eq!(
+            connection_capability(ConnectionsPerPort::Single, true, 1),
+            PortConnectionCapabilityDto {
+                current: 1,
+                maximum: Some(1),
+                ordered: false,
+                can_append: false,
+                can_replace: false,
+                can_move: false,
+            }
+        );
+        let connected_control = connection_capability(ConnectionsPerPort::Single, false, 1);
+        let connected_effect = connection_capability(
+            ConnectionsPerPort::Multiple {
+                max: None,
+                ordered: true,
+            },
+            false,
+            1,
+        );
+        assert!(connected_control.can_replace && connected_control.can_move);
+        assert!(connected_effect.can_append && connected_effect.can_move);
+    }
+
     struct EmptyResources;
 
     impl ResourceSnapshot for EmptyResources {
         fn versions(&self) -> ResourceVersionSet {
             BTreeMap::new()
+        }
+    }
+
+    fn insert_projection_node(
+        document: &mut GraphDocument,
+        id: u128,
+        node_type: &str,
+        position: NodePosition,
+    ) -> NodeId {
+        let id = NodeId::from_uuid(Uuid::from_u128(id));
+        document.nodes.insert(
+            id,
+            DocumentNode {
+                id,
+                node_type: NodeTypeId::new(node_type).unwrap(),
+                position,
+                parameters: BTreeMap::new(),
+                user_label: None,
+            },
+        );
+        id
+    }
+
+    fn insert_projection_connection(
+        document: &mut GraphDocument,
+        id: u128,
+        output: (NodeId, &str),
+        input: (NodeId, &str),
+    ) {
+        let id = ConnectionId::from_uuid(Uuid::from_u128(id));
+        document.connections.insert(
+            id,
+            DocumentConnection {
+                id,
+                output: PortAddress::declared(output.0, PortKey::new(output.1).unwrap()),
+                input: PortAddress::declared(input.0, PortKey::new(input.1).unwrap()),
+                order: None,
+            },
+        );
+    }
+
+    fn reroute_projection_document(include_data_endpoints: bool) -> GraphDocument {
+        let mut document = GraphDocument::default();
+        for (index, (reroute_type, endpoint_type, output_port, input_port)) in [
+            (
+                DATA_REROUTE_NODE_TYPE,
+                "yssbi.numeric.sqrt",
+                "result",
+                "input",
+            ),
+            (
+                CONTROL_REROUTE_NODE_TYPE,
+                "yssbi.control.do",
+                "then",
+                "enter",
+            ),
+            (
+                EFFECT_REROUTE_NODE_TYPE,
+                "yssbi.control.do",
+                "effect_out",
+                "effect_in",
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let y = 80.0 + index as f64 * 60.0;
+            let source = (index != 0 || include_data_endpoints).then(|| {
+                insert_projection_node(
+                    &mut document,
+                    10 + index as u128 * 2,
+                    endpoint_type,
+                    NodePosition { x: 0.0, y },
+                )
+            });
+
+            if index == 0 && include_data_endpoints {
+                document.input_states.insert(
+                    PortAddress::declared(source.unwrap(), PortKey::new("input").unwrap()),
+                    InputState {
+                        literal_override: Some(
+                            serde_json::to_value(TypedValue {
+                                value_type: TypeExpr::Concrete(
+                                    TypeId::new("core.float64").unwrap(),
+                                ),
+                                value: Value::Decimal(CanonicalDecimal::new("4").unwrap()),
+                            })
+                            .unwrap(),
+                        ),
+                    },
+                );
+            }
+            let first = insert_projection_node(
+                &mut document,
+                100 + index as u128 * 2,
+                reroute_type,
+                NodePosition { x: 40.0, y },
+            );
+            let second = insert_projection_node(
+                &mut document,
+                101 + index as u128 * 2,
+                reroute_type,
+                NodePosition { x: 140.0, y },
+            );
+            let target = (index != 0 || include_data_endpoints).then(|| {
+                insert_projection_node(
+                    &mut document,
+                    11 + index as u128 * 2,
+                    endpoint_type,
+                    NodePosition { x: 180.0, y },
+                )
+            });
+            if index != 0 || include_data_endpoints {
+                insert_projection_connection(
+                    &mut document,
+                    300 + index as u128 * 3,
+                    (source.unwrap(), output_port),
+                    (first, REROUTE_INPUT_PORT),
+                );
+            }
+            insert_projection_connection(
+                &mut document,
+                301 + index as u128 * 3,
+                (first, REROUTE_OUTPUT_PORT),
+                (second, REROUTE_INPUT_PORT),
+            );
+            if index != 0 || include_data_endpoints {
+                insert_projection_connection(
+                    &mut document,
+                    302 + index as u128 * 3,
+                    (second, REROUTE_OUTPUT_PORT),
+                    (target.unwrap(), input_port),
+                );
+            }
+        }
+        document
+    }
+
+    fn reroute_locale_independent_contract(
+        projection: &EditorGraphProjectionDto,
+    ) -> serde_json::Value {
+        json!({
+            "nodes": projection.nodes.iter().map(|node| json!({
+                "nodeId": node.node_id,
+                "nodeTypeId": node.node_type_id,
+                "position": node.position,
+                "styleId": node.display.style_id,
+                "ports": node.ports.iter().map(|port| json!({
+                    "address": port.address,
+                    "templateKey": port.template_key,
+                    "direction": port.direction,
+                    "kind": port.kind,
+                    "resolvedType": port.resolved_type,
+                })).collect::<Vec<_>>(),
+                "parameterEditors": node.parameter_editors,
+                "capabilities": node.capabilities,
+            })).collect::<Vec<_>>(),
+            "connections": projection.connections,
+        })
+    }
+
+    #[test]
+    fn phase2_reroute_projection_preserves_all_kinds_after_semantic_collapse_across_locales() {
+        let builtin = build_builtin_node_system().unwrap();
+        let document = reroute_projection_document(true);
+        let result =
+            GraphCompiler::new(builtin.registry.as_ref(), &EmptyResources).compile(&document);
+
+        assert_eq!(
+            result.outcome,
+            CompilationOutcome::Succeeded,
+            "{:?}",
+            result.analysis.diagnostics
+        );
+        let semantic = result.semantic.as_ref().unwrap();
+        assert_eq!(
+            semantic
+                .nodes
+                .iter()
+                .filter(|node| {
+                    builtin
+                        .registry
+                        .get(&node.node_type_id)
+                        .is_some_and(|registered| {
+                            registered.transparent_role() == Some(TransparentNodeRole::Reroute)
+                        })
+                })
+                .count(),
+            0
+        );
+        assert_eq!(semantic.dependencies.len(), 3);
+        for (index, expected_kind) in [PortKindDto::Data, PortKindDto::Control, PortKindDto::Effect]
+            .into_iter()
+            .enumerate()
+        {
+            let source = NodeId::from_uuid(Uuid::from_u128(10 + index as u128 * 2));
+            let target = NodeId::from_uuid(Uuid::from_u128(11 + index as u128 * 2));
+            assert!(
+                semantic
+                    .dependencies
+                    .iter()
+                    .any(|dependency| match dependency {
+                        SemanticDependency::Value(edge) => {
+                            expected_kind == PortKindDto::Data
+                                && edge.source.node_id == source
+                                && edge.target.node_id == target
+                        }
+                        SemanticDependency::Control(edge) => {
+                            expected_kind == PortKindDto::Control
+                                && edge.source_node == source
+                                && edge.target_node == target
+                        }
+                        SemanticDependency::Effect(edge) => {
+                            expected_kind == PortKindDto::Effect
+                                && edge.predecessor == source
+                                && edge.successor == target
+                        }
+                    })
+            );
+        }
+
+        let en = build_editor_graph_projection(
+            "functions/reroute-projection",
+            &document,
+            &result.analysis,
+            &result.outcome,
+            builtin.registry.as_ref(),
+            &builtin.catalog.localization("en-US"),
+        )
+        .unwrap();
+        let zh = build_editor_graph_projection(
+            "functions/reroute-projection",
+            &document,
+            &result.analysis,
+            &result.outcome,
+            builtin.registry.as_ref(),
+            &builtin.catalog.localization("zh-CN"),
+        )
+        .unwrap();
+
+        assert_eq!(en.nodes.len(), 12);
+        assert_eq!(en.connections.len(), 9);
+        assert_eq!(
+            en.nodes
+                .iter()
+                .filter(|node| node.display.style_id.as_deref() == Some("builtin.reroute"))
+                .count(),
+            6
+        );
+        let first_reroute = en
+            .nodes
+            .iter()
+            .position(|node| node.display.style_id.as_deref() == Some("builtin.reroute"))
+            .unwrap();
+        assert_ne!(
+            en.nodes[first_reroute].display.title,
+            zh.nodes[first_reroute].display.title
+        );
+        assert_eq!(
+            reroute_locale_independent_contract(&en),
+            reroute_locale_independent_contract(&zh)
+        );
+
+        for (index, kind) in [PortKindDto::Data, PortKindDto::Control, PortKindDto::Effect]
+            .into_iter()
+            .enumerate()
+        {
+            let source_id = NodeId::from_uuid(Uuid::from_u128(100 + index as u128 * 2));
+            let target_id = NodeId::from_uuid(Uuid::from_u128(101 + index as u128 * 2));
+            for (node_id, x) in [(source_id, 40.0), (target_id, 140.0)] {
+                let node = en
+                    .nodes
+                    .iter()
+                    .find(|node| node.node_id.as_ref() == node_id.to_string())
+                    .unwrap();
+                assert_eq!(
+                    node.position,
+                    NodePositionDto {
+                        x,
+                        y: 80.0 + index as f64 * 60.0,
+                    }
+                );
+                assert_eq!(node.display.style_id.as_deref(), Some("builtin.reroute"));
+                assert!(node.parameter_editors.is_empty());
+                assert!(!node.capabilities.managed);
+                assert!(node.capabilities.can_delete);
+                assert_eq!(node.ports.len(), 2);
+                assert_eq!(node.ports[0].direction, PortDirectionDto::Input);
+                assert_eq!(node.ports[1].direction, PortDirectionDto::Output);
+                assert!(node.ports.iter().all(|port| port.kind == kind));
+                if kind == PortKindDto::Data {
+                    assert_eq!(node.ports[0].resolved_type, node.ports[1].resolved_type);
+                }
+            }
+            let connection_id = ConnectionId::from_uuid(Uuid::from_u128(301 + index as u128 * 3));
+            let connection = en
+                .connections
+                .iter()
+                .find(|connection| connection.connection_id.as_ref() == connection_id.to_string())
+                .unwrap();
+            assert_eq!(connection.order, None);
+            assert_eq!(
+                connection.output,
+                PortAddressDto::Declared {
+                    node_id: source_id.to_string().into(),
+                    port_key: REROUTE_OUTPUT_PORT.into(),
+                }
+            );
+            assert_eq!(
+                connection.input,
+                PortAddressDto::Declared {
+                    node_id: target_id.to_string().into(),
+                    port_key: REROUTE_INPUT_PORT.into(),
+                }
+            );
         }
     }
 
@@ -1533,7 +2012,9 @@ mod tests {
                 current: 0,
                 maximum: Some(1),
                 ordered: false,
-                can_connect: true,
+                can_append: true,
+                can_replace: false,
+                can_move: false,
             },
             input: Some(EditorInputBindingDto {
                 literal_override: None,

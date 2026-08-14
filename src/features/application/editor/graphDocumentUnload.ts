@@ -5,7 +5,7 @@ import {
   useVariableStore,
 } from '@/features/core/dataStore';
 import { useExecutionStore } from '@/features/core/execution';
-import { useGraphInteractionStore } from '@/features/core/graphInteraction';
+import { clearCanvasInteractionGraph } from '@/features/core/canvas/canvasInteractionCleanup';
 import { markResourceLoaded } from '@/features/core/resource';
 import { releaseGraphViewport } from '@/features/core/viewport';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
@@ -29,7 +29,7 @@ export async function unloadGraphDocument(graphPath: string): Promise<void> {
   const lifecycleToken = beginGraphUnloadLifecycle(graphPath);
   invalidateGraphLoadOwnership(graphPath);
   useGraphDataStore.getState().clearGraph(graphPath);
-  useGraphInteractionStore.getState().clearGraphInteraction(graphPath);
+  clearCanvasInteractionGraph(graphPath);
   useVariableStore.getState().clearGraphVariables(graphPath);
   useExecutionStore.getState().releaseGraphExecutionState(graphPath);
   releaseGraphViewport(graphPath);

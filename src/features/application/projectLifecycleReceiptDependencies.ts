@@ -11,6 +11,7 @@ import {
   revokeAllPinPreviewLeases,
   useExecutionStore,
 } from '@/features/core/execution';
+import { clearCanvasInteractionProject } from '@/features/core/canvas/canvasInteractionCleanup';
 
 export function createProjectLifecycleReceiptDependencies(
   onProjectCleared?: () => void,
@@ -28,6 +29,7 @@ export function createProjectLifecycleReceiptDependencies(
     },
     refreshRegistry: () => ProjectService.listRegisteredProjects(),
     clearProject: () => {
+      clearCanvasInteractionProject();
       revokeAllPinPreviewLeases();
       useExecutionStore.setState({
         graphs: {},

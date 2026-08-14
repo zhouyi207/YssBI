@@ -268,10 +268,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -393,10 +395,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -424,10 +428,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "input",
                   "display": {
@@ -513,10 +519,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -544,10 +552,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {
@@ -632,10 +642,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -663,10 +675,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {
@@ -740,10 +754,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "output",
                   "display": {
@@ -771,10 +787,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {
@@ -880,10 +898,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "output",
                   "display": {
@@ -911,10 +931,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {
@@ -1169,10 +1191,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "output",
                   "display": {
@@ -1294,10 +1318,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -1325,10 +1351,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "input",
                   "display": {
@@ -1414,10 +1442,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -1445,10 +1475,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {
@@ -1533,10 +1565,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -1564,10 +1598,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {
@@ -1641,10 +1677,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "output",
                   "display": {
@@ -1672,10 +1710,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {
@@ -1783,10 +1823,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "output",
                   "display": {
@@ -1814,10 +1856,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "input",
                   "display": {
@@ -1974,10 +2018,12 @@
             },
             "canRemove": false,
             "connections": {
-              "canConnect": true,
               "current": 0,
               "maximum": 1,
-              "ordered": false
+              "ordered": false,
+              "canAppend": true,
+              "canReplace": false,
+              "canMove": false
             },
             "direction": "output",
             "display": {
@@ -2099,10 +2145,12 @@
             },
             "canRemove": false,
             "connections": {
-              "canConnect": false,
               "current": 1,
               "maximum": 1,
-              "ordered": false
+              "ordered": false,
+              "canAppend": false,
+              "canReplace": true,
+              "canMove": true
             },
             "direction": "output",
             "display": {
@@ -2130,10 +2178,12 @@
             },
             "canRemove": false,
             "connections": {
-              "canConnect": true,
               "current": 0,
               "maximum": 1,
-              "ordered": false
+              "ordered": false,
+              "canAppend": true,
+              "canReplace": false,
+              "canMove": false
             },
             "direction": "input",
             "display": {
@@ -2219,10 +2269,12 @@
             },
             "canRemove": false,
             "connections": {
-              "canConnect": false,
               "current": 1,
               "maximum": 1,
-              "ordered": false
+              "ordered": false,
+              "canAppend": false,
+              "canReplace": true,
+              "canMove": true
             },
             "direction": "output",
             "display": {
@@ -2250,10 +2302,12 @@
             },
             "canRemove": false,
             "connections": {
-              "canConnect": false,
               "current": 1,
               "maximum": 1,
-              "ordered": false
+              "ordered": false,
+              "canAppend": false,
+              "canReplace": true,
+              "canMove": true
             },
             "direction": "input",
             "display": {
@@ -2338,10 +2392,12 @@
             },
             "canRemove": false,
             "connections": {
-              "canConnect": false,
               "current": 1,
               "maximum": 1,
-              "ordered": false
+              "ordered": false,
+              "canAppend": false,
+              "canReplace": true,
+              "canMove": true
             },
             "direction": "output",
             "display": {
@@ -2369,10 +2425,12 @@
             },
             "canRemove": false,
             "connections": {
-              "canConnect": false,
               "current": 1,
               "maximum": 1,
-              "ordered": false
+              "ordered": false,
+              "canAppend": false,
+              "canReplace": true,
+              "canMove": true
             },
             "direction": "input",
             "display": {
@@ -2446,10 +2504,12 @@
             },
             "canRemove": false,
             "connections": {
-              "canConnect": true,
               "current": 0,
               "maximum": 1,
-              "ordered": false
+              "ordered": false,
+              "canAppend": true,
+              "canReplace": false,
+              "canMove": false
             },
             "direction": "output",
             "display": {
@@ -2477,10 +2537,12 @@
             },
             "canRemove": false,
             "connections": {
-              "canConnect": false,
               "current": 1,
               "maximum": 1,
-              "ordered": false
+              "ordered": false,
+              "canAppend": false,
+              "canReplace": true,
+              "canMove": true
             },
             "direction": "input",
             "display": {
@@ -2723,10 +2785,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -2848,10 +2912,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -2879,10 +2945,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "input",
                   "display": {
@@ -2968,10 +3036,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -2999,10 +3069,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {
@@ -3087,10 +3159,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "output",
                   "display": {
@@ -3118,10 +3192,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {
@@ -3195,10 +3271,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "output",
                   "display": {
@@ -3226,10 +3304,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {
@@ -3328,10 +3408,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": true,
                     "current": 0,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": true,
+                    "canReplace": false,
+                    "canMove": false
                   },
                   "direction": "output",
                   "display": {
@@ -3371,10 +3453,12 @@
                   },
                   "canRemove": false,
                   "connections": {
-                    "canConnect": false,
                     "current": 1,
                     "maximum": 1,
-                    "ordered": false
+                    "ordered": false,
+                    "canAppend": false,
+                    "canReplace": true,
+                    "canMove": true
                   },
                   "direction": "input",
                   "display": {

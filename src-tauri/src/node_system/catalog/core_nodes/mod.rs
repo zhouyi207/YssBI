@@ -1,6 +1,7 @@
 mod control;
 mod debug;
 mod math;
+pub(super) mod reroute;
 mod support;
 mod value;
 
@@ -59,6 +60,7 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
     math::register(&mut fragment)?;
     control::register(&mut fragment)?;
     debug::register(&mut fragment)?;
+    reroute::register(&mut fragment)?;
     Ok(fragment)
 }
 

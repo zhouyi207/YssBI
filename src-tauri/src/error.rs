@@ -3,6 +3,18 @@ use serde::ser::{Serialize, SerializeMap, Serializer};
 use serde_json::Value;
 use std::fmt;
 
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphMutationErrorDetailsDto {
+    pub category: &'static str,
+}
+
+impl GraphMutationErrorDetailsDto {
+    pub const VALUE: Self = Self {
+        category: "graphMutation",
+    };
+}
+
 #[derive(Debug, Clone)]
 pub struct AppError {
     pub code: String,
@@ -89,7 +101,7 @@ impl From<ProjectError> for AppError {
 
 #[cfg(test)]
 mod tests {
-    use super::AppError;
+    use super::{AppError, GraphMutationErrorDetailsDto};
 
     #[test]
     fn serializes_stable_ipc_error_shape() {
@@ -97,5 +109,13 @@ mod tests {
         assert_eq!(value["code"], "project_not_found");
         assert_eq!(value["message"], "missing");
         assert!(value.get("details").is_none());
+    }
+
+    #[test]
+    fn phase1_error_protocol_graph_mutation_details_are_stable() {
+        assert_eq!(
+            serde_json::to_value(GraphMutationErrorDetailsDto::VALUE).unwrap(),
+            serde_json::json!({ "category": "graphMutation" })
+        );
     }
 }

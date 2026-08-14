@@ -5,6 +5,8 @@
 //! boundary; document UUIDs and plan-local handles remain fixture details.
 
 mod assertions;
+#[cfg(test)]
+pub(crate) mod blueprint_phase1;
 mod builders;
 #[cfg(test)]
 pub(crate) mod contracts;

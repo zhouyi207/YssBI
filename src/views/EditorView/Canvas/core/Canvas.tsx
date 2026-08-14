@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect } from "react";
+import { useRef, useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { CanvasNode } from "../../Nodes/CanvasNode";
 import { useGraphDataStore } from "@/features/core/dataStore";
@@ -6,10 +6,7 @@ import { useEditorGroup, useCanvasViewport, useCanvasWheelZoom, useCanvasDrop } 
 import { editorViewportScope } from "@/features/core/viewport";
 import { CanvasContextMenuProvider } from "@/features/application/editor/CanvasContextMenuContext";
 import type { CanvasContextMenuActions } from "@/features/application/editor/CanvasContextMenuContext";
-import { useGestureStore } from "@/features/core/gesture";
-import { bindDragPreviewToGestureStore } from "@/features/core/canvas/dragPreview";
-import { bindConnectPreviewToGestureStore } from "@/features/core/canvas/connectPreview";
-import { getConnectGesture, type EditorGesture } from "@/shared/types/ui";
+import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
 import { useNodeDragPreview } from "@/features/core/canvas/useNodeDragPreview";
 import { useSelectionBoxPreview } from "@/features/core/canvas/useSelectionBoxPreview";
 import { useExecutionVisualBinder } from "@/features/core/execution";
@@ -19,8 +16,6 @@ import { EdgesOverlay } from "./EdgesOverlay";
 import { ConnectionLine } from "./ConnectionLine";
 import CanvasOverlays from "../overlays/CanvasOverlays";
 
-const selectActivePin = (state: { gesture: EditorGesture }) =>
-  getConnectGesture(state.gesture)?.startPin ?? null;
 
 const EMPTY_NODE_IDS: string[] = [];
 
@@ -43,32 +38,32 @@ export default function Canvas({ interactive = true }: CanvasProps) {
     functions,
     groupId,
     selectedNodeIds,
+    selectedConnectionIds,
     copyNodes,
     cutNodes,
     duplicateNodes,
     deleteNodesById,
     breakAllNodeLinks,
+    breakConnectionsById,
+    insertRerouteAtConnection,
     selectLinkedNodes,
     disconnectPinById,
     resetPinValue,
     setSelectedNodeIds,
+    setSelectedConnectionIds,
     createNode,
   } = useEditorGroup({ withCanvasPointerLoop: interactive });
 
-  const gesturePinData = useGestureStore(selectActivePin);
+  const interaction = useGraphInteractionStore((state) =>
+    activeTabId ? getCanvasInteraction(state, activeTabId, groupId) : { type: 'idle' as const });
+  const gesturePinData = interaction?.type === 'drawingConnection'
+    || interaction?.type === 'movingConnections'
+    ? interaction.session.source
+    : null;
 
   const canvasElementRef = useRef<HTMLDivElement>(null);
   const selectionBoxRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (!interactive) return;
-    const unbindDrag = bindDragPreviewToGestureStore();
-    const unbindConnect = bindConnectPreviewToGestureStore();
-    return () => {
-      unbindDrag();
-      unbindConnect();
-    };
-  }, [interactive]);
 
   const viewportScope = useMemo(
     () => (groupId && activeTabId ? editorViewportScope(groupId, activeTabId) : null),
@@ -76,7 +71,12 @@ export default function Canvas({ interactive = true }: CanvasProps) {
   );
 
   useNodeDragPreview(canvasElementRef, interactive ? groupId : null, interactive ? activeTabId : null);
-  useSelectionBoxPreview(selectionBoxRef, canvasElementRef, interactive ? groupId : undefined);
+  useSelectionBoxPreview(
+    selectionBoxRef,
+    canvasElementRef,
+    interactive ? activeTabId ?? undefined : undefined,
+    interactive ? groupId : undefined,
+  );
   useExecutionVisualBinder(canvasElementRef, interactive ? activeTabId ?? undefined : undefined);
 
   const selectedNodeIdsSet = useMemo(
@@ -174,8 +174,22 @@ export default function Canvas({ interactive = true }: CanvasProps) {
         <TransformContainer viewportScope={viewportScope}>
           <EdgesOverlay
             graphPath={activeTabId ?? ""}
+            groupId={groupId}
             getPinWorldPos={getPinWorldPos}
+            getCanvasLocalPoint={getCanvasLocalPoint}
             dimmed={isDraggingPin}
+            interactive={interactive}
+            selectedNodeIds={interactive ? selectedNodeIds : EMPTY_NODE_IDS}
+            selectedConnectionIds={interactive ? selectedConnectionIds : EMPTY_NODE_IDS}
+            onSelectedConnectionIdsChange={interactive
+              ? (connectionIds, graphPath, targetGroupId) => {
+                  if (graphPath === activeTabId && targetGroupId === groupId) {
+                    setSelectedConnectionIds(connectionIds, targetGroupId);
+                  }
+                }
+              : undefined}
+            onBreakConnections={interactive ? breakConnectionsById : undefined}
+            onEdgeDoubleClick={interactive ? insertRerouteAtConnection : undefined}
           />
           {graphNodeIds.map((nodeId: string) => {
             const isSelected = interactive && selectedNodeIdsSet.has(nodeId);

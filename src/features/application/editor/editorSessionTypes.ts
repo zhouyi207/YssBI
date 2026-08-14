@@ -8,6 +8,8 @@ import type { buildEditorState } from '@/features/core/editor/hooks/useEditorSta
 import type { useEditorActions } from '@/features/core/editor/hooks/useEditorActions';
 import type { EditorViewport } from '@/features/core/viewport';
 import type { LayoutTab } from '@/shared/types/layout/layout';
+import type { GraphSelection } from '@/features/core/layout';
+import type { CanvasMutationOutcome } from '@/features/core/canvas';
 import type { Pin } from '@/shared/types/domain/pin';
 import type { useEditorOperations } from './useEditorOperations';
 import type { useTabManagement } from './useTabManagement';
@@ -30,7 +32,6 @@ export interface EditorSessionLayoutBindings {
   setContextMenu: EditorActions['setContextMenu'];
   setDetailFocus: EditorActions['setDetailFocus'];
   clearDetailFocus: EditorActions['clearDetailFocus'];
-  setPendingConnection: EditorActions['setPendingConnection'];
   activeGroupIdRef: RefObject<string | null>;
   activeTabIdRef: RefObject<string | null>;
   viewportRef: RefObject<EditorViewport>;
@@ -93,6 +94,8 @@ export interface EditorGroupWorkspaceSlice {
   tabs: LayoutTab[];
   activeTabId: string | null;
   selectedNodeIds: string[];
+  selectedConnectionIds: string[];
+  selection: GraphSelection;
 }
 
 export type ConnectPinsHandler = (
@@ -106,6 +109,16 @@ export interface EditorGroupInteractionSlice {
   onNodePointerDown: (nodeId: string, e: React.PointerEvent) => void;
   onPinPointerDown: (pin: Pin, e: React.PointerEvent) => void;
   connectPins: ConnectPinsHandler;
+  insertRerouteAtConnection: (
+    connectionId: string,
+    position: Readonly<{ x: number; y: number }>,
+    graphPath: string,
+    groupId: string,
+    selection: {
+      before: GraphSelection;
+      temporary: GraphSelection;
+    },
+  ) => Promise<CanvasMutationOutcome | false>;
   setCanvas: (
     updater: EditorViewport | ((prev: EditorViewport) => EditorViewport),
     targetGraphPath?: string,
@@ -159,7 +172,6 @@ export function pickEditorSessionLayoutBindings(actions: EditorActions): EditorS
     setContextMenu: actions.setContextMenu,
     setDetailFocus: actions.setDetailFocus,
     clearDetailFocus: actions.clearDetailFocus,
-    setPendingConnection: actions.setPendingConnection,
     activeGroupIdRef: actions.activeGroupIdRef,
     activeTabIdRef: actions.activeTabIdRef,
     viewportRef: actions.viewportRef,

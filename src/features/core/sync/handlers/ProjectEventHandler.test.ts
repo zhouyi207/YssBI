@@ -3,6 +3,9 @@ import { projectPublicationCoordinator } from '@/features/application/editorMuta
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { useExecutionStore } from '@/features/core/execution';
 import { ProjectClearedHandler } from './ProjectEventHandler';
+import { registerCoreApplicationPorts } from '@/features/application/initialization/registerCoreApplicationPorts';
+
+registerCoreApplicationPorts();
 
 const graphPath = 'events/Main.yssbi-event';
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';

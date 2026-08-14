@@ -9,8 +9,8 @@ pub use fingerprint::{CanonicalEncodingError, ProtocolFingerprint, RegistryFinge
 pub use model::{
     CatalogManifest, CategoryRegistration, CategoryRegistry, I18nManifest, ImplementationKind,
     LeafImplementation, NodeImplementation, NodeImplementationCapability, NodeRegistry,
-    ProviderRegistration, RegisteredNode, StructuralNodeRole, TypeConstructorRegistration,
-    TypeRegistration, TypeRegistry,
+    ProviderRegistration, RegisteredNode, StructuralNodeRole, TransparentNodeRole,
+    TypeConstructorRegistration, TypeRegistration, TypeRegistry,
 };
 pub use validation::RegistryValidationError;
 
@@ -386,17 +386,21 @@ fn canonical_registry(
                 .nodes
                 .iter()
                 .map(|x| {
-                    let behavior = match (&x.implementation, x.structural_role) {
-                        (Some(implementation), None) => json!({
+                    let behavior = match (&x.implementation, x.structural_role, x.transparent_role)
+                    {
+                        (Some(implementation), None, None) => json!({
                             "implementationIdentity": implementation.implementation_identity(),
                             "kind": implementation.capability(),
                         }),
-                        (None, None) => json!({ "kind": "ProtocolOnly" }),
-                        (None, Some(role)) => json!({
+                        (None, Some(role), None) => json!({
                             "kind": "Structural",
                             "role": format!("{role:?}"),
                         }),
-                        (Some(_), Some(_)) => json!({ "kind": "Invalid" }),
+                        (None, None, Some(role)) => json!({
+                            "kind": "Transparent",
+                            "role": format!("{role:?}"),
+                        }),
+                        _ => json!({ "kind": "Invalid" }),
                     };
                     json!([
                         x.protocol.type_id,

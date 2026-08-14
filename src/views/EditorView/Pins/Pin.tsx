@@ -14,6 +14,26 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
 import { useGraphDataStore } from "@/features/core/dataStore";
+import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
+import type { ConnectionFeedback } from '@/features/core/canvas/connectionInteraction';
+
+export function pinConnectionFeedbackAttributes(feedback: ConnectionFeedback | null) {
+  if (!feedback) return {};
+  return feedback.kind === 'invalid'
+    ? {
+        'data-connection-feedback': feedback.kind,
+        'data-connection-invalid-reason': feedback.reason,
+      }
+    : { 'data-connection-feedback': feedback.kind };
+}
+
+export function pinConnectionFeedbackClass(feedback: ConnectionFeedback | null): string {
+  if (!feedback) return '';
+  if (feedback.kind === 'invalid') return 'ring-2 ring-red-500/90';
+  return feedback.kind === 'replace'
+    ? 'ring-2 ring-amber-500/90'
+    : 'ring-2 ring-emerald-500/90';
+}
 import {
   buildPinViewParams,
   evaluatePinViewState,
@@ -44,6 +64,8 @@ function toDisplayValue(v: unknown): unknown {
 
 export type PinDragState = "normal" | "highlighted" | "dimmed";
 
+const EMPTY_CONNECTION_IDS: string[] = [];
+
 export interface PinProps extends PinModel {
   connected?: boolean;
   linkCount?: number;
@@ -51,6 +73,7 @@ export interface PinProps extends PinModel {
   /** 来自 schema 的 pin metaData（如 dropdown 的 widgetOptions） */
   metaData?: PinMetaDataDTO;
   graphPath?: string;
+  groupId?: string;
   onPinClick?: (id: string, direction: "input" | "output") => void;
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   isActive?: boolean;
@@ -77,6 +100,7 @@ export const Pin: React.FC<PinProps> = (props) => {
     ui,
     metaData,
     graphPath,
+    groupId,
     onPinClick,
     onPinPointerDown,
     isActive,
@@ -116,8 +140,17 @@ export const Pin: React.FC<PinProps> = (props) => {
   const canRemovePin =
     canRemoveRepeatable && (onRemovePin != null || menuActions?.removeRepeatablePin != null);
 
+  const connectionFeedback = useGraphInteractionStore((state) => {
+    if (!graphPath || !groupId) return null;
+    const interaction = getCanvasInteraction(state, graphPath, groupId);
+    if (interaction?.type !== 'drawingConnection' && interaction?.type !== 'movingConnections') return null;
+    const session = interaction.session;
+    return session.snappedTarget?.id === id || session.hoveredTarget?.id === id
+      ? session.feedback
+      : null;
+  });
   const connectionIds = useGraphDataStore((s) =>
-    graphPath ? s.getGraphPinConnections(graphPath, id) : [],
+    graphPath ? s.getGraphPinConnections(graphPath, id) : EMPTY_CONNECTION_IDS,
   );
   const executionGraphs = useExecutionStore((s) => s.graphs);
   const pinResults = useMemo(() => {
@@ -225,9 +258,12 @@ export const Pin: React.FC<PinProps> = (props) => {
         ? { filter: "brightness(1.25) saturate(1.4)", transition: "opacity 150ms, filter 150ms" }
         : undefined;
 
-  const pinTooltip = validationWarning
+  const feedbackTooltip = connectionFeedback?.kind === 'invalid'
+    ? t(`canvas.connection.feedback.${connectionFeedback.reason}`)
+    : null;
+  const pinTooltip = feedbackTooltip ?? (validationWarning
     ? `${name} (${visualSpec.label}) — ${validationWarning}`
-    : `${name} (${visualSpec.label})`;
+    : `${name} (${visualSpec.label})`);
 
   const pulseStrokeProps = shouldPulse
     ? {
@@ -327,6 +363,7 @@ export const Pin: React.FC<PinProps> = (props) => {
       `}
           style={dragStyle}
           data-pin-id={id}
+          {...pinConnectionFeedbackAttributes(connectionFeedback)}
           data-validation-warning={validationWarning ? 'true' : undefined}
           onContextMenu={handleContextMenu}
           onPointerDown={(e) => {
@@ -346,6 +383,7 @@ export const Pin: React.FC<PinProps> = (props) => {
           ${direction === "input" ? "mr-1" : "ml-1"}
           ${contextMenu ? "ring-2 ring-[var(--accent-color)]/60" : ""}
           ${validationWarning ? "ring-2 ring-amber-500/80" : ""}
+          ${pinConnectionFeedbackClass(connectionFeedback)}
         `}
         onClick={(e) => {
           e.stopPropagation();

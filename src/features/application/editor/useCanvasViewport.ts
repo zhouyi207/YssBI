@@ -12,6 +12,7 @@ import { useGraphInteractionStore } from '@/features/core/graphInteraction';
 import { resolvePinOffsetWaiters } from '@/features/core/canvas/pinOffsetWaiter';
 import { createSashAwareResizeHandler } from '@/shared/utils/sashResizeGuard';
 import { SASH_DRAG_END_EVENT } from '@/views/EditorView/Renderer/sashResizeLogic';
+import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 export function useCanvasViewport(
   canvasElementRef: React.RefObject<HTMLDivElement | null>,
@@ -77,12 +78,12 @@ export function useCanvasViewport(
       if (el) observer.observe(el);
     }
 
-    window.addEventListener(SASH_DRAG_END_EVENT, flushAfterSashDrag);
+    const cleanupSashDragEnd = addGlobalEventListener(window, SASH_DRAG_END_EVENT, flushAfterSashDrag);
 
     return () => {
       cancelAnimationFrame(resizeRafRef.current);
       observer.disconnect();
-      window.removeEventListener(SASH_DRAG_END_EVENT, flushAfterSashDrag);
+      cleanupSashDragEnd();
     };
   }, [canvasElementRef, graphNodeIds]);
 

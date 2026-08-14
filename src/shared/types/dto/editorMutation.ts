@@ -32,7 +32,7 @@ export type EditorGraphMutationDto =
         connectFrom: PortAddressDto | null;
       };
     }
-  | { type: 'deleteNode'; payload: { nodeId: string } }
+  | { type: 'deleteNodes'; payload: { nodeIds: string[] } }
   | {
       type: 'setParameters';
       payload: { nodeId: string; parameters: Record<string, unknown> };
@@ -45,7 +45,20 @@ export type EditorGraphMutationDto =
       type: 'connect';
       payload: { output: PortAddressDto; input: PortAddressDto; order: string | null };
     }
-  | { type: 'disconnect'; payload: { connectionId: string } }
+  | { type: 'disconnectConnections'; payload: { connectionIds: string[] } }
+  | {
+      type: 'insertReroute';
+      payload: {
+        connectionId: string;
+        position: NodePositionDto;
+      };
+    }
+  | { type: 'disconnectPort'; payload: { address: PortAddressDto } }
+  | { type: 'disconnectNode'; payload: { nodeId: string } }
+  | {
+      type: 'moveConnections';
+      payload: { source: PortAddressDto; target: PortAddressDto };
+    }
   | { type: 'setLiteral'; payload: { address: PortAddressDto; literal: unknown | null } }
   | {
       type: 'addPortInstance';

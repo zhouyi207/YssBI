@@ -69,7 +69,9 @@ function validProjection(): EditorGraphProjectionDto {
               current: 1,
               maximum: null,
               ordered: false,
-              canConnect: true,
+              canAppend: true,
+              canReplace: false,
+              canMove: true,
             },
             input: null,
             resolvedType: {
@@ -93,7 +95,9 @@ function validProjection(): EditorGraphProjectionDto {
               current: 1,
               maximum: 1,
               ordered: false,
-              canConnect: false,
+              canAppend: false,
+              canReplace: true,
+              canMove: true,
             },
             input: {
               literalOverride: 42,

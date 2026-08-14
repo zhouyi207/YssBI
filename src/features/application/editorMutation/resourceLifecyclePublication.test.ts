@@ -158,6 +158,45 @@ describe('graph resource lifecycle publication', () => {
     expect(useGraphMetaStore.getState().graphs[graphPath]).toBeUndefined();
   });
 
+  it.each(['node', 'connection'] as const)(
+    'clears %s selection when lifecycle removal replaces the active graph',
+    (selectionKind) => {
+      const keptPath = 'events/Kept.yssbi-event';
+      const created = lifecycleResult(1, null, present);
+      commitPreparedPublication(prepareSynchronousPublicationCommit(created, {
+        projectInstanceId,
+        epoch: 1,
+        fingerprint: fingerprintResourceMutationResult(created),
+        affectedGraphPaths: new Set([graphPath]),
+        moves: [],
+      }));
+      useEditorTabStore.getState().initGroupPlacement('editor', [
+        { id: keptPath, component: 'GraphEditor', type: 'event' },
+        { id: graphPath, component: 'GraphEditor', type: 'event' },
+      ], graphPath);
+      if (selectionKind === 'node') {
+        useEditorTabStore.getState().setSelectedNodeIds('editor', ['node-a']);
+      } else {
+        useEditorTabStore.getState().setSelectedConnectionIds('editor', ['edge-a']);
+      }
+
+      const removed = lifecycleResult(2, present, null);
+      const plan = prepareSynchronousPublicationCommit(removed, {
+        projectInstanceId,
+        epoch: 1,
+        fingerprint: fingerprintResourceMutationResult(removed),
+        affectedGraphPaths: new Set([graphPath]),
+        moves: [],
+      });
+
+      expect(plan.storeState.tabs.placements.editor).toMatchObject({
+        activeTabId: keptPath,
+        selectedNodeIds: [],
+        selectedConnectionIds: [],
+      });
+    },
+  );
+
   it('removes a loaded graph using projection authority when sidebar metadata is stale', () => {
     const created = lifecycleResult(1, null, present);
     commitPreparedPublication(prepareSynchronousPublicationCommit(created, {

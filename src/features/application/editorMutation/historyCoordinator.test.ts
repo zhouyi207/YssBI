@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
@@ -17,6 +17,10 @@ import {
   type HistoryCoordinatorDependencies,
 } from './historyCoordinator';
 import { projectPublicationCoordinator } from './projectPublicationCoordinator';
+import {
+  installCoreApplicationTestPorts,
+  resetCoreApplicationTestPorts,
+} from '@/features/application/testHelpers/coreApplicationPorts';
 import {
   buildGraphResourceMeta,
   markResourceLoaded,
@@ -179,6 +183,12 @@ describe('executeHistoryMutation', () => {
     vi.clearAllMocks();
     resetPendingMutations();
     resetHistoryCoordinator();
+    installCoreApplicationTestPorts({
+      syncEvents: {
+        resourceMutationCommitted: (committed) =>
+          projectPublicationCoordinator.submit({ result: committed as ResourceMutationResultDto }),
+      },
+    });
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
     useGraphDataStore.setState({ graphEntities: {} });
     useGraphMetaStore.setState({
@@ -204,6 +214,8 @@ describe('executeHistoryMutation', () => {
     });
     markResourceLoaded({ id: functionPath, kind: 'function' });
   });
+
+  afterEach(resetCoreApplicationTestPorts);
 
   it.each(['undo', 'redo'] as const)(
     'installs the authoritative destination name for a history %s rename',

@@ -15,8 +15,12 @@ import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { applyMutationResult } from './applyMutationResult';
+import { applyMutationResult, validateMutationResult } from './applyMutationResult';
 import { setHistoryStatus } from './historyCoordinator';
+import {
+  graphMutationErrorCode,
+  type GraphMutationRejectionCode,
+} from './graphMutationError';
 import {
   completePendingMutation,
   registerPendingMutation,
@@ -44,8 +48,10 @@ export interface EditorMutationCoordinatorDependencies {
 
 export type ExecuteEditorMutationOutcome =
   | { status: 'applied'; result: GraphMutationResultDto }
+  | { status: 'noop'; result: GraphMutationResultDto }
   | { status: 'stale'; result?: GraphMutationResultDto }
-  | { status: 'conflict' };
+  | { status: 'conflict' }
+  | { status: 'rejected'; code: GraphMutationRejectionCode };
 
 
 
@@ -120,15 +126,23 @@ export async function executeEditorMutation(
     } catch (error) {
       if (!isCurrentProjectIdentity(identity)
         || hasErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
-      if (!isRevisionConflict(error)) throw error;
-      await requestAuthoritativeHydrate(input.graphPath, input.locale, dependencies);
-      return { status: 'conflict' };
+      if (isRevisionConflict(error)) {
+        await requestAuthoritativeHydrate(input.graphPath, input.locale, dependencies);
+        return { status: 'conflict' };
+      }
+      const code = graphMutationErrorCode(error);
+      if (code && code !== 'graph_revision_conflict') return { status: 'rejected', code };
+      throw error;
     }
 
     if (!isCurrentProjectIdentity(identity)) return { status: 'stale', result };
 
     try {
-      const applied = applyMutationResult(pending, result);
+      validateMutationResult(identity.projectInstanceId, pending, result);
+      if (result.delta.toRevision === result.delta.fromRevision) {
+        return { status: 'noop', result };
+      }
+      const applied = applyMutationResult(identity.projectInstanceId, pending, result);
       if (!applied.applied) {
         await requestAuthoritativeHydrate(input.graphPath, input.locale, dependencies);
         return { status: 'stale', result };

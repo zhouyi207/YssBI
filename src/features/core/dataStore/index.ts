@@ -25,7 +25,12 @@ export * from './graphEntityAccess';
 export * from './graphDataStore';
 
 export { useNodeView } from './useNodeView';
-export { toUiNode, uiNodeHasNoHeader } from './nodeView';
+export {
+  REROUTE_NODE_STYLE_ID,
+  toUiNode,
+  uiNodeHasNoHeader,
+  uiNodeIsReroute,
+} from './nodeView';
 export type { ToUiNodeOptions, UiNodePinSlice } from './nodeView';
 export { findInternalNodeInGraph } from './graphNodeSelectors';
 

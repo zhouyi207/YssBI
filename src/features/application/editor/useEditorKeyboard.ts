@@ -8,6 +8,9 @@ import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { exitZenMode, isZenModeActive } from '@/features/core/layout/workbenchZenMode';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { useHistoryStore } from '@/features/core/history';
+import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
+import { cancelCanvasInteraction } from '@/features/core/canvas/canvasInteractionCleanup';
+import { useEditorStore } from '@/features/core/editor';
 import {
   EDITOR_MUTATION_CAPABILITIES,
   notifyNodeCreationUnavailable,
@@ -93,10 +96,39 @@ export function useEditorKeyboard({
         return;
       }
 
-      if (e.key === 'Escape' && isZenModeActive()) {
-        e.preventDefault();
-        exitZenMode();
-        return;
+      if (e.key === 'Escape') {
+        const layout = useLayoutStore.getState();
+        const groupId = layout.activeEditorGroupId;
+        const graphPath = groupId ? getEditorGroupActiveTabId(groupId) : null;
+        if (graphPath && groupId) {
+          const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
+          if (interaction.type !== 'idle') {
+            e.preventDefault();
+            cancelCanvasInteraction(graphPath, groupId);
+            if (interaction.type === 'pendingNodeCreation') {
+              useEditorStore.getState().setContextMenu(null);
+            }
+            return;
+          }
+        }
+        if (groupId) {
+          const placement = useEditorTabStore.getState().getPlacement(groupId);
+          if (placement.selectedConnectionIds.length > 0) {
+            e.preventDefault();
+            useEditorTabStore.getState().setSelectedConnectionIds(groupId, []);
+            return;
+          }
+          if (placement.selectedNodeIds.length > 0) {
+            e.preventDefault();
+            useEditorTabStore.getState().setSelectedNodeIds(groupId, []);
+            return;
+          }
+        }
+        if (isZenModeActive()) {
+          e.preventDefault();
+          exitZenMode();
+          return;
+        }
       }
 
       if (e.key === 'F1') {

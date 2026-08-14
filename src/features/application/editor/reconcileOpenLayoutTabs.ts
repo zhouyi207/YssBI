@@ -1,6 +1,7 @@
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import type { LayoutTabInput } from '@/features/core/layout/layoutTabModel';
 import { normalizeLayoutTab } from '@/features/core/layout/layoutTabModel';
+import { replacePlacementActiveTab } from '@/features/core/layout/editorGraphSelectionPlacement';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
 
 /**
@@ -27,7 +28,10 @@ export function reconcileOpenLayoutTabsWithResources(): void {
       placement.tabIds = placement.tabIds.filter((tabId) => Boolean(state.registry[tabId]));
       placement.selectedTabIds = placement.selectedTabIds.filter((tabId) => placement.tabIds.includes(tabId));
       if (!placement.activeTabId || !placement.tabIds.includes(placement.activeTabId)) {
-        placement.activeTabId = placement.tabIds[placement.tabIds.length - 1] ?? null;
+        replacePlacementActiveTab(
+          placement,
+          placement.tabIds[placement.tabIds.length - 1] ?? null,
+        );
       }
     }
   });

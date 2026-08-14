@@ -4,11 +4,14 @@ import { useGraphMetaStore } from '@/features/core/dataStore';
 import { buildGraphResourceMeta, useResourceStore } from '@/features/core/resource';
 import { EventUpdatedHandler, FunctionUpdatedHandler } from './GraphEventHandler';
 import { invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
+import { registerCoreApplicationPorts } from '@/features/application/initialization/registerCoreApplicationPorts';
 
 vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/features/application/editorProjection/graphProjectionCoordinator')>()),
   invalidateGraphProjection: vi.fn(async () => true),
 }));
+
+registerCoreApplicationPorts();
 
 
 describe('Graph event handlers', () => {

@@ -4,13 +4,13 @@ use crate::database::DatabaseState;
 use crate::event::GraphMutationResultDto;
 use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
+#[cfg(test)]
+use crate::node_system::document::{ConnectionId, GraphMutation, RevisionedGraphStore};
 use crate::node_system::document::{
     EditorGraphMutationDto, GraphDeltaEvent, GraphDocumentPatch, HistoryEntryId, HistoryMutation,
     HistoryStatusDto, MutationConflict, MutationRequest, OperationId, ProjectDocumentState,
     ProjectHistory, ProjectHistoryTransaction, ResourceKey, ResourceRevision,
 };
-#[cfg(test)]
-use crate::node_system::document::{GraphMutation, RevisionedGraphStore};
 use crate::project::{
     GraphResourceDocument, GraphResourcePath, NormalizedProjectRoot, PreparedProjectActivation,
     ProjectData, ProjectFilesystemCoordinator, ProjectFilesystemError,
@@ -285,7 +285,7 @@ struct CommittedGraphLoad {
 struct CommittedGraphMutation {
     project_instance_id: String,
     delta: GraphDeltaEvent<GraphDocumentPatch>,
-    projection_source: ProjectionSourceSnapshot,
+    projection_replacement: crate::event::GraphProjectionReplacementDto,
     history: HistoryStatusDto,
 }
 
@@ -4711,6 +4711,45 @@ impl ProjectState {
         request: MutationRequest<EditorGraphMutationDto>,
         observe: impl FnOnce(&GraphDeltaEvent<GraphDocumentPatch>),
     ) -> Result<GraphMutationResultDto, MutationConflict> {
+        self.apply_editor_graph_mutation_observed_with_allocator(
+            project_instance_id,
+            graph_path,
+            locale,
+            request,
+            observe,
+            #[cfg(test)]
+            None,
+        )
+    }
+
+    #[cfg(test)]
+    pub(crate) fn apply_editor_graph_mutation_with_allocator_for_test(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+        graph_path: &GraphResourcePath,
+        locale: &str,
+        request: MutationRequest<EditorGraphMutationDto>,
+        allocate_connection_id: &(dyn Fn() -> ConnectionId + Send + Sync),
+    ) -> Result<GraphMutationResultDto, MutationConflict> {
+        self.apply_editor_graph_mutation_observed_with_allocator(
+            project_instance_id,
+            graph_path,
+            locale,
+            request,
+            |_| {},
+            Some(allocate_connection_id),
+        )
+    }
+
+    fn apply_editor_graph_mutation_observed_with_allocator(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+        graph_path: &GraphResourcePath,
+        locale: &str,
+        request: MutationRequest<EditorGraphMutationDto>,
+        observe: impl FnOnce(&GraphDeltaEvent<GraphDocumentPatch>),
+        #[cfg(test)] allocate_connection_id: Option<&(dyn Fn() -> ConnectionId + Send + Sync)>,
+    ) -> Result<GraphMutationResultDto, MutationConflict> {
         self.ensure_mutation_operational()?;
         let node_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
         let expected_resource = ResourceKey::Graph(node_path.clone());
@@ -4767,9 +4806,12 @@ impl ProjectState {
                     current_revision: ResourceRevision::new(projection.basis.graph_revision),
                 });
             }
-            let mut source =
-                crate::node_system::compatibility::source_from_projection(&projection, source_port)
-                    .map_err(|message| MutationConflict::InvalidEditorMutation(message.into()))?;
+            let mut source = crate::node_system::compatibility::source_from_projection(
+                &projection,
+                snapshot.registry.as_ref(),
+                source_port,
+            )
+            .map_err(|message| MutationConflict::InvalidEditorMutation(message.into()))?;
             let document = self
                 .get_data()
                 .map_err(|error| MutationConflict::Projection(error.to_string().into()))?
@@ -4789,32 +4831,70 @@ impl ProjectState {
         } else {
             None
         };
+        let mutation_validation = if matches!(
+            &request.payload,
+            EditorGraphMutationDto::Connect { .. }
+                | EditorGraphMutationDto::MoveConnections { .. }
+                | EditorGraphMutationDto::CreateNode {
+                    connect_from: Some(_),
+                    ..
+                }
+        ) {
+            let expected_session = self.current_projection_environment_expectation();
+            let environment = self
+                .capture_projection_environment(&expected_session)
+                .map_err(|error| MutationConflict::Projection(error.into()))?;
+            let data = self
+                .get_data()
+                .map_err(|error| MutationConflict::Projection(error.to_string().into()))?;
+            let projection_source = self.projection_source_snapshot(
+                &data,
+                environment.clone(),
+                environment.authority.project_instance_id.clone(),
+                environment.authority.authority_generation,
+                self.graph_revisions.read().unwrap().clone(),
+                self.variable_revisions.read().unwrap().clone(),
+                self.database_authority_revisions.read().unwrap().clone(),
+            );
+            let projection = projection_source
+                .graph_projection(graph_path, locale)
+                .map_err(|error| MutationConflict::Projection(error.into()))?;
+            let snapshot = crate::node_system::compatibility::EditorMutationValidationSnapshot::from_projection(
+                &projection,
+                environment.registry.as_ref(),
+            )
+            .map_err(|error| MutationConflict::Projection(error.into()))?;
+            if snapshot.graph_revision != request.base_revision {
+                return Err(MutationConflict::StaleRevision {
+                    base_revision: request.base_revision,
+                    current_revision: snapshot.graph_revision,
+                });
+            }
+            Some((snapshot, environment))
+        } else {
+            None
+        };
         if catalog_snapshot.is_some() {
             self.run_catalog_mutation_before_publication_test_hook();
         }
         let committed = self.commit_editor_graph_mutation(
             project_instance_id,
             graph_path,
+            locale,
             request,
             catalog_snapshot.as_ref(),
             compatibility_source.as_ref(),
+            mutation_validation.as_ref(),
+            #[cfg(test)]
+            allocate_connection_id,
         )?;
-        observe(&committed.delta);
-        let projection_replacement = crate::event::GraphProjectionReplacementDto {
-            graph_path: graph_path.as_str().to_string(),
-            projection: committed
-                .projection_source
-                .graph_projection(graph_path, locale)
-                .map_err(|error| MutationConflict::Projection(error.into()))?,
-            function_editor_projection: committed
-                .projection_source
-                .function_editor_projection(graph_path)
-                .map_err(|error| MutationConflict::Projection(error.into()))?,
-        };
+        if !committed.delta.payload.operations.is_empty() {
+            observe(&committed.delta);
+        }
         Ok(GraphMutationResultDto {
             project_instance_id: committed.project_instance_id,
             delta: committed.delta,
-            projection_replacement,
+            projection_replacement: committed.projection_replacement,
             history: committed.history,
         })
     }
@@ -4912,6 +4992,8 @@ impl ProjectState {
             resource,
             base_revision,
             operation_id,
+            "en-US",
+            None,
             None,
             None,
             move |_, _| Ok(payload),
@@ -4922,9 +5004,15 @@ impl ProjectState {
         &self,
         project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
+        locale: &str,
         request: MutationRequest<EditorGraphMutationDto>,
         catalog_snapshot: Option<&crate::project::CatalogMutationValidationSnapshot>,
         compatibility_source: Option<&crate::node_system::compatibility::SourcePort>,
+        mutation_validation: Option<&(
+            crate::node_system::compatibility::EditorMutationValidationSnapshot,
+            ProjectionEnvironmentSnapshot,
+        )>,
+        #[cfg(test)] allocate_connection_id: Option<&(dyn Fn() -> ConnectionId + Send + Sync)>,
     ) -> Result<CommittedGraphMutation, MutationConflict> {
         let MutationRequest {
             resource,
@@ -4938,15 +5026,30 @@ impl ProjectState {
             resource,
             base_revision,
             operation_id,
+            locale,
             Some(project_instance_id),
             catalog_snapshot,
+            mutation_validation.map(|(_, environment)| environment.clone()),
             move |document, registry| {
-                payload.into_patch_with_compatibility(
+                #[cfg(test)]
+                if let Some(allocate_connection_id) = allocate_connection_id {
+                    return payload.into_patch_with_editor_validation_and_allocator(
+                        &node_path,
+                        document,
+                        registry,
+                        catalog_snapshot,
+                        compatibility_source,
+                        mutation_validation.map(|(snapshot, _)| snapshot),
+                        allocate_connection_id,
+                    );
+                }
+                payload.into_patch_with_editor_validation(
                     &node_path,
                     document,
                     registry,
                     catalog_snapshot,
                     compatibility_source,
+                    mutation_validation.map(|(snapshot, _)| snapshot),
                 )
             },
         )
@@ -4958,8 +5061,10 @@ impl ProjectState {
         resource: ResourceKey,
         base_revision: ResourceRevision,
         operation_id: OperationId,
+        locale: &str,
         project_instance_id: Option<&ProjectInstanceId>,
         catalog_snapshot: Option<&crate::project::CatalogMutationValidationSnapshot>,
+        projection_environment: Option<ProjectionEnvironmentSnapshot>,
         plan: impl FnOnce(
             &crate::node_system::document::GraphDocument,
             &crate::node_system::registry::NodeRegistry,
@@ -4975,9 +5080,68 @@ impl ProjectState {
             });
         }
         let expected_session = self.current_projection_environment_expectation();
-        let projection_environment = self
-            .capture_projection_environment(&expected_session)
-            .map_err(|error| MutationConflict::Projection(error.into()))?;
+        let projection_environment = match projection_environment {
+            Some(environment) => environment,
+            None => self
+                .capture_projection_environment(&expected_session)
+                .map_err(|error| MutationConflict::Projection(error.into()))?,
+        };
+        let (
+            captured_data,
+            captured_graph_revisions,
+            captured_variable_revisions,
+            captured_database_revisions,
+        ) = {
+            let data = self.project_data.read().unwrap();
+            let graph =
+                data.graphs
+                    .get(graph_path)
+                    .ok_or_else(|| MutationConflict::ResourceMismatch {
+                        requested: expected_resource.clone(),
+                        store: expected_resource.clone(),
+                    })?;
+            if graph.document.revision != base_revision {
+                return Err(MutationConflict::StaleRevision {
+                    base_revision,
+                    current_revision: graph.document.revision,
+                });
+            }
+            (
+                data.clone(),
+                self.graph_revisions.read().unwrap().clone(),
+                self.variable_revisions.read().unwrap().clone(),
+                self.database_authority_revisions.read().unwrap().clone(),
+            )
+        };
+        let captured_document = &captured_data.graphs[graph_path].document;
+        let patch = plan(captured_document, projection_environment.registry.as_ref())?;
+        let mut candidate_data = captured_data;
+        let candidate_graph = candidate_data
+            .graphs
+            .get_mut(graph_path)
+            .expect("captured graph remains present");
+        candidate_graph.document.apply_patch(&patch)?;
+        let candidate_revision = candidate_graph.document.revision;
+        let mut candidate_graph_revisions = captured_graph_revisions;
+        candidate_graph_revisions.insert(graph_path.clone(), candidate_revision);
+        let candidate_source = self.projection_source_snapshot(
+            &candidate_data,
+            projection_environment.clone(),
+            projection_environment
+                .authority
+                .project_instance_id
+                .as_str()
+                .to_owned(),
+            projection_environment
+                .authority
+                .authority_generation
+                .saturating_add(u64::from(!patch.operations.is_empty())),
+            candidate_graph_revisions,
+            captured_variable_revisions,
+            captured_database_revisions,
+        );
+        let projection_replacement =
+            candidate_projection_replacement(&candidate_source, graph_path, locale)?;
         self.run_mutation_publication_test_hook();
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
@@ -5003,11 +5167,6 @@ impl ProjectState {
                 "project changed before graph authority commit".into(),
             ));
         }
-        if !projection_environment.matches_publication(&publication) {
-            return Err(MutationConflict::StaleProjectLifecycle(
-                "projection environment changed before graph authority commit".into(),
-            ));
-        }
         self.ensure_mutation_operational()?;
         let graph =
             data.graphs
@@ -5022,7 +5181,26 @@ impl ProjectState {
                 current_revision: graph.document.revision,
             });
         }
-        let patch = plan(&graph.document, projection_environment.registry.as_ref())?;
+        if !projection_environment.matches_publication(&publication) {
+            return Err(MutationConflict::StaleProjectLifecycle(
+                "projection environment changed before graph authority commit".into(),
+            ));
+        }
+        if patch.operations.is_empty() {
+            let history = self.history.read().unwrap().status();
+            return Ok(CommittedGraphMutation {
+                project_instance_id: publication.project_instance_id.clone(),
+                delta: GraphDeltaEvent {
+                    graph_path: node_path,
+                    from_revision: base_revision,
+                    to_revision: base_revision,
+                    caused_by: Some(operation_id),
+                    payload: patch,
+                },
+                projection_replacement,
+                history,
+            });
+        }
         let mut documents = ProjectDocumentState::new(
             data.graphs
                 .iter()
@@ -5058,15 +5236,6 @@ impl ProjectState {
         let history = history.status();
         publication.advance_authority_generation();
         self.invalidate_graph_compile_products(graph_path);
-        let projection_source = self.projection_source_snapshot(
-            &data,
-            projection_environment,
-            publication.project_instance_id.clone(),
-            publication.authority_generation(),
-            graph_revisions.clone(),
-            self.variable_revisions.read().unwrap().clone(),
-            self.database_authority_revisions.read().unwrap().clone(),
-        );
         Ok(CommittedGraphMutation {
             project_instance_id: publication.project_instance_id.clone(),
             delta: GraphDeltaEvent {
@@ -5078,7 +5247,7 @@ impl ProjectState {
                 caused_by: Some(operation_id),
                 payload: patch,
             },
-            projection_source,
+            projection_replacement,
             history,
         })
     }
@@ -8116,6 +8285,67 @@ static COMPILE_RESOURCE_SNAPSHOT_CONSTRUCTIONS: std::sync::atomic::AtomicU64 =
 #[cfg(test)]
 pub(super) fn compile_resource_snapshot_constructions() -> u64 {
     COMPILE_RESOURCE_SNAPSHOT_CONSTRUCTIONS.load(std::sync::atomic::Ordering::Acquire)
+}
+
+fn candidate_projection_replacement(
+    source: &ProjectionSourceSnapshot,
+    graph_path: &GraphResourcePath,
+    locale: &str,
+) -> Result<crate::event::GraphProjectionReplacementDto, MutationConflict> {
+    #[cfg(test)]
+    if let Some(hook) = source.environment.projection_test_hook.as_ref() {
+        hook().map_err(|error| MutationConflict::Projection(error.into()))?;
+    }
+    let document = &source
+        .data
+        .graphs
+        .get(graph_path)
+        .ok_or_else(|| MutationConflict::Projection("candidate graph is not loaded".into()))?
+        .document;
+    let resources = compile_resources_from_projection_snapshot(source)
+        .map_err(|error| MutationConflict::Projection(error.into()))?;
+    let compiler = GraphCompiler::with_resolvers(
+        source.environment.registry.as_ref(),
+        &resources,
+        resources.schema_resolvers(),
+        crate::node_system::compiler::build_builtin_interface_resolvers(),
+    )
+    .with_observability(
+        source.environment.project_session_id.clone(),
+        source.environment.trace_sink.as_ref(),
+    );
+    let snapshot = compiler.snapshot(
+        crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
+        document,
+    );
+    let compiled = compiler
+        .compile_snapshot(
+            &snapshot,
+            &crate::node_system::compiler::CompileCancellationToken::new(),
+        )
+        .map_err(|error| MutationConflict::Projection(error.to_string().into()))?;
+    let projection = EditorGraphProjectionDto::from_compilation_sources(
+        graph_path.as_str(),
+        &compiled.analysis,
+        &compiled.outcome,
+        document,
+        source.environment.registry.as_ref(),
+        &source.environment.catalog.localization(locale),
+    )
+    .map_err(|error| MutationConflict::Projection(error.to_string().into()))?;
+    let function_editor_projection = source
+        .data
+        .graphs
+        .get(graph_path)
+        .and_then(|resource| resource.function.as_ref())
+        .map(crate::node_system::analysis::build_function_editor_projection)
+        .transpose()
+        .map_err(|error| MutationConflict::Projection(error.into()))?;
+    Ok(crate::event::GraphProjectionReplacementDto {
+        graph_path: graph_path.as_str().to_owned(),
+        projection,
+        function_editor_projection,
+    })
 }
 
 pub(super) fn compile_resources_from_projection_snapshot(

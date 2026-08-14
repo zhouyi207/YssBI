@@ -107,53 +107,6 @@ export class Node implements UINode {
     }
 }
 
-/**
- * 编辑器手势类型
- * 表示用户当前的交互状态
- */
-export type EditorGesture =
-    | {
-        type: "pan";
-        startX: number;
-        startY: number;
-        lastX: number;
-        lastY: number;
-        moved: boolean;
-        groupId?: string;
-    }
-    | {
-        type: "connect";
-        startPin: Pin;
-        startX: number;     // 屏幕坐标
-        startY: number;
-        currentX: number;   // 屏幕坐标（用于 hit-test）
-        currentY: number;
-        /** 连接线终点的世界坐标（用于多 editor 同步渲染） */
-        worldX?: number;
-        worldY?: number;
-        isReconnect?: boolean;
-        groupId?: string;
-    }
-    | {
-        type: "drag";
-        nodeId?: string;
-        lastX: number;
-        lastY: number;
-        moved: boolean;
-        groupId?: string;
-        /** 正在被拖拽的节点 ID 列表（用于多 editor 同步应用偏移） */
-        dragNodeIds?: string[];
-        /** 拖拽期间的累计偏移（世界坐标） */
-        dragDelta?: { x: number; y: number };
-    }
-    | null;
-
-export type ConnectGesture = Extract<NonNullable<EditorGesture>, { type: 'connect' }>;
-
-/** Narrow `EditorGesture` to an active connect drag, or null. */
-export function getConnectGesture(gesture: EditorGesture): ConnectGesture | null {
-    return gesture?.type === 'connect' ? gesture : null;
-}
 
 /**
  * 上下文菜单状态

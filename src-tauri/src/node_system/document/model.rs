@@ -8,6 +8,7 @@ use std::fmt;
 pub type ParameterValues = BTreeMap<ParameterKey, TypedValue>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct NodePosition {
     pub x: f64,
     pub y: f64,

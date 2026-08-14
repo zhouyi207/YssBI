@@ -30,6 +30,7 @@ import { captureProjectIdentity } from '@/features/core/projectLifecycle/project
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
+import { registerCoreApplicationPorts } from '@/features/application/initialization/registerCoreApplicationPorts';
 
 vi.mock('@/services/project/projectService', () => ({
   ProjectService: {
@@ -52,6 +53,8 @@ vi.mock('@/features/application/graphDocument/functionSignatureSync', async (imp
   hydrateFunctionSignaturesFromProjectIndex: vi.fn(),
   syncFunctionSignatureFromGraph: vi.fn(),
 }));
+
+registerCoreApplicationPorts();
 
 function deferred<T>() {
   let resolve!: (value: T) => void;

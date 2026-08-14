@@ -4,6 +4,7 @@ import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creat
 import type { Pin } from '@/shared/types/domain/pin';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { useEditorStore } from '@/features/core/editor';
+import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
@@ -43,13 +44,15 @@ function interactionStillMatches(
   sourceAddress: PortAddressDto | null,
 ): boolean {
   if (useEditorTabStore.getState().getPlacement(groupId).activeTabId !== graphPath) return false;
-  const current = useEditorStore.getState();
-  if (!current.contextMenu?.visible
-    || current.contextMenu.x !== menu.x
-    || current.contextMenu.y !== menu.y) return false;
-  const currentSource = readPendingConnectionAddress(current.pendingConnection);
+  const contextMenu = useEditorStore.getState().contextMenu;
+  if (!contextMenu?.visible
+    || contextMenu.x !== menu.x
+    || contextMenu.y !== menu.y) return false;
+  const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
+  if (interaction?.type !== 'pendingNodeCreation') return sourceAddress === null;
+  const currentSource = readPendingConnectionAddress(interaction.session.source as Pin | null);
   return sourceAddress === null
-    ? current.pendingConnection === null
+    ? interaction.session.source === null
     : currentSource !== null && samePortAddress(currentSource, sourceAddress);
 }
 

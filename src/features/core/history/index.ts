@@ -1,13 +1,17 @@
 export { useHistoryStore, EMPTY_HISTORY_STATE } from './historyStore';
 export type { HistoryStoreState } from './historyStore';
-export { executeCommand } from './commandExecutor';
+export { executeCommand, executeCommandOutcome } from './commandExecutor';
 export { commandRegistry, getCommandHandler } from './commands';
 export type { CommandType, CommandHandler } from './types';
 export type {
   MoveNodesArgs,
   SetPinValueArgs,
   ConnectPinsArgs,
-  DisconnectPinArgs,
+  DisconnectPortArgs,
+  DisconnectNodeArgs,
+  DisconnectConnectionsArgs,
+  InsertRerouteArgs,
+  MoveConnectionsArgs,
   DeleteNodesArgs,
   AddRepeatablePinArgs,
   RemoveRepeatablePinArgs,

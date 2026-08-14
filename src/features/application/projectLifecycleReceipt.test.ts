@@ -1,9 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { ProjectLifecycleCommittedHandler } from '@/features/core/sync/handlers/ProjectEventHandler';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import type { LifecycleMutationResultDto } from '@/shared/types/dto/project';
 import { logger } from '@/utils/appLogger';
+import {
+  installCoreApplicationTestPorts,
+  resetCoreApplicationTestPorts,
+} from '@/features/application/testHelpers/coreApplicationPorts';
 import {
   ProjectLifecycleProtocolError,
   PROJECT_LIFECYCLE_SETTLEMENT_TTL_MS,
@@ -76,8 +80,21 @@ describe('project lifecycle pending receipt registry', () => {
     setProjectLifecycleClockForTests(() => 1_000);
     vi.spyOn(logger.sys, 'error').mockImplementation(() => undefined);
     resetProjectLifecycleReceiptHandlerForTests();
+    installCoreApplicationTestPorts({
+      syncEvents: {
+        applyProjectLifecycleReceipt: async (result, _onProjectCleared, deps) => {
+          await applyProjectLifecycleReceipt(
+            result as LifecycleMutationResultDto,
+            'event',
+            deps as ProjectLifecycleReceiptDependencies,
+          );
+        },
+      },
+    });
     startProject('project-a', 4);
   });
+
+  afterEach(resetCoreApplicationTestPorts);
 
   it.each(['event-first', 'direct-first'] as const)(
     '%s matching DTOs perform shared effects once while direct keeps notification ownership',

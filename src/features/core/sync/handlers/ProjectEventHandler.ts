@@ -3,11 +3,7 @@
 import { BaseEventHandler } from './BaseEventHandler';
 import { ProjectLifecycleCommittedPayload, ProjectLoadedPayload, ProjectSavedPayload, EventCallbacks } from '../types';
 import { loadActivatedProject } from '@/features/core/dataStore';
-import {
-    applyProjectLifecycleReceipt,
-    type ProjectLifecycleReceiptDependencies,
-} from '@/features/application/projectLifecycleReceipt';
-import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
+import { syncApplicationEventPort } from '../applicationEventPort';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 
@@ -29,9 +25,9 @@ export class ProjectClearedHandler extends BaseEventHandler<void> {
     handle(_payload: void, callbacks?: EventCallbacks): void {
         this.log('Project cleared');
         
-        createProjectLifecycleReceiptDependencies(
+        syncApplicationEventPort().clearProject(
             (callbacks ?? this.callbacks)?.onProjectCleared,
-        ).clearProject();
+        );
     }
 }
 
@@ -40,19 +36,18 @@ export class ProjectLifecycleCommittedHandler extends BaseEventHandler<ProjectLi
 
     constructor(
         callbacks?: EventCallbacks,
-        private readonly dependencies?: ProjectLifecycleReceiptDependencies,
+        private readonly dependencies?: unknown,
     ) {
         super(callbacks);
     }
 
     handle(payload: ProjectLifecycleCommittedPayload, callbacks?: EventCallbacks): void {
-        void applyProjectLifecycleReceipt(
+        const operation = syncApplicationEventPort().applyProjectLifecycleReceipt(
             payload.result,
-            'event',
-            this.dependencies ?? createProjectLifecycleReceiptDependencies(
-                (callbacks ?? this.callbacks)?.onProjectCleared,
-            ),
-        ).catch((error) => {
+            (callbacks ?? this.callbacks)?.onProjectCleared,
+            this.dependencies,
+        );
+        void operation.catch((error) => {
             logger.sys.error(
                 `Project lifecycle event failed: ${formatErrorMessage(error)}`,
                 'ProjectLifecycleCommittedHandler',

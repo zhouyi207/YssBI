@@ -1,15 +1,9 @@
+// @vitest-environment happy-dom
+
 import { describe, expect, it } from 'vitest';
-import { hitTestSelection } from './selectionHitTargets';
+import { collectSelectionHitTargets, hitTestSelection } from './selectionHitTargets';
 import type { SelectionHitTarget } from './selectionHitTargets';
-import {
-  selectionScreenRect,
-  selectionSessionMoved,
-  startSelectionSession,
-  endSelectionSession,
-  getSelectionSession,
-  getSelectionPreviewIds,
-  abortSelectionSession,
-} from './selectionSession';
+
 
 describe('hitTestSelection', () => {
   const targets: SelectionHitTarget[] = [
@@ -23,35 +17,37 @@ describe('hitTestSelection', () => {
     expect(hitTestSelection(targets, { x1: 0, y1: 0, x2: 200, y2: 60 })).toEqual(['a', 'b']);
   });
 
+  it('collects node hit targets without treating interactive edge paths as box-selectable', () => {
+    const canvas = document.createElement('div');
+    const node = document.createElement('div');
+    node.dataset.nodeId = 'node-a';
+    node.getBoundingClientRect = () => ({
+      left: 10,
+      right: 50,
+      top: 20,
+      bottom: 60,
+      width: 40,
+      height: 40,
+      x: 10,
+      y: 20,
+      toJSON: () => ({}),
+    });
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const edge = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    edge.setAttribute('data-edge-hit-target', 'edge-a');
+    svg.appendChild(edge);
+    canvas.append(node, svg);
+
+    expect(collectSelectionHitTargets(canvas)).toEqual([{
+      id: 'node-a',
+      left: 10,
+      right: 50,
+      top: 20,
+      bottom: 60,
+    }]);
+  });
+
   it('returns empty when nothing intersects', () => {
     expect(hitTestSelection(targets, { x1: 200, y1: 200, x2: 300, y2: 300 })).toEqual([]);
-  });
-});
-
-describe('selectionSession', () => {
-  it('tracks screen rect and movement', () => {
-    startSelectionSession({ groupId: 'g1', startX: 10, startY: 20, preserveSelection: false });
-    const session = getSelectionSession();
-    expect(session.active).toBe(true);
-    if (!session.active) return;
-
-    expect(selectionScreenRect({ ...session, currentX: 30, currentY: 50 })).toEqual({
-      x1: 10,
-      y1: 20,
-      x2: 30,
-      y2: 50,
-    });
-    expect(selectionSessionMoved({ ...session, currentX: 11, currentY: 20 }, 3)).toBe(false);
-    expect(selectionSessionMoved({ ...session, currentX: 20, currentY: 20 }, 3)).toBe(true);
-
-    endSelectionSession();
-    expect(getSelectionSession().active).toBe(false);
-    expect(getSelectionPreviewIds()).toEqual([]);
-  });
-
-  it('abortSelectionSession ends an active session', () => {
-    startSelectionSession({ groupId: 'g1', startX: 0, startY: 0, preserveSelection: false });
-    abortSelectionSession();
-    expect(getSelectionSession().active).toBe(false);
   });
 });

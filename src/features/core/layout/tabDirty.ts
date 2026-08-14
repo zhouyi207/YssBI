@@ -1,8 +1,8 @@
 import { useLayoutStore } from "./layoutStore";
 import { getLayoutTabById } from "./layoutTabQueries";
-import { isGraphResourceDirty, markResourceDirty } from "@/features/core/resource";
+import { isGraphResourceDirty, markResourceDirty, useResourceStore } from "@/features/core/resource";
 import { layoutTabResourceRef } from "./layoutTabModel";
-import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
+
 import { listAllOpenEditorTabs } from "./editorTabStore";
 
 export function markGraphTabDirty(graphPath: string): void {
@@ -13,6 +13,12 @@ export function markGraphTabDirty(graphPath: string): void {
             useLayoutStore.getState().setTabPinned(located.nodeId, graphPath, true);
         }
     }
+}
+
+function resolveCoreTabDisplayName(ref: ReturnType<typeof layoutTabResourceRef>, fallbackId: string): string {
+    if (!ref) return fallbackId || 'Untitled';
+    const resource = useResourceStore.getState().resources[`${ref.kind}:${ref.id}`];
+    return resource?.name ?? fallbackId ?? ref.id;
 }
 
 export interface DirtyTabSnapshot {
@@ -39,7 +45,7 @@ export function collectDirtyGraphTabs(): DirtyTabSnapshot[] {
         out.push({
           nodeId: groupId,
           graphPath: tab.id,
-          title: resolveTabDisplayName(layoutTabResourceRef(tab), tab.id),
+          title: resolveCoreTabDisplayName(layoutTabResourceRef(tab), tab.id),
         });
     }
     return out;

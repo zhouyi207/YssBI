@@ -9,7 +9,9 @@ use crate::node_system::compiler::{
 };
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::*;
-use crate::node_system::registry::{CategoryRegistration, RegisteredNode, StructuralNodeRole};
+use crate::node_system::registry::{
+    CategoryRegistration, RegisteredNode, StructuralNodeRole, TransparentNodeRole,
+};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -127,6 +129,13 @@ pub(crate) fn leaf(protocol: NodeProtocol, kernel: &'static str) -> RegisteredNo
 
 pub(crate) fn structural(protocol: NodeProtocol, role: StructuralNodeRole) -> RegisteredNode {
     RegisteredNode::structural(Arc::new(protocol), role)
+}
+
+pub(in crate::node_system::catalog::core_nodes) fn transparent(
+    protocol: NodeProtocol,
+    role: TransparentNodeRole,
+) -> RegisteredNode {
+    RegisteredNode::transparent(Arc::new(protocol), role)
 }
 
 pub(crate) fn protocol(

@@ -22,6 +22,12 @@ import { useProjectOperations } from '@/features/application/editor/useProjectOp
 import { useProjectPicker } from './useProjectPicker';
 import { saveAllDirtyGraphs } from '@/features/application/editor/saveAllDirtyGraphs';
 import { logger } from '@/utils/appLogger';
+import {
+  installCoreApplicationTestPorts,
+  resetCoreApplicationTestPorts,
+} from '@/features/application/testHelpers/coreApplicationPorts';
+import { applyProjectLifecycleReceipt } from '@/features/application/projectLifecycleReceipt';
+import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
 
 const navigate = vi.fn();
 
@@ -160,6 +166,18 @@ describe('project lifecycle initiating operations', () => {
     vi.restoreAllMocks();
     vi.clearAllMocks();
     resetProjectLifecycleReceiptHandlerForTests();
+    installCoreApplicationTestPorts({
+      syncEvents: {
+        applyProjectLifecycleReceipt: async (result, onProjectCleared, dependencies) => {
+          await applyProjectLifecycleReceipt(
+            result as LifecycleMutationResultDto,
+            'event',
+            dependencies as Parameters<typeof applyProjectLifecycleReceipt>[2]
+              ?? createProjectLifecycleReceiptDependencies(onProjectCleared),
+          );
+        },
+      },
+    });
     vi.mocked(saveAllDirtyGraphs).mockResolvedValue(true);
     vi.spyOn(logger.app, 'error').mockImplementation(() => undefined);
     vi.spyOn(ProjectService, 'listRegisteredProjects').mockResolvedValue([]);
@@ -188,6 +206,7 @@ describe('project lifecycle initiating operations', () => {
     act(() => root.unmount());
     host.remove();
     uiStore.finishProgress();
+    resetCoreApplicationTestPorts();
   });
 
   it('recovers initiating save-as success when event settles before direct transport rejects', async () => {

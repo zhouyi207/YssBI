@@ -17,6 +17,8 @@ pub mod command_window;
 pub mod command_worksheet;
 
 #[cfg(test)]
+mod command_blueprint_graph_phase1_tests;
+#[cfg(test)]
 mod command_trace_tests;
 
 pub use command_bayes::*;

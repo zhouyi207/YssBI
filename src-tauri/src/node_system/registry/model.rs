@@ -76,11 +76,17 @@ pub enum StructuralNodeRole {
     FunctionReturn,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+pub enum TransparentNodeRole {
+    Reroute,
+}
+
 #[derive(Clone)]
 pub struct RegisteredNode {
     pub(super) protocol: Arc<NodeProtocol>,
     pub(super) implementation: Option<LeafImplementation>,
     pub(super) structural_role: Option<StructuralNodeRole>,
+    pub(super) transparent_role: Option<TransparentNodeRole>,
 }
 
 impl RegisteredNode {
@@ -92,6 +98,7 @@ impl RegisteredNode {
             protocol,
             implementation: Some(implementation.into()),
             structural_role: None,
+            transparent_role: None,
         }
     }
 
@@ -100,6 +107,16 @@ impl RegisteredNode {
             protocol,
             implementation: None,
             structural_role: Some(role),
+            transparent_role: None,
+        }
+    }
+
+    pub fn transparent(protocol: Arc<NodeProtocol>, role: TransparentNodeRole) -> Self {
+        Self {
+            protocol,
+            implementation: None,
+            structural_role: None,
+            transparent_role: Some(role),
         }
     }
 
@@ -114,6 +131,10 @@ impl RegisteredNode {
     pub fn structural_role(&self) -> Option<StructuralNodeRole> {
         self.structural_role
     }
+
+    pub fn transparent_role(&self) -> Option<TransparentNodeRole> {
+        self.transparent_role
+    }
 }
 
 impl fmt::Debug for RegisteredNode {
@@ -122,6 +143,7 @@ impl fmt::Debug for RegisteredNode {
             .field("protocol", &self.protocol)
             .field("has_implementation", &self.implementation.is_some())
             .field("structural_role", &self.structural_role)
+            .field("transparent_role", &self.transparent_role)
             .finish()
     }
 }

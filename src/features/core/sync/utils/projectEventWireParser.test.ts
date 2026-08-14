@@ -11,7 +11,7 @@ const projectInstanceId = '00000000-0000-0000-0000-000000000601';
 const delta = {
   graphPath: 'events/Main.yssbi-event',
   fromRevision: 1,
-  toRevision: 2,
+  toRevision: 1,
   causedBy: null,
   payload: { operations: [] },
 };

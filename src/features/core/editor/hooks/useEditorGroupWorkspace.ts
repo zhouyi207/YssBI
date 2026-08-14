@@ -8,6 +8,7 @@ import { GroupContext } from '../context/GroupContext';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
 import { DEFAULT_EDITOR_GROUP_ID } from '@/features/core/layout/workbenchLayoutDefaults';
 import { useEditorGroupPlacement } from './useEditorGroupPlacement';
+import { createGraphSelection } from '@/features/core/layout/layoutTabQueries';
 
 export function useEditorGroupWorkspace(overrideGroupId?: string | null) {
   const contextGroupId = useContext(GroupContext);
@@ -24,7 +25,18 @@ export function useEditorGroupWorkspace(overrideGroupId?: string | null) {
       tabs: placement.tabs,
       activeTabId: placement.activeTabId,
       selectedNodeIds: placement.selectedNodeIds,
+      selectedConnectionIds: placement.selectedConnectionIds,
+      selection: createGraphSelection(
+        placement.selectedNodeIds,
+        placement.selectedConnectionIds,
+      ),
     }),
-    [groupId, placement.tabs, placement.activeTabId, placement.selectedNodeIds],
+    [
+      groupId,
+      placement.tabs,
+      placement.activeTabId,
+      placement.selectedNodeIds,
+      placement.selectedConnectionIds,
+    ],
   );
 }

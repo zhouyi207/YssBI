@@ -10,10 +10,16 @@ function invalidResult(message: string): never {
 }
 
 export function validateMutationResult(
+  projectInstanceId: string,
   pending: PendingMutationRecord,
   result: GraphMutationResultDto,
 ): void {
   const { delta, projectionReplacement } = result;
+  if (result.projectInstanceId !== projectInstanceId) {
+    invalidResult(
+      `projectInstanceId '${result.projectInstanceId}' does not match '${projectInstanceId}'`,
+    );
+  }
   if (delta.graphPath !== pending.graphPath) {
     invalidResult(`delta graph path '${delta.graphPath}' does not match '${pending.graphPath}'`);
   }
@@ -23,8 +29,12 @@ export function validateMutationResult(
   if (delta.fromRevision !== pending.baseRevision) {
     invalidResult(`from revision ${delta.fromRevision} does not match ${pending.baseRevision}`);
   }
-  if (delta.toRevision !== delta.fromRevision + 1) {
-    invalidResult(`revision ${delta.fromRevision} -> ${delta.toRevision} is not monotonic`);
+  const hasOperations = delta.payload.operations.length > 0;
+  const validRevision = hasOperations
+    ? delta.toRevision === delta.fromRevision + 1
+    : delta.toRevision === delta.fromRevision;
+  if (!validRevision) {
+    invalidResult(`revision ${delta.fromRevision} -> ${delta.toRevision} does not match operations`);
   }
   if (projectionReplacement.graphPath !== delta.graphPath) {
     invalidResult(
@@ -39,10 +49,11 @@ export function validateMutationResult(
 }
 
 export function applyMutationResult(
+  projectInstanceId: string,
   pending: PendingMutationRecord,
   result: GraphMutationResultDto,
 ): AtomicProjectionApplyResult {
-  validateMutationResult(pending, result);
+  validateMutationResult(projectInstanceId, pending, result);
   const applied = useGraphDataStore
     .getState()
     .replaceProjectionsAtomically([result.projectionReplacement]);

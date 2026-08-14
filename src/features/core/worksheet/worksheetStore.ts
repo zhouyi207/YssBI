@@ -2,8 +2,7 @@ import { create } from 'zustand';
 import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
-import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
+import { worksheetApplicationPort } from './worksheetApplicationPort';
 
 import {
   clearResourceDocumentState,
@@ -72,7 +71,7 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
   saveDocument: async (worksheetPath) => {
     const document = get().documents[worksheetPath];
     if (!document) return false;
-    const context = captureProjectCommandContext();
+    const context = worksheetApplicationPort().captureCommandContext();
     const result = await WorksheetService.saveWorksheet(
       context.projectInstanceId,
       context.operationId,
@@ -88,7 +87,7 @@ export const useWorksheetStore = create<WorksheetStore>((set, get) => ({
       context.operationId,
       document,
     );
-    await projectPublicationCoordinator.submit({ result });
+    await worksheetApplicationPort().submitPublication(result);
     if (!context.isCurrent() || !expected) return false;
     const settled = get().documents[worksheetPath];
     return settled !== undefined

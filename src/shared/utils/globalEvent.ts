@@ -22,6 +22,12 @@ export function addGlobalEventListener<K extends keyof DocumentEventMap>(
 export function addGlobalEventListener(
   target: GlobalEventTarget,
   type: string,
+  listener: (event: Event) => void,
+  options?: AddEventListenerOptions | boolean,
+): () => void;
+export function addGlobalEventListener(
+  target: GlobalEventTarget,
+  type: string,
   listener: EventListener,
   options?: AddEventListenerOptions | boolean,
 ) {

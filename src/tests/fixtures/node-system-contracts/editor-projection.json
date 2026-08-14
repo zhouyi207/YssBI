@@ -2,7 +2,7 @@
   "basis": {
     "graphPath": "events/contract.yssbi-event",
     "graphRevision": 7,
-    "registryFingerprint": "58d3559a9ebeb9950045ecc3b5b2dc400e029c99cfa33bdef823752d9cc3699d",
+    "registryFingerprint": "5e9d510f203e50f5034091a806b5e0d8b36075e7ac6d3a6d087335763fe0770f",
     "resourceVersions": {}
   },
   "connections": [],
@@ -53,7 +53,9 @@
           },
           "canRemove": false,
           "connections": {
-            "canConnect": true,
+            "canAppend": true,
+            "canMove": false,
+            "canReplace": false,
             "current": 0,
             "maximum": 1,
             "ordered": false
@@ -69,8 +71,10 @@
           "orphan": false,
           "resolvedSchema": null,
           "resolvedType": {
+            "dataType": {
+              "kind": "Boolean"
+            },
             "display": "core.bool",
-            "dataType": { "kind": "Boolean" },
             "resolved": true
           },
           "status": "resolved",

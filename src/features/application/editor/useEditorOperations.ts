@@ -4,7 +4,12 @@ import {
   canDeleteNode,
 } from '@/features/core/dataStore/graphNodeSelectors';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { updateEditorGroupSelectedNodeIds } from '@/features/core/layout';
+import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import {
+  updateEditorGroupSelectedConnectionIds,
+  updateEditorGroupSelectedNodeIds,
+} from '@/features/core/layout';
 import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import { useClipboardStore } from '@/features/core/editor';
 import { buildClipboardSnapshot } from '@/features/core/editor/clipboardSnapshot';
@@ -14,7 +19,9 @@ import {
   undoEditorHistory,
 } from '@/features/application/editorMutation/historyCoordinator';
 import { uiStore } from '@/features/core/ui/UIStore';
+import { executeSafeGraphMutation } from '@/features/application/editorMutation/safeGraphMutation';
 import { notifyNodeCreationUnavailable } from './editorMutationAvailability';
+import { disconnectConnectionsById } from './edgeOperations';
 
 
 /**
@@ -24,13 +31,29 @@ import { notifyNodeCreationUnavailable } from './editorMutationAvailability';
 export function useEditorOperations() {
   const setClipboard = useClipboardStore((s) => s.setClipboard);
 
-  const { activeTabId, selectedNodeIds } = useActiveEditorGroup();
+  const {
+    activeTabId,
+    groupId,
+    selectedNodeIds,
+    selectedConnectionIds,
+  } = useActiveEditorGroup();
 
   const activeTabIdRef = useRef(activeTabId);
+  const activeGroupIdRef = useRef(groupId);
   const selectedNodeIdsRef = useRef(selectedNodeIds);
+  const selectedConnectionIdsRef = useRef(selectedConnectionIds);
 
   activeTabIdRef.current = activeTabId;
+  activeGroupIdRef.current = groupId;
   selectedNodeIdsRef.current = selectedNodeIds;
+  selectedConnectionIdsRef.current = selectedConnectionIds;
+
+  const setSelectedConnectionIds = useCallback(
+    (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
+      updateEditorGroupSelectedConnectionIds(updater, targetGroupId);
+    },
+    [],
+  );
 
   const setSelectedNodeIds = useCallback(
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
@@ -87,22 +110,13 @@ export function useEditorOperations() {
     const idsToDelete = nodeIds.filter((id) => canDeleteNode(tid, id));
     if (idsToDelete.length === 0) return;
 
-    const applied = await executeCommand(tid, 'DeleteNodes', { nodeIds: idsToDelete });
-    if (!applied) uiStore.showToast("删除失败", "error", 2000);
-    return applied;
+    return executeSafeGraphMutation(tid, 'Delete nodes', 'DeleteNodes', { nodeIds: idsToDelete });
   }, []);
 
   const breakAllNodeLinks = useCallback(async (nodeId: string) => {
     const tid = activeTabIdRef.current;
     if (!tid) return;
-    const pinIds = useGraphDataStore.getState().getGraphNodePins(tid, nodeId);
-    for (const pinId of pinIds) {
-      const connIds = useGraphDataStore.getState().getGraphPinConnections(tid, pinId);
-      if (connIds.length === 0) continue;
-      const applied = await executeCommand(tid, 'DisconnectPin', { pinId });
-      if (!applied) return false;
-    }
-    return true;
+    return executeSafeGraphMutation(tid, 'Break all links', 'DisconnectNode', { nodeId });
   }, []);
 
   const selectLinkedNodes = useCallback((nodeId: string) => {
@@ -131,7 +145,7 @@ export function useEditorOperations() {
   const disconnectPinById = useCallback(async (pinId: string) => {
     const tid = activeTabIdRef.current;
     if (!tid) return;
-    return executeCommand(tid, 'DisconnectPin', { pinId });
+    return executeSafeGraphMutation(tid, 'Disconnect port', 'DisconnectPort', { pinId });
   }, []);
 
   const resetPinValue = useCallback(async (nodeId: string, pinId: string) => {
@@ -147,24 +161,75 @@ export function useEditorOperations() {
     return false;
   }, []);
 
-  const deleteSelected = useCallback(async () => {
-    const sIds = new Set(selectedNodeIdsRef.current);
-    if (sIds.size === 0) return;
-    const tid = activeTabIdRef.current;
-    if (!tid) return;
+  const breakConnectionsById = useCallback(async (
+    connectionIds: string[],
+    graphPath: string,
+    groupId: string,
+  ) => {
+    const placement = useEditorTabStore.getState().getPlacement(groupId);
+    if (placement.activeTabId !== graphPath || connectionIds.length === 0) return false;
 
+    const selectionSnapshot = [...placement.selectedConnectionIds];
+    const applied = await disconnectConnectionsById(graphPath, connectionIds);
+    const currentPlacement = useEditorTabStore.getState().getPlacement(groupId);
+    const selectionUnchanged = currentPlacement.selectedConnectionIds.length === selectionSnapshot.length
+      && currentPlacement.selectedConnectionIds.every((id, index) => id === selectionSnapshot[index]);
+    if (applied && currentPlacement.activeTabId === graphPath && selectionUnchanged) {
+      setSelectedConnectionIds([], groupId);
+    }
+    return applied;
+  }, [setSelectedConnectionIds]);
+
+  const deleteSelected = useCallback(async () => {
+    const groupId = useLayoutStore.getState().activeEditorGroupId;
+    if (!groupId) return;
+    const capturedPlacement = useEditorTabStore.getState().getPlacement(groupId);
+    const graphPath = capturedPlacement.activeTabId;
+    if (!graphPath) return;
+    const connectionSnapshot = [...capturedPlacement.selectedConnectionIds];
+
+    if (connectionSnapshot.length > 0) {
+      const applied = await disconnectConnectionsById(graphPath, connectionSnapshot);
+      const currentGroupId = useLayoutStore.getState().activeEditorGroupId;
+      const currentPlacement = useEditorTabStore.getState().getPlacement(groupId);
+      const selectionUnchanged = currentPlacement.selectedConnectionIds.length === connectionSnapshot.length
+        && currentPlacement.selectedConnectionIds.every((id, index) => id === connectionSnapshot[index]);
+      if (applied
+        && currentGroupId === groupId
+        && currentPlacement.activeTabId === graphPath
+        && selectionUnchanged) {
+        setSelectedConnectionIds([], groupId);
+      }
+      return applied;
+    }
+
+    const selectedSnapshot = [...capturedPlacement.selectedNodeIds];
+    const selectedIds = new Set(selectedSnapshot);
+    if (selectedIds.size === 0) return;
     const dataStore = useGraphDataStore.getState();
     const idsToDelete = dataStore
-      .getGraphNodeIds(tid)
-      .filter((nodeId) => sIds.has(nodeId) && canDeleteNode(tid, nodeId));
+      .getGraphNodeIds(graphPath)
+      .filter((nodeId) => selectedIds.has(nodeId) && canDeleteNode(graphPath, nodeId));
     if (idsToDelete.length === 0) return;
 
-    setSelectedNodeIds([]);
-
-    const applied = await executeCommand(tid, 'DeleteNodes', { nodeIds: idsToDelete });
-    if (!applied) uiStore.showToast("删除失败", "error", 2000);
+    const applied = await executeSafeGraphMutation(
+      graphPath,
+      'Delete selected nodes',
+      'DeleteNodes',
+      { nodeIds: idsToDelete },
+    );
+    const currentGroupId = useLayoutStore.getState().activeEditorGroupId;
+    const currentPlacement = useEditorTabStore.getState().getPlacement(groupId);
+    const selectionUnchanged = currentPlacement.selectedNodeIds.length === selectedSnapshot.length
+      && currentPlacement.selectedNodeIds.every((nodeId, index) => nodeId === selectedSnapshot[index]);
+    if (applied
+      && currentGroupId === groupId
+      && currentPlacement.activeTabId === graphPath
+      && selectionUnchanged) {
+      setSelectedNodeIds([], groupId);
+    }
     return applied;
-  }, [setSelectedNodeIds]);
+  }, [setSelectedConnectionIds, setSelectedNodeIds]);
 
   const cutNodes = useCallback(async (nodeIds: string[]) => {
     const tid = activeTabIdRef.current;
@@ -203,6 +268,7 @@ export function useEditorOperations() {
     cutNodes,
     paste,
     deleteSelected,
+    breakConnectionsById,
     deleteNodesById,
     duplicateNodes,
     duplicateSelected,
@@ -211,5 +277,6 @@ export function useEditorOperations() {
     disconnectPinById,
     resetPinValue,
     setSelectedNodeIds,
+    setSelectedConnectionIds,
   };
 }

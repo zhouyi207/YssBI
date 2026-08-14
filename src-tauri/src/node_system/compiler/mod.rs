@@ -10,6 +10,7 @@ mod lowering;
 mod pipeline;
 mod project;
 pub mod relational;
+mod reroute;
 mod schema_analysis;
 mod specialization;
 mod type_analysis;
@@ -68,6 +69,8 @@ pub fn build_builtin_interface_resolvers() -> InterfaceResolverSet {
 }
 pub use type_analysis::{TypeConstraintGraph, TypeEnvironment};
 
+#[cfg(test)]
+mod reroute_tests;
 #[cfg(test)]
 mod task1_tests;
 #[cfg(test)]

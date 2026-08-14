@@ -10,6 +10,7 @@ import {
 } from '@/features/application/execution/usePinResultSearch';
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { cn } from '@/lib/utils';
+import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
 function formatPinResultLabel(entry: PinResultSearchEntry): string {
   return `${entry.nodeTitle} · ${entry.pinName}`;
@@ -80,11 +81,11 @@ export function PinResultSearch({ graphPath }: PinResultSearchProps) {
       }
     };
 
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
+    const cleanupPointerDown = addGlobalEventListener(document, 'mousedown', handlePointerDown);
+    const cleanupKeyDown = addGlobalEventListener(document, 'keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
+      cleanupPointerDown();
+      cleanupKeyDown();
     };
   }, [open]);
 

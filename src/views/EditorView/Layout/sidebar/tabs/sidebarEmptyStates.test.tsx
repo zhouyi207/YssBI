@@ -112,6 +112,8 @@ describe('Sidebar tab-level empty states', () => {
         },
       },
     });
+    const dragData = draggableInputs[0]?.data as { template?: { descriptor?: unknown } };
+    expect(dragData.template?.descriptor).toBe(catalogState.catalog.items[0].creation);
   });
 
   it('uses the shared empty state when Commands has no active graph', () => {

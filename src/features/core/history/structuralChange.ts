@@ -4,7 +4,11 @@ import type { CommandType } from './types';
 const STRUCTURAL_COMMANDS: ReadonlySet<CommandType> = new Set([
   'DeleteNodes',
   'ConnectPins',
-  'DisconnectPin',
+  'DisconnectPort',
+  'DisconnectNode',
+  'DisconnectConnections',
+  'InsertReroute',
+  'MoveConnections',
   'AddRepeatablePin',
   'RemoveRepeatablePin',
 ]);

@@ -37,8 +37,9 @@ pub use model::{
     SchemaFieldIdentity, SchemaSourceIdentity, TypedValue,
 };
 pub use mutation::{
-    EditorGraphMutationDto, GraphDeltaEvent, MutationConflict, MutationRequest,
-    NodePositionMutationDto, PortAddressDto, RevisionGap, detect_revision_gap,
+    EditorGraphMutationDto, EditorMutationError, EditorMutationErrorCode, GraphDeltaEvent,
+    MutationConflict, MutationRequest, NodePositionMutationDto, PortAddressDto, RevisionGap,
+    detect_revision_gap,
 };
 #[cfg(test)]
 pub(crate) use mutation::{GraphMutation, RevisionedGraphStore};

@@ -5653,10 +5653,21 @@ fn project_reload_clears_history_status() {
 }
 
 #[test]
-fn committed_editor_mutation_remains_observable_when_projection_fails() {
+fn projection_failure_before_commit_has_zero_authoritative_effects() {
     let state = state_with_empty_graph();
-    state.set_projection_test_hook(std::sync::Arc::new(|| {
-        Err("injected projection failure".into())
+    let before_document =
+        serde_json::to_value(&state.get_data().unwrap().graphs[&graph_path()].document).unwrap();
+    let before_revisions = state.revision_state_for_test();
+    let before_history = state.history_status();
+    let before_publication = state.publication_state_for_test();
+    let before_projection =
+        serde_json::to_value(state.graph_projection(&graph_path(), "en-US").unwrap()).unwrap();
+    let fail_projection = std::sync::atomic::AtomicBool::new(true);
+    state.set_projection_test_hook(std::sync::Arc::new(move || {
+        if fail_projection.swap(false, std::sync::atomic::Ordering::AcqRel) {
+            return Err("injected projection failure".into());
+        }
+        Ok(())
     }));
     let mut observed = Vec::new();
 
@@ -5671,15 +5682,17 @@ fn committed_editor_mutation_remains_observable_when_projection_fails() {
         .unwrap_err();
 
     assert!(matches!(error, MutationConflict::Projection(_)));
-    assert_eq!(observed.len(), 1);
-    assert_eq!(observed[0].graph_path, document_path());
-    assert_eq!(observed[0].from_revision, GraphRevision::INITIAL);
-    assert_eq!(observed[0].to_revision, GraphRevision::new(1));
+    assert!(observed.is_empty());
     assert_eq!(
-        state.get_data().unwrap().graphs[&graph_path()]
-            .document
-            .revision,
-        GraphRevision::new(1)
+        serde_json::to_value(&state.get_data().unwrap().graphs[&graph_path()].document).unwrap(),
+        before_document
+    );
+    assert_eq!(state.revision_state_for_test(), before_revisions);
+    assert_eq!(state.history_status(), before_history);
+    assert_eq!(state.publication_state_for_test(), before_publication);
+    assert_eq!(
+        serde_json::to_value(state.graph_projection(&graph_path(), "en-US").unwrap()).unwrap(),
+        before_projection
     );
 }
 
@@ -13489,8 +13502,8 @@ fn parameterized_static_ui_route_fixture() -> serde_json::Value {
                 )),
                 GraphRevision::INITIAL,
                 OperationId::from_uuid(uuid::Uuid::from_u128(199)),
-                EditorGraphMutationDto::Disconnect {
-                    connection_id: ConnectionId::from_uuid(uuid::Uuid::from_u128(100)),
+                EditorGraphMutationDto::DisconnectConnections {
+                    connection_ids: vec![ConnectionId::from_uuid(uuid::Uuid::from_u128(100))],
                 },
             ),
         )

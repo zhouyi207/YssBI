@@ -7,6 +7,7 @@ import { logger } from '@/utils/appLogger';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { useEditorStore } from '@/features/core/editor';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
 import type { Pin } from '@/shared/types/domain/pin';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import { createNodeFromDescriptor } from '@/features/application/nodeCatalog/createNodeFromDescriptor';
@@ -77,6 +78,19 @@ function pin(address = sourceAddress): Pin {
   } as Pin;
 }
 
+function setPendingInteraction(source: Pin | null, x = 20, y = 30): void {
+  useGraphInteractionStore.getState().startInteraction(graphPath, {
+    type: 'pendingNodeCreation',
+    session: {
+      groupId,
+      graphPath,
+      source: source as never,
+      screenX: x,
+      screenY: y,
+    },
+  });
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((resolvePromise) => {
@@ -95,7 +109,8 @@ describe('unavailable creation routing', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    useEditorStore.setState({ contextMenu: null, pendingConnection: null });
+    useEditorStore.setState({ contextMenu: null });
+    useGraphInteractionStore.setState({ interactions: {}, positionOverrides: {} });
     useEditorTabStore.setState({ registry: {}, placements: {} });
     useEditorTabStore.getState().initGroupPlacement(groupId, [{
       id: graphPath,
@@ -185,10 +200,8 @@ describe('unavailable creation routing', () => {
       return null;
     }
     act(() => root.render(<Harness />));
-    useEditorStore.setState({
-      contextMenu: { x: 20, y: 30, visible: true },
-      pendingConnection: pin(),
-    });
+    useEditorStore.setState({ contextMenu: { x: 20, y: 30, visible: true } });
+    setPendingInteraction(pin());
 
     const selection = select(
       { kind: 'static', nodeTypeId: 'math.add' },
@@ -223,29 +236,27 @@ describe('unavailable creation routing', () => {
       return null;
     }
     act(() => root.render(<Harness />));
-    useEditorStore.setState({
-      contextMenu: { x: 20, y: 30, visible: true },
-      pendingConnection: pin(),
-    });
+    useEditorStore.setState({ contextMenu: { x: 20, y: 30, visible: true } });
+    setPendingInteraction(pin());
 
     const selection = select(
       { kind: 'static', nodeTypeId: 'math.add' },
       'en-US',
       { x: 20, y: 30 },
     );
-    useEditorStore.setState({
-      contextMenu: { x: 40, y: 50, visible: true },
-      pendingConnection: pin(newerSourceAddress),
-    });
+    useEditorStore.setState({ contextMenu: { x: 40, y: 50, visible: true } });
+    setPendingInteraction(pin(newerSourceAddress), 40, 50);
     pending.resolve({ status: 'applied', result: {} as never });
     await act(async () => selection);
 
     expect(setContextMenu).not.toHaveBeenCalled();
     expect(setPendingConnection).not.toHaveBeenCalled();
-    expect(useEditorStore.getState()).toMatchObject({
-      contextMenu: { x: 40, y: 50, visible: true },
-      pendingConnection: { address: newerSourceAddress },
-    });
+    expect(useEditorStore.getState().contextMenu).toEqual({ x: 40, y: 50, visible: true });
+    const current = useGraphInteractionStore.getState().interactions[graphPath];
+    expect(current?.type).toBe('pendingNodeCreation');
+    if (current?.type === 'pendingNodeCreation') {
+      expect(current.session.source).toMatchObject({ address: newerSourceAddress });
+    }
   });
 
   it('handles descriptor creation rejection with actionable feedback', async () => {

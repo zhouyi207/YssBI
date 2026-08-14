@@ -60,10 +60,17 @@ describe('useNodeManagement mutation outcomes', () => {
     });
   });
 
-  it('does not report requested node IDs when delete sequencing fails', async () => {
+  it('submits a node collection once and does not report IDs when the intent fails', async () => {
     executeCommand.mockResolvedValueOnce(false);
 
     await expect(management.deleteNodes(['node-1', 'node-2'])).resolves.toEqual([]);
+
+    expect(executeCommand).toHaveBeenCalledTimes(1);
+    expect(executeCommand).toHaveBeenCalledWith(
+      'events/main.yssbi-event',
+      'DeleteNodes',
+      { nodeIds: ['node-1', 'node-2'] },
+    );
   });
 
   it('returns false when a single delete is not applied', async () => {

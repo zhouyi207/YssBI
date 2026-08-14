@@ -13,7 +13,7 @@ import { structCanAccept } from '@/shared/types/domain/typeSystem';
 import type { PinData } from '@/shared/types/store/graph';
 
 export type ConnectionCandidatePin = Pin & Partial<
-  Pick<PinData, 'connections' | 'kind' | 'resolvedType'>
+  Pick<PinData, 'connections' | 'kind' | 'orphan' | 'resolvedType'>
 >;
 
 /**
@@ -82,32 +82,66 @@ export function isPinCompatible(
   return canConnectPins(candidate, dragged, typeSystem);
 }
 
+export type ConnectionInvalidReason =
+  | 'samePort'
+  | 'sameNode'
+  | 'directionMismatch'
+  | 'kindMismatch'
+  | 'typeMismatch'
+  | 'orphan'
+  | 'capacityReached';
+
+export type ConnectionCompatibility =
+  | { kind: 'append' }
+  | { kind: 'replace' }
+  | { kind: 'invalid'; reason: ConnectionInvalidReason };
+
+function connectionKind(pin: ConnectionCandidatePin): 'data' | 'control' | 'effect' {
+  return pin.kind ?? (isExecPin(pin) ? 'control' : 'data');
+}
+
+function canAppendOrReplace(pin: ConnectionCandidatePin): boolean {
+  return pin.connections
+    ? pin.connections.canAppend || pin.connections.canReplace
+    : true;
+}
+
+export function resolveConnectionCompatibility(
+  a: ConnectionCandidatePin,
+  b: ConnectionCandidatePin,
+  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
+): ConnectionCompatibility {
+  if (a.id === b.id) return { kind: 'invalid', reason: 'samePort' };
+  if (a.nodeId === b.nodeId) return { kind: 'invalid', reason: 'sameNode' };
+  if (a.direction === b.direction) return { kind: 'invalid', reason: 'directionMismatch' };
+
+  const source = a.direction === 'output' ? a : b;
+  const target = a.direction === 'input' ? a : b;
+  const sourceKind = connectionKind(source);
+  const targetKind = connectionKind(target);
+
+  if (sourceKind !== targetKind) return { kind: 'invalid', reason: 'kindMismatch' };
+  if (source.orphan || target.orphan) return { kind: 'invalid', reason: 'orphan' };
+  if (!canAppendOrReplace(source) || !canAppendOrReplace(target)) {
+    return { kind: 'invalid', reason: 'capacityReached' };
+  }
+
+  if (sourceKind === 'data' && source.dataType && target.dataType
+    && !canAcceptDataType(target.dataType, source.dataType, typeSystem)) {
+    return { kind: 'invalid', reason: 'typeMismatch' };
+  }
+
+  return source.connections?.canReplace || target.connections?.canReplace
+    ? { kind: 'replace' }
+    : { kind: 'append' };
+}
+
 export function canConnectPins(
   a: ConnectionCandidatePin,
   b: ConnectionCandidatePin,
   typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
 ): boolean {
-  if (a.id === b.id) return false;
-  if (a.nodeId === b.nodeId) return false;
-  if (a.direction === b.direction) return false;
-
-  const source = a.direction === 'output' ? a : b;
-  const target = a.direction === 'input' ? a : b;
-
-  const sourceIsExec = isExecPin(source);
-  const targetIsExec = isExecPin(target);
-  if (sourceIsExec !== targetIsExec) return false;
-  if (sourceIsExec) return true;
-
-  if (source.connections?.canConnect === false || target.connections?.canConnect === false) {
-    return false;
-  }
-
-  if (!source.dataType || !target.dataType) {
-    return source.kind === 'data' && target.kind === 'data';
-  }
-
-  return canAcceptDataType(target.dataType, source.dataType, typeSystem);
+  return resolveConnectionCompatibility(a, b, typeSystem).kind !== 'invalid';
 }
 
 function extractConcreteType(pdt: PinDataTypeDefinition): DataType | null {

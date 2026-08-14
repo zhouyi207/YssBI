@@ -8,6 +8,23 @@ import { bindSashAwareResizeObserver } from '@/shared/utils/sashResizeGuard';
 import { Pin } from "@/shared/types/domain";
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { getConnectPreview, subscribeConnectPreview } from '@/features/core/canvas/connectPreview';
+import type { ConnectionFeedback } from '@/features/core/canvas/connectionInteraction';
+
+export function connectionFeedbackAttributes(feedback: ConnectionFeedback | null) {
+    if (!feedback) return {};
+    return feedback.kind === 'invalid'
+        ? {
+            'data-connection-feedback': feedback.kind,
+            'data-connection-invalid-reason': feedback.reason,
+        }
+        : { 'data-connection-feedback': feedback.kind };
+}
+
+export function connectionFeedbackColor(feedback: ConnectionFeedback | null, fallback: string): string {
+    if (!feedback) return fallback;
+    if (feedback.kind === 'invalid') return '#ef4444';
+    return feedback.kind === 'replace' ? '#f59e0b' : '#22c55e';
+}
 
 export const ConnectionLine = ({
     viewportScope,
@@ -44,13 +61,12 @@ export const ConnectionLine = ({
 
     useEffect(() => {
         const render = () => {
-            const connectPreview = getConnectPreview();
-            const paneGroupId = viewportScope?.groupId;
-            const isPaneConnect =
-              connectPreview.active
-              && connectPreview.startPin
-              && (!connectPreview.groupId || !paneGroupId || connectPreview.groupId === paneGroupId);
-            const gestureStartPin = isPaneConnect ? connectPreview.startPin : null;
+            const scope = viewportScope
+              ? { graphPath: viewportScope.graphPath, groupId: viewportScope.groupId }
+              : null;
+            const connectPreview = scope ? getConnectPreview(scope) : null;
+            const isPaneConnect = Boolean(connectPreview?.active && connectPreview.startPin);
+            const gestureStartPin = isPaneConnect ? connectPreview?.startPin ?? null : null;
             const hasPendingConnection = pendingConnectionRef.current && menuPosRef.current;
 
             const canvasEl = lineCanvasRef.current;
@@ -67,7 +83,7 @@ export const ConnectionLine = ({
 
             if (isPaneConnect && gestureStartPin) {
                 activeStart = gestureStartPin;
-                endWorld = { x: connectPreview.worldX, y: connectPreview.worldY };
+                endWorld = { x: connectPreview!.worldX, y: connectPreview!.worldY };
             } else if (hasPendingConnection && menuPosRef.current) {
                 activeStart = pendingConnectionRef.current;
                 endWorld = getCanvasLocalPointRef.current(menuPosRef.current.x, menuPosRef.current.y);
@@ -89,7 +105,10 @@ export const ConnectionLine = ({
                     ctx,
                     start.x, start.y,
                     endWorld.x, endWorld.y,
-                    activeStart.ui?.color ?? getPinTypeColor(colorKey, currentTheme),
+                    connectionFeedbackColor(
+                        connectPreview?.feedback ?? null,
+                        activeStart.ui?.color ?? getPinTypeColor(colorKey, currentTheme),
+                    ),
                     2 / viewport.scale,
                     activeStart.direction === "input"
                 );
@@ -135,5 +154,14 @@ export const ConnectionLine = ({
         return bindSashAwareResizeObserver(parent, syncCanvasSize);
     }, []);
 
-    return <canvas ref={lineCanvasRef} className="absolute inset-0 pointer-events-none z-50" />;
+    const preview = viewportScope
+      ? getConnectPreview({ graphPath: viewportScope.graphPath, groupId: viewportScope.groupId })
+      : null;
+    return (
+        <canvas
+            ref={lineCanvasRef}
+            className="absolute inset-0 pointer-events-none z-50"
+            {...connectionFeedbackAttributes(preview?.feedback ?? null)}
+        />
+    );
 };

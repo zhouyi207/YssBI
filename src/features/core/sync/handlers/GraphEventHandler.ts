@@ -2,10 +2,10 @@
 
 import { BaseEventHandler } from './BaseEventHandler';
 import { GraphUpdatedPayload, GraphDeletedPayload } from '../types';
-import { syncFunctionSignatureFromGraph } from '@/features/application/graphDocument/functionSignatureSync';
+import { syncApplicationEventPort } from '../applicationEventPort';
 import { useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
 import { markGraphTabDirty } from '@/features/core/layout/tabDirty';
-import { invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
+
 import {
   lookupGraphResource,
   useResourceStore,
@@ -30,7 +30,7 @@ export class EventUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload> {
         this.log('Event updated:', payload.path);
         
         syncGraphResource(payload, 'event');
-        void invalidateGraphProjection(payload.path);
+        syncApplicationEventPort().eventUpdated(payload.path);
         markGraphTabDirty(payload.path);
     }
 }
@@ -59,7 +59,7 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
         syncGraphResource(payload, 'function');
         const name = payload.data.name ?? meta?.name;
         if (name) {
-          syncFunctionSignatureFromGraph({
+          syncApplicationEventPort().functionUpdated({
             path: payload.path,
             name,
             type: 'function',
@@ -68,7 +68,7 @@ export class FunctionUpdatedHandler extends BaseEventHandler<GraphUpdatedPayload
           });
         }
 
-        void invalidateGraphProjection(payload.path);
+        syncApplicationEventPort().eventUpdated(payload.path);
         markGraphTabDirty(payload.path);
     }
 }
