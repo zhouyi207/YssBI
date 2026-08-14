@@ -107,17 +107,7 @@ fn collect_kind_files(
             graph_dir.display()
         )));
     }
-    collect_kind_files_recursive(root, &graph_dir, extension, kind, files)
-}
-
-fn collect_kind_files_recursive(
-    root: &Path,
-    directory: &Path,
-    extension: &str,
-    kind: GraphDocumentKind,
-    files: &mut Vec<(String, GraphDocumentKind)>,
-) -> Result<(), ProjectError> {
-    for entry in std::fs::read_dir(directory)? {
+    for entry in std::fs::read_dir(&graph_dir)? {
         let path = entry?.path();
         let metadata = std::fs::symlink_metadata(&path)?;
         if crate::project::metadata_is_redirect(&metadata) {
@@ -127,8 +117,12 @@ fn collect_kind_files_recursive(
             )));
         }
         if metadata.is_dir() {
-            collect_kind_files_recursive(root, &path, extension, kind, files)?;
-        } else if is_graph_file(&path, &metadata, extension) {
+            return Err(ProjectError::InvalidProjectFormat(format!(
+                "nested graph directories are not supported: '{}'",
+                path.display()
+            )));
+        }
+        if is_graph_file(&path, &metadata, extension) {
             files.push((relative_slash_path(root, &path)?, kind));
         }
     }
@@ -224,6 +218,22 @@ mod tests {
             .to_string();
 
         assert!(error.contains("portable graph path collision"), "{error}");
+    }
+
+    #[test]
+    fn graph_discovery_rejects_nested_directories() {
+        let tree = TestTree::new("nested-directory");
+        let nested = tree.root.join("events/Nested");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(nested.join("Legacy.yssbi-event"), b"{}").unwrap();
+
+        let error = scan_graph_resource_index(&tree.root).unwrap_err();
+
+        assert!(matches!(
+            error,
+            crate::project::ProjectError::InvalidProjectFormat(message)
+                if message.contains("nested graph directories are not supported")
+        ));
     }
 
     #[test]

@@ -718,7 +718,7 @@ mod tests {
             },
             schema_version: 1,
             required: false,
-            name: Some(project_name.into()),
+            name: project_name.into(),
         };
         project.databases.insert("sales".into(), decl.clone());
         state.activate_project_fixture(project_name.into(), project);
@@ -955,7 +955,7 @@ mod tests {
                 },
                 schema_version: 1,
                 required: false,
-                name: Some("Before".into()),
+                name: "Before".into(),
             },
         );
         state.activate_project_fixture("database-command".into(), data);
@@ -1006,12 +1006,7 @@ mod tests {
         );
         assert!(stale.is_err());
         assert_eq!(events.len(), event_count);
-        assert_eq!(
-            state.get_data().unwrap().databases["writer"]
-                .name
-                .as_deref(),
-            Some("After")
-        );
+        assert_eq!(state.get_data().unwrap().databases["writer"].name, "After");
     }
 
     #[test]

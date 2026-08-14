@@ -257,7 +257,7 @@ fn register_duckdb_instance(
         engine: engine_domain,
         schema_version: 1,
         required: false,
-        name: Some(name.clone()),
+        name: name.clone(),
     };
 
     let instance = DatabaseInstance {

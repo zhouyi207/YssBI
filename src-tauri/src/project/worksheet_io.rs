@@ -3,7 +3,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::{ProjectError, SCHEMA_VERSION, WorksheetResourcePath};
+use super::{
+    ProjectError, SCHEMA_VERSION, WorksheetResourcePath,
+    project_io::deserialize_current_schema_version,
+};
 
 pub const WORKSHEETS_DIR: &str = "worksheets";
 pub const WORKSHEET_EXTENSION: &str = "yssbi-worksheet";
@@ -20,6 +23,7 @@ pub struct WorksheetEncodings {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorksheetDocument {
+    #[serde(deserialize_with = "deserialize_current_schema_version")]
     pub schema_version: u32,
     pub revision: crate::node_system::document::ResourceRevision,
     pub database_id: String,
@@ -320,6 +324,26 @@ mod tests {
         value.as_object_mut().unwrap().remove("revision");
 
         assert!(serde_json::from_value::<WorksheetDocument>(value).is_err());
+    }
+
+    #[test]
+    fn worksheet_load_rejects_unsupported_schema_version() {
+        let root = temp_project_dir();
+        let path = worksheet_path("Unsupported");
+        let mut value = serde_json::to_value(document(0)).unwrap();
+        value["schemaVersion"] = serde_json::json!(SCHEMA_VERSION + 1);
+        let file = root.join(path.relative_path());
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+
+        let error = load_worksheet_from_file(&root, &path).unwrap_err();
+
+        assert!(matches!(
+            error,
+            ProjectError::Deserialize(source)
+                if source.to_string().contains("unsupported schema version 4")
+        ));
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

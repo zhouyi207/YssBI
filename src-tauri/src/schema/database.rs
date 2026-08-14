@@ -44,7 +44,7 @@ impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
             engine: (&value.engine).into(),
             schema_version: value.schema_version,
             required: value.required,
-            name: None,
+            name: Some(value.name.clone()),
             columns: None,
             row_count: None,
             column_count: None,

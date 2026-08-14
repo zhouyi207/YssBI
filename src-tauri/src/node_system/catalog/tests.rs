@@ -1786,9 +1786,9 @@ fn builtin_function_resolver_projects_function_document_members() {
             parameters: vec![FunctionParameter {
                 id: FunctionParameterId("amount".into()),
                 name: "Amount".into(),
-                type_name: "float64".into(),
+                type_name: "Float64".into(),
             }],
-            return_type: Some("float64".into()),
+            return_type: Some("Float64".into()),
         }),
         graph: GraphDocument::default(),
     };

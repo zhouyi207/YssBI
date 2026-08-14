@@ -179,14 +179,7 @@ pub fn build_function_editor_projection(
 }
 
 pub(crate) fn resolve_function_data_type(type_name: &str) -> Result<DataType, String> {
-    let data_type = type_name.parse().or_else(|_| match type_name.trim() {
-        "bool" | "boolean" | "core.bool" => Ok(DataType::Boolean),
-        "int" | "integer" | "int64" | "core.int64" => Ok(DataType::Int64),
-        "float" | "float64" | "number" | "core.float64" => Ok(DataType::Float64),
-        "string" | "core.string" => Ok(DataType::String),
-        "json" | "object" => Ok(DataType::Object),
-        value => Err(format!("Unknown function data type: {value}")),
-    })?;
+    let data_type = type_name.parse()?;
     validate_function_data_type(&data_type)?;
     Ok(data_type)
 }
@@ -1546,6 +1539,48 @@ mod tests {
     use uuid::Uuid;
 
     #[test]
+    fn function_data_types_accept_canonical_display_strings() {
+        let cases = [
+            ("Boolean", DataType::Boolean),
+            ("Int64", DataType::Int64),
+            ("Float64", DataType::Float64),
+            ("String", DataType::String),
+            ("Object", DataType::Object),
+            ("Number", DataType::number()),
+        ];
+
+        for (type_name, expected) in cases {
+            assert_eq!(resolve_function_data_type(type_name), Ok(expected));
+        }
+    }
+
+    #[test]
+    fn function_data_types_reject_legacy_aliases() {
+        for type_name in [
+            "bool",
+            "boolean",
+            "core.bool",
+            "int",
+            "integer",
+            "int64",
+            "core.int64",
+            "float",
+            "float64",
+            "number",
+            "core.float64",
+            "string",
+            "core.string",
+            "json",
+            "object",
+        ] {
+            assert!(
+                resolve_function_data_type(type_name).is_err(),
+                "legacy function data type alias {type_name:?} was accepted"
+            );
+        }
+    }
+
+    #[test]
     fn projection_projects_unknown_without_any() {
         let summary = project_type_summary(&TypeExpr::Unknown);
 
@@ -1554,7 +1589,7 @@ mod tests {
     }
 
     #[test]
-    fn projection_projects_numeric_series_union_without_legacy_ids() {
+    fn projection_projects_canonical_numeric_series_union() {
         let summary = project_type_summary(&numeric_data_series_type());
 
         assert!(summary.resolved);

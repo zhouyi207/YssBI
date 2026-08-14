@@ -121,6 +121,14 @@ mod tests {
     }
 
     #[test]
+    fn number_display_string_parses_as_the_canonical_numeric_union() {
+        let parsed: DataType = "Number".parse().unwrap();
+
+        assert_eq!(parsed, DataType::number());
+        assert_eq!(parsed.to_string().parse::<DataType>().unwrap(), parsed);
+    }
+
+    #[test]
     fn data_type_struct_acceptance_is_exact_without_type_system() {
         let target = DataType::Struct("Model".to_string());
         let source = DataType::Struct("OLSModel".to_string());
@@ -197,6 +205,7 @@ impl FromStr for DataType {
                 Ok(DataType::Int64)
             }
             "Float32" | "Float64" => Ok(DataType::Float64),
+            "Number" => Ok(DataType::number()),
             "String" => Ok(DataType::String),
             "Date" => Ok(DataType::Date),
             "Datetime" | "DateTime" => Ok(DataType::Datetime),

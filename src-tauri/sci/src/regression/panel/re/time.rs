@@ -1,16 +1,4 @@
-﻿/// Alias for backward compatibility
-pub fn fit_panel_re(
-    endog: &Array1<f64>,
-    exog: &Array2<f64>,
-    entity_id: &[usize],
-    constant: bool,
-    cov_type: &str,
-    cov_params: Option<crate::regression::covariance::CovParams>,
-) -> Result<super::PanelOLSResult, String> {
-    fit_panel_re_fgls(endog, exog, entity_id, constant, cov_type, cov_params)
-}
-
-// ============== Time Random Effects (group by time_id) ==============
+﻿// ============== Time Random Effects (group by time_id) ==============
 
 /// Panel RE FGLS (Time): same as entity RE but group by time period
 pub fn fit_panel_re_fgls_time(

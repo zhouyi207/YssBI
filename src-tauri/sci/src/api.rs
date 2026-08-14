@@ -14,9 +14,8 @@ pub mod regression {
     pub use crate::regression::panel::{
         PanelFEStats, PanelOLSResult, fit_panel_fd, fit_panel_fe, fit_panel_fe_time,
         fit_panel_fe_twoway, fit_panel_lsdv, fit_panel_lsdv_time, fit_panel_lsdv_twoway,
-        fit_panel_re, fit_panel_re_be, fit_panel_re_be_time, fit_panel_re_fgls,
-        fit_panel_re_fgls_time, fit_panel_re_fgls_twoway, fit_panel_re_mle, fit_panel_re_mle_time,
-        fit_panel_re_mle_twoway,
+        fit_panel_re_be, fit_panel_re_be_time, fit_panel_re_fgls, fit_panel_re_fgls_time,
+        fit_panel_re_fgls_twoway, fit_panel_re_mle, fit_panel_re_mle_time, fit_panel_re_mle_twoway,
     };
 }
 

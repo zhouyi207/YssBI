@@ -2471,9 +2471,9 @@ fn signature(parameter_name: &str) -> FunctionSignature {
         parameters: vec![FunctionParameter {
             id: FunctionParameterId("parameter-1".into()),
             name: parameter_name.into(),
-            type_name: "number".into(),
+            type_name: "Number".into(),
         }],
-        return_type: Some("number".into()),
+        return_type: Some("Number".into()),
     }
 }
 

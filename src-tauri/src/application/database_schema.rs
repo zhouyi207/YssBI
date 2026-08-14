@@ -1,8 +1,7 @@
 use polars::prelude::Schema;
 
 use crate::database::{
-    DatabaseEngine, DatabaseInstance, DatabaseState, DuckDbColumnMeta,
-    database_schema::polars_dtype_to_raw_string,
+    DatabaseInstance, DatabaseState, DuckDbColumnMeta, database_schema::polars_dtype_to_raw_string,
 };
 use crate::schema::{ColumnInfoDTO, DatabaseDeclDTO};
 
@@ -15,18 +14,7 @@ pub fn name_from_path(path: &str) -> String {
 }
 
 pub fn database_display_name(instance: &DatabaseInstance) -> String {
-    instance
-        .decl
-        .name
-        .clone()
-        .unwrap_or_else(|| match &instance.decl.engine {
-            DatabaseEngine::Csv { path, .. } => name_from_path(path),
-            DatabaseEngine::Parquet { path, .. } => name_from_path(path),
-            DatabaseEngine::Sql { table, .. } => table.clone(),
-            DatabaseEngine::Excel { sheet, .. } => sheet.clone(),
-            DatabaseEngine::DuckDb { .. } => instance.decl.id.clone(),
-            DatabaseEngine::InMemory { name } => name.clone(),
-        })
+    instance.decl.name.clone()
 }
 
 pub fn column_info_from_schema(schema: &Schema) -> Vec<ColumnInfoDTO> {

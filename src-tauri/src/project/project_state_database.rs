@@ -416,8 +416,8 @@ impl ProjectState {
         let declaration = data.databases.get_mut(id).ok_or("Database not found")?;
         let before = declaration.clone();
         let instance = store.databases.get_mut(id).ok_or("Database not found")?;
-        declaration.name = Some(name.to_string());
-        instance.decl.name = Some(name.to_string());
+        declaration.name = name.to_string();
+        instance.decl.name = name.to_string();
         let after = declaration.clone();
         let mutation = self.publish_database_delta(
             &mut publication,
@@ -574,7 +574,7 @@ mod tests {
                 },
                 schema_version: 1,
                 required: false,
-                name: Some("Original".into()),
+                name: "Original".into(),
             },
         );
         state.activate_project_fixture("database-read-original".into(), original);
@@ -589,7 +589,7 @@ mod tests {
                 },
                 schema_version: 1,
                 required: false,
-                name: Some("Replacement".into()),
+                name: "Replacement".into(),
             },
         );
         state.activate_project_fixture("database-read-replacement".into(), replacement);
@@ -666,7 +666,7 @@ mod tests {
                     },
                     schema_version: 1,
                     required: false,
-                    name: Some("missing".into()),
+                    name: "missing".into(),
                 },
                 state: DatabaseState::DuckDb {
                     duckdb_path: root.join("missing.duckdb").to_string_lossy().into_owned(),
@@ -720,7 +720,7 @@ mod tests {
                     },
                     schema_version: 1,
                     required: false,
-                    name: Some("Before".into()),
+                    name: "Before".into(),
                 },
                 state: DatabaseState::Failed {
                     error: "fixture".into(),
@@ -758,7 +758,7 @@ mod tests {
                     let store_lock = state.project_store.try_write();
                     let lock_available = store_lock.is_ok();
                     drop(store_lock);
-                    database.decl.name = Some("Committed".into());
+                    database.decl.name = "Committed".into();
                     Ok(lock_available)
                 },
             )
@@ -769,15 +769,12 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases[database_id]
                 .decl
-                .name
-                .as_deref(),
-            Some("Committed")
+                .name,
+            "Committed"
         );
         assert_eq!(
-            state.get_data().unwrap().databases[database_id]
-                .name
-                .as_deref(),
-            Some("Committed")
+            state.get_data().unwrap().databases[database_id].name,
+            "Committed"
         );
         assert_eq!(state.authority_generation_for_test(), generation + 1);
         assert!(coordinator.contains_slot_for_test(&document_path));
@@ -793,7 +790,7 @@ mod tests {
                 expected_revision,
                 operation_id,
                 |database| {
-                    database.decl.name = Some("Rejected".into());
+                    database.decl.name = "Rejected".into();
                     Err::<(), _>("reject mutation".into())
                 },
             )
@@ -802,9 +799,8 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases[database_id]
                 .decl
-                .name
-                .as_deref(),
-            Some("Committed")
+                .name,
+            "Committed"
         );
         assert_eq!(state.authority_generation_for_test(), generation);
         assert!(coordinator.contains_slot_for_test(&document_path));
@@ -827,7 +823,7 @@ mod tests {
                     },
                     schema_version: 1,
                     required: false,
-                    name: Some("Authoritative".into()),
+                    name: "Authoritative".into(),
                 },
                 state: DatabaseState::Failed {
                     error: "fixture".into(),
@@ -858,13 +854,13 @@ mod tests {
                 let store_lock = state.project_store.try_write();
                 let lock_available = store_lock.is_ok();
                 drop(store_lock);
-                database.decl.name = Some("Local only".into());
+                database.decl.name = "Local only".into();
                 Ok(lock_available)
             })
             .unwrap();
         state
             .with_database_snapshot(database_id, |database| {
-                assert_eq!(database.decl.name.as_deref(), Some("Authoritative"));
+                assert_eq!(database.decl.name, "Authoritative");
                 Ok(())
             })
             .unwrap();
@@ -873,9 +869,8 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases[database_id]
                 .decl
-                .name
-                .as_deref(),
-            Some("Authoritative")
+                .name,
+            "Authoritative"
         );
         assert_eq!(state.authority_generation_for_test(), generation);
         assert!(coordinator.contains_slot_for_test(&document_path));
@@ -1018,7 +1013,7 @@ mod tests {
                     engine: DatabaseEngine::InMemory { name: id.into() },
                     schema_version: 1,
                     required: false,
-                    name: Some(name.into()),
+                    name: name.into(),
                 },
                 state: DatabaseState::Failed {
                     error: "fixture".into(),
@@ -1063,9 +1058,8 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases["writer"]
                 .decl
-                .name
-                .as_deref(),
-            Some("Committed")
+                .name,
+            "Committed"
         );
         assert_eq!(
             state.authority_generation_for_test(),
@@ -1147,9 +1141,8 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases[&imported.id]
                 .decl
-                .name
-                .as_deref(),
-            Some("Renamed")
+                .name,
+            "Renamed"
         );
         assert_eq!(
             crate::database::read_display_name(&duckdb_path, &table).as_deref(),
@@ -1176,7 +1169,7 @@ mod tests {
                 .unwrap();
             snapshot_ready_tx.send(()).unwrap();
             resume_rx.recv().unwrap();
-            instance.decl.name = Some("Stale A".into());
+            instance.decl.name = "Stale A".into();
             stale_state.commit_database_instance(
                 &stale_session,
                 &token,
@@ -1196,7 +1189,7 @@ mod tests {
                 expected_revision,
                 operation_id,
                 |database| {
-                    database.decl.name = Some("Committed B".into());
+                    database.decl.name = "Committed B".into();
                     Ok(())
                 },
             )
@@ -1210,9 +1203,8 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases["writer"]
                 .decl
-                .name
-                .as_deref(),
-            Some("Committed B")
+                .name,
+            "Committed B"
         );
         let _ = std::fs::remove_dir_all(root);
     }
@@ -1248,7 +1240,7 @@ mod tests {
                     first_calls.fetch_add(1, Ordering::SeqCst);
                     entered_tx.send(()).unwrap();
                     release_rx.recv().unwrap();
-                    database.decl.name = Some("First".into());
+                    database.decl.name = "First".into();
                     Ok(())
                 },
             )
@@ -1349,7 +1341,7 @@ mod tests {
                         },
                         schema_version: 1,
                         required: false,
-                        name: Some("Before".into()),
+                        name: "Before".into(),
                     },
                     state: DatabaseState::Failed {
                         error: "fixture".into(),
@@ -1441,7 +1433,7 @@ mod tests {
             edited_revision,
             OperationId::new(),
             |database, _| {
-                database.decl.name = Some("Rejected".into());
+                database.decl.name = "Rejected".into();
                 Err::<(), _>("reject mutation".into())
             },
         );
@@ -1507,7 +1499,7 @@ mod tests {
                 },
                 schema_version: 1,
                 required: false,
-                name: Some("Replacement".into()),
+                name: "Replacement".into(),
             },
         );
         state.activate_project_fixture("replacement-project".into(), replacement);
@@ -1543,7 +1535,7 @@ mod tests {
                 expected_revision,
                 operation_id,
                 |database| {
-                    database.decl.name = Some("New Authority".into());
+                    database.decl.name = "New Authority".into();
                     Ok(())
                 },
             )

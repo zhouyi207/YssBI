@@ -24,9 +24,23 @@ pub const GLOBAL_VARIABLES_FILE: &str = "variables.yssbi-vars";
 pub const EVENT_EXTENSION: &str = "yssbi-event";
 pub const FUNCTION_EXTENSION: &str = "yssbi-function";
 
+pub(crate) fn deserialize_current_schema_version<'de, D>(deserializer: D) -> Result<u32, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let schema_version = u32::deserialize(deserializer)?;
+    if schema_version != SCHEMA_VERSION {
+        return Err(serde::de::Error::custom(format!(
+            "unsupported schema version {schema_version}; expected {SCHEMA_VERSION}"
+        )));
+    }
+    Ok(schema_version)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectManifest {
+    #[serde(deserialize_with = "deserialize_current_schema_version")]
     pub schema_version: u32,
     pub project_name: String,
     pub export_time: String,
@@ -36,6 +50,7 @@ pub struct ProjectManifest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GlobalVariablesDocument {
+    #[serde(deserialize_with = "deserialize_current_schema_version")]
     pub schema_version: u32,
     pub variables: HashMap<VariableId, VariableInstance>,
 }
@@ -273,6 +288,8 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
     ensure_worksheets_dir(root)?;
     std::fs::create_dir_all(root.join(DATABASE_DIR))?;
 
+    scan_graph_resource_index(root)?;
+
     let global_variables = project_data
         .variables
         .iter()
@@ -287,9 +304,6 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
         },
     )?;
 
-    // Reconcile on-disk graph files first so nested layouts are flattened before save.
-    flatten_graph_layout(root)?;
-
     for graph_path in project_data.graphs.keys() {
         write_loaded_graph_document(project_data, root, graph_path)?;
     }
@@ -302,11 +316,15 @@ fn save_project_to_directory(project_data: &ProjectData, root: &Path) -> Result<
         std::fs::write(target, contents)?;
     }
 
-    let mut manifest = read_project_manifest_from_root(root)?;
-    manifest.project_name = project_data.metadata.project_name.clone();
-    manifest.export_time = project_data.metadata.export_time.clone();
-    manifest.computation_settings = project_data.computation_settings.clone();
-    write_json(root.join(PROJECT_METADATA_FILE).as_path(), &manifest)?;
+    write_json(
+        root.join(PROJECT_METADATA_FILE).as_path(),
+        &ProjectManifest {
+            schema_version: SCHEMA_VERSION,
+            project_name: project_data.metadata.project_name.clone(),
+            export_time: project_data.metadata.export_time.clone(),
+            computation_settings: project_data.computation_settings.clone(),
+        },
+    )?;
     Ok(())
 }
 
@@ -450,21 +468,7 @@ pub fn load_project_graph_from_file(
 }
 
 fn read_project_manifest_from_root(root: &Path) -> Result<ProjectManifest, ProjectError> {
-    let manifest_path = root.join(PROJECT_METADATA_FILE);
-    if !manifest_path.exists() {
-        let default_name = root
-            .file_name()
-            .and_then(|name| name.to_str())
-            .map(|name| name.to_string())
-            .unwrap_or_else(|| "Untitled".to_string());
-        return Ok(ProjectManifest {
-            schema_version: SCHEMA_VERSION,
-            project_name: default_name,
-            export_time: String::new(),
-            computation_settings: ProjectComputationSettings::default(),
-        });
-    }
-    read_json(manifest_path.as_path())
+    read_json(root.join(PROJECT_METADATA_FILE).as_path())
 }
 
 fn load_graph_resource_index(root: &Path) -> Result<GraphResourceIndex, ProjectError> {
@@ -926,115 +930,6 @@ fn sanitize_file_stem(name: &str) -> String {
     }
 }
 
-/// Test-fixture helper for exercising legacy nested graph layouts.
-#[cfg(test)]
-pub fn flatten_graph_layout(root: &Path) -> Result<bool, ProjectError> {
-    let mut changed = false;
-    changed |= flatten_kind_graph_layout(root, EVENTS_DIR, EVENT_EXTENSION)?;
-    changed |= flatten_kind_graph_layout(root, FUNCTIONS_DIR, FUNCTION_EXTENSION)?;
-    if changed {
-        remove_empty_graph_subdirs(&root.join(EVENTS_DIR))?;
-        remove_empty_graph_subdirs(&root.join(FUNCTIONS_DIR))?;
-    }
-    Ok(changed)
-}
-
-#[cfg(test)]
-fn flatten_kind_graph_layout(
-    root: &Path,
-    dir: &str,
-    extension: &str,
-) -> Result<bool, ProjectError> {
-    let graph_dir = root.join(dir);
-    if !graph_dir.is_dir() {
-        return Ok(false);
-    }
-
-    let mut nested_paths = Vec::new();
-    collect_nested_graph_files(&graph_dir, extension, &mut nested_paths)?;
-    if nested_paths.is_empty() {
-        return Ok(false);
-    }
-
-    let mut changed = false;
-    for nested_path in nested_paths {
-        let graph_name = read_graph_file_header(nested_path.as_path())
-            .ok()
-            .map(|header| header.name)
-            .or_else(|| graph_name_from_file_path(nested_path.as_path()))
-            .unwrap_or_else(|| "Untitled".to_string());
-        let file_name = unique_graph_file_name(graph_dir.as_path(), &graph_name, extension, None);
-        let target_path = graph_dir.join(&file_name);
-        if nested_path == target_path {
-            continue;
-        }
-
-        std::fs::rename(&nested_path, &target_path)?;
-        changed = true;
-    }
-
-    Ok(changed)
-}
-
-#[cfg(test)]
-fn collect_nested_graph_files(
-    graph_dir: &Path,
-    extension: &str,
-    nested_paths: &mut Vec<PathBuf>,
-) -> Result<(), ProjectError> {
-    for entry in std::fs::read_dir(graph_dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_all_graph_files(path.as_path(), extension, nested_paths)?;
-        }
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-fn collect_all_graph_files(
-    dir: &Path,
-    extension: &str,
-    paths: &mut Vec<PathBuf>,
-) -> Result<(), ProjectError> {
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_all_graph_files(path.as_path(), extension, paths)?;
-        } else if path.is_file()
-            && path
-                .extension()
-                .and_then(|value| value.to_str())
-                .map(|value| value.eq_ignore_ascii_case(extension))
-                .unwrap_or(false)
-        {
-            paths.push(path);
-        }
-    }
-    Ok(())
-}
-
-#[cfg(test)]
-fn remove_empty_graph_subdirs(dir: &Path) -> Result<(), ProjectError> {
-    if !dir.is_dir() {
-        return Ok(());
-    }
-    let entries: Vec<_> = std::fs::read_dir(dir)?.collect();
-    for entry in entries {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_dir() {
-            remove_empty_graph_subdirs(&path)?;
-            if std::fs::read_dir(&path)?.next().is_none() {
-                std::fs::remove_dir(path)?;
-            }
-        }
-    }
-    Ok(())
-}
-
 fn path_to_slash_string(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
@@ -1084,7 +979,7 @@ pub fn discover_databases_from_root(
             },
             schema_version: SCHEMA_VERSION,
             required: false,
-            name: Some(display_name),
+            name: display_name,
         };
         map.insert(table, decl);
     }
@@ -1129,6 +1024,54 @@ mod tests {
         .unwrap_err();
 
         assert!(error.to_string().contains("computationSettings"));
+    }
+
+    #[test]
+    fn project_load_requires_manifest() {
+        let root = temp_project_dir();
+
+        let error = read_project_index(root.to_string_lossy().as_ref()).unwrap_err();
+
+        assert!(
+            matches!(error, ProjectError::Io(ref source) if source.kind() == std::io::ErrorKind::NotFound)
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_manifest_rejects_unsupported_schema_version() {
+        let root = temp_project_dir();
+        initialize_project_directory(&ProjectData::new(), root.as_path()).unwrap();
+        let manifest_path = root.join(PROJECT_METADATA_FILE);
+        let mut value: serde_json::Value = read_json(&manifest_path).unwrap();
+        value["schemaVersion"] = json!(SCHEMA_VERSION - 1);
+        write_json(&manifest_path, &value).unwrap();
+
+        let error = read_project_index(root.to_string_lossy().as_ref()).unwrap_err();
+
+        assert!(matches!(
+            error,
+            ProjectError::Deserialize(source)
+                if source.to_string().contains("unsupported schema version 2")
+        ));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn global_variables_reject_unsupported_schema_version() {
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&serialize_global_variables(&ProjectData::new()).unwrap())
+                .unwrap();
+        value["schemaVersion"] = json!(SCHEMA_VERSION + 1);
+        let contents = serde_json::to_vec(&value).unwrap();
+
+        let error = parse_global_variables_document(&contents).unwrap_err();
+
+        assert!(matches!(
+            error,
+            ProjectError::Deserialize(source)
+                if source.to_string().contains("unsupported schema version 4")
+        ));
     }
 
     #[test]
@@ -1258,7 +1201,7 @@ mod tests {
     }
 
     #[test]
-    fn production_project_index_rejects_legacy_graph_schema() {
+    fn production_project_index_rejects_unsupported_graph_schema() {
         let root = temp_project_dir();
         let graph_path = GraphResourcePath::new("events/RoundTrip.yssbi-event").unwrap();
         let mut project = ProjectData::new();
@@ -1364,7 +1307,7 @@ mod tests {
     }
 
     #[test]
-    fn production_graph_io_rejects_legacy_schema() {
+    fn production_graph_io_rejects_unsupported_schema() {
         let root = temp_project_dir();
         let graph_path = GraphResourcePath::new("events/RoundTrip.yssbi-event").unwrap();
         let mut project = ProjectData::new();

@@ -1149,7 +1149,7 @@ mod tests {
                         },
                         schema_version: 1,
                         required: false,
-                        name: Some("generation".into()),
+                        name: "generation".into(),
                     },
                     state: crate::database::DatabaseState::Failed {
                         error: "test fixture".into(),

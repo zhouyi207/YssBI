@@ -1091,9 +1091,9 @@ mod tests {
             parameters: vec![FunctionParameter {
                 id: FunctionParameterId("value".into()),
                 name: "Value".into(),
-                type_name: "core.int64".into(),
+                type_name: "Int64".into(),
             }],
-            return_type: Some("core.string".into()),
+            return_type: Some("String".into()),
         };
         let snapshot = snapshot(
             vec![CatalogResourceEntry {

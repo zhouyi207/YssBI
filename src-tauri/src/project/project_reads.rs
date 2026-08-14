@@ -359,7 +359,7 @@ fn build_catalog_snapshots(
         let node_type_id = node_type("yssbi.dataframe.source.get");
         let revision = ResourceRevision::new(authority_revision);
         resources.push(CatalogResourceEntry {
-            name: declaration.name.unwrap_or_else(|| id.clone()).into(),
+            name: declaration.name.into(),
             node_type_id: node_type_id.clone(),
             resource_path: resource_path.clone(),
             resource_revision: revision,
@@ -629,7 +629,7 @@ fn overlay_authoritative_project_index(
                 engine: declaration.engine.clone(),
                 schema_version: declaration.schema_version,
                 required: declaration.required,
-                name: declaration.name.clone(),
+                name: Some(declaration.name.clone()),
             },
         )
         .collect();
@@ -704,19 +704,16 @@ mod tests {
     #[test]
     fn delayed_project_index_read_has_zero_effects_after_project_replacement() {
         let root = project_root("delayed-index");
-        let graph_path = GraphResourcePath::new("events/Legacy.yssbi-event").unwrap();
+        let graph_path = GraphResourcePath::new("events/Current.yssbi-event").unwrap();
         let mut project = ProjectData::new();
         project.graphs.insert(
             graph_path.clone(),
-            GraphResourceDocument::new("Legacy", GraphDocumentKind::Event),
+            GraphResourceDocument::new("Current", GraphDocumentKind::Event),
         );
         fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
         fixtures::write_graph(&project, root.to_string_lossy().as_ref(), &graph_path).unwrap();
-        let nested_dir = root.join("events/Nested");
-        std::fs::create_dir_all(&nested_dir).unwrap();
-        let nested_path = nested_dir.join("Legacy.yssbi-event");
-        let flattened_path = root.join(graph_path.as_str());
-        std::fs::rename(&flattened_path, &nested_path).unwrap();
+        let graph_file = root.join(graph_path.as_str());
+        let graph_contents = std::fs::read(&graph_file).unwrap();
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
         let expected = state.capture_project_session().unwrap().instance_id;
@@ -750,17 +747,10 @@ mod tests {
 
         assert_eq!(result.unwrap_err().code(), "stale_project_lifecycle");
         assert_eq!(state.get_path().as_deref(), Some(replacement_root.as_str()));
-        assert!(
-            nested_path.is_file(),
-            "stale index read moved the nested graph"
-        );
-        assert!(
-            nested_dir.is_dir(),
-            "stale index read removed the nested directory"
-        );
-        assert!(
-            !flattened_path.exists(),
-            "stale index read created a flattened graph"
+        assert_eq!(
+            std::fs::read(&graph_file).unwrap(),
+            graph_contents,
+            "stale index read mutated the graph fixture"
         );
         let data = state.get_data().unwrap();
         assert_eq!(data.variables.len(), 1);
@@ -926,7 +916,7 @@ mod tests {
             };
             database.schema_version = 9;
             database.required = true;
-            database.name = Some("After generation".into());
+            database.name = "After generation".into();
             publication.allocate_resource_revision();
             revisions.insert("sales".into(), publication.authority_generation());
             mutated_tx.send(()).unwrap();
@@ -1219,7 +1209,7 @@ mod tests {
                 },
                 schema_version: 1,
                 required: false,
-                name: Some("Sales warehouse".into()),
+                name: "Sales warehouse".into(),
             },
         );
         let state = ProjectState::new();

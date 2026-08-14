@@ -120,6 +120,11 @@ pub fn validate_graph_resource_path(path: &str) -> Result<(), ProjectError> {
             "graph resource path cannot be empty".into(),
         ));
     }
+    if path.split('/').count() != 2 {
+        return Err(ProjectError::InvalidProjectFormat(format!(
+            "nested graph resource paths are not supported: '{path}'"
+        )));
+    }
     let kind = graph_kind_from_path(path)?;
     let file_name = path.rsplit('/').next().unwrap_or(path);
     let extension = match kind {
@@ -194,6 +199,17 @@ mod tests {
             to_graph_resource_uri(GraphDocumentKind::Function, &path),
             "yssbi://graph/function/functions::My Fn.yssbi-function"
         );
+    }
+
+    #[test]
+    fn rejects_nested_graph_resource_path() {
+        let error = GraphResourcePath::new("events/Nested/Legacy.yssbi-event").unwrap_err();
+
+        assert!(matches!(
+            error,
+            ProjectError::InvalidProjectFormat(message)
+                if message.contains("nested graph resource paths are not supported")
+        ));
     }
 
     #[test]

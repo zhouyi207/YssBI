@@ -8800,15 +8800,9 @@ pub(super) fn compile_resources_from_data(
         .databases
         .iter()
         .filter_map(|(id, declaration)| {
-            declaration
-                .name
-                .as_deref()
-                .filter(|name| !name.is_empty())
-                .and_then(|name| {
-                    crate::node_system::plan::ResourceId::new(format!("databases/{id}"))
-                        .ok()
-                        .map(|resource| (resource, name.into()))
-                })
+            crate::node_system::plan::ResourceId::new(format!("databases/{id}"))
+                .ok()
+                .map(|resource| (resource, declaration.name.clone().into()))
         })
         .collect();
     let resource_states = versions
@@ -8994,15 +8988,9 @@ pub(super) fn snapshot_project_resources(
     let database_names = databases
         .iter()
         .filter_map(|(id, declaration)| {
-            declaration
-                .name
-                .as_deref()
-                .filter(|name| !name.is_empty())
-                .and_then(|name| {
-                    ResourceId::new(format!("databases/{id}"))
-                        .ok()
-                        .map(|resource| (resource, name.into()))
-                })
+            ResourceId::new(format!("databases/{id}"))
+                .ok()
+                .map(|resource| (resource, declaration.name.clone().into()))
         })
         .collect();
     let mut database_schemas = BTreeMap::new();

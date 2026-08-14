@@ -7695,9 +7695,9 @@ fn call_binds_exact_function_locators_across_different_value_layouts() {
         parameters: vec![FunctionParameter {
             id: parameter_id.clone(),
             name: "Amount".into(),
-            type_name: "int64".into(),
+            type_name: "Int64".into(),
         }],
-        return_type: Some("int64".into()),
+        return_type: Some("Int64".into()),
     });
 
     let mut callee = builtin_graph_with_nodes(&[
@@ -8724,7 +8724,7 @@ fn function_abi_rejects_wrong_dynamic_member_direction() {
             parameters: vec![FunctionParameter {
                 id: parameter.clone(),
                 name: "Amount".into(),
-                type_name: "int64".into(),
+                type_name: "Int64".into(),
             }],
             return_type: None,
         }),
@@ -8843,7 +8843,7 @@ fn call_closure_finalizes_nested_structured_result_productions_before_caller_low
     let result_id = FunctionParameterId("return".into());
     let signature = FunctionDocument::new(FunctionSignature {
         parameters: Vec::new(),
-        return_type: Some("int64".into()),
+        return_type: Some("Int64".into()),
     });
 
     let mut branch = builtin_graph_with_nodes(&[

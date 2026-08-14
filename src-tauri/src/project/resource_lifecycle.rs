@@ -1225,48 +1225,6 @@ mod tests {
     }
 
     #[test]
-    fn graph_load_reads_nested_layout_without_mutating_disk() {
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-lifecycle-nested-load-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&root).unwrap();
-        let flat_path = GraphResourcePath::new("events/Legacy.yssbi-event").unwrap();
-        let nested_path = GraphResourcePath::new("events/Nested/Legacy.yssbi-event").unwrap();
-        let mut project = ProjectData::new();
-        project.graphs.insert(
-            flat_path.clone(),
-            GraphResourceDocument::new("Legacy", GraphDocumentKind::Event),
-        );
-        fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
-        fixtures::write_graph(&project, root.to_string_lossy().as_ref(), &flat_path).unwrap();
-        let nested_dir = root.join("events/Nested");
-        std::fs::create_dir_all(&nested_dir).unwrap();
-        let nested_file = root.join(nested_path.as_str());
-        let flattened_file = root.join(flat_path.as_str());
-        std::fs::rename(&flattened_file, &nested_file).unwrap();
-        let state = ProjectState::new();
-        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
-        let project_instance_id = state.capture_project_session().unwrap().instance_id;
-
-        let projection = state
-            .load_graph_projection(&project_instance_id, &nested_path, 1, "en-US")
-            .unwrap();
-
-        assert_eq!(projection.graph_path.as_ref(), nested_path.as_str());
-        assert!(nested_file.is_file(), "graph load moved the nested graph");
-        assert!(
-            nested_dir.is_dir(),
-            "graph load removed the nested directory"
-        );
-        assert!(
-            !flattened_file.exists(),
-            "graph load created a flattened graph"
-        );
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
     fn unload_and_rename_intents_exclude_load_for_the_same_owner() {
         let registry = super::ResourceLifecycleRegistry::default();
         let session = session("intent-exclusion");

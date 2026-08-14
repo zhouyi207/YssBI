@@ -444,7 +444,7 @@ mod tests {
             },
             schema_version: 1,
             required: false,
-            name: Some(project_name.into()),
+            name: project_name.into(),
         };
         project.databases.insert("sales".into(), decl.clone());
         state.activate_project_fixture(project_name.into(), project);

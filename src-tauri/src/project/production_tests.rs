@@ -473,7 +473,7 @@ fn insert_uncached_duckdb_declaration(state: &ProjectState, path: &str) {
             },
             schema_version: 1,
             required: true,
-            name: Some("Missing".into()),
+            name: "Missing".into(),
         },
     );
 }
@@ -580,7 +580,7 @@ fn resource_descriptor_matrix_fixture(label: &str) -> ResourceDescriptorMatrixFi
             },
             schema_version: 1,
             required: false,
-            name: Some("Sales".into()),
+            name: "Sales".into(),
         },
     );
     crate::project::fixtures::write_project(&data, root.to_string_lossy().as_ref()).unwrap();
@@ -6014,7 +6014,7 @@ fn projection_environment_capture_is_activation_ordered_and_coherent() {
                 },
                 schema_version: 1,
                 required: true,
-                name: Some(id.into()),
+                name: id.into(),
             },
         );
         project
@@ -6115,7 +6115,7 @@ fn projection_environment_capture_rejects_store_from_overlapping_activation() {
                 },
                 schema_version: 1,
                 required: true,
-                name: Some(id.into()),
+                name: id.into(),
             },
         );
         project
@@ -6199,7 +6199,7 @@ fn committed_projection_uses_precommit_database_metadata_after_removal() {
             },
             schema_version: 1,
             required: true,
-            name: Some("Main".into()),
+            name: "Main".into(),
         },
     );
     let state = ProjectState::new();
@@ -8668,7 +8668,7 @@ fn project_activation_publishes_declared_duckdb_runtime_and_relational_access() 
             },
             schema_version: 1,
             required: true,
-            name: Some("Main".into()),
+            name: "Main".into(),
         },
     );
     crate::project::fixtures::write_project(&project_data, root.to_string_lossy().as_ref())
@@ -11217,7 +11217,7 @@ fn project_resource_authority_tracks_missing_tombstones_and_prevents_aba() {
                 },
                 schema_version: 1,
                 required: false,
-                name: Some("Authority".into()),
+                name: "Authority".into(),
             },
         );
         state.variable_revisions.write().unwrap().insert(
@@ -11276,7 +11276,7 @@ fn project_resource_authority_tracks_missing_tombstones_and_prevents_aba() {
                 },
                 schema_version: 1,
                 required: false,
-                name: Some("Authority".into()),
+                name: "Authority".into(),
             },
         );
         let mut variable_revisions = state.variable_revisions.write().unwrap();
@@ -11921,7 +11921,7 @@ fn dataframe_decompose_production_fixture(
                 },
                 schema_version: 1,
                 required: true,
-                name: Some("Main".into()),
+                name: "Main".into(),
             },
         );
     }
@@ -11943,7 +11943,7 @@ fn production_decompose_projects_database_column_metadata() {
             },
             schema_version: 1,
             required: true,
-            name: Some("Main".into()),
+            name: "Main".into(),
         },
     );
     let resource = crate::node_system::plan::ResourceId::new("databases/main").unwrap();
@@ -12513,136 +12513,6 @@ fn resource_rename_updates_editor_title() {
 }
 
 #[test]
-fn database_without_name_uses_localized_editor_title() {
-    let database_id = "opaque-database-id";
-    let mut data = ProjectData::new();
-    data.databases.insert(
-        database_id.into(),
-        crate::database::DatabaseDecl {
-            id: database_id.into(),
-            engine: crate::database::DatabaseEngine::InMemory {
-                name: database_id.into(),
-            },
-            schema_version: 1,
-            required: false,
-            name: None,
-        },
-    );
-    let resource =
-        crate::node_system::plan::ResourceId::new(format!("databases/{database_id}")).unwrap();
-    let resources = compile_resources_from_data(
-        &data,
-        std::collections::BTreeMap::from([(
-            resource,
-            vec![crate::schema::ColumnInfoDTO {
-                name: "amount".into(),
-                dtype: "Int64".into(),
-            }],
-        )]),
-    )
-    .unwrap();
-    let builtin = crate::node_system::catalog::build_builtin_node_system().unwrap();
-    let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(901));
-    let decompose_id = NodeId::from_uuid(uuid::Uuid::from_u128(902));
-    let mut document = crate::node_system::document::GraphDocument::default();
-    document.nodes.insert(
-        node_id,
-        DocumentNode {
-            id: node_id,
-            node_type: NodeTypeId::new("yssbi.dataframe.source.get").unwrap(),
-            position: crate::node_system::document::NodePosition { x: 0.0, y: 0.0 },
-            parameters: std::collections::BTreeMap::from([(
-                crate::node_system::protocol::ParameterKey::new("dataframe").unwrap(),
-                serde_json::json!(format!("databases/{database_id}")),
-            )]),
-            user_label: None,
-        },
-    );
-    document.nodes.insert(
-        decompose_id,
-        DocumentNode {
-            id: decompose_id,
-            node_type: NodeTypeId::new("yssbi.dataframe.decompose").unwrap(),
-            position: crate::node_system::document::NodePosition { x: 1.0, y: 0.0 },
-            parameters: std::collections::BTreeMap::new(),
-            user_label: None,
-        },
-    );
-    let connection_id = ConnectionId::from_uuid(uuid::Uuid::from_u128(903));
-    document.connections.insert(
-        connection_id,
-        DocumentConnection {
-            id: connection_id,
-            output: PortAddress::declared(node_id, PortKey::new("dataframe").unwrap()),
-            input: PortAddress::declared(decompose_id, PortKey::new("dataframe").unwrap()),
-            order: None,
-        },
-    );
-    let compiler = crate::node_system::compiler::GraphCompiler::with_resolvers(
-        builtin.registry.as_ref(),
-        &resources,
-        resources.schema_resolvers(),
-        crate::node_system::compiler::build_builtin_interface_resolvers(),
-    );
-    let result = compiler
-        .compile_snapshot(
-            &compiler.snapshot(
-                crate::node_system::document::GraphResourcePath(
-                    "events/database-title-fallback.yssbi-event".into(),
-                ),
-                &document,
-            ),
-            &crate::node_system::compiler::CompileCancellationToken::new(),
-        )
-        .unwrap();
-    let projection = crate::node_system::analysis::build_editor_graph_projection(
-        "events/database-title-fallback.yssbi-event",
-        &document,
-        &result.analysis,
-        &result.outcome,
-        builtin.registry.as_ref(),
-        &builtin.catalog.localization("en-US"),
-    )
-    .unwrap();
-    let node = projection
-        .nodes
-        .iter()
-        .find(|node| node.node_id.as_ref() == node_id.to_string())
-        .unwrap();
-
-    assert_eq!(node.display.title.as_ref(), "Get DataFrame");
-    assert_ne!(node.display.title.as_ref(), database_id);
-    let decompose = projection
-        .nodes
-        .iter()
-        .find(|node| node.node_id.as_ref() == decompose_id.to_string())
-        .expect("Decompose remains projected for an unnamed database");
-    let amount = decompose
-        .ports
-        .iter()
-        .find(|port| port.display.instance_label.as_deref() == Some("amount"))
-        .expect("unnamed database schema still propagates to Decompose");
-    assert!(!amount.orphan);
-    assert_eq!(
-        amount
-            .resolved_type
-            .as_ref()
-            .and_then(|summary| summary.data_type.clone()),
-        Some(crate::graph::DataType::DataSeries(Box::new(
-            crate::graph::DataType::Int64,
-        ))),
-    );
-    assert!(node.diagnostics.iter().any(|diagnostic| {
-        diagnostic.code.as_ref() == "compiler.resource.display_name_unavailable"
-            && matches!(
-                &diagnostic.location,
-                crate::node_system::analysis::DiagnosticLocationDto::Node { node_id: id }
-                    if id.as_ref() == node_id.to_string()
-            )
-    }));
-}
-
-#[test]
 fn database_schema_resolver_attaches_canonical_field_lineage() {
     let declaration = crate::database::DatabaseDecl {
         id: "main".into(),
@@ -12651,7 +12521,7 @@ fn database_schema_resolver_attaches_canonical_field_lineage() {
         },
         schema_version: 1,
         required: true,
-        name: Some("Main".into()),
+        name: "Main".into(),
     };
     let mut data = ProjectData::new();
     data.databases.insert("main".into(), declaration);
@@ -12703,7 +12573,7 @@ fn database_resource_version_changes_with_resolved_column_type() {
         },
         schema_version: 1,
         required: true,
-        name: Some("Main".into()),
+        name: "Main".into(),
     };
     let mut data = ProjectData::new();
     data.databases.insert("main".into(), declaration);
@@ -12876,7 +12746,7 @@ impl SourceRenameLimitFixture {
                 },
                 schema_version: 1,
                 required: true,
-                name: Some("Main".into()),
+                name: "Main".into(),
             },
         );
         let state = ProjectState::new();
@@ -13386,7 +13256,7 @@ fn project_execute_graph_runs_builtin_dataframe_source_limit() {
             },
             schema_version: 1,
             required: true,
-            name: Some("Main".into()),
+            name: "Main".into(),
         },
     );
     let state = ProjectState::new();
@@ -13562,7 +13432,7 @@ impl ProductionRelationalChainFixture {
                 },
                 schema_version: 1,
                 required: true,
-                name: Some("Main".into()),
+                name: "Main".into(),
             },
         );
         project_data.graphs.insert(path.clone(), graph);

@@ -5,7 +5,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use crate::execution::Presentation;
-use crate::graph::PinId;
 
 pub type SourceId = String;
 
@@ -103,22 +102,10 @@ pub struct ResultSourceRecord {
     pub source: ResultSource,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum SourceOwner {
-    Window,
-    RuntimePin {
-        graph_path: String,
-        pin_id: String,
-        run_id: String,
-    },
-}
-
 #[derive(Default)]
 struct ResultSourceRegistry {
     descriptors: HashMap<SourceId, SourceDescriptor>,
     sources: HashMap<SourceId, ResultSource>,
-    runtime_index: HashMap<(String, String), SourceId>,
-    owners: HashMap<SourceId, SourceOwner>,
 }
 
 /// Session-scoped registry for all inspectable execution results.
@@ -138,41 +125,7 @@ impl ResultSourceStore {
         registry
             .descriptors
             .insert(source_id.clone(), record.descriptor);
-        registry.sources.insert(source_id.clone(), record.source);
-        registry.owners.insert(source_id, SourceOwner::Window);
-    }
-
-    pub fn insert_runtime_pin_source(
-        &self,
-        graph_path: String,
-        pin_id: String,
-        run_id: String,
-        record: ResultSourceRecord,
-    ) -> SourceDescriptor {
-        let source_id = record.descriptor.source_id.clone();
-        let descriptor = record.descriptor.clone();
-        let mut registry = self.registry.write().unwrap();
-        if let Some(previous) = registry
-            .runtime_index
-            .insert((graph_path.clone(), pin_id.clone()), source_id.clone())
-        {
-            registry.descriptors.remove(&previous);
-            registry.sources.remove(&previous);
-            registry.owners.remove(&previous);
-        }
-        registry
-            .descriptors
-            .insert(source_id.clone(), record.descriptor);
-        registry.sources.insert(source_id.clone(), record.source);
-        registry.owners.insert(
-            source_id,
-            SourceOwner::RuntimePin {
-                graph_path,
-                pin_id,
-                run_id,
-            },
-        );
-        descriptor
+        registry.sources.insert(source_id, record.source);
     }
 
     pub fn get_descriptor(&self, source_id: &str) -> Option<SourceDescriptor> {
@@ -182,14 +135,6 @@ impl ResultSourceStore {
             .descriptors
             .get(source_id)
             .cloned()
-    }
-
-    pub fn get_pin_descriptor(&self, graph_path: &str, pin_id: &str) -> Option<SourceDescriptor> {
-        let registry = self.registry.read().unwrap();
-        let source_id = registry
-            .runtime_index
-            .get(&(graph_path.to_string(), pin_id.to_string()))?;
-        registry.descriptors.get(source_id).cloned()
     }
 
     pub fn get_value(&self, source_id: &str) -> Result<Option<SourceValue>, String> {
@@ -236,78 +181,23 @@ impl ResultSourceStore {
         }
     }
 
-    pub fn clear_runtime_graph(&self, graph_path: &str) {
-        let mut registry = self.registry.write().unwrap();
-        let source_ids: Vec<_> = registry
-            .owners
-            .iter()
-            .filter_map(|(source_id, owner)| match owner {
-                SourceOwner::RuntimePin {
-                    graph_path: owner_graph_path,
-                    ..
-                } if owner_graph_path == graph_path => Some(source_id.clone()),
-                _ => None,
-            })
-            .collect();
-        for source_id in source_ids {
-            registry.descriptors.remove(&source_id);
-            registry.sources.remove(&source_id);
-            registry.owners.remove(&source_id);
-        }
-        registry
-            .runtime_index
-            .retain(|(owner_graph_path, _), _| owner_graph_path != graph_path);
-    }
-
-    /// Remove runtime pin sources for the given pins on a graph. Returns pin ids actually removed.
-    pub fn invalidate_runtime_pins(&self, graph_path: &str, pin_ids: &[PinId]) -> Vec<PinId> {
-        if pin_ids.is_empty() {
-            return Vec::new();
-        }
-        let mut registry = self.registry.write().unwrap();
-        let mut invalidated = Vec::new();
-        for pin_id in pin_ids {
-            let key = (graph_path.to_string(), pin_id.to_string());
-            let Some(source_id) = registry.runtime_index.remove(&key) else {
-                continue;
-            };
-            registry.descriptors.remove(&source_id);
-            registry.sources.remove(&source_id);
-            registry.owners.remove(&source_id);
-            invalidated.push(*pin_id);
-        }
-        invalidated
-    }
-
-    /// Release a window-owned source. No-op when owner is RuntimePin or source is missing.
     pub fn release_window_source(&self, source_id: &str) -> Result<bool, String> {
         let mut registry = self.registry.write().unwrap();
-        match registry.owners.get(source_id) {
-            Some(SourceOwner::Window) => {
-                registry.descriptors.remove(source_id);
-                registry.sources.remove(source_id);
-                registry.owners.remove(source_id);
-                registry.runtime_index.retain(|_, v| v != source_id);
-                Ok(true)
-            }
-            Some(SourceOwner::RuntimePin { .. }) | None => Ok(false),
-        }
+        let removed = registry.descriptors.remove(source_id).is_some();
+        registry.sources.remove(source_id);
+        Ok(removed)
     }
 
     pub fn clear_all(&self) {
         let mut registry = self.registry.write().unwrap();
         registry.descriptors.clear();
         registry.sources.clear();
-        registry.runtime_index.clear();
-        registry.owners.clear();
     }
 
     pub fn remove(&self, source_id: &str) {
         let mut registry = self.registry.write().unwrap();
         registry.descriptors.remove(source_id);
         registry.sources.remove(source_id);
-        registry.owners.remove(source_id);
-        registry.runtime_index.retain(|_, v| v != source_id);
     }
 }
 
@@ -449,39 +339,6 @@ mod tests {
     }
 
     #[test]
-    fn runtime_pin_sources_replace_previous_index_entry() {
-        let store = ResultSourceStore::new();
-        store.insert_runtime_pin_source(
-            "graph".to_string(),
-            "pin".to_string(),
-            "run-a".to_string(),
-            ResultSourceRecord {
-                descriptor: descriptor("runtime-a", SourceKind::Scalar),
-                source: ResultSource::Json(serde_json::json!({"value": 1})),
-            },
-        );
-        store.insert_runtime_pin_source(
-            "graph".to_string(),
-            "pin".to_string(),
-            "run-b".to_string(),
-            ResultSourceRecord {
-                descriptor: descriptor("runtime-b", SourceKind::Scalar),
-                source: ResultSource::Json(serde_json::json!({"value": 2})),
-            },
-        );
-
-        assert!(store.get_descriptor("runtime-a").is_none());
-        assert_eq!(
-            store
-                .get_pin_descriptor("graph", "pin")
-                .unwrap()
-                .source_id
-                .as_str(),
-            "runtime-b"
-        );
-    }
-
-    #[test]
     fn dataframe_page_slices_rows() {
         let df = df!(
             "a" => [1, 2, 3, 4, 5],
@@ -518,61 +375,6 @@ mod tests {
         assert_eq!(page.rows.as_ref().unwrap().len(), 2);
         assert_eq!(page.columns.as_ref().unwrap(), &vec!["s".to_string()]);
         assert_eq!(page.rows.as_ref().unwrap()[0][0], serde_json::json!(30));
-    }
-
-    #[test]
-    fn invalidate_runtime_pins_only_removes_target_pins() {
-        use uuid::Uuid;
-        let pin_a = PinId::from(Uuid::new_v4());
-        let pin_b = PinId::from(Uuid::new_v4());
-        let store = ResultSourceStore::new();
-        store.insert_runtime_pin_source(
-            "graph".to_string(),
-            pin_a.to_string(),
-            "run".to_string(),
-            ResultSourceRecord {
-                descriptor: descriptor("runtime-a", SourceKind::Scalar),
-                source: ResultSource::Json(serde_json::json!({"value": 1})),
-            },
-        );
-        store.insert_runtime_pin_source(
-            "graph".to_string(),
-            pin_b.to_string(),
-            "run".to_string(),
-            ResultSourceRecord {
-                descriptor: descriptor("runtime-b", SourceKind::Scalar),
-                source: ResultSource::Json(serde_json::json!({"value": 2})),
-            },
-        );
-
-        let removed = store.invalidate_runtime_pins("graph", &[pin_a]);
-        assert_eq!(removed, vec![pin_a]);
-        assert!(
-            store
-                .get_pin_descriptor("graph", &pin_a.to_string())
-                .is_none()
-        );
-        assert!(
-            store
-                .get_pin_descriptor("graph", &pin_b.to_string())
-                .is_some()
-        );
-    }
-
-    #[test]
-    fn release_window_source_noop_for_runtime_pin_owner() {
-        let store = ResultSourceStore::new();
-        store.insert_runtime_pin_source(
-            "graph".to_string(),
-            "pin".to_string(),
-            "run".to_string(),
-            ResultSourceRecord {
-                descriptor: descriptor("runtime", SourceKind::Scalar),
-                source: ResultSource::Json(serde_json::json!({"value": 1})),
-            },
-        );
-        assert!(!store.release_window_source("runtime").unwrap());
-        assert!(store.get_descriptor("runtime").is_some());
     }
 
     #[test]

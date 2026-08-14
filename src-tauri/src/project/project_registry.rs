@@ -16,15 +16,20 @@ pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
 pub enum ProjectRootIdentityState {
     Valid,
     Invalid,
-    Unmigrated,
 }
 
 impl ProjectRootIdentityState {
-    fn from_stored(value: &str) -> Self {
+    fn from_stored(value: &str) -> Result<Self, sqlx::Error> {
         match value {
-            "valid" => Self::Valid,
-            "invalid" => Self::Invalid,
-            _ => Self::Unmigrated,
+            "valid" => Ok(Self::Valid),
+            "invalid" => Ok(Self::Invalid),
+            _ => Err(sqlx::Error::Decode(
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("unknown project root identity state '{value}'"),
+                )
+                .into(),
+            )),
         }
     }
 }
@@ -76,8 +81,8 @@ struct ProjectRecordRow {
 }
 
 impl ProjectRecordRow {
-    fn into_record(self) -> ProjectRecord {
-        ProjectRecord {
+    fn into_record(self) -> Result<ProjectRecord, sqlx::Error> {
+        Ok(ProjectRecord {
             id: self.id,
             name: self.name,
             path: normalize_existing_path(&self.path).unwrap_or(self.path),
@@ -85,8 +90,8 @@ impl ProjectRecordRow {
             last_opened_at: self.last_opened_at,
             is_favorite: self.is_favorite != 0,
             root_identity: ProjectRootIdentity::from_stored(self.root_identity),
-            root_identity_state: ProjectRootIdentityState::from_stored(&self.root_identity_state),
-        }
+            root_identity_state: ProjectRootIdentityState::from_stored(&self.root_identity_state)?,
+        })
     }
 }
 
@@ -136,7 +141,7 @@ impl ProjectRegistry {
                 last_opened_at TEXT,
                 is_favorite INTEGER NOT NULL DEFAULT 0,
                 root_identity TEXT NOT NULL DEFAULT '',
-                root_identity_state TEXT NOT NULL DEFAULT 'unmigrated'
+                root_identity_state TEXT NOT NULL DEFAULT 'invalid'
             )
             "#,
         )
@@ -160,10 +165,9 @@ impl ProjectRegistry {
         )
         .fetch_all(&self.pool)
         .await?;
-        Ok(rows
-            .into_iter()
+        rows.into_iter()
             .map(ProjectRecordRow::into_record)
-            .collect())
+            .collect()
     }
 
     pub async fn register_project(&self, name: &str, path: &str) -> Result<ProjectRecord, String> {
@@ -255,7 +259,7 @@ impl ProjectRegistry {
 
         if let Some(ref canonical) = normalized {
             if let Some(row) = self.fetch_by_path_exact(canonical).await? {
-                return Ok(Some(row.into_record()));
+                return Ok(Some(row.into_record()?));
             }
 
             let rows = sqlx::query_as::<_, ProjectRecordRow>(
@@ -273,14 +277,14 @@ impl ProjectRegistry {
                     == NormalizedProjectRoot::from_project_path(canonical).ok()
             }) {
                 let _ = self.reconcile_stored_path(&row.id, canonical).await;
-                return Ok(Some(row.into_record()));
+                return Ok(Some(row.into_record()?));
             }
         }
 
-        Ok(self
-            .fetch_by_path_exact(path)
+        self.fetch_by_path_exact(path)
             .await?
-            .map(ProjectRecordRow::into_record))
+            .map(ProjectRecordRow::into_record)
+            .transpose()
     }
 
     #[cfg(test)]
@@ -318,7 +322,9 @@ impl ProjectRegistry {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| e.to_string())?;
-        Ok(row.map(ProjectRecordRow::into_record))
+        row.map(ProjectRecordRow::into_record)
+            .transpose()
+            .map_err(|error| error.to_string())
     }
 
     pub async fn toggle_favorite(&self, id: &str) -> Result<bool, String> {
@@ -586,6 +592,41 @@ mod tests {
     use super::*;
     use crate::project::ProjectRootBinding;
     use std::fs;
+
+    #[test]
+    fn registry_defaults_new_rows_to_invalid_and_rejects_unknown_identity_state() {
+        tauri::async_runtime::block_on(async {
+            let app_dir = std::env::temp_dir().join(format!(
+                "yssbi-registry-identity-state-{}",
+                uuid::Uuid::new_v4()
+            ));
+            let registry = ProjectRegistry::init(app_dir.clone()).await.unwrap();
+            sqlx::query(
+                "INSERT INTO projects (id, name, path, created_at) VALUES ('state-test', 'State Test', 'missing', 'now')",
+            )
+            .execute(&registry.pool)
+            .await
+            .unwrap();
+
+            let record = registry.fetch_by_id("state-test").await.unwrap().unwrap();
+            assert_eq!(
+                record.root_identity_state,
+                ProjectRootIdentityState::Invalid
+            );
+
+            sqlx::query(
+                "UPDATE projects SET root_identity_state = 'unmigrated' WHERE id = 'state-test'",
+            )
+            .execute(&registry.pool)
+            .await
+            .unwrap();
+            let error = registry.fetch_by_id("state-test").await.unwrap_err();
+            assert!(error.contains("unknown project root identity state 'unmigrated'"));
+
+            drop(registry);
+            let _ = fs::remove_dir_all(app_dir);
+        });
+    }
 
     #[test]
     fn cleanup_removes_terminal_and_replaced_valid_rows_before_reregistration() {
