@@ -854,7 +854,7 @@ fn assert_no_completed_result(events: &[RunEvent]) {
     assert!(
         events
             .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::ResultReady { .. }))
+            .all(|event| !matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
     );
     assert_eq!(
         event_count(
@@ -1373,7 +1373,7 @@ fn builtin_recursive_call_stops_at_project_recursion_limit() {
     assert!(
         recorded
             .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::ResultReady { .. }))
+            .all(|event| !matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
     );
     assert!(
         recorded
@@ -2014,7 +2014,7 @@ fn builtin_effect_failure_attempts_once_and_drops_every_retained_project_resourc
     assert_eq!(
         recorded
             .iter()
-            .filter(|event| matches!(event.kind, RunEventKind::ResultReady { .. }))
+            .filter(|event| matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
             .count(),
         0
     );
@@ -2123,7 +2123,7 @@ fn builtin_effect_cancellation_attempts_once_drops_retained_resources_and_drains
     assert_eq!(
         recorded
             .iter()
-            .filter(|event| matches!(event.kind, RunEventKind::ResultReady { .. }))
+            .filter(|event| matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
             .count(),
         0
     );

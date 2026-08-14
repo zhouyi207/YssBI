@@ -3284,6 +3284,14 @@ fn lower_graph<R: CompilerRegistry>(
                         production: spec
                             .production
                             .unwrap_or(OutputProduction::FullyMaterialized),
+                        public_output: Some(GraphOutputRef {
+                            graph_path: provenance.graph_path.clone(),
+                            port: port.address.clone(),
+                        }),
+                        presentation: crate::node_system::plan::presentation_for_output(
+                            node.node_type_id.as_str(),
+                            spec.key.as_str(),
+                        ),
                     });
                 }
                 PortDirection::Input => {

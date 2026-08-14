@@ -10,12 +10,12 @@ import { parsePresentationWindowQuery } from './parsePresentationWindowQuery';
 
 export function usePresentationWindow(windowKind: WindowKind, logTag: string) {
   const query = useMemo(() => parsePresentationWindowQuery(), []);
-  const sourceId = query.sourceId;
+  const resultId = query.resultId;
   const [state, setState] = useState<PresentationWindowState>(() =>
-    sourceId ? { status: 'loading' } : { status: 'missing_source_id' },
+    resultId ? { status: 'loading' } : { status: 'missing_result_id' },
   );
 
-  usePresentationWindowLifecycle(sourceId);
+  usePresentationWindowLifecycle(resultId);
   usePersistedWindow(windowKind);
   const isMaximized = useWindowMaximized(logTag);
 
@@ -34,13 +34,13 @@ export function usePresentationWindow(windowKind: WindowKind, logTag: string) {
       });
     };
 
-    if (!sourceId) {
+    if (!resultId) {
       void revealWindow();
       return;
     }
 
     void (async () => {
-      const next = await loadPresentationWindow(sourceId);
+      const next = await loadPresentationWindow(resultId);
       if (cancelled) return;
       setState(next);
       if (next.status === 'ready') {
@@ -53,7 +53,7 @@ export function usePresentationWindow(windowKind: WindowKind, logTag: string) {
     return () => {
       cancelled = true;
     };
-  }, [sourceId, logTag]);
+  }, [resultId, logTag]);
 
-  return { sourceId, state, isMaximized };
+  return { resultId, state, isMaximized };
 }

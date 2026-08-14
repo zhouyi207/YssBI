@@ -67,12 +67,12 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
         id: ID,
         title: "View Data",
         zh_title: "查看数据",
-        description: "Captures an immutable, replayable snapshot for a result inspector.",
-        zh_description: "为结果查看器捕获不可变、可重放的快照。",
-        documentation: "The runtime returns a snapshot artifact; opening and paging the inspector remains a UI concern.",
-        zh_documentation: "运行时返回快照 artifact；打开查看器及分页仍由 UI 负责。",
-        aliases: &["view", "inspect", "preview", "snapshot", "data inspector"],
-        zh_aliases: &["查看", "检查", "预览", "快照", "数据查看器"],
+        description: "Opens the exact input result in the data inspector as an ordered effect.",
+        zh_description: "将精确的输入结果作为有序副作用在数据查看器中打开。",
+        documentation: "After activation succeeds, the runtime requests an inspector for the input ResultId and continues through Then without copying or materializing data.",
+        zh_documentation: "激活成功后，运行时请求查看输入 ResultId，并通过“然后”继续，不复制或物化数据。",
+        aliases: &["view", "inspect", "preview", "data inspector"],
+        zh_aliases: &["查看", "检查", "预览", "数据查看器"],
     })?;
     add_port_messages(
         fragment,
@@ -80,7 +80,6 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
         &[
             ("enter", "Enter", "进入"),
             ("data", "Data", "数据"),
-            ("snapshot", "Snapshot", "快照"),
             ("then", "Then", "然后"),
         ],
     )?;
@@ -90,7 +89,7 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
             source,
         }
     })?;
-    fragment.nodes.push(result_leaf(
+    fragment.nodes.push(leaf(
         protocol(
             ID,
             "debug",
@@ -102,12 +101,6 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
                     PortDirection::Input,
                     TypeExpr::Generic(value_type.clone()),
                 )?,
-                data_port(
-                    ID,
-                    "snapshot",
-                    PortDirection::Output,
-                    TypeExpr::Generic(value_type.clone()),
-                )?,
                 control_port(ID, "then", PortDirection::Output, PortInstances::Declared)?,
             ],
             vec![value_type],
@@ -116,8 +109,6 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
             effectful(),
         )?,
         ID,
-        "snapshot",
-        "snapshot",
     ));
     Ok(())
 }

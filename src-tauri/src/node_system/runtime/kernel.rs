@@ -4,6 +4,7 @@ use super::{
 };
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::project::{NumericTolerance, ProjectComputationSettings, StatisticalMissingValuePolicy};
+use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
@@ -69,7 +70,8 @@ impl fmt::Display for KernelError {
 
 impl std::error::Error for KernelError {}
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EffectiveComputationSettings {
     pub numeric_tolerance: NumericTolerance,
     pub statistical_missing_value_policy: StatisticalMissingValuePolicy,

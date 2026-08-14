@@ -262,6 +262,15 @@ fn insert_materialization_adapters(
     ensure_sequence(root_region);
     normalize_structured_sequences(root_region);
     let control_flow = ControlFlowIndex::build(root_region, operations);
+    let mut presentation_by_value = operations
+        .iter()
+        .flat_map(|operation| {
+            operation
+                .outputs
+                .iter()
+                .map(|output| (output.value, output.presentation))
+        })
+        .collect::<BTreeMap<_, _>>();
     let mut source_anchors = control_flow.definitions.clone();
     for source in value_sources {
         if matches!(source, PlanValueSource::ExternalInput(_, _)) {
@@ -453,6 +462,10 @@ fn insert_materialization_adapters(
         let source_node_id = producer
             .map(|producer| operations[producer].source_node_id)
             .unwrap_or_else(|| operations[boundaries[indices[0]].5].source_node_id);
+        let presentation = presentation_by_value
+            .get(&source)
+            .copied()
+            .unwrap_or_default();
         operations.push(PlannedOperation {
             stable_id: stable_id.clone(),
             source_node_id,
@@ -471,6 +484,8 @@ fn insert_materialization_adapters(
                 value: adapter_output,
                 contract,
                 production: output_production,
+                public_output: None,
+                presentation,
             }]),
             params: CompiledParameterHandle::new("adapter.fanout")
                 .expect("static fanout parameter handle is valid"),
@@ -489,6 +504,7 @@ fn insert_materialization_adapters(
             .or_default()
             .push(operation_index);
         source_anchors.insert(adapter_output, anchor);
+        presentation_by_value.insert(adapter_output, presentation);
         for index in indices {
             boundaries[index].0 = stable_id.clone();
             boundaries[index].2 = adapter_output;
@@ -511,6 +527,13 @@ fn insert_materialization_adapters(
             production,
             consumption,
         );
+        if adapter_plan.adapter == crate::node_system::plan::PlannedAdapter::Identity {
+            dependencies.push(ValueDependency {
+                source,
+                destination,
+            });
+            continue;
+        }
         let contract = value_contracts.get(&source).cloned().ok_or_else(|| {
             DemandPlanError::InvalidDerivedPlan(
                 format!(
@@ -553,6 +576,10 @@ fn insert_materialization_adapters(
             )?);
         let operation_index = OperationIndex::new(operations.len() as u32);
         let consumer_operation = &operations[consumer];
+        let presentation = presentation_by_value
+            .get(&source)
+            .copied()
+            .unwrap_or_default();
         operations.push(PlannedOperation {
             stable_id,
             source_node_id: consumer_operation.source_node_id,
@@ -571,6 +598,8 @@ fn insert_materialization_adapters(
                 value: adapter_output,
                 contract,
                 production: adapter_plan.output_production,
+                public_output: None,
+                presentation,
             }]),
             params: CompiledParameterHandle::new("adapter.none")
                 .expect("static adapter parameter handle is valid"),
@@ -588,6 +617,7 @@ fn insert_materialization_adapters(
             source: adapter_output,
             destination,
         });
+        presentation_by_value.insert(adapter_output, presentation);
         let anchor = source_anchors.get(&source).cloned().ok_or_else(|| {
             DemandPlanError::InvalidDerivedPlan(
                 format!(
@@ -693,6 +723,37 @@ fn inject_placement_steps(
 }
 
 impl ExecutionPlanBasis {
+    fn validate_public_output_facts(
+        &self,
+        retained: &BTreeSet<usize>,
+    ) -> Result<(), DemandPlanError> {
+        for index in retained {
+            let operation = &self.operations[*index];
+            for (output, expected_port) in operation.outputs.iter().zip(&operation.output_ports) {
+                let Some(public_output) = &output.public_output else {
+                    continue;
+                };
+                let valid_fact = self.port_facts.get(expected_port).is_some_and(|fact| {
+                    fact.kind == PortKind::Data && fact.direction == PortDirection::Output
+                });
+                if public_output.graph_path != self.provenance.graph_path
+                    || public_output.port != *expected_port
+                    || !valid_fact
+                {
+                    return Err(DemandPlanError::InvalidDerivedPlan(
+                        format!(
+                            "operation {} has invalid public output {}",
+                            operation.stable_id.as_str(),
+                            public_output.port
+                        )
+                        .into(),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn finalize(
         &self,
         retained: &BTreeSet<usize>,
@@ -701,6 +762,7 @@ impl ExecutionPlanBasis {
         retained_region: &StructuredControlRegion,
         required_values: Option<&BTreeSet<ValueRef>>,
     ) -> Result<ExecutionPlan, DemandPlanError> {
+        self.validate_public_output_facts(retained)?;
         let selected_results = selected_outputs
             .iter()
             .map(|output| self.output_results[output].clone())
@@ -870,14 +932,17 @@ impl ExecutionPlanBasis {
                         &compiled_plan.roots,
                     )
                     .into_boxed_slice();
-                    let cache_policy = if members
+                    let cache_policy = members
                         .iter()
-                        .all(|index| self.operations[*index].cache_policy == CachePolicy::PerRun)
-                    {
-                        CachePolicy::PerRun
-                    } else {
-                        CachePolicy::Disabled
-                    };
+                        .map(|index| self.operations[*index].cache_policy)
+                        .reduce(|left, right| {
+                            if left == right {
+                                left
+                            } else {
+                                CachePolicy::Disabled
+                            }
+                        })
+                        .unwrap_or(CachePolicy::Disabled);
                     let workload = members
                         .iter()
                         .map(|index| self.operations[*index].workload)
@@ -1177,6 +1242,8 @@ mod materialization_tests {
                 value: output,
                 contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 production: OutputProduction::Streaming,
+                public_output: None,
+                presentation: crate::node_system::plan::ResultPresentation::Inspector,
             }]),
             params: CompiledParameterHandle::new("test.params").unwrap(),
             resource_dependencies: Box::new([]),
@@ -1282,6 +1349,160 @@ mod materialization_tests {
     }
 
     #[test]
+    fn compatible_materialized_contract_preserves_direct_dependency() {
+        let native = |name: &str| PlannedKernel::Native(KernelHandle::new(name).unwrap());
+        let mut producer = operation(
+            "stable.producer",
+            1,
+            native("test.producer"),
+            None,
+            ValueRef::new(0),
+        );
+        producer.outputs[0].production = OutputProduction::FullyMaterialized;
+        let consumer = operation(
+            "stable.consumer",
+            2,
+            native("test.consumer"),
+            Some(ValueRef::new(1)),
+            ValueRef::new(2),
+        );
+        let mut operations = vec![producer, consumer];
+        let direct_dependency = ValueDependency {
+            source: ValueRef::new(0),
+            destination: ValueRef::new(1),
+        };
+        let mut dependencies = vec![direct_dependency];
+        let mut region = StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ]));
+        let provenance = crate::node_system::analysis::CompileProvenance {
+            project_session_id: ProjectSessionId::new("test-session"),
+            graph_path: GraphResourcePath("events/materialized-direct".into()),
+            basis: CompilationBasis {
+                graph_revision: GraphRevision::new(1),
+                registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
+                resource_versions: ResourceVersionSet::new(),
+                resource_observations: Default::default(),
+            },
+            compile_id: CompileId::new(1),
+        };
+        let mut value_count = 3;
+        let mut value_contracts = (0..value_count)
+            .map(|value| {
+                (
+                    ValueRef::new(value),
+                    crate::node_system::plan::PlannedValueContract::opaque(),
+                )
+            })
+            .collect();
+
+        insert_materialization_adapters(
+            &provenance,
+            &mut value_count,
+            &mut operations,
+            &[],
+            &mut value_contracts,
+            &mut dependencies,
+            &mut region,
+        )
+        .unwrap();
+
+        assert_eq!(operations.len(), 2);
+        assert_eq!(value_count, 3);
+        assert_eq!(dependencies, [direct_dependency]);
+    }
+
+    #[test]
+    fn fanout_and_per_consumer_adapters_preserve_presentation() {
+        let native = |name: &str| PlannedKernel::Native(KernelHandle::new(name).unwrap());
+        let mut producer = operation(
+            "stable.producer",
+            1,
+            native("test.producer"),
+            None,
+            ValueRef::new(0),
+        );
+        producer.outputs[0].presentation = crate::node_system::plan::ResultPresentation::Report {
+            report: crate::node_system::plan::ResultReportKind::OlsSummary,
+        };
+        let mut streaming_consumer = operation(
+            "stable.streaming",
+            2,
+            native("test.streaming"),
+            Some(ValueRef::new(1)),
+            ValueRef::new(3),
+        );
+        streaming_consumer.inputs[0].consumption = InputConsumption::Streaming;
+        let materialized_consumer = operation(
+            "stable.materialized",
+            3,
+            native("test.materialized"),
+            Some(ValueRef::new(2)),
+            ValueRef::new(4),
+        );
+        let mut operations = vec![producer, streaming_consumer, materialized_consumer];
+        let mut dependencies = vec![
+            ValueDependency {
+                source: ValueRef::new(0),
+                destination: ValueRef::new(1),
+            },
+            ValueDependency {
+                source: ValueRef::new(0),
+                destination: ValueRef::new(2),
+            },
+        ];
+        let mut region = StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+            ControlStep::Operation(OperationIndex::new(2)),
+        ]));
+        let provenance = crate::node_system::analysis::CompileProvenance {
+            project_session_id: ProjectSessionId::new("test-session"),
+            graph_path: GraphResourcePath("events/presentation-fanout".into()),
+            basis: CompilationBasis {
+                graph_revision: GraphRevision::new(1),
+                registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
+                resource_versions: ResourceVersionSet::new(),
+                resource_observations: Default::default(),
+            },
+            compile_id: CompileId::new(1),
+        };
+        let mut value_count = 5;
+        let mut value_contracts = (0..value_count)
+            .map(|value| {
+                (
+                    ValueRef::new(value),
+                    crate::node_system::plan::PlannedValueContract::opaque(),
+                )
+            })
+            .collect();
+
+        insert_materialization_adapters(
+            &provenance,
+            &mut value_count,
+            &mut operations,
+            &[],
+            &mut value_contracts,
+            &mut dependencies,
+            &mut region,
+        )
+        .unwrap();
+
+        let adapters = operations
+            .iter()
+            .filter(|operation| matches!(operation.kernel, PlannedKernel::Adapter(_)))
+            .collect::<Vec<_>>();
+        assert_eq!(adapters.len(), 2);
+        assert!(adapters.iter().all(|adapter| {
+            adapter.outputs[0].presentation
+                == crate::node_system::plan::ResultPresentation::Report {
+                    report: crate::node_system::plan::ResultReportKind::OlsSummary,
+                }
+        }));
+    }
+
+    #[test]
     fn external_stream_fanout_is_hoisted_once_before_sibling_branch_arms() {
         let native = |name: &str| PlannedKernel::Native(KernelHandle::new(name).unwrap());
         let mut operations = vec![
@@ -1367,10 +1588,7 @@ mod materialization_tests {
             .iter()
             .position(|step| matches!(step, ControlStep::Region(_)))
             .unwrap();
-        assert_eq!(
-            branch_index, 3,
-            "shared fanout and two adapters are root prelude"
-        );
+        assert_eq!(branch_index, 1, "shared fanout is the root prelude");
         assert!(
             steps[..branch_index]
                 .iter()
@@ -1489,7 +1707,7 @@ mod materialization_tests {
                     .then_some(OperationIndex::new(index as u32))
             })
             .collect::<Vec<_>>();
-        assert_eq!(adapter_indices.len(), 3);
+        assert_eq!(adapter_indices.len(), 1);
         assert!(
             adapter_indices
                 .iter()

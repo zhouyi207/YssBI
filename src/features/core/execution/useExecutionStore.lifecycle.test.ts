@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { PinResultState } from '@/shared/types/ui';
+import type { PinHistoryProjection } from '@/shared/types/ui';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { pinPreviewCacheKey } from './pinResultIndex';
 import {
@@ -8,20 +8,6 @@ import {
   type PinPreviewLease,
 } from './useExecutionStore';
 
-function samplePinResult(pinId: string, graphPath = 'events/Main.yssbi-event'): PinResultState {
-  return {
-    graphPath,
-    nodeId: 'node-1',
-    pinId,
-    sourceId: `source-${pinId}`,
-    descriptor: {
-      sourceId: `source-${pinId}`,
-      kind: 'json',
-      presentation: { kind: 'inspector' },
-      title: 'Result',
-    },
-  };
-}
 
 const declaredOutput: PortAddressDto = {
   kind: 'declared',
@@ -64,7 +50,7 @@ describe('useExecutionStore pin result lifecycle', () => {
     const failPinPreview = vi.spyOn(store, 'failPinPreview');
 
     expect(first.isCurrent()).toBe(false);
-    expect(first.complete('source-stale')).toBe(false);
+    expect(first.complete('result-stale')).toBe(false);
     expect(first.fail('stale failure')).toBe(false);
     expect(getExecutionState).not.toHaveBeenCalled();
     expect(completePinPreview).not.toHaveBeenCalled();
@@ -78,9 +64,9 @@ describe('useExecutionStore pin result lifecycle', () => {
     const first = beginPreview(graphPath, declaredOutput, 1);
     const second = beginPreview(graphPath, declaredOutput, 2);
 
-    expect(store.completePinPreview(graphPath, declaredOutput, first.generation, 'source-stale')).toBe(false);
-    expect(store.completePinPreview(graphPath, instanceOutput, second.generation, 'source-wrong-port')).toBe(false);
-    expect(second.complete('source-current')).toBe(true);
+    expect(store.completePinPreview(graphPath, declaredOutput, first.generation, 'result-stale')).toBe(false);
+    expect(store.completePinPreview(graphPath, instanceOutput, second.generation, 'result-wrong-port')).toBe(false);
+    expect(second.complete('result-current')).toBe(true);
 
     const preview = useExecutionStore.getState().getGraph(graphPath).pinPreviews.get(
       pinPreviewCacheKey(graphPath, declaredOutput),
@@ -88,7 +74,7 @@ describe('useExecutionStore pin result lifecycle', () => {
     expect(preview).toMatchObject({
       generation: second.generation,
       status: 'ready',
-      sourceId: 'source-current',
+      resultId: 'result-current',
       port: declaredOutput,
     });
   });
@@ -117,7 +103,7 @@ describe('useExecutionStore pin result lifecycle', () => {
     store.releaseGraphExecutionState(graphPath);
 
     expect(lease.isCurrent()).toBe(false);
-    expect(lease.complete('source-stale')).toBe(false);
+    expect(lease.complete('result-stale')).toBe(false);
     expect(useExecutionStore.getState().graphs[graphPath]).toBeUndefined();
   });
 
@@ -135,48 +121,52 @@ describe('useExecutionStore pin result lifecycle', () => {
     expect(useExecutionStore.getState().getGraph(graphPath).runId).toBeNull();
   });
 
-  it('indexes pin results by graphPath and pinId', () => {
+  it('keeps history projections across graph-dirty visual invalidation', () => {
+    const graphPath = 'events/Main.yssbi-event';
     const store = useExecutionStore.getState();
-    store.recordPinResult(
-      'events/Main.yssbi-event',
-      samplePinResult('out-1', 'functions/Helper.yssbi-function'),
-    );
+    store.recordPinHistory({
+      graphPath,
+      output: declaredOutput,
+      entries: [],
+      selectedResultId: null,
+    });
+    store.completeExecution(graphPath);
 
-    const graph = useExecutionStore.getState().graphs['events/Main.yssbi-event'];
-    expect(graph?.pinResults.get('functions/Helper.yssbi-function:out-1')).toBeDefined();
-  });
+    store.markGraphDirty(graphPath);
 
-  it('keeps pin results across markGraphDirty while tab session is active', () => {
-    const store = useExecutionStore.getState();
-    store.recordPinResult('events/Main.yssbi-event', samplePinResult('out-1'));
-    store.completeExecution('events/Main.yssbi-event');
-
-    store.markGraphDirty('events/Main.yssbi-event');
-
-    const graph = useExecutionStore.getState().graphs['events/Main.yssbi-event'];
+    const graph = useExecutionStore.getState().graphs[graphPath];
     expect(graph?.graphDirty).toBe(true);
-    expect(graph?.pinResults.size).toBe(1);
+    expect(graph?.pinHistories.size).toBe(1);
   });
 
-  it('clears invalidated results across execution buckets', () => {
+  it('clear action removes frontend history projections only', () => {
+    const graphPath = 'events/Main.yssbi-event';
     const store = useExecutionStore.getState();
-    store.recordPinResult(
-      'events/Main.yssbi-event',
-      samplePinResult('out-fn', 'functions/Helper.yssbi-function'),
-    );
+    store.recordPinHistory({
+      graphPath,
+      output: declaredOutput,
+      entries: [],
+      selectedResultId: null,
+    });
 
-    store.clearPinResults('functions/Helper.yssbi-function', ['out-fn']);
+    store.clearGraphRunProjections(graphPath);
 
-    const graph = useExecutionStore.getState().graphs['events/Main.yssbi-event'];
-    expect(graph?.pinResults.size).toBe(0);
+    expect(useExecutionStore.getState().graphs[graphPath]?.pinHistories.size).toBe(0);
   });
 
-  it('releases execution state when graph tab is fully closed', () => {
+  it('releases only frontend result projections when a graph tab is fully closed', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const projection: PinHistoryProjection = {
+      graphPath,
+      output: declaredOutput,
+      entries: [],
+      selectedResultId: null,
+    };
     const store = useExecutionStore.getState();
-    store.recordPinResult('events/Main.yssbi-event', samplePinResult('out-1'));
+    store.recordPinHistory(projection);
 
-    store.releaseGraphExecutionState('events/Main.yssbi-event');
+    store.releaseGraphExecutionState(graphPath);
 
-    expect(useExecutionStore.getState().graphs['events/Main.yssbi-event']).toBeUndefined();
+    expect(useExecutionStore.getState().graphs[graphPath]).toBeUndefined();
   });
 });

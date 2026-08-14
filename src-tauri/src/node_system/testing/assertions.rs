@@ -114,14 +114,14 @@ impl RunAssertions {
             .result
             .as_ref()
             .unwrap_or_else(|error| panic!("expected run success, got: {error:#?}"));
-        match result.values.get(name) {
+        match result.value_for_test(name) {
             Some(RuntimeValue::Scalar(actual)) => {
-                assert_eq!(actual, expected, "unexpected result value for '{name}'");
+                assert_eq!(&actual, expected, "unexpected result value for '{name}'");
             }
             Some(actual) => {
                 panic!("expected scalar result value for '{name}', got: {actual:#?}");
             }
-            None => panic!("missing result value '{name}'"),
+            None => panic!("missing ready result value '{name}'"),
         }
         self
     }

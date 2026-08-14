@@ -8,6 +8,7 @@ use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
     FunctionDocument, FunctionParameter, FunctionParameterId, FunctionSignature, GraphDocument,
     GraphResourcePath, InputState, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
+    PortRef,
 };
 use crate::node_system::plan::{
     BranchResultBinding, CallArgumentBinding, CallResultBinding, CompiledParameterHandle,
@@ -17,7 +18,8 @@ use crate::node_system::plan::{
     PlannedAdapter, PlannedKernel, PlannedOperation, PlannedPublication, PlannedRetry,
     RelationalBackendId, RelationalExpression, RelationalFragmentId, RelationalLiteral,
     RelationalOperator, RelationalOperatorIndex, RelationalPushdownHint, ResourceAccess,
-    ResourceId, ResourceKind, StructuredControlRegion, ValueDependency, ValueRef, WorkloadClass,
+    ResourceId, ResourceKind, ResultPresentation, ResultReportKind, StructuredControlRegion,
+    ValueDependency, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{
@@ -1503,6 +1505,104 @@ fn semantic_graph_preserves_protocol_port_order_for_kernel_abi() {
 }
 
 #[test]
+fn planned_outputs_preserve_protocol_order_identity_and_presentation() {
+    let mut protocol = test_protocol(
+        "report",
+        vec![
+            data_port("z_result", PortDirection::Output, TypeExpr::Unknown, None),
+            data_port("report", PortDirection::Output, TypeExpr::Unknown, None),
+        ],
+        vec![],
+        vec![],
+    );
+    protocol.type_id = NodeTypeId::new("yssbi.statistics.ols.summary").unwrap();
+    let registry = TestRegistry::new(vec![protocol]);
+    let result = GraphCompiler::new(&registry, &Resources).compile(&document(
+        NodeTypeId::new("yssbi.statistics.ols.summary").unwrap(),
+    ));
+    let plan = result.plan.expect("report fixture must lower");
+    let operation = plan
+        .operations
+        .iter()
+        .find(|operation| operation.source_node_type_id.as_str() == "yssbi.statistics.ols.summary")
+        .unwrap();
+
+    assert_eq!(
+        operation
+            .outputs
+            .iter()
+            .map(
+                |output| match &output.public_output.as_ref().unwrap().port.port {
+                    PortRef::Declared { key } => key.as_str(),
+                    PortRef::Instance { template, .. } => template.as_str(),
+                }
+            )
+            .collect::<Vec<_>>(),
+        ["z_result", "report"],
+    );
+    assert_eq!(
+        operation.outputs[0].presentation,
+        ResultPresentation::Inspector
+    );
+    assert_eq!(
+        operation.outputs[1].presentation,
+        ResultPresentation::Report {
+            report: ResultReportKind::OlsSummary,
+        },
+    );
+}
+
+#[test]
+fn adapter_output_has_no_public_pin_and_inherits_presentation() {
+    let mut report = test_protocol(
+        "report",
+        vec![data_port(
+            "report",
+            PortDirection::Output,
+            TypeExpr::Unknown,
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    report.type_id = NodeTypeId::new("yssbi.statistics.ols.summary").unwrap();
+    report.interface.ports[0].production = Some(OutputProduction::Streaming);
+    let mut consumer = test_protocol(
+        "report_consumer",
+        vec![data_port(
+            "input",
+            PortDirection::Input,
+            TypeExpr::Unknown,
+            None,
+        )],
+        vec![],
+        vec![],
+    );
+    consumer.interface.ports[0].consumption = Some(InputConsumption::FullyMaterialized);
+    let registry = TestRegistry::new(vec![report, consumer]);
+    let mut graph = graph_with_nodes(&[(1, "report"), (2, "report_consumer")]);
+    graph.nodes.get_mut(&node_id(1)).unwrap().node_type =
+        NodeTypeId::new("yssbi.statistics.ols.summary").unwrap();
+    connect(&mut graph, 1, 1, "report", 2, "input");
+
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let plan = result.plan.expect("report adapter fixture must lower");
+    let adapter = plan
+        .operations
+        .iter()
+        .find(|operation| matches!(operation.kernel, PlannedKernel::Adapter(_)))
+        .unwrap();
+
+    assert!(adapter.outputs[0].public_output.is_none());
+    assert_eq!(
+        adapter.outputs[0].presentation,
+        ResultPresentation::Report {
+            report: ResultReportKind::OlsSummary,
+        },
+    );
+}
+
+#[test]
 fn effective_cache_policy_disables_every_effect_semantics_independently() {
     for effects in [EffectSemantics::Ordered, EffectSemantics::Exclusive] {
         assert_eq!(
@@ -2422,7 +2522,7 @@ fn compiler_materializes_stream_once_before_same_contract_fanout() {
             .iter()
             .filter(|(_, adapter)| matches!(adapter, PlannedAdapter::Identity))
             .count(),
-        2
+        0
     );
     let shared = adapters
         .iter()
@@ -2595,7 +2695,7 @@ fn compiler_streaming_fanout_with_different_contracts_is_permutation_stable() {
                     PlannedKernel::Adapter(PlannedAdapter::Identity)
                 ))
                 .count(),
-            1
+            0
         );
     }
 
@@ -3054,6 +3154,25 @@ fn demand_output(graph_path: &str, node: u128, port: &str) -> GraphOutputRef {
         graph_path: GraphResourcePath(graph_path.into()),
         port: PortAddress::declared(node_id(node), key(port)),
     }
+}
+
+#[test]
+fn finalization_rejects_public_output_that_conflicts_with_exact_port_facts() {
+    let (registry, graph) = demand_fixture();
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let mut basis = result.execution_basis.expect("demand fixture must lower");
+    let operation = basis
+        .operations
+        .iter_mut()
+        .find(|operation| operation.source_node_id == node_id(2))
+        .unwrap();
+    operation.outputs[0].public_output.as_mut().unwrap().port =
+        PortAddress::declared(node_id(2), key("in"));
+
+    let error = basis
+        .derive_full_plan()
+        .expect_err("input/non-output public identity must be rejected");
+    assert!(matches!(error, DemandPlanError::InvalidDerivedPlan(_)));
 }
 
 fn chain_protocol(name: &str) -> NodeProtocol {
@@ -4195,7 +4314,8 @@ fn compiler_inserts_explicit_materialization_adapter_for_relational_boundary() {
     )));
 
     let mut incompatible = plan.clone();
-    incompatible.operations[adapter_index].kernel = PlannedKernel::Adapter(PlannedAdapter::Replay);
+    incompatible.operations[adapter_index].kernel =
+        PlannedKernel::Adapter(PlannedAdapter::Identity);
     assert!(
         incompatible
             .validate()

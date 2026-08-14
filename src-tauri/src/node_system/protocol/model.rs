@@ -229,6 +229,7 @@ pub enum EvaluationPolicy {
 pub enum CachePolicy {
     Disabled,
     PerRun,
+    PerSession,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -602,6 +603,14 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&CachePolicy::Disabled).unwrap(),
             "\"Disabled\""
+        );
+        assert_eq!(
+            serde_json::to_string(&CachePolicy::PerSession).unwrap(),
+            "\"PerSession\""
+        );
+        assert_eq!(
+            serde_json::from_str::<CachePolicy>("\"PerSession\"").unwrap(),
+            CachePolicy::PerSession
         );
         assert!(serde_json::from_str::<CachePolicy>("\"None\"").is_err());
     }

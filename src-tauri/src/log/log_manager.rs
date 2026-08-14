@@ -222,6 +222,23 @@ pub fn emit_execution_log(level: LogLevel, message: String, source: Option<Strin
     }
 }
 
+pub fn emit_notify_log(level: LogLevel, message: String, source: Option<String>) {
+    #[cfg(test)]
+    TEST_LOGS.with(|logs| {
+        logs.borrow_mut().push(LogMessage {
+            timestamp: String::new(),
+            level,
+            log_type: LogType::Notify,
+            message: message.clone(),
+            source: source.clone(),
+        });
+    });
+
+    if let Some(manager) = get_log_manager() {
+        manager.log_notify(level, message, source);
+    }
+}
+
 #[cfg(test)]
 thread_local! {
     static TEST_LOGS: std::cell::RefCell<Vec<LogMessage>> = const { std::cell::RefCell::new(Vec::new()) };

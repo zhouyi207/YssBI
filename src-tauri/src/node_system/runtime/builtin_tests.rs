@@ -199,7 +199,7 @@ fn data_series(
     RuntimeValue::Artifact(
         DataSeriesBuilder::new(element_type)
             .values(values)
-            .build(ArtifactKind::Replayable)
+            .build(ArtifactKind::Collected)
             .unwrap(),
     )
 }
@@ -213,7 +213,7 @@ fn named_data_series(
         DataSeriesBuilder::new(element_type)
             .values(values)
             .name(name)
-            .build(ArtifactKind::Replayable)
+            .build(ArtifactKind::Collected)
             .unwrap(),
     )
 }
@@ -324,6 +324,8 @@ fn operation(kernel: &str, params: &str, inputs: &[u32], output: u32) -> Planned
             value: ValueRef::new(output),
             contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
+            public_output: None,
+            presentation: crate::node_system::plan::ResultPresentation::Inspector,
         }]),
         params: handle(params, CompiledParameterHandle::new),
         resource_dependencies: Box::new([]),
@@ -487,7 +489,7 @@ fn variable_data_series_set_serializes_payload_without_artifact_internals() {
             .values([decimal("1.5"), Value::Null, decimal("3.5")])
             .name("fitted")
             .format("number")
-            .build(ArtifactKind::Replayable)
+            .build(ArtifactKind::Collected)
             .unwrap(),
     );
 
@@ -509,7 +511,6 @@ fn variable_data_series_set_serializes_payload_without_artifact_internals() {
         serde_json::json!({"fitted": [1.5, null, 3.5]})
     );
     assert!(!value.id.contains("artifact"));
-    assert!(!value.id.contains("Replayable"));
 }
 
 #[test]
@@ -532,7 +533,7 @@ fn data_series_variable_get_set_flows_into_statistics() {
             .values([decimal("1"), decimal("2"), decimal("4")])
             .name("observations")
             .format("number")
-            .build(ArtifactKind::Replayable)
+            .build(ArtifactKind::Collected)
             .unwrap(),
     );
     let (set, snapshot) =
@@ -548,11 +549,6 @@ fn data_series_variable_get_set_flows_into_statistics() {
         tabular: Some(crate::tabular::TabularSnapshot::from_json(&series_json).unwrap()),
         ..empty
     };
-    assert!(
-        !serde_json::to_string(&persisted)
-            .unwrap()
-            .contains("Replayable")
-    );
 
     let (get, _) = execute_variable_kernel("yssbi.project.variable.get", persisted, &[]);
     let values = get.unwrap();
@@ -629,7 +625,7 @@ fn plot_preserves_data_series_name_and_format_metadata() {
             .name("calendar period")
             .format("0000")
             .values([Value::Integer(2024), Value::Integer(2025)])
-            .build(ArtifactKind::Replayable)
+            .build(ArtifactKind::Collected)
             .unwrap(),
     );
     let y = RuntimeValue::Artifact(
@@ -637,7 +633,7 @@ fn plot_preserves_data_series_name_and_format_metadata() {
             .name("revenue")
             .format("$0.00")
             .values([decimal("10.5"), decimal("11.75")])
-            .build(ArtifactKind::Replayable)
+            .build(ArtifactKind::Collected)
             .unwrap(),
     );
 
@@ -716,9 +712,15 @@ fn execute(
     parameters: &CompiledParameterStore,
 ) -> Result<RunResult, RunError> {
     let kernels = build_builtin_kernel_registry();
-    RunExecutor::new(&kernels, &NoResources, &NoFunctions)
-        .with_compiled_parameters(parameters)
-        .run(plan, CancellationToken::new())
+    RunExecutor::new(
+        &kernels,
+        &NoResources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_compiled_parameters(parameters)
+    .run(plan, CancellationToken::new())
 }
 
 fn insert_constant(parameters: &mut CompiledParameterStore, name: &str, value: Value) {
@@ -1182,7 +1184,7 @@ fn dataframe_integer_range_executes_through_production_registry() {
 
     let result = execute(&execution_plan, &parameters).unwrap();
     assert_eq!(
-        data_series_values(&result.values["value_3"]),
+        data_series_values(&result.value_for_test("value_3").unwrap()),
         vec![Value::Integer(1), Value::Integer(3)]
     );
 }
@@ -1504,16 +1506,22 @@ fn statistics_fit_executes_instead_of_returning_an_adapter_error() {
             value: ValueRef::new(5),
             contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
+            public_output: None,
+            presentation: crate::node_system::plan::ResultPresentation::Inspector,
         },
         PlannedOutput {
             value: ValueRef::new(6),
             contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
+            public_output: None,
+            presentation: crate::node_system::plan::ResultPresentation::Inspector,
         },
         PlannedOutput {
             value: ValueRef::new(7),
             contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
+            public_output: None,
+            presentation: crate::node_system::plan::ResultPresentation::Inspector,
         },
     ]);
     let execution_plan = plan(
@@ -1531,10 +1539,13 @@ fn statistics_fit_executes_instead_of_returning_an_adapter_error() {
 
     let result = execute(&execution_plan, &parameters).unwrap();
     assert!(matches!(
-        result.values["value_5"],
+        result.value_for_test("value_5").unwrap(),
         RuntimeValue::Scalar(Value::Object(_))
     ));
-    assert_decimal_list_approx_eq(&result.values["value_6"], &[1.0, 2.0, 3.0, 4.0]);
+    assert_decimal_list_approx_eq(
+        &result.value_for_test("value_6").unwrap(),
+        &[1.0, 2.0, 3.0, 4.0],
+    );
 }
 
 #[test]
@@ -1563,16 +1574,22 @@ fn logit_fit_uses_the_real_binary_response_implementation() {
             value: ValueRef::new(5),
             contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
+            public_output: None,
+            presentation: crate::node_system::plan::ResultPresentation::Inspector,
         },
         PlannedOutput {
             value: ValueRef::new(6),
             contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
+            public_output: None,
+            presentation: crate::node_system::plan::ResultPresentation::Inspector,
         },
         PlannedOutput {
             value: ValueRef::new(7),
             contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
+            public_output: None,
+            presentation: crate::node_system::plan::ResultPresentation::Inspector,
         },
     ]);
     let execution_plan = plan(
@@ -1659,13 +1676,22 @@ fn constant_kernels_resolve_compiled_parameters_by_plan_handle() {
 
     let result = execute(&execution_plan, &parameters).unwrap();
 
-    assert_eq!(result.values["value_0"], Value::Bool(true).into());
     assert_eq!(
-        result.values["value_1"],
+        result.value_for_test("value_0").unwrap(),
+        Value::Bool(true).into()
+    );
+    assert_eq!(
+        result.value_for_test("value_1").unwrap(),
         Value::String("hello".into()).into()
     );
-    assert_eq!(result.values["value_2"], Value::Integer(42).into());
-    assert_eq!(result.values["value_3"], decimal("1.25").into());
+    assert_eq!(
+        result.value_for_test("value_2").unwrap(),
+        Value::Integer(42).into()
+    );
+    assert_eq!(
+        result.value_for_test("value_3").unwrap(),
+        decimal("1.25").into()
+    );
 }
 
 #[test]
@@ -1702,11 +1728,17 @@ fn numeric_kernels_execute_int64_and_float64_operations() {
 
     for (value, expected) in [(4, 15), (5, 9), (6, 36), (7, 4)] {
         let key = format!("value_{value}");
-        assert_eq!(result.values[key.as_str()], Value::Integer(expected).into());
+        assert_eq!(
+            result.value_for_test(key.as_str()).unwrap(),
+            Value::Integer(expected).into()
+        );
     }
     for (value, expected) in [(8, "10"), (9, "5"), (10, "18.75"), (11, "3")] {
         let key = format!("value_{value}");
-        assert_eq!(result.values[key.as_str()], decimal(expected).into());
+        assert_eq!(
+            result.value_for_test(key.as_str()).unwrap(),
+            decimal(expected).into()
+        );
     }
 }
 
@@ -1745,7 +1777,10 @@ fn compare_and_logic_kernels_execute_through_the_run_scheduler() {
     let expected = [false, true, true, true, false, false, false, true, true];
     for (value, expected) in (4_u32..=12).zip(expected) {
         let key = format!("value_{value}");
-        assert_eq!(result.values[key.as_str()], Value::Bool(expected).into());
+        assert_eq!(
+            result.value_for_test(key.as_str()).unwrap(),
+            Value::Bool(expected).into()
+        );
     }
 }
 
@@ -1787,7 +1822,7 @@ fn equal_kernel_covers_bool_int_string_and_float() {
         let execution_plan = plan(operations, 3, &[2]);
         let result = execute(&execution_plan, &parameters).unwrap();
         assert_eq!(
-            result.values["value_2"],
+            result.value_for_test("value_2").unwrap(),
             Value::Bool(expected).into(),
             "{label}"
         );
@@ -1888,7 +1923,7 @@ fn scalar_convert_kernel_covers_supported_targets_and_errors() {
         &params,
         Some(&parameters),
         &[RuntimeValue::Artifact(Artifact::new(
-            ArtifactKind::Replayable,
+            ArtifactKind::Collected,
             vec![Value::Integer(1)],
         ))],
     )
@@ -2087,7 +2122,7 @@ fn series_conversion_rejects_scalar_list_and_preserves_nulls() {
 fn series_conversion_rejects_sequence_artifact_payload() {
     let params = handle("series.convert.payload", CompiledParameterHandle::new);
     let sequence = RuntimeValue::Artifact(Artifact::new(
-        ArtifactKind::Replayable,
+        ArtifactKind::Collected,
         vec![Value::Integer(1)],
     ));
     let error = execute_kernel_direct(
@@ -2188,7 +2223,7 @@ fn series_math_requires_at_least_one_series_operand() {
 fn series_math_rejects_sequence_artifact_operand() {
     let params = handle("series.math.payload", CompiledParameterHandle::new);
     let sequence = RuntimeValue::Artifact(Artifact::new(
-        ArtifactKind::Replayable,
+        ArtifactKind::Collected,
         vec![Value::Integer(1)],
     ));
     let error = execute_kernel_direct(
@@ -2403,7 +2438,7 @@ fn unary_math_kernels_execute_each_legacy_operation() {
 }
 
 #[test]
-fn do_sleep_print_and_view_leaf_kernels_preserve_contracts() {
+fn do_sleep_print_and_view_scheduler_contracts() {
     let params = handle("effects", CompiledParameterHandle::new);
     assert!(
         execute_kernel_direct("yssbi.control.do", &params, None, &[])
@@ -2471,19 +2506,11 @@ fn do_sleep_print_and_view_leaf_kernels_preserve_contracts() {
         print_error.message(),
         "Print message must be a String scalar"
     );
-    let viewed = execute_kernel_direct(
-        "yssbi.debug.view",
-        &params,
-        None,
-        &[Value::Integer(9).into()],
-    )
-    .unwrap();
-    assert_eq!(
-        viewed,
-        vec![RuntimeValue::Artifact(Artifact::new(
-            ArtifactKind::Replayable,
-            vec![Value::Integer(9)],
-        ))]
+    assert!(
+        build_builtin_kernel_registry()
+            .get(&KernelHandle::new("yssbi.debug.view").unwrap())
+            .is_none(),
+        "View Data is a scheduler side effect, not an ordinary kernel"
     );
 
     let mut parameters = CompiledParameterStore::new();
@@ -2559,12 +2586,18 @@ fn print_observer_and_trace_preserve_exact_first_second_third_order() {
     let trace = Trace::default();
     let kernels = build_builtin_kernel_registry();
 
-    RunExecutor::new(&kernels, &NoResources, &NoFunctions)
-        .with_compiled_parameters(&parameters)
-        .with_event_sink(&events)
-        .with_trace_sink(&trace)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &NoResources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_compiled_parameters(&parameters)
+    .with_event_sink(&events)
+    .with_trace_sink(&trace)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     let label = |node_id: NodeId| match node_id.as_uuid().as_u128() {
         101 => Some("First"),
@@ -2717,10 +2750,16 @@ fn real_graph_connection_overrides_print_protocol_default_at_runtime() {
         )
         .unwrap();
 
-    RunExecutor::new(&kernels, &NoResources, &NoFunctions)
-        .with_compiled_parameters(&parameters)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &NoResources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_compiled_parameters(&parameters)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(
         captured.lock().unwrap().as_slice(),

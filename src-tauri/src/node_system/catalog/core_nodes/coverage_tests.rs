@@ -1,5 +1,12 @@
 use super::{CoverageDisposition, build_provider_fragment, legacy_coverage};
 use crate::node_system::catalog::localization::Message;
+use crate::node_system::compiler::{
+    CompileCancellationToken, LoweredKernel, LoweringContext, NodeImplementation,
+    ValidatedNodeConfig,
+};
+use crate::node_system::document::{NodeId, PortAddress};
+use crate::node_system::plan::ValueRef;
+use crate::node_system::protocol::{PortDirection, PortKind};
 use std::collections::BTreeSet;
 
 const LEGACY_CORE_NODES: &[&str] = &[
@@ -114,6 +121,58 @@ fn protocols_use_unique_stable_port_and_parameter_keys() {
             node.protocol().parameters.parameters.len()
         );
     }
+}
+
+#[test]
+fn view_data_has_no_data_output_or_fragment_result() {
+    let fragment = build_provider_fragment().expect("core built-in fixture must assemble");
+    let node = fragment
+        .nodes
+        .iter()
+        .find(|node| node.protocol().type_id.as_str() == "yssbi.debug.view")
+        .expect("View Data is registered");
+    let protocol = node.protocol();
+    assert_eq!(
+        protocol
+            .interface
+            .ports
+            .iter()
+            .map(|port| { (port.key.as_str(), port.direction, port.kind,) })
+            .collect::<Vec<_>>(),
+        [
+            ("enter", PortDirection::Input, PortKind::Control),
+            ("data", PortDirection::Input, PortKind::Data),
+            ("then", PortDirection::Output, PortKind::Control),
+        ]
+    );
+
+    let implementation = node
+        .implementation()
+        .expect("View Data has compiler lowering")
+        .as_any()
+        .downcast_ref::<NodeImplementation>()
+        .expect("View Data uses the native compiler lowerer");
+    let data = PortAddress::declared(
+        NodeId::from_uuid(uuid::Uuid::from_u128(1)),
+        protocol.interface.ports[1].key.clone(),
+    );
+    let cancellation = CompileCancellationToken::new();
+    let parameters = ValidatedNodeConfig::empty();
+    let lowered = implementation
+        .lowerer
+        .lower(&LoweringContext {
+            cancellation: &cancellation,
+            node_id: data.node_id,
+            protocol,
+            parameters: &parameters,
+            inputs: &[(data, ValueRef::new(0))],
+            outputs: &[],
+        })
+        .expect("View Data lowering succeeds");
+    let LoweredKernel::Kernel(kernel) = lowered.kernel else {
+        panic!("View Data lowers to a kernel fragment");
+    };
+    assert!(kernel.metadata.results.is_empty());
 }
 
 #[test]
@@ -345,7 +404,7 @@ fn every_legacy_core_entry_has_current_behavioral_or_structural_evidence() {
             "Debug:Print",
             RUNTIME,
             &[
-                "do_sleep_print_and_view_leaf_kernels_preserve_contracts",
+                "do_sleep_print_and_view_scheduler_contracts",
                 "print_observer_and_trace_preserve_exact_first_second_third_order",
                 "real_graph_connection_overrides_print_protocol_default_at_runtime",
                 "print_protocol_has_default_and_ordered_chain_contract",
@@ -354,7 +413,10 @@ fn every_legacy_core_entry_has_current_behavioral_or_structural_evidence() {
         (
             "Debug:Data:View",
             RUNTIME,
-            &["do_sleep_print_and_view_leaf_kernels_preserve_contracts"],
+            &[
+                "do_sleep_print_and_view_scheduler_contracts",
+                "view_data_opens_exact_input_result_without_materialization",
+            ],
         ),
     ];
 

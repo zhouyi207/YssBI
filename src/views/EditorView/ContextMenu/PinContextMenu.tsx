@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscEye, VscLink, VscRefresh, VscSymbolVariable, VscTrash } from "react-icons/vsc";
 import { ContextMenu, type ContextMenuPosition, type ContextMenuSection, type ContextMenuItem } from "@/shared/ui/contextMenu";
+import type { PinResultEntry } from '@/shared/types/dto/result';
 
 export interface PinContextMenuProps {
   position: ContextMenuPosition;
@@ -14,6 +15,8 @@ export interface PinContextMenuProps {
   viewEnabled?: boolean;
   viewDisabledTitle?: string;
   onView?: () => void;
+  historyEntries?: readonly PinResultEntry[];
+  onViewHistory?: (resultId: string) => void;
   onRemove?: () => void;
   onClose: () => void;
 }
@@ -29,6 +32,8 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
   viewEnabled = false,
   viewDisabledTitle,
   onView,
+  historyEntries,
+  onViewHistory,
   onRemove,
   onClose,
 }) => {
@@ -51,6 +56,17 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
         onClick: onView,
       });
     }
+
+    [...(historyEntries ?? [])].reverse().forEach((entry, index) => {
+      const createdAt = Number(entry.createdAtMs);
+      const time = Number.isFinite(createdAt) ? new Date(createdAt).toLocaleString() : entry.createdAtMs;
+      primaryItems.push({
+        id: `view-history-${entry.activationId}`,
+        label: `${entry.resultId} · ${entry.state.kind}${index === 0 ? ` · ${p('historyLatest')}` : ''}`,
+        shortcut: `${time} · ${entry.runId}`,
+        onClick: () => onViewHistory?.(entry.resultId),
+      });
+    });
 
     primaryItems.push({
       id: "promoteToVar",
@@ -86,6 +102,8 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
     viewEnabled,
     viewDisabledTitle,
     onView,
+    historyEntries,
+    onViewHistory,
     onRemove,
   ]);
 

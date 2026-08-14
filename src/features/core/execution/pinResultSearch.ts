@@ -1,11 +1,10 @@
-import type { InspectableSourceRef } from '@/features/core/resultSource/inspectableSource';
-import { runtimePinRef } from '@/features/core/resultSource/inspectableSource';
-import type { PinResultState } from '@/shared/types/ui';
-import { pinResultCacheKey } from './pinResultIndex';
+import { resultRef, type InspectableResultRef } from '@/features/core/resultSource/inspectableResult';
+import type { PinHistoryProjection } from '@/shared/types/ui';
+import { pinHistoryCacheKey } from './pinResultIndex';
 
 export interface PinResultSearchEntry {
   id: string;
-  ref: InspectableSourceRef;
+  ref: InspectableResultRef;
   nodeTitle: string;
   pinName: string;
   sourceTitle: string;
@@ -18,19 +17,23 @@ export interface PinResultSearchLabels {
 }
 
 export function buildPinResultSearchEntry(
-  pinResult: PinResultState,
+  history: PinHistoryProjection,
   labels: PinResultSearchLabels,
-): PinResultSearchEntry {
-  const sourceTitle = pinResult.descriptor.title.trim();
-  const nodeTitle = labels.nodeTitle.trim() || pinResult.nodeId || pinResult.pinId;
-  const pinName = labels.pinName.trim() || pinResult.pinId;
-  const searchText = [nodeTitle, pinName, sourceTitle, pinResult.graphPath]
+): PinResultSearchEntry | null {
+  const selected = history.entries.find((entry) => entry.resultId === history.selectedResultId)
+    ?? history.entries[history.entries.length - 1];
+  if (!selected) return null;
+
+  const nodeTitle = labels.nodeTitle.trim() || history.output.nodeId;
+  const pinName = labels.pinName.trim();
+  const sourceTitle = `${selected.state.kind} · ${selected.resultId}`;
+  const searchText = [nodeTitle, pinName, sourceTitle, history.graphPath, selected.runId]
     .join(' ')
     .toLowerCase();
 
   return {
-    id: pinResultCacheKey(pinResult.graphPath, pinResult.pinId),
-    ref: runtimePinRef(pinResult.graphPath, pinResult.pinId),
+    id: pinHistoryCacheKey(history.graphPath, history.output),
+    ref: resultRef(selected.resultId),
     nodeTitle,
     pinName,
     sourceTitle,
@@ -38,27 +41,16 @@ export function buildPinResultSearchEntry(
   };
 }
 
-/** Build searchable entries from execution pinResults — the post-run source of truth. */
 export function collectPinResultSearchEntries(
-  pinResults: ReadonlyMap<string, PinResultState>,
-  resolveLabels: (
-    labelGraphPath: string,
-    nodeId: string,
-    pinId: string,
-  ) => PinResultSearchLabels,
+  histories: ReadonlyMap<string, PinHistoryProjection>,
+  resolveLabels: (history: PinHistoryProjection) => PinResultSearchLabels,
 ): PinResultSearchEntry[] {
-  const entries: PinResultSearchEntry[] = [];
-
-  for (const pinResult of pinResults.values()) {
-    entries.push(
-      buildPinResultSearchEntry(
-        pinResult,
-        resolveLabels(pinResult.graphPath, pinResult.nodeId, pinResult.pinId),
-      ),
-    );
-  }
-
-  return entries.sort((left, right) => left.searchText.localeCompare(right.searchText));
+  return [...histories.values()]
+    .flatMap((history) => {
+      const entry = buildPinResultSearchEntry(history, resolveLabels(history));
+      return entry ? [entry] : [];
+    })
+    .sort((left, right) => left.searchText.localeCompare(right.searchText));
 }
 
 export function filterPinResultSearchEntries(

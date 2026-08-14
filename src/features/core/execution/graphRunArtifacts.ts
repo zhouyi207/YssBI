@@ -1,11 +1,11 @@
 import type { GraphExecutionState } from '@/shared/types/ui';
 
-/** Last-run inspectable artifacts: pin index + replay recording. */
-export function clearedRunArtifactsPatch(
+/** Clear frontend execution projections without touching backend result history. */
+export function clearedRunProjectionsPatch(
   graphDirty = false,
-): Pick<GraphExecutionState, 'pinResults' | 'recording' | 'graphDirty'> {
+): Pick<GraphExecutionState, 'pinHistories' | 'recording' | 'graphDirty'> {
   return {
-    pinResults: new Map(),
+    pinHistories: new Map(),
     recording: [],
     graphDirty,
   };
@@ -18,7 +18,7 @@ export function graphHasClearableArtifacts(
   if (!graph) return false;
   if (graph.status === 'running') return false;
   return (
-    graph.pinResults.size > 0
+    graph.pinHistories.size > 0
     || graph.recording.length > 0
     || graph.status === 'completed'
     || graph.status === 'error'

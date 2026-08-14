@@ -3,7 +3,7 @@ import { applyExecutionVisualEvent } from './executionVisualSession';
 
 type SideEffectHandler = (graphPath: string, event: ExecutionEvent) => void;
 
-const IMMEDIATE_EVENTS = new Set<ExecutionEvent['event']>(['pinResultReady', 'openSourceWindow']);
+const IMMEDIATE_EVENTS = new Set<ExecutionEvent['event']>(['openResultWindow']);
 
 let rafId: number | null = null;
 const pendingByGraph = new Map<string, ExecutionEvent[]>();
@@ -37,7 +37,7 @@ function scheduleFlush(): void {
   rafId = requestAnimationFrame(flushLiveEvents);
 }
 
-/** Batch visual events per frame; side-effect events (pin results, windows) run immediately. */
+/** Batch visual events per frame; result-window requests run immediately. */
 export function enqueueLiveExecutionEvent(
   graphPath: string,
   event: ExecutionEvent,

@@ -2,7 +2,7 @@ export * from './useExecutionStore';
 export { useExecutionPlayback } from './useExecutionPlayback';
 export { resolveExecutionGraphPath, getExecutionEventGraph } from './resolveExecutionGraphPath';
 export {
-  clearedRunArtifactsPatch,
+  clearedRunProjectionsPatch,
   graphHasClearableArtifacts,
 } from './graphRunArtifacts';
 export { useExecutionVisualBinder } from './useExecutionVisualBinder';
@@ -33,17 +33,12 @@ export {
   type ResolvePinViewTargetParams,
 } from './pinViewTarget';
 export {
-  executionStatusForSourceGraph,
+  lookupPinHistory,
   lookupPinPreview,
-  lookupPinResult,
+  pinHistoryCacheKey,
   pinPreviewCacheKey,
-  pinResultCacheKey,
-  pinResultsForSourceGraph,
 } from './pinResultIndex';
-export {
-  normalizePinResultState,
-  type PinResultWirePayload,
-} from './normalizePinResult';
+
 export {
   collectPinResultSearchEntries,
   filterPinResultSearchEntries,

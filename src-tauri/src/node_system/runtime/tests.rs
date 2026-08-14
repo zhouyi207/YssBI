@@ -1,9 +1,8 @@
 use super::scheduler::SchedulerCheckpoint;
 use super::*;
 use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CompileProvenance, CorrelationContext, ProjectSessionId,
-    ResourceKey, ResourceVersion, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanOutcome, SpanSpec,
-    TraceSink, TraceSpan,
+    CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, ResourceKey, ResourceVersion,
+    SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan,
 };
 use crate::node_system::document::{
     FunctionParameterId, GraphResourcePath, GraphRevision, NodeId, PortAddress,
@@ -59,6 +58,8 @@ fn operation(kernel: &str, inputs: &[u32], outputs: &[u32]) -> PlannedOperation 
                 value: ValueRef::new(*value),
                 contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 production: OutputProduction::FullyMaterialized,
+                public_output: None,
+                presentation: crate::node_system::plan::ResultPresentation::Inspector,
             })
             .collect::<Vec<_>>()
             .into_boxed_slice(),
@@ -94,6 +95,8 @@ fn adapter_operation(
             value: ValueRef::new(output),
             contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: contract.output_production,
+            public_output: None,
+            presentation: crate::node_system::plan::ResultPresentation::Inspector,
         }]),
         params: id("adapter.test", CompiledParameterHandle::new),
         resource_dependencies: Box::new([]),
@@ -105,39 +108,543 @@ fn adapter_operation(
 }
 
 #[test]
-fn view_data_inherits_report_presentation_from_its_input() {
-    let mut summary = operation("summary", &[], &[0]);
-    summary.source_node_type_id = NodeTypeId::new("yssbi.statistics.ols.summary").unwrap();
-    let mut view = operation("view", &[1], &[2]);
+fn view_data_opens_exact_input_result_without_materialization() {
+    let mut kernels = build_builtin_kernel_registry();
+    kernels
+        .register(
+            id("view_data_source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(42).into()])),
+        )
+        .unwrap();
+    let then_executions = Arc::new(AtomicUsize::new(0));
+    let observed_then_executions = Arc::clone(&then_executions);
+    kernels
+        .register(
+            id("view_data_then", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed_then_executions.fetch_add(1, Ordering::SeqCst);
+                Ok(Vec::new())
+            }),
+        )
+        .unwrap();
+
+    let source_output = stable_output("source");
+    let mut source = operation("view_data_source", &[], &[0]);
+    source.outputs[0].public_output = Some(source_output.clone());
+    let mut view = operation("yssbi.debug.view", &[0], &[]);
+    view.source_node_id = view_node_id();
     view.source_node_type_id = NodeTypeId::new("yssbi.debug.view").unwrap();
-    let mut execution_plan = plan(
-        vec![summary, view],
-        3,
-        StructuredControlRegion::Sequence(Box::new([])),
+    let then = operation("view_data_then", &[], &[]);
+    let mut plan = plan(
+        vec![source, view, then],
+        1,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+            ControlStep::Operation(OperationIndex::new(2)),
+        ])),
     );
-    execution_plan.value_dependencies = Box::new([ValueDependency {
-        source: ValueRef::new(0),
-        destination: ValueRef::new(1),
+    plan.effect_dependencies = Box::new([EffectDependency {
+        before: OperationIndex::new(1),
+        after: OperationIndex::new(2),
     }]);
-    let output = GraphOutputRef {
-        graph_path: execution_plan.provenance.graph_path.clone(),
-        port: PortAddress::declared(
-            execution_plan.operations[1].source_node_id,
-            PortKey::new("snapshot").unwrap(),
-        ),
+    let results = ResultStore::new();
+    let events = RecordingRunEvents::default();
+    crate::log::clear_test_logs();
+    let run = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        ResultStore::new(),
+        Arc::new(SessionMemoization::new()),
+    )
+    .with_result_store(&results)
+    .with_event_sink(&events)
+    .run(&plan, CancellationToken::new())
+    .unwrap();
+
+    let source_history = results.pin_history(&source_output);
+    assert_eq!(source_history.len(), 1);
+    let input_result_id = source_history[0].result_id;
+    let recorded = events.0.lock().unwrap();
+    let open_events = recorded
+        .iter()
+        .enumerate()
+        .filter_map(|(index, event)| match event.kind {
+            RunEventKind::OpenResultWindow { result_id } => Some((index, result_id)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(open_events.len(), 1);
+    let (open_index, open_result_id) = open_events[0];
+    assert_eq!(open_result_id, input_result_id);
+    let view_completed_index = recorded
+        .iter()
+        .position(|event| {
+            matches!(
+                event.kind,
+                RunEventKind::OperationCompleted {
+                    operation_index: 1,
+                    ..
+                }
+            )
+        })
+        .expect("View Data completes");
+    let then_completed_index = recorded
+        .iter()
+        .position(|event| {
+            matches!(
+                event.kind,
+                RunEventKind::OperationCompleted {
+                    operation_index: 2,
+                    ..
+                }
+            )
+        })
+        .expect("Then control flow completes");
+    assert!(open_index < view_completed_index);
+    assert!(view_completed_index < then_completed_index);
+    let view_activation_id = match recorded[view_completed_index].kind {
+        RunEventKind::OperationCompleted { activation_id, .. } => activation_id,
+        _ => unreachable!("View Data completion index has the expected event"),
     };
-    execution_plan.results = Box::new([PlanResult {
-        name: "view".into(),
-        output: output.clone(),
-        value: ValueRef::new(2),
-    }]);
+    drop(recorded);
+
+    let notify_logs = crate::log::take_test_logs()
+        .into_iter()
+        .filter(|log| log.log_type == crate::log::LogType::Notify)
+        .collect::<Vec<_>>();
+    assert_eq!(notify_logs.len(), 1);
+    let notify = &notify_logs[0];
+    assert_eq!(notify.level, crate::log::LogLevel::Info);
+    assert_eq!(notify.source.as_deref(), Some("yssbi.debug.view"));
+    for field in [
+        format!("resultId={}", input_result_id.get()),
+        format!("runId={}", run.run_id.get()),
+        format!("activationId={view_activation_id}"),
+        format!("nodeId={}", view_node_id()),
+    ] {
+        assert!(notify.message.contains(&field), "missing log field {field}");
+    }
+
+    assert_eq!(then_executions.load(Ordering::SeqCst), 1);
+    assert_eq!(results.authoritative_result_count_for_test(), 1);
+    assert_eq!(results.group_count_for_test(), 1);
+    assert_eq!(
+        results.pin_history(&source_output).as_ref(),
+        source_history.as_ref()
+    );
+}
+
+fn view_node_id() -> NodeId {
+    NodeId::from_uuid(uuid::Uuid::from_u128(9))
+}
+
+#[test]
+fn kernel_receives_all_inputs_once_and_outputs_publish_atomically() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let observed_calls = Arc::clone(&calls);
+    let observed_inputs = Arc::clone(&observed);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("atomic_multi", KernelHandle::new),
+            FnKernel(move |inputs: &[RuntimeValue]| {
+                observed_calls.fetch_add(1, Ordering::SeqCst);
+                *observed_inputs.lock().unwrap() = inputs.to_vec();
+                Ok(vec![
+                    RuntimeValue::Scalar(Value::Integer(5)),
+                    RuntimeValue::Scalar(Value::Integer(6)),
+                ])
+            }),
+        )
+        .unwrap();
+
+    let mut atomic = operation("atomic_multi", &[0, 1], &[2, 3]);
+    atomic.inputs[0].bound_value = Some(Value::Integer(2));
+    atomic.inputs[1].bound_value = Some(Value::Integer(3));
+    let first_output = stable_output("first");
+    let second_output = stable_output("second");
+    atomic.outputs[0].public_output = Some(first_output.clone());
+    atomic.outputs[1].public_output = Some(second_output.clone());
+    let execution_plan = plan(
+        vec![atomic],
+        4,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    let store = ResultStore::new();
+    let checkpoint_store = store.clone();
+    let checkpoint_first = first_output.clone();
+    let checkpoint_second = second_output.clone();
+    let pending_states = Arc::new(Mutex::new(Vec::new()));
+    let observed_pending = Arc::clone(&pending_states);
+
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_result_store(&store)
+    .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+        if checkpoint != SchedulerCheckpoint::BeforeGroupCommit {
+            return;
+        }
+        let first = checkpoint_store.pin_history(&checkpoint_first)[0].result_id;
+        let second = checkpoint_store.pin_history(&checkpoint_second)[0].result_id;
+        *observed_pending.lock().unwrap() = vec![
+            checkpoint_store.result(first).unwrap().state.is_pending(),
+            checkpoint_store.result(second).unwrap().state.is_pending(),
+        ];
+    }))
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        observed.lock().unwrap().as_slice(),
+        [
+            RuntimeValue::Scalar(Value::Integer(2)),
+            RuntimeValue::Scalar(Value::Integer(3)),
+        ]
+    );
+    assert_eq!(pending_states.lock().unwrap().as_slice(), [true, true]);
+    let first_id = store.pin_history(&first_output)[0].result_id;
+    let second_id = store.pin_history(&second_output)[0].result_id;
+    assert!(matches!(
+        &store.result(first_id).unwrap().state,
+        ResultState::Ready(value) if value.page(0, 1).unwrap().as_ref() == [Value::Integer(5)]
+    ));
+    assert!(matches!(
+        &store.result(second_id).unwrap().state,
+        ResultState::Ready(value) if value.page(0, 1).unwrap().as_ref() == [Value::Integer(6)]
+    ));
+}
+
+#[test]
+fn stream_materialization_finishes_before_group_commit() {
+    struct StreamingKernel {
+        produced: Arc<AtomicUsize>,
+    }
+
+    impl Kernel for StreamingKernel {
+        fn execute(
+            &self,
+            context: &KernelContext<'_>,
+            _: &[RuntimeValue],
+        ) -> Result<Vec<RuntimeValue>, KernelError> {
+            let produced = Arc::clone(&self.produced);
+            let stream = context
+                .resource_owner
+                .stream_from_values((0..3).map(move |value| {
+                    produced.fetch_add(1, Ordering::SeqCst);
+                    Value::Integer(value)
+                }))
+                .map_err(|error| KernelError::new(error.to_string()))?;
+            Ok(vec![RuntimeValue::Stream(stream)])
+        }
+    }
+
+    let produced = Arc::new(AtomicUsize::new(0));
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("stream_before_commit", KernelHandle::new),
+            StreamingKernel {
+                produced: Arc::clone(&produced),
+            },
+        )
+        .unwrap();
+    let output = stable_output("streamed");
+    let mut source = operation("stream_before_commit", &[], &[0]);
+    source.outputs[0].production = OutputProduction::Streaming;
+    source.outputs[0].public_output = Some(output.clone());
+    let execution_plan = plan(
+        vec![source],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    let store = ResultStore::new();
+    let checkpoint_store = store.clone();
+    let checkpoint_output = output.clone();
+    let checkpoint_produced = Arc::clone(&produced);
+
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        store.clone(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_result_store(&store)
+    .with_resource_budgets(materialization_test_budgets(1, 1024))
+    .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+        if checkpoint != SchedulerCheckpoint::BeforeGroupCommit {
+            return;
+        }
+        assert_eq!(checkpoint_produced.load(Ordering::SeqCst), 3);
+        let result_id = checkpoint_store.pin_history(&checkpoint_output)[0].result_id;
+        assert!(
+            checkpoint_store
+                .result(result_id)
+                .unwrap()
+                .state
+                .is_pending()
+        );
+    }))
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
+
+    let result_id = store.pin_history(&output)[0].result_id;
+    let result = store.result(result_id).unwrap();
+    let ResultState::Ready(value) = &result.state else {
+        panic!("stream result must be ready after group commit");
+    };
+    assert_eq!(
+        value.page(0, 10).unwrap().as_ref(),
+        &[Value::Integer(0), Value::Integer(1), Value::Integer(2)]
+    );
+}
+
+#[test]
+fn internal_bound_value_uses_plan_contract_and_coherent_provenance() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("bound_contract", KernelHandle::new),
+            FnKernel(|inputs: &[RuntimeValue]| Ok(vec![inputs[0].clone()])),
+        )
+        .unwrap();
+    let contract = PlannedValueContract {
+        kind: PlannedValueKind::Scalar,
+        type_expr: TypeExpr::Concrete(TypeId::new("core.integer").unwrap()),
+    };
+    let mut operation = operation("bound_contract", &[0], &[1]);
+    operation.inputs[0].contract = contract.clone();
+    operation.inputs[0].bound_value = Some(Value::Integer(4));
+    operation.outputs[0].contract = contract.clone();
+    let node_id = operation.source_node_id;
+    let mut execution_plan = plan(
+        vec![operation],
+        2,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan
+        .value_contracts
+        .insert(ValueRef::new(0), contract.clone());
+    execution_plan
+        .value_contracts
+        .insert(ValueRef::new(1), contract.clone());
+    let results = ResultStore::new();
+    let run_result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        results.clone(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
+    let internal = results
+        .results_for_run(run_result.run_id)
+        .iter()
+        .find(|result| result.value == ValueRef::new(0))
+        .cloned()
+        .expect("bound input result");
+
+    assert_eq!(internal.contract, contract);
+    assert_eq!(internal.provenance.node_id, node_id);
+    assert_eq!(
+        internal.provenance.graph_path,
+        execution_plan.provenance.graph_path
+    );
+    assert_eq!(
+        internal.provenance.graph_revision,
+        execution_plan.provenance.basis.graph_revision
+    );
+    assert!(internal.provenance.activation_id.get() > 0);
+}
+
+#[test]
+fn failed_exact_input_skips_kernel_and_fails_downstream_group_with_source_id() {
+    let downstream_calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&downstream_calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("upstream_failure", KernelHandle::new),
+            ErrorKernel {
+                cancel_token: false,
+                cancelled_error: false,
+            },
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("downstream_skipped", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![Value::Integer(1).into()])
+            }),
+        )
+        .unwrap();
+    let upstream_output = stable_output("failed_source");
+    let downstream_output = stable_output("failed_downstream");
+    let mut upstream = operation("upstream_failure", &[], &[0]);
+    upstream.outputs[0].public_output = Some(upstream_output.clone());
+    let mut downstream = operation("downstream_skipped", &[0], &[2]);
+    downstream.outputs[0].public_output = Some(downstream_output.clone());
+    let execution_plan = plan(
+        vec![upstream, downstream],
+        3,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    let results = ResultStore::new();
+
+    let run = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        results.clone(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new());
+    assert!(matches!(run, Err(RunError::KernelFailed { .. })), "{run:?}");
+    assert_eq!(downstream_calls.load(Ordering::SeqCst), 0);
+    let source_id = results.pin_history(&upstream_output)[0].result_id;
+    let downstream_id = results.pin_history(&downstream_output)[0].result_id;
+    let downstream = results.result(downstream_id).unwrap();
+    assert!(matches!(
+        &downstream.state,
+        ResultState::Failed(failure)
+            if failure.cause == ResultFailureCause::Upstream {
+                upstream_result_id: source_id,
+            }
+    ));
+}
+
+#[test]
+fn cancelled_exact_input_skips_kernel_and_cancels_downstream_group() {
+    let downstream_calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&downstream_calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("upstream_cancelled", KernelHandle::new),
+            ErrorKernel {
+                cancel_token: false,
+                cancelled_error: true,
+            },
+        )
+        .unwrap();
+    kernels
+        .register(
+            id("cancelled_downstream_skipped", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![Value::Integer(1).into()])
+            }),
+        )
+        .unwrap();
+    let downstream_output = stable_output("cancelled_downstream");
+    let upstream = operation("upstream_cancelled", &[], &[0]);
+    let mut downstream = operation("cancelled_downstream_skipped", &[0], &[2]);
+    downstream.outputs[0].public_output = Some(downstream_output.clone());
+    let execution_plan = plan(
+        vec![upstream, downstream],
+        3,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    let results = ResultStore::new();
 
     assert_eq!(
-        super::scheduler::result_presentation(&execution_plan, &output),
-        ResultSourcePresentation::Report {
-            report: ResultReportKind::OlsSummary,
-        },
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            results.clone(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
+        )
+        .run(&execution_plan, CancellationToken::new()),
+        Err(RunError::Cancelled)
     );
+    assert_eq!(downstream_calls.load(Ordering::SeqCst), 0);
+    let downstream_id = results.pin_history(&downstream_output)[0].result_id;
+    assert!(matches!(
+        results.result(downstream_id).unwrap().state,
+        ResultState::Cancelled
+    ));
+}
+
+#[test]
+fn output_count_mismatch_fails_the_entire_result_group() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed_calls = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("short_output", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed_calls.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![RuntimeValue::Scalar(Value::Integer(1))])
+            }),
+        )
+        .unwrap();
+    let mut operation = operation("short_output", &[], &[0, 1]);
+    let first_output = stable_output("short_first");
+    let second_output = stable_output("short_second");
+    operation.outputs[0].public_output = Some(first_output.clone());
+    operation.outputs[1].public_output = Some(second_output.clone());
+    let execution_plan = plan(
+        vec![operation],
+        2,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    let store = ResultStore::new();
+
+    assert!(matches!(
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
+        )
+        .with_result_store(&store)
+        .run(&execution_plan, CancellationToken::new()),
+        Err(RunError::OutputCount {
+            expected: 2,
+            actual: 1,
+            ..
+        })
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let first_id = store.pin_history(&first_output)[0].result_id;
+    let second_id = store.pin_history(&second_output)[0].result_id;
+    assert!(matches!(
+        store.result(first_id).unwrap().state,
+        ResultState::Failed(_)
+    ));
+    assert!(matches!(
+        store.result(second_id).unwrap().state,
+        ResultState::Failed(_)
+    ));
 }
 
 fn publish_graph_results(plan: &mut ExecutionPlan) {
@@ -288,9 +795,15 @@ fn trace_sink_completion_panic_does_not_replace_successful_run() {
         ))])),
     );
 
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_trace_sink(&PanickingCompletionTrace)
-        .run(&execution_plan, CancellationToken::new());
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_trace_sink(&PanickingCompletionTrace)
+    .run(&execution_plan, CancellationToken::new());
 
     assert!(result.is_ok());
 }
@@ -318,7 +831,7 @@ fn assert_cancelled_without_completion(events: &RecordingRunEvents) {
     );
     assert!(events.iter().all(|event| !matches!(
         event.kind,
-        RunEventKind::ResultReady { .. } | RunEventKind::OutputReady { .. }
+        RunEventKind::ResultGroupChanged { .. } | RunEventKind::OutputResultChanged { .. }
     )));
 }
 
@@ -528,8 +1041,8 @@ fn data_series_constructor_validates_metadata_and_storage_contract() {
 }
 
 #[test]
-fn data_series_artifact_preserves_metadata_through_spill_and_replay() {
-    let root = materialization_test_root("data-series-replay");
+fn data_series_artifact_preserves_metadata_through_spill() {
+    let root = materialization_test_root("data-series-spill");
     let cancellation = CancellationToken::new();
     let owner = RunResourceOwner::with_spill_root(
         RunId::new(104),
@@ -555,13 +1068,11 @@ fn data_series_artifact_preserves_metadata_through_spill_and_replay() {
         &cancellation,
     )
     .unwrap();
-    let replayed =
-        execute_planned_adapter(&PlannedAdapter::Replay, spilled, &owner, &cancellation).unwrap();
-    let RuntimeValue::Artifact(artifact) = replayed else {
-        panic!("replay must produce an artifact");
+    let RuntimeValue::Artifact(artifact) = spilled else {
+        panic!("spill must produce an artifact");
     };
 
-    assert_eq!(artifact.kind(), ArtifactKind::Replayable);
+    assert_eq!(artifact.kind(), ArtifactKind::Spilled);
     assert_eq!(artifact.value_kind(), ArtifactValueKind::DataSeries);
     assert_eq!(artifact.data_series_metadata(), Some(&metadata));
     assert_eq!(
@@ -871,8 +1382,14 @@ fn kernel_context_receives_an_immutable_effective_settings_snapshot() {
     };
     settings.missing_values.statistics = StatisticalMissingValuePolicy::Reject;
     let resources = no_resources();
-    let executor = RunExecutor::new(&kernels, &resources, &NoFunctions)
-        .with_computation_settings_snapshot(&settings);
+    let executor = RunExecutor::new(
+        &kernels,
+        &resources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_computation_settings_snapshot(&settings);
     settings.numeric.tolerance.absolute = 9.0;
     assert_eq!(settings.numeric.tolerance.absolute, 9.0);
     let execution_plan = plan(
@@ -992,6 +1509,90 @@ fn bounded_materialization_producer_panic_is_not_partial_success() {
 }
 
 #[test]
+fn collect_adapter_uses_pending_value_writer() {
+    let root = materialization_test_root("writer-integration");
+    let cancellation = CancellationToken::new();
+    let owner = RunResourceOwner::with_spill_root(
+        RunId::new(201),
+        materialization_test_budgets(1, 1024),
+        cancellation.clone(),
+        root.clone(),
+    )
+    .unwrap();
+
+    execute_planned_adapter(
+        &PlannedAdapter::Collect {
+            limits: MaterializationLimits {
+                max_values: 10,
+                max_bytes: 1024,
+            },
+        },
+        RuntimeValue::Artifact(Artifact::new(
+            ArtifactKind::Buffered,
+            [Value::Integer(1), Value::Integer(2)],
+        )),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+
+    assert_eq!(owner.pending_writer_count_for_test(), 1);
+    drop(owner);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
+fn kernel_unreserved_artifact_respects_owner_memory_budget() {
+    let root = materialization_test_root("kernel-artifact-budget");
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("unreserved_artifact", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| {
+                Ok(vec![RuntimeValue::Artifact(Artifact::new(
+                    ArtifactKind::Collected,
+                    [Value::String("larger than one byte".into())],
+                ))])
+            }),
+        )
+        .unwrap();
+    let output = stable_output("unreserved");
+    let mut source = operation("unreserved_artifact", &[], &[0]);
+    source.outputs[0].public_output = Some(output.clone());
+    let execution_plan = plan(
+        vec![source],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    let results = ResultStore::new();
+
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        results.clone(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_result_store(&results)
+    .with_resource_budgets(materialization_test_budgets(1, 1))
+    .with_test_spill_root(root.clone())
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
+
+    let result_id = results.pin_history(&output)[0].result_id;
+    let result = results.result(result_id).unwrap();
+    let ResultState::Ready(value) = &result.state else {
+        panic!("kernel artifact result must be ready");
+    };
+    assert!(value.is_spill_backed());
+    drop(result);
+    drop(results);
+    std::fs::remove_dir(root).unwrap();
+}
+
+#[test]
 fn spill_memory_threshold_preserves_stable_disk_order() {
     let root = materialization_test_root("spill-order");
     let cancellation = CancellationToken::new();
@@ -1043,7 +1644,7 @@ fn spill_memory_threshold_preserves_stable_disk_order() {
             Value::Bool(true)
         ]
     );
-    assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
 
     drop(artifact);
     drop(owner);
@@ -1091,8 +1692,8 @@ fn spilled_artifact_exposes_only_explicit_non_panicking_consumption() {
 }
 
 #[test]
-fn spill_replay_supports_two_independent_passes() {
-    let root = materialization_test_root("replay");
+fn spill_backed_adapter_value_supports_two_independent_passes() {
+    let root = materialization_test_root("independent-readers");
     let cancellation = CancellationToken::new();
     let owner = RunResourceOwner::with_spill_root(
         RunId::new(3),
@@ -1113,17 +1714,13 @@ fn spill_replay_supports_two_independent_passes() {
         &cancellation,
     )
     .unwrap();
-    let replayable =
-        execute_planned_adapter(&PlannedAdapter::Replay, spilled, &owner, &cancellation).unwrap();
-    let RuntimeValue::Artifact(artifact) = replayable else {
-        panic!("replay must produce an artifact");
+    let RuntimeValue::Artifact(artifact) = spilled else {
+        panic!("reusable storage must remain an artifact kernel view");
     };
-    let MaterializedArtifact::Replayable(replay) = artifact.materialized() else {
-        panic!("replay adapter must produce replayable storage");
-    };
+    let stored = StoredValue::from_artifact(artifact);
 
-    let first = replay.cursor().unwrap();
-    let second = replay.cursor().unwrap();
+    let first = stored.open_reader().unwrap();
+    let second = stored.open_reader().unwrap();
     assert_eq!(
         first.collect::<Result<Vec<_>, _>>().unwrap(),
         [Value::Integer(1), Value::Integer(2), Value::Integer(3),]
@@ -1133,7 +1730,7 @@ fn spill_replay_supports_two_independent_passes() {
         [Value::Integer(1), Value::Integer(2), Value::Integer(3),]
     );
 
-    drop(artifact);
+    drop(stored);
     drop(owner);
     assert!(std::fs::read_dir(&root).unwrap().next().is_none());
     std::fs::remove_dir(root).unwrap();
@@ -1179,6 +1776,109 @@ fn disk_backed_result_plan(terminal_kernel: &str) -> ExecutionPlan {
 }
 
 #[test]
+fn stream_output_is_stored_and_supports_two_independent_reads() {
+    let root = materialization_test_root("stored-stream-output");
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("stored_stream", KernelHandle::new),
+            OwnedStreamKernel {
+                values: vec![Value::Integer(1), Value::Integer(2)].into_boxed_slice(),
+                executions: None,
+            },
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("stored_stream", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("stored_stream"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+    let results = ResultStore::new();
+    let run_result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        results.clone(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_test_spill_root(root.clone())
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
+    let stored = results.result(run_result.result_ids["result"]).unwrap();
+    let ResultState::Ready(value) = &stored.state else {
+        panic!("stream output must be ready");
+    };
+
+    let first = value
+        .open_reader()
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    let second = value
+        .open_reader()
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(first, [Value::Integer(1), Value::Integer(2)]);
+    assert_eq!(second, first);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn run_result_ids_resolve_after_executor_drop() {
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("persistent_result", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(9).into()])),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("persistent_result", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("persistent_result"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+    let results = ResultStore::new();
+    let resources = no_resources();
+    let run_result = {
+        let executor = RunExecutor::new(
+            &kernels,
+            &resources,
+            &NoFunctions,
+            results.clone(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        );
+        executor
+            .run(&execution_plan, CancellationToken::new())
+            .unwrap()
+    };
+
+    assert!(matches!(
+        results
+            .result(run_result.result_ids["result"])
+            .unwrap()
+            .state,
+        ResultState::Ready(_)
+    ));
+}
+
+#[test]
 fn bounded_materialization_run_result_and_result_store_keep_spill_durable() {
     let root = materialization_test_root("durable-result");
     let mut kernels = KernelRegistry::new();
@@ -1199,18 +1899,24 @@ fn bounded_materialization_run_result_and_result_store_keep_spill_durable() {
     let resources = no_resources();
     let functions = NoFunctions;
 
-    let run_result = RunExecutor::new(&kernels, &resources, &functions)
-        .with_result_store(&results)
-        .with_event_sink(&events)
-        .with_resource_budgets(materialization_test_budgets(1, 1))
-        .with_test_spill_root(root.clone())
-        .run(
-            &disk_backed_result_plan("disk_result_passthrough"),
-            CancellationToken::new(),
-        )
-        .unwrap();
+    let run_result = RunExecutor::new(
+        &kernels,
+        &resources,
+        &functions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_result_store(&results)
+    .with_event_sink(&events)
+    .with_resource_budgets(materialization_test_budgets(1, 1))
+    .with_test_spill_root(root.clone())
+    .run(
+        &disk_backed_result_plan("disk_result_passthrough"),
+        CancellationToken::new(),
+    )
+    .unwrap();
 
-    let RuntimeValue::Artifact(artifact) = &run_result.values["result"] else {
+    let RuntimeValue::Artifact(artifact) = &run_result.value_for_test("result").unwrap() else {
         panic!("collected result must be an artifact");
     };
     assert_eq!(
@@ -1221,164 +1927,23 @@ fn bounded_materialization_run_result_and_result_store_keep_spill_durable() {
             .unwrap(),
         [Value::String("durable".into())]
     );
-    let source_id = events
+    let result_id = events
         .0
         .lock()
         .unwrap()
         .iter()
-        .find_map(|event| match event.kind {
-            RunEventKind::ResultReady { source_id, .. } => Some(source_id),
+        .find_map(|event| match &event.kind {
+            RunEventKind::ResultGroupChanged { result_ids, .. } => result_ids.last().copied(),
             _ => None,
         })
-        .expect("published result source");
-    assert_eq!(
-        results
-            .page(source_id, 0, 10)
-            .unwrap()
-            .unwrap()
-            .values
-            .as_ref(),
-        &[Value::String("durable".into())]
-    );
-    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
-    std::fs::remove_dir(root).unwrap();
-}
-
-#[test]
-fn spilled_data_series_is_pageable_as_data_series() {
-    let root = materialization_test_root("data-series-result-page");
-    let cancellation = CancellationToken::new();
-    let owner = RunResourceOwner::with_spill_root(
-        RunId::new(105),
-        materialization_test_budgets(1, 1),
-        cancellation.clone(),
-        root.clone(),
-    )
-    .unwrap();
-    let metadata = data_series_metadata(DataSeriesElementType::Float64, 3, 1);
-    let series = Artifact::new_data_series(
-        ArtifactKind::Collected,
-        metadata.clone(),
-        [decimal("1.25"), Value::Null, decimal("3.75")],
-    )
-    .unwrap();
-    let spilled = execute_planned_adapter(
-        &PlannedAdapter::Spill {
-            memory_limit_bytes: 1,
-        },
-        RuntimeValue::Artifact(series),
-        &owner,
-        &cancellation,
-    )
-    .unwrap();
-    let execution_plan = plan(
-        Vec::new(),
-        0,
-        StructuredControlRegion::Sequence(Box::new([])),
-    );
-    let run_id = RunId::new(105);
-    let correlation = CorrelationContext::compile(&execution_plan.provenance).for_run(run_id, None);
-    let results = ResultStore::new();
-
-    let descriptor = results
-        .publish_runtime_value(
-            run_id,
-            correlation,
-            execution_plan.provenance.basis.clone(),
-            "series",
-            &spilled,
-        )
-        .unwrap();
-    assert_eq!(descriptor.kind, ArtifactSnapshotKind::DataSeries);
-    assert_eq!(descriptor.data_series_metadata, Some(metadata.clone()));
-
-    let page = results.page(descriptor.source_id, 1, 2).unwrap().unwrap();
-    assert_eq!(page.kind, ArtifactSnapshotKind::DataSeries);
-    assert_eq!(page.data_series_metadata, Some(metadata));
-    assert_eq!(page.values.as_ref(), &[Value::Null, decimal("3.75")]);
-
-    drop(spilled);
-    drop(owner);
-    std::fs::remove_dir(root).unwrap();
-}
-
-#[test]
-fn result_store_paging_propagates_spill_read_failures() {
-    let root = materialization_test_root("result-page-error");
-    let cancellation = CancellationToken::new();
-    let owner = RunResourceOwner::with_spill_root(
-        RunId::new(14),
-        materialization_test_budgets(1, 1),
-        cancellation.clone(),
-        root.clone(),
-    )
-    .unwrap();
-    let spilled = execute_planned_adapter(
-        &PlannedAdapter::Spill {
-            memory_limit_bytes: 1,
-        },
-        RuntimeValue::Scalar(Value::Integer(9)),
-        &owner,
-        &cancellation,
-    )
-    .unwrap();
-    let execution_plan = plan(
-        Vec::new(),
-        0,
-        StructuredControlRegion::Sequence(Box::new([])),
-    );
-    let run_id = RunId::new(14);
-    let correlation = CorrelationContext::compile(&execution_plan.provenance).for_run(run_id, None);
-    let results = ResultStore::new();
-    let descriptor = results
-        .publish_runtime_value(
-            run_id,
-            correlation,
-            execution_plan.provenance.basis.clone(),
-            "spilled",
-            &spilled,
-        )
-        .unwrap();
-    assert!(owner.cleanup().is_empty());
-
-    assert!(matches!(
-        results.page(descriptor.source_id, 0, 1),
-        Err(RunError::Stream(message)) if message.contains("spill I/O failed")
-    ));
-
-    drop(spilled);
-    drop(owner);
-    std::fs::remove_dir(root).unwrap();
-}
-
-#[test]
-fn bounded_materialization_debug_view_consumes_spilled_collect() {
-    let root = materialization_test_root("debug-consumer");
-    let mut kernels = build_builtin_kernel_registry();
-    kernels
-        .register(
-            id("disk_result_source", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(41).into()])),
-        )
-        .unwrap();
-    let execution_plan = disk_backed_result_plan("yssbi.debug.view");
-
-    let run_result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_resource_budgets(materialization_test_budgets(1, 1))
-        .with_test_spill_root(root.clone())
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
-
-    let RuntimeValue::Artifact(artifact) = &run_result.values["result"] else {
-        panic!("view result must be an artifact");
+        .expect("published authoritative result");
+    let stored = results.result(result_id).unwrap();
+    let ResultState::Ready(value) = &stored.state else {
+        panic!("published result must be ready");
     };
     assert_eq!(
-        artifact
-            .cursor()
-            .unwrap()
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap(),
-        [Value::Integer(41)]
+        value.page(0, 10).unwrap().as_ref(),
+        &[Value::String("durable".into())]
     );
     assert!(std::fs::read_dir(&root).unwrap().next().is_none());
     std::fs::remove_dir(root).unwrap();
@@ -1497,70 +2062,6 @@ fn bounded_materialization_clone_shares_values_and_one_live_reservation() {
     drop(artifact);
     assert_eq!(owner.memory_bytes_for_test(), bytes);
     drop(cloned);
-    assert_eq!(owner.memory_bytes_for_test(), 0);
-
-    drop(owner);
-    std::fs::remove_dir(root).unwrap();
-}
-
-#[test]
-fn bounded_materialization_result_store_retains_shared_artifact_storage() {
-    let value = Value::String("shared-result".into());
-    let bytes = serde_json::to_vec(&value).unwrap().len() as u64;
-    let root = materialization_test_root("memory-result-sharing");
-    let cancellation = CancellationToken::new();
-    let owner = RunResourceOwner::with_spill_root(
-        RunId::new(20),
-        materialization_test_budgets(1, bytes),
-        cancellation.clone(),
-        root.clone(),
-    )
-    .unwrap();
-    let RuntimeValue::Artifact(artifact) = execute_planned_adapter(
-        &PlannedAdapter::Collect {
-            limits: MaterializationLimits {
-                max_values: 1,
-                max_bytes: bytes,
-            },
-        },
-        RuntimeValue::Scalar(value),
-        &owner,
-        &cancellation,
-    )
-    .unwrap() else {
-        panic!("collect must return an artifact");
-    };
-    let run_id = RunId::new(20);
-    let execution_plan = plan(
-        Vec::new(),
-        0,
-        StructuredControlRegion::Sequence(Box::new([])),
-    );
-    let correlation = CorrelationContext::compile(&execution_plan.provenance).for_run(run_id, None);
-    let results = ResultStore::new();
-    let descriptor = results
-        .publish_runtime_value(
-            run_id,
-            correlation,
-            execution_plan.provenance.basis.clone(),
-            "shared",
-            &RuntimeValue::Artifact(artifact.clone()),
-        )
-        .unwrap();
-    let snapshot = results.value(descriptor.source_id).unwrap();
-    let ArtifactSnapshot::RuntimeArtifact(stored) = snapshot.as_ref() else {
-        panic!("runtime artifact snapshots must retain shared storage");
-    };
-
-    assert!(std::ptr::eq(
-        artifact.in_memory_values().unwrap().as_ptr(),
-        stored.in_memory_values().unwrap().as_ptr(),
-    ));
-    drop(artifact);
-    assert_eq!(owner.memory_bytes_for_test(), bytes);
-    drop(snapshot);
-    results.cleanup_run(run_id);
-    assert!(results.release(descriptor.source_id));
     assert_eq!(owner.memory_bytes_for_test(), 0);
 
     drop(owner);
@@ -1843,9 +2344,7 @@ fn spill_cursor_keeps_promoted_file_alive_until_cursor_drop() {
         panic!("spill adapter must use spill storage");
     };
     let path = spill.path_for_test();
-    let ArtifactCursor::Spilled(cursor) = artifact.cursor().unwrap() else {
-        panic!("spill artifact must return a spill cursor");
-    };
+    let cursor = spill.cursor().unwrap();
 
     drop(artifact);
     assert!(path.exists());
@@ -1867,21 +2366,26 @@ fn deadline_during_spill_promotion_publishes_no_durable_artifact() {
         root.clone(),
     )
     .unwrap();
-    let RuntimeValue::Artifact(artifact) = execute_planned_adapter(
-        &PlannedAdapter::Spill {
-            memory_limit_bytes: 1,
-        },
-        RuntimeValue::Scalar(Value::Integer(1)),
-        &owner,
+    let staged_path = root.join("pending-promotion.jsonf");
+    let metadata = super::spill::write_spill(
+        &staged_path,
+        std::iter::once(Ok(Value::Integer(1))),
         &cancellation,
+        |_| Ok(()),
     )
-    .unwrap() else {
-        panic!("spill adapter must return an artifact");
-    };
-    let MaterializedArtifact::Spilled(spill) = artifact.materialized() else {
-        panic!("spill adapter must use spill storage");
-    };
-    let staged_path = spill.path_for_test();
+    .unwrap();
+    let spill = Arc::new(super::spill::SpillStorage::new(
+        staged_path.clone(),
+        metadata,
+        ArtifactValueKind::Sequence,
+        None,
+        [0; 32],
+        None,
+    ));
+    let artifact = Artifact::from_stored_value(
+        ArtifactKind::Spilled,
+        StoredValue::spill_backed(Arc::clone(&spill)),
+    );
     spill.set_promotion_checkpoint_for_test(Arc::new(|| {
         thread::sleep(Duration::from_millis(20));
     }));
@@ -1931,9 +2435,7 @@ fn spill_cursor_close_surfaces_and_retries_transient_delete_failure() {
     };
     spill.fail_next_deletions_for_test(1);
     let path = spill.path_for_test();
-    let ArtifactCursor::Spilled(mut cursor) = artifact.cursor().unwrap() else {
-        panic!("spill artifact must return a spill cursor");
-    };
+    let mut cursor = spill.cursor().unwrap();
     drop(artifact);
 
     let error = cursor.close().unwrap_err();
@@ -1997,6 +2499,20 @@ fn spill_quota_exact_boundary_and_failure_rollback_allow_subsequent_write() {
     assert_eq!(owner.spill_bytes_for_test(), first_bytes);
     assert!(second_bytes > 0);
     drop(exact);
+    assert_eq!(owner.spill_bytes_for_test(), 0);
+
+    let again = execute_planned_adapter(
+        &PlannedAdapter::Spill {
+            memory_limit_bytes: 1,
+        },
+        RuntimeValue::Scalar(Value::String("first".into())),
+        &owner,
+        &cancellation,
+    )
+    .unwrap();
+    assert_eq!(owner.spill_bytes_for_test(), first_bytes);
+    drop(again);
+    assert_eq!(owner.spill_bytes_for_test(), 0);
     drop(owner);
     std::fs::remove_dir(root).unwrap();
 }
@@ -2132,13 +2648,22 @@ fn bounded_materialization_kernel_streams_use_the_scheduler_owner() {
     }]);
     publish_graph_results(&mut execution_plan);
 
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_resource_budgets(materialization_test_budgets(1, 1024))
-        .with_test_spill_root(root.clone())
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_resource_budgets(materialization_test_budgets(1, 1024))
+    .with_test_spill_root(root.clone())
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
-    assert_eq!(result.values["count"], Value::Integer(2).into());
+    assert_eq!(
+        result.value_for_test("count").unwrap(),
+        Value::Integer(2).into()
+    );
     assert!(std::fs::read_dir(&root).unwrap().next().is_none());
     std::fs::remove_dir(root).unwrap();
 }
@@ -2190,9 +2715,15 @@ fn bounded_materialization_panic_cleanup_errors_are_traced_without_replacing_pan
     );
     let resources = no_resources();
     let functions = NoFunctions;
-    let executor = RunExecutor::new(&kernels, &resources, &functions)
-        .with_trace_sink(&trace)
-        .with_test_spill_root(root.clone());
+    let executor = RunExecutor::new(
+        &kernels,
+        &resources,
+        &functions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_trace_sink(&trace)
+    .with_test_spill_root(root.clone());
 
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _ = executor.run(&execution_plan, CancellationToken::new());
@@ -2257,16 +2788,15 @@ fn data_series_artifact_survives_memoization() {
             if artifact.kind() == ArtifactKind::Spilled
                 && artifact.data_series_metadata() == Some(&metadata)
     ));
+    let RuntimeValue::Artifact(spilled_artifact) = &spilled else {
+        unreachable!();
+    };
     assert!(
-        OperationMemoKey::from_inputs(
-            OperationStableId::new("events/test::data-series-spilled-consumer").unwrap(),
-            std::slice::from_ref(&spilled),
-            BTreeMap::new(),
-            ExecutionSemanticsVersion::from_bytes([7; 32]),
-            DemandFingerprint::from_bytes([9; 32]),
-        )
-        .is_none(),
-        "run-owned spill paths must not become memo keys"
+        ValueFingerprint::from_stored_value(&StoredValue::from_artifact(spilled_artifact.clone()))
+            == ValueFingerprint::from_stored_value(&StoredValue::from_artifact(
+                spilled_artifact.clone(),
+            )),
+        "spill-backed logical contents and metadata are fingerprintable"
     );
 
     let calls = AtomicUsize::new(0);
@@ -2286,7 +2816,7 @@ fn data_series_artifact_survives_memoization() {
                 .values(values)
                 .name(metadata.name.clone().unwrap())
                 .format(metadata.format.clone().unwrap())
-                .build(ArtifactKind::Replayable)
+                .build(ArtifactKind::Collected)
                 .unwrap(),
         );
     }
@@ -2310,7 +2840,7 @@ fn data_series_artifact_survives_memoization() {
 }
 
 #[test]
-fn spill_artifacts_never_enter_per_run_memoization() {
+fn spill_artifacts_enter_session_memoization_by_logical_value() {
     let root = materialization_test_root("spill-memo");
     let cancellation = CancellationToken::new();
     let owner = RunResourceOwner::with_spill_root(
@@ -2332,31 +2862,16 @@ fn spill_artifacts_never_enter_per_run_memoization() {
         &cancellation,
     )
     .unwrap();
-    assert!(
-        OperationMemoKey::from_inputs(
-            OperationStableId::new("events/test::spilled-input").unwrap(),
-            std::slice::from_ref(&spilled),
-            BTreeMap::new(),
-            ExecutionSemanticsVersion::from_bytes([7; 32]),
-            DemandFingerprint::from_bytes([9; 32]),
-        )
-        .is_none()
-    );
+    let RuntimeValue::Artifact(spilled_artifact) = &spilled else {
+        unreachable!();
+    };
+    let first =
+        ValueFingerprint::from_stored_value(&StoredValue::from_artifact(spilled_artifact.clone()));
+    let second = ValueFingerprint::from_stored_value(&StoredValue::sequence(
+        vec![Value::Integer(1), Value::Integer(2)].into_boxed_slice(),
+    ));
+    assert_eq!(first, second);
 
-    let memo = RunMemoization::new();
-    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
-    let calls = AtomicUsize::new(0);
-    for _ in 0..2 {
-        let output = spilled.clone();
-        memo.get_or_produce(key.clone(), &CancellationToken::new(), || {
-            calls.fetch_add(1, Ordering::SeqCst);
-            Ok(vec![output].into_boxed_slice())
-        })
-        .unwrap();
-    }
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
-
-    drop(memo);
     drop(spilled);
     drop(owner);
     assert!(std::fs::read_dir(&root).unwrap().next().is_none());
@@ -2463,9 +2978,15 @@ fn bounded_materialization_cleanup_covers_success_error_cancel_and_deadline() {
         };
         let resources = no_resources();
         let functions = NoFunctions;
-        let mut executor = RunExecutor::new(&kernels, &resources, &functions)
-            .with_resource_budgets(materialization_test_budgets(1, 1))
-            .with_test_spill_root(root.clone());
+        let mut executor = RunExecutor::new(
+            &kernels,
+            &resources,
+            &functions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_resource_budgets(materialization_test_budgets(1, 1))
+        .with_test_spill_root(root.clone());
         if deadline {
             executor = executor.with_test_checkpoint(Arc::new(|checkpoint, cancellation| {
                 if checkpoint == SchedulerCheckpoint::FinalResultPublication {
@@ -2497,9 +3018,15 @@ fn bounded_materialization_cleanup_runs_during_panic_unwind() {
     }));
     let resources = no_resources();
     let functions = NoFunctions;
-    let executor = RunExecutor::new(&kernels, &resources, &functions)
-        .with_resource_budgets(materialization_test_budgets(1, 1))
-        .with_test_spill_root(root.clone());
+    let executor = RunExecutor::new(
+        &kernels,
+        &resources,
+        &functions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_resource_budgets(materialization_test_budgets(1, 1))
+    .with_test_spill_root(root.clone());
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _ = executor.run(
@@ -2544,11 +3071,17 @@ fn bounded_materialization_cleanup_precedes_project_replacement_drain_completion
     let run_registry = Arc::clone(&registry);
     let run_root = root.clone();
     let run = thread::spawn(move || {
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_run_registry(&run_registry)
-            .with_resource_budgets(materialization_test_budgets(1, 1))
-            .with_test_spill_root(run_root)
-            .run(&execution_plan, CancellationToken::new())
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_run_registry(&run_registry)
+        .with_resource_budgets(materialization_test_budgets(1, 1))
+        .with_test_spill_root(run_root)
+        .run(&execution_plan, CancellationToken::new())
     });
     started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
 
@@ -2596,11 +3129,20 @@ fn bound_input_operation_executes_downstream_and_publishes_result_without_fallba
     }]);
     publish_graph_results(&mut execution_plan);
 
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
-    assert_eq!(result.values["result"], Value::Integer(8).into());
+    assert_eq!(
+        result.value_for_test("result").unwrap(),
+        Value::Integer(8).into()
+    );
 }
 
 #[test]
@@ -2619,9 +3161,15 @@ fn bound_input_blocked_by_effect_dependency_reports_effect_error() {
         after: OperationIndex::new(1),
     }]);
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(
         error,
@@ -2652,9 +3200,15 @@ fn bound_input_blocked_by_value_dependency_reports_dependency_source() {
         destination: ValueRef::new(1),
     }]);
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(error, RunError::MissingValue(value) if value == ValueRef::new(2)));
 }
@@ -2673,9 +3227,15 @@ fn truly_missing_operation_input_still_reports_missing_value() {
         OutputProduction::FullyMaterialized,
     )]);
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(error, RunError::MissingValue(value) if value == ValueRef::new(0)));
 }
@@ -2750,9 +3310,15 @@ fn runtime_admission_rejects_sequence_artifact_for_data_series_contract() {
         },
     ]);
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(
         matches!(&error, RunError::InvalidPlan(message) if message.contains("DataSeries Artifact")),
@@ -2780,7 +3346,7 @@ fn runtime_admission_rejects_data_series_element_metadata_mismatch() {
                     DataSeriesBuilder::new(DataSeriesElementType::Float64)
                         .values([decimal("1.5")])
                         .name("float input")
-                        .build(ArtifactKind::Replayable)
+                        .build(ArtifactKind::Collected)
                         .unwrap(),
                 )])
             }),
@@ -2810,9 +3376,15 @@ fn runtime_admission_rejects_data_series_element_metadata_mismatch() {
     );
     execution_plan.value_contracts = BTreeMap::from([(ValueRef::new(0), int_series_contract)]);
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(
         matches!(&error, RunError::InvalidPlan(message) if message.contains("expects Int64") && message.contains("Float64")),
@@ -2859,13 +3431,19 @@ fn executes_sequence_deterministically() {
     }]);
     publish_graph_results(&mut execution_plan);
 
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(*events.lock().unwrap(), vec![1, 2]);
     assert_eq!(
-        result.values["result"],
+        result.value_for_test("result").unwrap(),
         RuntimeValue::from(Value::Integer(2))
     );
 }
@@ -2915,18 +3493,23 @@ fn demand_driven_publication_exposes_only_the_requested_final_output() {
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 
-    let run = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    let run = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_result_store(&results)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
-    assert_eq!(run.values["final"], RuntimeValue::from(Value::Integer(7)));
     assert_eq!(
-        results.source_count(),
-        1,
-        "intermediate values must not be readable sources"
+        run.value_for_test("final").unwrap(),
+        RuntimeValue::from(Value::Integer(7))
     );
+
     let recorded = events.0.lock().unwrap();
     assert!(
         recorded
@@ -2936,11 +3519,11 @@ fn demand_driven_publication_exposes_only_the_requested_final_output() {
     assert_eq!(
         recorded
             .iter()
-            .filter(|event| matches!(event.kind, RunEventKind::ResultReady { .. }))
+            .filter(|event| matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
             .count(),
         1
     );
-    assert_eq!(recorded.iter().filter(|event| matches!(&event.kind, RunEventKind::OutputReady { output: emitted, .. } if emitted == &output)).count(), 1);
+    assert_eq!(recorded.iter().filter(|event| matches!(&event.kind, RunEventKind::OutputResultChanged { output: emitted, .. } if emitted == &output)).count(), 1);
 }
 
 #[test]
@@ -2973,25 +3556,30 @@ fn demand_driven_publication_pin_preview_emits_only_generation_bound_output() {
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 
-    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_result_store(&results)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
-    assert_eq!(results.source_count(), 1);
     let recorded = events.0.lock().unwrap();
     assert!(
         recorded
             .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::ResultReady { .. }))
+            .all(|event| !matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
     );
     assert_eq!(
         recorded
             .iter()
             .filter(|event| matches!(
                 &event.kind,
-                RunEventKind::OutputReady {
+                RunEventKind::OutputResultChanged {
                     output: emitted,
                     generation: Some(17),
                     ..
@@ -3031,13 +3619,18 @@ fn invalid_publication_returns_typed_invalid_plan_without_panicking() {
     }]);
     let results = ResultStore::new();
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_result_store(&results)
-        .run(&execution_plan, CancellationToken::new())
-        .expect_err("invalid publication must be rejected before execution");
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_result_store(&results)
+    .run(&execution_plan, CancellationToken::new())
+    .expect_err("invalid publication must be rejected before execution");
 
     assert!(matches!(error, RunError::InvalidPlan(_)));
-    assert_eq!(results.source_count(), 0);
 }
 
 #[test]
@@ -3064,17 +3657,22 @@ fn missing_publications_return_typed_invalid_plan_before_execution() {
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .run(&execution_plan, CancellationToken::new())
-        .expect_err("results without publications must be rejected before execution");
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_result_store(&results)
+    .run(&execution_plan, CancellationToken::new())
+    .expect_err("results without publications must be rejected before execution");
 
     assert!(matches!(error, RunError::InvalidPlan(_)));
-    assert_eq!(results.source_count(), 0);
     assert!(events.0.lock().unwrap().iter().all(|event| !matches!(
         event.kind,
-        RunEventKind::ResultReady { .. } | RunEventKind::OutputReady { .. }
+        RunEventKind::ResultGroupChanged { .. } | RunEventKind::OutputResultChanged { .. }
     )));
 }
 
@@ -3108,11 +3706,17 @@ fn stable_output_ready_is_published_before_completion() {
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 
-    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_result_store(&results)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     let recorded = events.0.lock().unwrap();
     let output_index = recorded
@@ -3120,7 +3724,7 @@ fn stable_output_ready_is_published_before_completion() {
         .position(|event| {
             matches!(
                 &event.kind,
-                RunEventKind::OutputReady {
+                RunEventKind::OutputResultChanged {
                     output: emitted,
                     ..
                 } if emitted == &output
@@ -3168,9 +3772,15 @@ fn if_uses_a_plan_bound_condition_value() {
         .bound_values
         .insert(ValueRef::new(0), Value::Bool(true));
 
-    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(counts.lock().unwrap().get("then"), Some(&1));
     assert_eq!(counts.lock().unwrap().get("else"), None);
@@ -3229,9 +3839,15 @@ fn if_executes_only_selected_branch() {
         OutputProduction::FullyMaterialized,
     )]);
 
-    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(counts.lock().unwrap().get("then"), Some(&1));
     assert_eq!(counts.lock().unwrap().get("else"), None);
@@ -3323,9 +3939,15 @@ fn execute_nested_branch_sequence_switch(
     }]);
     publish_graph_results(&mut execution_plan);
 
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
     let observed = observed.lock().unwrap().clone();
     (result, observed)
 }
@@ -3335,7 +3957,10 @@ fn nested_sibling_regions_produce_complete_data_exactly_once() {
     let (result, observed) = execute_nested_branch_sequence_switch(true, true);
 
     assert_eq!(observed, vec!["first_case"]);
-    assert_eq!(result.values["selected"], Value::Integer(10).into());
+    assert_eq!(
+        result.value_for_test("selected").unwrap(),
+        Value::Integer(10).into()
+    );
 }
 
 #[test]
@@ -3343,7 +3968,10 @@ fn nested_branch_sequence_switch_executes_only_n_way_match() {
     let (result, observed) = execute_nested_branch_sequence_switch(false, true);
 
     assert_eq!(observed, vec!["second_case"]);
-    assert_eq!(result.values["selected"], Value::Integer(20).into());
+    assert_eq!(
+        result.value_for_test("selected").unwrap(),
+        Value::Integer(20).into()
+    );
 }
 
 #[test]
@@ -3351,7 +3979,10 @@ fn nested_branch_sequence_switch_executes_default_when_no_case_matches() {
     let (result, observed) = execute_nested_branch_sequence_switch(false, false);
 
     assert_eq!(observed, vec!["default"]);
-    assert_eq!(result.values["selected"], Value::Integer(30).into());
+    assert_eq!(
+        result.value_for_test("selected").unwrap(),
+        Value::Integer(30).into()
+    );
 }
 
 #[test]
@@ -3379,9 +4010,15 @@ fn cancellation_stops_run_and_releases_resources() {
     let resources = no_resources();
     let released = resources.released.clone();
 
-    let error = RunExecutor::new(&kernels, &resources, &NoFunctions)
-        .run(&execution_plan, token)
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &resources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, token)
+    .unwrap_err();
 
     assert_eq!(error, RunError::Cancelled);
     assert_eq!(released.load(Ordering::SeqCst), 1);
@@ -3407,9 +4044,15 @@ fn cancelled_kernel_error_maps_to_run_cancelled() {
         ))])),
     );
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert_eq!(error, RunError::Cancelled);
 }
@@ -3434,9 +4077,15 @@ fn cancellation_before_ordinary_outcome_wins() {
         ))])),
     );
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert_eq!(error, RunError::Cancelled);
 }
@@ -3481,14 +4130,20 @@ fn ordinary_outcome_produced_before_cancellation_is_preserved() {
         ))])),
     );
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_test_checkpoint(Arc::new(|checkpoint, cancellation| {
-            if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
-                cancellation.cancel();
-            }
-        }))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_test_checkpoint(Arc::new(|checkpoint, cancellation| {
+        if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+            cancellation.cancel();
+        }
+    }))
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(
         error,
@@ -3503,9 +4158,15 @@ fn successful_run_releases_all_resources() {
     let mut execution_plan = plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([])));
     execution_plan.resources = Box::new([requirement("one"), requirement("two")]);
 
-    RunExecutor::new(&KernelRegistry::new(), &resources, &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &KernelRegistry::new(),
+        &resources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(released.load(Ordering::SeqCst), 2);
 }
@@ -3522,10 +4183,16 @@ fn acquire_failure_releases_previously_acquired_resources() {
     let mut execution_plan = plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([])));
     execution_plan.resources = Box::new([requirement("one"), requirement("two")]);
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &resources, &NoFunctions)
-        .with_trace_sink(&trace)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &resources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_trace_sink(&trace)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(error, RunError::ResourceAcquire { .. }));
     assert_eq!(released.load(Ordering::SeqCst), 1);
@@ -3540,9 +4207,15 @@ fn acquire_failure_releases_previously_acquired_resources() {
 fn run_result_keeps_the_plan_basis_and_compile_id() {
     let execution_plan = plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([])));
 
-    let result = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    let result = RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(result.provenance, execution_plan.provenance);
     assert_eq!(
@@ -3562,7 +4235,14 @@ fn cleanup_spans_cover_success_failure_and_cancellation() {
     let resources = no_resources();
     let kernels = KernelRegistry::new();
     let functions = NoFunctions;
-    let executor = RunExecutor::new(&kernels, &resources, &functions).with_trace_sink(&trace);
+    let executor = RunExecutor::new(
+        &kernels,
+        &resources,
+        &functions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_trace_sink(&trace);
     let valid = plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([])));
     executor.run(&valid, CancellationToken::new()).unwrap();
 
@@ -3635,14 +4315,20 @@ fn assert_run_phase_coverage(
 #[test]
 fn run_phase_spans_cover_success_error_cancellation_deadline_retry_exhaustion_and_panic() {
     let success_trace = RecordingTrace::default();
-    RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .with_trace_sink(&success_trace)
-        .with_cleanup_delay_for_test(Duration::from_millis(100))
-        .run(
-            &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
-            CancellationToken::new(),
-        )
-        .unwrap();
+    RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_trace_sink(&success_trace)
+    .with_cleanup_delay_for_test(Duration::from_millis(100))
+    .run(
+        &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
+        CancellationToken::new(),
+    )
+    .unwrap();
     assert_run_phase_coverage(
         &success_trace.0.lock().unwrap(),
         SpanOutcome::Success,
@@ -3670,10 +4356,16 @@ fn run_phase_spans_cover_success_error_cancellation_deadline_retry_exhaustion_an
         ))])),
     );
     assert!(
-        RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-            .with_trace_sink(&error_trace)
-            .run(&error_plan, CancellationToken::new())
-            .is_err()
+        RunExecutor::new(
+            &KernelRegistry::new(),
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
+        )
+        .with_trace_sink(&error_trace)
+        .run(&error_plan, CancellationToken::new())
+        .is_err()
     );
     assert_run_phase_coverage(
         &error_trace.0.lock().unwrap(),
@@ -3685,12 +4377,18 @@ fn run_phase_spans_cover_success_error_cancellation_deadline_retry_exhaustion_an
     let cancelled = CancellationToken::new();
     cancelled.cancel();
     assert_eq!(
-        RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-            .with_trace_sink(&cancelled_trace)
-            .run(
-                &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
-                cancelled,
-            ),
+        RunExecutor::new(
+            &KernelRegistry::new(),
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
+        )
+        .with_trace_sink(&cancelled_trace)
+        .run(
+            &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
+            cancelled,
+        ),
         Err(RunError::Cancelled)
     );
     assert_run_phase_coverage(
@@ -3701,13 +4399,19 @@ fn run_phase_spans_cover_success_error_cancellation_deadline_retry_exhaustion_an
 
     let deadline_trace = RecordingTrace::default();
     assert!(matches!(
-        RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-            .with_trace_sink(&deadline_trace)
-            .with_deadline(RunDeadline::after(Duration::ZERO))
-            .run(
-                &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
-                CancellationToken::new(),
-            ),
+        RunExecutor::new(
+            &KernelRegistry::new(),
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
+        )
+        .with_trace_sink(&deadline_trace)
+        .with_deadline(RunDeadline::after(Duration::ZERO))
+        .run(
+            &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
+            CancellationToken::new(),
+        ),
         Err(RunError::DeadlineExceeded { .. })
     ));
     assert_run_phase_coverage(
@@ -3725,13 +4429,19 @@ fn run_phase_spans_cover_success_error_cancellation_deadline_retry_exhaustion_an
         )
         .unwrap();
     assert!(
-        RunExecutor::new(&retry_kernels, &no_resources(), &NoFunctions)
-            .with_trace_sink(&retry_trace)
-            .run(
-                &retry_plan("phase_retry_exhausted", 2, Duration::ZERO),
-                CancellationToken::new(),
-            )
-            .is_err()
+        RunExecutor::new(
+            &retry_kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
+        )
+        .with_trace_sink(&retry_trace)
+        .run(
+            &retry_plan("phase_retry_exhausted", 2, Duration::ZERO),
+            CancellationToken::new(),
+        )
+        .is_err()
     );
     assert_run_phase_coverage(
         &retry_trace.0.lock().unwrap(),
@@ -3764,9 +4474,15 @@ fn run_phase_spans_cover_success_error_cancellation_deadline_retry_exhaustion_an
         ))])),
     );
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _ = RunExecutor::new(&panic_kernels, &no_resources(), &NoFunctions)
-            .with_trace_sink(&panic_trace)
-            .run(&panic_plan, CancellationToken::new());
+        let _ = RunExecutor::new(
+            &panic_kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_trace_sink(&panic_trace)
+        .run(&panic_plan, CancellationToken::new());
     }));
     let panic = panic.expect_err("worker panic must resume");
     assert_eq!(
@@ -3811,6 +4527,8 @@ fn nested_call_spans_record_the_parent_call_and_callee_compile() {
         &KernelRegistry::new(),
         &no_resources(),
         &OneFunction(published_function(callee, "functions/callee", &[], &[])),
+        ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
     .with_trace_sink(&trace)
     .run(&caller, CancellationToken::new())
@@ -3909,12 +4627,18 @@ fn loop_carries_values_through_fresh_activations() {
     }]);
     publish_graph_results(&mut execution_plan);
 
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(
-        result.values["result"],
+        result.value_for_test("result").unwrap(),
         RuntimeValue::from(Value::Integer(13))
     );
     let activations = activations.lock().unwrap();
@@ -4000,9 +4724,15 @@ fn loop_does_not_reuse_an_unselected_branch_value_from_a_prior_iteration() {
         PlanValueSource::ControlProduced(ValueRef::new(7), OutputProduction::FullyMaterialized),
     ]);
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .expect_err("an unselected branch must not leak a prior activation value");
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .expect_err("an unselected branch must not leak a prior activation value");
 
     assert!(matches!(error, RunError::InvalidPlan(_)));
 }
@@ -4036,9 +4766,15 @@ fn call_missing_caller_value_does_not_acquire_callee_resources() {
     );
     let resources = no_resources();
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &resources, &OneFunction(published))
-        .run(&caller, CancellationToken::new())
-        .expect_err("the caller value is unavailable");
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &resources,
+        &OneFunction(published),
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&caller, CancellationToken::new())
+    .expect_err("the caller value is unavailable");
 
     assert!(matches!(error, RunError::InvalidPlan(_)));
     assert_eq!(resources.acquired.load(Ordering::SeqCst), 0);
@@ -4108,12 +4844,18 @@ fn call_copies_values_across_different_caller_and_callee_layouts() {
     publish_graph_results(&mut caller);
 
     let function = published_function(callee, "functions/callee", &[1], &[3]);
-    let result = RunExecutor::new(&kernels, &no_resources(), &OneFunction(function))
-        .run(&caller, CancellationToken::new())
-        .unwrap();
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &OneFunction(function),
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&caller, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(
-        result.values["answer"],
+        result.value_for_test("answer").unwrap(),
         RuntimeValue::from(Value::Integer(42))
     );
 }
@@ -4136,7 +4878,7 @@ fn function_call_preserves_data_series_artifact() {
                         .values([decimal("1"), Value::Null, decimal("3")])
                         .name("function payload")
                         .format("number")
-                        .build(ArtifactKind::Replayable)
+                        .build(ArtifactKind::Collected)
                         .unwrap(),
                 )])
             }),
@@ -4233,10 +4975,17 @@ fn function_call_preserves_data_series_artifact() {
         .result_contracts
         .values_mut()
         .for_each(|contract| *contract = series_contract.clone());
-    let result = RunExecutor::new(&kernels, &no_resources(), &OneFunction(function))
-        .run(&caller, CancellationToken::new())
-        .unwrap();
-    let artifact = require_data_series(&result.values["result"]).unwrap();
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &OneFunction(function),
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&caller, CancellationToken::new())
+    .unwrap();
+    let result_value = result.value_for_test("result").unwrap();
+    let artifact = require_data_series(&result_value).unwrap();
     let metadata = artifact.data_series_metadata().unwrap();
 
     assert_eq!(metadata.element_type, DataSeriesElementType::Float64);
@@ -4300,9 +5049,15 @@ fn call_rejects_stale_published_abi_before_entering_the_callee_frame() {
         },
     );
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &OneFunction(published))
-        .run(&caller, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &OneFunction(published),
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&caller, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(error, RunError::FunctionPlanFailed(_)));
     assert_eq!(calls.load(Ordering::SeqCst), 0);
@@ -4476,9 +5231,15 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
             .into_boxed_slice();
         let resources = no_resources();
 
-        let error = RunExecutor::new(&kernels, &resources, &OneFunction(published))
-            .run(&caller, CancellationToken::new())
-            .expect_err("invalid public Call bindings must fail preflight");
+        let error = RunExecutor::new(
+            &kernels,
+            &resources,
+            &OneFunction(published),
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .run(&caller, CancellationToken::new())
+        .expect_err("invalid public Call bindings must fail preflight");
 
         assert!(matches!(
             error,
@@ -4544,9 +5305,15 @@ fn call_preflight_allows_reusing_one_caller_source_for_distinct_parameters() {
         ])),
     );
 
-    RunExecutor::new(&kernels, &no_resources(), &OneFunction(published))
-        .run(&caller, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &OneFunction(published),
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&caller, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
@@ -4603,6 +5370,8 @@ fn call_uses_an_independent_frame() {
             &[],
             &[],
         )),
+        ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
     .run(&caller, CancellationToken::new())
     .unwrap();
@@ -4644,9 +5413,15 @@ fn effect_dependencies_determine_ready_queue_order() {
         after: OperationIndex::new(0),
     }]);
 
-    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(*events.lock().unwrap(), vec!["before", "after"]);
 }
@@ -4781,9 +5556,15 @@ fn parallel_scheduler_independent_cpu_operations_overlap() {
     let execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]);
 
     let run = thread::spawn(move || {
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_scheduling_policy(parallel_policy(2, 1, 1))
-            .run(&execution_plan, CancellationToken::new())
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_scheduling_policy(parallel_policy(2, 1, 1))
+        .run(&execution_plan, CancellationToken::new())
     });
     let first = started_rx.recv_timeout(Duration::from_secs(2));
     let second = started_rx.recv_timeout(Duration::from_secs(2));
@@ -4811,14 +5592,20 @@ fn assert_parallel_class_limit(class: WorkloadClass, policy: SchedulingPolicy) {
     let execution_plan = independent_parallel_plan(&[class, class, class]);
 
     let run = thread::spawn(move || {
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_scheduling_policy(policy)
-            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
-                if checkpoint == SchedulerCheckpoint::AdmissionBlocked(class) {
-                    let _ = blocked_tx.send(());
-                }
-            }))
-            .run(&execution_plan, CancellationToken::new())
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_scheduling_policy(policy)
+        .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+            if checkpoint == SchedulerCheckpoint::AdmissionBlocked(class) {
+                let _ = blocked_tx.send(());
+            }
+        }))
+        .run(&execution_plan, CancellationToken::new())
     });
     started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
     started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
@@ -4860,9 +5647,15 @@ fn parallel_scheduler_io_has_a_separate_budget() {
     let execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Io]);
 
     let run = thread::spawn(move || {
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_scheduling_policy(parallel_policy(1, 1, 1))
-            .run(&execution_plan, CancellationToken::new())
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_scheduling_policy(parallel_policy(1, 1, 1))
+        .run(&execution_plan, CancellationToken::new())
     });
     let first = started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
     let second = started_rx.recv_timeout(Duration::from_secs(2));
@@ -4886,14 +5679,20 @@ fn parallel_scheduler_exclusive_work_never_overlaps_other_work() {
     let execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Exclusive]);
 
     let run = thread::spawn(move || {
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_scheduling_policy(parallel_policy(2, 1, 1))
-            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
-                if checkpoint == SchedulerCheckpoint::AdmissionBlocked(WorkloadClass::Exclusive) {
-                    let _ = blocked_tx.send(());
-                }
-            }))
-            .run(&execution_plan, CancellationToken::new())
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_scheduling_policy(parallel_policy(2, 1, 1))
+        .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+            if checkpoint == SchedulerCheckpoint::AdmissionBlocked(WorkloadClass::Exclusive) {
+                let _ = blocked_tx.send(());
+            }
+        }))
+        .run(&execution_plan, CancellationToken::new())
     });
     assert_eq!(
         started_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
@@ -4934,9 +5733,15 @@ fn parallel_scheduler_io_is_not_starved_by_sustained_cpu_load() {
     ]);
 
     let run = thread::spawn(move || {
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_scheduling_policy(parallel_policy(1, 1, 1))
-            .run(&execution_plan, CancellationToken::new())
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_scheduling_policy(parallel_policy(1, 1, 1))
+        .run(&execution_plan, CancellationToken::new())
     });
     let first = started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
     let second = started_rx.recv_timeout(Duration::from_secs(2));
@@ -4976,10 +5781,16 @@ fn parallel_scheduler_reuses_a_policy_bounded_worker_pool() {
     }
     let execution_plan = independent_parallel_plan(&[WorkloadClass::Cpu; 8]);
 
-    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_scheduling_policy(parallel_policy(2, 1, 1))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_scheduling_policy(parallel_policy(2, 1, 1))
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert!(worker_threads.lock().unwrap().len() <= 4);
 }
@@ -5016,9 +5827,15 @@ fn parallel_scheduler_completion_order_does_not_change_value_mapping() {
     publish_graph_results(&mut execution_plan);
 
     let run = thread::spawn(move || {
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_scheduling_policy(parallel_policy(2, 1, 1))
-            .run(&execution_plan, CancellationToken::new())
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_scheduling_policy(parallel_policy(2, 1, 1))
+        .run(&execution_plan, CancellationToken::new())
     });
     started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
     started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
@@ -5030,8 +5847,14 @@ fn parallel_scheduler_completion_order_does_not_change_value_mapping() {
     gates[0].release();
     let result = run.join().unwrap().unwrap();
 
-    assert_eq!(result.values["first"], Value::Integer(0).into());
-    assert_eq!(result.values["second"], Value::Integer(1).into());
+    assert_eq!(
+        result.value_for_test("first").unwrap(),
+        Value::Integer(0).into()
+    );
+    assert_eq!(
+        result.value_for_test("second").unwrap(),
+        Value::Integer(1).into()
+    );
 }
 
 struct CancellationDrainKernel {
@@ -5143,9 +5966,15 @@ fn parallel_scheduler_ordinary_error_drains_and_joins_peer_worker() {
     let (kernels, execution_plan, entered, exited) =
         multi_worker_terminal_fixture(MultiWorkerTerminalKind::Error);
     let run = thread::spawn(move || {
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_scheduling_policy(parallel_policy(2, 1, 1))
-            .run(&execution_plan, CancellationToken::new())
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_scheduling_policy(parallel_policy(2, 1, 1))
+        .run(&execution_plan, CancellationToken::new())
     });
     entered.wait();
 
@@ -5163,9 +5992,15 @@ fn parallel_scheduler_panic_drains_and_joins_peer_worker_before_unwind() {
         multi_worker_terminal_fixture(MultiWorkerTerminalKind::Panic);
     let run = thread::spawn(move || {
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-                .with_scheduling_policy(parallel_policy(2, 1, 1))
-                .run(&execution_plan, CancellationToken::new());
+            let _ = RunExecutor::new(
+                &kernels,
+                &no_resources(),
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .with_scheduling_policy(parallel_policy(2, 1, 1))
+            .run(&execution_plan, CancellationToken::new());
         }))
     });
     entered.wait();
@@ -5194,9 +6029,15 @@ fn parallel_scheduler_cancellation_drains_all_workers() {
     let cancellation = CancellationToken::new();
     let run_cancellation = cancellation.clone();
     let run = thread::spawn(move || {
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_scheduling_policy(parallel_policy(2, 1, 1))
-            .run(&execution_plan, run_cancellation)
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_scheduling_policy(parallel_policy(2, 1, 1))
+        .run(&execution_plan, run_cancellation)
     });
     started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
     started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
@@ -5232,9 +6073,15 @@ fn duplicate_operation_in_one_activation_is_rejected() {
         ])),
     );
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(error, RunError::OperationAlreadyExecuted { .. }));
     assert!(calls.load(Ordering::SeqCst) <= 1);
@@ -5337,12 +6184,24 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
     );
     caller.provenance.basis.resource_versions = versions;
 
-    RunExecutor::new(&kernels, &no_resources(), &forward)
-        .run(&caller, CancellationToken::new())
-        .unwrap();
-    RunExecutor::new(&kernels, &no_resources(), &reverse)
-        .run(&caller, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &forward,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&caller, CancellationToken::new())
+    .unwrap();
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &reverse,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&caller, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(forward.plan_count(), reverse.plan_count());
     assert_eq!(calls.load(Ordering::SeqCst), 2);
@@ -5367,6 +6226,8 @@ fn recursive_calls_stop_at_the_configured_limit() {
         &KernelRegistry::new(),
         &resources,
         &OneFunction(Arc::clone(&recursive)),
+        ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
     .with_recursion_limit(3)
     .run(recursive.plan.as_ref(), CancellationToken::new())
@@ -5403,9 +6264,15 @@ fn kernel_failure_releases_resources_without_retry() {
     let resources = no_resources();
     let released = resources.released.clone();
 
-    let error = RunExecutor::new(&kernels, &resources, &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &resources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(error, RunError::KernelFailed { .. }));
     assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -5423,6 +6290,8 @@ fn retry_plan(kernel: &str, max_attempts: u32, backoff: Duration) -> ExecutionPl
         idempotent: true,
         policy: Some(retry_policy(max_attempts, backoff)),
     };
+    let output = stable_output("retry_result");
+    planned.outputs[0].public_output = Some(output.clone());
     let mut execution_plan = plan(
         vec![planned],
         1,
@@ -5432,7 +6301,7 @@ fn retry_plan(kernel: &str, max_attempts: u32, backoff: Duration) -> ExecutionPl
     );
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
-        output: stable_output("retry_result"),
+        output,
         value: ValueRef::new(0),
     }]);
     publish_graph_results(&mut execution_plan);
@@ -5528,18 +6397,24 @@ fn retry_delayed_queue_drains_bounded_completions_during_long_backoff() {
 
     thread::scope(|scope| {
         let run = scope.spawn(|| {
-            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-                .with_scheduling_policy(parallel_policy(2, 1, 1))
-                .with_test_checkpoint(Arc::new(move |checkpoint, _| {
-                    if matches!(checkpoint, SchedulerCheckpoint::RetryBackoff { .. })
-                        && let Some(release) = release_at_backoff.lock().unwrap().take()
-                    {
-                        for _ in 0..6 {
-                            release.send(()).unwrap();
-                        }
+            RunExecutor::new(
+                &kernels,
+                &no_resources(),
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .with_scheduling_policy(parallel_policy(2, 1, 1))
+            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                if matches!(checkpoint, SchedulerCheckpoint::RetryBackoff { .. })
+                    && let Some(release) = release_at_backoff.lock().unwrap().take()
+                {
+                    for _ in 0..6 {
+                        release.send(()).unwrap();
                     }
-                }))
-                .run(&execution_plan, cancellation)
+                }
+            }))
+            .run(&execution_plan, cancellation)
         });
         for _ in 0..6 {
             completed_rx
@@ -5587,17 +6462,23 @@ fn retry_delayed_queue_allows_exclusive_effect_progress() {
 
     thread::scope(|scope| {
         let run = scope.spawn(|| {
-            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-                .with_scheduling_policy(parallel_policy(2, 1, 1))
-                .with_test_checkpoint(Arc::new(move |checkpoint, _| {
-                    if matches!(checkpoint, SchedulerCheckpoint::RetryBackoff { .. })
-                        && let Some(release) = release_at_backoff.lock().unwrap().take()
-                    {
-                        release.send(()).unwrap();
-                        release.send(()).unwrap();
-                    }
-                }))
-                .run(&execution_plan, cancellation)
+            RunExecutor::new(
+                &kernels,
+                &no_resources(),
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .with_scheduling_policy(parallel_policy(2, 1, 1))
+            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                if matches!(checkpoint, SchedulerCheckpoint::RetryBackoff { .. })
+                    && let Some(release) = release_at_backoff.lock().unwrap().take()
+                {
+                    release.send(()).unwrap();
+                    release.send(()).unwrap();
+                }
+            }))
+            .run(&execution_plan, cancellation)
         });
         completed_rx
             .recv_timeout(Duration::from_millis(500))
@@ -5703,37 +6584,43 @@ fn run_initial_admission_rejection(rejection: AdmissionRejection) {
     let observed_rollback = Arc::clone(&rollback);
     let events = RecordingRunEvents::default();
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_scheduling_policy(parallel_policy(2, 1, 1))
-        .with_deadline(admission_rejection_deadline(rejection))
-        .with_event_sink(&events)
-        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| match checkpoint {
-            SchedulerCheckpoint::AdmissionBookkept {
-                operation, attempt, ..
-            } if operation == OperationIndex::new(1) && attempt == AttemptId::initial() => {
-                reject_admission(rejection, cancellation);
-            }
-            SchedulerCheckpoint::AdmissionRolledBack {
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_scheduling_policy(parallel_policy(2, 1, 1))
+    .with_deadline(admission_rejection_deadline(rejection))
+    .with_event_sink(&events)
+    .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| match checkpoint {
+        SchedulerCheckpoint::AdmissionBookkept {
+            operation, attempt, ..
+        } if operation == OperationIndex::new(1) && attempt == AttemptId::initial() => {
+            reject_admission(rejection, cancellation);
+        }
+        SchedulerCheckpoint::AdmissionRolledBack {
+            operation,
+            attempt,
+            running_count,
+            tracked_running,
+            memo_owned,
+            frame_attempt,
+        } if operation == OperationIndex::new(1) => {
+            *observed_rollback.lock().unwrap() = Some(AdmissionRollbackObservation {
                 operation,
                 attempt,
                 running_count,
                 tracked_running,
                 memo_owned,
                 frame_attempt,
-            } if operation == OperationIndex::new(1) => {
-                *observed_rollback.lock().unwrap() = Some(AdmissionRollbackObservation {
-                    operation,
-                    attempt,
-                    running_count,
-                    tracked_running,
-                    memo_owned,
-                    frame_attempt,
-                });
-            }
-            _ => {}
-        }))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+            });
+        }
+        _ => {}
+    }))
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(
         (rejection, error),
@@ -5807,37 +6694,43 @@ fn run_promoted_retry_admission_rejection(rejection: AdmissionRejection) {
     let observed_rollback = Arc::clone(&rollback);
     let events = RecordingRunEvents::default();
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_scheduling_policy(parallel_policy(2, 1, 1))
-        .with_deadline(admission_rejection_deadline(rejection))
-        .with_event_sink(&events)
-        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| match checkpoint {
-            SchedulerCheckpoint::AdmissionBookkept {
-                operation, attempt, ..
-            } if operation == OperationIndex::new(0) && attempt == AttemptId::new(2) => {
-                reject_admission(rejection, cancellation);
-            }
-            SchedulerCheckpoint::AdmissionRolledBack {
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_scheduling_policy(parallel_policy(2, 1, 1))
+    .with_deadline(admission_rejection_deadline(rejection))
+    .with_event_sink(&events)
+    .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| match checkpoint {
+        SchedulerCheckpoint::AdmissionBookkept {
+            operation, attempt, ..
+        } if operation == OperationIndex::new(0) && attempt == AttemptId::new(2) => {
+            reject_admission(rejection, cancellation);
+        }
+        SchedulerCheckpoint::AdmissionRolledBack {
+            operation,
+            attempt,
+            running_count,
+            tracked_running,
+            memo_owned,
+            frame_attempt,
+        } if operation == OperationIndex::new(0) => {
+            *observed_rollback.lock().unwrap() = Some(AdmissionRollbackObservation {
                 operation,
                 attempt,
                 running_count,
                 tracked_running,
                 memo_owned,
                 frame_attempt,
-            } if operation == OperationIndex::new(0) => {
-                *observed_rollback.lock().unwrap() = Some(AdmissionRollbackObservation {
-                    operation,
-                    attempt,
-                    running_count,
-                    tracked_running,
-                    memo_owned,
-                    frame_attempt,
-                });
-            }
-            _ => {}
-        }))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+            });
+        }
+        _ => {}
+    }))
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(
         (rejection, error),
@@ -5891,8 +6784,14 @@ fn activation_allocator_exhaustion_is_typed_without_global_contamination() {
     let execution_plan = plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([])));
     let kernels = KernelRegistry::new();
     let resources = no_resources();
-    let executor = RunExecutor::new(&kernels, &resources, &NoFunctions)
-        .with_activation_allocator_for_test(&allocator);
+    let executor = RunExecutor::new(
+        &kernels,
+        &resources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_activation_allocator_for_test(&allocator);
 
     executor
         .run(&execution_plan, CancellationToken::new())
@@ -5953,15 +6852,24 @@ fn retry_transient_failure_then_success_publishes_only_final_output() {
 
     let execution_plan = retry_plan("retry_transient_success", 3, Duration::ZERO);
     execution_plan.validate().unwrap();
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_trace_sink(&trace)
-        .with_result_store(&results)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_trace_sink(&trace)
+    .with_result_store(&results)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(calls.load(Ordering::SeqCst), 2);
-    assert_eq!(result.values["result"], Value::Integer(42).into());
+    assert_eq!(
+        result.value_for_test("result").unwrap(),
+        Value::Integer(42).into()
+    );
     let events = events.0.lock().unwrap();
     assert_eq!(
         events
@@ -6020,12 +6928,18 @@ fn retry_permanent_error_never_retries() {
         )
         .unwrap();
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(
-            &retry_plan("retry_permanent", 3, Duration::ZERO),
-            CancellationToken::new(),
-        )
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(
+        &retry_plan("retry_permanent", 3, Duration::ZERO),
+        CancellationToken::new(),
+    )
+    .unwrap_err();
 
     assert!(matches!(error, RunError::KernelFailed { .. }));
     assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -6046,12 +6960,18 @@ fn retry_max_attempts_includes_initial_attempt() {
         )
         .unwrap();
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(
-            &retry_plan("retry_exact_max", 3, Duration::ZERO),
-            CancellationToken::new(),
-        )
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(
+        &retry_plan("retry_exact_max", 3, Duration::ZERO),
+        CancellationToken::new(),
+    )
+    .unwrap_err();
 
     assert!(matches!(error, RunError::KernelFailed { .. }));
     assert_eq!(calls.load(Ordering::SeqCst), 3);
@@ -6073,14 +6993,21 @@ fn retry_insufficient_deadline_returns_typed_deadline_without_next_attempt() {
         .unwrap();
 
     let trace = RecordingTrace::default();
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_trace_sink(&trace)
-        .with_deadline(RunDeadline::after(Duration::from_millis(10)))
-        .run(
-            &retry_plan("retry_deadline", 3, Duration::from_millis(100)),
-            CancellationToken::new(),
-        )
-        .unwrap_err();
+    let results = ResultStore::new();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        results.clone(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_trace_sink(&trace)
+    .with_deadline(RunDeadline::after(Duration::from_millis(10)))
+    .run(
+        &retry_plan("retry_deadline", 3, Duration::from_millis(100)),
+        CancellationToken::new(),
+    )
+    .unwrap_err();
 
     assert_eq!(
         error,
@@ -6089,6 +7016,11 @@ fn retry_insufficient_deadline_returns_typed_deadline_without_next_attempt() {
         }
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let result_id = results.pin_history(&stable_output("retry_result"))[0].result_id;
+    assert!(matches!(
+        results.result(result_id).unwrap().state,
+        ResultState::Failed(_)
+    ));
     let spans = trace.0.lock().unwrap();
     assert!(spans.iter().any(|span| {
         span.kind == SpanKind::OperationAttempt && span.outcome == SpanOutcome::Retry
@@ -6115,21 +7047,33 @@ fn retry_cancellation_during_backoff_wakes_promptly() {
         .unwrap();
     let cancellation = CancellationToken::new();
     let started = Instant::now();
+    let results = ResultStore::new();
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_test_checkpoint(Arc::new(|checkpoint, cancellation| {
-            if matches!(checkpoint, SchedulerCheckpoint::RetryBackoff { .. }) {
-                cancellation.cancel();
-            }
-        }))
-        .run(
-            &retry_plan("retry_cancel_backoff", 3, Duration::from_secs(5)),
-            cancellation,
-        )
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        results.clone(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_test_checkpoint(Arc::new(|checkpoint, cancellation| {
+        if matches!(checkpoint, SchedulerCheckpoint::RetryBackoff { .. }) {
+            cancellation.cancel();
+        }
+    }))
+    .run(
+        &retry_plan("retry_cancel_backoff", 3, Duration::from_secs(5)),
+        cancellation,
+    )
+    .unwrap_err();
 
     assert_eq!(error, RunError::Cancelled);
     assert!(started.elapsed() < Duration::from_millis(200));
+    let result_id = results.pin_history(&stable_output("retry_result"))[0].result_id;
+    assert!(matches!(
+        results.result(result_id).unwrap().state,
+        ResultState::Cancelled
+    ));
 }
 
 struct RetryIdentityKernel {
@@ -6153,7 +7097,7 @@ impl Kernel for RetryIdentityKernel {
 }
 
 #[test]
-fn retry_attempts_use_distinct_attempt_and_activation_with_stable_operation() {
+fn retry_attempts_preserve_activation_and_result_provenance() {
     let activations = Arc::new(Mutex::new(Vec::new()));
     let attempts = Arc::new(Mutex::new(Vec::new()));
     let mut kernels = KernelRegistry::new();
@@ -6168,31 +7112,38 @@ fn retry_attempts_use_distinct_attempt_and_activation_with_stable_operation() {
         .unwrap();
     let observed_attempts = Arc::clone(&attempts);
     let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
 
-    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_test_checkpoint(Arc::new(move |checkpoint, _| {
-            if let SchedulerCheckpoint::AttemptPrepared {
-                operation,
-                activation,
-                attempt,
-            } = checkpoint
-            {
-                observed_attempts
-                    .lock()
-                    .unwrap()
-                    .push((operation, activation, attempt));
-            }
-        }))
-        .run(
-            &retry_plan("retry_identity", 2, Duration::ZERO),
-            CancellationToken::new(),
-        )
-        .unwrap();
+    let run_result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        results.clone(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+        if let SchedulerCheckpoint::AttemptPrepared {
+            operation,
+            activation,
+            attempt,
+        } = checkpoint
+        {
+            observed_attempts
+                .lock()
+                .unwrap()
+                .push((operation, activation, attempt));
+        }
+    }))
+    .run(
+        &retry_plan("retry_identity", 2, Duration::ZERO),
+        CancellationToken::new(),
+    )
+    .unwrap();
 
     let activations = activations.lock().unwrap();
     assert_eq!(activations.len(), 2);
-    assert_ne!(activations[0], activations[1]);
+    assert_eq!(activations[0], activations[1]);
     let attempts = attempts.lock().unwrap();
     assert_eq!(attempts.len(), 2);
     assert_eq!(attempts[0].0, OperationIndex::new(0));
@@ -6200,18 +7151,27 @@ fn retry_attempts_use_distinct_attempt_and_activation_with_stable_operation() {
     assert_eq!(attempts[0].2, AttemptId::new(1));
     assert_eq!(attempts[1].2, AttemptId::new(2));
     assert_eq!(attempts[0].1, activations[0]);
-    assert_eq!(attempts[1].1, activations[1]);
+    assert_eq!(attempts[1].1, activations[0]);
+    let stored = results.result(run_result.result_ids["result"]).unwrap();
+    assert_eq!(stored.provenance.activation_id, activations[0]);
     let event_attempts = events
         .0
         .lock()
         .unwrap()
         .iter()
         .filter_map(|event| match event.kind {
-            RunEventKind::OperationStarted { attempt_id, .. } => Some(attempt_id),
+            RunEventKind::OperationStarted {
+                activation_id,
+                attempt_id,
+                ..
+            } => Some((activation_id, attempt_id)),
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert_eq!(event_attempts, vec![1, 2]);
+    assert_eq!(
+        event_attempts,
+        vec![(activations[0].get(), 1), (activations[0].get(), 2)]
+    );
 }
 
 #[test]
@@ -6250,9 +7210,15 @@ fn retry_runtime_defense_rejects_malformed_side_effect_plan() {
             if *operation == OperationIndex::new(0))
             })
     );
-    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(error, RunError::InvalidPlan(_)));
 }
@@ -6285,6 +7251,8 @@ fn call_failure_releases_caller_and_callee_resources() {
         &KernelRegistry::new(),
         &resources,
         &OneFunction(published_function(callee, "functions/callee", &[], &[])),
+        ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
     .run(&caller, CancellationToken::new())
     .unwrap_err();
@@ -6438,10 +7406,16 @@ fn run_relational_backend_trace(
     publish_graph_results(&mut execution_plan);
     let trace = RecordingTrace::default();
 
-    let result = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
-        .with_trace_sink(&trace)
-        .run(&execution_plan, CancellationToken::new());
+    let result = RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_relational_backends(&relational)
+    .with_trace_sink(&trace)
+    .run(&execution_plan, CancellationToken::new());
     let events = trace.0.into_inner().unwrap();
     (result, execution_plan, events)
 }
@@ -6497,10 +7471,16 @@ fn relational_cancellation_installed_before_ordinary_error_wins() {
         Box::new([]),
     )]);
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_relational_backends(&relational)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert_eq!(error, RunError::Cancelled);
 }
@@ -6604,17 +7584,23 @@ fn deadline_before_envelope_receive_forwards_worker_spans_once() {
 
     let result = thread::scope(|scope| {
         let run = scope.spawn(|| {
-            RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-                .with_relational_backends(&relational)
-                .with_trace_sink(&trace)
-                .with_deadline(RunDeadline::after(Duration::from_millis(20)))
-                .with_test_checkpoint(Arc::new(move |checkpoint, _| {
-                    if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
-                        produced_tx.send(()).unwrap();
-                        checkpoint_release.lock().unwrap().recv().unwrap();
-                    }
-                }))
-                .run(&execution_plan, CancellationToken::new())
+            RunExecutor::new(
+                &KernelRegistry::new(),
+                &no_resources(),
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .with_relational_backends(&relational)
+            .with_trace_sink(&trace)
+            .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+                    produced_tx.send(()).unwrap();
+                    checkpoint_release.lock().unwrap().recv().unwrap();
+                }
+            }))
+            .run(&execution_plan, CancellationToken::new())
         });
         produced_rx.recv().unwrap();
         thread::sleep(Duration::from_millis(40));
@@ -6650,11 +7636,17 @@ fn completion_after_deadline_forwards_worker_spans_once() {
 
     let result = thread::scope(|scope| {
         let run = scope.spawn(|| {
-            RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-                .with_relational_backends(&relational)
-                .with_trace_sink(&trace)
-                .with_deadline(RunDeadline::after(Duration::from_millis(20)))
-                .run(&execution_plan, CancellationToken::new())
+            RunExecutor::new(
+                &KernelRegistry::new(),
+                &no_resources(),
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .with_relational_backends(&relational)
+            .with_trace_sink(&trace)
+            .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+            .run(&execution_plan, CancellationToken::new())
         });
         started_rx.recv().unwrap();
         thread::sleep(Duration::from_millis(40));
@@ -6693,10 +7685,16 @@ fn retryable_failure_after_deadline_keeps_retry_attempt_truth() {
 
     let result = thread::scope(|scope| {
         let run = scope.spawn(|| {
-            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-                .with_trace_sink(&trace)
-                .with_deadline(RunDeadline::after(Duration::from_millis(20)))
-                .run(&execution_plan, CancellationToken::new())
+            RunExecutor::new(
+                &kernels,
+                &no_resources(),
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .with_trace_sink(&trace)
+            .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+            .run(&execution_plan, CancellationToken::new())
         });
         started_rx.recv().unwrap();
         thread::sleep(Duration::from_millis(40));
@@ -6737,10 +7735,16 @@ fn success_completed_after_cancellation_rewrites_attempt_but_preserves_adapter_t
 
     let result = thread::scope(|scope| {
         let run = scope.spawn(|| {
-            RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-                .with_relational_backends(&relational)
-                .with_trace_sink(&trace)
-                .run(&execution_plan, run_cancellation)
+            RunExecutor::new(
+                &KernelRegistry::new(),
+                &no_resources(),
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .with_relational_backends(&relational)
+            .with_trace_sink(&trace)
+            .run(&execution_plan, run_cancellation)
         });
         started_rx.recv().unwrap();
         cancellation.cancel();
@@ -6784,15 +7788,21 @@ fn success_completed_before_cancellation_keeps_attempt_truth_while_envelope_drai
 
     let result = thread::scope(|scope| {
         let run = scope.spawn(|| {
-            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-                .with_trace_sink(&trace)
-                .with_test_checkpoint(Arc::new(move |checkpoint, _| {
-                    if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
-                        produced_tx.send(()).unwrap();
-                        checkpoint_release.lock().unwrap().recv().unwrap();
-                    }
-                }))
-                .run(&execution_plan, run_cancellation)
+            RunExecutor::new(
+                &kernels,
+                &no_resources(),
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .with_trace_sink(&trace)
+            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+                    produced_tx.send(()).unwrap();
+                    checkpoint_release.lock().unwrap().recv().unwrap();
+                }
+            }))
+            .run(&execution_plan, run_cancellation)
         });
         produced_rx.recv().unwrap();
         cancellation.cancel();
@@ -6845,8 +7855,14 @@ fn panic_attempt_truth_survives_deadline_and_cancellation() {
             let run = scope.spawn(|| {
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     let resources = no_resources();
-                    let mut executor = RunExecutor::new(&kernels, &resources, &NoFunctions)
-                        .with_trace_sink(&trace);
+                    let mut executor = RunExecutor::new(
+                        &kernels,
+                        &resources,
+                        &NoFunctions,
+                        crate::node_system::runtime::ResultStore::new(),
+                        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+                    )
+                    .with_trace_sink(&trace);
                     if terminal == "deadline" {
                         executor =
                             executor.with_deadline(RunDeadline::after(Duration::from_millis(20)));
@@ -6908,19 +7924,24 @@ fn peer_ordinary_error_does_not_rewrite_drained_success_attempt() {
     let checkpoint_release = Arc::clone(&release_rx);
     let error = thread::scope(|scope| {
         let run = scope.spawn(|| {
-            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-                .with_trace_sink(&trace)
-                .with_scheduling_policy(parallel_policy(2, 1, 1))
-                .with_test_checkpoint(Arc::new(move |checkpoint, _| {
-                    if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced
-                        && checkpoint_thread.lock().unwrap().as_ref()
-                            == Some(&thread::current().id())
-                    {
-                        produced_tx.send(()).unwrap();
-                        checkpoint_release.lock().unwrap().recv().unwrap();
-                    }
-                }))
-                .run(&execution_plan, CancellationToken::new())
+            RunExecutor::new(
+                &kernels,
+                &no_resources(),
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .with_trace_sink(&trace)
+            .with_scheduling_policy(parallel_policy(2, 1, 1))
+            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced
+                    && checkpoint_thread.lock().unwrap().as_ref() == Some(&thread::current().id())
+                {
+                    produced_tx.send(()).unwrap();
+                    checkpoint_release.lock().unwrap().recv().unwrap();
+                }
+            }))
+            .run(&execution_plan, CancellationToken::new())
         });
         entered.wait();
         produced_rx.recv().unwrap();
@@ -6967,11 +7988,17 @@ fn parallel_scheduler_workers_return_relational_trace_to_owner_thread() {
     )]);
     let trace = OwnerThreadTrace::current();
 
-    RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
-        .with_trace_sink(&trace)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_relational_backends(&relational)
+    .with_trace_sink(&trace)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(trace.off_owner_calls.load(Ordering::SeqCst), 0);
     assert_eq!(
@@ -7140,18 +8167,23 @@ fn assert_production_source_cancellation(
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &provider, &NoFunctions)
-        .with_relational_backends(&relational)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &provider,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_relational_backends(&relational)
+    .with_event_sink(&events)
+    .with_result_store(&results)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert_eq!(error, RunError::Cancelled);
     assert_eq!(observed.lock().unwrap().as_slice(), expected_checkpoints);
     assert_eq!(scan_limits.lock().unwrap().as_slice(), expected_scan_limits);
     assert_cancelled_without_completion(&events);
-    assert_eq!(results.source_count(), 0);
     assert_eq!(lease_observer.acquired(), lease_observer.dropped());
     assert_eq!(lease_observer.active(), 0);
 }
@@ -7252,10 +8284,16 @@ fn invalid_pushdown_plan_is_rejected_before_relational_backend_execution() {
     }]);
     execution_plan.relational_subplans = Box::new([subplan]);
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_relational_backends(&relational)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(error, RunError::InvalidPlan(_)));
     assert!(executions.lock().unwrap().is_empty());
@@ -7289,14 +8327,20 @@ fn relational_operation_executes_compiled_subplan_by_index() {
     }]);
     publish_graph_results(&mut execution_plan);
 
-    let result = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    let result = RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_relational_backends(&relational)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(*executions.lock().unwrap(), vec![Box::<str>::from("sales")]);
     assert_eq!(
-        result.values["result"],
+        result.value_for_test("result").unwrap(),
         RuntimeValue::from(Value::Integer(41))
     );
 }
@@ -7331,12 +8375,18 @@ fn failed_success_finalizer_publishes_no_result_or_completion() {
         ))
     };
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .with_success_finalizer(&finalizer)
-        .run(&execution_plan, CancellationToken::new())
-        .expect_err("failed authoritative finalization must fail the run");
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_result_store(&results)
+    .with_success_finalizer(&finalizer)
+    .run(&execution_plan, CancellationToken::new())
+    .expect_err("failed authoritative finalization must fail the run");
 
     assert!(matches!(error, RunError::ResourceSnapshotMismatch(_)));
     let recorded = events.0.lock().unwrap();
@@ -7353,320 +8403,86 @@ fn failed_success_finalizer_publishes_no_result_or_completion() {
             .iter()
             .all(|event| event.kind != RunEventKind::RunCompleted)
     );
-    assert!(recorded.iter().all(|event| !matches!(
-        event.kind,
-        RunEventKind::ResultReady { .. } | RunEventKind::OutputReady { .. }
-    )));
-    assert_eq!(results.source_count(), 0);
-}
-
-fn publication_transaction_fixture() -> (KernelRegistry, ExecutionPlan) {
-    let mut kernels = KernelRegistry::new();
-    kernels
-        .register(
-            id("transactional_value", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
-        )
-        .unwrap();
-    let mut execution_plan = plan(
-        vec![operation("transactional_value", &[], &[0])],
-        1,
-        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
-            0,
-        ))])),
-    );
-    execution_plan.results = Box::new([PlanResult {
-        name: "value".into(),
-        output: stable_output("transactional_value"),
-        value: ValueRef::new(0),
-    }]);
-    publish_graph_results(&mut execution_plan);
-    (kernels, execution_plan)
-}
-
-fn seed_result_source(
-    kernels: &KernelRegistry,
-    execution_plan: &ExecutionPlan,
-    results: &ResultStore,
-) -> ResultSourceId {
-    let events = RecordingRunEvents::default();
-    RunExecutor::new(kernels, &no_resources(), &NoFunctions)
-        .with_result_store(results)
-        .with_event_sink(&events)
-        .run(execution_plan, CancellationToken::new())
-        .unwrap();
-    events
-        .0
-        .lock()
-        .unwrap()
+    let group_events = recorded
         .iter()
-        .find_map(|event| match event.kind {
-            RunEventKind::ResultReady { source_id, .. } => Some(source_id),
-            _ => None,
-        })
-        .expect("seed run publishes one result source")
-}
-
-#[test]
-fn result_publication_error_preserves_capacity_eviction_candidate() {
-    let trace = RecordingTrace::default();
-    let (kernels, execution_plan) = publication_transaction_fixture();
-    let results = ResultStore::with_capacity(1);
-    let prior_source = seed_result_source(&kernels, &execution_plan, &results);
-    let finalizer = |_: &mut RunResult, _: &CancellationToken, _: Option<RunDeadline>| {
-        Err(RunError::ResourceSnapshotMismatch(
-            "finalizer failed".into(),
-        ))
-    };
-
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_result_store(&results)
-        .with_atomic_success_finalizer(&finalizer)
-        .with_trace_sink(&trace)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
-
-    assert!(matches!(error, RunError::ResourceSnapshotMismatch(_)));
-    assert_run_phase_coverage(
-        &trace.0.lock().unwrap(),
-        SpanOutcome::Success,
-        SpanOutcome::Error,
-    );
-    assert_eq!(results.source_count(), 1);
-    assert_eq!(results.artifact_count_for_test(), 1);
-    assert!(results.descriptor(prior_source).is_some());
-}
-
-#[test]
-fn successful_atomic_result_publication_is_invisible_and_non_evicting_until_final_gate() {
-    let (kernels, execution_plan) = publication_transaction_fixture();
-    let results = ResultStore::with_capacity(1);
-    let prior_source = seed_result_source(&kernels, &execution_plan, &results);
-    let finalizer = |_: &mut RunResult, _: &CancellationToken, _: Option<RunDeadline>| Ok(());
-
-    RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_result_store(&results)
-        .with_atomic_success_finalizer(&finalizer)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
-
-    assert_eq!(results.source_count(), 1);
-    assert_eq!(results.artifact_count_for_test(), 1);
-    assert!(results.descriptor(prior_source).is_none());
-}
-
-#[test]
-fn result_publication_deadline_preserves_capacity_eviction_candidate() {
-    let (kernels, execution_plan) = publication_transaction_fixture();
-    let results = ResultStore::with_capacity(1);
-    let prior_source = seed_result_source(&kernels, &execution_plan, &results);
-    let finalizer =
-        |_: &mut RunResult, cancellation: &CancellationToken, deadline: Option<RunDeadline>| {
-            thread::sleep(Duration::from_millis(20));
-            deadline
-                .expect("deadline configured")
-                .check(cancellation, RunPhase::ResultPublication)
-        };
-
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_result_store(&results)
-        .with_atomic_success_finalizer(&finalizer)
-        .with_deadline(RunDeadline::after(Duration::from_millis(5)))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
-
-    assert_eq!(
-        error,
-        RunError::DeadlineExceeded {
-            phase: RunPhase::ResultPublication,
+        .filter(|event| matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
+        .collect::<Vec<_>>();
+    assert_eq!(group_events.len(), 1);
+    assert!(matches!(
+        group_events[0].kind,
+        RunEventKind::ResultGroupChanged {
+            state: ResultStateKind::Ready,
+            ..
         }
+    ));
+    assert!(
+        recorded
+            .iter()
+            .all(|event| !matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
     );
-    assert_eq!(results.source_count(), 1);
-    assert_eq!(results.artifact_count_for_test(), 1);
-    assert!(results.descriptor(prior_source).is_some());
 }
 
 #[test]
-fn result_publication_finalizer_panic_preserves_prior_source_and_leaks_no_handle() {
-    let (kernels, execution_plan) = publication_transaction_fixture();
-    let results = ResultStore::with_capacity(1);
-    let prior_source = seed_result_source(&kernels, &execution_plan, &results);
+fn repeated_terminal_transition_emits_exactly_one_result_group_changed() {
+    let execution_plan = plan(
+        Vec::new(),
+        1,
+        StructuredControlRegion::Sequence(Box::new([])),
+    );
     let events = RecordingRunEvents::default();
-    let finalizer = |_: &mut RunResult, _: &CancellationToken, _: Option<RunDeadline>| {
-        panic!("finalizer panic sentinel")
+    let results = ResultStore::new();
+    let activation_id = ActivationId::next().unwrap();
+    let group = results
+        .create_pending_group(
+            ActivationProvenance {
+                run_id: RunId::new(1),
+                activation_id,
+                graph_path: execution_plan.provenance.graph_path.clone(),
+                graph_revision: execution_plan.provenance.basis.graph_revision,
+                node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+                created_at_ms: 1,
+                usage: ResultUsage::Produced,
+            },
+            &[PendingOutputDescriptor {
+                value: ValueRef::new(0),
+                output: Some(stable_output("value")),
+                presentation: ResultPresentation::Inspector,
+                contract: PlannedValueContract::opaque(),
+            }],
+        )
+        .unwrap();
+    let kernels = KernelRegistry::new();
+    let resources = no_resources();
+    let executor = RunExecutor::new(
+        &kernels,
+        &resources,
+        &NoFunctions,
+        results,
+        Arc::new(SessionMemoization::new()),
+    )
+    .with_event_sink(&events);
+    let failure = RunError::KernelFailed {
+        operation: OperationIndex::new(0),
+        kind: KernelErrorKind::Permanent,
+        message: "failed once".into(),
     };
 
-    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _ = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_result_store(&results)
-            .with_event_sink(&events)
-            .with_atomic_success_finalizer(&finalizer)
-            .run(&execution_plan, CancellationToken::new());
-    }));
+    executor.transition_group_terminal_for_test(&execution_plan, &group, &failure);
+    executor.transition_group_terminal_for_test(&execution_plan, &group, &failure);
 
-    assert!(panic.is_err());
-    assert_eq!(results.source_count(), 1);
-    assert_eq!(results.artifact_count_for_test(), 1);
-    assert!(results.descriptor(prior_source).is_some());
-    assert!(events.0.lock().unwrap().iter().all(|event| !matches!(
-        event.kind,
-        RunEventKind::ResultReady { .. }
-            | RunEventKind::OutputReady { .. }
-            | RunEventKind::RunCompleted
-    )));
-}
-
-#[test]
-fn cancellation_after_first_multi_result_source_is_staged_publishes_nothing() {
-    use super::scheduler::SchedulerCheckpoint;
-
-    let mut kernels = KernelRegistry::new();
-    kernels
-        .register(
-            id("pair", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| {
-                Ok(vec![
-                    RuntimeValue::from(Value::Integer(1)),
-                    RuntimeValue::from(Value::Integer(2)),
-                ])
-            }),
-        )
-        .unwrap();
-    let mut execution_plan = plan(
-        vec![operation("pair", &[], &[0, 1])],
-        2,
-        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
-            0,
-        ))])),
-    );
-    execution_plan.results = Box::new([
-        PlanResult {
-            name: "first".into(),
-            output: stable_output("first"),
-            value: ValueRef::new(0),
-        },
-        PlanResult {
-            name: "second".into(),
-            output: stable_output("second"),
-            value: ValueRef::new(1),
-        },
-    ]);
-    execution_plan.publications = Box::new([
-        PlannedPublication::GraphResult {
-            name: "first".into(),
-            output: stable_output("first"),
-            value: ValueRef::new(0),
-        },
-        PlannedPublication::GraphResult {
-            name: "second".into(),
-            output: stable_output("second"),
-            value: ValueRef::new(1),
-        },
-    ]);
-    let events = RecordingRunEvents::default();
-    let results = ResultStore::with_capacity(1);
-    let old_run_id = RunId::new(90_001);
-    let old_correlation =
-        CorrelationContext::compile(&execution_plan.provenance).for_run(old_run_id, None);
-    let old_descriptor = results.publish_snapshot(
-        old_run_id,
-        old_correlation,
-        execution_plan.provenance.basis.clone(),
-        "committed",
-        ArtifactSnapshot::Value(Value::String("keep".into())),
-    );
-    let old_value = results.value(old_descriptor.source_id).unwrap();
-    let staged = Arc::new(AtomicUsize::new(0));
-    let observed = Arc::clone(&staged);
-
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
-            if checkpoint == SchedulerCheckpoint::ResultSourceStaged
-                && observed.fetch_add(1, Ordering::SeqCst) == 0
-            {
-                cancellation.cancel();
-            }
-        }))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
-
-    assert_eq!(error, RunError::Cancelled);
-    assert_eq!(staged.load(Ordering::SeqCst), 1);
-    assert_cancelled_without_completion(&events);
-    assert_eq!(results.source_count(), 1);
-    assert_eq!(
-        results.descriptor(old_descriptor.source_id),
-        Some(old_descriptor.clone())
-    );
-    assert_eq!(results.value(old_descriptor.source_id), Some(old_value));
-}
-
-#[test]
-fn cancellation_after_operation_output_preserves_an_older_committed_source() {
-    let cancellation = CancellationToken::new();
-    let kernel_cancellation = cancellation.clone();
-    let mut kernels = KernelRegistry::new();
-    kernels
-        .register(
-            id("value", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
-        )
-        .unwrap();
-    kernels
-        .register(
-            id("cancel", KernelHandle::new),
-            FnKernel(move |_: &[RuntimeValue]| {
-                kernel_cancellation.cancel();
-                Ok(Vec::new())
-            }),
-        )
-        .unwrap();
-    let execution_plan = plan(
-        vec![operation("value", &[], &[0]), operation("cancel", &[], &[])],
-        1,
-        StructuredControlRegion::Sequence(Box::new([
-            ControlStep::Operation(OperationIndex::new(0)),
-            ControlStep::Operation(OperationIndex::new(1)),
-        ])),
-    );
-    let events = RecordingRunEvents::default();
-    let results = ResultStore::with_capacity(1);
-    let old_run_id = RunId::new(90_002);
-    let old_correlation =
-        CorrelationContext::compile(&execution_plan.provenance).for_run(old_run_id, None);
-    let old_descriptor = results.publish_snapshot(
-        old_run_id,
-        old_correlation,
-        execution_plan.provenance.basis.clone(),
-        "committed",
-        ArtifactSnapshot::Value(Value::String("keep".into())),
-    );
-    let old_value = results.value(old_descriptor.source_id).unwrap();
-
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .run(&execution_plan, cancellation)
-        .unwrap_err();
-
-    assert_eq!(error, RunError::Cancelled);
-    assert_cancelled_without_completion(&events);
-    assert!(
-        events
-            .0
-            .lock()
-            .unwrap()
-            .iter()
-            .all(|event| { serde_json::to_value(&event.kind).unwrap()["type"] != "valueReady" })
-    );
-    assert_eq!(results.source_count(), 1);
-    assert_eq!(
-        results.descriptor(old_descriptor.source_id),
-        Some(old_descriptor.clone())
-    );
-    assert_eq!(results.value(old_descriptor.source_id), Some(old_value));
+    let recorded = events.0.lock().unwrap();
+    let group_events = recorded
+        .iter()
+        .filter(|event| matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
+        .collect::<Vec<_>>();
+    assert_eq!(group_events.len(), 1);
+    assert!(matches!(
+        group_events[0].kind,
+        RunEventKind::ResultGroupChanged {
+            state: ResultStateKind::Failed,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -7698,22 +8514,27 @@ fn cancellation_before_final_result_publication_cleans_results_without_completio
     let final_checkpoints = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&final_checkpoints);
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_result_store(&results)
-        .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
-            if checkpoint == SchedulerCheckpoint::FinalResultPublication {
-                observed.fetch_add(1, Ordering::SeqCst);
-                cancellation.cancel();
-            }
-        }))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_result_store(&results)
+    .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| {
+        if checkpoint == SchedulerCheckpoint::FinalResultPublication {
+            observed.fetch_add(1, Ordering::SeqCst);
+            cancellation.cancel();
+        }
+    }))
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert_eq!(error, RunError::Cancelled);
     assert_eq!(final_checkpoints.load(Ordering::SeqCst), 1);
     assert_cancelled_without_completion(&events);
-    assert_eq!(results.source_count(), 0);
 }
 
 #[test]
@@ -7768,6 +8589,8 @@ fn scheduler_executes_only_the_planned_materialization_adapter() {
             value: ValueRef::new(2),
             contract: crate::node_system::plan::PlannedValueContract::opaque(),
             production: OutputProduction::FullyMaterialized,
+            public_output: None,
+            presentation: crate::node_system::plan::ResultPresentation::Inspector,
         }]),
         params: id("adapter.none", CompiledParameterHandle::new),
         resource_dependencies: Box::new([]),
@@ -7802,12 +8625,18 @@ fn scheduler_executes_only_the_planned_materialization_adapter() {
     }]);
     publish_graph_results(&mut execution_plan);
 
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert_eq!(
-        result.values["result"],
+        result.value_for_test("result").unwrap(),
         RuntimeValue::from(Value::Integer(2))
     );
 }
@@ -7968,11 +8797,20 @@ fn external_stream_fanout_before_branch_executes_once_and_delivers_complete_data
         publish_graph_results(&mut caller);
 
         let function = published_function(callee, "functions/external-branch", &[0], &[12]);
-        let result = RunExecutor::new(&kernels, &no_resources(), &OneFunction(function))
-            .run(&caller, CancellationToken::new())
-            .unwrap();
+        let result = RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &OneFunction(function),
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .run(&caller, CancellationToken::new())
+        .unwrap();
 
-        assert_eq!(result.values["count"], Value::Integer(3).into());
+        assert_eq!(
+            result.value_for_test("count").unwrap(),
+            Value::Integer(3).into()
+        );
         assert_eq!(source_executions.load(Ordering::SeqCst), 1);
     }
 }
@@ -8045,6 +8883,8 @@ fn shared_materialized_fanout_delivers_complete_data_to_same_and_different_consu
                     value: ValueRef::new(output),
                     contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production,
+                    public_output: None,
+                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
                 }]),
                 params: id("adapter.fanout", CompiledParameterHandle::new),
                 resource_dependencies: Box::new([]),
@@ -8140,9 +8980,15 @@ fn shared_materialized_fanout_delivers_complete_data_to_same_and_different_consu
         ]);
         publish_graph_results(&mut execution_plan);
 
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .run(&execution_plan, CancellationToken::new())
-            .unwrap();
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
         let mut counts = observed.lock().unwrap().clone();
         counts.sort();
         assert_eq!(counts, vec![3, 3]);
@@ -8182,10 +9028,15 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::Streaming,
             InputConsumption::RewindableBatches,
-            PlannedAdapter::Replay,
+            PlannedAdapter::Collect {
+                limits: MaterializationLimits {
+                    max_values: 1_000_000,
+                    max_bytes: 64 * 1024 * 1024,
+                },
+            },
             InputConsumption::Streaming,
             OutputProduction::Batches,
-            Shape::Artifact(ArtifactKind::Replayable),
+            Shape::Artifact(ArtifactKind::Collected),
         ),
         (
             OutputProduction::Streaming,
@@ -8229,10 +9080,10 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::Batches,
             InputConsumption::RewindableBatches,
-            PlannedAdapter::Replay,
+            PlannedAdapter::Identity,
             InputConsumption::SinglePassBatches,
             OutputProduction::Batches,
-            Shape::Artifact(ArtifactKind::Replayable),
+            Shape::Artifact(ArtifactKind::Buffered),
         ),
         (
             OutputProduction::Batches,
@@ -8347,17 +9198,32 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
 }
 
 fn per_run_memo_key(inputs: &[RuntimeValue], resource_revision: &str) -> OperationMemoKey {
-    OperationMemoKey::from_inputs(
-        OperationStableId::new("events/test::memoized-operation").unwrap(),
-        inputs,
-        BTreeMap::from([(
+    let input_fingerprints = inputs
+        .iter()
+        .map(|input| match input.clone() {
+            RuntimeValue::Scalar(value) => {
+                ValueFingerprint::from_stored_value(&StoredValue::scalar(value))
+            }
+            RuntimeValue::Artifact(artifact) => {
+                ValueFingerprint::from_stored_value(&StoredValue::from_artifact(artifact))
+            }
+            RuntimeValue::Stream(_) => panic!("materialized inputs are cacheable"),
+        })
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    OperationMemoKey {
+        operation: OperationStableId::new("events/test::memoized-operation").unwrap(),
+        input_fingerprints,
+        resource_versions: BTreeMap::from([(
             ResourceKey::new("variables/relevant"),
             ResourceVersion::new(resource_revision),
         )]),
-        ExecutionSemanticsVersion::from_bytes([7; 32]),
-        DemandFingerprint::from_bytes([9; 32]),
-    )
-    .expect("materialized inputs are cacheable")
+        semantics_version: ExecutionSemanticsVersion::from_bytes([7; 32]),
+        computation_settings: ComputationSettingsFingerprint::new(
+            EffectiveComputationSettings::default(),
+        ),
+        demand: DemandFingerprint::from_bytes([9; 32]),
+    }
 }
 
 #[test]
@@ -8414,7 +9280,7 @@ fn per_run_memoization_demand_fingerprints_are_frame_specific_without_sentinels(
 
 #[test]
 fn per_run_memoization_same_key_produces_once() {
-    let memo = RunMemoization::new();
+    let memo = SessionMemoization::new();
     let key = per_run_memo_key(&[Value::Integer(7).into()], "1");
     let calls = AtomicUsize::new(0);
 
@@ -8422,10 +9288,10 @@ fn per_run_memoization_same_key_produces_once() {
         let outputs = memo
             .get_or_produce(key.clone(), &CancellationToken::new(), || {
                 calls.fetch_add(1, Ordering::SeqCst);
-                Ok(vec![Value::Integer(8).into()].into_boxed_slice())
+                Ok(vec![ResultId::new(8)].into_boxed_slice())
             })
             .unwrap();
-        assert_eq!(outputs.as_ref(), &[RuntimeValue::from(Value::Integer(8))]);
+        assert_eq!(outputs.as_ref(), &[ResultId::new(8)]);
     }
 
     assert_eq!(calls.load(Ordering::SeqCst), 1);
@@ -8433,7 +9299,7 @@ fn per_run_memoization_same_key_produces_once() {
 
 #[test]
 fn per_run_memoization_different_typed_inputs_produce_separately() {
-    let memo = RunMemoization::new();
+    let memo = SessionMemoization::new();
     let calls = AtomicUsize::new(0);
 
     for input in [
@@ -8451,12 +9317,12 @@ fn per_run_memoization_different_typed_inputs_produce_separately() {
         .unwrap();
     }
 
-    assert_eq!(calls.load(Ordering::SeqCst), 4);
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
 }
 
 #[test]
 fn per_run_memoization_relevant_resource_revision_is_part_of_the_key() {
-    let memo = RunMemoization::new();
+    let memo = SessionMemoization::new();
     let calls = AtomicUsize::new(0);
 
     for revision in ["41", "42"] {
@@ -8494,7 +9360,7 @@ fn per_run_memoization_uses_only_operation_resource_versions() {
             ResourceVersion::new("1"),
         ),
     ]);
-    let memo = RunMemoization::new();
+    let memo = SessionMemoization::new();
     let calls = AtomicUsize::new(0);
 
     for (unrelated, relevant) in [("1", "1"), ("2", "1"), ("2", "2")] {
@@ -8512,8 +9378,10 @@ fn per_run_memoization_uses_only_operation_resource_versions() {
         let key = OperationMemoKey::from_inputs(
             execution_plan.operations[0].stable_id.clone(),
             &[],
+            &ResultStore::new(),
             versions,
             execution_plan.operations[0].semantics_version,
+            EffectiveComputationSettings::default(),
             DemandFingerprint::from_bytes([9; 32]),
         )
         .unwrap();
@@ -8538,7 +9406,7 @@ fn per_run_memoization_uses_only_operation_resource_versions() {
 
 #[test]
 fn per_run_memoization_concurrent_same_key_has_one_producer_and_waiter_cancel_isolated() {
-    let memo = Arc::new(RunMemoization::new());
+    let memo = Arc::new(SessionMemoization::new());
     let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
     let producer_started = Arc::new(Barrier::new(2));
     let release_producer = Arc::new(Barrier::new(2));
@@ -8555,7 +9423,7 @@ fn per_run_memoization_concurrent_same_key_has_one_producer_and_waiter_cancel_is
                 calls.fetch_add(1, Ordering::SeqCst);
                 producer_started.wait();
                 release_producer.wait();
-                Ok(vec![Value::Integer(2).into()].into_boxed_slice())
+                Ok(vec![ResultId::new(2)].into_boxed_slice())
             })
         })
     };
@@ -8582,18 +9450,18 @@ fn per_run_memoization_concurrent_same_key_has_one_producer_and_waiter_cancel_is
     assert_eq!(cancelled_waiter.join().unwrap(), Err(RunError::Cancelled));
     assert_eq!(
         producer.join().unwrap().unwrap().as_ref(),
-        &[RuntimeValue::from(Value::Integer(2))]
+        &[ResultId::new(2)]
     );
     assert_eq!(
         successful_waiter.join().unwrap().unwrap().as_ref(),
-        &[RuntimeValue::from(Value::Integer(2))]
+        &[ResultId::new(2)]
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
 
 #[test]
 fn per_run_memoization_producer_panic_removes_flight_and_wakes_waiter() {
-    let memo = Arc::new(RunMemoization::new());
+    let memo = Arc::new(SessionMemoization::new());
     let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
     let producer_started = Arc::new(Barrier::new(2));
     let waiter_registered = Arc::new(Barrier::new(2));
@@ -8650,7 +9518,7 @@ fn per_run_memoization_producer_panic_removes_flight_and_wakes_waiter() {
 
 #[test]
 fn per_run_memoization_producer_error_is_removed() {
-    let memo = RunMemoization::new();
+    let memo = SessionMemoization::new();
     let key = per_run_memo_key(&[Value::Null.into()], "1");
     let calls = AtomicUsize::new(0);
 
@@ -8670,7 +9538,7 @@ fn per_run_memoization_producer_error_is_removed() {
 
 #[test]
 fn per_run_memoization_producer_cancellation_is_not_cached() {
-    let memo = RunMemoization::new();
+    let memo = SessionMemoization::new();
     let key = per_run_memo_key(&[Value::Null.into()], "1");
     let calls = AtomicUsize::new(0);
 
@@ -8693,7 +9561,7 @@ fn per_run_memoization_producer_cancellation_is_not_cached() {
 
 #[test]
 fn per_run_memoization_cancellation_before_commit_does_not_cache() {
-    let memo = Arc::new(RunMemoization::new());
+    let memo = Arc::new(SessionMemoization::new());
     let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
     let cancellation = CancellationToken::new();
     let at_commit = Arc::new(Barrier::new(2));
@@ -8739,7 +9607,7 @@ fn per_run_memoization_cancellation_before_commit_does_not_cache() {
 
 #[test]
 fn per_run_memoization_cancellation_after_commit_keeps_cache() {
-    let memo = Arc::new(RunMemoization::new());
+    let memo = Arc::new(SessionMemoization::new());
     let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
     let cancellation = CancellationToken::new();
     let committed = Arc::new(Barrier::new(2));
@@ -8784,48 +9652,24 @@ fn per_run_memoization_cancellation_after_commit_keeps_cache() {
 }
 
 #[test]
-fn per_run_memoization_partial_stream_is_not_cacheable() {
-    let memo = RunMemoization::new();
-    let stream_owner = materialization_test_owner();
-    let stream = RuntimeValue::Stream(
-        stream_owner
-            .stream_from_values([Value::Integer(1)])
-            .unwrap(),
-    );
+fn session_memoization_rejects_unknown_input_result() {
     assert!(
         OperationMemoKey::from_inputs(
-            OperationStableId::new("events/test::stream-operation").unwrap(),
-            &[stream],
+            OperationStableId::new("events/test::missing-result").unwrap(),
+            &[ResultId::new(u64::MAX)],
+            &ResultStore::new(),
             BTreeMap::new(),
             ExecutionSemanticsVersion::from_bytes([7; 32]),
+            EffectiveComputationSettings::default(),
             DemandFingerprint::from_bytes([9; 32]),
         )
         .is_none()
     );
-
-    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
-    let calls = AtomicUsize::new(0);
-    for _ in 0..2 {
-        let result = memo.get_or_produce(key.clone(), &CancellationToken::new(), || {
-            calls.fetch_add(1, Ordering::SeqCst);
-            Ok(vec![RuntimeValue::Stream(
-                stream_owner
-                    .stream_from_values([Value::Integer(2)])
-                    .unwrap(),
-            )]
-            .into_boxed_slice())
-        });
-        assert!(matches!(
-            result.unwrap().as_ref(),
-            [RuntimeValue::Stream(_)]
-        ));
-    }
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
 }
 
 #[test]
 fn per_run_memoization_run_finalization_releases_entries() {
-    let memo = RunMemoization::new();
+    let memo = SessionMemoization::new();
     let key = per_run_memo_key(&[Value::Null.into()], "1");
     let calls = AtomicUsize::new(0);
     memo.get_or_produce(key.clone(), &CancellationToken::new(), || {
@@ -8847,7 +9691,7 @@ fn per_run_memoization_run_finalization_releases_entries() {
 
 #[test]
 fn per_run_memoization_finalize_wakes_waiter_and_prevents_late_commit() {
-    let memo = Arc::new(RunMemoization::new());
+    let memo = Arc::new(SessionMemoization::new());
     let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
     let producer_started = Arc::new(Barrier::new(2));
     let waiter_registered = Arc::new(Barrier::new(2));
@@ -8910,7 +9754,7 @@ fn per_run_memoization_finalize_wakes_waiter_and_prevents_late_commit() {
 
 #[test]
 fn per_run_memoization_finalize_terminal_wins_over_late_producer_error() {
-    let memo = Arc::new(RunMemoization::new());
+    let memo = Arc::new(SessionMemoization::new());
     let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
     let producer_started = Arc::new(Barrier::new(2));
     let release_error = Arc::new(Barrier::new(2));
@@ -8980,7 +9824,7 @@ fn per_run_memoization_finalize_terminal_wins_over_late_producer_error() {
 
 #[test]
 fn per_run_memoization_finalize_terminal_wins_over_late_producer_panic() {
-    let memo = Arc::new(RunMemoization::new());
+    let memo = Arc::new(SessionMemoization::new());
     let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
     let producer_started = Arc::new(Barrier::new(2));
     let release_panic = Arc::new(Barrier::new(2));
@@ -9050,7 +9894,7 @@ fn per_run_memoization_finalize_terminal_wins_over_late_producer_panic() {
 
 #[test]
 fn per_run_memoization_finalize_owner_lock_rejects_late_lookup() {
-    let memo = Arc::new(RunMemoization::new());
+    let memo = Arc::new(SessionMemoization::new());
     let terminal_set = Arc::new(Barrier::new(2));
     let release_finalize = Arc::new(Barrier::new(2));
     let finalizer = {
@@ -9094,7 +9938,7 @@ fn per_run_memoization_new_run_is_isolated() {
     let calls = AtomicUsize::new(0);
 
     for _ in 0..2 {
-        let memo = RunMemoization::new();
+        let memo = SessionMemoization::new();
         memo.get_or_produce(key.clone(), &CancellationToken::new(), || {
             calls.fetch_add(1, Ordering::SeqCst);
             Ok(Box::new([]))
@@ -9106,7 +9950,164 @@ fn per_run_memoization_new_run_is_isolated() {
 }
 
 #[test]
-fn per_run_memoization_executor_runs_same_key_kernel_once_per_run() {
+fn cache_policies_have_exact_two_run_semantics() {
+    for (policy, expected_calls) in [
+        (CachePolicy::Disabled, 2),
+        (CachePolicy::PerRun, 2),
+        (CachePolicy::PerSession, 1),
+    ] {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let mut kernels = KernelRegistry::new();
+        kernels
+            .register(
+                id("policy_matrix", KernelHandle::new),
+                FnKernel(move |_: &[RuntimeValue]| {
+                    observed.fetch_add(1, Ordering::SeqCst);
+                    Ok(vec![Value::Integer(7).into()])
+                }),
+            )
+            .unwrap();
+        let mut cached = operation("policy_matrix", &[], &[0]);
+        cached.cache_policy = policy;
+        let mut execution_plan = plan(
+            vec![cached],
+            1,
+            StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(
+                OperationIndex::new(0),
+            )])),
+        );
+        execution_plan.results = Box::new([PlanResult {
+            name: "result".into(),
+            output: stable_output("policy_result"),
+            value: ValueRef::new(0),
+        }]);
+        publish_graph_results(&mut execution_plan);
+        let resources = no_resources();
+        let executor = RunExecutor::new(
+            &kernels,
+            &resources,
+            &NoFunctions,
+            ResultStore::new(),
+            Arc::new(SessionMemoization::new()),
+        );
+
+        executor
+            .run(&execution_plan, CancellationToken::new())
+            .unwrap();
+        executor
+            .run(&execution_plan, CancellationToken::new())
+            .unwrap();
+
+        assert_eq!(calls.load(Ordering::SeqCst), expected_calls, "{policy:?}");
+    }
+}
+
+#[test]
+fn computation_settings_change_misses_session_cache() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("settings_cache", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![Value::Integer(7).into()])
+            }),
+        )
+        .unwrap();
+    let mut cached = operation("settings_cache", &[], &[0]);
+    cached.cache_policy = CachePolicy::PerSession;
+    let mut execution_plan = plan(
+        vec![cached],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("settings_result"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+    let store = ResultStore::new();
+    let memo = Arc::new(SessionMemoization::new());
+    let resources = no_resources();
+    let defaults = crate::project::ProjectComputationSettings::default();
+    let mut changed = defaults.clone();
+    changed.numeric.tolerance.absolute = 0.25;
+
+    RunExecutor::new(
+        &kernels,
+        &resources,
+        &NoFunctions,
+        store.clone(),
+        Arc::clone(&memo),
+    )
+    .with_computation_settings_snapshot(&defaults)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
+    RunExecutor::new(&kernels, &resources, &NoFunctions, store, memo)
+        .with_computation_settings_snapshot(&changed)
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn invalid_reused_group_entry_is_evicted_and_recomputed_once() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("invalid_reuse", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![Value::Integer(7).into()])
+            }),
+        )
+        .unwrap();
+    let mut cached = operation("invalid_reuse", &[], &[0]);
+    cached.cache_policy = CachePolicy::PerSession;
+    let mut first_plan = plan(
+        vec![cached],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    first_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("invalid_reuse_result"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut first_plan);
+    let mut second_plan = first_plan.clone();
+    second_plan.operations[0].outputs[0].presentation = ResultPresentation::Plot {
+        chart: ResultPlotKind::Line,
+    };
+    let store = ResultStore::new();
+    let memo = Arc::new(SessionMemoization::new());
+    let resources = no_resources();
+    let executor = RunExecutor::new(&kernels, &resources, &NoFunctions, store, memo);
+
+    executor.run(&first_plan, CancellationToken::new()).unwrap();
+    executor
+        .run(&second_plan, CancellationToken::new())
+        .unwrap();
+    executor
+        .run(&second_plan, CancellationToken::new())
+        .unwrap();
+
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn session_memoization_executor_runs_same_key_kernel_once_per_session() {
     let memoized_calls = Arc::new(AtomicUsize::new(0));
     let loop_calls = Arc::new(AtomicUsize::new(0));
     let mut kernels = KernelRegistry::new();
@@ -9145,7 +10146,7 @@ fn per_run_memoization_executor_runs_same_key_kernel_once_per_run() {
         .unwrap();
 
     let mut memoized = operation("memo_value", &[], &[1]);
-    memoized.cache_policy = CachePolicy::PerRun;
+    memoized.cache_policy = CachePolicy::PerSession;
     let mut execution_plan = plan(
         vec![
             operation("memo_initial", &[], &[0]),
@@ -9185,18 +10186,187 @@ fn per_run_memoization_executor_runs_same_key_kernel_once_per_run() {
 
     execution_plan.validate().unwrap();
     let resources = no_resources();
-    let executor = RunExecutor::new(&kernels, &resources, &NoFunctions);
+    let executor = RunExecutor::new(
+        &kernels,
+        &resources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    );
     for expected_run_count in 1..=2 {
         let result = executor
             .run(&execution_plan, CancellationToken::new())
             .unwrap();
         assert_eq!(
-            result.values["count"],
+            result.value_for_test("count").unwrap(),
             RuntimeValue::from(Value::Integer(3))
         );
-        assert_eq!(memoized_calls.load(Ordering::SeqCst), expected_run_count);
+        assert_eq!(memoized_calls.load(Ordering::SeqCst), 1);
         assert_eq!(loop_calls.load(Ordering::SeqCst), expected_run_count * 3);
     }
+}
+
+#[test]
+fn memoization_reuses_ordered_output_result_ids_and_history() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("memo_two_outputs", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![
+                    Value::Integer(7).into(),
+                    Value::String("second".into()).into(),
+                ])
+            }),
+        )
+        .unwrap();
+    let first_output = stable_output("z_result");
+    let second_output = stable_output("a_report");
+    let mut memoized = operation("memo_two_outputs", &[], &[0, 1]);
+    memoized.cache_policy = CachePolicy::PerSession;
+    memoized.outputs[0].public_output = Some(first_output.clone());
+    memoized.outputs[1].public_output = Some(second_output.clone());
+    let mut execution_plan = plan(
+        vec![memoized],
+        2,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([
+        PlanResult {
+            name: "first".into(),
+            output: first_output.clone(),
+            value: ValueRef::new(0),
+        },
+        PlanResult {
+            name: "second".into(),
+            output: second_output.clone(),
+            value: ValueRef::new(1),
+        },
+    ]);
+    publish_graph_results(&mut execution_plan);
+    execution_plan.validate().unwrap();
+
+    let store = ResultStore::new();
+    let memoization = Arc::new(SessionMemoization::new());
+    let resources = no_resources();
+    let executor = RunExecutor::new(
+        &kernels,
+        &resources,
+        &NoFunctions,
+        store.clone(),
+        memoization,
+    );
+    let first = executor
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+    let second = executor
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+    let first_ids = [first.result_ids["first"], first.result_ids["second"]];
+    let second_ids = [second.result_ids["first"], second.result_ids["second"]];
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(first_ids, second_ids);
+    assert_ne!(first_ids[0], first_ids[1]);
+    for output in [&first_output, &second_output] {
+        let history = store.pin_history(output);
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].usage, ResultUsage::Produced);
+        assert!(matches!(
+            history[1].usage,
+            ResultUsage::Reused {
+                original_activation_id
+            } if original_activation_id == history[0].activation_id
+        ));
+        assert_eq!(history[0].result_id, history[1].result_id);
+    }
+    assert_eq!(
+        store.result(first_ids[0]).unwrap().provenance.run_id,
+        first.run_id
+    );
+}
+
+#[test]
+fn memoization_reuses_spill_backed_results_without_copying() {
+    let root = materialization_test_root("session-spill-reuse");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("memo_spill_output", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![RuntimeValue::Artifact(Artifact::new(
+                    ArtifactKind::Collected,
+                    [Value::String("spill-backed-result".into())],
+                ))])
+            }),
+        )
+        .unwrap();
+    let mut memoized = operation("memo_spill_output", &[], &[0]);
+    memoized.cache_policy = CachePolicy::PerSession;
+    let mut execution_plan = plan(
+        vec![memoized],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("spill_result"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+    execution_plan.validate().unwrap();
+
+    let store = ResultStore::new();
+    let resources = no_resources();
+    let executor = RunExecutor::new(
+        &kernels,
+        &resources,
+        &NoFunctions,
+        store.clone(),
+        Arc::new(SessionMemoization::new()),
+    )
+    .with_resource_budgets(materialization_test_budgets(1, 1))
+    .with_test_spill_root(root.clone());
+    let first = executor
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+    let first_id = first.result_ids["result"];
+    let first_result = store.result(first_id).unwrap();
+    let ResultState::Ready(first_value) = &first_result.state else {
+        panic!("first result must be ready");
+    };
+    assert!(first_value.is_spill_backed());
+
+    let second = executor
+        .run(&execution_plan, CancellationToken::new())
+        .unwrap();
+    let second_id = second.result_ids["result"];
+    let second_result = store.result(second_id).unwrap();
+    let ResultState::Ready(second_value) = &second_result.state else {
+        panic!("second result must be ready");
+    };
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(first_id, second_id);
+    assert!(first_value.ptr_eq(second_value));
+    drop(first_result);
+    drop(second_result);
+    drop(first);
+    drop(second);
+    drop(executor);
+    drop(store);
+    assert!(std::fs::read_dir(&root).unwrap().next().is_none());
+    std::fs::remove_dir(root).unwrap();
 }
 
 #[test]
@@ -9268,10 +10438,16 @@ fn deadline_late_kernel_completion_is_joined_without_commit_or_completion_event(
     }]);
     publish_graph_results(&mut execution_plan);
 
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_deadline(RunDeadline::after(Duration::from_millis(10)))
-        .run(&execution_plan, CancellationToken::new());
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_deadline(RunDeadline::after(Duration::from_millis(10)))
+    .run(&execution_plan, CancellationToken::new());
 
     assert_eq!(
         result,
@@ -9282,7 +10458,7 @@ fn deadline_late_kernel_completion_is_joined_without_commit_or_completion_event(
     let events = events.0.lock().unwrap();
     assert!(!events.iter().any(|event| matches!(
         event.kind,
-        RunEventKind::OperationCompleted { .. } | RunEventKind::ResultReady { .. }
+        RunEventKind::OperationCompleted { .. } | RunEventKind::ResultGroupChanged { .. }
     )));
     assert!(events.iter().any(|event| matches!(
         event.kind,
@@ -9310,14 +10486,20 @@ fn deadline_queue_wait_is_typed_and_late_workers_do_not_commit() {
             .unwrap();
     }
     let deadline = RunDeadline::after(Duration::from_millis(10));
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_scheduling_policy(parallel_policy(1, 1, 1))
-        .with_deadline(deadline)
-        .run(
-            &independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]),
-            CancellationToken::new(),
-        );
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_scheduling_policy(parallel_policy(1, 1, 1))
+    .with_deadline(deadline)
+    .run(
+        &independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]),
+        CancellationToken::new(),
+    );
 
     assert_eq!(
         result,
@@ -9383,15 +10565,21 @@ fn deadline_publication_suppresses_terminal_result_events() {
         value: ValueRef::new(0),
     }]);
     publish_graph_results(&mut execution_plan);
-    let result = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_event_sink(&events)
-        .with_deadline(RunDeadline::after(Duration::from_millis(20)))
-        .with_test_checkpoint(Arc::new(|checkpoint, _| {
-            if checkpoint == SchedulerCheckpoint::FinalResultPublication {
-                thread::sleep(Duration::from_millis(30));
-            }
-        }))
-        .run(&execution_plan, CancellationToken::new());
+    let result = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+    .with_test_checkpoint(Arc::new(|checkpoint, _| {
+        if checkpoint == SchedulerCheckpoint::FinalResultPublication {
+            thread::sleep(Duration::from_millis(30));
+        }
+    }))
+    .run(&execution_plan, CancellationToken::new());
 
     assert_eq!(
         result,
@@ -9402,8 +10590,8 @@ fn deadline_publication_suppresses_terminal_result_events() {
     assert!(!events.0.lock().unwrap().iter().any(|event| matches!(
         event.kind,
         RunEventKind::RunCompleted
-            | RunEventKind::ResultReady { .. }
-            | RunEventKind::OutputReady { .. }
+            | RunEventKind::ResultGroupChanged { .. }
+            | RunEventKind::OutputResultChanged { .. }
     )));
 }
 
@@ -9440,9 +10628,15 @@ fn deadline_cleanup_runs_to_completion_without_replacing_an_earlier_error() {
     );
 
     assert_eq!(
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_deadline(RunDeadline::after(Duration::from_millis(10)))
-            .run(&execution_plan, CancellationToken::new()),
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
+        )
+        .with_deadline(RunDeadline::after(Duration::from_millis(10)))
+        .run(&execution_plan, CancellationToken::new()),
         Err(RunError::DeadlineExceeded {
             phase: RunPhase::Cleanup,
         })
@@ -9514,8 +10708,14 @@ fn kernel_context_wait_wakes_promptly_on_cancellation() {
     thread::scope(|scope| {
         let run_cancellation = cancellation.clone();
         let run = scope.spawn(|| {
-            RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-                .run(&execution_plan, run_cancellation)
+            RunExecutor::new(
+                &kernels,
+                &no_resources(),
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .run(&execution_plan, run_cancellation)
         });
         started_rx.recv().unwrap();
         let cancelled_at = std::time::Instant::now();
@@ -9543,10 +10743,16 @@ fn deadline_is_propagated_into_cooperative_kernel_context() {
     );
     let started = std::time::Instant::now();
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_deadline(RunDeadline::after(Duration::from_millis(20)))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert_eq!(
         error,
@@ -9597,11 +10803,17 @@ fn deadline_is_propagated_into_cooperative_relational_context() {
     )]);
     let started = std::time::Instant::now();
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
-        .with_deadline(RunDeadline::after(Duration::from_millis(20)))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_relational_backends(&relational)
+    .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert_eq!(
         error,
@@ -9659,15 +10871,21 @@ fn worker_outcome_timestamp_precedes_envelope_preparation_delay() {
         ))])),
     );
 
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_deadline(RunDeadline::after(Duration::from_millis(20)))
-        .with_test_checkpoint(Arc::new(|checkpoint, _| {
-            if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
-                thread::sleep(Duration::from_millis(40));
-            }
-        }))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+    .with_test_checkpoint(Arc::new(|checkpoint, _| {
+        if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+            thread::sleep(Duration::from_millis(40));
+        }
+    }))
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(
         error,
@@ -9694,14 +10912,20 @@ fn worker_panic_timestamp_is_captured_at_unwind_boundary() {
     );
 
     let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _ = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_deadline(RunDeadline::after(Duration::from_millis(20)))
-            .with_test_checkpoint(Arc::new(|checkpoint, _| {
-                if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
-                    thread::sleep(Duration::from_millis(40));
-                }
-            }))
-            .run(&execution_plan, CancellationToken::new());
+        let _ = RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_deadline(RunDeadline::after(Duration::from_millis(20)))
+        .with_test_checkpoint(Arc::new(|checkpoint, _| {
+            if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+                thread::sleep(Duration::from_millis(40));
+            }
+        }))
+        .run(&execution_plan, CancellationToken::new());
     }));
 
     assert!(panic.is_err());
@@ -9728,20 +10952,26 @@ fn deadline_drain_preserves_ordinary_error_completed_before_expiry() {
         )
         .unwrap();
     let observed_completion = Arc::clone(&completed_rx);
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_scheduling_policy(parallel_policy(1, 1, 1))
-        .with_deadline(RunDeadline::after(Duration::from_millis(100)))
-        .with_test_checkpoint(Arc::new(move |checkpoint, _| {
-            if checkpoint == SchedulerCheckpoint::AdmissionBlocked(WorkloadClass::Cpu) {
-                observed_completion.lock().unwrap().recv().unwrap();
-                thread::sleep(Duration::from_millis(120));
-            }
-        }))
-        .run(
-            &independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]),
-            CancellationToken::new(),
-        )
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_scheduling_policy(parallel_policy(1, 1, 1))
+    .with_deadline(RunDeadline::after(Duration::from_millis(100)))
+    .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+        if checkpoint == SchedulerCheckpoint::AdmissionBlocked(WorkloadClass::Cpu) {
+            observed_completion.lock().unwrap().recv().unwrap();
+            thread::sleep(Duration::from_millis(120));
+        }
+    }))
+    .run(
+        &independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]),
+        CancellationToken::new(),
+    )
+    .unwrap_err();
 
     assert!(
         matches!(error, RunError::KernelFailed { message, .. } if message.as_ref() == "completed before deadline")
@@ -9780,61 +11010,17 @@ fn cancellation_observed_while_draining_upgrades_deadline() {
     );
 
     assert_eq!(
-        RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-            .with_deadline(RunDeadline::after(Duration::from_millis(5)))
-            .run(&execution_plan, CancellationToken::new()),
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
+        )
+        .with_deadline(RunDeadline::after(Duration::from_millis(5)))
+        .run(&execution_plan, CancellationToken::new()),
         Err(RunError::Cancelled),
     );
-}
-
-#[test]
-fn deadline_result_store_commit_gate_publishes_nothing() {
-    let results = ResultStore::new();
-    let events = RecordingRunEvents::default();
-    results.set_commit_checkpoint_for_test(Arc::new(|| {
-        thread::sleep(Duration::from_millis(25));
-    }));
-    let mut kernels = KernelRegistry::new();
-    kernels
-        .register(
-            id("deadline_commit", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
-        )
-        .unwrap();
-    let mut execution_plan = plan(
-        vec![operation("deadline_commit", &[], &[0])],
-        1,
-        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
-            0,
-        ))])),
-    );
-    execution_plan.results = Box::new([PlanResult {
-        name: "commit".into(),
-        output: stable_output("commit"),
-        value: ValueRef::new(0),
-    }]);
-    publish_graph_results(&mut execution_plan);
-
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_result_store(&results)
-        .with_event_sink(&events)
-        .with_deadline(RunDeadline::after(Duration::from_millis(10)))
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
-
-    assert_eq!(
-        error,
-        RunError::DeadlineExceeded {
-            phase: RunPhase::ResultPublication
-        }
-    );
-    assert_eq!(results.source_count(), 0);
-    assert!(!events.0.lock().unwrap().iter().any(|event| matches!(
-        event.kind,
-        RunEventKind::ResultReady { .. }
-            | RunEventKind::OutputReady { .. }
-            | RunEventKind::RunCompleted
-    )));
 }
 
 #[test]
@@ -9862,14 +11048,20 @@ fn deadline_cleanup_drains_an_uncooperative_task_after_recording_timeout() {
         }
     });
     let owner_delay = Duration::from_millis(250);
-    let error = RunExecutor::new(&kernels, &no_resources(), &NoFunctions)
-        .with_deadline(RunDeadline::after(Duration::from_millis(10)))
-        .with_success_finalizer(&finalizer)
-        .with_test_spill_root(root.clone())
-        .with_test_checkpoint(checkpoint)
-        .with_cleanup_delay_for_test(owner_delay)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_deadline(RunDeadline::after(Duration::from_millis(10)))
+    .with_success_finalizer(&finalizer)
+    .with_test_spill_root(root.clone())
+    .with_test_checkpoint(checkpoint)
+    .with_cleanup_delay_for_test(owner_delay)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert_eq!(
         error,
@@ -9975,10 +11167,16 @@ fn run_cleanup_closes_relational_streams() {
     execution_plan.relational_subplans =
         Box::new([relational_subplan("single", "sales", Box::new([]))]);
 
-    RunExecutor::new(&KernelRegistry::new(), &no_resources(), &NoFunctions)
-        .with_relational_backends(&relational)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap();
+    RunExecutor::new(
+        &KernelRegistry::new(),
+        &no_resources(),
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_relational_backends(&relational)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap();
 
     assert!(observed.lock().unwrap().as_ref().unwrap().is_closed());
 }
@@ -10017,10 +11215,16 @@ fn relational_failure_releases_run_resources_and_backend_lease() {
     execution_plan.relational_subplans =
         Box::new([relational_subplan("single", "sales", Box::new([]))]);
 
-    let error = RunExecutor::new(&KernelRegistry::new(), &resources, &NoFunctions)
-        .with_relational_backends(&provider)
-        .run(&execution_plan, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &resources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_relational_backends(&provider)
+    .run(&execution_plan, CancellationToken::new())
+    .unwrap_err();
 
     assert!(matches!(error, RunError::RelationalFailed { .. }));
     assert_eq!(released_resources.load(Ordering::SeqCst), 1);

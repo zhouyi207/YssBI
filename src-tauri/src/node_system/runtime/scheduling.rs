@@ -1,4 +1,4 @@
-use super::{ActivationId, RunError, RuntimeValue};
+use super::{ActivationId, ActivationResultGroup, RunError, StoredValue};
 use crate::node_system::plan::{AttemptId, OperationIndex, WorkloadClass};
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
@@ -36,7 +36,8 @@ pub struct OperationCompletion {
     pub operation: OperationIndex,
     pub activation: ActivationId,
     pub attempt: AttemptId,
-    pub outputs: Result<Box<[RuntimeValue]>, RunError>,
+    pub output_group: Option<ActivationResultGroup>,
+    pub outputs: Result<Box<[StoredValue]>, RunError>,
 }
 
 const ADMISSION_ORDER: [WorkloadClass; 5] = [

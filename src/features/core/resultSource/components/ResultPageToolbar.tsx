@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 
-interface SourcePageToolbarProps {
+interface ResultPageToolbarProps {
   pageIndex: number;
   totalPages: number;
   totalCount: number;
@@ -10,7 +10,7 @@ interface SourcePageToolbarProps {
   onNext: () => void;
 }
 
-export function SourcePageToolbar({
+export function ResultPageToolbar({
   pageIndex,
   totalPages,
   totalCount,
@@ -18,7 +18,7 @@ export function SourcePageToolbar({
   loading,
   onPrevious,
   onNext,
-}: SourcePageToolbarProps) {
+}: ResultPageToolbarProps) {
   const start = totalCount === 0 ? 0 : pageIndex * pageSize + 1;
   const end = Math.min(totalCount, (pageIndex + 1) * pageSize);
 

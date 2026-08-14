@@ -232,6 +232,8 @@ fn run_executor_classifies_resource_plan_validation_errors() {
         &KernelRegistry::new(),
         &UnsupportedAccessProvider,
         &NoFunctions,
+        ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
     .run(&unsupported, CancellationToken::new())
     .unwrap_err();
@@ -244,9 +246,15 @@ fn run_executor_classifies_resource_plan_validation_errors() {
         &RegistryFingerprint::from_bytes([7; 32]),
         BTreeMap::new(),
     );
-    let error = RunExecutor::new(&KernelRegistry::new(), &provider, &NoFunctions)
-        .run(&stale_session, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &provider,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&stale_session, CancellationToken::new())
+    .unwrap_err();
     assert!(matches!(error, RunError::ResourceSnapshotMismatch(_)));
     assert_eq!(
         RunErrorCode::from(&error),
@@ -265,9 +273,15 @@ fn run_executor_classifies_resource_plan_validation_errors() {
         access: ResourceAccess::Shared,
         optional: false,
     }]);
-    let error = RunExecutor::new(&KernelRegistry::new(), &provider, &NoFunctions)
-        .run(&stale_version, CancellationToken::new())
-        .unwrap_err();
+    let error = RunExecutor::new(
+        &KernelRegistry::new(),
+        &provider,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&stale_version, CancellationToken::new())
+    .unwrap_err();
     assert!(matches!(error, RunError::ResourceSnapshotMismatch(_)));
     assert_eq!(
         RunErrorCode::from(&error),

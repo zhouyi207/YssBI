@@ -1,4 +1,4 @@
-use super::{ArtifactKind, CancellationToken, MaterializedArtifact, RunError, RuntimeValue};
+use super::{CancellationToken, ResultId, ResultState, ResultStore, RunError, StoredValue};
 use crate::node_system::analysis::ResourceVersionSet;
 use crate::node_system::plan::{
     CallArgumentBinding, CallResultBinding, ExecutionPlan, ExecutionSemanticsVersion,
@@ -13,31 +13,8 @@ use std::sync::{Arc, Condvar, Mutex};
 pub struct ValueFingerprint([u8; 32]);
 
 impl ValueFingerprint {
-    pub fn from_runtime_value(value: &RuntimeValue) -> Option<Self> {
-        let digest = match value {
-            RuntimeValue::Scalar(value) => hash_canonical("yssbi.runtime-value.scalar.v1", value),
-            RuntimeValue::Artifact(artifact) => {
-                let MaterializedArtifact::InMemory(values) = artifact.materialized() else {
-                    return None;
-                };
-                hash_canonical(
-                    "yssbi.runtime-value.artifact.v1",
-                    &(artifact_kind_name(artifact.kind()), values),
-                )
-            }
-            RuntimeValue::Stream(_) => return None,
-        }
-        .expect("runtime values have a canonical JSON representation");
-        Some(Self(digest))
-    }
-}
-
-fn artifact_kind_name(kind: ArtifactKind) -> &'static str {
-    match kind {
-        ArtifactKind::Buffered => "buffered",
-        ArtifactKind::Collected => "collected",
-        ArtifactKind::Spilled => "spilled",
-        ArtifactKind::Replayable => "replayable",
+    pub fn from_stored_value(value: &StoredValue) -> Self {
+        Self(value.logical_digest())
     }
 }
 
@@ -99,26 +76,52 @@ fn plan_demand_identity(plan: &ExecutionPlan) -> serde_json::Value {
     })
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ComputationSettingsFingerprint([u8; 32]);
+
+impl ComputationSettingsFingerprint {
+    pub fn new(settings: super::EffectiveComputationSettings) -> Self {
+        Self(
+            hash_canonical("yssbi.computation-settings.v1", &settings)
+                .expect("effective computation settings are canonical"),
+        )
+    }
+
+    #[cfg(test)]
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct OperationMemoKey {
     pub operation: OperationStableId,
     pub input_fingerprints: Box<[ValueFingerprint]>,
     pub resource_versions: ResourceVersionSet,
     pub semantics_version: ExecutionSemanticsVersion,
+    pub computation_settings: ComputationSettingsFingerprint,
     pub demand: DemandFingerprint,
 }
 
 impl OperationMemoKey {
     pub fn from_inputs(
         operation: OperationStableId,
-        inputs: &[RuntimeValue],
+        input_result_ids: &[ResultId],
+        results: &ResultStore,
         resource_versions: ResourceVersionSet,
         semantics_version: ExecutionSemanticsVersion,
+        computation_settings: super::EffectiveComputationSettings,
         demand: DemandFingerprint,
     ) -> Option<Self> {
-        let input_fingerprints = inputs
+        let input_fingerprints = input_result_ids
             .iter()
-            .map(ValueFingerprint::from_runtime_value)
+            .map(|result_id| {
+                let result = results.result(*result_id)?;
+                let ResultState::Ready(value) = &result.state else {
+                    return None;
+                };
+                Some(ValueFingerprint::from_stored_value(value))
+            })
             .collect::<Option<Vec<_>>>()?
             .into_boxed_slice();
         Some(Self {
@@ -126,18 +129,19 @@ impl OperationMemoKey {
             input_fingerprints,
             resource_versions,
             semantics_version,
+            computation_settings: ComputationSettingsFingerprint::new(computation_settings),
             demand,
         })
     }
 }
 
 #[derive(Default)]
-pub struct RunMemoization {
-    owner: Mutex<RunMemoizationState>,
+pub struct SessionMemoization {
+    owner: Mutex<SessionMemoizationState>,
 }
 
 #[derive(Default)]
-struct RunMemoizationState {
+struct SessionMemoizationState {
     finalized: bool,
     entries: BTreeMap<OperationMemoKey, Arc<Flight>>,
 }
@@ -149,8 +153,8 @@ struct Flight {
 
 enum FlightState {
     Producing,
-    Complete(Box<[RuntimeValue]>),
-    Uncacheable,
+    Complete(Box<[ResultId]>),
+    RetryableAborted,
     Failed(RunError),
     Panicked,
     Finalized,
@@ -165,6 +169,12 @@ impl Flight {
     }
 }
 
+pub(crate) enum MemoReservation {
+    Complete(Box<[ResultId]>),
+    Producer,
+    Running,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MemoCommitCheckpoint {
     WaiterRegistered,
@@ -172,53 +182,162 @@ pub(crate) enum MemoCommitCheckpoint {
     Committed,
 }
 
-impl RunMemoization {
+impl SessionMemoization {
     pub fn new() -> Self {
         Self::default()
     }
 
-    pub(crate) fn completed(&self, key: &OperationMemoKey) -> Option<Box<[RuntimeValue]>> {
+    pub(crate) fn completed(
+        &self,
+        key: &OperationMemoKey,
+        results: &ResultStore,
+    ) -> Option<Box<[ResultId]>> {
         let owner = self.owner.lock().unwrap_or_else(|error| error.into_inner());
         let flight = owner.entries.get(key)?;
         let state = flight
             .state
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        match &*state {
-            FlightState::Complete(outputs) => Some(outputs.clone()),
-            _ => None,
+        let outputs = match &*state {
+            FlightState::Complete(outputs) => outputs.clone(),
+            _ => return None,
+        };
+        if results.ready_group_activation(&outputs).is_some() {
+            return Some(outputs);
         }
+        drop(state);
+        drop(owner);
+        self.invalidate(key);
+        None
     }
 
-    pub(crate) fn commit_completed(&self, key: OperationMemoKey, outputs: &[RuntimeValue]) -> bool {
-        let cacheable = outputs.iter().all(|value| match value {
-            RuntimeValue::Scalar(_) => true,
-            RuntimeValue::Artifact(artifact) => artifact.is_memoization_complete(),
-            RuntimeValue::Stream(_) => false,
-        });
-        if !cacheable {
-            return false;
-        }
+    pub(crate) fn reserve(
+        &self,
+        key: &OperationMemoKey,
+        results: &ResultStore,
+    ) -> Result<MemoReservation, RunError> {
         let mut owner = self.owner.lock().unwrap_or_else(|error| error.into_inner());
         if owner.finalized {
-            return false;
+            return Err(RunError::Cancelled);
         }
-        let flight = Arc::new(Flight::producing());
-        *flight
+        let Some(flight) = owner.entries.get(key) else {
+            owner
+                .entries
+                .insert(key.clone(), Arc::new(Flight::producing()));
+            return Ok(MemoReservation::Producer);
+        };
+        let state = flight
             .state
             .lock()
-            .unwrap_or_else(|error| error.into_inner()) =
-            FlightState::Complete(outputs.to_vec().into_boxed_slice());
-        owner.entries.insert(key, flight);
+            .unwrap_or_else(|error| error.into_inner());
+        let reservation = match &*state {
+            FlightState::Complete(outputs) if results.ready_group_activation(outputs).is_some() => {
+                MemoReservation::Complete(outputs.clone())
+            }
+            FlightState::Complete(_) | FlightState::RetryableAborted => {
+                drop(state);
+                owner.entries.remove(key);
+                owner
+                    .entries
+                    .insert(key.clone(), Arc::new(Flight::producing()));
+                MemoReservation::Producer
+            }
+            FlightState::Producing => MemoReservation::Running,
+            FlightState::Failed(_) | FlightState::Panicked | FlightState::Finalized => {
+                MemoReservation::Running
+            }
+        };
+        Ok(reservation)
+    }
+
+    pub(crate) fn wait_completed(
+        &self,
+        key: &OperationMemoKey,
+        cancellation: &CancellationToken,
+    ) -> Result<Box<[ResultId]>, RunError> {
+        let flight =
+            {
+                let owner = self.owner.lock().unwrap_or_else(|error| error.into_inner());
+                if owner.finalized {
+                    return Err(RunError::Cancelled);
+                }
+                Arc::clone(owner.entries.get(key).ok_or_else(|| {
+                    RunError::InvalidPlan("memoization flight disappeared".into())
+                })?)
+            };
+        wait_for_flight(&flight, cancellation)
+    }
+
+    pub(crate) fn commit_completed(
+        &self,
+        key: OperationMemoKey,
+        outputs: &[ResultId],
+        results: &ResultStore,
+    ) -> bool {
+        let owner = self.owner.lock().unwrap_or_else(|error| error.into_inner());
+        if owner.finalized || results.ready_group_activation(outputs).is_none() {
+            drop(owner);
+            self.invalidate(&key);
+            return false;
+        }
+        let Some(flight) = owner.entries.get(&key).cloned() else {
+            return false;
+        };
+        let mut state = flight
+            .state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if !matches!(*state, FlightState::Producing) {
+            return false;
+        }
+        *state = FlightState::Complete(outputs.to_vec().into_boxed_slice());
+        drop(state);
+        drop(owner);
+        flight.ready.notify_all();
         true
+    }
+
+    pub(crate) fn abort(&self, key: &OperationMemoKey, error: RunError, retryable: bool) {
+        let flight = {
+            let mut owner = self.owner.lock().unwrap_or_else(|error| error.into_inner());
+            let Some(flight) = owner.entries.remove(key) else {
+                return;
+            };
+            *flight
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner()) = if retryable {
+                FlightState::RetryableAborted
+            } else {
+                FlightState::Failed(error)
+            };
+            flight
+        };
+        flight.ready.notify_all();
+    }
+
+    pub(crate) fn invalidate(&self, key: &OperationMemoKey) {
+        let flight = self
+            .owner
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .entries
+            .remove(key);
+        if let Some(flight) = flight {
+            *flight
+                .state
+                .lock()
+                .unwrap_or_else(|error| error.into_inner()) = FlightState::RetryableAborted;
+            flight.ready.notify_all();
+        }
     }
 
     pub fn get_or_produce(
         &self,
         key: OperationMemoKey,
         cancellation: &CancellationToken,
-        produce: impl FnOnce() -> Result<Box<[RuntimeValue]>, RunError>,
-    ) -> Result<Box<[RuntimeValue]>, RunError> {
+        produce: impl FnOnce() -> Result<Box<[ResultId]>, RunError>,
+    ) -> Result<Box<[ResultId]>, RunError> {
         self.get_or_produce_inner(key, cancellation, produce, |_| {})
     }
 
@@ -227,9 +346,9 @@ impl RunMemoization {
         &self,
         key: OperationMemoKey,
         cancellation: &CancellationToken,
-        produce: impl FnOnce() -> Result<Box<[RuntimeValue]>, RunError>,
+        produce: impl FnOnce() -> Result<Box<[ResultId]>, RunError>,
         checkpoint: impl Fn(MemoCommitCheckpoint),
-    ) -> Result<Box<[RuntimeValue]>, RunError> {
+    ) -> Result<Box<[ResultId]>, RunError> {
         self.get_or_produce_inner(key, cancellation, produce, checkpoint)
     }
 
@@ -237,9 +356,9 @@ impl RunMemoization {
         &self,
         key: OperationMemoKey,
         cancellation: &CancellationToken,
-        produce: impl FnOnce() -> Result<Box<[RuntimeValue]>, RunError>,
+        produce: impl FnOnce() -> Result<Box<[ResultId]>, RunError>,
         checkpoint: impl Fn(MemoCommitCheckpoint),
-    ) -> Result<Box<[RuntimeValue]>, RunError> {
+    ) -> Result<Box<[ResultId]>, RunError> {
         let mut produce = Some(produce);
         loop {
             cancellation.check()?;
@@ -259,9 +378,9 @@ impl RunMemoization {
 
             if !producer {
                 checkpoint(MemoCommitCheckpoint::WaiterRegistered);
-                match wait_for_flight(&flight, cancellation)? {
-                    FlightWait::Complete(outputs) => return Ok(outputs),
-                    FlightWait::Retry => continue,
+                match wait_for_flight(&flight, cancellation) {
+                    Err(RunError::MemoizationRetry) => continue,
+                    result => return result,
                 }
             }
 
@@ -273,18 +392,22 @@ impl RunMemoization {
             let outputs = match produced {
                 Ok(outputs) => outputs,
                 Err(error) => {
-                    return if guard.publish(FlightState::Failed(error.clone()), false) {
+                    let state = if matches!(
+                        error,
+                        RunError::Cancelled | RunError::DeadlineExceeded { .. }
+                    ) {
+                        FlightState::RetryableAborted
+                    } else {
+                        FlightState::Failed(error.clone())
+                    };
+                    return if guard.publish(state, false) {
                         Err(error)
                     } else {
                         Err(RunError::Cancelled)
                     };
                 }
             };
-            let cacheable = outputs.iter().all(|value| match value {
-                RuntimeValue::Scalar(_) => true,
-                RuntimeValue::Artifact(artifact) => artifact.is_memoization_complete(),
-                RuntimeValue::Stream(_) => false,
-            });
+
             let mut owner = self.owner.lock().unwrap_or_else(|error| error.into_inner());
             if owner.finalized {
                 guard.disarm();
@@ -314,22 +437,8 @@ impl RunMemoization {
                 guard.disarm();
                 return Err(RunError::Cancelled);
             }
-            *state = if cacheable {
-                FlightState::Complete(outputs.clone())
-            } else {
-                FlightState::Uncacheable
-            };
-            if cacheable {
-                checkpoint(MemoCommitCheckpoint::Committed);
-            }
-            if !cacheable
-                && owner
-                    .entries
-                    .get(&key)
-                    .is_some_and(|current| Arc::ptr_eq(current, &flight))
-            {
-                owner.entries.remove(&key);
-            }
+            *state = FlightState::Complete(outputs.clone());
+            checkpoint(MemoCommitCheckpoint::Committed);
             drop(state);
             drop(owner);
             flight.ready.notify_all();
@@ -397,21 +506,25 @@ impl RunMemoization {
     }
 }
 
-impl Drop for RunMemoization {
+impl Drop for SessionMemoization {
     fn drop(&mut self) {
         self.finalize();
     }
 }
 
 struct ProducerFlightGuard<'a> {
-    owner: &'a RunMemoization,
+    owner: &'a SessionMemoization,
     key: &'a OperationMemoKey,
     flight: &'a Arc<Flight>,
     armed: bool,
 }
 
 impl<'a> ProducerFlightGuard<'a> {
-    fn new(owner: &'a RunMemoization, key: &'a OperationMemoKey, flight: &'a Arc<Flight>) -> Self {
+    fn new(
+        owner: &'a SessionMemoization,
+        key: &'a OperationMemoKey,
+        flight: &'a Arc<Flight>,
+    ) -> Self {
         Self {
             owner,
             key,
@@ -445,15 +558,10 @@ fn memoization_panic_error() -> RunError {
     RunError::InvalidPlan("memoization producer panicked".into())
 }
 
-enum FlightWait {
-    Complete(Box<[RuntimeValue]>),
-    Retry,
-}
-
 fn wait_for_flight(
     flight: &Flight,
     cancellation: &CancellationToken,
-) -> Result<FlightWait, RunError> {
+) -> Result<Box<[ResultId]>, RunError> {
     cancellation.register_waiter(&flight.ready);
     let mut state = flight
         .state
@@ -469,9 +577,9 @@ fn wait_for_flight(
                     .unwrap_or_else(|error| error.into_inner());
             }
             FlightState::Complete(outputs) => {
-                return Ok(FlightWait::Complete(outputs.clone()));
+                return Ok(outputs.clone());
             }
-            FlightState::Uncacheable => return Ok(FlightWait::Retry),
+            FlightState::RetryableAborted => return Err(RunError::MemoizationRetry),
             FlightState::Failed(error) => return Err(error.clone()),
             FlightState::Panicked => return Err(memoization_panic_error()),
             FlightState::Finalized => return Err(RunError::Cancelled),
@@ -485,16 +593,121 @@ mod owner_drop_tests {
     use std::sync::Barrier;
     use std::thread;
 
-    #[test]
-    fn per_run_memoization_drop_wakes_owned_flight() {
-        let key = OperationMemoKey {
-            operation: OperationStableId::new("drop-flight").unwrap(),
+    fn test_key(name: &str) -> OperationMemoKey {
+        OperationMemoKey {
+            operation: OperationStableId::new(name).unwrap(),
             input_fingerprints: Box::new([]),
             resource_versions: ResourceVersionSet::new(),
             semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+            computation_settings: ComputationSettingsFingerprint::from_bytes([3; 32]),
             demand: DemandFingerprint::from_bytes([2; 32]),
+        }
+    }
+
+    #[test]
+    fn retryable_producer_cancellation_or_deadline_wakes_waiter_to_produce() {
+        for (index, error) in [
+            RunError::Cancelled,
+            RunError::DeadlineExceeded {
+                phase: super::super::RunPhase::Kernel,
+            },
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let memo = Arc::new(SessionMemoization::new());
+            let key = test_key(&format!("retryable-flight-{index}"));
+            assert!(matches!(
+                memo.reserve(&key, &ResultStore::new()).unwrap(),
+                MemoReservation::Producer
+            ));
+            let waiter_registered = Arc::new(Barrier::new(2));
+            let produced = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let waiter = {
+                let memo = Arc::clone(&memo);
+                let key = key.clone();
+                let waiter_registered = Arc::clone(&waiter_registered);
+                let produced = Arc::clone(&produced);
+                thread::spawn(move || {
+                    memo.get_or_produce_with_commit_checkpoint(
+                        key,
+                        &CancellationToken::new(),
+                        || {
+                            produced.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                            Ok(vec![ResultId::new(17)].into_boxed_slice())
+                        },
+                        |checkpoint| {
+                            if checkpoint == MemoCommitCheckpoint::WaiterRegistered {
+                                waiter_registered.wait();
+                            }
+                        },
+                    )
+                })
+            };
+            waiter_registered.wait();
+
+            memo.abort(&key, error, true);
+
+            assert_eq!(
+                waiter.join().unwrap().unwrap().as_ref(),
+                &[ResultId::new(17)]
+            );
+            assert_eq!(produced.load(std::sync::atomic::Ordering::SeqCst), 1);
+        }
+    }
+
+    #[test]
+    fn direct_cancelled_producer_wakes_waiter_to_retry_election() {
+        let memo = Arc::new(SessionMemoization::new());
+        let key = test_key("direct-cancelled-producer");
+        let producer_started = Arc::new(Barrier::new(2));
+        let release_producer = Arc::new(Barrier::new(2));
+        let producer = {
+            let memo = Arc::clone(&memo);
+            let key = key.clone();
+            let producer_started = Arc::clone(&producer_started);
+            let release_producer = Arc::clone(&release_producer);
+            thread::spawn(move || {
+                memo.get_or_produce(key, &CancellationToken::new(), || {
+                    producer_started.wait();
+                    release_producer.wait();
+                    Err(RunError::Cancelled)
+                })
+            })
         };
-        let memo = RunMemoization::new();
+        producer_started.wait();
+        let waiter_registered = Arc::new(Barrier::new(2));
+        let waiter = {
+            let memo = Arc::clone(&memo);
+            let key = key.clone();
+            let waiter_registered = Arc::clone(&waiter_registered);
+            thread::spawn(move || {
+                memo.get_or_produce_with_commit_checkpoint(
+                    key,
+                    &CancellationToken::new(),
+                    || Ok(vec![ResultId::new(18)].into_boxed_slice()),
+                    |checkpoint| {
+                        if checkpoint == MemoCommitCheckpoint::WaiterRegistered {
+                            waiter_registered.wait();
+                        }
+                    },
+                )
+            })
+        };
+        waiter_registered.wait();
+        release_producer.wait();
+
+        assert_eq!(producer.join().unwrap(), Err(RunError::Cancelled));
+        assert_eq!(
+            waiter.join().unwrap().unwrap().as_ref(),
+            &[ResultId::new(18)]
+        );
+    }
+
+    #[test]
+    fn session_memoization_drop_wakes_owned_flight() {
+        let key = test_key("drop-flight");
+        let memo = SessionMemoization::new();
         let flight = Arc::new(Flight::producing());
         memo.owner
             .lock()

@@ -1,46 +1,55 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Button } from '@/components/ui/button';
+
 import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { detailPinRowClass } from '../shared/detailStyles';
 import { DetailBadge, DetailText } from '../shared/DetailText';
-import type { PinResultState } from '@/shared/types/ui';
+
 import {
   buildPinViewParams,
   evaluatePinViewState,
   pinViewDisabledTitle,
 } from '@/features/core/execution';
-import { openPinInspectableView } from '@/features/application/execution/openInspectableSource';
-import type { ExecutionStatus } from '@/shared/types/ui';
+import { PinHistoryMenu } from '@/features/application/execution/PinHistoryMenu';
+import { useGraphDataStore } from '@/features/core/dataStore';
+import { useShallow } from 'zustand/react/shallow';
 
 interface NodePinSpecRowProps {
   graphPath: string;
   pin: ResolvedPinSpec;
-  pinResults?: Map<string, PinResultState>;
-  executionStatus?: ExecutionStatus;
+
 }
 
 export function NodePinSpecRow({
   graphPath,
   pin,
-  pinResults,
-  executionStatus,
 }: NodePinSpecRowProps) {
   const { t } = useTranslation();
+  const connections = useGraphDataStore(useShallow((state) =>
+    pin.connectionIds.flatMap((connectionId) => {
+      const connection = state.getGraphConnection(graphPath, connectionId);
+      return connection?.output && connection.input
+        ? [{
+            connectionId: connection.id,
+            output: connection.output,
+            input: connection.input,
+            order: connection.order ?? null,
+          }]
+        : [];
+    }),
+  ));
 
   const viewParams = useMemo(
     () =>
       buildPinViewParams({
         graphPath,
-        pinId: pin.id,
+        address: pin.address,
         direction: pin.direction,
         isExec: pin.kind === 'Exec',
-        connectionIds: pin.connectionIds,
-        pinResults,
-        executionStatus,
+        connections,
       }),
-    [graphPath, pin, pinResults, executionStatus],
+    [graphPath, pin.address, pin.direction, pin.kind, connections],
   );
 
   const viewState = useMemo(
@@ -91,25 +100,20 @@ export function NodePinSpecRow({
   };
 
   const viewButton = showView ? (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="h-5 px-1.5 text-[10px]"
-            disabled={!viewEnabled}
-            onClick={() => void openPinInspectableView(viewParams, t)}
-          >
-            {t('detail.nodeDoc.view')}
-          </Button>
-        </span>
-      </TooltipTrigger>
-      {!viewEnabled && viewDisabledLabel ? (
-        <TooltipContent side="top">{viewDisabledLabel}</TooltipContent>
-      ) : null}
-    </Tooltip>
+    viewEnabled ? (
+      <PinHistoryMenu
+        graphPath={graphPath}
+        outputs={viewState.refs.flatMap((ref) => ref.kind === 'outputPin' ? [ref.output] : [])}
+        label={t('detail.nodeDoc.view')}
+      />
+    ) : (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="text-[10px] text-muted-foreground">{t('detail.nodeDoc.view')}</span>
+        </TooltipTrigger>
+        {viewDisabledLabel ? <TooltipContent side="top">{viewDisabledLabel}</TooltipContent> : null}
+      </Tooltip>
+    )
   ) : null;
 
   return (

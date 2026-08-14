@@ -11,7 +11,7 @@ function graph(partial: Partial<GraphExecutionState>): GraphExecutionState {
     flowingConnections: new Set(),
     recording: [],
     graphDirty: false,
-    pinResults: new Map(),
+    pinHistories: new Map(),
     pinPreviews: new Map(),
     ...partial,
   };
@@ -24,11 +24,11 @@ describe('graphHasClearableArtifacts', () => {
   });
 
   it('returns false while running', () => {
-    expect(graphHasClearableArtifacts(graph({ status: 'running', pinResults: new Map([['p', {} as never]]) }))).toBe(false);
+    expect(graphHasClearableArtifacts(graph({ status: 'running', pinHistories: new Map([['p', {} as never]]) }))).toBe(false);
   });
 
-  it('returns true when pin results or recording exist', () => {
-    expect(graphHasClearableArtifacts(graph({ pinResults: new Map([['p', {} as never]]) }))).toBe(true);
+  it('returns true when result projections or recording exist', () => {
+    expect(graphHasClearableArtifacts(graph({ pinHistories: new Map([['p', {} as never]]) }))).toBe(true);
     expect(graphHasClearableArtifacts(graph({ recording: [{ event: { event: 'executionStart' }, timestamp: 0 }] }))).toBe(true);
   });
 

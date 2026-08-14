@@ -1,26 +1,26 @@
 import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
 import { ReportView } from '@/views/InfoView/ReportView';
-import type { SourceDescriptor } from '../types';
-import { reportSourceValuePayload } from '../sourceValuePayload';
-import { useSourceValue } from '../useSourceValue';
+import type { ResultDescriptor } from '../types';
+import { reportResultValuePayload } from '../resultValuePayload';
+import { useResultValue } from '../useResultValue';
 
-export interface ReportSourceViewProps {
-  payload: SourceDescriptor;
+export interface ReportResultViewProps {
+  payload: ResultDescriptor;
   /** When provided, skips IPC fetch (presentation windows preload data). */
   data?: unknown;
 }
 
-export function ReportSourceView({
+export function ReportResultView({
   payload,
   data: preloadedData,
-}: ReportSourceViewProps) {
+}: ReportResultViewProps) {
   if (payload.presentation.kind !== 'report') {
     return null;
   }
 
   const report = payload.presentation.report;
-  const { value, loading, error } = useSourceValue(
-    preloadedData === undefined ? payload.sourceId : null,
+  const { value, loading, error } = useResultValue(
+    preloadedData === undefined ? payload.resultId : null,
   );
 
   if (error) {
@@ -30,8 +30,8 @@ export function ReportSourceView({
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
 
-  const data = preloadedData ?? (value ? reportSourceValuePayload(value) : value);
-  const content = <ReportView report={report} data={data} />;
+  const data = preloadedData ?? (value ? reportResultValuePayload(value) : value);
+  const content = <ReportView descriptor={payload} report={report} data={data} />;
 
   return (
     <OverlayScrollbar className="min-h-0 flex-1" direction="vertical">

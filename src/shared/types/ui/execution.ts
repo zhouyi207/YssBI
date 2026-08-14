@@ -4,8 +4,9 @@
  * Tauri Channel 传输的执行事件 + 前端执行状态（按图独立存储）
  */
 
-import type { Presentation, SourceDescriptor } from '@/features/core/resultSource';
+import type { Presentation } from '@/features/core/resultSource';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import type { PinResultEntry } from '@/shared/types/dto/result';
 
 // ─── Channel 事件类型（与后端 ExecutionEvent 枚举对应）───
 
@@ -18,18 +19,8 @@ export type ExecutionEvent =
   | { event: 'connectionActive'; data: { fromPinId: string; toPinId: string } }
   | { event: 'connectionFlow'; data: { fromPinId: string; toPinId: string } }
   | {
-      event: 'openSourceWindow';
-      data: { sourceId: string; presentation: Presentation; windowTitle: string };
-    }
-  | {
-      event: 'pinResultReady';
-      data: {
-        graphPath: string;
-        nodeId: string;
-        pinId: string;
-        sourceId: string;
-        descriptor: SourceDescriptor;
-      };
+      event: 'openResultWindow';
+      data: { resultId: string; presentation: Presentation; windowTitle: string };
     };
 
 /** 带时间戳的录制事件 */
@@ -50,12 +41,12 @@ export interface NodeExecutionState {
   durationMs?: number;
 }
 
-export interface PinResultState {
+
+export interface PinHistoryProjection {
   graphPath: string;
-  nodeId: string;
-  pinId: string;
-  sourceId: string;
-  descriptor: SourceDescriptor;
+  output: PortAddressDto;
+  entries: PinResultEntry[];
+  selectedResultId: string | null;
 }
 
 export interface PinPreviewState {
@@ -63,7 +54,7 @@ export interface PinPreviewState {
   port: PortAddressDto;
   generation: number;
   status: 'pending' | 'ready' | 'error';
-  sourceId: string | null;
+  resultId: string | null;
   error: string | null;
 }
 
@@ -78,8 +69,9 @@ export interface GraphExecutionState {
   flowingConnections: Set<string>;
   recording: RecordedEvent[];
   graphDirty: boolean;
-  /** output pin id -> latest backend source descriptor */
-  pinResults: Map<string, PinResultState>;
+
+  /** Backend output-Pin history projections keyed by exact graph path and address. */
+  pinHistories: Map<string, PinHistoryProjection>;
   /** Stable `(graphPath, PortAddressDto)` preview projections. */
   pinPreviews: Map<string, PinPreviewState>;
 }

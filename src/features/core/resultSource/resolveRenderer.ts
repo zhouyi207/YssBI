@@ -1,22 +1,16 @@
-import type { SourceDescriptor, SourceRendererKind } from './types';
+import type { ResultDescriptor, ResultRendererKind } from './types';
 
-export function resolveSourceRenderer(descriptor: SourceDescriptor): SourceRendererKind {
-  const { presentation, kind } = descriptor;
-  if (presentation.kind === 'plot') return 'plot';
-  if (presentation.kind === 'report') return 'info';
-
-  switch (kind) {
-    case 'dataframe':
-      return 'dataframe';
-    case 'dataseries':
+export function resolveResultRenderer(descriptor: ResultDescriptor): ResultRendererKind {
+  if (descriptor.presentation.kind === 'plot') return 'plot';
+  if (descriptor.presentation.kind === 'report') return 'info';
+  switch (descriptor.valueKind) {
+    case 'sequence':
+      return 'sequence';
+    case 'dataSeries':
       return 'dataseries';
     case 'scalar':
       return 'scalar';
-    case 'null':
-      return 'null';
-    case 'json':
-    case 'struct':
-    default:
+    case 'unknown':
       return 'json';
   }
 }

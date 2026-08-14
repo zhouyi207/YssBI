@@ -5,9 +5,12 @@
 //! `ExecutionPlan` and serialize only as part of that immutable plan product.
 
 mod model;
+mod result_presentation;
 mod validation;
 
 pub use model::*;
+pub(crate) use result_presentation::presentation_for_output;
+pub use result_presentation::{ResultPlotKind, ResultPresentation, ResultReportKind};
 pub(crate) use validation::PlanSourceFacts;
 pub use validation::{PlanValidationError, PlanValidationErrors};
 
@@ -39,6 +42,8 @@ mod tests {
                 value: ValueRef::new(output),
                 contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 production: OutputProduction::FullyMaterialized,
+                public_output: None,
+                presentation: ResultPresentation::Inspector,
             }]),
             params: id("params-1", CompiledParameterHandle::new),
             resource_dependencies: Box::new([]),
@@ -167,6 +172,70 @@ mod tests {
                 value: ValueRef::new(6),
             }]),
         }
+    }
+
+    #[test]
+    fn validation_rejects_duplicate_public_output_identity() {
+        let mut plan = valid_plan();
+        let public_output = GraphOutputRef {
+            graph_path: plan.provenance.graph_path.clone(),
+            port: PortAddress::declared(
+                plan.operations[0].source_node_id,
+                PortKey::new("shared").unwrap(),
+            ),
+        };
+        plan.operations[0].outputs[0].public_output = Some(public_output.clone());
+        plan.operations[1].source_node_id = plan.operations[0].source_node_id;
+        plan.operations[1].outputs[0].public_output = Some(public_output.clone());
+
+        assert!(plan.validate().unwrap_err().0.iter().any(|error| {
+            matches!(error, PlanValidationError::DuplicatePublicOutput(output) if output == &public_output)
+        }));
+    }
+
+    #[test]
+    fn validation_rejects_wrong_public_output_graph_and_node() {
+        let mut wrong_graph = valid_plan();
+        wrong_graph.operations[0].outputs[0].public_output = Some(GraphOutputRef {
+            graph_path: GraphResourcePath("events/other".into()),
+            port: PortAddress::declared(
+                wrong_graph.operations[0].source_node_id,
+                PortKey::new("result").unwrap(),
+            ),
+        });
+        assert!(wrong_graph.validate().unwrap_err().0.iter().any(|error| {
+            matches!(error, PlanValidationError::InvalidPublicOutput { operation, .. } if operation.index() == 0)
+        }));
+
+        let mut wrong_node = valid_plan();
+        wrong_node.operations[0].outputs[0].public_output = Some(GraphOutputRef {
+            graph_path: wrong_node.provenance.graph_path.clone(),
+            port: PortAddress::declared(
+                NodeId::from_uuid(uuid::Uuid::from_u128(99)),
+                PortKey::new("result").unwrap(),
+            ),
+        });
+        assert!(wrong_node.validate().unwrap_err().0.iter().any(|error| {
+            matches!(error, PlanValidationError::InvalidPublicOutput { operation, .. } if operation.index() == 0)
+        }));
+    }
+
+    #[test]
+    fn validation_rejects_non_data_public_output_when_result_fact_is_exact() {
+        let mut plan = valid_plan();
+        let result = plan.results[0].clone();
+        plan.operations[1].outputs[0].value = result.value;
+        plan.operations[1].outputs[0].public_output = Some(GraphOutputRef {
+            graph_path: result.output.graph_path.clone(),
+            port: PortAddress::declared(
+                plan.operations[1].source_node_id,
+                PortKey::new("then").unwrap(),
+            ),
+        });
+
+        assert!(plan.validate().unwrap_err().0.iter().any(|error| {
+            matches!(error, PlanValidationError::PublicOutputResultMismatch { value, .. } if value == &result.value)
+        }));
     }
 
     #[test]

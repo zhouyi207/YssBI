@@ -5,14 +5,12 @@ import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { NodePinSpecRow } from './NodePinSpecRow';
 import { detailEmptyHintClass } from '../shared/detailStyles';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
-import type { ExecutionStatus, PinResultState } from '@/shared/types/ui';
+
 
 interface NodePinInterfacePanelProps {
   graphPath: string;
   inputs: ResolvedPinSpec[];
   outputs: ResolvedPinSpec[];
-  pinResults?: Map<string, PinResultState>;
-  executionStatus?: ExecutionStatus;
 }
 
 type PinTab = 'inputs' | 'outputs';
@@ -21,14 +19,10 @@ function PinList({
   graphPath,
   emptyLabel,
   pins,
-  pinResults,
-  executionStatus,
 }: {
   graphPath: string;
   emptyLabel: string;
   pins: ResolvedPinSpec[];
-  pinResults?: Map<string, PinResultState>;
-  executionStatus?: ExecutionStatus;
 }) {
   return (
     <div className="space-y-1">
@@ -38,8 +32,6 @@ function PinList({
             key={pin.id}
             graphPath={graphPath}
             pin={pin}
-            pinResults={pinResults}
-            executionStatus={executionStatus}
           />
         ))
       ) : (
@@ -53,8 +45,6 @@ export function NodePinInterfacePanel({
   graphPath,
   inputs,
   outputs,
-  pinResults,
-  executionStatus,
 }: NodePinInterfacePanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<PinTab>(() =>
@@ -91,8 +81,6 @@ export function NodePinInterfacePanel({
               graphPath={graphPath}
               emptyLabel={t('detail.nodeDoc.noInputs')}
               pins={inputs}
-              pinResults={pinResults}
-              executionStatus={executionStatus}
             />
           </TabsContent>
           <TabsContent value="outputs" className="mt-2">
@@ -100,8 +88,6 @@ export function NodePinInterfacePanel({
               graphPath={graphPath}
               emptyLabel={t('detail.nodeDoc.noOutputs')}
               pins={outputs}
-              pinResults={pinResults}
-              executionStatus={executionStatus}
             />
           </TabsContent>
         </Tabs>

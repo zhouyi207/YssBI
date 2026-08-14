@@ -1,97 +1,83 @@
-import { SourceService } from '@/services/resultSource/resultSourceService';
+import { ResultService } from '@/services/result/resultService';
 import type {
-  PlotChart,
-  ReportKind,
-  SourceDescriptor,
-} from '@/features/core/resultSource';
-import {
-  reportSourceValuePayload,
-  sourceValuePayload,
-} from '@/features/core/resultSource/sourceValuePayload';
+  ResultDescriptor,
+  ResultFailure,
+  ResultPage,
+  ResultPlotKind,
+  ResultProgress,
+  ResultReportKind,
+} from '@/shared/types/dto/result';
 import { parsePlotChartFromLocation } from './parsePresentationWindowQuery';
 
 export type PresentationWindowState =
   | { status: 'loading' }
-  | { status: 'missing_source_id' }
+  | { status: 'missing_result_id' }
   | { status: 'not_found' }
+  | { status: 'pending'; descriptor: ResultDescriptor; progress: ResultProgress }
+  | { status: 'failed'; descriptor: ResultDescriptor; failure: ResultFailure }
+  | { status: 'cancelled'; descriptor: ResultDescriptor }
   | { status: 'load_failed'; message: string }
-  | { status: 'ready'; descriptor: SourceDescriptor; payload: PresentationPayload };
+  | { status: 'ready'; descriptor: ResultDescriptor; payload: PresentationPayload };
 
 export type PresentationPayload =
-  | { mode: 'inspector'; descriptor: SourceDescriptor }
-  | { mode: 'plot'; chart: PlotChart; data: unknown }
-  | { mode: 'report'; report: ReportKind; data: unknown };
+  | { mode: 'inspector'; descriptor: ResultDescriptor; page?: ResultPage }
+  | { mode: 'plot'; chart: ResultPlotKind; data: unknown }
+  | { mode: 'report'; report: ResultReportKind; data: unknown };
 
+const PAGE_SIZE = 200;
 
-function resolvePlotChart(descriptor: SourceDescriptor): PlotChart {
-  if (descriptor.presentation.kind === 'plot') {
-    return descriptor.presentation.chart;
-  }
+function resolvePlotChart(descriptor: ResultDescriptor): ResultPlotKind {
+  if (descriptor.presentation.kind === 'plot') return descriptor.presentation.chart;
   const fallback = parsePlotChartFromLocation();
-  const allowed: PlotChart[] = [
-    'scatter',
-    'line',
-    'plot',
-    'ecdf',
-    'kde',
-    'histogram',
-    'correlation',
-    'correlogram',
+  const allowed: ResultPlotKind[] = [
+    'scatter', 'line', 'plot', 'ecdf', 'kde', 'histogram', 'correlation', 'correlogram',
   ];
-  if (fallback && allowed.includes(fallback as PlotChart)) {
-    return fallback as PlotChart;
-  }
-  return 'scatter';
+  return allowed.includes(fallback as ResultPlotKind) ? fallback as ResultPlotKind : 'scatter';
 }
 
-export async function loadPresentationWindow(
-  sourceId: string,
-): Promise<PresentationWindowState> {
-  if (!sourceId.trim()) {
-    return { status: 'missing_source_id' };
+async function loadReadyPayload(descriptor: ResultDescriptor): Promise<PresentationPayload> {
+  if (descriptor.presentation.kind === 'inspector') {
+    if (descriptor.valueKind === 'scalar') {
+      await ResultService.getValue(descriptor.resultId);
+      return { mode: 'inspector', descriptor };
+    }
+    const page = await ResultService.getPage(descriptor.resultId, 0, PAGE_SIZE);
+    if (!page) throw new Error('Result data was not found');
+    return { mode: 'inspector', descriptor, page };
   }
 
-  try {
-    const descriptor = await SourceService.getDescriptor(sourceId);
-    if (!descriptor) {
-      return { status: 'not_found' };
+  if (descriptor.valueKind === 'scalar') {
+    const value = await ResultService.getValue(descriptor.resultId);
+    if (!value || value.kind !== 'value') {
+      throw new Error('Presentation results require a canonical scalar value');
     }
+    return descriptor.presentation.kind === 'plot'
+      ? { mode: 'plot', chart: resolvePlotChart(descriptor), data: value.value }
+      : { mode: 'report', report: descriptor.presentation.report, data: value.value };
+  }
 
-    switch (descriptor.presentation.kind) {
-      case 'inspector':
-        return {
-          status: 'ready',
-          descriptor,
-          payload: { mode: 'inspector', descriptor },
-        };
+  const page = await ResultService.getPage(descriptor.resultId, 0, PAGE_SIZE);
+  if (!page) throw new Error('Result data was not found');
+  if (descriptor.presentation.kind === 'report') {
+    throw new Error('Report results require a canonical scalar object');
+  }
+  return { mode: 'plot', chart: resolvePlotChart(descriptor), data: page.values };
+}
 
-      case 'plot': {
-        const value = await SourceService.getValue(descriptor.sourceId);
-        if (!value) return { status: 'not_found' };
-        return {
-          status: 'ready',
-          descriptor,
-          payload: {
-            mode: 'plot',
-            chart: resolvePlotChart(descriptor),
-            data: sourceValuePayload(value),
-          },
-        };
-      }
-
-      case 'report': {
-        const value = await SourceService.getValue(descriptor.sourceId);
-        if (!value) return { status: 'not_found' };
-        return {
-          status: 'ready',
-          descriptor,
-          payload: {
-            mode: 'report',
-            report: descriptor.presentation.report,
-            data: reportSourceValuePayload(value),
-          },
-        };
-      }
+export async function loadPresentationWindow(resultId: string): Promise<PresentationWindowState> {
+  if (!resultId.trim()) return { status: 'missing_result_id' };
+  try {
+    const descriptor = await ResultService.getDescriptor(resultId);
+    if (!descriptor) return { status: 'not_found' };
+    switch (descriptor.state.kind) {
+      case 'pending':
+        return { status: 'pending', descriptor, progress: descriptor.state.progress };
+      case 'failed':
+        return { status: 'failed', descriptor, failure: descriptor.state.failure };
+      case 'cancelled':
+        return { status: 'cancelled', descriptor };
+      case 'ready':
+        return { status: 'ready', descriptor, payload: await loadReadyPayload(descriptor) };
     }
   } catch (error) {
     return {

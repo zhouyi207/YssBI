@@ -45,6 +45,12 @@ impl ExecutionPlan {
         let mut value_producers = vec![BTreeSet::new(); value_count];
         let mut relational_owners = BTreeMap::new();
         let mut stable_operation_ids = BTreeMap::new();
+        let mut public_outputs = BTreeSet::new();
+        let result_outputs_by_value = self
+            .results
+            .iter()
+            .map(|result| (result.value, &result.output))
+            .collect::<BTreeMap<_, _>>();
 
         for (value, _) in &self.value_contracts {
             check_value(&mut errors, "value contract", *value, value_count);
@@ -105,6 +111,30 @@ impl ExecutionPlan {
                 );
             }
             for output in &planned.outputs {
+                if let Some(public_output) = &output.public_output {
+                    if !public_outputs.insert(public_output.clone()) {
+                        errors.push(PlanValidationError::DuplicatePublicOutput(
+                            public_output.clone(),
+                        ));
+                    }
+                    if public_output.graph_path != self.provenance.graph_path
+                        || public_output.port.node_id != planned.source_node_id
+                    {
+                        errors.push(PlanValidationError::InvalidPublicOutput {
+                            operation: OperationIndex::new(operation as u32),
+                            output: public_output.clone(),
+                        });
+                    }
+                    if let Some(expected) = result_outputs_by_value.get(&output.value)
+                        && public_output != *expected
+                    {
+                        errors.push(PlanValidationError::PublicOutputResultMismatch {
+                            value: output.value,
+                            expected: (*expected).clone(),
+                            actual: public_output.clone(),
+                        });
+                    }
+                }
                 validate_value_contract(
                     &self.value_contracts,
                     output.value,
@@ -558,10 +588,10 @@ fn validate_materialization_adapters(plan: &ExecutionPlan, errors: &mut Vec<Plan
         .collect::<BTreeMap<_, _>>();
 
     for dependency in &plan.value_dependencies {
-        let Some((producer, _)) = output_owners.get(&dependency.source) else {
+        let Some((producer, production)) = output_owners.get(&dependency.source) else {
             continue;
         };
-        let Some((consumer, _)) = input_owners.get(&dependency.destination) else {
+        let Some((consumer, consumption)) = input_owners.get(&dependency.destination) else {
             continue;
         };
         let producer_is_adapter = producer.is_some_and(|producer| {
@@ -575,6 +605,8 @@ fn validate_materialization_adapters(plan: &ExecutionPlan, errors: &mut Vec<Plan
                 plan.operations[consumer.index()].kernel,
                 PlannedKernel::Adapter(_)
             )
+            && MaterializationAdapterPlan::for_contract(*production, *consumption).adapter
+                != PlannedAdapter::Identity
         {
             errors.push(PlanValidationError::MissingMaterializationAdapter {
                 source: dependency.source,
@@ -631,27 +663,28 @@ fn validate_materialization_adapters(plan: &ExecutionPlan, errors: &mut Vec<Plan
             let downstream_consumptions = outgoing
                 .iter()
                 .filter_map(|dependency| {
-                    let (adapter, _) = input_owners.get(&dependency.destination)?;
-                    let adapter_operation = &plan.operations[adapter.index()];
-                    if !matches!(adapter_operation.kernel, PlannedKernel::Adapter(_))
-                        || adapter_operation.outputs.len() != 1
-                    {
+                    let (consumer, consumption) = input_owners.get(&dependency.destination)?;
+                    let consumer_operation = &plan.operations[consumer.index()];
+                    if !matches!(consumer_operation.kernel, PlannedKernel::Adapter(_)) {
+                        return Some(*consumption);
+                    }
+                    if consumer_operation.outputs.len() != 1 {
                         return None;
                     }
-                    let mut adapter_outgoing = plan
-                        .value_dependencies
-                        .iter()
-                        .filter(|candidate| candidate.source == adapter_operation.outputs[0].value);
+                    let mut adapter_outgoing = plan.value_dependencies.iter().filter(|candidate| {
+                        candidate.source == consumer_operation.outputs[0].value
+                    });
                     let downstream = adapter_outgoing.next()?;
                     if adapter_outgoing.next().is_some() {
                         return None;
                     }
-                    let (consumer, consumption) = input_owners.get(&downstream.destination)?;
+                    let (downstream_consumer, downstream_consumption) =
+                        input_owners.get(&downstream.destination)?;
                     (!matches!(
-                        plan.operations[consumer.index()].kernel,
+                        plan.operations[downstream_consumer.index()].kernel,
                         PlannedKernel::Adapter(_)
                     ))
-                    .then_some(*consumption)
+                    .then_some(*downstream_consumption)
                 })
                 .collect::<Vec<_>>();
             if downstream_consumptions.len() != outgoing.len() {
@@ -1733,6 +1766,16 @@ pub enum PlanValidationError {
     DuplicateValueProducer {
         value: ValueRef,
         operation: OperationIndex,
+    },
+    DuplicatePublicOutput(GraphOutputRef),
+    InvalidPublicOutput {
+        operation: OperationIndex,
+        output: GraphOutputRef,
+    },
+    PublicOutputResultMismatch {
+        value: ValueRef,
+        expected: GraphOutputRef,
+        actual: GraphOutputRef,
     },
     ZeroLoopIterationLimit,
     DuplicateBranchResultDestination(ValueRef),

@@ -46,75 +46,120 @@ fn external_project_event_executes_when_diagnostic_path_is_configured() {
     state.activate_project_fixture(root, data);
     let graph_path = GraphResourcePath::new(graph_path).unwrap();
     load_graph(&state, &graph_path).unwrap();
-    let view_node = state
-        .project_data
-        .read()
-        .unwrap()
-        .graphs
-        .get(&graph_path)
-        .unwrap()
-        .document
-        .nodes
-        .values()
-        .find(|node| node.node_type.as_str() == "yssbi.debug.view")
-        .map(|node| node.id)
-        .expect("external diagnostic graph must contain View Data");
-    let view_output = crate::node_system::plan::GraphOutputRef {
-        graph_path: crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
-        port: crate::node_system::document::PortAddress::declared(
-            view_node,
-            crate::node_system::protocol::PortKey::new("snapshot").unwrap(),
-        ),
+
+    let (view_node_id, ols_report_output) = {
+        let project = state.project_data.read().unwrap();
+        let document = &project.graphs.get(&graph_path).unwrap().document;
+        let view_node_id = document
+            .nodes
+            .values()
+            .find(|node| node.node_type.as_str() == "yssbi.debug.view")
+            .map(|node| node.id)
+            .expect("external diagnostic graph must contain View Data");
+        let ols_node_id = document
+            .nodes
+            .values()
+            .find(|node| node.node_type.as_str() == "yssbi.statistics.ols.summary")
+            .map(|node| node.id)
+            .expect("external diagnostic graph must contain OLS Summary");
+        let view_data_input = crate::node_system::document::PortAddress::declared(
+            view_node_id,
+            crate::node_system::protocol::PortKey::new("data").unwrap(),
+        );
+        let connection = document
+            .connections
+            .values()
+            .find(|connection| connection.input == view_data_input)
+            .expect("View Data must have a connected Data input");
+        assert_eq!(connection.output.node_id, ols_node_id);
+        (
+            view_node_id,
+            crate::node_system::plan::GraphOutputRef {
+                graph_path: crate::node_system::document::GraphResourcePath(
+                    graph_path.as_str().into(),
+                ),
+                port: connection.output.clone(),
+            },
+        )
     };
+
     let events = Events::default();
-    let result = state.execute_graph_for_current_project_for_test(
+    let run = state.execute_graph_for_current_project_for_test(
         &graph_path,
         &crate::node_system::plan::ExecutionDemand::Default,
         &events,
     );
-    assert!(
-        result.is_ok(),
-        "external project execution failed: {result:?}"
-    );
-    let report_source = events
-        .0
-        .lock()
-        .unwrap()
+    let _run = run.unwrap_or_else(|error| panic!("external project execution failed: {error:?}"));
+    let events = events.0.lock().unwrap().clone();
+    let results = state.project_store.read().unwrap().results.clone();
+    let latest_ols_report_pin_history = results
+        .pin_history(&ols_report_output)
+        .last()
+        .cloned()
+        .expect("OLS report output must have Pin history");
+    let ols_report_result_id = latest_ols_report_pin_history.result_id;
+    let open_result_ids = events
         .iter()
-        .find_map(|event| match &event.kind {
-            crate::node_system::runtime::RunEventKind::OutputReady {
-                output, source_id, ..
-            } if output == &view_output => Some(*source_id),
+        .filter_map(|event| match event.kind {
+            crate::node_system::runtime::RunEventKind::OpenResultWindow { result_id } => {
+                Some(result_id)
+            }
             _ => None,
         })
-        .expect("View Data snapshot output must be published");
-    let descriptor = state
-        .result_source_descriptor(report_source)
-        .unwrap()
-        .expect("published report descriptor must remain available");
-    let snapshot = state
-        .result_source_value(report_source)
-        .unwrap()
-        .expect("published report value must remain available");
-    let values = match snapshot.as_ref() {
-        crate::node_system::runtime::ArtifactSnapshot::RuntimeArtifact(artifact) => artifact
-            .in_memory_values()
-            .expect("View Data report must remain in memory"),
-        other => panic!("View Data must publish a runtime artifact, got {other:?}"),
+        .collect::<Vec<_>>();
+    let [view_data_input_result_id] = open_result_ids.as_slice() else {
+        panic!(
+            "expected exactly one View Data input/OpenResultWindow ResultId, got {open_result_ids:?}"
+        );
     };
-    let ipc_json = values
-        .iter()
-        .map(crate::commands::command_node_system::result_source_value_to_json)
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    assert_eq!(ipc_json.len(), 1);
-    assert_eq!(ipc_json[0]["title"], "OLS Summary");
+
+    assert_eq!(ols_report_result_id, *view_data_input_result_id);
     assert_eq!(
-        descriptor.presentation,
-        crate::node_system::runtime::ResultSourcePresentation::Report {
-            report: crate::node_system::runtime::ResultReportKind::OlsSummary,
+        *view_data_input_result_id,
+        latest_ols_report_pin_history.result_id
+    );
+    assert_eq!(results.result_count_for_node(view_node_id), 0);
+    assert_eq!(results.group_count_for_node(view_node_id), 0);
+    assert_eq!(results.materialized_result_count_for_node(view_node_id), 0);
+    assert!(events.iter().all(|event| !matches!(
+        &event.kind,
+        crate::node_system::runtime::RunEventKind::OutputResultChanged { output, .. }
+            if output.port.node_id == view_node_id
+    )));
+    let removed_view_output = crate::node_system::plan::GraphOutputRef {
+        graph_path: ols_report_output.graph_path.clone(),
+        port: crate::node_system::document::PortAddress::declared(
+            view_node_id,
+            crate::node_system::protocol::PortKey::new("snapshot").unwrap(),
+        ),
+    };
+    assert!(results.pin_history(&removed_view_output).is_empty());
+
+    let report = results
+        .result(ols_report_result_id)
+        .expect("OLS report result must remain available");
+    assert_eq!(
+        report.presentation,
+        crate::node_system::plan::ResultPresentation::Report {
+            report: crate::node_system::plan::ResultReportKind::OlsSummary,
         }
     );
+    assert_eq!(
+        crate::commands::node_system_execution_dto::canonical_report_title(&report),
+        Some("OLS Summary")
+    );
+    let crate::node_system::runtime::ResultState::Ready(value) = &report.state else {
+        panic!("OLS report result must be ready");
+    };
+    assert_eq!(
+        value.kind(),
+        crate::node_system::runtime::StoredValueKind::Scalar
+    );
+    let report_value = value.page(0, 1).unwrap();
+    assert_eq!(report_value.len(), 1);
+    let report_json =
+        crate::commands::command_node_system::result_value_to_json(&report_value[0]).unwrap();
+    assert_eq!(report_json["title"], "OLS Summary");
 }
 
 fn graph_path() -> GraphResourcePath {
@@ -1883,20 +1928,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
             .unwrap_err()
             .contains("project_recovery_required")
     );
-    assert_eq!(
-        state
-            .result_source_descriptor(crate::node_system::runtime::ResultSourceId::new(1))
-            .unwrap_err()
-            .code(),
-        "project_recovery_required"
-    );
-    assert_eq!(
-        state
-            .release_run_result_sources(crate::node_system::analysis::RunId::new(1))
-            .unwrap_err()
-            .code(),
-        "project_recovery_required"
-    );
+
     assert!(
         state
             .project_data
@@ -9141,7 +9173,7 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
         .execute_graph_for_current_project_for_test(&graph_path(), &demand, &NOOP_RUN_EVENT_SINK)
         .unwrap();
 
-    assert_eq!(run.values.len(), 1);
+    assert_eq!(run.result_ids.len(), 1);
     assert_eq!(
         observer.validated_requirements(),
         vec![vec![requirement(first_resource.clone())].into_boxed_slice()]
@@ -10583,8 +10615,8 @@ fn default_requested_and_preview_demands_reuse_one_basis_with_distinct_digests()
         first_run.provenance.compile_id,
         preview_run.provenance.compile_id
     );
-    assert_eq!(first_run.values.len(), 1);
-    assert_eq!(second_run.values.len(), 1);
+    assert_eq!(first_run.result_ids.len(), 1);
+    assert_eq!(second_run.result_ids.len(), 1);
     let first_events = first_events.0.lock().unwrap();
     assert_eq!(
         first_events
@@ -10598,7 +10630,7 @@ fn default_requested_and_preview_demands_reuse_one_basis_with_distinct_digests()
     );
     assert!(first_events.iter().any(|event| matches!(
         &event.kind,
-        crate::node_system::runtime::RunEventKind::OutputReady { output, .. }
+        crate::node_system::runtime::RunEventKind::OutputResultChanged { output, .. }
             if output == &first_output
     )));
     assert_ne!(
@@ -10616,14 +10648,14 @@ fn default_requested_and_preview_demands_reuse_one_basis_with_distinct_digests()
     let preview_events = preview_events.0.lock().unwrap();
     assert!(preview_events.iter().all(|event| !matches!(
         event.kind,
-        crate::node_system::runtime::RunEventKind::ResultReady { .. }
+        crate::node_system::runtime::RunEventKind::ResultGroupChanged { .. }
     )));
     assert_eq!(
         preview_events
             .iter()
             .filter(|event| matches!(
                 &event.kind,
-                crate::node_system::runtime::RunEventKind::OutputReady {
+                crate::node_system::runtime::RunEventKind::OutputResultChanged {
                     output,
                     generation: Some(17),
                     ..
@@ -13212,8 +13244,7 @@ fn project_execute_graph_runs_builtin_dataframe_source_rename_limit() {
     );
 
     let RuntimeValue::Scalar(Value::Object(rename_columns)) = result
-        .values
-        .get(fixture.rename_result_name.as_str())
+        .value_for_test(fixture.rename_result_name.as_str())
         .expect("Rename result must be exposed")
     else {
         panic!("expected Rename dataframe output")
@@ -13221,7 +13252,7 @@ fn project_execute_graph_runs_builtin_dataframe_source_rename_limit() {
     assert!(!rename_columns.contains_key("old_name"));
     assert_eq!(
         rename_columns,
-        &[
+        [
             (
                 "new_name".into(),
                 Value::List(vec![
@@ -13246,8 +13277,7 @@ fn project_execute_graph_runs_builtin_dataframe_source_rename_limit() {
     );
 
     let RuntimeValue::Scalar(Value::Object(limit_columns)) = result
-        .values
-        .get(fixture.limit_result_name.as_str())
+        .value_for_test(fixture.limit_result_name.as_str())
         .expect("Limit result must be exposed")
     else {
         panic!("expected Limit dataframe output")
@@ -13255,7 +13285,7 @@ fn project_execute_graph_runs_builtin_dataframe_source_rename_limit() {
     assert!(!limit_columns.contains_key("old_name"));
     assert_eq!(
         limit_columns,
-        &[
+        [
             (
                 "new_name".into(),
                 Value::List(vec![Value::Integer(11), Value::Integer(22)]),
@@ -13449,13 +13479,12 @@ fn predicate_cancellation_publishes_no_result_and_releases_project_resources() {
     )));
     assert!(events.iter().all(|event| !matches!(
         event.kind,
-        crate::node_system::runtime::RunEventKind::ResultReady { .. }
+        crate::node_system::runtime::RunEventKind::ResultGroupChanged { .. }
             | crate::node_system::runtime::RunEventKind::RunCompleted
     )));
     drop(events);
     let store = fixture.state.project_store.read().unwrap();
     assert_eq!(store.runs.active_run_count(), 0);
-    assert_eq!(store.results.source_count(), 0);
     drop(store);
     assert!(leases.acquired() > 0);
     assert_eq!(leases.acquired(), leases.dropped());
@@ -13537,7 +13566,7 @@ fn project_execution_preserves_relational_codes_in_errors_and_terminal_events() 
         )));
         assert!(events.iter().all(|event| !matches!(
             event.kind,
-            crate::node_system::runtime::RunEventKind::ResultReady { .. }
+            crate::node_system::runtime::RunEventKind::ResultGroupChanged { .. }
                 | crate::node_system::runtime::RunEventKind::RunCompleted
         )));
 
@@ -13619,8 +13648,8 @@ fn project_execute_graph_runs_builtin_dataframe_source_limit() {
     assert_eq!(observation.backend_invocations, 1);
     assert_eq!(observation.scan_limits, vec![Some(2)]);
     assert_eq!(
-        result.values.get(result_name.as_str()),
-        Some(&RuntimeValue::Scalar(Value::Object(
+        result.value_for_test(result_name.as_str()),
+        Some(RuntimeValue::Scalar(Value::Object(
             [(
                 "value".into(),
                 Value::List(vec![Value::Integer(11), Value::Integer(22)]),
@@ -13929,13 +13958,14 @@ impl ProductionRelationalChainFixture {
         events: &DemandRunEvents,
         leases: &crate::node_system::runtime::ProjectResourceLeaseObserver,
     ) {
-        assert_eq!(result.values.len(), 1);
+        assert_eq!(result.result_ids.len(), 1);
+        let result_name = result.result_ids.keys().next().expect("one result name");
         assert_eq!(
-            result.values.values().next(),
-            Some(&Self::expected_value(output))
+            result.value_for_test(result_name),
+            Some(Self::expected_value(output))
         );
         let expected_output = self.output_ref(output);
-        let expected_name = format!("node.{}.result", self.node_id(output));
+        let _expected_name = format!("node.{}.result", self.node_id(output));
         let events = events.0.lock().unwrap();
         assert_eq!(
             events
@@ -13952,7 +13982,7 @@ impl ProductionRelationalChainFixture {
                 .iter()
                 .filter(|event| matches!(
                     event.kind,
-                    crate::node_system::runtime::RunEventKind::ResultReady { .. }
+                    crate::node_system::runtime::RunEventKind::ResultGroupChanged { .. }
                 ))
                 .count(),
             1
@@ -13962,29 +13992,25 @@ impl ProductionRelationalChainFixture {
                 .iter()
                 .filter(|event| matches!(
                     event.kind,
-                    crate::node_system::runtime::RunEventKind::OutputReady { .. }
+                    crate::node_system::runtime::RunEventKind::OutputResultChanged { .. }
                 ))
                 .count(),
             1
         );
         assert!(events.iter().any(|event| matches!(
             &event.kind,
-            crate::node_system::runtime::RunEventKind::ResultReady { name, .. }
-                if name.as_ref() == expected_name
+            crate::node_system::runtime::RunEventKind::ResultGroupChanged { result_ids, .. }
+                if !result_ids.is_empty()
         )));
         assert!(events.iter().any(|event| matches!(
             &event.kind,
-            crate::node_system::runtime::RunEventKind::OutputReady { output, .. }
+            crate::node_system::runtime::RunEventKind::OutputResultChanged { output, .. }
                 if output == &expected_output
         )));
         drop(events);
         let store = self.state.project_store.read().unwrap();
         assert_eq!(store.runs.active_run_count(), 0);
-        assert_eq!(
-            store.results.source_count(),
-            1,
-            "final-only demand must not expose an intermediate readable source",
-        );
+
         drop(store);
         assert_eq!(leases.acquired(), 1);
         assert_eq!(leases.dropped(), 1);
@@ -14196,11 +14222,11 @@ impl ProductionRelationalChainFixture {
                 "role": role(result.output.port.node_id),
                 "port": result.output.port.port,
             })).collect::<Vec<_>>(),
-            "values": format!("{:?}", result.values.values().collect::<Vec<_>>()),
+            "values": format!("{:?}", result.result_ids.keys().filter_map(|name| result.value_for_test(name)).collect::<Vec<_>>()),
             "eventKinds": {
                 "completed": events.0.lock().unwrap().iter().filter(|event| matches!(event.kind, crate::node_system::runtime::RunEventKind::RunCompleted)).count(),
-                "resultReady": events.0.lock().unwrap().iter().filter(|event| matches!(event.kind, crate::node_system::runtime::RunEventKind::ResultReady { .. })).count(),
-                "outputReady": events.0.lock().unwrap().iter().filter(|event| matches!(event.kind, crate::node_system::runtime::RunEventKind::OutputReady { .. })).count(),
+                "resultReady": events.0.lock().unwrap().iter().filter(|event| matches!(event.kind, crate::node_system::runtime::RunEventKind::ResultGroupChanged { .. })).count(),
+                "outputReady": events.0.lock().unwrap().iter().filter(|event| matches!(event.kind, crate::node_system::runtime::RunEventKind::OutputResultChanged { .. })).count(),
             },
             "leases": [leases.acquired(), leases.dropped(), leases.active()],
         })
@@ -14272,14 +14298,13 @@ impl ProductionRelationalChainFixture {
         );
         assert!(events.iter().all(|event| !matches!(
             event.kind,
-            RunEventKind::ResultReady { .. }
-                | RunEventKind::OutputReady { .. }
+            RunEventKind::ResultGroupChanged { .. }
+                | RunEventKind::OutputResultChanged { .. }
                 | RunEventKind::RunCompleted
         )));
         drop(events);
         let store = self.state.project_store.read().unwrap();
         assert_eq!(store.runs.active_run_count(), 0);
-        assert_eq!(store.results.source_count(), 0);
         drop(store);
         assert_eq!(leases.acquired(), 1);
         assert_eq!(leases.dropped(), 1);
@@ -14342,14 +14367,13 @@ impl ProductionRelationalChainFixture {
         );
         assert!(events.iter().all(|event| !matches!(
             event.kind,
-            RunEventKind::ResultReady { .. }
-                | RunEventKind::OutputReady { .. }
+            RunEventKind::ResultGroupChanged { .. }
+                | RunEventKind::OutputResultChanged { .. }
                 | RunEventKind::RunCompleted
         )));
         drop(events);
         let store = self.state.project_store.read().unwrap();
         assert_eq!(store.runs.active_run_count(), 0);
-        assert_eq!(store.results.source_count(), 0);
         drop(store);
         assert_eq!(leases.acquired(), 1);
         assert_eq!(leases.dropped(), 1);

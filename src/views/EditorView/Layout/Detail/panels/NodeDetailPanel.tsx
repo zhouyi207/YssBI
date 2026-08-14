@@ -4,13 +4,9 @@ import { useShallow } from 'zustand/react/shallow';
 import type { GraphEntitiesState } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
-import {
-  executionStatusForSourceGraph,
-  pinResultsForSourceGraph,
-  useExecutionStore,
-} from '@/features/core/execution';
+
 import type { PinData, PinView } from '@/shared/types/store/graph';
-import type { PinResultState } from '@/shared/types/ui';
+
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
 import { NodePinInterfacePanel } from '../node/NodePinInterfacePanel';
@@ -91,6 +87,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
             : 'fixed',
       connected: pin.connected,
       connectionIds: pin.connectionIds,
+      address: pin.address,
     });
     return {
       inputs: pins.filter((pin) => pin.direction === 'input').map(toSpec),
@@ -98,15 +95,6 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
     };
   }, [pins]);
 
-  const executionGraphs = useExecutionStore((state) => state.graphs);
-  const pinResults = useMemo<Map<string, PinResultState>>(
-    () => pinResultsForSourceGraph(executionGraphs, graphPath),
-    [executionGraphs, graphPath],
-  );
-  const executionStatus = useMemo(
-    () => executionStatusForSourceGraph(executionGraphs, graphPath),
-    [executionGraphs, graphPath],
-  );
 
   if (!node) {
     return (
@@ -178,8 +166,6 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
         graphPath={graphPath}
         inputs={pinSpecs.inputs}
         outputs={pinSpecs.outputs}
-        pinResults={pinResults}
-        executionStatus={executionStatus}
       />
       {documentation && <NodeDocumentationPanel markdown={documentation} />}
     </DetailPanelShell>

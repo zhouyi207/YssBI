@@ -2,9 +2,8 @@ import { create } from 'zustand';
 import type {
   ExecutionState,
   GraphExecutionState,
-  ExecutionEvent,
   RecordedEvent,
-  PinResultState,
+  PinHistoryProjection,
 } from '@/shared/types/ui';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { flushLiveExecutionEventsNow } from './executionLiveFeed';
@@ -14,9 +13,8 @@ import {
   resetExecutionVisual,
   snapshotToGraphPatch,
 } from './executionVisualSession';
-import { clearedRunArtifactsPatch } from './graphRunArtifacts';
-import { normalizePinResultState, type PinResultWirePayload } from './normalizePinResult';
-import { pinPreviewCacheKey, pinResultCacheKey } from './pinResultIndex';
+import { clearedRunProjectionsPatch } from './graphRunArtifacts';
+import { pinHistoryCacheKey, pinPreviewCacheKey } from './pinResultIndex';
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
@@ -26,7 +24,7 @@ const emptyGraphState = (): GraphExecutionState => ({
   flowingConnections: new Set(),
   recording: [],
   graphDirty: false,
-  pinResults: new Map(),
+  pinHistories: new Map(),
   pinPreviews: new Map(),
 });
 
@@ -57,7 +55,7 @@ function stopPlaybackIfGraph(
 export interface PinPreviewLease {
   readonly generation: number;
   isCurrent: () => boolean;
-  complete: (sourceId: string) => boolean;
+  complete: (resultId: string) => boolean;
   fail: (error: string) => boolean;
   revoke: () => void;
 }
@@ -95,10 +93,10 @@ interface ExecutionStore extends ExecutionState {
   /** User cancelled a live run; clear partial pin results and replay data. */
   interruptExecution: (graphPath: string) => void;
   /** User cleared last run without executing again. */
-  clearGraphRunArtifacts: (graphPath: string) => void;
+  clearGraphRunProjections: (graphPath: string) => void;
   /** Flush live/replay visual session into store (single React update). */
   commitExecutionVisual: (graphPath: string) => void;
-  recordPinResult: (graphPath: string, result: PinResultWirePayload | PinResultState) => void;
+  recordPinHistory: (projection: PinHistoryProjection) => void;
   beginPinPreview: (
     graphPath: string,
     port: PortAddressDto,
@@ -108,7 +106,7 @@ interface ExecutionStore extends ExecutionState {
     graphPath: string,
     port: PortAddressDto,
     generation: number,
-    sourceId: string,
+    resultId: string,
   ) => boolean;
   failPinPreview: (
     graphPath: string,
@@ -124,13 +122,12 @@ interface ExecutionStore extends ExecutionState {
   setRecording: (graphPath: string, recording: RecordedEvent[]) => void;
   setPlaying: (playing: boolean, graphPath?: string) => void;
   markGraphDirty: (graphPath: string) => void;
-  clearPinResults: (graphPath: string, pinIds: string[]) => void;
+
   /** Drop all execution state when a graph is fully closed (no open tab). */
   releaseGraphExecutionState: (graphPath: string) => void;
   /** Clear node/connection visuals only; keep pin results and recording (replay start). */
   resetGraphVisuals: (graphPath: string) => void;
-  /** Side-effect events only (pin results). Visual events use executionVisualSession. */
-  applySideEffectEvent: (graphPath: string, event: ExecutionEvent) => void;
+
 }
 
 function updateGraph(
@@ -172,7 +169,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     resetExecutionVisual(graphPath);
     set((state) => updateGraph(state, graphPath, {
       ...clearedVisualPatch(),
-      ...clearedRunArtifactsPatch(),
+      ...clearedRunProjectionsPatch(),
       status: "running",
     }));
   },
@@ -198,18 +195,18 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     set((state) => ({
       ...updateGraph(state, graphPath, {
         ...clearedVisualPatch(),
-        ...clearedRunArtifactsPatch(),
+        ...clearedRunProjectionsPatch(),
       }),
       ...stopPlaybackIfGraph(state, graphPath),
     }));
   },
 
-  clearGraphRunArtifacts: (graphPath) => {
+  clearGraphRunProjections: (graphPath) => {
     clearExecutionVisual();
     set((state) => ({
       ...updateGraph(state, graphPath, {
         ...clearedVisualPatch(),
-        ...clearedRunArtifactsPatch(),
+        ...clearedRunProjectionsPatch(),
       }),
       ...stopPlaybackIfGraph(state, graphPath),
     }));
@@ -220,12 +217,15 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     commitVisualSnapshot(graphPath, set);
   },
 
-  recordPinResult: (graphPath, result) => set((state) => {
-    const g = state.graphs[graphPath] ?? emptyGraphState();
-    const normalized = normalizePinResultState(graphPath, result);
-    const next = new Map(g.pinResults);
-    next.set(pinResultCacheKey(normalized.graphPath, normalized.pinId), normalized);
-    return updateGraph(state, graphPath, { pinResults: next });
+
+  recordPinHistory: (projection) => set((state) => {
+    const graph = state.graphs[projection.graphPath] ?? emptyGraphState();
+    const pinHistories = new Map(graph.pinHistories);
+    pinHistories.set(
+      pinHistoryCacheKey(projection.graphPath, projection.output),
+      projection,
+    );
+    return updateGraph(state, projection.graphPath, { pinHistories });
   }),
 
   beginPinPreview: (graphPath, port, generation) => {
@@ -237,8 +237,8 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     const lease: PinPreviewLease = {
       generation,
       isCurrent: () => !record.revoked && activePreviewLeases.get(key) === record,
-      complete: (sourceId) => lease.isCurrent()
-        && useExecutionStore.getState().completePinPreview(graphPath, port, generation, sourceId),
+      complete: (resultId) => lease.isCurrent()
+        && useExecutionStore.getState().completePinPreview(graphPath, port, generation, resultId),
       fail: (error) => lease.isCurrent()
         && useExecutionStore.getState().failPinPreview(graphPath, port, generation, error),
       revoke: () => {
@@ -257,7 +257,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
         port,
         generation,
         status: 'pending',
-        sourceId: null,
+        resultId: null,
         error: null,
       });
       return updateGraph(state, graphPath, { pinPreviews });
@@ -265,7 +265,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     return lease;
   },
 
-  completePinPreview: (graphPath, port, generation, sourceId) => {
+  completePinPreview: (graphPath, port, generation, resultId) => {
     let accepted = false;
     set((state) => {
       const graph = state.graphs[graphPath];
@@ -277,7 +277,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       pinPreviews.set(key, {
         ...preview,
         status: 'ready',
-        sourceId,
+        resultId,
         error: null,
       });
       accepted = true;
@@ -298,7 +298,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       pinPreviews.set(key, {
         ...preview,
         status: 'error',
-        sourceId: null,
+        resultId: null,
         error,
       });
       accepted = true;
@@ -346,29 +346,6 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     };
   }),
 
-  clearPinResults: (resultGraphPath, pinIds) => set((state) => {
-    if (pinIds.length === 0) return state;
-
-    let changed = false;
-    const graphs = { ...state.graphs };
-
-    for (const [bucketPath, bucket] of Object.entries(graphs)) {
-      if (bucket.pinResults.size === 0) continue;
-
-      const next = new Map(bucket.pinResults);
-      for (const pinId of pinIds) {
-        if (next.delete(pinResultCacheKey(resultGraphPath, pinId))) {
-          changed = true;
-        }
-      }
-
-      if (next.size !== bucket.pinResults.size) {
-        graphs[bucketPath] = { ...bucket, pinResults: next };
-      }
-    }
-
-    return changed ? { ...state, graphs } : state;
-  }),
 
   releaseGraphExecutionState: (graphPath) => {
     revokeGraphPreviewLeases(graphPath);
@@ -392,9 +369,4 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     };
   }),
 
-  applySideEffectEvent: (graphPath, event) => {
-    if (event.event === 'pinResultReady') {
-      get().recordPinResult(graphPath, event.data);
-    }
-  },
 }));

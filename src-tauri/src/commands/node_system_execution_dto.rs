@@ -1,11 +1,14 @@
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext, ResourceVersionSet};
 use crate::node_system::document::{GraphResourcePath, GraphRevision, PortAddressDto};
-use crate::node_system::plan::{ExecutionDemand, GraphOutputRef, MAX_SAFE_PREVIEW_GENERATION};
-use crate::node_system::protocol::Value;
+use crate::node_system::plan::{
+    ExecutionDemand, GraphOutputRef, MAX_SAFE_PREVIEW_GENERATION, PlannedValueKind,
+    ResultPresentation,
+};
+
 use crate::node_system::runtime::{
-    ArtifactSnapshotKind, DataSeriesMetadata, OrdinaryRunErrorCode, ResultSourceDescriptor,
-    ResultSourcePage, ResultSourcePresentation, RunErrorCode, RunErrorOutcome, RunEvent,
-    RunEventKind, RunPhase,
+    DataSeriesMetadata, OrdinaryRunErrorCode, PinResultEntry, ResultFailureCause, ResultState,
+    ResultUsage, RunErrorCode, RunErrorOutcome, RunEvent, RunEventKind, RunPhase, StoredResult,
+    StoredValueKind,
 };
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
@@ -179,7 +182,7 @@ impl From<CorrelationContext> for RunCorrelationDto {
 }
 
 #[cfg(test)]
-pub(crate) const RUN_EVENT_KIND_DTO_WIRE_TYPES: [&str; 9] = [
+pub(crate) const RUN_EVENT_KIND_DTO_WIRE_TYPES: [&str; 10] = [
     "runStarted",
     "runCompleted",
     "runErrored",
@@ -187,8 +190,9 @@ pub(crate) const RUN_EVENT_KIND_DTO_WIRE_TYPES: [&str; 9] = [
     "operationStarted",
     "operationCompleted",
     "operationErrored",
-    "resultReady",
-    "outputReady",
+    "resultGroupChanged",
+    "outputResultChanged",
+    "openResultWindow",
 ];
 
 #[derive(Debug)]
@@ -257,14 +261,18 @@ pub(crate) enum RunEventKindDto {
         #[serde(flatten)]
         outcome: RunErrorOutcomeDto,
     },
-    ResultReady {
-        name: Box<str>,
-        source_id: String,
+    ResultGroupChanged {
+        activation_id: String,
+        result_ids: Box<[String]>,
+        state: ResultStateKindDto,
     },
-    OutputReady {
+    OutputResultChanged {
         output: GraphOutputRefDto,
         generation: Option<u64>,
-        source_id: String,
+        result_id: String,
+    },
+    OpenResultWindow {
+        result_id: String,
     },
 }
 
@@ -306,18 +314,31 @@ impl From<RunEventKind> for RunEventKindDto {
                 attempt_id: attempt_id.to_string(),
                 outcome: outcome.into(),
             },
-            RunEventKind::ResultReady { name, source_id } => Self::ResultReady {
-                name,
-                source_id: source_id.get().to_string(),
+            RunEventKind::ResultGroupChanged {
+                activation_id,
+                result_ids,
+                state,
+            } => Self::ResultGroupChanged {
+                activation_id: activation_id.to_string(),
+                result_ids: result_ids
+                    .into_vec()
+                    .into_iter()
+                    .map(|result_id| result_id.get().to_string())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+                state: state.into(),
             },
-            RunEventKind::OutputReady {
+            RunEventKind::OutputResultChanged {
                 output,
                 generation,
-                source_id,
-            } => Self::OutputReady {
+                result_id,
+            } => Self::OutputResultChanged {
                 output: output.into(),
                 generation,
-                source_id: source_id.get().to_string(),
+                result_id: result_id.get().to_string(),
+            },
+            RunEventKind::OpenResultWindow { result_id } => Self::OpenResultWindow {
+                result_id: result_id.get().to_string(),
             },
         }
     }
@@ -341,69 +362,301 @@ impl From<RunEvent> for RunEventDto {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResultSourceDescriptorDto {
-    source_id: String,
-    artifact_id: String,
-    name: Box<str>,
-    kind: &'static str,
-    presentation: ResultSourcePresentation,
-    title: Box<str>,
-    data_series_metadata: Option<DataSeriesMetadata>,
-    total_count: usize,
-    correlation: RunCorrelationDto,
-    basis: CompilationBasisDto,
+pub enum ResultStateKindDto {
+    Pending,
+    Ready,
+    Failed,
+    Cancelled,
 }
 
-impl From<ResultSourceDescriptor> for ResultSourceDescriptorDto {
-    fn from(descriptor: ResultSourceDescriptor) -> Self {
-        let kind = match descriptor.kind {
-            ArtifactSnapshotKind::Value | ArtifactSnapshotKind::Sequence => "json",
-            ArtifactSnapshotKind::DataSeries => "dataseries",
-        };
-        let title = match descriptor.presentation {
-            ResultSourcePresentation::Inspector => descriptor.name.clone(),
-            presentation => presentation.default_title().into(),
-        };
-        Self {
-            source_id: descriptor.source_id.get().to_string(),
-            artifact_id: descriptor.artifact_id.get().to_string(),
-            name: descriptor.name,
-            kind,
-            presentation: descriptor.presentation,
-            title,
-            data_series_metadata: descriptor.data_series_metadata,
-            total_count: descriptor.total_count,
-            correlation: descriptor.correlation.into(),
-            basis: descriptor.basis.into(),
+impl From<crate::node_system::runtime::ResultStateKind> for ResultStateKindDto {
+    fn from(state: crate::node_system::runtime::ResultStateKind) -> Self {
+        match state {
+            crate::node_system::runtime::ResultStateKind::Pending => Self::Pending,
+            crate::node_system::runtime::ResultStateKind::Ready => Self::Ready,
+            crate::node_system::runtime::ResultStateKind::Failed => Self::Failed,
+            crate::node_system::runtime::ResultStateKind::Cancelled => Self::Cancelled,
         }
     }
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResultSourcePageDto {
-    source_id: String,
-    offset: usize,
-    limit: usize,
-    total_count: usize,
-    kind: ArtifactSnapshotKind,
-    data_series_metadata: Option<DataSeriesMetadata>,
-    values: Box<[Value]>,
+pub struct ResultProgressDto {
+    completed: String,
+    total: Option<String>,
 }
 
-impl From<ResultSourcePage> for ResultSourcePageDto {
-    fn from(page: ResultSourcePage) -> Self {
-        Self {
-            source_id: page.source_id.get().to_string(),
-            offset: page.offset,
-            limit: page.limit,
-            total_count: page.total_count,
-            kind: page.kind,
-            data_series_metadata: page.data_series_metadata,
-            values: page.values,
+#[derive(Debug, Serialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum ResultFailureCauseDto {
+    Execution,
+    Upstream { upstream_result_id: String },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResultFailureDto {
+    code: &'static str,
+    message: Box<str>,
+    cause: ResultFailureCauseDto,
+    upstream_result_ids: Box<[String]>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ResultStateDto {
+    Pending { progress: ResultProgressDto },
+    Ready,
+    Failed { failure: ResultFailureDto },
+    Cancelled,
+}
+
+impl ResultStateDto {
+    pub const fn kind(&self) -> ResultStateKindDto {
+        match self {
+            Self::Pending { .. } => ResultStateKindDto::Pending,
+            Self::Ready => ResultStateKindDto::Ready,
+            Self::Failed { .. } => ResultStateKindDto::Failed,
+            Self::Cancelled => ResultStateKindDto::Cancelled,
         }
+    }
+}
+
+impl From<&ResultState> for ResultStateDto {
+    fn from(state: &ResultState) -> Self {
+        match state {
+            ResultState::Pending(progress) => Self::Pending {
+                progress: ResultProgressDto {
+                    completed: progress.completed.to_string(),
+                    total: progress.total.map(|total| total.to_string()),
+                },
+            },
+            ResultState::Ready(_) => Self::Ready,
+            ResultState::Failed(failure) => Self::Failed {
+                failure: match failure.cause {
+                    ResultFailureCause::Execution => ResultFailureDto {
+                        code: "executionFailed",
+                        message: failure.message.clone(),
+                        cause: ResultFailureCauseDto::Execution,
+                        upstream_result_ids: Box::default(),
+                    },
+                    ResultFailureCause::Upstream { upstream_result_id } => ResultFailureDto {
+                        code: "upstreamFailed",
+                        message: failure.message.clone(),
+                        cause: ResultFailureCauseDto::Upstream {
+                            upstream_result_id: upstream_result_id.get().to_string(),
+                        },
+                        upstream_result_ids: vec![upstream_result_id.get().to_string()]
+                            .into_boxed_slice(),
+                    },
+                },
+            },
+            ResultState::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResultProvenanceDto {
+    run_id: String,
+    activation_id: String,
+    graph_path: String,
+    graph_revision: String,
+    node_id: String,
+    output: Option<GraphOutputRefDto>,
+    created_at_ms: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResultValueKindDto {
+    Scalar,
+    Sequence,
+    DataSeries,
+    Unknown,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResultDescriptorDto {
+    result_id: String,
+    state: ResultStateDto,
+    provenance: ResultProvenanceDto,
+    presentation: ResultPresentation,
+    value_kind: ResultValueKindDto,
+    metadata: Option<DataSeriesMetadata>,
+    total_count: Option<usize>,
+    title: Box<str>,
+}
+
+impl From<&StoredResult> for ResultDescriptorDto {
+    fn from(result: &StoredResult) -> Self {
+        let (value_kind, metadata, total_count) = match &result.state {
+            ResultState::Ready(value) => (
+                match value.kind() {
+                    StoredValueKind::Scalar => ResultValueKindDto::Scalar,
+                    StoredValueKind::Sequence => ResultValueKindDto::Sequence,
+                    StoredValueKind::DataSeries => ResultValueKindDto::DataSeries,
+                },
+                value.data_series_metadata().cloned(),
+                Some(value.len()),
+            ),
+            _ => (
+                match result.contract.kind {
+                    PlannedValueKind::Scalar => ResultValueKindDto::Scalar,
+                    PlannedValueKind::DataSeries => ResultValueKindDto::DataSeries,
+                    PlannedValueKind::DataFrame => ResultValueKindDto::Sequence,
+                    PlannedValueKind::Opaque => ResultValueKindDto::Unknown,
+                },
+                None,
+                None,
+            ),
+        };
+        Self {
+            result_id: result.id.get().to_string(),
+            state: ResultStateDto::from(&result.state),
+            provenance: ResultProvenanceDto {
+                run_id: result.provenance.run_id.get().to_string(),
+                activation_id: result.provenance.activation_id.get().to_string(),
+                graph_path: result.provenance.graph_path.0.to_string(),
+                graph_revision: result.provenance.graph_revision.get().to_string(),
+                node_id: result.provenance.node_id.to_string(),
+                output: result.provenance.output.clone().map(Into::into),
+                created_at_ms: result.provenance.created_at_ms.to_string(),
+            },
+            presentation: result.presentation,
+            value_kind,
+            metadata,
+            total_count,
+            title: result_title(result),
+        }
+    }
+}
+
+pub(crate) fn canonical_report_title(result: &StoredResult) -> Option<&'static str> {
+    match result.presentation {
+        ResultPresentation::Report { report } => Some(report.canonical_title()),
+        _ => None,
+    }
+}
+
+fn result_title(result: &StoredResult) -> Box<str> {
+    match result.presentation {
+        ResultPresentation::Inspector => result
+            .provenance
+            .output
+            .as_ref()
+            .map(|output| output.port.to_string().into_boxed_str())
+            .unwrap_or_else(|| "Result".into()),
+        ResultPresentation::Plot { .. } => "Plot".into(),
+        ResultPresentation::Report { report } => report.canonical_title().into(),
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "camelCase")]
+pub enum ResultValueDto {
+    Value(serde_json::Value),
+    Sequence(Box<[serde_json::Value]>),
+    DataSeries(Box<[serde_json::Value]>),
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResultPageDto {
+    result_id: String,
+    offset: usize,
+    requested_limit: usize,
+    actual_count: usize,
+    total_count: usize,
+    has_more: bool,
+    next_offset: Option<usize>,
+    value_kind: ResultValueKindDto,
+    metadata: Option<DataSeriesMetadata>,
+    values: Box<[serde_json::Value]>,
+}
+
+impl ResultPageDto {
+    pub fn new(
+        result_id: crate::node_system::runtime::ResultId,
+        offset: usize,
+        requested_limit: usize,
+        value_kind: StoredValueKind,
+        metadata: Option<DataSeriesMetadata>,
+        total_count: usize,
+        values: Box<[serde_json::Value]>,
+    ) -> Self {
+        let actual_count = values.len();
+        let next = offset.saturating_add(actual_count);
+        let has_more = next < total_count;
+        Self {
+            result_id: result_id.get().to_string(),
+            offset,
+            requested_limit,
+            actual_count,
+            total_count,
+            has_more,
+            next_offset: has_more.then_some(next),
+            value_kind: match value_kind {
+                StoredValueKind::Scalar => ResultValueKindDto::Scalar,
+                StoredValueKind::Sequence => ResultValueKindDto::Sequence,
+                StoredValueKind::DataSeries => ResultValueKindDto::DataSeries,
+            },
+            metadata,
+            values,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ResultUsageDto {
+    Produced,
+    Reused { original_activation_id: String },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PinResultEntryDto {
+    result_id: String,
+    run_id: String,
+    activation_id: String,
+    graph_revision: String,
+    created_at_ms: String,
+    usage: ResultUsageDto,
+    state: ResultStateDto,
+}
+
+impl PinResultEntryDto {
+    pub fn from_entry(entry: PinResultEntry, result: &StoredResult) -> Self {
+        Self {
+            result_id: entry.result_id.get().to_string(),
+            run_id: entry.run_id.get().to_string(),
+            activation_id: entry.activation_id.get().to_string(),
+            graph_revision: entry.graph_revision.get().to_string(),
+            created_at_ms: entry.created_at_ms.to_string(),
+            usage: match entry.usage {
+                ResultUsage::Produced => ResultUsageDto::Produced,
+                ResultUsage::Reused {
+                    original_activation_id,
+                } => ResultUsageDto::Reused {
+                    original_activation_id: original_activation_id.get().to_string(),
+                },
+            },
+            state: ResultStateDto::from(&result.state),
+        }
+    }
+
+    pub const fn state_kind(&self) -> ResultStateKindDto {
+        self.state.kind()
     }
 }
 
@@ -557,7 +810,7 @@ mod execution_demand_tests {
     }
 
     #[test]
-    fn output_ready_serializes_only_stable_output_and_source_id() {
+    fn output_result_changed_serializes_only_stable_output_and_result_id() {
         let output = GraphOutputRefDto {
             graph_path: "events/Main.yssbi-event".into(),
             port: PortAddressDto::from(PortAddress::declared(
@@ -567,27 +820,109 @@ mod execution_demand_tests {
                 crate::node_system::protocol::PortKey::new("result").unwrap(),
             )),
         };
-        let wire = serde_json::to_value(RunEventKindDto::OutputReady {
+        let wire = serde_json::to_value(RunEventKindDto::OutputResultChanged {
             output,
             generation: None,
-            source_id: "42".into(),
+            result_id: "42".into(),
         })
         .unwrap();
 
         assert_eq!(
             wire,
             json!({
-                "type": "outputReady",
+                "type": "outputResultChanged",
                 "output": {
                     "graphPath": "events/Main.yssbi-event",
                     "port": { "kind": "declared", "nodeId": NODE_ID, "portKey": "result" }
                 },
                 "generation": null,
-                "sourceId": "42"
+                "resultId": "42"
             })
         );
         assert!(wire.get("valueIndex").is_none());
         assert!(wire.get("operationIndex").is_none());
         assert!(wire.get("name").is_none());
+    }
+
+    #[test]
+    fn result_dto_serializes_identity_state_and_provenance_without_artifacts() {
+        use crate::node_system::analysis::RunId;
+        use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
+        use crate::node_system::plan::{PlannedValueContract, ResultPresentation, ValueRef};
+        use crate::node_system::runtime::{
+            ActivationId, ResultFailure, ResultId, ResultProvenance, ResultState, StoredResult,
+        };
+        use std::sync::Arc;
+
+        let result = StoredResult {
+            id: ResultId::new(17),
+            provenance: ResultProvenance {
+                run_id: RunId::new(5),
+                activation_id: ActivationId::next().unwrap(),
+                graph_path: GraphResourcePath("events/test.yssbi-event".into()),
+                graph_revision: GraphRevision::new(3),
+                node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+                output: None,
+                created_at_ms: 123,
+            },
+            value: ValueRef::new(0),
+            presentation: ResultPresentation::Inspector,
+            contract: PlannedValueContract::opaque(),
+            state: ResultState::Failed(Arc::new(ResultFailure::new("boom"))),
+        };
+
+        let json = serde_json::to_value(ResultDescriptorDto::from(&result)).unwrap();
+        assert_eq!(json["resultId"], "17");
+        assert_eq!(json["state"]["kind"], "failed");
+        assert!(
+            json["provenance"]["activationId"]
+                .as_str()
+                .unwrap()
+                .parse::<u64>()
+                .is_ok()
+        );
+
+        assert!(!json.to_string().contains("spill"));
+    }
+
+    #[test]
+    fn upstream_failure_uses_stable_code_and_upstream_result_identity() {
+        use crate::node_system::runtime::{ResultFailure, ResultId, ResultState};
+        use std::sync::Arc;
+
+        let state = ResultStateDto::from(&ResultState::Failed(Arc::new(ResultFailure::upstream(
+            ResultId::new(23),
+            "upstream failed",
+        ))));
+        let json = serde_json::to_value(state).unwrap();
+
+        assert_eq!(json["kind"], "failed");
+        assert_eq!(json["failure"]["code"], "upstreamFailed");
+        assert_eq!(json["failure"]["cause"]["kind"], "upstream");
+        assert_eq!(json["failure"]["cause"]["upstreamResultId"], "23");
+        assert_eq!(json["failure"]["upstreamResultIds"], json!(["23"]));
+        assert!(json.to_string().find("sourceResultId").is_none());
+    }
+
+    #[test]
+    fn result_group_and_open_window_wire_include_terminal_state_and_result_id() {
+        let group = serde_json::to_value(RunEventKindDto::ResultGroupChanged {
+            activation_id: "9".into(),
+            result_ids: vec!["17".into()].into_boxed_slice(),
+            state: ResultStateKindDto::Failed,
+        })
+        .unwrap();
+        assert_eq!(group["type"], "resultGroupChanged");
+        assert_eq!(group["state"], "failed");
+
+        // Task 6 defines this wire shape; Task 9 owns actual View Data emission.
+        let window = serde_json::to_value(RunEventKindDto::OpenResultWindow {
+            result_id: "17".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            window,
+            json!({ "type": "openResultWindow", "resultId": "17" })
+        );
     }
 }

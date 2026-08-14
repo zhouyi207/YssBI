@@ -5592,22 +5592,6 @@
               "editor": "Default",
               "input_binding": null,
               "instances": "Declared",
-              "key": "snapshot",
-              "kind": "Data",
-              "label_key": "nodes.yssbi.debug.view.ports.snapshot.label",
-              "production": "FullyMaterialized",
-              "schema": null,
-              "value_type": {
-                "Generic": "value"
-              }
-            },
-            {
-              "connections": "Single",
-              "consumption": null,
-              "direction": "Output",
-              "editor": "Default",
-              "input_binding": null,
-              "instances": "Declared",
               "key": "then",
               "kind": "Control",
               "label_key": "nodes.yssbi.debug.view.ports.then.label",
@@ -5628,7 +5612,7 @@
         "scope": "Any",
         "typeId": "yssbi.debug.view"
       },
-      "protocolFingerprint": "3ebd871407a7ca82677a9288fb75038ecd2035ece1ad367187ecc6aa840f9361"
+      "protocolFingerprint": "64b8b1170cf0218cc9f126251874bd882875bc5b24ec3894ae08298ea3367c32"
     },
     {
       "nodeTypeId": "yssbi.distribution.bernoulli.sample",

@@ -1,10 +1,11 @@
 import type { TFunction } from 'i18next';
 import {
-  resolveInspectableSource,
-  windowSourceRef,
-  type InspectableSourceRef,
+  resolveInspectableResult,
+  resolveInspectableResultRef,
+  resultRef,
+  type InspectableResultRef,
   type Presentation,
-  type SourceDescriptor,
+  type ResultDescriptor,
 } from '@/features/core/resultSource';
 import {
   openPresentationWindow,
@@ -17,24 +18,31 @@ import {
   pinViewDisabledTitle,
   type ResolvePinViewTargetParams,
 } from '@/features/core/execution/pinViewTarget';
+import { useExecutionStore } from '@/features/core/execution/useExecutionStore';
 
 export async function launchInspectablePresentation(
-  descriptor: SourceDescriptor,
+  descriptor: ResultDescriptor,
   titleFallback: string,
 ): Promise<void> {
   await openPresentationWindow(
-    descriptor.sourceId,
+    descriptor.resultId,
     presentationWindowPayloadFromDescriptor(descriptor, titleFallback),
   );
 }
 
-export async function openInspectableSource(
-  ref: InspectableSourceRef,
+export async function openInspectableResult(
+  ref: InspectableResultRef,
   t: TFunction,
-  options?: { silent?: boolean },
+  options?: { silent?: boolean; selectedResultId?: string | null },
 ): Promise<boolean> {
   try {
-    const descriptor = await resolveInspectableSource(ref);
+    const resolved = await resolveInspectableResultRef(ref, options?.selectedResultId);
+    if (resolved.history) {
+      useExecutionStore.getState().recordPinHistory(resolved.history);
+    }
+    const descriptor = resolved.ref
+      ? await resolveInspectableResult(resolved.ref)
+      : null;
     if (!descriptor) {
       if (!options?.silent) {
         uiStore.showToast(t('sourceInspector.noSource'), 'error');
@@ -56,10 +64,14 @@ export async function openInspectableSource(
 export async function openPinInspectableView(
   params: ResolvePinViewTargetParams,
   t: TFunction,
+  options?: { selectedResultId?: string | null },
 ): Promise<boolean> {
   const { refs, disabledReason } = evaluatePinViewState(params);
   for (const ref of refs) {
-    if (await openInspectableSource(ref, t, { silent: true })) {
+    if (await openInspectableResult(ref, t, {
+      silent: true,
+      selectedResultId: options?.selectedResultId,
+    })) {
       return true;
     }
   }
@@ -69,19 +81,19 @@ export async function openPinInspectableView(
   return false;
 }
 
-/** Execution `openSourceWindow` events — window-owned sources via InspectableSourceRef. */
-export async function openWindowInspectableSource(
-  sourceId: string,
+/** Open an exact result requested by an execution window event. */
+export async function openWindowInspectableResult(
+  resultId: string,
   event: { presentation: Presentation; windowTitle: string },
 ): Promise<void> {
-  const descriptor = await resolveInspectableSource(windowSourceRef(sourceId));
+  const descriptor = await resolveInspectableResult(resultRef(resultId));
   if (descriptor) {
     await launchInspectablePresentation(descriptor, event.windowTitle);
     return;
   }
 
   await openPresentationWindow(
-    sourceId,
+    resultId,
     presentationWindowPayload(event.presentation, event.windowTitle),
   );
 }

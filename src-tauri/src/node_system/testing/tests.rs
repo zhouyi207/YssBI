@@ -52,8 +52,14 @@ fn protocol_to_runtime_executes_constants_and_addition() {
     assert!(plan_debug_snapshot(&plan).contains("testing.kernel.yssbi.testing.add"));
 
     let resources = ResourceLeakTracker::new();
-    let result = RunExecutor::new(provider.kernels(), &resources, &NoFunctionPlans)
-        .run(&plan, CancellationToken::new());
+    let result = RunExecutor::new(
+        provider.kernels(),
+        &resources,
+        &NoFunctionPlans,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .run(&plan, CancellationToken::new());
     run_assertions(result)
         .succeeds()
         .has_value("sum", &Value::Integer(5));
@@ -229,8 +235,14 @@ fn successful_failed_and_cancelled_runs_release_every_resource() {
         let mut plan = compile_assertions(provider.compile(&graph.build())).into_plan();
         plan.resources = vec![tracked_requirement(&format!("testing.{kind}"))].into_boxed_slice();
         let resources = ResourceLeakTracker::new();
-        let result = RunExecutor::new(provider.kernels(), &resources, &NoFunctionPlans)
-            .run(&plan, CancellationToken::new());
+        let result = RunExecutor::new(
+            provider.kernels(),
+            &resources,
+            &NoFunctionPlans,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .run(&plan, CancellationToken::new());
 
         match expected {
             "success" => {
@@ -266,8 +278,14 @@ fn partial_resource_acquisition_failure_releases_prior_leases() {
     let resources = ResourceLeakTracker::failing_at(2);
 
     run_assertions(
-        RunExecutor::new(provider.kernels(), &resources, &NoFunctionPlans)
-            .run(&plan, CancellationToken::new()),
+        RunExecutor::new(
+            provider.kernels(),
+            &resources,
+            &NoFunctionPlans,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .run(&plan, CancellationToken::new()),
     )
     .fails()
     .error_matches(|error| matches!(error, RunError::ResourceAcquire { .. }));

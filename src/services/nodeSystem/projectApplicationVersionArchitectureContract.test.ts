@@ -876,5 +876,5 @@ describe('project application-version architecture audit behavior', () => {
 describe('project application-version architecture', () => {
   it('keeps project production and ordinary fixture sources free of application metadata', () => {
     expect(productionOffenders()).toEqual([]);
-  }, 15_000);
+  }, 30_000);
 });

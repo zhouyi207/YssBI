@@ -306,6 +306,8 @@ pub struct PlannedOutput {
     pub value: ValueRef,
     pub contract: PlannedValueContract,
     pub production: OutputProduction,
+    pub public_output: Option<GraphOutputRef>,
+    pub presentation: super::ResultPresentation,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -325,7 +327,6 @@ pub enum PlannedAdapter {
     Collect { limits: MaterializationLimits },
     Buffer { capacity: usize },
     Spill { memory_limit_bytes: u64 },
-    Replay,
     StreamBridge { format: StreamFormat },
 }
 
@@ -352,9 +353,15 @@ impl MaterializationAdapterPlan {
                 PlannedAdapter::Buffer { capacity: 64 },
                 OutputProduction::Batches,
             ),
-            (OutputProduction::Streaming, InputConsumption::RewindableBatches) => {
-                (PlannedAdapter::Replay, OutputProduction::Batches)
-            }
+            (OutputProduction::Streaming, InputConsumption::RewindableBatches) => (
+                PlannedAdapter::Collect {
+                    limits: MaterializationLimits {
+                        max_values: 1_000_000,
+                        max_bytes: MAX_BYTES,
+                    },
+                },
+                OutputProduction::Batches,
+            ),
             (OutputProduction::Streaming, InputConsumption::RandomAccess) => (
                 PlannedAdapter::Spill {
                     memory_limit_bytes: MAX_BYTES,
@@ -381,7 +388,7 @@ impl MaterializationAdapterPlan {
                 (PlannedAdapter::Identity, OutputProduction::Batches)
             }
             (OutputProduction::Batches, InputConsumption::RewindableBatches) => {
-                (PlannedAdapter::Replay, OutputProduction::Batches)
+                (PlannedAdapter::Identity, OutputProduction::Batches)
             }
             (OutputProduction::Batches, InputConsumption::RandomAccess) => (
                 PlannedAdapter::Spill {

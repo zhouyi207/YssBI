@@ -53,7 +53,6 @@ mod tests {
             "yssbi.control.do",
             "yssbi.control.sleep",
             "yssbi.debug.print",
-            "yssbi.debug.view",
         ]
         .into_iter()
         .collect::<BTreeSet<_>>();

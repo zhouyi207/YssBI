@@ -330,7 +330,7 @@ fn float_series(values: Vec<f64>, name: &'static str) -> Result<RuntimeValue, Ke
         DataSeriesBuilder::new(DataSeriesElementType::Float64)
             .name(name)
             .values(values)
-            .build(ArtifactKind::Replayable)
+            .build(ArtifactKind::Collected)
             .map_err(|error| KernelError::new(error.to_string()))?,
     ))
 }

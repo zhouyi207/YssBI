@@ -76,6 +76,10 @@ export const zhCN = {
       breakLinks: "断开连接",
       resetValue: "恢复默认值",
       view: "查看",
+      history: "结果历史",
+      historyLoading: "正在加载历史…",
+      historyEmpty: "暂无结果历史",
+      historyLatest: "最新",
       viewDisabledNoRun: "请先运行图以生成可查看结果",
       viewDisabledNoUpstream: "无可用上游结果",
       promoteToVar: "提升为变量",
@@ -751,9 +755,9 @@ export const zhCN = {
   sourceInspector: {
     title: "结果查看",
     loading: "加载中…",
-    missingSourceId: "URL 中缺少 sourceId",
-    noSource: "未找到数据源",
-    loadFailed: "加载数据源失败",
+    missingResultId: "URL 中缺少结果 ID",
+    noSource: "未找到结果",
+    loadFailed: "加载结果失败",
     failedOpenWindow: "无法打开结果查看窗口",
   },
   plot: {

@@ -192,7 +192,7 @@ fn variable_runtime_value(
     let artifact = DataSeriesBuilder::new(element_type)
         .values(values)
         .name(name.as_str())
-        .build(ArtifactKind::Replayable)
+        .build(ArtifactKind::Collected)
         .map_err(|error| KernelError::new(error.to_string()))?;
     Ok(RuntimeValue::Artifact(artifact))
 }

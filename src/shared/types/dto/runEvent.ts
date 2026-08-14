@@ -1,4 +1,5 @@
 import type { GraphOutputRefDto } from './executionDemand';
+import type { ResultStateKind } from './result';
 
 export type RunErrorCode =
   | 'invalidPlan'
@@ -124,13 +125,19 @@ export type RunEventKind =
       code: Exclude<RunErrorCode, 'deadlineExceeded'>;
       phase: null;
     }
-  | { type: 'resultReady'; name: string; sourceId: string }
   | {
-      type: 'outputReady';
+      type: 'resultGroupChanged';
+      activationId: string;
+      resultIds: string[];
+      state: ResultStateKind;
+    }
+  | {
+      type: 'outputResultChanged';
       output: GraphOutputRefDto;
       generation: number | null;
-      sourceId: string;
-    };
+      resultId: string;
+    }
+  | { type: 'openResultWindow'; resultId: string };
 
 export const RUN_EVENT_KIND_TYPES = {
   runStarted: true,
@@ -140,8 +147,9 @@ export const RUN_EVENT_KIND_TYPES = {
   operationStarted: true,
   operationCompleted: true,
   operationErrored: true,
-  resultReady: true,
-  outputReady: true,
+  resultGroupChanged: true,
+  outputResultChanged: true,
+  openResultWindow: true,
 } as const satisfies Record<RunEventKind['type'], true>;
 
 export interface RunEvent {

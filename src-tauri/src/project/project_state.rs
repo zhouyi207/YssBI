@@ -225,6 +225,7 @@ impl PublishedProjectActivation {
             garbage,
             postcommit_panic,
         } = self;
+        garbage._store.finalize_session();
         drop(garbage);
         if let Some(payload) = postcommit_panic {
             std::panic::resume_unwind(payload);
@@ -7130,57 +7131,47 @@ impl ProjectState {
         Ok(())
     }
 
-    pub fn result_source_descriptor(
+    pub fn result(
         &self,
-        source_id: crate::node_system::runtime::ResultSourceId,
-    ) -> Result<Option<crate::node_system::runtime::ResultSourceDescriptor>, ProjectFilesystemError>
+        result_id: crate::node_system::runtime::ResultId,
+    ) -> Result<Option<Arc<crate::node_system::runtime::StoredResult>>, ProjectFilesystemError>
     {
         self.ensure_project_operational()?;
         let results = self.project_store.read().unwrap().results.clone();
-        Ok(results.descriptor(source_id))
+        Ok(results.result(result_id))
     }
 
-    pub fn result_source_value(
+    pub fn pin_result_history(
         &self,
-        source_id: crate::node_system::runtime::ResultSourceId,
-    ) -> Result<Option<Arc<crate::node_system::runtime::ArtifactSnapshot>>, ProjectFilesystemError>
-    {
+        output: &crate::node_system::plan::GraphOutputRef,
+    ) -> Result<
+        Box<
+            [(
+                crate::node_system::runtime::PinResultEntry,
+                Arc<crate::node_system::runtime::StoredResult>,
+            )],
+        >,
+        ProjectFilesystemError,
+    > {
         self.ensure_project_operational()?;
         let results = self.project_store.read().unwrap().results.clone();
-        Ok(results.value(source_id))
-    }
-
-    pub fn result_source_page(
-        &self,
-        source_id: crate::node_system::runtime::ResultSourceId,
-        offset: usize,
-        limit: usize,
-    ) -> Result<Option<crate::node_system::runtime::ResultSourcePage>, ProjectFilesystemError> {
-        self.ensure_project_operational()?;
-        let results = self.project_store.read().unwrap().results.clone();
-        results.page(source_id, offset, limit).map_err(|error| {
-            ProjectFilesystemError::ResultSourceReadFailed {
-                message: error.to_string(),
-            }
-        })
-    }
-
-    pub fn release_result_source(
-        &self,
-        source_id: crate::node_system::runtime::ResultSourceId,
-    ) -> Result<bool, ProjectFilesystemError> {
-        self.ensure_project_operational()?;
-        let results = self.project_store.read().unwrap().results.clone();
-        Ok(results.release(source_id))
-    }
-
-    pub fn release_run_result_sources(
-        &self,
-        run_id: crate::node_system::analysis::RunId,
-    ) -> Result<usize, ProjectFilesystemError> {
-        self.ensure_project_operational()?;
-        let results = self.project_store.read().unwrap().results.clone();
-        Ok(results.release_run_sources(run_id))
+        results
+            .pin_history(output)
+            .into_vec()
+            .into_iter()
+            .map(|entry| {
+                let result = results.result(entry.result_id).ok_or_else(|| {
+                    ProjectFilesystemError::ResultSourceReadFailed {
+                        message: format!(
+                            "pin history references missing result {}",
+                            entry.result_id.get()
+                        ),
+                    }
+                })?;
+                Ok((entry, result))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(Vec::into_boxed_slice)
     }
 
     fn capture_execution_snapshot(
@@ -7207,6 +7198,7 @@ impl ProjectState {
         let kernels = Arc::clone(&store.kernels);
         let functions = Arc::clone(&store.function_plans);
         let results = store.results.clone();
+        let memoization = Arc::clone(&store.memoization);
         let runs = Arc::clone(&store.runs);
         let session_id = store.project_session_id.clone();
         drop(store);
@@ -7236,6 +7228,7 @@ impl ProjectState {
             kernels,
             functions,
             results,
+            memoization,
             runs,
             session_id,
         })
@@ -7505,6 +7498,8 @@ impl ProjectState {
             execution.kernels.as_ref(),
             &resources,
             &function_generation,
+            execution.results.clone(),
+            Arc::clone(&execution.memoization),
         )
         .with_relational_backends(&relational_backends)
         .with_compiled_parameters(&compiled_parameters)
@@ -8571,6 +8566,7 @@ struct ExecutionSnapshot {
     kernels: Arc<crate::node_system::runtime::KernelRegistry>,
     functions: Arc<crate::node_system::runtime::FunctionPlanStore>,
     results: crate::node_system::runtime::ResultStore,
+    memoization: Arc<crate::node_system::runtime::SessionMemoization>,
     runs: Arc<crate::node_system::runtime::ProjectRunRegistry>,
     session_id: crate::node_system::analysis::ProjectSessionId,
 }
@@ -9638,9 +9634,7 @@ fn json_to_protocol_value(
 #[cfg(test)]
 mod execution_identity_tests {
     use super::*;
-    use crate::node_system::runtime::{
-        ArtifactSnapshot, ResultSourceDescriptor, ResultStore, RunEvent, RunEventKind, RunEventSink,
-    };
+    use crate::node_system::runtime::{RunEvent, RunEventKind, RunEventSink};
     use crate::project::GraphDocumentKind;
     use std::sync::{Arc, Condvar, Mutex};
     use std::time::Duration;
@@ -9652,43 +9646,6 @@ mod execution_identity_tests {
         fn record(&self, event: RunEvent) {
             self.0.lock().unwrap().push(event);
         }
-    }
-
-    fn publish_identity_test_snapshot(
-        store: &ResultStore,
-        run_id: crate::node_system::analysis::RunId,
-    ) -> ResultSourceDescriptor {
-        let basis = crate::node_system::analysis::CompilationBasis {
-            graph_revision: crate::node_system::document::GraphRevision::new(1),
-            registry_fingerprint: crate::node_system::registry::RegistryFingerprint::from_bytes(
-                [8; 32],
-            ),
-            resource_versions: std::collections::BTreeMap::new(),
-            resource_observations: std::collections::BTreeMap::new(),
-        };
-        let correlation = crate::node_system::analysis::CorrelationContext {
-            project_session_id: crate::node_system::analysis::ProjectSessionId::new("session"),
-            graph_path: crate::node_system::document::GraphResourcePath(
-                "events/Main.yssbi-event".into(),
-            ),
-            graph_revision: basis.graph_revision,
-            registry_fingerprint: basis.registry_fingerprint.clone(),
-            resource_versions: basis.resource_versions.clone(),
-            compile_id: crate::node_system::analysis::CompileId::new(1),
-            selection_digest: None,
-            run_id: Some(run_id),
-            node_id: None,
-            node_type_id: None,
-            parent_call: None,
-            trace_parent_span_id: None,
-        };
-        store.publish_snapshot(
-            run_id,
-            correlation,
-            basis,
-            "result",
-            ArtifactSnapshot::Value(crate::node_system::protocol::Value::Integer(1)),
-        )
     }
 
     #[derive(Default)]
@@ -9739,138 +9696,6 @@ mod execution_identity_tests {
     }
 
     #[test]
-    fn stale_source_handle_cannot_alias_replacement_project() {
-        let old_root = std::env::temp_dir().join(format!(
-            "yssbi-stale-result-source-old-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let replacement_root = std::env::temp_dir().join(format!(
-            "yssbi-stale-result-source-replacement-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&old_root).unwrap();
-        std::fs::create_dir_all(&replacement_root).unwrap();
-        let state = ProjectState::new();
-        state.activate_project_fixture(old_root.to_string_lossy().into_owned(), ProjectData::new());
-        let old_results = state.project_store.read().unwrap().results.clone();
-        let old_source = publish_identity_test_snapshot(
-            &old_results,
-            crate::node_system::analysis::RunId::new(1),
-        );
-
-        state.activate_project_fixture(
-            replacement_root.to_string_lossy().into_owned(),
-            ProjectData::new(),
-        );
-        let replacement_results = state.project_store.read().unwrap().results.clone();
-        let replacement_source = publish_identity_test_snapshot(
-            &replacement_results,
-            crate::node_system::analysis::RunId::new(2),
-        );
-
-        assert_ne!(old_source.source_id, replacement_source.source_id);
-        assert_eq!(
-            state
-                .result_source_descriptor(old_source.source_id)
-                .unwrap(),
-            None
-        );
-        assert_eq!(
-            state.result_source_value(old_source.source_id).unwrap(),
-            None
-        );
-        assert_eq!(
-            state
-                .result_source_page(old_source.source_id, 0, 10)
-                .unwrap(),
-            None
-        );
-        assert!(!state.release_result_source(old_source.source_id).unwrap());
-        assert!(
-            state
-                .result_source_descriptor(replacement_source.source_id)
-                .unwrap()
-                .is_some()
-        );
-
-        let _ = std::fs::remove_dir_all(old_root);
-        let _ = std::fs::remove_dir_all(replacement_root);
-    }
-
-    #[test]
-    fn project_result_reader_does_not_deadlock_scoped_result_authority() {
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-result-reader-authority-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&root).unwrap();
-        let state = ProjectState::new();
-        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
-        let results = state.project_store.read().unwrap().results.clone();
-        let prior =
-            publish_identity_test_snapshot(&results, crate::node_system::analysis::RunId::new(30));
-        let pending = results
-            .prepare_runtime_value(
-                prior.correlation.clone(),
-                prior.basis.clone(),
-                "replacement",
-                &crate::node_system::runtime::RuntimeValue::from(
-                    crate::node_system::protocol::Value::Integer(2),
-                ),
-            )
-            .unwrap();
-        let (source_tx, source_rx) = std::sync::mpsc::sync_channel(1);
-        let (reader_started_tx, reader_started_rx) = std::sync::mpsc::sync_channel(1);
-        let (store_acquired_tx, store_acquired_rx) = std::sync::mpsc::sync_channel(1);
-        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
-        let authority_committed = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let authority_committed_by_publisher = Arc::clone(&authority_committed);
-        let publication_state = state.clone();
-        let publication_results = results.clone();
-        let publisher = std::thread::spawn(move || {
-            let cancellation = crate::node_system::runtime::CancellationToken::new();
-            let mut transaction = publication_results
-                .begin_publication(crate::node_system::analysis::RunId::new(31), vec![pending]);
-            transaction.prepare(&cancellation, None).unwrap();
-            transaction
-                .publish_with_authority(&cancellation, None, |descriptors| {
-                    source_tx
-                        .send(descriptors[0].as_ref().unwrap().source_id)
-                        .unwrap();
-                    reader_started_rx.recv().unwrap();
-                    let store = publication_state.project_store.write().unwrap();
-                    store_acquired_tx.send(()).unwrap();
-                    release_rx.recv().unwrap();
-                    drop(store);
-                    authority_committed_by_publisher
-                        .store(true, std::sync::atomic::Ordering::Release);
-                    Ok(())
-                })
-                .unwrap()
-        });
-        let source_id = source_rx.recv().unwrap();
-        let reader_state = state.clone();
-        let authority_committed_for_reader = Arc::clone(&authority_committed);
-        let reader = std::thread::spawn(move || {
-            reader_started_tx.send(()).unwrap();
-            let descriptor = reader_state.result_source_descriptor(source_id).unwrap();
-            let committed =
-                authority_committed_for_reader.load(std::sync::atomic::Ordering::Acquire);
-            (descriptor, committed)
-        });
-
-        store_acquired_rx
-            .recv_timeout(Duration::from_secs(2))
-            .expect("result reader retained project_store while waiting on result authority");
-        assert!(!reader.is_finished());
-        release_tx.send(()).unwrap();
-
-        let published = publisher.join().unwrap();
-        assert_eq!(reader.join().unwrap(), (published[0].clone(), true));
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
     fn execute_graph_rejects_stale_caller_before_run_registration() {
         let root = std::env::temp_dir().join(format!(
             "yssbi-execution-entry-stale-{}",
@@ -9902,7 +9727,6 @@ mod execution_identity_tests {
         assert!(events.0.lock().unwrap().is_empty());
         let store = state.project_store.read().unwrap();
         assert_eq!(store.runs.active_run_count(), 0);
-        assert_eq!(store.results.source_count(), 0);
         drop(store);
         let _ = std::fs::remove_dir_all(root);
     }
@@ -9928,7 +9752,7 @@ mod execution_identity_tests {
         let state = ProjectState::new();
         state.activate_project_fixture(old_root.to_string_lossy().into_owned(), project.clone());
         let project_instance_id = state.capture_project_session().unwrap().instance_id;
-        let (old_runs, old_results) = {
+        let (old_runs, _old_results) = {
             let store = state.project_store.read().unwrap();
             (Arc::clone(&store.runs), store.results.clone())
         };
@@ -9964,10 +9788,8 @@ mod execution_identity_tests {
         assert!(error.run_error().is_none());
         assert!(events.0.lock().unwrap().is_empty());
         assert_eq!(old_runs.active_run_count(), 0);
-        assert_eq!(old_results.source_count(), 0);
         let store = state.project_store.read().unwrap();
         assert_eq!(store.runs.active_run_count(), 0);
-        assert_eq!(store.results.source_count(), 0);
         drop(store);
         let _ = std::fs::remove_dir_all(old_root);
         let _ = std::fs::remove_dir_all(new_root);
@@ -9994,7 +9816,7 @@ mod execution_identity_tests {
         let state = ProjectState::new();
         state.activate_project_fixture(old_root.to_string_lossy().into_owned(), project.clone());
         let project_instance_id = state.capture_project_session().unwrap().instance_id;
-        let (old_runs, old_results, old_session_id) = {
+        let (old_runs, _old_results, old_session_id) = {
             let store = state.project_store.read().unwrap();
             (
                 Arc::clone(&store.runs),
@@ -10061,10 +9883,8 @@ mod execution_identity_tests {
         );
         drop(recorded);
         assert_eq!(old_runs.active_run_count(), 0);
-        assert_eq!(old_results.source_count(), 0);
         let store = state.project_store.read().unwrap();
         assert_eq!(store.runs.active_run_count(), 0);
-        assert_eq!(store.results.source_count(), 0);
         drop(store);
         let _ = std::fs::remove_dir_all(old_root);
         let _ = std::fs::remove_dir_all(new_root);
@@ -10526,7 +10346,7 @@ mod run_parameter_tests {
                 crate::node_system::runtime::DataSeriesElementType::Float64,
             )
             .values(values)
-            .build(crate::node_system::runtime::ArtifactKind::Replayable)
+            .build(crate::node_system::runtime::ArtifactKind::Collected)
             .map_err(|error| crate::node_system::runtime::KernelError::new(error.to_string()))?;
             Ok(vec![crate::node_system::runtime::RuntimeValue::Artifact(
                 artifact,
@@ -10597,6 +10417,8 @@ mod run_parameter_tests {
                     value: ValueRef::new(0),
                     contract: series_contract.clone(),
                     production: OutputProduction::FullyMaterialized,
+                    public_output: None,
+                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
                 }]),
                 params: CompiledParameterHandle::new("adf-series").unwrap(),
                 resource_dependencies: Box::new([]),
@@ -10623,6 +10445,8 @@ mod run_parameter_tests {
                     value: ValueRef::new(1),
                     contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production: OutputProduction::FullyMaterialized,
+                    public_output: None,
+                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
                 }]),
                 params: CompiledParameterHandle::new("adf-production-chain").unwrap(),
                 resource_dependencies: Box::new([]),
@@ -10668,13 +10492,21 @@ mod run_parameter_tests {
                 &crate::project::ProjectComputationSettings::default(),
             )
             .unwrap();
-            RunExecutor::new(&kernels, &NoResources, &NoFunctions)
-                .with_compiled_parameters(&store)
-                .run(&plan, CancellationToken::new())
+            RunExecutor::new(
+                &kernels,
+                &NoResources,
+                &NoFunctions,
+                crate::node_system::runtime::ResultStore::new(),
+                std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+            )
+            .with_compiled_parameters(&store)
+            .run(&plan, CancellationToken::new())
         };
 
         let trend_result = run(&document).unwrap();
-        let RuntimeValue::Scalar(Value::Object(actual)) = &trend_result.values["adf"] else {
+        let RuntimeValue::Scalar(Value::Object(actual)) =
+            &trend_result.value_for_test("adf").unwrap()
+        else {
             panic!("ADF result must be an object");
         };
         let expected_trend =
@@ -10774,6 +10606,8 @@ mod run_parameter_tests {
                 value: ValueRef::new(index as u32),
                 contract: crate::node_system::plan::PlannedValueContract::opaque(),
                 production: OutputProduction::FullyMaterialized,
+                public_output: None,
+                presentation: crate::node_system::plan::ResultPresentation::Inspector,
             }]),
             params: CompiledParameterHandle::new(format!("series-{index}")).unwrap(),
             resource_dependencies: Box::new([]),
@@ -10809,11 +10643,15 @@ mod run_parameter_tests {
                     value: ValueRef::new(2),
                     contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production: OutputProduction::FullyMaterialized,
+                    public_output: None,
+                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
                 },
                 PlannedOutput {
                     value: ValueRef::new(3),
                     contract: crate::node_system::plan::PlannedValueContract::opaque(),
                     production: OutputProduction::FullyMaterialized,
+                    public_output: None,
+                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
                 },
             ]),
             params: CompiledParameterHandle::new("var").unwrap(),
@@ -10870,11 +10708,18 @@ mod run_parameter_tests {
                 )
                 .unwrap();
         }
-        let result = RunExecutor::new(&kernels, &NoResources, &NoFunctions)
-            .with_compiled_parameters(&store)
-            .run(&plan, CancellationToken::new())
-            .unwrap();
-        let RuntimeValue::Scalar(Value::Object(result)) = &result.values["var"] else {
+        let result = RunExecutor::new(
+            &kernels,
+            &NoResources,
+            &NoFunctions,
+            crate::node_system::runtime::ResultStore::new(),
+            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        )
+        .with_compiled_parameters(&store)
+        .run(&plan, CancellationToken::new())
+        .unwrap();
+        let RuntimeValue::Scalar(Value::Object(result)) = &result.value_for_test("var").unwrap()
+        else {
             panic!("VAR result must be an object");
         };
         let Value::List(coefficients) = &result["coefficients"] else {

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-interface SourceViewShellProps {
+interface ResultViewShellProps {
   title: string;
   meta?: ReactNode;
   toolbar?: ReactNode;
@@ -8,13 +8,13 @@ interface SourceViewShellProps {
   className?: string;
 }
 
-export function SourceViewShell({
+export function ResultViewShell({
   title,
   meta,
   toolbar,
   children,
   className,
-}: SourceViewShellProps) {
+}: ResultViewShellProps) {
   return (
     <div
       className={[

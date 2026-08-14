@@ -170,7 +170,7 @@
   ],
   "defaultLocale": "en-US",
   "format": "yssbi.i18n-inventory.v1",
-  "registryFingerprint": "5e9d510f203e50f5034091a806b5e0d8b36075e7ac6d3a6d087335763fe0770f",
+  "registryFingerprint": "c60af510a508bb69775410ade5fcc5bf5da8662176def016086210afbe9d0e94",
   "requiredKeys": [
     "categories.constants.title",
     "categories.control.title",
@@ -576,7 +576,6 @@
     "nodes.yssbi.debug.view.documentation",
     "nodes.yssbi.debug.view.ports.data.label",
     "nodes.yssbi.debug.view.ports.enter.label",
-    "nodes.yssbi.debug.view.ports.snapshot.label",
     "nodes.yssbi.debug.view.ports.then.label",
     "nodes.yssbi.debug.view.title",
     "nodes.yssbi.distribution.bernoulli.sample.aliases",

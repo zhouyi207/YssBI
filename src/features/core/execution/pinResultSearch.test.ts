@@ -1,105 +1,74 @@
 import { describe, expect, it } from 'vitest';
-import type { PinResultState } from '@/shared/types/ui';
-import { pinResultCacheKey } from './pinResultIndex';
+import type { PinHistoryProjection } from '@/shared/types/ui';
+import { pinHistoryCacheKey } from './pinResultIndex';
 import {
   buildPinResultSearchEntry,
   collectPinResultSearchEntries,
   filterPinResultSearchEntries,
 } from './pinResultSearch';
 
-function pinResult(pinId: string, title: string, nodeId = 'node-1'): PinResultState {
+function history(portKey: string, resultId: string, state: 'ready' | 'cancelled' = 'ready'): PinHistoryProjection {
+  const output = { kind: 'declared' as const, nodeId: `node-${portKey}`, portKey };
   return {
     graphPath: 'events/Main.yssbi-event',
-    nodeId,
-    pinId,
-    sourceId: `source-${pinId}`,
-    descriptor: {
-      sourceId: `source-${pinId}`,
-      kind: 'json',
-      presentation: { kind: 'inspector' },
-      title,
-    },
+    output,
+    selectedResultId: resultId,
+    entries: [{
+      resultId,
+      runId: `run-${resultId}`,
+      activationId: `activation-${resultId}`,
+      graphRevision: '1',
+      createdAtMs: '1000',
+      usage: { kind: 'produced' },
+      state: { kind: state },
+    }],
   };
 }
 
 describe('pinResultSearch', () => {
-  it('builds searchable entries with runtime pin refs', () => {
-    const entry = buildPinResultSearchEntry(pinResult('out-1', 'OLS Result'), {
+  it('builds searchable exact-result entries from history projections', () => {
+    const projection = history('result', '17');
+    const entry = buildPinResultSearchEntry(projection, {
       nodeTitle: 'OLS Regression',
       pinName: 'Result',
     });
 
-    expect(entry.nodeTitle).toBe('OLS Regression');
-    expect(entry.pinName).toBe('Result');
-    expect(entry.sourceTitle).toBe('OLS Result');
-    expect(entry.id).toBe('events/Main.yssbi-event:out-1');
-    expect(entry.ref).toEqual({
-      kind: 'runtimePin',
-      graphPath: 'events/Main.yssbi-event',
-      pinId: 'out-1',
+    expect(entry).toMatchObject({
+      id: pinHistoryCacheKey(projection.graphPath, projection.output),
+      nodeTitle: 'OLS Regression',
+      pinName: 'Result',
+      sourceTitle: 'ready · 17',
+      ref: { kind: 'result', resultId: '17' },
     });
   });
 
-  it('filters entries by node, pin, or source title', () => {
-    const entries = [
-      buildPinResultSearchEntry(pinResult('out-1', 'Alpha Table', 'node-a'), {
-        nodeTitle: 'Alpha Node',
-        pinName: 'Output',
-      }),
-      buildPinResultSearchEntry(pinResult('out-2', 'Beta Table', 'node-b'), {
-        nodeTitle: 'Beta Node',
-        pinName: 'Output',
-      }),
-    ];
+  it('uses selected historical result instead of silently replacing it with latest', () => {
+    const projection = history('result', '17');
+    projection.entries.push({
+      ...projection.entries[0],
+      resultId: '18',
+      runId: 'run-18',
+      state: { kind: 'cancelled' },
+    });
 
-    expect(filterPinResultSearchEntries(entries, 'alpha')).toHaveLength(1);
-    expect(filterPinResultSearchEntries(entries, 'output')).toHaveLength(2);
-    expect(filterPinResultSearchEntries(entries, 'beta table')).toHaveLength(1);
+    expect(buildPinResultSearchEntry(projection, { nodeTitle: 'Node', pinName: 'Result' })?.ref)
+      .toEqual({ kind: 'result', resultId: '17' });
   });
 
-  it('collects every cached pin result without walking graph pins', () => {
-    const pinResults = new Map([
-      [
-        pinResultCacheKey('events/Main.yssbi-event', 'out-1'),
-        pinResult('out-1', 'Upstream Table', 'node-out'),
-      ],
-      [
-        pinResultCacheKey('events/Main.yssbi-event', 'out-2'),
-        pinResult('out-2', 'Second Table', 'node-two'),
-      ],
+  it('collects and filters cached history projections', () => {
+    const first = history('alpha', '17');
+    const second = history('beta', '18', 'cancelled');
+    const histories = new Map([
+      [pinHistoryCacheKey(first.graphPath, first.output), first],
+      [pinHistoryCacheKey(second.graphPath, second.output), second],
     ]);
-
-    const entries = collectPinResultSearchEntries(
-      pinResults,
-      (_graphPath, _nodeId, pinId) =>
-        pinId === 'out-2'
-          ? { nodeTitle: 'Second Node', pinName: 'Data' }
-          : { nodeTitle: 'OLS', pinName: 'Result' },
-    );
-
-    expect(entries).toHaveLength(2);
-    expect(entries.map((entry) => (entry.ref.kind === 'runtimePin' ? entry.ref.pinId : '')).sort()).toEqual(['out-1', 'out-2']);
-    expect(
-      entries.find((entry) => entry.ref.kind === 'runtimePin' && entry.ref.pinId === 'out-2')?.nodeTitle,
-    ).toBe('Second Node');
-  });
-
-  it('resolveLabels uses pinResult graphPath for nested call results', () => {
-    const pinResults = new Map([
-      [
-        pinResultCacheKey('functions/Helper.yssbi-function', 'out-fn'),
-        {
-          ...pinResult('out-fn', 'Fn Result', 'fn-node'),
-          graphPath: 'functions/Helper.yssbi-function',
-        },
-      ],
-    ]);
-
-    const entries = collectPinResultSearchEntries(pinResults, (labelGraphPath, nodeId) => ({
-      nodeTitle: `${labelGraphPath}:${nodeId}`,
-      pinName: 'Result',
+    const entries = collectPinResultSearchEntries(histories, (projection) => ({
+      nodeTitle: projection.output.nodeId,
+      pinName: projection.output.kind === 'declared' ? projection.output.portKey : projection.output.templateKey,
     }));
 
-    expect(entries[0]?.nodeTitle).toBe('functions/Helper.yssbi-function:fn-node');
+    expect(entries).toHaveLength(2);
+    expect(filterPinResultSearchEntries(entries, 'cancelled')).toHaveLength(1);
+    expect(filterPinResultSearchEntries(entries, 'alpha')).toHaveLength(1);
   });
 });

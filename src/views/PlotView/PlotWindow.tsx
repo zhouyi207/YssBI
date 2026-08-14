@@ -27,7 +27,7 @@ export const PlotWindow: React.FC = () => {
 
   const plotParseKey =
     state.status === 'ready' && state.payload.mode === 'plot'
-      ? `${state.descriptor.sourceId}:${state.payload.chart}`
+      ? `${state.descriptor.resultId}:${state.payload.chart}`
       : null;
 
   useEffect(() => {
@@ -46,7 +46,7 @@ export const PlotWindow: React.FC = () => {
       state={state}
       isMaximized={isMaximized}
       errorMessages={{
-        missingSourceId: t('info.missingDataKey'),
+        missingResultId: t('info.missingDataKey'),
         notFound: t('plot.noData'),
         loadFailed: t('plot.failedInitialize'),
       }}

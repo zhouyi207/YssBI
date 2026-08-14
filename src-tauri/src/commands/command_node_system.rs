@@ -1,5 +1,6 @@
 use crate::commands::node_system_execution_dto::{
-    ExecutionDemandDto, ResultSourceDescriptorDto, ResultSourcePageDto, RunEventDto,
+    ExecutionDemandDto, PinResultEntryDto, ResultDescriptorDto, ResultPageDto, ResultValueDto,
+    RunEventDto,
 };
 use crate::error::{AppError, GraphMutationErrorDetailsDto};
 use crate::event::{
@@ -11,7 +12,7 @@ use crate::node_system::document::{
     EditorGraphMutationDto, HistoryMutation, HistoryStatusDto, MutationRequest, OperationId,
     PortAddressDto, ResourceRevision,
 };
-use crate::node_system::runtime::{ArtifactSnapshot, ResultSourceId, RunEvent, RunEventSink};
+use crate::node_system::runtime::{ResultId, ResultState, RunEvent, RunEventSink, StoredValueKind};
 use crate::project::project_writers::ProjectSaveResultDto;
 use crate::project::{GraphResourcePath, ProjectFilesystemError, ProjectInstanceId, ProjectState};
 use serde::Serialize;
@@ -812,33 +813,26 @@ pub fn allocate_pin_preview_generation() -> Result<PinPreviewGenerationDto, AppE
         })
 }
 
-fn get_result_source_descriptor_from_state(
+fn get_result_descriptor_from_state(
     state: &ProjectState,
-    source_id: &str,
-) -> Result<Option<ResultSourceDescriptorDto>, AppError> {
-    let source_id = parse_opaque_u64("sourceId", source_id)?;
+    result_id: &str,
+) -> Result<Option<ResultDescriptorDto>, AppError> {
+    let result_id = parse_opaque_u64("resultId", result_id)?;
     state
-        .result_source_descriptor(ResultSourceId::new(source_id))
+        .result(ResultId::new(result_id))
         .map_err(AppError::from)
-        .map(|descriptor| descriptor.map(Into::into))
+        .map(|result| result.as_deref().map(Into::into))
 }
 
 #[tauri::command]
-pub fn get_result_source_descriptor(
+pub fn get_result_descriptor(
     state: State<'_, ProjectState>,
-    source_id: String,
-) -> Result<Option<ResultSourceDescriptorDto>, AppError> {
-    get_result_source_descriptor_from_state(&state, &source_id)
+    result_id: String,
+) -> Result<Option<ResultDescriptorDto>, AppError> {
+    get_result_descriptor_from_state(&state, &result_id)
 }
 
-#[derive(Debug, Serialize)]
-#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
-pub enum ResultSourceValueDto {
-    Value(serde_json::Value),
-    Sequence(Box<[serde_json::Value]>),
-}
-
-pub(crate) fn result_source_value_to_json(
+pub(crate) fn result_value_to_json(
     value: &crate::node_system::protocol::Value,
 ) -> Result<serde_json::Value, AppError> {
     use crate::node_system::protocol::Value;
@@ -856,7 +850,7 @@ pub(crate) fn result_source_value_to_json(
             .map(serde_json::Value::Number)
             .ok_or_else(|| {
                 AppError::new(
-                    "result_source_value_not_json",
+                    "result_value_not_json",
                     format!(
                         "Result decimal '{}' is not a finite JSON number",
                         value.as_str()
@@ -871,118 +865,182 @@ pub(crate) fn result_source_value_to_json(
             .collect(),
         Value::List(values) => values
             .iter()
-            .map(result_source_value_to_json)
+            .map(result_value_to_json)
             .collect::<Result<_, _>>()?,
         Value::Object(values) => values
             .iter()
-            .map(|(key, value)| Ok((key.to_string(), result_source_value_to_json(value)?)))
+            .map(|(key, value)| Ok((key.to_string(), result_value_to_json(value)?)))
             .collect::<Result<_, AppError>>()?,
     })
 }
 
-fn result_source_values_to_json(
+fn result_values_to_json(
     values: &[crate::node_system::protocol::Value],
 ) -> Result<Box<[serde_json::Value]>, AppError> {
     values
         .iter()
-        .map(result_source_value_to_json)
+        .map(result_value_to_json)
         .collect::<Result<Vec<_>, _>>()
         .map(Vec::into_boxed_slice)
 }
 
-fn get_result_source_value_from_state(
+const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
+
+fn result_state_error(result_id: ResultId, state: &ResultState) -> AppError {
+    let state = match state {
+        ResultState::Pending(_) => "pending",
+        ResultState::Failed(_) => "failed",
+        ResultState::Cancelled => "cancelled",
+        ResultState::Ready(_) => unreachable!("ready results do not produce state errors"),
+    };
+    AppError {
+        code: "result_not_ready".into(),
+        message: format!(
+            "Result {} is {state}; query its descriptor first",
+            result_id.get()
+        ),
+        details: Some(serde_json::json!({
+            "resultId": result_id.get().to_string(),
+            "state": state,
+        })),
+    }
+}
+
+fn result_requires_paging(result_id: ResultId, kind: StoredValueKind) -> AppError {
+    AppError {
+        code: "result_requires_paging".into(),
+        message: format!(
+            "Result {} must be read through get_result_page",
+            result_id.get()
+        ),
+        details: Some(serde_json::json!({
+            "resultId": result_id.get().to_string(),
+            "valueKind": match kind {
+                StoredValueKind::Scalar => "scalar",
+                StoredValueKind::Sequence => "sequence",
+                StoredValueKind::DataSeries => "dataSeries",
+            },
+        })),
+    }
+}
+
+fn get_result_value_from_state(
     state: &ProjectState,
-    source_id: &str,
-) -> Result<Option<ResultSourceValueDto>, AppError> {
-    let source_id = parse_opaque_u64("sourceId", source_id)?;
-    let snapshot = state
-        .result_source_value(ResultSourceId::new(source_id))
-        .map_err(AppError::from)?;
-    snapshot
-        .map(|snapshot| match snapshot.as_ref() {
-            ArtifactSnapshot::Value(value) => Ok(ResultSourceValueDto::Value(
-                result_source_value_to_json(value)?,
-            )),
-            ArtifactSnapshot::Sequence(values) => Ok(ResultSourceValueDto::Sequence(
-                result_source_values_to_json(values)?,
-            )),
-            ArtifactSnapshot::Spilled(_) => Err(AppError::new(
-                "result_source_requires_paging",
-                "Disk-backed result sources must be read through the paged API",
-            )),
-            ArtifactSnapshot::RuntimeArtifact(artifact) => artifact
-                .in_memory_values()
-                .map(result_source_values_to_json)
-                .transpose()?
-                .map(ResultSourceValueDto::Sequence)
-                .ok_or_else(|| {
-                    AppError::new(
-                        "result_source_requires_paging",
-                        "Disk-backed result sources must be read through the paged API",
-                    )
-                }),
+    result_id: &str,
+) -> Result<Option<ResultValueDto>, AppError> {
+    let result_id = parse_opaque_u64("resultId", result_id)?;
+    let Some(result) = state
+        .result(ResultId::new(result_id))
+        .map_err(AppError::from)?
+    else {
+        return Ok(None);
+    };
+    let ResultState::Ready(value) = &result.state else {
+        return Err(result_state_error(ResultId::new(result_id), &result.state));
+    };
+    if value.kind() != StoredValueKind::Scalar {
+        return Err(result_requires_paging(
+            ResultId::new(result_id),
+            value.kind(),
+        ));
+    }
+    let values = value
+        .page(0, 1)
+        .map_err(|error| AppError::new("result_read_failed", error.to_string()))?;
+    let value = values
+        .first()
+        .map(result_value_to_json)
+        .transpose()?
+        .unwrap_or(serde_json::Value::Null);
+    let encoded_size = serde_json::to_vec(&value)
+        .map_err(|error| AppError::new("result_value_not_json", error.to_string()))?
+        .len();
+    if encoded_size > MAX_INLINE_RESULT_JSON_BYTES {
+        return Err(result_requires_paging(
+            ResultId::new(result_id),
+            StoredValueKind::Scalar,
+        ));
+    }
+    Ok(Some(ResultValueDto::Value(value)))
+}
+
+#[tauri::command]
+pub fn get_result_value(
+    state: State<'_, ProjectState>,
+    result_id: String,
+) -> Result<Option<ResultValueDto>, AppError> {
+    get_result_value_from_state(&state, &result_id)
+}
+
+fn get_result_page_from_state(
+    state: &ProjectState,
+    result_id: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<Option<ResultPageDto>, AppError> {
+    let result_id = ResultId::new(parse_opaque_u64("resultId", result_id)?);
+    let Some(result) = state.result(result_id).map_err(AppError::from)? else {
+        return Ok(None);
+    };
+    let ResultState::Ready(value) = &result.state else {
+        return Err(result_state_error(result_id, &result.state));
+    };
+    let values = value
+        .page(offset, limit)
+        .map_err(|error| AppError::new("result_read_failed", error.to_string()))?;
+    Ok(Some(ResultPageDto::new(
+        result_id,
+        offset.min(value.len()),
+        limit,
+        value.kind(),
+        value.data_series_metadata().cloned(),
+        value.len(),
+        result_values_to_json(&values)?,
+    )))
+}
+
+#[tauri::command]
+pub fn get_result_page(
+    state: State<'_, ProjectState>,
+    result_id: String,
+    offset: usize,
+    limit: usize,
+) -> Result<Option<ResultPageDto>, AppError> {
+    get_result_page_from_state(&state, &result_id, offset, limit)
+}
+
+fn get_pin_result_history_from_state(
+    state: &ProjectState,
+    graph_path: &str,
+    output: PortAddressDto,
+) -> Result<Box<[PinResultEntryDto]>, AppError> {
+    let port = output
+        .try_into()
+        .map_err(|error: String| AppError::new("invalid_output", error))?;
+    let output = crate::node_system::plan::GraphOutputRef {
+        graph_path: crate::node_system::document::GraphResourcePath(graph_path.into()),
+        port,
+    };
+    state
+        .pin_result_history(&output)
+        .map_err(AppError::from)
+        .map(|history| {
+            history
+                .into_vec()
+                .into_iter()
+                .map(|(entry, result)| PinResultEntryDto::from_entry(entry, &result))
+                .collect::<Vec<_>>()
+                .into_boxed_slice()
         })
-        .transpose()
 }
 
 #[tauri::command]
-pub fn get_result_source_value(
+pub fn get_pin_result_history(
     state: State<'_, ProjectState>,
-    source_id: String,
-) -> Result<Option<ResultSourceValueDto>, AppError> {
-    get_result_source_value_from_state(&state, &source_id)
-}
-
-fn get_result_source_page_from_state(
-    state: &ProjectState,
-    source_id: &str,
-    offset: usize,
-    limit: usize,
-) -> Result<Option<ResultSourcePageDto>, AppError> {
-    let source_id = parse_opaque_u64("sourceId", source_id)?;
-    state
-        .result_source_page(ResultSourceId::new(source_id), offset, limit)
-        .map_err(AppError::from)
-        .map(|page| page.map(Into::into))
-}
-
-#[tauri::command]
-pub fn get_result_source_page(
-    state: State<'_, ProjectState>,
-    source_id: String,
-    offset: usize,
-    limit: usize,
-) -> Result<Option<ResultSourcePageDto>, AppError> {
-    get_result_source_page_from_state(&state, &source_id, offset, limit)
-}
-
-fn release_result_source_from_state(
-    state: &ProjectState,
-    source_id: &str,
-) -> Result<bool, AppError> {
-    let source_id = parse_opaque_u64("sourceId", source_id)?;
-    state
-        .release_result_source(ResultSourceId::new(source_id))
-        .map_err(AppError::from)
-}
-
-#[tauri::command]
-pub fn release_result_source(
-    state: State<'_, ProjectState>,
-    source_id: String,
-) -> Result<bool, AppError> {
-    release_result_source_from_state(&state, &source_id)
-}
-
-#[tauri::command]
-pub fn release_run_result_sources(
-    state: State<'_, ProjectState>,
-    run_id: String,
-) -> Result<usize, AppError> {
-    let run_id = parse_opaque_u64("runId", &run_id)?;
-    state
-        .release_run_result_sources(crate::node_system::analysis::RunId::new(run_id))
-        .map_err(AppError::from)
+    graph_path: String,
+    output: PortAddressDto,
+) -> Result<Box<[PinResultEntryDto]>, AppError> {
+    get_pin_result_history_from_state(&state, &graph_path, output)
 }
 
 #[tauri::command]
@@ -1040,6 +1098,7 @@ pub async fn execute_graph_document(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::commands::node_system_execution_dto::ResultStateKindDto;
     use crate::node_system::analysis::{
         CompilationBasis, CompileId, CorrelationContext, ParentCallId, ProjectSessionId, RunId,
     };
@@ -1050,7 +1109,8 @@ mod tests {
     };
     use crate::node_system::registry::RegistryFingerprint;
     use crate::node_system::runtime::{
-        ArtifactSnapshot, ResultSourceDescriptor, ResultSourceId, ResultStore, RunEventKind,
+        ActivationId, ActivationProvenance, CancellationToken, PendingOutputDescriptor, ResultId,
+        ResultStore, ResultUsage, RunEventKind, RunResourceBudgets, RunResourceOwner, StoredValue,
     };
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, fixtures,
@@ -1126,41 +1186,6 @@ mod tests {
         project
     }
 
-    fn publish_identity_test_snapshot(
-        store: &ResultStore,
-        run_id: RunId,
-    ) -> ResultSourceDescriptor {
-        let basis = CompilationBasis {
-            graph_revision: crate::node_system::document::GraphRevision::new(1),
-            registry_fingerprint: RegistryFingerprint::from_bytes([8; 32]),
-            resource_versions: std::collections::BTreeMap::new(),
-            resource_observations: std::collections::BTreeMap::new(),
-        };
-        let correlation = CorrelationContext {
-            project_session_id: ProjectSessionId::new("session"),
-            graph_path: crate::node_system::document::GraphResourcePath(
-                "events/Main.yssbi-event".into(),
-            ),
-            graph_revision: basis.graph_revision,
-            registry_fingerprint: basis.registry_fingerprint.clone(),
-            resource_versions: basis.resource_versions.clone(),
-            compile_id: CompileId::new(1),
-            selection_digest: None,
-            run_id: Some(run_id),
-            node_id: None,
-            node_type_id: None,
-            parent_call: None,
-            trace_parent_span_id: None,
-        };
-        store.publish_snapshot(
-            run_id,
-            correlation,
-            basis,
-            "result",
-            ArtifactSnapshot::Value(crate::node_system::protocol::Value::Integer(1)),
-        )
-    }
-
     fn history_request(graph_path: &GraphResourcePath) -> MutationRequest<HistoryMutation> {
         MutationRequest::new(
             ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
@@ -1193,7 +1218,7 @@ mod tests {
     }
 
     #[test]
-    fn result_source_value_dto_serializes_protocol_values_as_plain_json() {
+    fn result_value_dto_serializes_protocol_values_as_plain_json() {
         use crate::node_system::protocol::{CanonicalDecimal, Value};
         use std::collections::BTreeMap;
 
@@ -1209,9 +1234,7 @@ mod tests {
             ("coefficients".into(), Value::List(vec![Value::Integer(1)])),
         ]));
 
-        let dto = ResultSourceValueDto::Sequence(Box::new([
-            result_source_value_to_json(&report).unwrap()
-        ]));
+        let dto = ResultValueDto::Sequence(Box::new([result_value_to_json(&report).unwrap()]));
 
         assert_eq!(
             serde_json::to_value(dto).unwrap(),
@@ -1226,8 +1249,56 @@ mod tests {
         );
     }
 
+    fn insert_ready_result(
+        store: &ResultStore,
+        run_id: RunId,
+        activation_id: ActivationId,
+        output: crate::node_system::plan::GraphOutputRef,
+    ) -> ResultId {
+        let group = store
+            .create_pending_group(
+                ActivationProvenance {
+                    run_id,
+                    activation_id,
+                    graph_path: output.graph_path.clone(),
+                    graph_revision: crate::node_system::document::GraphRevision::new(1),
+                    node_id: output.port.node_id,
+                    created_at_ms: activation_id.get(),
+                    usage: ResultUsage::Produced,
+                },
+                &[PendingOutputDescriptor {
+                    value: crate::node_system::plan::ValueRef::new(activation_id.get() as u32),
+                    output: Some(output),
+                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
+                }],
+            )
+            .unwrap();
+        let result_id = group.output_result_ids[0];
+        store
+            .complete_group(
+                &group,
+                vec![StoredValue::scalar(
+                    crate::node_system::protocol::Value::Integer(activation_id.get() as i64),
+                )]
+                .into_boxed_slice(),
+            )
+            .unwrap();
+        result_id
+    }
+
+    fn test_output(graph_path: &str) -> crate::node_system::plan::GraphOutputRef {
+        crate::node_system::plan::GraphOutputRef {
+            graph_path: crate::node_system::document::GraphResourcePath(graph_path.into()),
+            port: crate::node_system::document::PortAddress::declared(
+                crate::node_system::document::NodeId::from_uuid(uuid::Uuid::nil()),
+                crate::node_system::protocol::PortKey::new("result").unwrap(),
+            ),
+        }
+    }
+
     #[test]
-    fn stale_source_handle_cannot_alias_replacement_project_through_tauri_helpers() {
+    fn stale_result_id_cannot_alias_replacement_project() {
         let old_root = std::env::temp_dir().join(format!(
             "yssbi-stale-result-source-command-old-{}",
             uuid::Uuid::new_v4()
@@ -1241,45 +1312,292 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_fixture(old_root.to_string_lossy().into_owned(), ProjectData::new());
         let old_results = state.project_store.read().unwrap().results.clone();
-        let old_source = publish_identity_test_snapshot(&old_results, RunId::new(1));
+        let old_result_id = insert_ready_result(
+            &old_results,
+            RunId::new(1),
+            ActivationId::next().unwrap(),
+            test_output("events/test.yssbi-event"),
+        );
 
         state.activate_project_fixture(
             replacement_root.to_string_lossy().into_owned(),
             ProjectData::new(),
         );
         let replacement_results = state.project_store.read().unwrap().results.clone();
-        let replacement_source =
-            publish_identity_test_snapshot(&replacement_results, RunId::new(2));
-        let old_source_id = old_source.source_id.get().to_string();
+        let replacement_result_id = insert_ready_result(
+            &replacement_results,
+            RunId::new(2),
+            ActivationId::next().unwrap(),
+            test_output("events/test.yssbi-event"),
+        );
 
-        assert_ne!(old_source.source_id, replacement_source.source_id);
+        assert_ne!(old_result_id, replacement_result_id);
         assert!(
-            get_result_source_descriptor_from_state(&state, &old_source_id)
+            get_result_descriptor_from_state(&state, &old_result_id.get().to_string())
                 .unwrap()
                 .is_none()
         );
         assert!(
-            get_result_source_value_from_state(&state, &old_source_id)
+            get_result_descriptor_from_state(&state, &replacement_result_id.get().to_string())
                 .unwrap()
-                .is_none()
-        );
-        assert!(
-            get_result_source_page_from_state(&state, &old_source_id, 0, 10)
-                .unwrap()
-                .is_none()
-        );
-        assert!(!release_result_source_from_state(&state, &old_source_id).unwrap());
-        assert!(
-            get_result_source_descriptor_from_state(
-                &state,
-                &replacement_source.source_id.get().to_string(),
-            )
-            .unwrap()
-            .is_some()
+                .is_some()
         );
 
         let _ = std::fs::remove_dir_all(old_root);
         let _ = std::fs::remove_dir_all(replacement_root);
+    }
+
+    #[test]
+    fn pin_history_command_returns_latest_failure_not_latest_success() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-result-history-command-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        let output = test_output("events/test.yssbi-event");
+        let results = state.project_store.read().unwrap().results.clone();
+        insert_ready_result(
+            &results,
+            RunId::new(1),
+            ActivationId::next().unwrap(),
+            output.clone(),
+        );
+        let failed_activation = ActivationId::next().unwrap();
+        let failed = results
+            .create_pending_group(
+                ActivationProvenance {
+                    run_id: RunId::new(2),
+                    activation_id: failed_activation,
+                    graph_path: output.graph_path.clone(),
+                    graph_revision: crate::node_system::document::GraphRevision::new(1),
+                    node_id: output.port.node_id,
+                    created_at_ms: 2,
+                    usage: ResultUsage::Produced,
+                },
+                &[PendingOutputDescriptor {
+                    value: crate::node_system::plan::ValueRef::new(2),
+                    output: Some(output.clone()),
+                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
+                }],
+            )
+            .unwrap();
+        results
+            .fail_group(
+                &failed,
+                std::sync::Arc::new(crate::node_system::runtime::ResultFailure::new("failed")),
+            )
+            .unwrap();
+        let output_address = PortAddressDto::from(output.port);
+
+        let history =
+            get_pin_result_history_from_state(&state, "events/test.yssbi-event", output_address)
+                .unwrap();
+        assert_eq!(
+            history.last().unwrap().state_kind(),
+            ResultStateKindDto::Failed
+        );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn result_queries_are_descriptor_first_and_require_paging_for_collections() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-result-query-contract-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        let results = state.project_store.read().unwrap().results.clone();
+        let output = test_output("events/test.yssbi-event");
+        let activation = ActivationId::next().unwrap();
+        let group = results
+            .create_pending_group(
+                ActivationProvenance {
+                    run_id: RunId::new(3),
+                    activation_id: activation,
+                    graph_path: output.graph_path.clone(),
+                    graph_revision: crate::node_system::document::GraphRevision::new(1),
+                    node_id: output.port.node_id,
+                    created_at_ms: 3,
+                    usage: ResultUsage::Produced,
+                },
+                &[PendingOutputDescriptor {
+                    value: crate::node_system::plan::ValueRef::new(3),
+                    output: Some(output),
+                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
+                }],
+            )
+            .unwrap();
+        let result_id = group.output_result_ids[0].get().to_string();
+
+        assert!(
+            get_result_descriptor_from_state(&state, &result_id)
+                .unwrap()
+                .is_some()
+        );
+        let value_error = get_result_value_from_state(&state, &result_id).unwrap_err();
+        assert_eq!(value_error.code, "result_not_ready");
+        let page_error = get_result_page_from_state(&state, &result_id, 0, 2).unwrap_err();
+        assert_eq!(page_error.code, "result_not_ready");
+        assert!(
+            get_result_value_from_state(&state, "999999999")
+                .unwrap()
+                .is_none()
+        );
+
+        results
+            .complete_group(
+                &group,
+                vec![StoredValue::sequence(
+                    (0..5)
+                        .map(crate::node_system::protocol::Value::Integer)
+                        .collect::<Vec<_>>()
+                        .into_boxed_slice(),
+                )]
+                .into_boxed_slice(),
+            )
+            .unwrap();
+        let paging_error = get_result_value_from_state(&state, &result_id).unwrap_err();
+        assert_eq!(paging_error.code, "result_requires_paging");
+        let page = get_result_page_from_state(&state, &result_id, 1, 2)
+            .unwrap()
+            .unwrap();
+        let page = serde_json::to_value(page).unwrap();
+        assert_eq!(page["actualCount"], 2);
+        assert_eq!(page["requestedLimit"], 2);
+        assert_eq!(page["hasMore"], true);
+        assert_eq!(page["nextOffset"], 3);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn large_spill_result_requires_paging_without_reading_its_backing_file() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-spill-result-query-contract-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        let results = state.project_store.read().unwrap().results.clone();
+        let output = test_output("events/test.yssbi-event");
+        let activation_id = ActivationId::next().unwrap();
+        let owner = RunResourceOwner::with_spill_root(
+            RunId::new(4),
+            RunResourceBudgets {
+                stream_capacity: std::num::NonZeroUsize::new(1).unwrap(),
+                materialization_memory_bytes: 1,
+                spill_directory_bytes: 1_048_576,
+            },
+            CancellationToken::new(),
+            root.join("spill"),
+        )
+        .unwrap();
+        let stored = owner
+            .store_values(
+                (0..10_000).map(|value| Ok(crate::node_system::protocol::Value::Integer(value))),
+                None,
+                None,
+            )
+            .unwrap();
+        let spill = stored.spill_storage().expect("large result must spill");
+        let spill_path = spill.path_for_test();
+        let group = results
+            .create_pending_group(
+                ActivationProvenance {
+                    run_id: RunId::new(4),
+                    activation_id,
+                    graph_path: output.graph_path.clone(),
+                    graph_revision: crate::node_system::document::GraphRevision::new(1),
+                    node_id: output.port.node_id,
+                    created_at_ms: 4,
+                    usage: ResultUsage::Produced,
+                },
+                &[PendingOutputDescriptor {
+                    value: crate::node_system::plan::ValueRef::new(4),
+                    output: Some(output),
+                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
+                }],
+            )
+            .unwrap();
+        let result_id = group.output_result_ids[0].get().to_string();
+        results
+            .complete_group(&group, vec![stored].into_boxed_slice())
+            .unwrap();
+        std::fs::remove_file(&spill_path).unwrap();
+
+        let error = get_result_value_from_state(&state, &result_id).unwrap_err();
+
+        assert_eq!(error.code, "result_requires_paging");
+        assert!(!spill_path.try_exists().unwrap());
+        drop(spill);
+        drop(owner);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn oversized_scalar_requires_paging_and_is_retrievable_as_one_page() {
+        let root = std::env::temp_dir().join(format!(
+            "yssbi-oversized-scalar-query-contract-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let state = ProjectState::new();
+        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
+        let results = state.project_store.read().unwrap().results.clone();
+        let output = test_output("events/test.yssbi-event");
+        let activation_id = ActivationId::next().unwrap();
+        let group = results
+            .create_pending_group(
+                ActivationProvenance {
+                    run_id: RunId::new(5),
+                    activation_id,
+                    graph_path: output.graph_path.clone(),
+                    graph_revision: crate::node_system::document::GraphRevision::new(1),
+                    node_id: output.port.node_id,
+                    created_at_ms: 5,
+                    usage: ResultUsage::Produced,
+                },
+                &[PendingOutputDescriptor {
+                    value: crate::node_system::plan::ValueRef::new(5),
+                    output: Some(output),
+                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
+                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
+                }],
+            )
+            .unwrap();
+        let result_id = group.output_result_ids[0].get().to_string();
+        let scalar = "x".repeat(MAX_INLINE_RESULT_JSON_BYTES + 1);
+        results
+            .complete_group(
+                &group,
+                vec![StoredValue::scalar(
+                    crate::node_system::protocol::Value::String(scalar.clone().into()),
+                )]
+                .into_boxed_slice(),
+            )
+            .unwrap();
+
+        let error = get_result_value_from_state(&state, &result_id).unwrap_err();
+        let page = get_result_page_from_state(&state, &result_id, 0, 1)
+            .unwrap()
+            .unwrap();
+        let page = serde_json::to_value(page).unwrap();
+
+        assert_eq!(error.code, "result_requires_paging");
+        assert_eq!(error.details.unwrap()["valueKind"], "scalar");
+        assert_eq!(page["valueKind"], "scalar");
+        assert_eq!(page["values"], serde_json::json!([scalar]));
+        assert_eq!(page["hasMore"], false);
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
@@ -1768,31 +2086,14 @@ mod tests {
             basis: basis.clone(),
             kind: RunEventKind::RunStarted,
         });
-        let source =
-            ResultSourceDescriptorDto::from(crate::node_system::runtime::ResultSourceDescriptor {
-                source_id: ResultSourceId::new(unsafe_id),
-                artifact_id: crate::node_system::runtime::ArtifactId::new(unsafe_id),
-                name: "result".into(),
-                kind: crate::node_system::runtime::ArtifactSnapshotKind::Value,
-                data_series_metadata: None,
-                total_count: 1,
-                presentation: crate::node_system::runtime::ResultSourcePresentation::Report {
-                    report: crate::node_system::runtime::ResultReportKind::OlsSummary,
-                },
-                correlation: correlation.clone(),
-                basis: basis.clone(),
-            });
-        let source = serde_json::to_value(source).unwrap();
-        assert_eq!(source["title"], "Results");
-        assert_eq!(source["presentation"]["kind"], "report");
-        assert_eq!(source["presentation"]["report"], "olsSummary");
 
         let result = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
             correlation,
             basis,
-            kind: RunEventKind::ResultReady {
-                name: "result".into(),
-                source_id: ResultSourceId::new(unsafe_id),
+            kind: RunEventKind::ResultGroupChanged {
+                activation_id: unsafe_id,
+                result_ids: vec![ResultId::new(unsafe_id)].into_boxed_slice(),
+                state: crate::node_system::runtime::ResultStateKind::Ready,
             },
         });
 
@@ -1824,23 +2125,21 @@ mod tests {
             operation["correlation"]["selectionDigest"],
             preview["correlation"]["selectionDigest"]
         );
-        assert_eq!(
-            source["correlation"]["selectionDigest"],
-            "demand-selection-a"
-        );
+
         let result = serde_json::to_value(result).unwrap();
         assert_eq!(
             result["correlation"]["selectionDigest"],
             "demand-selection-a"
         );
-        assert_eq!(result["kind"]["sourceId"], unsafe_id.to_string());
+        assert_eq!(result["kind"]["activationId"], unsafe_id.to_string());
+        assert_eq!(result["kind"]["resultIds"][0], unsafe_id.to_string());
         let execute_result = serde_json::to_value(ExecuteGraphResultDto {
             run_id: unsafe_id.to_string(),
         })
         .unwrap();
         assert_eq!(execute_result["runId"], unsafe_id.to_string());
         assert_eq!(
-            parse_opaque_u64("sourceId", &unsafe_id.to_string()).unwrap(),
+            parse_opaque_u64("resultId", &unsafe_id.to_string()).unwrap(),
             unsafe_id,
         );
         assert_eq!(

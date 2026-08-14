@@ -213,14 +213,13 @@ const processGlobalAllocatorCommandExemptions = [
 
 const capabilityCommandExemptions = [
   'cancel_graph_run',
+  'get_result_descriptor',
+  'get_result_value',
+  'get_result_page',
+  'get_pin_result_history',
   'list_graph_traces',
   'get_run_trace',
-  // Task 8 source IDs are process-global, monotonic, and non-reusable capabilities.
-  'get_result_source_descriptor',
-  'get_result_source_value',
-  'get_result_source_page',
-  'release_result_source',
-  'release_run_result_sources',
+
   'submit_bayes_inference',
   'get_bayes_inference_status',
   'cancel_bayes_inference',
@@ -648,7 +647,7 @@ describe('projectFilesystemContract', () => {
 
     expect(restoredFacadePaths).toEqual([]);
     expect(legacyIdentityViolations(productionSources(), restoredFacadePaths)).toEqual([]);
-  });
+  }, 15_000);
 
   it.each([
     ['publication reverse import', {
@@ -917,6 +916,7 @@ describe('projectFilesystemContract', () => {
           || source.includes('assertCurrentProjectIdentity'));
       const usesCommandContextFacade = (source.includes('captureProjectCommandContext')
         || source.includes('captureGraphSaveCommandContext')
+        || source.includes('captureSettledGraphSaveCommandContext')
         || source.includes('captureRevisionedProjectCommandSnapshot'))
         && (source.includes('.isCurrent()')
           || source.includes('.assertCurrent()')

@@ -1,26 +1,36 @@
-import { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import type { ReportKind } from '@/features/core/resultSource';
-import { parseReportPayload } from '@/shared/types/report/parseReportPayload';
+import { useEffect, useMemo } from 'react';
+import type { ReportKind, ResultDescriptor } from '@/features/core/resultSource';
+import { validateReportPayload } from '@/shared/types/report/reportValidation';
+import { logger } from '@/utils/appLogger';
 import { resolveReportComponent } from './reportViewResolver';
 
 interface ReportViewProps {
+  descriptor: ResultDescriptor;
   report: ReportKind;
   data: unknown;
 }
 
-export function ReportView({ report, data }: ReportViewProps) {
-  const { t } = useTranslation();
-  const parsed = useMemo(() => parseReportPayload(report, data), [report, data]);
+export function ReportView({ descriptor, report, data }: ReportViewProps) {
+  const validation = useMemo(
+    () => validateReportPayload(descriptor, report, data),
+    [data, descriptor, report],
+  );
 
-  if (!parsed) {
+  useEffect(() => {
+    if (!validation.ok) {
+      logger.notify.error(JSON.stringify(validation.diagnostic), 'ReportValidation');
+    }
+  }, [validation]);
+
+  if (!validation.ok) {
+    const label = report === 'olsSummary' ? 'OLS report' : 'report';
     return (
       <p className="px-4 py-6 text-sm text-destructive">
-        {t('info.invalidReportPayload', { defaultValue: '报告数据格式无效，无法渲染。' })}
+        Unable to render {label}: {validation.diagnostic.fieldPath} {validation.diagnostic.reason}.
       </p>
     );
   }
 
   const Component = resolveReportComponent(report);
-  return <Component data={parsed} />;
+  return <Component data={validation.value} />;
 }

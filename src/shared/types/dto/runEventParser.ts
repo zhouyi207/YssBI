@@ -8,6 +8,7 @@ import {
   isPortAddressDto,
   isUuid,
 } from './editorProjectionGuards';
+import type { ResultStateKind } from './result';
 import {
   RUN_ERROR_CODES,
   RUN_EVENT_KIND_TYPES,
@@ -235,6 +236,13 @@ function parseOperationEvent(
   };
 }
 
+function parseResultStateKind(value: unknown): ResultStateKind {
+  if (value === 'pending' || value === 'ready' || value === 'failed' || value === 'cancelled') {
+    return value;
+  }
+  return fail('result state kind');
+}
+
 function parseRunEventKind(value: unknown): RunEventKind {
   if (!isRecord(value)) return fail('run event kind');
   const type = parseDiscriminant(value.type, RUN_EVENT_KIND_TYPES, 'run event kind variant');
@@ -270,21 +278,32 @@ function parseRunEventKind(value: unknown): RunEventKind {
         attemptId: value.attemptId,
         ...parseErrorOutcome(value),
       };
-    case 'resultReady':
-      if (!hasExactKeys(value, ['type', 'name', 'sourceId'])
-        || typeof value.name !== 'string'
-        || !isDecimalId(value.sourceId)) return fail('resultReady');
-      return { type: 'resultReady', name: value.name, sourceId: value.sourceId };
-    case 'outputReady':
-      if (!hasExactKeys(value, ['type', 'output', 'generation', 'sourceId'])
-        || !(value.generation === null || isGeneration(value.generation))
-        || !isDecimalId(value.sourceId)) return fail('outputReady');
+    case 'resultGroupChanged':
+      if (!hasExactKeys(value, ['type', 'activationId', 'resultIds', 'state'])
+        || !isDecimalId(value.activationId)
+        || !Array.isArray(value.resultIds)
+        || !value.resultIds.every(isDecimalId)) return fail('resultGroupChanged');
       return {
-        type: 'outputReady',
+        type: 'resultGroupChanged',
+        activationId: value.activationId,
+        resultIds: value.resultIds,
+        state: parseResultStateKind(value.state),
+      };
+    case 'outputResultChanged':
+      if (!hasExactKeys(value, ['type', 'output', 'generation', 'resultId'])
+        || !(value.generation === null || isGeneration(value.generation))
+        || !isDecimalId(value.resultId)) return fail('outputResultChanged');
+      return {
+        type: 'outputResultChanged',
         output: parseGraphOutputRefDto(value.output),
         generation: value.generation,
-        sourceId: value.sourceId,
+        resultId: value.resultId,
       };
+    case 'openResultWindow':
+      if (!hasExactKeys(value, ['type', 'resultId']) || !isDecimalId(value.resultId)) {
+        return fail('openResultWindow');
+      }
+      return { type: 'openResultWindow', resultId: value.resultId };
     default:
       return assertNever(type);
   }

@@ -76,6 +76,10 @@ export const enUS = {
       breakLinks: "Break Links",
       resetValue: "Reset to Default",
       view: "View",
+      history: "Result history",
+      historyLoading: "Loading history…",
+      historyEmpty: "No result history",
+      historyLatest: "Latest",
       viewDisabledNoRun: "Run the graph first to generate viewable results",
       viewDisabledNoUpstream: "No upstream result available",
       promoteToVar: "Promote to Variable",
@@ -751,9 +755,9 @@ export const enUS = {
   sourceInspector: {
     title: "Source Inspector",
     loading: "Loading…",
-    missingSourceId: "Missing source id in URL",
-    noSource: "No data source found",
-    loadFailed: "Failed to load source",
+    missingResultId: "Missing result ID in URL",
+    noSource: "No result found",
+    loadFailed: "Failed to load result",
     failedOpenWindow: "Unable to open Source Inspector window",
   },
   plot: {

@@ -1,4 +1,4 @@
-use super::{RelationalErrorCode, ResultSourceId, RunError, RunPhase};
+use super::{RelationalErrorCode, ResultId, ResultStateKind, RunError, RunPhase};
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext};
 use crate::node_system::document::GraphRevision;
 use crate::node_system::plan::GraphOutputRef;
@@ -39,12 +39,18 @@ define_run_event_kind! {
         attempt_id: u64,
         outcome: RunErrorOutcome,
     },
-    ResultReady { name: Box<str>, source_id: ResultSourceId },
-    OutputReady {
+    ResultGroupChanged {
+        activation_id: u64,
+        result_ids: Box<[ResultId]>,
+        state: ResultStateKind,
+    },
+    OutputResultChanged {
         output: GraphOutputRef,
         generation: Option<u64>,
-        source_id: ResultSourceId,
+        result_id: ResultId,
     },
+    // Task 9 emits this for View Data; Task 6 defines the stable wire contract.
+    OpenResultWindow { result_id: ResultId },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -251,6 +257,9 @@ impl From<&RunError> for OrdinaryRunErrorCode {
     fn from(error: &RunError) -> Self {
         match error {
             RunError::InvalidPlan(_) => Self::InvalidPlan,
+            RunError::MemoizationRetry => {
+                unreachable!("memoization retry is internal to scheduling")
+            }
             RunError::Cancelled => Self::Cancelled,
             RunError::ActivationIdExhausted => Self::ActivationIdExhausted,
             RunError::DeadlineExceeded { .. } => {
@@ -273,7 +282,8 @@ impl From<&RunError> for OrdinaryRunErrorCode {
                 }
             }
             RunError::Stream(_) => Self::Stream,
-            RunError::MissingValue(_) => Self::MissingValue,
+            RunError::MissingValue(_) | RunError::UpstreamResultFailed { .. } => Self::MissingValue,
+            RunError::UpstreamResultCancelled { .. } => Self::Cancelled,
             RunError::InvalidCondition { .. } => Self::InvalidCondition,
             RunError::OutputCount { .. } => Self::OutputCount,
             RunError::OperationAlreadyExecuted { .. } => Self::OperationAlreadyExecuted,

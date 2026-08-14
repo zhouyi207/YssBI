@@ -4,7 +4,6 @@
 //! queries the node registry or graph document and owns acquired resources only
 //! for the lifetime of a run.
 
-mod artifact;
 mod builtin;
 mod data_series;
 mod execution_event;
@@ -21,18 +20,17 @@ mod project_run;
 mod relational;
 mod relational_dataframe;
 mod resource;
+mod result;
 mod result_store;
 mod run;
 mod scheduler;
 mod scheduling;
 mod spill;
+mod stored_value;
 mod stream;
 
 pub use crate::node_system::analysis::RunId;
-pub use artifact::{
-    ArtifactDescriptor, ArtifactId, ArtifactPage, ArtifactSnapshot, ArtifactSnapshotKind,
-    ArtifactStore,
-};
+
 pub use builtin::{
     BuiltinConstantParameters, BuiltinVariableParameters, build_builtin_kernel_registry,
 };
@@ -63,7 +61,11 @@ pub use kernels::{
 pub use materialization::{RunResourceBudgets, RunResourceOwner, execute_planned_adapter};
 #[cfg(test)]
 pub(crate) use memoization::MemoCommitCheckpoint;
-pub use memoization::{DemandFingerprint, OperationMemoKey, RunMemoization, ValueFingerprint};
+pub(crate) use memoization::MemoReservation;
+pub use memoization::{
+    ComputationSettingsFingerprint, DemandFingerprint, OperationMemoKey, SessionMemoization,
+    ValueFingerprint,
+};
 pub use numeric::{
     ListwiseRows, NumericError, NumericValue, approximately_equal, approximately_zero,
     listwise_numeric_rows, numeric_equal, numeric_ordering, prepare_numeric_rows,
@@ -95,20 +97,24 @@ pub use relational::{
 pub use resource::{
     ResourceError, ResourceErrorKind, ResourceLease, ResourceProvider, RunResourceSet,
 };
-pub(crate) use result_store::PendingResultSource;
-pub use result_store::{
-    ResultReportKind, ResultSourceDescriptor, ResultSourceId, ResultSourcePage,
-    ResultSourcePresentation, ResultStore,
+pub use result::{
+    ActivationProvenance, ActivationResultGroup, PendingOutputDescriptor, PinResultEntry,
+    ResultFailure, ResultFailureCause, ResultId, ResultProgress, ResultProvenance, ResultState,
+    ResultStateKind, ResultUsage, StoredResult,
 };
+
+pub use result_store::{ResultStore, ResultStoreError};
+#[cfg(test)]
+pub(crate) use run::MaterializedArtifact;
 pub(crate) use run::{ACTIVATION_IDS, ActivationIdAllocator, check_terminal};
 pub use run::{
-    ActivationId, Artifact, ArtifactCursor, ArtifactKind, ArtifactValueKind, CancellationToken,
-    FrameId, MaterializedArtifact, RunDeadline, RunError, RunOptions, RunPhase, RunResult,
-    RuntimeValue, StreamValue,
+    ActivationId, Artifact, ArtifactKind, ArtifactValueKind, CancellationToken, FrameId,
+    RunDeadline, RunError, RunOptions, RunPhase, RunResult, RuntimeValue, StreamValue,
 };
 pub use scheduler::{FunctionPlanProvider, RunExecutor};
 pub use scheduling::{OperationCompletion, SchedulingPolicy};
-pub use spill::{ReplayArtifact, SpillArtifact, SpillCursor};
+
+pub use stored_value::{StoredValue, StoredValueKind, StoredValueReadError, StoredValueReader};
 pub use stream::{
     BoundedStreamReceiver, BoundedStreamSender, InvalidStreamCapacity, StreamReceiveError,
     StreamSendError, bounded_stream_channel, bounded_stream_channel_with_deadline,

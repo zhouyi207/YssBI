@@ -10,7 +10,7 @@ import {
   startProjectLifecycle,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import type { RunEvent } from '@/shared/types/dto/runEvent';
-import { openInspectableSource } from '@/features/application/execution/openInspectableSource';
+import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
 import { useProjectOperations } from './useProjectOperations';
 
 const projectInstanceId = 'project-instance-1';
@@ -49,6 +49,8 @@ const executionState = {
   completeExecution: vi.fn(),
   failExecution: vi.fn(),
   interruptExecution: vi.fn(),
+  getGraph: vi.fn(() => ({ status: 'completed' })),
+  clearGraphRunProjections: vi.fn(),
 };
 
 vi.mock('react-i18next', () => ({
@@ -60,13 +62,13 @@ vi.mock('@/features/core/execution', () => ({
   getExecutionEventGraph: () => ({
     graph: { name: 'Main', path: 'events/Main.yssbi-event', type: 'event' },
   }),
-  graphHasClearableArtifacts: () => false,
+  graphHasClearableArtifacts: () => true,
 }));
 vi.mock('@/features/core/execution/executionRecording', () => ({
   ensureGraphExecutionTerminal: vi.fn(),
 }));
-vi.mock('@/features/application/execution/openInspectableSource', () => ({
-  openInspectableSource: vi.fn().mockResolvedValue(true),
+vi.mock('@/features/application/execution/openInspectableResult', () => ({
+  openInspectableResult: vi.fn().mockResolvedValue(true),
 }));
 vi.mock('@/features/core/dataStore', () => ({
   loadActivatedProject: vi.fn(),
@@ -133,24 +135,43 @@ describe('useProjectOperations execution demand', () => {
     );
   });
 
-  it('opens an ordinary View Data output without opening other or preview outputs', async () => {
+  it('opens only the backend-requested result window', async () => {
     vi.mocked(ProjectService.executeGraphDocument).mockImplementation(
       async (_projectInstanceId, _graphPath, _demand, onEvent) => {
-        const outputReady = (nodeId: string, generation: number | null, sourceId: string): RunEvent => ({
+        onEvent?.({
           ...runStartedEvent(),
           kind: {
-            type: 'outputReady',
+            type: 'outputResultChanged',
             output: {
               graphPath,
-              port: { kind: 'declared', nodeId, portKey: 'snapshot' },
+              port: {
+                kind: 'declared',
+                nodeId: '00000000-0000-0000-0000-000000000001',
+                portKey: 'value',
+              },
             },
-            generation,
-            sourceId,
+            generation: null,
+            resultId: '15',
           },
         });
-        onEvent?.(outputReady('other-node', null, 'source-other'));
-        onEvent?.(outputReady('view-node', 1, 'source-preview'));
-        onEvent?.(outputReady('view-node', null, 'source-view'));
+        onEvent?.({
+          ...runStartedEvent(),
+          kind: {
+            type: 'outputResultChanged',
+            output: {
+              graphPath,
+              port: {
+                kind: 'declared',
+                nodeId: '00000000-0000-0000-0000-000000000001',
+                portKey: 'value',
+              },
+            },
+            generation: 3,
+            resultId: '16',
+          },
+        });
+        expect(openInspectableResult).not.toHaveBeenCalled();
+        onEvent?.({ ...runStartedEvent(), kind: { type: 'openResultWindow', resultId: '17' } });
         return { runId: 'run-1' };
       },
     );
@@ -159,11 +180,20 @@ describe('useProjectOperations execution demand', () => {
       await operations.executeGraph();
     });
 
-    expect(openInspectableSource).toHaveBeenCalledOnce();
-    expect(openInspectableSource).toHaveBeenCalledWith(
-      { kind: 'window', sourceId: 'source-view' },
+    expect(openInspectableResult).toHaveBeenCalledOnce();
+    expect(openInspectableResult).toHaveBeenCalledWith(
+      { kind: 'result', resultId: '17' },
       expect.any(Function),
     );
+  });
+
+  it('clears only frontend run projections', async () => {
+    await act(async () => {
+      await operations.clearGraphArtifacts(graphPath);
+    });
+
+    expect(executionState.clearGraphRunProjections).toHaveBeenCalledWith(graphPath);
+    expect('clearGraphExecutionArtifacts' in ProjectService).toBe(false);
   });
 
   it('ignores delayed events and completion after project lifecycle replacement', async () => {

@@ -61,7 +61,7 @@ function observePinPreviewEvent(
     preview.terminal = 'cancelled';
     return;
   }
-  if (event.kind.type !== 'outputReady') return;
+  if (event.kind.type !== 'outputResultChanged') return;
   if (
     event.kind.generation !== preview.generation
     || event.kind.output.graphPath !== preview.output.graphPath
@@ -72,7 +72,7 @@ function observePinPreviewEvent(
     return;
   }
 
-  preview.lease.complete(event.kind.sourceId);
+  preview.lease.complete(event.kind.resultId);
 }
 
 export function observeGraphRunEvent(

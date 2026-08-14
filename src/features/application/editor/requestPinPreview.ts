@@ -16,8 +16,8 @@ import {
 import { uiStore } from '@/features/core/ui/UIStore';
 import { ProjectService } from '@/services/project/projectService';
 import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
-import { openInspectableSource } from '@/features/application/execution/openInspectableSource';
-import { windowSourceRef } from '@/features/core/resultSource';
+import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
+import { resultRef } from '@/features/core/resultSource';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import type { GraphOutputRefDto } from '@/shared/types/dto/executionDemand';
 import type { PinData } from '@/shared/types/store/graph';
@@ -42,7 +42,7 @@ export type PinPreviewRejectionReason =
   | 'stale-project-lifecycle';
 
 export type PinPreviewRequestResult =
-  | { status: 'completed'; generation: number; sourceId: string }
+  | { status: 'completed'; generation: number; resultId: string }
   | { status: 'rejected'; reason: PinPreviewRejectionReason }
   | { status: 'failed'; generation: number; error: string };
 
@@ -230,12 +230,12 @@ export async function requestPinPreview(
   if (
     observation.terminal === 'completed'
     && preview.status === 'ready'
-    && preview.sourceId
+    && preview.resultId
   ) {
     return {
       status: 'completed',
       generation,
-      sourceId: preview.sourceId,
+      resultId: preview.resultId,
     };
   }
   if (observation.terminal === 'pending' || observation.terminal === 'completed') {
@@ -256,5 +256,5 @@ export async function requestAndOpenPinPreview(
 ): Promise<boolean> {
   const result = await requestPinPreview(graphPath, pinId);
   if (result.status !== 'completed') return false;
-  return openInspectableSource(windowSourceRef(result.sourceId), t);
+  return openInspectableResult(resultRef(result.resultId), t);
 }

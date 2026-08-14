@@ -15,7 +15,7 @@ interface PresentationWindowShellProps {
   icon?: ReactNode;
   state: PresentationWindowState;
   errorMessages: {
-    missingSourceId: string;
+    missingResultId: string;
     notFound: string;
     loadFailed: string;
   };

@@ -580,7 +580,6 @@ mod tests {
             format: StreamFormat::Native,
         };
         let buffer = PlannedAdapter::Buffer { capacity: 64 };
-        let replay = PlannedAdapter::Replay;
         let spill = PlannedAdapter::Spill {
             memory_limit_bytes: 64 * 1024 * 1024,
         };
@@ -604,7 +603,7 @@ mod tests {
             (
                 OutputProduction::Streaming,
                 InputConsumption::RewindableBatches,
-                replay.clone(),
+                collect.clone(),
             ),
             (
                 OutputProduction::Streaming,
@@ -629,7 +628,7 @@ mod tests {
             (
                 OutputProduction::Batches,
                 InputConsumption::RewindableBatches,
-                replay,
+                PlannedAdapter::Identity,
             ),
             (
                 OutputProduction::Batches,

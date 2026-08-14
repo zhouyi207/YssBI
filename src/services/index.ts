@@ -10,7 +10,7 @@ export * from "./log";
 
 export { GraphService } from "./graph/graphService";
 export { VariableService } from "./variable/variableService";
-export { SourceService } from './resultSource/resultSourceService';
+
 export { JuliaRuntimeService } from "./julia/juliaRuntimeService";
 export type {
   JuliaRuntimeStatus,

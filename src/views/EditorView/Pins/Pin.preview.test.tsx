@@ -13,6 +13,7 @@ import { markResourceLoaded, useDocumentStateStore } from '@/features/core/resou
 import { useExecutionStore } from '@/features/core/execution';
 import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
 import { ProjectService } from '@/services/project/projectService';
+import { ResultService } from '@/services/result/resultService';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import {
@@ -78,6 +79,8 @@ describe('Pin preview production path', () => {
       isPlaying: false,
     });
     vi.spyOn(PinPreviewGenerationService, 'allocate').mockResolvedValue(1);
+    vi.spyOn(ResultService, 'getPinHistory').mockResolvedValue([]);
+    vi.spyOn(ResultService, 'getDescriptor').mockResolvedValue(null);
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -90,7 +93,7 @@ describe('Pin preview production path', () => {
     vi.restoreAllMocks();
   });
 
-  it('routes the top-level Event data-output View action through application preview to service', async () => {
+  it('routes output View through authoritative structured Pin history', async () => {
     const fixture = makeEditorProjectionFixture({ graphPath });
     expect(useGraphDataStore.getState().replaceProjection(
       graphPath,
@@ -101,8 +104,7 @@ describe('Pin preview production path', () => {
     useGraphSessionStore.getState().setFocusedSession('editor-a', graphPath);
     const pin = useGraphDataStore.getState().getGraphPin(graphPath, fixture.outputKey);
     if (!pin) throw new Error('expected projected output pin');
-    const commandError = { code: 'test_stop', message: 'stop after preview invoke' };
-    const execute = vi.spyOn(ProjectService, 'executeGraphDocument').mockRejectedValue(commandError);
+    const execute = vi.spyOn(ProjectService, 'executeGraphDocument');
 
     act(() => root.render(
       <TooltipProvider>
@@ -130,19 +132,79 @@ describe('Pin preview production path', () => {
       await Promise.resolve();
     });
 
-    expect(execute).toHaveBeenCalledWith(
-      'project-session-1',
-      graphPath,
-      {
-        type: 'pinPreview',
-        output: { graphPath, port: fixture.outputAddress },
-        generation: 1,
-      },
-      expect.any(Function),
-    );
+    expect(ResultService.getPinHistory).toHaveBeenCalledWith(graphPath, fixture.outputAddress);
+    expect(execute).not.toHaveBeenCalled();
   });
 
-  it('does not enable preview View for a Function output', () => {
+  it('opens an exact historical occurrence from the compact Pin context menu', async () => {
+    const fixture = makeEditorProjectionFixture({ graphPath });
+    expect(useGraphDataStore.getState().replaceProjection(
+      graphPath,
+      fixture.projection,
+      1,
+    ).applied).toBe(true);
+    const pin = useGraphDataStore.getState().getGraphPin(graphPath, fixture.outputKey);
+    if (!pin) throw new Error('expected projected output pin');
+    vi.mocked(ResultService.getPinHistory).mockResolvedValue([
+      {
+        resultId: '17',
+        runId: '7',
+        activationId: '70',
+        graphRevision: '1',
+        createdAtMs: '1000',
+        usage: { kind: 'produced' },
+        state: { kind: 'ready' },
+      },
+      {
+        resultId: '18',
+        runId: '8',
+        activationId: '80',
+        graphRevision: '1',
+        createdAtMs: '2000',
+        usage: { kind: 'produced' },
+        state: { kind: 'cancelled' },
+      },
+    ]);
+
+    act(() => root.render(
+      <TooltipProvider><Pin {...pin} graphPath={graphPath} /></TooltipProvider>,
+    ));
+    const pinElement = container.querySelector(`[data-pin-id="${fixture.outputKey}"]`);
+    if (!pinElement) throw new Error('expected rendered pin');
+    const openContext = () => act(() => {
+      pinElement.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 10,
+        clientY: 20,
+      }));
+    });
+
+    openContext();
+    const viewItem = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      .find((item) => item.textContent?.includes('contextMenu.pin.view'));
+    await act(async () => {
+      viewItem?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    openContext();
+    const historical = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      .find((item) => item.textContent?.includes('17 · ready'));
+    expect(historical).toBeDefined();
+    await act(async () => {
+      historical?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(ResultService.getDescriptor).toHaveBeenCalledWith('17');
+    expect(useExecutionStore.getState().getGraph(graphPath).pinHistories.values().next().value)
+      .toMatchObject({ selectedResultId: '17' });
+  });
+
+  it('enables authoritative history View for a Function output', async () => {
     const functionPath = 'functions/Helper.yssbi-function';
     const fixture = makeEditorProjectionFixture({ graphPath: functionPath });
     expect(useGraphDataStore.getState().replaceProjection(
@@ -174,7 +236,12 @@ describe('Pin preview production path', () => {
 
     const viewItem = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
       .find((item) => item.textContent?.includes('contextMenu.pin.view'));
-    expect(viewItem?.disabled).toBe(true);
+    expect(viewItem?.disabled).toBe(false);
+    await act(async () => {
+      viewItem?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      await Promise.resolve();
+    });
+    expect(ResultService.getPinHistory).toHaveBeenCalledWith(functionPath, fixture.outputAddress);
     expect(execute).not.toHaveBeenCalled();
   });
 });

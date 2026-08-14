@@ -1,52 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSourceRenderer } from './resolveRenderer';
-import type { SourceDescriptor } from './types';
+import type { ResultDescriptor } from '@/shared/types/dto/result';
+import { resolveResultRenderer } from './resolveRenderer';
 
-function descriptor(
-  partial: Partial<SourceDescriptor> & Pick<SourceDescriptor, 'kind' | 'title'>,
-): SourceDescriptor {
+function descriptor(valueKind: ResultDescriptor['valueKind']): ResultDescriptor {
   return {
-    sourceId: 'source-1',
+    resultId: '17',
+    state: { kind: 'ready' },
+    provenance: {
+      runId: '1', activationId: '2', graphPath: 'events/Main.yssbi-event', graphRevision: '3',
+      nodeId: '00000000-0000-0000-0000-000000000002', output: null, createdAtMs: '4',
+    },
     presentation: { kind: 'inspector' },
-    ...partial,
+    valueKind,
+    metadata: null,
+    totalCount: 1,
+    title: 'Result',
   };
 }
 
-describe('resolveSourceRenderer', () => {
-  it('selects dataframe renderer from kind when inspector', () => {
-    expect(
-      resolveSourceRenderer(
-        descriptor({ kind: 'dataframe', title: 'DF', totalRows: 1000 }),
-      ),
-    ).toBe('dataframe');
+describe('resolveResultRenderer', () => {
+  it('selects renderers from result value kind', () => {
+    expect(resolveResultRenderer(descriptor('sequence'))).toBe('sequence');
+    expect(resolveResultRenderer(descriptor('dataSeries'))).toBe('dataseries');
+    expect(resolveResultRenderer(descriptor('scalar'))).toBe('scalar');
+    expect(resolveResultRenderer(descriptor('unknown'))).toBe('json');
   });
 
-  it('selects series renderer from kind when inspector', () => {
-    expect(
-      resolveSourceRenderer(
-        descriptor({ kind: 'dataseries', title: 'S', length: 500 }),
-      ),
-    ).toBe('dataseries');
-  });
-
-  it('selects scalar, null, and json renderers', () => {
-    expect(resolveSourceRenderer(descriptor({ kind: 'scalar', title: 'X' }))).toBe('scalar');
-    expect(resolveSourceRenderer(descriptor({ kind: 'null', title: 'Empty' }))).toBe('null');
-    expect(resolveSourceRenderer(descriptor({ kind: 'json', title: 'Object' }))).toBe('json');
-  });
-
-  it('selects plot and report renderers from presentation', () => {
-    expect(
-      resolveSourceRenderer({
-        ...descriptor({ kind: 'json', title: 'Plot' }),
-        presentation: { kind: 'plot', chart: 'scatter' },
-      }),
-    ).toBe('plot');
-    expect(
-      resolveSourceRenderer({
-        ...descriptor({ kind: 'json', title: 'Report' }),
-        presentation: { kind: 'report', report: 'olsSummary' },
-      }),
-    ).toBe('info');
+  it('selects plot and report from presentation', () => {
+    expect(resolveResultRenderer({
+      ...descriptor('scalar'), presentation: { kind: 'plot', chart: 'scatter' },
+    })).toBe('plot');
+    expect(resolveResultRenderer({
+      ...descriptor('scalar'), presentation: { kind: 'report', report: 'olsSummary' },
+    })).toBe('info');
   });
 });

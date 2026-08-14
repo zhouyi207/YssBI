@@ -27,8 +27,7 @@ export function useExecutionPlayback(graphPath: string) {
   }, []);
 
   const scheduleSteps = useCallback((rec: typeof recording) => {
-    const { setPlaying, applySideEffectEvent, commitExecutionVisual } =
-      useExecutionStore.getState();
+    const { setPlaying, commitExecutionVisual } = useExecutionStore.getState();
 
     const step = () => {
       if (pausedRef.current) return;
@@ -45,9 +44,7 @@ export function useExecutionPlayback(graphPath: string) {
       }
       const entry = rec[idx];
       const event = entry.event;
-      if (event.event === 'pinResultReady') {
-        applySideEffectEvent(graphPath, event);
-      } else if (event.event === 'executionStart') {
+      if (event.event === 'executionStart') {
         // Do not call startExecution — it clears recording and breaks repeat replay.
         resetExecutionVisual(graphPath);
       } else {

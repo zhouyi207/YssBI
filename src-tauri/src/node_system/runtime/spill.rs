@@ -1,4 +1,7 @@
-use super::{CancellationToken, RunDeadline, RunError, RunPhase, check_terminal};
+use super::{
+    ArtifactValueKind, CancellationToken, DataSeriesMetadata, RunDeadline, RunError, RunPhase,
+    check_terminal,
+};
 use crate::node_system::protocol::Value;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -12,6 +15,7 @@ struct SpillFile {
     path: Mutex<PathBuf>,
     promotion: Mutex<()>,
     delete_on_drop: AtomicBool,
+    promoted: AtomicBool,
     #[cfg(test)]
     deletion_failures: AtomicUsize,
     #[cfg(test)]
@@ -59,21 +63,32 @@ impl Drop for SpillFile {
     }
 }
 
-#[derive(Clone)]
-pub struct SpillArtifact {
+pub(crate) struct SpillStorage {
     file: Arc<SpillFile>,
     bytes: u64,
     count: usize,
     max_record_bytes: u64,
+    value_kind: ArtifactValueKind,
+    data_series_metadata: Option<DataSeriesMetadata>,
+    logical_digest: [u8; 32],
+    _reservation: Option<super::materialization::SpillReservation>,
 }
 
-impl SpillArtifact {
-    pub(crate) fn new(path: PathBuf, metadata: SpillMetadata) -> Self {
+impl SpillStorage {
+    pub(crate) fn new(
+        path: PathBuf,
+        metadata: SpillMetadata,
+        value_kind: ArtifactValueKind,
+        data_series_metadata: Option<DataSeriesMetadata>,
+        logical_digest: [u8; 32],
+        reservation: Option<super::materialization::SpillReservation>,
+    ) -> Self {
         Self {
             file: Arc::new(SpillFile {
                 path: Mutex::new(path),
                 promotion: Mutex::new(()),
-                delete_on_drop: AtomicBool::new(false),
+                delete_on_drop: AtomicBool::new(true),
+                promoted: AtomicBool::new(false),
                 #[cfg(test)]
                 deletion_failures: AtomicUsize::new(0),
                 #[cfg(test)]
@@ -82,7 +97,27 @@ impl SpillArtifact {
             bytes: metadata.bytes,
             count: metadata.count,
             max_record_bytes: metadata.max_record_bytes,
+            value_kind,
+            data_series_metadata,
+            logical_digest,
+            _reservation: reservation,
         }
+    }
+
+    pub(crate) const fn value_kind(&self) -> ArtifactValueKind {
+        self.value_kind
+    }
+
+    pub(crate) fn data_series_metadata(&self) -> Option<&DataSeriesMetadata> {
+        self.data_series_metadata.as_ref()
+    }
+
+    pub(crate) const fn logical_digest(&self) -> [u8; 32] {
+        self.logical_digest
+    }
+
+    pub(crate) fn has_reservation(&self) -> bool {
+        self._reservation.is_some()
     }
 
     pub const fn bytes(&self) -> u64 {
@@ -98,7 +133,7 @@ impl SpillArtifact {
     }
 
     pub fn cursor(&self) -> Result<SpillCursor, RunError> {
-        SpillCursor::open(Arc::clone(&self.file), self.max_record_bytes)
+        SpillCursor::open(Arc::clone(&self.file), self.max_record_bytes, self.count)
     }
 
     #[cfg(test)]
@@ -138,7 +173,7 @@ impl SpillArtifact {
             .promotion
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        if self.file.delete_on_drop.load(Ordering::Acquire) {
+        if self.file.promoted.load(Ordering::Acquire) {
             return Ok(());
         }
         let source = self
@@ -172,73 +207,44 @@ impl SpillArtifact {
             return Err(error);
         }
         *path = durable;
-        self.file.delete_on_drop.store(true, Ordering::Release);
+        self.file.promoted.store(true, Ordering::Release);
         Ok(())
     }
 }
 
-impl std::fmt::Debug for SpillArtifact {
+impl std::fmt::Debug for SpillStorage {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
-            .debug_struct("SpillArtifact")
+            .debug_struct("SpillStorage")
             .field("bytes", &self.bytes)
             .field("count", &self.count)
             .finish_non_exhaustive()
     }
 }
 
-impl PartialEq for SpillArtifact {
+impl PartialEq for SpillStorage {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.file, &other.file)
     }
 }
 
-impl Eq for SpillArtifact {}
+impl Eq for SpillStorage {}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ReplayArtifact {
-    spill: SpillArtifact,
-}
-
-impl ReplayArtifact {
-    pub(crate) fn new(spill: SpillArtifact) -> Self {
-        Self { spill }
-    }
-
-    pub fn cursor(&self) -> Result<SpillCursor, RunError> {
-        self.spill.cursor()
-    }
-
-    pub const fn len(&self) -> usize {
-        self.spill.len()
-    }
-
-    pub const fn is_empty(&self) -> bool {
-        self.spill.is_empty()
-    }
-
-    pub(crate) fn promote(
-        &self,
-        cancellation: &CancellationToken,
-        deadline: Option<RunDeadline>,
-    ) -> Result<(), RunError> {
-        self.spill.promote(cancellation, deadline)
-    }
-
-    pub(crate) fn spill(&self) -> &SpillArtifact {
-        &self.spill
-    }
-}
-
-pub struct SpillCursor {
+pub(crate) struct SpillCursor {
     reader: Option<BufReader<File>>,
     file: Arc<SpillFile>,
     finished: bool,
     max_record_bytes: u64,
+    expected_count: usize,
+    read_count: usize,
 }
 
 impl SpillCursor {
-    fn open(file: Arc<SpillFile>, max_record_bytes: u64) -> Result<Self, RunError> {
+    fn open(
+        file: Arc<SpillFile>,
+        max_record_bytes: u64,
+        expected_count: usize,
+    ) -> Result<Self, RunError> {
         let path = file
             .path
             .lock()
@@ -252,6 +258,8 @@ impl SpillCursor {
             file,
             finished: false,
             max_record_bytes,
+            expected_count,
+            read_count: 0,
         })
     }
 
@@ -291,17 +299,48 @@ impl Iterator for SpillCursor {
         if self.finished {
             return None;
         }
+        if self.read_count == self.expected_count {
+            let mut trailing = [0_u8; 1];
+            return match self.reader().read(&mut trailing) {
+                Ok(0) => {
+                    self.finished = true;
+                    None
+                }
+                Ok(_) => {
+                    self.finished = true;
+                    Some(Err(RunError::Stream(
+                        "spill contains trailing data after declared value count".into(),
+                    )))
+                }
+                Err(error) => {
+                    self.finished = true;
+                    Some(Err(spill_io_error(error)))
+                }
+            };
+        }
+
         let mut length = [0_u8; 8];
-        match self.reader().read_exact(&mut length) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
+        match self.reader().read(&mut length[..1]) {
+            Ok(0) => {
                 self.finished = true;
-                return None;
+                return Some(Err(RunError::Stream(
+                    "spill ended before declared value count".into(),
+                )));
             }
+            Ok(1) => {}
+            Ok(_) => unreachable!("one-byte read returned more than one byte"),
             Err(error) => {
                 self.finished = true;
                 return Some(Err(spill_io_error(error)));
             }
+        }
+        if let Err(error) = self.reader().read_exact(&mut length[1..]) {
+            self.finished = true;
+            return Some(Err(if error.kind() == std::io::ErrorKind::UnexpectedEof {
+                RunError::Stream("truncated spill length prefix".into())
+            } else {
+                spill_io_error(error)
+            }));
         }
         let length = u64::from_le_bytes(length);
         if length > self.max_record_bytes {
@@ -319,13 +358,45 @@ impl Iterator for SpillCursor {
         let mut encoded = vec![0; length];
         if let Err(error) = self.reader().read_exact(&mut encoded) {
             self.finished = true;
-            return Some(Err(spill_io_error(error)));
+            return Some(Err(if error.kind() == std::io::ErrorKind::UnexpectedEof {
+                RunError::Stream("truncated spill record payload".into())
+            } else {
+                spill_io_error(error)
+            }));
         }
+        self.read_count += 1;
         Some(
             serde_json::from_slice(&encoded)
                 .map_err(|error| RunError::Stream(format!("invalid spill value: {error}").into())),
         )
     }
+}
+
+pub(crate) fn append_spill_value(
+    path: &Path,
+    value: &Value,
+    cancellation: &CancellationToken,
+    deadline: Option<RunDeadline>,
+) -> Result<u64, RunError> {
+    check_terminal(cancellation, deadline, RunPhase::AdapterIo)?;
+    let encoded_bytes = serialized_value_len(value)?;
+    let mut writer = BufWriter::new(
+        OpenOptions::new()
+            .append(true)
+            .open(path)
+            .map_err(spill_io_error)?,
+    );
+    writer
+        .write_all(&encoded_bytes.to_le_bytes())
+        .map_err(spill_io_error)?;
+    serde_json::to_writer(&mut writer, value).map_err(|error| {
+        RunError::Stream(format!("failed to serialize spill value: {error}").into())
+    })?;
+    writer.flush().map_err(spill_io_error)?;
+    check_terminal(cancellation, deadline, RunPhase::AdapterIo)?;
+    writer.get_ref().sync_all().map_err(spill_io_error)?;
+    check_terminal(cancellation, deadline, RunPhase::AdapterIo)?;
+    Ok(encoded_bytes)
 }
 
 pub(crate) fn serialized_value_len(value: &Value) -> Result<u64, RunError> {
@@ -411,4 +482,66 @@ fn spill_io_error(error: std::io::Error) -> RunError {
 
 fn spill_delete_error(error: std::io::Error) -> RunError {
     RunError::Stream(format!("spill deletion failed: {error}").into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_storage(bytes: &[u8], count: usize, max_record_bytes: u64) -> (SpillStorage, PathBuf) {
+        let path = std::env::temp_dir().join(format!("spill-frame-{}", uuid::Uuid::new_v4()));
+        fs::write(&path, bytes).unwrap();
+        let storage = SpillStorage::new(
+            path.clone(),
+            SpillMetadata {
+                bytes: bytes.len() as u64,
+                count,
+                max_record_bytes,
+            },
+            ArtifactValueKind::Sequence,
+            None,
+            [0; 32],
+            None,
+        );
+        (storage, path)
+    }
+
+    #[test]
+    fn spill_cursor_rejects_truncated_length_prefix() {
+        let (storage, _) = test_storage(&[1, 0, 0], 1, 1);
+        let error = storage.cursor().unwrap().next().unwrap().unwrap_err();
+        assert!(error.to_string().contains("truncated spill length prefix"));
+    }
+
+    #[test]
+    fn spill_cursor_rejects_early_eof_before_declared_count() {
+        let (storage, _) = test_storage(&[], 1, 1);
+        let error = storage.cursor().unwrap().next().unwrap().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("ended before declared value count")
+        );
+    }
+
+    #[test]
+    fn spill_cursor_rejects_trailing_records_after_declared_count() {
+        let value = serde_json::to_vec(&Value::Integer(1)).unwrap();
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&(value.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(&value);
+        let (storage, _) = test_storage(&bytes, 0, value.len() as u64);
+        let error = storage.cursor().unwrap().next().unwrap().unwrap_err();
+        assert!(error.to_string().contains("trailing data"));
+    }
+
+    #[test]
+    fn spill_cursor_rejects_truncated_record_payload() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&5_u64.to_le_bytes());
+        bytes.extend_from_slice(b"12");
+        let (storage, _) = test_storage(&bytes, 1, 5);
+        let error = storage.cursor().unwrap().next().unwrap().unwrap_err();
+        assert!(error.to_string().contains("truncated spill record payload"));
+    }
 }

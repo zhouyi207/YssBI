@@ -337,7 +337,7 @@ fn build_series_with_metadata(
         builder = builder.format(format);
     }
     builder
-        .build(ArtifactKind::Replayable)
+        .build(ArtifactKind::Collected)
         .map_err(|error| KernelError::new(error.to_string()))
 }
 
@@ -387,7 +387,7 @@ fn decompose_dataframe(
             DataSeriesBuilder::new(element_type)
                 .values(values)
                 .name(name)
-                .build(ArtifactKind::Replayable)
+                .build(ArtifactKind::Collected)
                 .map(RuntimeValue::Artifact)
                 .map_err(|error| KernelError::new(error.to_string()))
         })
@@ -447,7 +447,7 @@ fn select_series(dataframe: &Value, column: Option<&str>) -> Result<Artifact, Ke
     DataSeriesBuilder::new(infer_element_type(&values)?)
         .values(values)
         .name(column)
-        .build(ArtifactKind::Replayable)
+        .build(ArtifactKind::Collected)
         .map_err(|error| KernelError::new(error.to_string()))
 }
 

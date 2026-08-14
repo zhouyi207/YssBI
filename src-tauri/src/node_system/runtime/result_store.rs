@@ -1,175 +1,72 @@
 use super::{
-    CancellationToken, DataSeriesMetadata, RunDeadline, RunError, RunPhase, RuntimeValue,
-    check_terminal,
+    ActivationId, ActivationProvenance, ActivationResultGroup, CancellationToken,
+    PendingOutputDescriptor, PinResultEntry, ResultFailure, ResultId, ResultProgress,
+    ResultProvenance, ResultState, RunDeadline, RunError, RunPhase, StoredResult, StoredValue,
 };
-use crate::node_system::analysis::{CompilationBasis, CorrelationContext, RunId};
-use crate::node_system::document::GraphRevision;
-use crate::node_system::protocol::Value;
-use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+#[cfg(test)]
+use crate::node_system::analysis::RunId;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-
-use super::artifact::{
-    ArtifactId, ArtifactPage, ArtifactPublicationGuard, ArtifactSnapshot, ArtifactSnapshotKind,
-    ArtifactStore,
-};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ResultSourceId(u64);
-
-impl ResultSourceId {
-    pub const fn new(value: u64) -> Self {
-        Self(value)
-    }
-
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ResultReportKind {
-    OlsSummary,
-    BinarySummary,
-    Iv2slsSummary,
-    IvLimlSummary,
-    PraisSummary,
-    VarSummary,
-    VarSoc,
-    PanelSummary,
-    PanelDid,
-    DfAdfSummary,
-    DfAdfSummaryList,
-    VecSummary,
-    VecRankSummary,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum ResultSourcePresentation {
-    #[default]
-    Inspector,
-    Report {
-        report: ResultReportKind,
-    },
-}
-
-impl ResultSourcePresentation {
-    pub const fn default_title(self) -> &'static str {
-        match self {
-            Self::Inspector => "Source Inspector",
-            Self::Report {
-                report: ResultReportKind::OlsSummary,
-            } => "Results",
-            Self::Report { .. } => "Statistical Report",
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResultSourceDescriptor {
-    pub source_id: ResultSourceId,
-    pub artifact_id: ArtifactId,
-    pub name: Box<str>,
-    pub kind: ArtifactSnapshotKind,
-    pub data_series_metadata: Option<DataSeriesMetadata>,
-    pub total_count: usize,
-    pub presentation: ResultSourcePresentation,
-    pub correlation: CorrelationContext,
-    pub basis: CompilationBasis<GraphRevision>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResultSourcePage {
-    pub source_id: ResultSourceId,
-    pub offset: usize,
-    pub limit: usize,
-    pub total_count: usize,
-    pub kind: ArtifactSnapshotKind,
-    pub data_series_metadata: Option<DataSeriesMetadata>,
-    pub values: Box<[Value]>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct PendingResultSource {
-    correlation: CorrelationContext,
-    basis: CompilationBasis<GraphRevision>,
-    name: Box<str>,
-    presentation: ResultSourcePresentation,
-    snapshot: ArtifactSnapshot,
-}
-
-#[derive(Clone)]
-struct ResultSourceEntry {
-    run_id: RunId,
-    descriptor: ResultSourceDescriptor,
-}
+use std::sync::{Arc, Condvar, Mutex};
 
 #[derive(Default)]
-struct ResultSourceRegistry {
-    sources: BTreeMap<ResultSourceId, ResultSourceEntry>,
+struct ResultStoreRegistry {
+    results: BTreeMap<ResultId, Arc<StoredResult>>,
+    groups: BTreeMap<ActivationId, ActivationResultGroup>,
+    pin_history: BTreeMap<crate::node_system::plan::GraphOutputRef, Arc<PinHistoryNode>>,
 }
 
-static NEXT_RESULT_SOURCE_ID: AtomicU64 = AtomicU64::new(1);
+struct PinHistoryNode {
+    entry: PinResultEntry,
+    previous: Option<Arc<PinHistoryNode>>,
+    len: usize,
+}
 
-fn allocate_result_source_range(count: usize) -> u64 {
-    let count = u64::try_from(count).expect("result source batch length fits u64");
-    NEXT_RESULT_SOURCE_ID
+static NEXT_RESULT_ID: AtomicU64 = AtomicU64::new(1);
+
+fn allocate_result_range(count: usize) -> Result<u64, ResultStoreError> {
+    let count = u64::try_from(count).map_err(|_| ResultStoreError::IdExhausted)?;
+    NEXT_RESULT_ID
         .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
             next.checked_add(count)
         })
-        .expect("result source id space exhausted")
+        .map_err(|_| ResultStoreError::IdExhausted)
 }
 
 struct ResultStoreInner {
-    max_sources: usize,
-    registry: Mutex<ResultSourceRegistry>,
-    #[cfg(test)]
-    commit_checkpoint: Mutex<Option<Arc<dyn Fn() + Send + Sync>>>,
-    #[cfg(test)]
-    publication_checkpoint: Mutex<Option<Arc<dyn Fn(ResultPublicationCheckpoint) + Send + Sync>>>,
+    registry: Mutex<ResultStoreRegistry>,
+    changed: Arc<Condvar>,
 }
 
-#[cfg(test)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ResultPublicationCheckpoint {
-    AfterSourceIdAllocation,
-    AfterArtifactInsert,
-    AfterSourceInsert,
-}
-
-/// User-visible handles over immutable artifacts. A source owns one artifact hold;
-/// run cleanup never invalidates it, and `release` ends that ownership explicitly.
+/// Project-session authority for logical execution results and Pin history.
 #[derive(Clone)]
 pub struct ResultStore {
-    artifacts: ArtifactStore,
     inner: Arc<ResultStoreInner>,
 }
 
-pub(crate) struct ResultPublicationTransaction<'a> {
-    store: &'a ResultStore,
-    run_id: RunId,
-    pending: Option<Vec<PendingResultSource>>,
-    prepared: Option<Vec<PendingResultSource>>,
+impl fmt::Debug for ResultStore {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("ResultStore")
+    }
 }
 
-struct ResultAuthorityRollback<'a, 'b> {
-    registry: &'a mut ResultSourceRegistry,
-    artifacts: &'a mut ArtifactPublicationGuard<'b>,
-    inserted_source_ids: Vec<ResultSourceId>,
-    inserted_artifact_ids: Vec<ArtifactId>,
-    evicted_prior: Vec<ResultSourceEntry>,
-    committed: bool,
+impl PartialEq for ResultStore {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
 }
+
+impl Eq for ResultStore {}
 
 impl Default for ResultStore {
     fn default() -> Self {
-        Self::with_capacity(4096)
+        Self {
+            inner: Arc::new(ResultStoreInner {
+                registry: Mutex::new(ResultStoreRegistry::default()),
+                changed: Arc::new(Condvar::new()),
+            }),
+        }
     }
 }
 
@@ -178,270 +75,409 @@ impl ResultStore {
         Self::default()
     }
 
-    pub fn with_capacity(max_sources: usize) -> Self {
-        Self {
-            artifacts: ArtifactStore::default(),
-            inner: Arc::new(ResultStoreInner {
-                max_sources: max_sources.max(1),
-                registry: Mutex::new(ResultSourceRegistry::default()),
-                #[cfg(test)]
-                commit_checkpoint: Mutex::new(None),
-                #[cfg(test)]
-                publication_checkpoint: Mutex::new(None),
-            }),
+    pub fn create_pending_group(
+        &self,
+        provenance: ActivationProvenance,
+        outputs: &[PendingOutputDescriptor],
+    ) -> Result<ActivationResultGroup, ResultStoreError> {
+        if outputs.is_empty() {
+            return Err(ResultStoreError::EmptyGroup);
         }
-    }
-
-    pub fn artifacts(&self) -> &ArtifactStore {
-        &self.artifacts
-    }
-
-    fn prepare_snapshot(
-        &self,
-        correlation: CorrelationContext,
-        basis: CompilationBasis<GraphRevision>,
-        name: impl Into<Box<str>>,
-        snapshot: ArtifactSnapshot,
-    ) -> PendingResultSource {
-        self.prepare_snapshot_with_presentation(
-            correlation,
-            basis,
-            name,
-            ResultSourcePresentation::Inspector,
-            snapshot,
-        )
-    }
-
-    fn prepare_snapshot_with_presentation(
-        &self,
-        correlation: CorrelationContext,
-        basis: CompilationBasis<GraphRevision>,
-        name: impl Into<Box<str>>,
-        presentation: ResultSourcePresentation,
-        snapshot: ArtifactSnapshot,
-    ) -> PendingResultSource {
-        PendingResultSource {
-            correlation,
-            basis,
-            name: name.into(),
-            presentation,
-            snapshot,
+        if !matches!(provenance.usage, super::ResultUsage::Produced) {
+            return Err(ResultStoreError::InvalidProducedUsage);
         }
-    }
-
-    pub(crate) fn prepare_runtime_value(
-        &self,
-        correlation: CorrelationContext,
-        basis: CompilationBasis<GraphRevision>,
-        name: impl Into<Box<str>>,
-        value: &RuntimeValue,
-    ) -> Option<PendingResultSource> {
-        self.prepare_runtime_value_with_presentation(
-            correlation,
-            basis,
-            name,
-            ResultSourcePresentation::Inspector,
-            value,
-        )
-    }
-
-    pub(crate) fn prepare_runtime_value_with_presentation(
-        &self,
-        correlation: CorrelationContext,
-        basis: CompilationBasis<GraphRevision>,
-        name: impl Into<Box<str>>,
-        presentation: ResultSourcePresentation,
-        value: &RuntimeValue,
-    ) -> Option<PendingResultSource> {
-        let snapshot = match value {
-            RuntimeValue::Scalar(value) => ArtifactSnapshot::Value(value.clone()),
-            RuntimeValue::Artifact(artifact) => ArtifactSnapshot::RuntimeArtifact(artifact.clone()),
-            RuntimeValue::Stream(_) => return None,
+        let mut public_outputs = BTreeSet::new();
+        let mut values = BTreeSet::new();
+        for output in outputs {
+            if !values.insert(output.value) {
+                return Err(ResultStoreError::DuplicateOutputValue(output.value));
+            }
+            if let Some(public_output) = &output.output {
+                if public_output.graph_path != provenance.graph_path {
+                    return Err(ResultStoreError::OutputGraphMismatch(public_output.clone()));
+                }
+                if public_output.port.node_id != provenance.node_id {
+                    return Err(ResultStoreError::OutputNodeMismatch(public_output.clone()));
+                }
+                if !public_outputs.insert(public_output.clone()) {
+                    return Err(ResultStoreError::DuplicatePublicOutput(
+                        public_output.clone(),
+                    ));
+                }
+            }
+        }
+        let first_id = allocate_result_range(outputs.len())?;
+        let output_result_ids = (0..outputs.len())
+            .map(|offset| ResultId::new(first_id + offset as u64))
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+        let group = ActivationResultGroup {
+            activation_id: provenance.activation_id,
+            output_result_ids,
         };
-        Some(self.prepare_snapshot_with_presentation(
-            correlation,
-            basis,
-            name,
-            presentation,
-            snapshot,
-        ))
-    }
 
-    pub(crate) fn begin_publication(
-        &self,
-        run_id: RunId,
-        pending: Vec<PendingResultSource>,
-    ) -> ResultPublicationTransaction<'_> {
-        ResultPublicationTransaction {
-            store: self,
-            run_id,
-            pending: Some(pending),
-            prepared: None,
+        let mut registry = self.registry();
+        if registry.groups.contains_key(&provenance.activation_id) {
+            return Err(ResultStoreError::DuplicateActivation(
+                provenance.activation_id,
+            ));
         }
+        for (descriptor, result_id) in outputs.iter().zip(&group.output_result_ids) {
+            let result = StoredResult {
+                id: *result_id,
+                provenance: ResultProvenance {
+                    run_id: provenance.run_id,
+                    activation_id: provenance.activation_id,
+                    graph_path: provenance.graph_path.clone(),
+                    graph_revision: provenance.graph_revision,
+                    node_id: provenance.node_id,
+                    output: descriptor.output.clone(),
+                    created_at_ms: provenance.created_at_ms,
+                },
+                value: descriptor.value,
+                presentation: descriptor.presentation,
+                contract: descriptor.contract.clone(),
+                state: ResultState::Pending(ResultProgress::default()),
+            };
+            registry.results.insert(*result_id, Arc::new(result));
+            if let Some(public_output) = &descriptor.output {
+                append_pin_history(
+                    &mut registry.pin_history,
+                    public_output,
+                    PinResultEntry {
+                        result_id: *result_id,
+                        run_id: provenance.run_id,
+                        activation_id: provenance.activation_id,
+                        graph_revision: provenance.graph_revision,
+                        created_at_ms: provenance.created_at_ms,
+                        usage: provenance.usage,
+                    },
+                );
+            }
+        }
+        registry
+            .groups
+            .insert(provenance.activation_id, group.clone());
+        drop(registry);
+        self.inner.changed.notify_all();
+        Ok(group)
     }
 
-    pub(crate) fn commit_batch(
+    pub fn complete_group(
         &self,
-        run_id: RunId,
-        pending: Vec<PendingResultSource>,
-    ) -> Vec<Option<ResultSourceDescriptor>> {
-        self.commit_batch_with_deadline(run_id, pending, &CancellationToken::new(), None)
-            .expect("commit without a deadline cannot time out")
-    }
-
-    pub(crate) fn commit_batch_with_deadline(
-        &self,
-        run_id: RunId,
-        pending: Vec<PendingResultSource>,
-        cancellation: &CancellationToken,
-        deadline: Option<RunDeadline>,
-    ) -> Result<Vec<Option<ResultSourceDescriptor>>, RunError> {
-        self.commit_batch_with_deadline_and_publish(run_id, pending, cancellation, deadline, |_| {})
-    }
-
-    pub(crate) fn commit_batch_with_deadline_and_publish(
-        &self,
-        run_id: RunId,
-        pending: Vec<PendingResultSource>,
-        cancellation: &CancellationToken,
-        deadline: Option<RunDeadline>,
-        publish: impl FnOnce(&[Option<ResultSourceDescriptor>]),
-    ) -> Result<Vec<Option<ResultSourceDescriptor>>, RunError> {
-        let mut transaction = self.begin_publication(run_id, pending);
-        transaction.prepare(cancellation, deadline)?;
-        transaction.publish_with_authority(cancellation, deadline, |descriptors| {
-            publish(descriptors);
-            Ok(())
+        group: &ActivationResultGroup,
+        values: Box<[StoredValue]>,
+    ) -> Result<(), ResultStoreError> {
+        if values.len() != group.output_result_ids.len() {
+            return Err(ResultStoreError::OutputCount {
+                expected: group.output_result_ids.len(),
+                actual: values.len(),
+            });
+        }
+        self.transition_group(group, |index, _| {
+            Ok(ResultState::Ready(values[index].clone()))
         })
     }
 
-    #[cfg(test)]
-    pub(crate) fn set_commit_checkpoint_for_test(&self, checkpoint: Arc<dyn Fn() + Send + Sync>) {
-        *self
-            .inner
-            .commit_checkpoint
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = Some(checkpoint);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_publication_checkpoint_for_test(
+    pub fn fail_group(
         &self,
-        checkpoint: Arc<dyn Fn(ResultPublicationCheckpoint) + Send + Sync>,
-    ) {
-        *self
-            .inner
-            .publication_checkpoint
-            .lock()
-            .unwrap_or_else(|error| error.into_inner()) = Some(checkpoint);
+        group: &ActivationResultGroup,
+        failure: Arc<ResultFailure>,
+    ) -> Result<(), ResultStoreError> {
+        self.transition_group(group, |_, _| Ok(ResultState::Failed(Arc::clone(&failure))))
     }
 
-    pub fn publish_snapshot(
-        &self,
-        run_id: RunId,
-        correlation: CorrelationContext,
-        basis: CompilationBasis<GraphRevision>,
-        name: impl Into<Box<str>>,
-        snapshot: ArtifactSnapshot,
-    ) -> ResultSourceDescriptor {
-        let pending = self.prepare_snapshot(correlation, basis, name, snapshot);
-        self.commit_batch(run_id, vec![pending])
-            .pop()
-            .flatten()
-            .expect("single result source commit must remain within capacity")
+    pub fn cancel_group(&self, group: &ActivationResultGroup) -> Result<(), ResultStoreError> {
+        self.transition_group(group, |_, _| Ok(ResultState::Cancelled))
     }
 
-    pub fn publish_runtime_value(
-        &self,
-        run_id: RunId,
-        correlation: CorrelationContext,
-        basis: CompilationBasis<GraphRevision>,
-        name: impl Into<Box<str>>,
-        value: &RuntimeValue,
-    ) -> Option<ResultSourceDescriptor> {
-        let pending = self.prepare_runtime_value(correlation, basis, name, value)?;
-        self.commit_batch(run_id, vec![pending]).pop().flatten()
+    pub fn result(&self, id: ResultId) -> Option<Arc<StoredResult>> {
+        self.registry().results.get(&id).cloned()
     }
 
-    pub fn descriptor(&self, source_id: ResultSourceId) -> Option<ResultSourceDescriptor> {
-        self.registry()
-            .sources
-            .get(&source_id)
-            .map(|entry| entry.descriptor.clone())
-    }
-
-    pub fn value(&self, source_id: ResultSourceId) -> Option<Arc<ArtifactSnapshot>> {
-        let artifact_id = self.descriptor(source_id)?.artifact_id;
-        self.artifacts.snapshot(artifact_id)
-    }
-
-    pub fn page(
-        &self,
-        source_id: ResultSourceId,
-        offset: usize,
-        limit: usize,
-    ) -> Result<Option<ResultSourcePage>, super::RunError> {
-        let Some(descriptor) = self.descriptor(source_id) else {
-            return Ok(None);
-        };
-        let Some(ArtifactPage {
-            offset,
-            limit,
-            total_count,
-            data_series_metadata,
-            values,
-            ..
-        }) = self.artifacts.page(descriptor.artifact_id, offset, limit)?
-        else {
-            return Ok(None);
-        };
-        Ok(Some(ResultSourcePage {
-            source_id,
-            offset,
-            limit,
-            total_count,
-            kind: descriptor.kind,
-            data_series_metadata,
-            values,
-        }))
-    }
-
-    pub fn source_count(&self) -> usize {
-        self.registry().sources.len()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn artifact_count_for_test(&self) -> usize {
-        self.artifacts.entry_count()
-    }
-
-    pub fn release(&self, source_id: ResultSourceId) -> bool {
-        let entry = self.registry().sources.remove(&source_id);
-        let Some(entry) = entry else {
-            return false;
-        };
-        self.artifacts.release(entry.descriptor.artifact_id)
-    }
-
-    pub fn release_run_sources(&self, run_id: RunId) -> usize {
-        let source_ids = self
-            .registry()
-            .sources
-            .iter()
-            .filter_map(|(source_id, entry)| (entry.run_id == run_id).then_some(*source_id))
-            .collect::<Vec<_>>();
-        let count = source_ids.len();
-        for source_id in source_ids {
-            self.release(source_id);
+    pub(crate) fn ready_group_activation(&self, result_ids: &[ResultId]) -> Option<ActivationId> {
+        if result_ids.is_empty() {
+            return None;
         }
-        count
+        let registry = self.registry();
+        let first = registry.results.get(&result_ids[0])?;
+        let activation_id = first.provenance.activation_id;
+        let group = registry.groups.get(&activation_id)?;
+        if group.output_result_ids.as_ref() != result_ids {
+            return None;
+        }
+        result_ids
+            .iter()
+            .all(|result_id| {
+                registry.results.get(result_id).is_some_and(|result| {
+                    result.provenance.activation_id == activation_id
+                        && matches!(result.state, ResultState::Ready(_))
+                })
+            })
+            .then_some(activation_id)
     }
 
-    pub fn cleanup_run(&self, run_id: RunId) {
-        self.artifacts.cleanup_run(run_id);
+    pub fn wait_terminal(
+        &self,
+        id: ResultId,
+        cancellation: &CancellationToken,
+        deadline: Option<RunDeadline>,
+    ) -> Result<Arc<StoredResult>, ResultStoreError> {
+        cancellation.register_waiter(&self.inner.changed);
+        let mut registry = self.registry();
+        loop {
+            let result = registry
+                .results
+                .get(&id)
+                .ok_or(ResultStoreError::UnknownResult(id))?;
+            if result.state.is_terminal() {
+                return Ok(Arc::clone(result));
+            }
+            if cancellation.is_cancelled() {
+                return Err(ResultStoreError::WaitCancelled);
+            }
+            let poll = std::time::Duration::from_millis(25);
+            let wait = if let Some(deadline) = deadline {
+                deadline
+                    .remaining(cancellation, RunPhase::ResultPublication)
+                    .map_err(ResultStoreError::from_wait_error)?
+                    .min(poll)
+            } else {
+                poll
+            };
+            let (next_registry, timeout) = self
+                .inner
+                .changed
+                .wait_timeout(registry, wait)
+                .unwrap_or_else(|error| error.into_inner());
+            registry = next_registry;
+            if timeout.timed_out() {
+                if cancellation.is_cancelled() {
+                    return Err(ResultStoreError::WaitCancelled);
+                }
+                if deadline.is_some_and(|deadline| {
+                    deadline
+                        .remaining(cancellation, RunPhase::ResultPublication)
+                        .is_err()
+                }) {
+                    return Err(ResultStoreError::WaitDeadlineExceeded);
+                }
+            }
+        }
     }
 
-    fn registry(&self) -> std::sync::MutexGuard<'_, ResultSourceRegistry> {
+    pub fn pin_history(
+        &self,
+        output: &crate::node_system::plan::GraphOutputRef,
+    ) -> Box<[PinResultEntry]> {
+        let tail = self.registry().pin_history.get(output).cloned();
+        collect_pin_history(tail)
+    }
+
+    pub fn record_reused_group(
+        &self,
+        provenance: ActivationProvenance,
+        outputs: &[PendingOutputDescriptor],
+        result_ids: &[ResultId],
+    ) -> Result<ActivationResultGroup, ResultStoreError> {
+        if outputs.is_empty() {
+            return Err(ResultStoreError::EmptyGroup);
+        }
+        if outputs.len() != result_ids.len() {
+            return Err(ResultStoreError::OutputCount {
+                expected: outputs.len(),
+                actual: result_ids.len(),
+            });
+        }
+        let super::ResultUsage::Reused {
+            original_activation_id,
+        } = provenance.usage
+        else {
+            return Err(ResultStoreError::InvalidReusedUsage);
+        };
+        let group = ActivationResultGroup {
+            activation_id: provenance.activation_id,
+            output_result_ids: result_ids.to_vec().into_boxed_slice(),
+        };
+        let mut registry = self.registry();
+        if registry.groups.contains_key(&provenance.activation_id) {
+            return Err(ResultStoreError::DuplicateActivation(
+                provenance.activation_id,
+            ));
+        }
+        let original_group = registry
+            .groups
+            .get(&original_activation_id)
+            .ok_or(ResultStoreError::UnknownActivation(original_activation_id))?;
+        if original_group.output_result_ids.as_ref() != result_ids {
+            let index = original_group
+                .output_result_ids
+                .iter()
+                .zip(result_ids)
+                .position(|(expected, actual)| expected != actual)
+                .unwrap_or(0);
+            return Err(ResultStoreError::ReusedOutputMismatch {
+                index,
+                result_id: result_ids[index],
+            });
+        }
+        for (index, (descriptor, result_id)) in outputs.iter().zip(result_ids).enumerate() {
+            let result = registry
+                .results
+                .get(result_id)
+                .ok_or(ResultStoreError::UnknownResult(*result_id))?;
+            if !matches!(result.state, ResultState::Ready(_)) {
+                return Err(ResultStoreError::ReusedResultNotReady(*result_id));
+            }
+            if result.provenance.activation_id != original_activation_id
+                || result.provenance.graph_path != provenance.graph_path
+                || result.provenance.node_id != provenance.node_id
+                || result.provenance.output != descriptor.output
+                || result.value != descriptor.value
+                || result.presentation != descriptor.presentation
+                || result.contract != descriptor.contract
+            {
+                return Err(ResultStoreError::ReusedOutputMismatch {
+                    index,
+                    result_id: *result_id,
+                });
+            }
+        }
+        for (descriptor, result_id) in outputs.iter().zip(result_ids) {
+            if let Some(public_output) = &descriptor.output {
+                append_pin_history(
+                    &mut registry.pin_history,
+                    public_output,
+                    PinResultEntry {
+                        result_id: *result_id,
+                        run_id: provenance.run_id,
+                        activation_id: provenance.activation_id,
+                        graph_revision: provenance.graph_revision,
+                        created_at_ms: provenance.created_at_ms,
+                        usage: provenance.usage,
+                    },
+                );
+            }
+        }
+        registry
+            .groups
+            .insert(provenance.activation_id, group.clone());
+        drop(registry);
+        self.inner.changed.notify_all();
+        Ok(group)
+    }
+
+    fn transition_group(
+        &self,
+        group: &ActivationResultGroup,
+        mut transition: impl FnMut(usize, &StoredResult) -> Result<ResultState, ResultStoreError>,
+    ) -> Result<(), ResultStoreError> {
+        let mut registry = self.registry();
+        let registered = registry
+            .groups
+            .get(&group.activation_id)
+            .ok_or(ResultStoreError::UnknownActivation(group.activation_id))?;
+        if registered != group {
+            return Err(ResultStoreError::GroupMismatch(group.activation_id));
+        }
+
+        let mut next_states = Vec::with_capacity(group.output_result_ids.len());
+        for (index, result_id) in group.output_result_ids.iter().enumerate() {
+            let result = registry
+                .results
+                .get(result_id)
+                .ok_or(ResultStoreError::UnknownResult(*result_id))?;
+            if result.provenance.activation_id != group.activation_id {
+                return Err(ResultStoreError::GroupMismatch(group.activation_id));
+            }
+            if !result.state.is_pending() {
+                return Err(ResultStoreError::TerminalResult(*result_id));
+            }
+            next_states.push(transition(index, result)?);
+        }
+        for (result_id, state) in group.output_result_ids.iter().zip(next_states) {
+            Arc::make_mut(
+                registry
+                    .results
+                    .get_mut(result_id)
+                    .expect("validated result remains registered"),
+            )
+            .state = state;
+        }
+        drop(registry);
+        self.inner.changed.notify_all();
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn authoritative_result_count_for_test(&self) -> usize {
+        self.registry().results.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn group_count_for_test(&self) -> usize {
+        self.registry().groups.len()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn result_count_for_node(
+        &self,
+        node_id: crate::node_system::document::NodeId,
+    ) -> usize {
+        self.registry()
+            .results
+            .values()
+            .filter(|result| result.provenance.node_id == node_id)
+            .count()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn group_count_for_node(
+        &self,
+        node_id: crate::node_system::document::NodeId,
+    ) -> usize {
+        let registry = self.registry();
+        registry
+            .groups
+            .values()
+            .filter(|group| {
+                group.output_result_ids.first().is_some_and(|result_id| {
+                    registry
+                        .results
+                        .get(result_id)
+                        .is_some_and(|result| result.provenance.node_id == node_id)
+                })
+            })
+            .count()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn materialized_result_count_for_node(
+        &self,
+        node_id: crate::node_system::document::NodeId,
+    ) -> usize {
+        self.registry()
+            .results
+            .values()
+            .filter(|result| {
+                result.provenance.node_id == node_id
+                    && matches!(result.state, ResultState::Ready(_))
+            })
+            .count()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn results_for_run(&self, run_id: RunId) -> Box<[Arc<StoredResult>]> {
+        self.registry()
+            .results
+            .values()
+            .filter(|result| result.provenance.run_id == run_id)
+            .cloned()
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
+    }
+
+    fn registry(&self) -> std::sync::MutexGuard<'_, ResultStoreRegistry> {
         self.inner
             .registry
             .lock()
@@ -449,585 +485,701 @@ impl ResultStore {
     }
 }
 
-impl ResultPublicationTransaction<'_> {
-    pub(crate) fn prepare(
-        &mut self,
-        cancellation: &CancellationToken,
-        deadline: Option<RunDeadline>,
-    ) -> Result<(), RunError> {
-        if self.prepared.is_some() {
-            return Ok(());
-        }
-        let pending = self.pending.take().unwrap_or_default();
-        if !pending.is_empty() {
-            #[cfg(test)]
-            if let Some(checkpoint) = self
-                .store
-                .inner
-                .commit_checkpoint
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .clone()
-            {
-                checkpoint();
-            }
-            check_terminal(cancellation, deadline, RunPhase::ResultPublication)?;
-        }
-        self.prepared = Some(pending);
-        Ok(())
+fn append_pin_history(
+    histories: &mut BTreeMap<crate::node_system::plan::GraphOutputRef, Arc<PinHistoryNode>>,
+    output: &crate::node_system::plan::GraphOutputRef,
+    entry: PinResultEntry,
+) {
+    let previous = histories.get(output).cloned();
+    let len = previous.as_ref().map_or(1, |node| node.len + 1);
+    histories.insert(
+        output.clone(),
+        Arc::new(PinHistoryNode {
+            entry,
+            previous,
+            len,
+        }),
+    );
+}
+
+fn collect_pin_history(tail: Option<Arc<PinHistoryNode>>) -> Box<[PinResultEntry]> {
+    let Some(tail) = tail else {
+        return Box::default();
+    };
+    let mut entries = Vec::with_capacity(tail.len);
+    let mut current = Some(tail);
+    while let Some(node) = current {
+        entries.push(node.entry.clone());
+        current = node.previous.clone();
     }
+    entries.reverse();
+    entries.into_boxed_slice()
+}
 
-    pub(crate) fn publish_with_authority(
-        &mut self,
-        cancellation: &CancellationToken,
-        deadline: Option<RunDeadline>,
-        authority: impl FnOnce(&[Option<ResultSourceDescriptor>]) -> Result<(), RunError>,
-    ) -> Result<Vec<Option<ResultSourceDescriptor>>, RunError> {
-        self.prepare(cancellation, deadline)?;
-        let pending = self
-            .prepared
-            .take()
-            .expect("result snapshots must be prepared before publication");
-        #[cfg(test)]
-        let checkpoint = self
-            .store
-            .inner
-            .publication_checkpoint
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .clone();
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResultStoreError {
+    IdExhausted,
+    EmptyGroup,
+    InvalidProducedUsage,
+    InvalidReusedUsage,
+    DuplicateActivation(ActivationId),
+    DuplicateOutputValue(crate::node_system::plan::ValueRef),
+    DuplicatePublicOutput(crate::node_system::plan::GraphOutputRef),
+    OutputGraphMismatch(crate::node_system::plan::GraphOutputRef),
+    OutputNodeMismatch(crate::node_system::plan::GraphOutputRef),
+    UnknownActivation(ActivationId),
+    UnknownResult(ResultId),
+    GroupMismatch(ActivationId),
+    TerminalResult(ResultId),
+    ReusedResultNotReady(ResultId),
+    ReusedOutputMismatch { index: usize, result_id: ResultId },
+    WaitCancelled,
+    WaitDeadlineExceeded,
+    OutputCount { expected: usize, actual: usize },
+}
 
-        // Global authority lock order is result registry -> artifact registry -> project
-        // authority. Result readers clone their ResultStore before taking either result
-        // lock, so no project guard is retained while waiting here.
-        let mut registry = self.store.registry();
-        let mut artifacts = self.store.artifacts.publication_registry();
-        check_terminal(cancellation, deadline, RunPhase::ResultPublication)?;
-        let capacity = registry.sources.len().saturating_add(pending.len());
-        let mut rollback = ResultAuthorityRollback {
-            registry: &mut registry,
-            artifacts: &mut artifacts,
-            inserted_source_ids: Vec::with_capacity(pending.len()),
-            inserted_artifact_ids: Vec::with_capacity(pending.len()),
-            evicted_prior: Vec::with_capacity(capacity),
-            committed: false,
-        };
-
-        let first_id = allocate_result_source_range(pending.len());
-        #[cfg(test)]
-        if let Some(checkpoint) = &checkpoint {
-            checkpoint(ResultPublicationCheckpoint::AfterSourceIdAllocation);
+impl ResultStoreError {
+    fn from_wait_error(error: RunError) -> Self {
+        match error {
+            RunError::Cancelled => Self::WaitCancelled,
+            RunError::DeadlineExceeded { .. } => Self::WaitDeadlineExceeded,
+            _ => unreachable!("terminal wait only checks cancellation and deadline"),
         }
-        let mut descriptors = Vec::with_capacity(pending.len());
-        for (offset, pending) in pending.into_iter().enumerate() {
-            let PendingResultSource {
-                correlation,
-                basis,
-                name,
-                presentation,
-                snapshot,
-            } = pending;
-            let (artifact, prepared) = self.store.artifacts.prepare_retained_result_source(
-                self.run_id,
-                correlation.clone(),
-                basis.clone(),
-                snapshot,
-            );
-            rollback.inserted_artifact_ids.push(artifact.artifact_id);
-            rollback.artifacts.insert(prepared);
-            #[cfg(test)]
-            if let Some(checkpoint) = &checkpoint {
-                checkpoint(ResultPublicationCheckpoint::AfterArtifactInsert);
-            }
-            descriptors.push(ResultSourceDescriptor {
-                source_id: ResultSourceId::new(first_id + offset as u64),
-                artifact_id: artifact.artifact_id,
-                name,
-                kind: artifact.kind,
-                data_series_metadata: artifact.data_series_metadata,
-                total_count: artifact.total_count,
-                presentation,
-                correlation,
-                basis,
-            });
-        }
-        for descriptor in &descriptors {
-            rollback.inserted_source_ids.push(descriptor.source_id);
-            rollback.registry.sources.insert(
-                descriptor.source_id,
-                ResultSourceEntry {
-                    run_id: self.run_id,
-                    descriptor: descriptor.clone(),
-                },
-            );
-            #[cfg(test)]
-            if let Some(checkpoint) = &checkpoint {
-                checkpoint(ResultPublicationCheckpoint::AfterSourceInsert);
-            }
-        }
-        while rollback.registry.sources.len() > self.store.inner.max_sources {
-            let source_id = *rollback
-                .registry
-                .sources
-                .keys()
-                .next()
-                .expect("over-capacity registry is not empty");
-            let entry = rollback
-                .registry
-                .sources
-                .remove(&source_id)
-                .expect("oldest source must exist");
-            if !rollback.inserted_source_ids.contains(&source_id) {
-                rollback.evicted_prior.push(entry);
-            }
-        }
-        let committed = descriptors
-            .into_iter()
-            .map(|descriptor| {
-                rollback
-                    .registry
-                    .sources
-                    .contains_key(&descriptor.source_id)
-                    .then_some(descriptor)
-            })
-            .collect::<Vec<_>>();
-
-        authority(&committed)?;
-        rollback.commit(&committed);
-        Ok(committed)
     }
 }
 
-impl ResultAuthorityRollback<'_, '_> {
-    fn commit(&mut self, committed: &[Option<ResultSourceDescriptor>]) {
-        for entry in self.evicted_prior.drain(..) {
-            self.artifacts.release(entry.descriptor.artifact_id);
-        }
-        for artifact_id in self.inserted_artifact_ids.iter().copied() {
-            if !committed
-                .iter()
-                .flatten()
-                .any(|descriptor| descriptor.artifact_id == artifact_id)
-            {
-                self.artifacts.remove(artifact_id);
+impl fmt::Display for ResultStoreError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::IdExhausted => formatter.write_str("result ID space is exhausted"),
+            Self::EmptyGroup => formatter.write_str(
+                "result groups require at least one data output; control-only operations skip them",
+            ),
+            Self::InvalidProducedUsage => {
+                formatter.write_str("pending result groups must describe produced results")
+            }
+            Self::InvalidReusedUsage => {
+                formatter.write_str("reused result groups require original activation provenance")
+            }
+            Self::DuplicateActivation(id) => {
+                write!(
+                    formatter,
+                    "activation {} already has a result group",
+                    id.get()
+                )
+            }
+            Self::DuplicateOutputValue(value) => {
+                write!(formatter, "result group repeats value {}", value.index())
+            }
+            Self::DuplicatePublicOutput(output) => {
+                write!(
+                    formatter,
+                    "result group repeats public output {}",
+                    output.port
+                )
+            }
+            Self::OutputGraphMismatch(output) => write!(
+                formatter,
+                "public output graph '{}' does not match activation provenance",
+                output.graph_path.0
+            ),
+            Self::OutputNodeMismatch(output) => write!(
+                formatter,
+                "public output node '{}' does not match activation provenance",
+                output.port.node_id
+            ),
+            Self::UnknownActivation(id) => {
+                write!(formatter, "activation {} has no result group", id.get())
+            }
+            Self::UnknownResult(id) => write!(formatter, "result {} is not registered", id.get()),
+            Self::GroupMismatch(id) => {
+                write!(
+                    formatter,
+                    "result group does not match activation {}",
+                    id.get()
+                )
+            }
+            Self::TerminalResult(id) => write!(formatter, "result {} is terminal", id.get()),
+            Self::ReusedResultNotReady(id) => {
+                write!(formatter, "reused result {} is not ready", id.get())
+            }
+            Self::ReusedOutputMismatch { index, result_id } => write!(
+                formatter,
+                "reused output {index} is incompatible with result {}",
+                result_id.get()
+            ),
+            Self::WaitCancelled => formatter.write_str("result wait was cancelled"),
+            Self::WaitDeadlineExceeded => formatter.write_str("result wait deadline exceeded"),
+            Self::OutputCount { expected, actual } => {
+                write!(
+                    formatter,
+                    "result group has {actual} values; expected {expected}"
+                )
             }
         }
-        self.committed = true;
     }
 }
 
-impl Drop for ResultAuthorityRollback<'_, '_> {
-    fn drop(&mut self) {
-        if self.committed {
-            return;
-        }
-        for source_id in &self.inserted_source_ids {
-            self.registry.sources.remove(source_id);
-        }
-        for entry in self.evicted_prior.drain(..) {
-            self.registry
-                .sources
-                .insert(entry.descriptor.source_id, entry);
-        }
-        for artifact_id in &self.inserted_artifact_ids {
-            self.artifacts.remove(*artifact_id);
-        }
-    }
-}
+impl std::error::Error for ResultStoreError {}
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::analysis::{CompileId, ProjectSessionId};
-    use crate::node_system::document::GraphResourcePath;
-    use crate::node_system::registry::RegistryFingerprint;
+    use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
+    use crate::node_system::plan::{
+        GraphOutputRef, PlannedValueContract, ResultPresentation, ValueRef,
+    };
+    use crate::node_system::protocol::{PortKey, Value};
+    use crate::node_system::runtime::{ArtifactValueKind, ResultUsage, StoredValueKind};
 
-    fn context(run_id: RunId) -> (CorrelationContext, CompilationBasis<GraphRevision>) {
-        let basis = CompilationBasis {
-            graph_revision: GraphRevision::new(8),
-            registry_fingerprint: RegistryFingerprint::from_bytes([4; 32]),
-            resource_versions: BTreeMap::new(),
-            resource_observations: BTreeMap::new(),
-        };
-        let correlation = CorrelationContext {
-            project_session_id: ProjectSessionId::new("session"),
-            graph_path: GraphResourcePath("functions/example".into()),
-            graph_revision: basis.graph_revision,
-            registry_fingerprint: basis.registry_fingerprint.clone(),
-            resource_versions: basis.resource_versions.clone(),
-            compile_id: CompileId::new(9),
-            selection_digest: None,
-            run_id: Some(run_id),
-            node_id: None,
-            node_type_id: None,
-            parent_call: None,
-            trace_parent_span_id: None,
-        };
-        (correlation, basis)
-    }
-
-    fn pending_test_snapshot(store: &ResultStore, run_id: RunId) -> PendingResultSource {
-        let (correlation, basis) = context(run_id);
-        store.prepare_snapshot(
-            correlation,
-            basis,
-            "result",
-            ArtifactSnapshot::Value(Value::Integer(run_id.get() as i64)),
-        )
-    }
-
-    fn publish_test_snapshot(store: &ResultStore, run_id: RunId) -> ResultSourceDescriptor {
-        let (correlation, basis) = context(run_id);
-        store.publish_snapshot(
-            run_id,
-            correlation,
-            basis,
-            "result",
-            ArtifactSnapshot::Value(Value::Integer(run_id.get() as i64)),
-        )
-    }
-
-    #[test]
-    fn result_source_ids_are_process_global_across_stores() {
-        let first_store = ResultStore::new();
-        let replacement_store = ResultStore::new();
-        let first = publish_test_snapshot(&first_store, RunId::new(1));
-        let replacement = publish_test_snapshot(&replacement_store, RunId::new(2));
-
-        assert_ne!(first.source_id, replacement.source_id);
-        assert!(replacement.source_id.get() > first.source_id.get());
-    }
-
-    #[test]
-    fn result_source_ids_are_process_global_when_allocated_concurrently() {
-        const PUBLICATION_COUNT: usize = 16;
-
-        let rendezvous = Arc::new(std::sync::Barrier::new(PUBLICATION_COUNT + 1));
-        let publications = (0..PUBLICATION_COUNT)
-            .map(|index| {
-                let rendezvous = Arc::clone(&rendezvous);
-                std::thread::spawn(move || {
-                    let store = ResultStore::new();
-                    rendezvous.wait();
-                    publish_test_snapshot(&store, RunId::new(index as u64 + 1))
-                        .source_id
-                        .get()
-                })
-            })
-            .collect::<Vec<_>>();
-
-        rendezvous.wait();
-        let source_ids = publications
-            .into_iter()
-            .map(|publication| publication.join().unwrap())
-            .collect::<std::collections::BTreeSet<_>>();
-
-        assert_eq!(source_ids.len(), PUBLICATION_COUNT);
-    }
-
-    #[test]
-    fn descriptor_page_and_release_replace_result_source_store_reads() {
-        let store = ResultStore::new();
-        let run_id = RunId::new(11);
-        let (correlation, basis) = context(run_id);
-        let descriptor = store.publish_snapshot(
-            run_id,
-            correlation,
-            basis,
-            "result",
-            ArtifactSnapshot::Sequence(
-                vec![Value::Integer(1), Value::Integer(2)].into_boxed_slice(),
-            ),
-        );
-
-        assert_eq!(
-            store.descriptor(descriptor.source_id),
-            Some(descriptor.clone())
-        );
-        assert_eq!(
-            store
-                .page(descriptor.source_id, 1, 20)
-                .unwrap()
-                .unwrap()
-                .values
-                .as_ref(),
-            &[Value::Integer(2)]
-        );
-        assert!(store.release(descriptor.source_id));
-        assert!(store.descriptor(descriptor.source_id).is_none());
-    }
-
-    #[test]
-    fn prepared_runtime_values_commit_as_an_ordered_atomic_batch() {
-        let store = ResultStore::with_capacity(2);
-        let old_run_id = RunId::new(13);
-        let (old_correlation, old_basis) = context(old_run_id);
-        let old = store.publish_snapshot(
-            old_run_id,
-            old_correlation,
-            old_basis,
-            "old",
-            ArtifactSnapshot::Value(Value::Integer(0)),
-        );
-        store.cleanup_run(old_run_id);
-
-        let run_id = RunId::new(14);
-        let (correlation, basis) = context(run_id);
-        let first = store
-            .prepare_runtime_value(
-                correlation.clone(),
-                basis.clone(),
-                "first",
-                &RuntimeValue::from(Value::Integer(1)),
-            )
-            .unwrap();
-        let second = store
-            .prepare_runtime_value(
-                correlation,
-                basis,
-                "second",
-                &RuntimeValue::from(Value::Integer(2)),
-            )
-            .unwrap();
-
-        assert_eq!(store.source_count(), 1);
-        assert_eq!(store.descriptor(old.source_id), Some(old.clone()));
-        let committed = store
-            .commit_batch(run_id, vec![first, second])
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
-
-        assert_eq!(
-            committed
-                .iter()
-                .map(|descriptor| descriptor.name.as_ref())
-                .collect::<Vec<_>>(),
-            vec!["first", "second"]
-        );
-        assert_eq!(
-            committed[1].source_id.get(),
-            committed[0].source_id.get() + 1
-        );
-        assert!(store.descriptor(old.source_id).is_none());
-        assert!(store.artifacts().descriptor(old.artifact_id).is_none());
-        assert_eq!(store.source_count(), 2);
-    }
-
-    #[test]
-    fn result_sources_evict_oldest_entry_at_capacity() {
-        let store = ResultStore::with_capacity(2);
-        let run_id = RunId::new(13);
-        let (correlation, basis) = context(run_id);
-        let first = store.publish_snapshot(
-            run_id,
-            correlation.clone(),
-            basis.clone(),
-            "first",
-            ArtifactSnapshot::Value(Value::Integer(1)),
-        );
-        let second = store.publish_snapshot(
-            run_id,
-            correlation.clone(),
-            basis.clone(),
-            "second",
-            ArtifactSnapshot::Value(Value::Integer(2)),
-        );
-        let third = store.publish_snapshot(
-            run_id,
-            correlation,
-            basis,
-            "third",
-            ArtifactSnapshot::Value(Value::Integer(3)),
-        );
-
-        assert!(store.descriptor(first.source_id).is_none());
-        assert!(store.descriptor(second.source_id).is_some());
-        assert!(store.descriptor(third.source_id).is_some());
-        assert_eq!(store.source_count(), 2);
-    }
-
-    #[test]
-    fn scoped_authority_serializes_capacity_one_rollback_before_next_publication() {
-        let store = Arc::new(ResultStore::with_capacity(1));
-        let prior = publish_test_snapshot(&store, RunId::new(20));
-        store.cleanup_run(RunId::new(20));
-        let (a_entered_tx, a_entered_rx) = std::sync::mpsc::sync_channel(1);
-        let (release_a_tx, release_a_rx) = std::sync::mpsc::sync_channel(1);
-        let (b_done_tx, b_done_rx) = std::sync::mpsc::sync_channel(1);
-
-        let a_store = Arc::clone(&store);
-        let a = std::thread::spawn(move || {
-            let cancellation = CancellationToken::new();
-            let mut transaction = a_store.begin_publication(
-                RunId::new(21),
-                vec![pending_test_snapshot(&a_store, RunId::new(21))],
-            );
-            transaction.prepare(&cancellation, None).unwrap();
-            transaction.publish_with_authority(&cancellation, None, |_| {
-                a_entered_tx.send(()).unwrap();
-                release_a_rx.recv().unwrap();
-                Err(RunError::ResourceSnapshotMismatch("A rolled back".into()))
-            })
-        });
-        a_entered_rx.recv().unwrap();
-
-        let b_store = Arc::clone(&store);
-        let b = std::thread::spawn(move || {
-            let descriptor = publish_test_snapshot(&b_store, RunId::new(22));
-            b_done_tx.send(descriptor.clone()).unwrap();
-            descriptor
-        });
-        assert!(
-            b_done_rx
-                .recv_timeout(std::time::Duration::from_millis(30))
-                .is_err()
-        );
-        release_a_tx.send(()).unwrap();
-
-        assert!(matches!(
-            a.join().unwrap(),
-            Err(RunError::ResourceSnapshotMismatch(_))
-        ));
-        let b_descriptor = b.join().unwrap();
-        assert_eq!(store.source_count(), 1);
-        assert_eq!(store.artifact_count_for_test(), 1);
-        assert!(store.descriptor(prior.source_id).is_none());
-        assert_eq!(store.descriptor(b_descriptor.source_id), Some(b_descriptor));
-    }
-
-    #[test]
-    fn scoped_authority_keeps_provisional_source_unreadable_until_success() {
-        let store = Arc::new(ResultStore::with_capacity(1));
-        let (source_tx, source_rx) = std::sync::mpsc::sync_channel(1);
-        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
-        let (reader_done_tx, reader_done_rx) = std::sync::mpsc::sync_channel(1);
-        let publisher_store = Arc::clone(&store);
-        let publisher = std::thread::spawn(move || {
-            let cancellation = CancellationToken::new();
-            let mut transaction = publisher_store.begin_publication(
-                RunId::new(23),
-                vec![pending_test_snapshot(&publisher_store, RunId::new(23))],
-            );
-            transaction.prepare(&cancellation, None).unwrap();
-            transaction
-                .publish_with_authority(&cancellation, None, |descriptors| {
-                    source_tx
-                        .send(descriptors[0].as_ref().unwrap().source_id)
-                        .unwrap();
-                    release_rx.recv().unwrap();
-                    Ok(())
-                })
-                .unwrap()
-        });
-        let source_id = source_rx.recv().unwrap();
-        let reader_store = Arc::clone(&store);
-        let reader = std::thread::spawn(move || {
-            let descriptor = reader_store.descriptor(source_id);
-            reader_done_tx.send(descriptor.clone()).unwrap();
-            descriptor
-        });
-        assert!(
-            reader_done_rx
-                .recv_timeout(std::time::Duration::from_millis(30))
-                .is_err()
-        );
-        release_tx.send(()).unwrap();
-
-        let published = publisher.join().unwrap();
-        assert_eq!(published[0].as_ref().unwrap().source_id, source_id);
-        assert_eq!(reader.join().unwrap(), published[0]);
-    }
-
-    #[test]
-    fn scoped_authority_serializes_empty_publication_through_final_authority() {
-        let store = Arc::new(ResultStore::with_capacity(1));
-        let (empty_entered_tx, empty_entered_rx) = std::sync::mpsc::sync_channel(1);
-        let (release_empty_tx, release_empty_rx) = std::sync::mpsc::sync_channel(1);
-        let (publisher_done_tx, publisher_done_rx) = std::sync::mpsc::sync_channel(1);
-
-        let empty_store = Arc::clone(&store);
-        let empty = std::thread::spawn(move || {
-            let cancellation = CancellationToken::new();
-            let mut transaction = empty_store.begin_publication(RunId::new(24), Vec::new());
-            transaction.prepare(&cancellation, None).unwrap();
-            transaction
-                .publish_with_authority(&cancellation, None, |descriptors| {
-                    assert!(descriptors.is_empty());
-                    empty_entered_tx.send(()).unwrap();
-                    release_empty_rx.recv().unwrap();
-                    Ok(())
-                })
-                .unwrap()
-        });
-        empty_entered_rx.recv().unwrap();
-
-        let publisher_store = Arc::clone(&store);
-        let publisher = std::thread::spawn(move || {
-            let descriptor = publish_test_snapshot(&publisher_store, RunId::new(25));
-            publisher_done_tx.send(descriptor.clone()).unwrap();
-            descriptor
-        });
-        assert!(
-            publisher_done_rx
-                .recv_timeout(std::time::Duration::from_millis(30))
-                .is_err()
-        );
-        release_empty_tx.send(()).unwrap();
-
-        assert!(empty.join().unwrap().is_empty());
-        let descriptor = publisher.join().unwrap();
-        assert_eq!(store.source_count(), 1);
-        assert_eq!(store.descriptor(descriptor.source_id), Some(descriptor));
-    }
-
-    #[test]
-    fn scoped_authority_rolls_back_panics_during_artifact_and_source_construction() {
-        for checkpoint in [
-            ResultPublicationCheckpoint::AfterArtifactInsert,
-            ResultPublicationCheckpoint::AfterSourceIdAllocation,
-            ResultPublicationCheckpoint::AfterSourceInsert,
-        ] {
-            let store = ResultStore::with_capacity(1);
-            let prior = publish_test_snapshot(&store, RunId::new(24));
-            store.set_publication_checkpoint_for_test(Arc::new(move |observed| {
-                if observed == checkpoint {
-                    panic!("injected result publication construction panic")
-                }
-            }));
-            let cancellation = CancellationToken::new();
-            let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                let mut transaction = store.begin_publication(
-                    RunId::new(25),
-                    vec![pending_test_snapshot(&store, RunId::new(25))],
-                );
-                transaction.prepare(&cancellation, None).unwrap();
-                let _ = transaction.publish_with_authority(&cancellation, None, |_| Ok(()));
-            }));
-
-            assert!(panic.is_err());
-            assert_eq!(store.source_count(), 1);
-            assert_eq!(store.artifact_count_for_test(), 1);
-            assert_eq!(store.descriptor(prior.source_id), Some(prior));
+    fn test_output(port_key: &str, value: u32) -> PendingOutputDescriptor {
+        PendingOutputDescriptor {
+            value: ValueRef::new(value),
+            output: Some(GraphOutputRef {
+                graph_path: GraphResourcePath("events/test".into()),
+                port: PortAddress::declared(
+                    NodeId::from_uuid(uuid::Uuid::nil()),
+                    PortKey::new(port_key).unwrap(),
+                ),
+            }),
+            presentation: ResultPresentation::Inspector,
+            contract: PlannedValueContract::opaque(),
         }
     }
 
+    fn test_outputs<const N: usize>(port_keys: [&str; N]) -> Vec<PendingOutputDescriptor> {
+        port_keys
+            .into_iter()
+            .enumerate()
+            .map(|(index, port_key)| test_output(port_key, index as u32))
+            .collect()
+    }
+
+    fn test_provenance(run: u64) -> ActivationProvenance {
+        ActivationProvenance {
+            run_id: RunId::new(run),
+            activation_id: ActivationId::next().unwrap(),
+            graph_path: GraphResourcePath("events/test".into()),
+            graph_revision: GraphRevision::new(8),
+            node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+            created_at_ms: run,
+            usage: ResultUsage::Produced,
+        }
+    }
+
+    fn create_ready_test_group(store: &ResultStore, run: u64) -> ActivationResultGroup {
+        let group = store
+            .create_pending_group(test_provenance(run), &test_outputs(["result"]))
+            .unwrap();
+        store
+            .complete_group(
+                &group,
+                vec![StoredValue::scalar(Value::Integer(run as i64))].into_boxed_slice(),
+            )
+            .unwrap();
+        group
+    }
+
     #[test]
-    fn run_cleanup_and_user_release_have_separate_lifetimes() {
+    fn pending_group_rejects_empty_and_mismatched_public_outputs() {
         let store = ResultStore::new();
-        let run_id = RunId::new(12);
-        let (correlation, basis) = context(run_id);
-        let descriptor = store.publish_snapshot(
-            run_id,
-            correlation,
-            basis,
-            "result",
-            ArtifactSnapshot::Value(Value::String("private".into())),
+        assert!(matches!(
+            store.create_pending_group(test_provenance(5), &[]),
+            Err(ResultStoreError::EmptyGroup)
+        ));
+
+        let mut wrong_graph = test_outputs(["result"]);
+        wrong_graph[0].output.as_mut().unwrap().graph_path =
+            GraphResourcePath("events/other".into());
+        assert!(matches!(
+            store.create_pending_group(test_provenance(6), &wrong_graph),
+            Err(ResultStoreError::OutputGraphMismatch(_))
+        ));
+
+        let mut wrong_node = test_outputs(["result"]);
+        wrong_node[0].output.as_mut().unwrap().port.node_id = NodeId::new();
+        assert!(matches!(
+            store.create_pending_group(test_provenance(6), &wrong_node),
+            Err(ResultStoreError::OutputNodeMismatch(_))
+        ));
+        assert_eq!(store.authoritative_result_count_for_test(), 0);
+    }
+
+    #[test]
+    fn pending_group_allocates_ordered_results_and_pin_history() {
+        let store = ResultStore::new();
+        let outputs = test_outputs(["z_result", "a_report"]);
+        let group = store
+            .create_pending_group(test_provenance(7), &outputs)
+            .unwrap();
+
+        assert_eq!(group.output_result_ids.len(), 2);
+        assert_ne!(group.output_result_ids[0], group.output_result_ids[1]);
+        assert!(matches!(
+            store.result(group.output_result_ids[0]).unwrap().state,
+            ResultState::Pending(_)
+        ));
+        assert_eq!(
+            store.pin_history(outputs[0].output.as_ref().unwrap())[0].result_id,
+            group.output_result_ids[0]
+        );
+    }
+
+    #[test]
+    fn pending_group_setup_rolls_back_on_invalid_descriptors() {
+        let store = ResultStore::new();
+        let output = test_output("result", 0);
+        let outputs = vec![output.clone(), output];
+
+        assert!(
+            store
+                .create_pending_group(test_provenance(8), &outputs)
+                .is_err()
+        );
+        assert_eq!(store.authoritative_result_count_for_test(), 0);
+        assert!(
+            store
+                .pin_history(outputs[0].output.as_ref().unwrap())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn complete_group_is_all_or_nothing_and_terminal() {
+        let store = ResultStore::new();
+        let group = store
+            .create_pending_group(test_provenance(9), &test_outputs(["left", "right"]))
+            .unwrap();
+
+        assert!(
+            store
+                .complete_group(
+                    &group,
+                    vec![StoredValue::scalar(Value::Null)].into_boxed_slice()
+                )
+                .is_err()
+        );
+        assert!(
+            group
+                .output_result_ids
+                .iter()
+                .all(|id| matches!(store.result(*id).unwrap().state, ResultState::Pending(_)))
         );
 
-        store.cleanup_run(run_id);
-        assert!(store.value(descriptor.source_id).is_some());
-        assert_eq!(store.release_run_sources(run_id), 1);
-        assert!(store.value(descriptor.source_id).is_none());
+        store
+            .complete_group(
+                &group,
+                vec![
+                    StoredValue::scalar(Value::Null),
+                    StoredValue::scalar(Value::Null),
+                ]
+                .into_boxed_slice(),
+            )
+            .unwrap();
+        assert!(
+            group
+                .output_result_ids
+                .iter()
+                .all(|id| matches!(store.result(*id).unwrap().state, ResultState::Ready(_)))
+        );
+        assert!(store.cancel_group(&group).is_err());
+    }
+
+    #[test]
+    fn fail_and_cancel_transition_the_whole_group_and_preserve_history() {
+        let store = ResultStore::new();
+        let failed_outputs = test_outputs(["failed_left", "failed_right"]);
+        let failed = store
+            .create_pending_group(test_provenance(10), &failed_outputs)
+            .unwrap();
+        store
+            .fail_group(&failed, Arc::new(ResultFailure::new("kernel failed")))
+            .unwrap();
+        assert!(
+            failed
+                .output_result_ids
+                .iter()
+                .all(|id| matches!(store.result(*id).unwrap().state, ResultState::Failed(_)))
+        );
+
+        let cancelled_outputs = test_outputs(["cancelled_left", "cancelled_right"]);
+        let cancelled = store
+            .create_pending_group(test_provenance(11), &cancelled_outputs)
+            .unwrap();
+        store.cancel_group(&cancelled).unwrap();
+        assert!(
+            cancelled
+                .output_result_ids
+                .iter()
+                .all(|id| matches!(store.result(*id).unwrap().state, ResultState::Cancelled))
+        );
+        assert_eq!(
+            store.pin_history(cancelled_outputs[1].output.as_ref().unwrap())[0].result_id,
+            cancelled.output_result_ids[1]
+        );
+    }
+
+    #[test]
+    fn concurrent_duplicate_activation_never_mutates_results_or_history() {
+        let store = Arc::new(ResultStore::new());
+        let provenance = test_provenance(12);
+        let output = test_outputs(["result"]);
+        let barrier = Arc::new(std::sync::Barrier::new(3));
+        let attempts = (0..2)
+            .map(|_| {
+                let store = Arc::clone(&store);
+                let provenance = provenance.clone();
+                let output = output.clone();
+                let barrier = Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    store.create_pending_group(provenance, &output)
+                })
+            })
+            .collect::<Vec<_>>();
+        barrier.wait();
+        let outcomes = attempts
+            .into_iter()
+            .map(|attempt| attempt.join().unwrap())
+            .collect::<Vec<_>>();
+
+        assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
+        assert_eq!(store.authoritative_result_count_for_test(), 1);
+        assert_eq!(
+            store.pin_history(output[0].output.as_ref().unwrap()).len(),
+            1
+        );
+        assert!(outcomes.iter().any(|outcome| matches!(
+            outcome,
+            Err(ResultStoreError::DuplicateActivation(id)) if *id == provenance.activation_id
+        )));
+        // The losing pre-lock allocation may leave an opaque ResultId gap by design.
+    }
+
+    #[test]
+    fn completion_and_cancellation_race_has_one_atomic_winner() {
+        let store = Arc::new(ResultStore::new());
+        let group = store
+            .create_pending_group(test_provenance(12), &test_outputs(["left", "right"]))
+            .unwrap();
+        let complete_store = Arc::clone(&store);
+        let complete_group = group.clone();
+        let complete = std::thread::spawn(move || {
+            complete_store.complete_group(
+                &complete_group,
+                vec![
+                    StoredValue::scalar(Value::Null),
+                    StoredValue::scalar(Value::Null),
+                ]
+                .into_boxed_slice(),
+            )
+        });
+        let cancel_store = Arc::clone(&store);
+        let cancel_group = group.clone();
+        let cancel = std::thread::spawn(move || cancel_store.cancel_group(&cancel_group));
+
+        let outcomes = [complete.join().unwrap(), cancel.join().unwrap()];
+        assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
+        let states = group
+            .output_result_ids
+            .iter()
+            .map(|id| store.result(*id).unwrap().state.clone())
+            .collect::<Vec<_>>();
+        assert!(
+            states
+                .iter()
+                .all(|state| matches!(state, ResultState::Ready(_)))
+                || states
+                    .iter()
+                    .all(|state| matches!(state, ResultState::Cancelled))
+        );
+    }
+
+    #[test]
+    fn wait_terminal_observes_ready_failed_and_cancelled_without_lost_wakeup() {
+        for terminal in ["ready", "failed", "cancelled"] {
+            let store = Arc::new(ResultStore::new());
+            let group = store
+                .create_pending_group(test_provenance(14), &test_outputs([terminal]))
+                .unwrap();
+            let result_id = group.output_result_ids[0];
+            let waiter_store = Arc::clone(&store);
+            let (waiting_tx, waiting_rx) = std::sync::mpsc::channel();
+            let waiter = std::thread::spawn(move || {
+                waiting_tx.send(()).unwrap();
+                waiter_store.wait_terminal(result_id, &CancellationToken::new(), None)
+            });
+            waiting_rx.recv().unwrap();
+            match terminal {
+                "ready" => store
+                    .complete_group(
+                        &group,
+                        vec![StoredValue::scalar(Value::Null)].into_boxed_slice(),
+                    )
+                    .unwrap(),
+                "failed" => store
+                    .fail_group(&group, Arc::new(ResultFailure::new("failed")))
+                    .unwrap(),
+                "cancelled" => store.cancel_group(&group).unwrap(),
+                _ => unreachable!(),
+            }
+            let result = waiter.join().unwrap().unwrap();
+            assert!(result.state.is_terminal());
+        }
+
+        let store = ResultStore::new();
+        let ready = create_ready_test_group(&store, 15);
+        assert!(matches!(
+            store
+                .wait_terminal(ready.output_result_ids[0], &CancellationToken::new(), None)
+                .unwrap()
+                .state,
+            ResultState::Ready(_)
+        ));
+    }
+
+    #[test]
+    fn wait_terminal_reports_missing_cancellation_and_deadline() {
+        let store = ResultStore::new();
+        assert!(matches!(
+            store.wait_terminal(ResultId::new(u64::MAX), &CancellationToken::new(), None),
+            Err(ResultStoreError::UnknownResult(_))
+        ));
+
+        let cancelled = CancellationToken::new();
+        let cancelled_group = store
+            .create_pending_group(test_provenance(16), &test_outputs(["cancelled_wait"]))
+            .unwrap();
+        cancelled.cancel();
+        assert!(matches!(
+            store.wait_terminal(cancelled_group.output_result_ids[0], &cancelled, None),
+            Err(ResultStoreError::WaitCancelled)
+        ));
+
+        let deadline_group = store
+            .create_pending_group(test_provenance(17), &test_outputs(["deadline_wait"]))
+            .unwrap();
+        assert!(matches!(
+            store.wait_terminal(
+                deadline_group.output_result_ids[0],
+                &CancellationToken::new(),
+                Some(RunDeadline::after(std::time::Duration::from_millis(1)))
+            ),
+            Err(ResultStoreError::WaitDeadlineExceeded)
+        ));
+    }
+
+    #[test]
+    fn reused_group_records_occurrences_without_rewriting_producers() {
+        let store = ResultStore::new();
+        let outputs = test_outputs(["left", "right"]);
+        let produced = store
+            .create_pending_group(test_provenance(18), &outputs)
+            .unwrap();
+        store
+            .complete_group(
+                &produced,
+                vec![
+                    StoredValue::scalar(Value::Null),
+                    StoredValue::scalar(Value::Null),
+                ]
+                .into_boxed_slice(),
+            )
+            .unwrap();
+        let producer = store
+            .result(produced.output_result_ids[0])
+            .unwrap()
+            .provenance
+            .clone();
+        let result_count = store.authoritative_result_count_for_test();
+        let mut reuse = test_provenance(19);
+        reuse.usage = ResultUsage::Reused {
+            original_activation_id: produced.activation_id,
+        };
+
+        let reused = store
+            .record_reused_group(reuse.clone(), &outputs, &produced.output_result_ids)
+            .unwrap();
+
+        assert_eq!(reused.output_result_ids, produced.output_result_ids);
+        assert_eq!(store.authoritative_result_count_for_test(), result_count);
+        assert_eq!(
+            store
+                .result(produced.output_result_ids[0])
+                .unwrap()
+                .provenance,
+            producer
+        );
+        let history = store.pin_history(outputs[0].output.as_ref().unwrap());
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[1].activation_id, reuse.activation_id);
+        assert_eq!(
+            history[1].usage,
+            ResultUsage::Reused {
+                original_activation_id: produced.activation_id
+            }
+        );
+    }
+
+    #[test]
+    fn reused_group_validates_count_order_compatibility_and_ready_state() {
+        let store = ResultStore::new();
+        let outputs = test_outputs(["left", "right"]);
+        let ready = store
+            .create_pending_group(test_provenance(20), &outputs)
+            .unwrap();
+        store
+            .complete_group(
+                &ready,
+                vec![
+                    StoredValue::scalar(Value::Null),
+                    StoredValue::scalar(Value::Null),
+                ]
+                .into_boxed_slice(),
+            )
+            .unwrap();
+        let reuse = |original_activation_id| {
+            let mut provenance = test_provenance(21);
+            provenance.usage = ResultUsage::Reused {
+                original_activation_id,
+            };
+            provenance
+        };
+
+        assert!(matches!(
+            store.record_reused_group(
+                reuse(ready.activation_id),
+                &outputs,
+                &ready.output_result_ids[..1]
+            ),
+            Err(ResultStoreError::OutputCount { .. })
+        ));
+        assert!(matches!(
+            store.record_reused_group(
+                reuse(ready.activation_id),
+                &outputs,
+                &[ready.output_result_ids[1], ready.output_result_ids[0]]
+            ),
+            Err(ResultStoreError::ReusedOutputMismatch { .. })
+        ));
+        let mut incompatible = outputs.clone();
+        incompatible[0].presentation = ResultPresentation::default();
+        incompatible[0].value = ValueRef::new(99);
+        assert!(matches!(
+            store.record_reused_group(
+                reuse(ready.activation_id),
+                &incompatible,
+                &ready.output_result_ids
+            ),
+            Err(ResultStoreError::ReusedOutputMismatch { .. })
+        ));
+
+        let foreign_store = ResultStore::new();
+        let foreign_outputs = test_outputs(["foreign"]);
+        let foreign = create_ready_test_group(&foreign_store, 22);
+        assert!(matches!(
+            store.record_reused_group(
+                reuse(foreign.activation_id),
+                &foreign_outputs,
+                &foreign.output_result_ids
+            ),
+            Err(ResultStoreError::UnknownActivation(_))
+        ));
+
+        let pending_outputs = test_outputs(["pending"]);
+        let pending = store
+            .create_pending_group(test_provenance(22), &pending_outputs)
+            .unwrap();
+        assert!(matches!(
+            store.record_reused_group(
+                reuse(pending.activation_id),
+                &pending_outputs,
+                &pending.output_result_ids
+            ),
+            Err(ResultStoreError::ReusedResultNotReady(_))
+        ));
+        assert_eq!(
+            store.pin_history(outputs[0].output.as_ref().unwrap()).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn result_ids_are_process_global_across_session_stores() {
+        let first_store = ResultStore::new();
+        let second_store = ResultStore::new();
+        let first = first_store
+            .create_pending_group(test_provenance(20), &test_outputs(["first"]))
+            .unwrap();
+        let second = second_store
+            .create_pending_group(test_provenance(21), &test_outputs(["second"]))
+            .unwrap();
+
+        assert!(second.output_result_ids[0].get() > first.output_result_ids[0].get());
+    }
+
+    #[test]
+    fn result_store_never_evicts_within_the_session() {
+        let store = ResultStore::new();
+        let first = create_ready_test_group(&store, 1);
+        for activation in 2..=5000 {
+            create_ready_test_group(&store, activation);
+        }
+        assert!(store.result(first.output_result_ids[0]).is_some());
+    }
+
+    #[test]
+    fn stored_value_pages_and_opens_independent_readers() {
+        let value = StoredValue::sequence(
+            vec![Value::Integer(1), Value::Integer(2), Value::Integer(3)].into_boxed_slice(),
+        );
+        assert_eq!(value.kind(), StoredValueKind::Sequence);
+        assert_eq!(value.len(), 3);
+        assert_eq!(value.page(1, 1).unwrap().as_ref(), &[Value::Integer(2)]);
+        let mut first = value.open_reader().unwrap();
+        let mut second = value.open_reader().unwrap();
+        assert_eq!(first.next().unwrap().unwrap(), Value::Integer(1));
+        assert_eq!(second.next().unwrap().unwrap(), Value::Integer(1));
+    }
+
+    #[test]
+    fn dropping_the_session_store_releases_spill_backing() {
+        let transient = std::env::temp_dir().join(format!(
+            "yssbi-result-store-test-{}.jsonf",
+            uuid::Uuid::new_v4()
+        ));
+        let metadata = super::super::spill::write_spill(
+            &transient,
+            vec![Ok(Value::Integer(1))].into_iter(),
+            &CancellationToken::new(),
+            |_| Ok(()),
+        )
+        .unwrap();
+        let spill = Arc::new(super::super::spill::SpillStorage::new(
+            transient,
+            metadata,
+            ArtifactValueKind::Sequence,
+            None,
+            [0; 32],
+            None,
+        ));
+        spill.promote(&CancellationToken::new(), None).unwrap();
+        let durable = spill.path_for_test();
+        assert!(durable.exists());
+
+        {
+            let store = ResultStore::new();
+            let group = store
+                .create_pending_group(test_provenance(13), &test_outputs(["result"]))
+                .unwrap();
+            store
+                .complete_group(
+                    &group,
+                    vec![StoredValue::spill_backed(spill)].into_boxed_slice(),
+                )
+                .unwrap();
+        }
+
+        assert!(!durable.exists());
     }
 }

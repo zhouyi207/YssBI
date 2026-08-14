@@ -6,7 +6,7 @@ use crate::node_system::catalog::{
 use crate::node_system::registry::NodeRegistry;
 use crate::node_system::runtime::{
     CompiledParameterStore, FunctionPlanStore, KernelRegistry, ProjectRunRegistry, ResultStore,
-    build_builtin_kernel_registry,
+    SessionMemoization, build_builtin_kernel_registry,
 };
 use crate::tabular::VariableTabularCache;
 use std::collections::HashMap;
@@ -21,6 +21,7 @@ pub struct ProjectStore {
     pub compiled_parameters: Arc<RwLock<CompiledParameterStore>>,
     pub function_plans: Arc<FunctionPlanStore>,
     pub results: ResultStore,
+    pub memoization: Arc<SessionMemoization>,
     pub runs: Arc<ProjectRunRegistry>,
     pub trace_sink: Arc<BoundedTraceSink>,
     pub project_session_id: ProjectSessionId,
@@ -59,6 +60,7 @@ impl ProjectStore {
             compiled_parameters: Arc::new(RwLock::new(CompiledParameterStore::new())),
             function_plans,
             results: ResultStore::new(),
+            memoization: Arc::new(SessionMemoization::new()),
             runs: Arc::new(ProjectRunRegistry::new()),
             trace_sink: Arc::new(BoundedTraceSink::default()),
             project_session_id,
@@ -79,12 +81,17 @@ impl ProjectStore {
             compiled_parameters: Arc::new(RwLock::new(CompiledParameterStore::new())),
             function_plans,
             results: ResultStore::new(),
+            memoization: Arc::new(SessionMemoization::new()),
             runs: Arc::new(ProjectRunRegistry::new()),
             trace_sink: Arc::new(BoundedTraceSink::default()),
             project_session_id,
             #[cfg(test)]
             drop_test_hook: None,
         }
+    }
+
+    pub(crate) fn finalize_session(&self) {
+        self.memoization.finalize();
     }
 
     #[cfg(test)]
@@ -126,6 +133,10 @@ mod tests {
         ));
         assert!(Arc::ptr_eq(&scratch.catalog, &authoritative.catalog));
         assert!(Arc::ptr_eq(&scratch.kernels, &authoritative.kernels));
+        assert!(!Arc::ptr_eq(
+            &scratch.memoization,
+            &authoritative.memoization
+        ));
         assert_eq!(scratch.databases.len(), authoritative.databases.len());
         assert_eq!(
             scratch.variable_tabular.len(),
@@ -133,6 +144,157 @@ mod tests {
         );
         scratch.variable_tabular.clear();
         assert_eq!(authoritative.variable_tabular.len(), 1);
+    }
+
+    #[test]
+    fn replacing_project_session_invalidates_all_memo_entries() {
+        use crate::node_system::analysis::{ResourceVersionSet, RunId};
+        use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
+        use crate::node_system::plan::{
+            ExecutionSemanticsVersion, OperationStableId, PlannedValueContract, ResultPresentation,
+            ValueRef,
+        };
+        use crate::node_system::protocol::Value;
+        use crate::node_system::runtime::{
+            ActivationId, ActivationProvenance, CancellationToken, DemandFingerprint,
+            OperationMemoKey, PendingOutputDescriptor, ResultId, ResultUsage, StoredValue,
+        };
+
+        let old = ProjectStore::new();
+        let activation_id = ActivationId::next().unwrap();
+        let group = old
+            .results
+            .create_pending_group(
+                ActivationProvenance {
+                    run_id: RunId::new(1),
+                    activation_id,
+                    graph_path: GraphResourcePath("events/replaced".into()),
+                    graph_revision: GraphRevision::new(1),
+                    node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+                    created_at_ms: 1,
+                    usage: ResultUsage::Produced,
+                },
+                &[PendingOutputDescriptor {
+                    value: ValueRef::new(0),
+                    output: None,
+                    presentation: ResultPresentation::Inspector,
+                    contract: PlannedValueContract::opaque(),
+                }],
+            )
+            .unwrap();
+        old.results
+            .complete_group(
+                &group,
+                vec![StoredValue::scalar(Value::Integer(1))].into_boxed_slice(),
+            )
+            .unwrap();
+        let old_result_id = group.output_result_ids[0];
+        let key = OperationMemoKey {
+            operation: OperationStableId::new("project-session-replacement").unwrap(),
+            input_fingerprints: Box::new([]),
+            resource_versions: ResourceVersionSet::new(),
+            semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+            computation_settings:
+                crate::node_system::runtime::ComputationSettingsFingerprint::from_bytes([3; 32]),
+            demand: DemandFingerprint::from_bytes([2; 32]),
+        };
+        old.memoization
+            .get_or_produce(key.clone(), &CancellationToken::new(), || {
+                Ok(vec![old_result_id].into_boxed_slice())
+            })
+            .unwrap();
+
+        old.finalize_session();
+        let replacement = ProjectStore::new();
+
+        assert!(replacement.results.result(old_result_id).is_none());
+        assert_eq!(
+            old.memoization
+                .get_or_produce(key.clone(), &CancellationToken::new(), || Ok(vec![
+                    ResultId::new(2)
+                ]
+                .into_boxed_slice()),),
+            Err(crate::node_system::runtime::RunError::Cancelled)
+        );
+        assert_eq!(
+            replacement
+                .memoization
+                .get_or_produce(key, &CancellationToken::new(), || {
+                    Ok(vec![ResultId::new(2)].into_boxed_slice())
+                })
+                .unwrap()
+                .as_ref(),
+            &[ResultId::new(2)]
+        );
+    }
+
+    #[test]
+    fn project_replacement_drains_memo_producer_and_waiter() {
+        use crate::node_system::analysis::ResourceVersionSet;
+        use crate::node_system::plan::{ExecutionSemanticsVersion, OperationStableId};
+        use crate::node_system::runtime::{
+            CancellationToken, ComputationSettingsFingerprint, DemandFingerprint,
+            MemoCommitCheckpoint, OperationMemoKey, ResultId, RunError,
+        };
+        use std::sync::{Arc, Barrier, mpsc};
+        use std::time::Duration;
+
+        let store = Arc::new(ProjectStore::new());
+        let key = OperationMemoKey {
+            operation: OperationStableId::new("project-replacement-drain").unwrap(),
+            input_fingerprints: Box::new([]),
+            resource_versions: ResourceVersionSet::new(),
+            semantics_version: ExecutionSemanticsVersion::from_bytes([1; 32]),
+            computation_settings: ComputationSettingsFingerprint::from_bytes([3; 32]),
+            demand: DemandFingerprint::from_bytes([2; 32]),
+        };
+        let producer_started = Arc::new(Barrier::new(2));
+        let release_producer = Arc::new(Barrier::new(2));
+        let producer = {
+            let memo = Arc::clone(&store.memoization);
+            let key = key.clone();
+            let producer_started = Arc::clone(&producer_started);
+            let release_producer = Arc::clone(&release_producer);
+            std::thread::spawn(move || {
+                memo.get_or_produce(key, &CancellationToken::new(), || {
+                    producer_started.wait();
+                    release_producer.wait();
+                    Ok(vec![ResultId::new(1)].into_boxed_slice())
+                })
+            })
+        };
+        producer_started.wait();
+        let waiter_registered = Arc::new(Barrier::new(2));
+        let (waiter_tx, waiter_rx) = mpsc::channel();
+        let waiter = {
+            let memo = Arc::clone(&store.memoization);
+            let key = key.clone();
+            let waiter_registered = Arc::clone(&waiter_registered);
+            std::thread::spawn(move || {
+                let result = memo.get_or_produce_with_commit_checkpoint(
+                    key,
+                    &CancellationToken::new(),
+                    || panic!("finalized waiter must not produce"),
+                    |checkpoint| {
+                        if checkpoint == MemoCommitCheckpoint::WaiterRegistered {
+                            waiter_registered.wait();
+                        }
+                    },
+                );
+                waiter_tx.send(result).unwrap();
+            })
+        };
+        waiter_registered.wait();
+
+        store.finalize_session();
+
+        assert_eq!(
+            waiter_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
+            Err(RunError::Cancelled)
+        );
+        release_producer.wait();
+        assert_eq!(producer.join().unwrap(), Err(RunError::Cancelled));
+        waiter.join().unwrap();
     }
 
     #[test]

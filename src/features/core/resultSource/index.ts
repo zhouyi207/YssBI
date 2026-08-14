@@ -1,14 +1,12 @@
 export type {
-  SourcePageState,
-  SourceRendererKind,
-  SourceStructKind,
+  ResultPageState,
+  ResultRendererKind,
   PlotChart,
   Presentation,
   ReportKind,
-  SourceDescriptor,
-  SourceKind,
-  SourcePage,
-  SourceValue,
+  ResultDescriptor,
+  ResultPage,
+  ResultValue,
 } from './types';
 
 export {
@@ -17,16 +15,18 @@ export {
   presentationRouteForDescriptor,
 } from './presentation';
 export {
-  resolveInspectableSource,
-  runtimePinRef,
-  windowSourceRef,
-  type InspectableSourceRef,
-} from './inspectableSource';
-export { resolveSourceRenderer } from './resolveRenderer';
-export { useSourceValue } from './useSourceValue';
-export { usePagedSourceRows } from './usePagedSourceRows';
-export { UnifiedSourceView } from './components/UnifiedSourceView';
-export { ReportSourceView } from './components/ReportSourceView';
-export { SourceViewShell } from './components/SourceViewShell';
+  outputPinRef,
+  resolveInspectableResult,
+  resolveInspectableResultRef,
+  resultRef,
+  type InspectableResultRef,
+  type ResolvedInspectableResultRef,
+} from './inspectableResult';
+export { resolveResultRenderer } from './resolveRenderer';
+export { useResultValue } from './useResultValue';
+export { usePagedResultRows } from './usePagedResultRows';
+export { UnifiedResultView } from './components/UnifiedResultView';
+export { ReportResultView } from './components/ReportResultView';
+export { ResultViewShell } from './components/ResultViewShell';
 export { JsonTreeView } from './components/JsonTreeView';
 export { ReadOnlyDataGrid } from './components/ReadOnlyDataGrid';

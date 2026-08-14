@@ -1,8 +1,7 @@
 use super::{
-    Artifact, ArtifactKind, ArtifactValueKind, CancellationToken, DataSeriesMetadata,
-    MaterializedArtifact, ReplayArtifact, RunDeadline, RunError, RunId, RunPhase, RuntimeValue,
-    SpillArtifact, StreamReceiveError, StreamSendError, StreamValue,
-    bounded_stream_channel_with_deadline, check_terminal,
+    Artifact, ArtifactKind, ArtifactValueKind, CancellationToken, DataSeriesMetadata, RunDeadline,
+    RunError, RunId, RunPhase, RuntimeValue, StoredValue, StreamReceiveError, StreamSendError,
+    StreamValue, bounded_stream_channel_with_deadline, check_terminal,
 };
 use crate::node_system::plan::{MaterializationLimits, PlannedAdapter};
 use crate::node_system::protocol::Value;
@@ -59,6 +58,48 @@ pub(crate) struct MemoryReservation {
     bytes: u64,
 }
 
+#[derive(Debug)]
+pub(crate) struct SpillReservation {
+    used: Arc<Mutex<u64>>,
+    bytes: u64,
+}
+
+impl SpillReservation {
+    fn new(used: Arc<Mutex<u64>>) -> Self {
+        Self { used, bytes: 0 }
+    }
+
+    fn try_extend(&mut self, bytes: u64, limit: u64) -> Result<(), RunError> {
+        let reserved = self
+            .bytes
+            .checked_add(bytes)
+            .ok_or_else(|| RunError::Stream("spill reservation overflowed".into()))?;
+        let mut used = self.used.lock().unwrap_or_else(|error| error.into_inner());
+        let next = used
+            .checked_add(bytes)
+            .ok_or_else(|| RunError::Stream("spill directory usage overflowed".into()))?;
+        if next > limit {
+            return Err(RunError::Stream(
+                "run spill directory budget exceeded".into(),
+            ));
+        }
+        *used = next;
+        self.bytes = reserved;
+        Ok(())
+    }
+
+    fn bytes(&self) -> u64 {
+        self.bytes
+    }
+}
+
+impl Drop for SpillReservation {
+    fn drop(&mut self) {
+        let mut used = self.used.lock().unwrap_or_else(|error| error.into_inner());
+        *used = used.saturating_sub(self.bytes);
+    }
+}
+
 impl MemoryReservation {
     fn new(used: Arc<Mutex<u64>>) -> Self {
         Self { used, bytes: 0 }
@@ -96,10 +137,12 @@ pub struct RunResourceOwner {
     spill_root: PathBuf,
     remove_root: bool,
     next_spill: AtomicU64,
-    spill_bytes: Mutex<u64>,
+    spill_bytes: Arc<Mutex<u64>>,
     memory_bytes: Arc<Mutex<u64>>,
     lifecycle: Mutex<OwnerLifecycle>,
     cleanup_ready: Condvar,
+    #[cfg(test)]
+    pending_writer_count: AtomicU64,
 }
 
 impl RunResourceOwner {
@@ -181,13 +224,15 @@ impl RunResourceOwner {
             spill_root,
             remove_root,
             next_spill: AtomicU64::new(1),
-            spill_bytes: Mutex::new(0),
+            spill_bytes: Arc::new(Mutex::new(0)),
             memory_bytes: Arc::new(Mutex::new(0)),
             lifecycle: Mutex::new(OwnerLifecycle {
                 phase: OwnerPhase::Active,
                 producers: Vec::new(),
             }),
             cleanup_ready: Condvar::new(),
+            #[cfg(test)]
+            pending_writer_count: AtomicU64::new(0),
         }
     }
 
@@ -197,6 +242,10 @@ impl RunResourceOwner {
 
     pub const fn deadline(&self) -> Option<RunDeadline> {
         self.deadline
+    }
+
+    pub(crate) fn cancellation(&self) -> CancellationToken {
+        self.cancellation.clone()
     }
 
     pub fn stream_from_values<I>(&self, values: I) -> Result<StreamValue, RunError>
@@ -291,65 +340,84 @@ impl RunResourceOwner {
         ))
     }
 
-    pub(crate) fn materialize_artifact(
+    pub(crate) fn store_stream(
         &self,
-        kind: ArtifactKind,
-        values: impl Iterator<Item = Result<Value, RunError>>,
-    ) -> Result<Artifact, RunError> {
-        let RuntimeValue::Artifact(artifact) = materialize_values(
-            kind,
-            ArtifactValueKind::Sequence,
-            None,
-            Box::new(values),
-            self.budgets.materialization_memory_bytes,
-            None,
-            self,
-            &self.cancellation,
-        )?
-        else {
-            unreachable!("materialization always returns an artifact");
-        };
-        Ok(artifact)
+        stream: StreamValue,
+        metadata: Option<DataSeriesMetadata>,
+        limits: Option<&MaterializationLimits>,
+    ) -> Result<StoredValue, RunError> {
+        self.store_values(StreamRuntimeValues { stream }, metadata, limits)
     }
 
-    fn spill_values(
+    pub(crate) fn store_values(
         &self,
         values: impl Iterator<Item = Result<Value, RunError>>,
-    ) -> Result<SpillArtifact, RunError> {
-        check_terminal(&self.cancellation, self.deadline, RunPhase::AdapterIo)?;
-        let sequence = self.next_spill.fetch_add(1, Ordering::Relaxed);
-        let path = self.spill_root.join(format!("spill-{sequence}.jsonf"));
-        let mut reserved = 0_u64;
-        let result = super::spill::write_spill(&path, values, &self.cancellation, |bytes| {
-            check_terminal(&self.cancellation, self.deadline, RunPhase::AdapterIo)?;
-            let mut used = self
-                .spill_bytes
-                .lock()
-                .unwrap_or_else(|error| error.into_inner());
-            let next = used
-                .checked_add(bytes)
-                .ok_or_else(|| RunError::Stream("spill directory usage overflowed".into()))?;
-            if next > self.budgets.spill_directory_bytes {
-                return Err(RunError::Stream(
-                    "run spill directory budget exceeded".into(),
-                ));
-            }
-            *used = next;
-            reserved += bytes;
-            Ok(())
-        });
-        match result {
-            Ok(metadata) => Ok(SpillArtifact::new(path, metadata)),
-            Err(error) => {
-                let _ = fs::remove_file(&path);
-                let mut used = self
-                    .spill_bytes
-                    .lock()
-                    .unwrap_or_else(|poison| poison.into_inner());
-                *used = used.saturating_sub(reserved);
-                Err(error)
-            }
+        metadata: Option<DataSeriesMetadata>,
+        limits: Option<&MaterializationLimits>,
+    ) -> Result<StoredValue, RunError> {
+        let mut writer = self.pending_value_writer(metadata, limits);
+        for value in values {
+            writer.push_result(value)?;
         }
+        writer.finish()
+    }
+
+    /// Operation-local physical builder for an already allocated output-group slot.
+    /// It has no independent result identity and cannot publish into `ResultStore`.
+    pub(crate) fn pending_value_writer(
+        &self,
+        metadata: Option<DataSeriesMetadata>,
+        limits: Option<&MaterializationLimits>,
+    ) -> PendingValueWriter<'_> {
+        self.pending_value_writer_with_memory_limit(
+            metadata,
+            limits,
+            self.budgets.materialization_memory_bytes,
+        )
+    }
+
+    fn pending_value_writer_with_memory_limit(
+        &self,
+        metadata: Option<DataSeriesMetadata>,
+        limits: Option<&MaterializationLimits>,
+        memory_limit: u64,
+    ) -> PendingValueWriter<'_> {
+        #[cfg(test)]
+        self.pending_writer_count.fetch_add(1, Ordering::Relaxed);
+        let logical_digest = super::stored_value::logical_digest_seed(
+            if metadata.is_some() {
+                ArtifactValueKind::DataSeries
+            } else {
+                ArtifactValueKind::Sequence
+            },
+            metadata.as_ref(),
+        );
+        PendingValueWriter {
+            owner: self,
+            metadata,
+            limits: limits.cloned(),
+            memory_limit,
+            values: Vec::new(),
+            reservation: Some(self.memory_reservation()),
+            encoded_bytes: 0,
+            value_count: 0,
+            staged_path: None,
+            spill_reservation: Some(self.spill_reservation()),
+            max_record_bytes: 0,
+            logical_digest,
+            poisoned: None,
+            #[cfg(test)]
+            fail_next_append: false,
+        }
+    }
+
+    fn spill_reservation(&self) -> SpillReservation {
+        SpillReservation::new(Arc::clone(&self.spill_bytes))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn pending_writer_count_for_test(&self) -> u64 {
+        self.pending_writer_count.load(Ordering::Relaxed)
     }
 
     pub(crate) fn cleanup(&self) -> Box<[Box<str>]> {
@@ -513,6 +581,237 @@ impl Drop for RunResourceOwner {
     }
 }
 
+pub(crate) struct PendingValueWriter<'a> {
+    owner: &'a RunResourceOwner,
+    metadata: Option<DataSeriesMetadata>,
+    limits: Option<MaterializationLimits>,
+    memory_limit: u64,
+    values: Vec<Value>,
+    reservation: Option<MemoryReservation>,
+    encoded_bytes: u64,
+    value_count: u64,
+    staged_path: Option<PathBuf>,
+    spill_reservation: Option<SpillReservation>,
+    max_record_bytes: u64,
+    logical_digest: [u8; 32],
+    poisoned: Option<Box<str>>,
+    #[cfg(test)]
+    fail_next_append: bool,
+}
+
+impl PendingValueWriter<'_> {
+    fn push_result(&mut self, value: Result<Value, RunError>) -> Result<(), RunError> {
+        match value {
+            Ok(value) => self.push(value),
+            Err(error) => self.poison(error),
+        }
+    }
+
+    pub fn push(&mut self, value: Value) -> Result<(), RunError> {
+        if let Some(message) = &self.poisoned {
+            return Err(RunError::Stream(message.clone()));
+        }
+        match self.push_inner(value) {
+            Ok(()) => Ok(()),
+            Err(error) => self.poison(error),
+        }
+    }
+
+    fn push_inner(&mut self, value: Value) -> Result<(), RunError> {
+        check_terminal(
+            &self.owner.cancellation,
+            self.owner.deadline,
+            RunPhase::AdapterIo,
+        )?;
+        let value_bytes = super::spill::serialized_value_len(&value)?;
+        let next_count = self
+            .value_count
+            .checked_add(1)
+            .ok_or_else(|| RunError::Stream("materialized value count overflowed".into()))?;
+        let next_bytes = self
+            .encoded_bytes
+            .checked_add(value_bytes)
+            .ok_or_else(|| RunError::Stream("materialized byte count overflowed".into()))?;
+        if let Some(limits) = &self.limits {
+            if next_count > limits.max_values {
+                return Err(RunError::Stream(
+                    "materialization value limit exceeded".into(),
+                ));
+            }
+            if next_bytes > limits.max_bytes {
+                return Err(RunError::Stream(
+                    "materialization byte limit exceeded".into(),
+                ));
+            }
+        }
+        self.logical_digest =
+            super::stored_value::extend_logical_digest(self.logical_digest, &value);
+        self.value_count = next_count;
+        self.encoded_bytes = next_bytes;
+        self.max_record_bytes = self.max_record_bytes.max(value_bytes);
+
+        if self.staged_path.is_some() {
+            return self.append_spilled(&value, value_bytes);
+        }
+        let reservation = self
+            .reservation
+            .as_mut()
+            .expect("memory writer reservation");
+        if reservation.try_extend(value_bytes, self.memory_limit)? {
+            self.values.push(value);
+            return Ok(());
+        }
+        self.begin_spill(value)
+    }
+
+    fn begin_spill(&mut self, value: Value) -> Result<(), RunError> {
+        let sequence = self.owner.next_spill.fetch_add(1, Ordering::Relaxed);
+        let path = self
+            .owner
+            .spill_root
+            .join(format!("pending-{sequence}.jsonf"));
+        let values = self.values.drain(..).chain(std::iter::once(value));
+        let reservation = self
+            .spill_reservation
+            .as_mut()
+            .expect("pending writer spill reservation");
+        let result =
+            super::spill::write_spill(&path, values.map(Ok), &self.owner.cancellation, |bytes| {
+                check_terminal(
+                    &self.owner.cancellation,
+                    self.owner.deadline,
+                    RunPhase::AdapterIo,
+                )?;
+                reservation.try_extend(bytes, self.owner.budgets.spill_directory_bytes)
+            });
+        match result {
+            Ok(_) => {
+                if let Err(error) = check_terminal(
+                    &self.owner.cancellation,
+                    self.owner.deadline,
+                    RunPhase::AdapterIo,
+                ) {
+                    let _ = fs::remove_file(path);
+                    self.spill_reservation = Some(self.owner.spill_reservation());
+                    return Err(error);
+                }
+                self.reservation.take();
+                self.staged_path = Some(path);
+                Ok(())
+            }
+            Err(error) => {
+                let _ = fs::remove_file(path);
+                self.spill_reservation = Some(self.owner.spill_reservation());
+                Err(error)
+            }
+        }
+    }
+
+    fn append_spilled(&mut self, value: &Value, value_bytes: u64) -> Result<(), RunError> {
+        #[cfg(test)]
+        if std::mem::take(&mut self.fail_next_append) {
+            return Err(RunError::Stream("injected spill append failure".into()));
+        }
+        let record_bytes = 8_u64
+            .checked_add(value_bytes)
+            .ok_or_else(|| RunError::Stream("spill record size overflowed".into()))?;
+        let reservation = self
+            .spill_reservation
+            .as_mut()
+            .expect("pending writer spill reservation");
+        reservation.try_extend(record_bytes, self.owner.budgets.spill_directory_bytes)?;
+        let path = self.staged_path.as_ref().expect("spill path exists");
+        super::spill::append_spill_value(path, value, &self.owner.cancellation, self.owner.deadline)
+            .map(|_| ())
+    }
+
+    fn poison<T>(&mut self, error: RunError) -> Result<T, RunError> {
+        let message: Box<str> = format!("pending value writer failed: {error}").into();
+        self.poisoned = Some(message.clone());
+        if let Some(path) = self.staged_path.take() {
+            let _ = fs::remove_file(path);
+        }
+        self.values.clear();
+        self.reservation.take();
+        self.spill_reservation = Some(self.owner.spill_reservation());
+        Err(RunError::Stream(message))
+    }
+
+    pub fn finish(mut self) -> Result<StoredValue, RunError> {
+        if let Some(message) = &self.poisoned {
+            return Err(RunError::Stream(message.clone()));
+        }
+        if let Err(error) = check_terminal(
+            &self.owner.cancellation,
+            self.owner.deadline,
+            RunPhase::AdapterIo,
+        ) {
+            return self.poison(error);
+        }
+        let value_kind = if self.metadata.is_some() {
+            ArtifactValueKind::DataSeries
+        } else {
+            ArtifactValueKind::Sequence
+        };
+        let logical_digest =
+            super::stored_value::finish_logical_digest(self.logical_digest, self.value_count);
+        let stored = if let Some(path) = self.staged_path.take() {
+            let count = usize::try_from(self.value_count)
+                .map_err(|_| RunError::Stream("spill value count exceeds this platform".into()))?;
+            let storage = Arc::new(super::spill::SpillStorage::new(
+                path,
+                super::spill::SpillMetadata {
+                    bytes: self
+                        .spill_reservation
+                        .as_ref()
+                        .expect("spill reservation")
+                        .bytes(),
+                    count,
+                    max_record_bytes: self.max_record_bytes,
+                },
+                value_kind,
+                self.metadata.take(),
+                logical_digest,
+                self.spill_reservation.take(),
+            ));
+            StoredValue::spill_backed(storage)
+        } else {
+            StoredValue::in_memory_with_digest(
+                Arc::new(super::stored_value::InMemoryStorage::new(
+                    self.values.drain(..).collect::<Vec<_>>().into_boxed_slice(),
+                    value_kind,
+                    self.metadata.take(),
+                    self.reservation.take(),
+                )),
+                logical_digest,
+            )
+        };
+        if let Err(error) = stored.promote(&self.owner.cancellation, self.owner.deadline) {
+            return self.poison(error);
+        }
+        Ok(stored)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn spill_path_for_test(&self) -> Option<PathBuf> {
+        self.staged_path.clone()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fail_next_append_for_test(&mut self) {
+        self.fail_next_append = true;
+    }
+}
+
+impl Drop for PendingValueWriter<'_> {
+    fn drop(&mut self) {
+        if let Some(path) = self.staged_path.take() {
+            let _ = fs::remove_file(path);
+        }
+        self.spill_reservation.take();
+    }
+}
+
 pub fn execute_planned_adapter(
     adapter: &PlannedAdapter,
     value: RuntimeValue,
@@ -545,43 +844,14 @@ pub fn execute_planned_adapter(
             cancellation,
         ),
         PlannedAdapter::Spill { .. } => {
-            let (value_kind, metadata) = artifact_payload(&value);
-            let spill = owner.spill_values(runtime_values(value)?)?;
-            Ok(RuntimeValue::Artifact(
-                Artifact::from_materialized_with_payload(
-                    ArtifactKind::Spilled,
-                    value_kind,
-                    metadata,
-                    MaterializedArtifact::Spilled(spill),
-                ),
-            ))
-        }
-        PlannedAdapter::Replay => {
-            let (value_kind, metadata) = artifact_payload(&value);
-            let spill = match value {
-                RuntimeValue::Artifact(artifact) => {
-                    let existing = match artifact.materialized() {
-                        MaterializedArtifact::Spilled(spill) => Some(spill.clone()),
-                        MaterializedArtifact::Replayable(replay) => Some(replay.spill().clone()),
-                        MaterializedArtifact::InMemory(_) => None,
-                    };
-                    match existing {
-                        Some(spill) => spill,
-                        None => {
-                            owner.spill_values(runtime_values(RuntimeValue::Artifact(artifact))?)?
-                        }
-                    }
-                }
-                value => owner.spill_values(runtime_values(value)?)?,
-            };
-            Ok(RuntimeValue::Artifact(
-                Artifact::from_materialized_with_payload(
-                    ArtifactKind::Replayable,
-                    value_kind,
-                    metadata,
-                    MaterializedArtifact::Replayable(ReplayArtifact::new(spill)),
-                ),
-            ))
+            let (_, metadata) = artifact_payload(&value);
+            let mut writer = owner.pending_value_writer_with_memory_limit(metadata, None, 0);
+            for value in runtime_values(value)? {
+                writer.push_result(value)?;
+            }
+            writer.finish().map(|stored| {
+                RuntimeValue::Artifact(Artifact::from_stored_value(ArtifactKind::Spilled, stored))
+            })
         }
     };
     check_terminal(cancellation, owner.deadline, RunPhase::AdapterIo)?;
@@ -596,82 +866,15 @@ fn materialize(
     owner: &RunResourceOwner,
     cancellation: &CancellationToken,
 ) -> Result<RuntimeValue, RunError> {
-    let (value_kind, metadata) = artifact_payload(&value);
-    materialize_values(
-        kind,
-        value_kind,
-        metadata,
-        runtime_values(value)?,
-        memory_limit,
-        limits,
-        owner,
-        cancellation,
-    )
-}
-
-fn materialize_values(
-    kind: ArtifactKind,
-    value_kind: ArtifactValueKind,
-    metadata: Option<DataSeriesMetadata>,
-    mut source: Box<dyn Iterator<Item = Result<Value, RunError>> + '_>,
-    memory_limit: u64,
-    limits: Option<&MaterializationLimits>,
-    owner: &RunResourceOwner,
-    cancellation: &CancellationToken,
-) -> Result<RuntimeValue, RunError> {
-    let mut buffered = Vec::new();
-    let mut reservation = owner.memory_reservation();
-    let mut encoded_bytes = 0_u64;
-    let mut value_count = 0_u64;
-    while let Some(value) = source.next() {
-        check_terminal(cancellation, owner.deadline, RunPhase::AdapterIo)?;
-        let value = value?;
-        value_count = value_count
-            .checked_add(1)
-            .ok_or_else(|| RunError::Stream("materialized value count overflowed".into()))?;
-        let value_bytes = super::spill::serialized_value_len(&value)?;
-        encoded_bytes = encoded_bytes
-            .checked_add(value_bytes)
-            .ok_or_else(|| RunError::Stream("materialized byte count overflowed".into()))?;
-        if let Some(limits) = limits {
-            if value_count > limits.max_values {
-                return Err(RunError::Stream(
-                    "materialization value limit exceeded".into(),
-                ));
-            }
-            if encoded_bytes > limits.max_bytes {
-                return Err(RunError::Stream(
-                    "materialization byte limit exceeded".into(),
-                ));
-            }
-        }
-        if !reservation.try_extend(value_bytes, memory_limit)? {
-            let values = buffered
-                .into_iter()
-                .chain(std::iter::once(value))
-                .map(Ok)
-                .chain(source);
-            let spill = owner.spill_values(values)?;
-            return Ok(RuntimeValue::Artifact(
-                Artifact::from_materialized_with_payload(
-                    kind,
-                    value_kind,
-                    metadata,
-                    MaterializedArtifact::Spilled(spill),
-                ),
-            ));
-        }
-        buffered.push(value);
+    let (_, metadata) = artifact_payload(&value);
+    let mut writer = owner.pending_value_writer_with_memory_limit(metadata, limits, memory_limit);
+    for value in runtime_values(value)? {
+        writer.push_result(value)?;
     }
-    Ok(RuntimeValue::Artifact(
-        Artifact::from_materialized_with_reservation(
-            kind,
-            value_kind,
-            metadata,
-            MaterializedArtifact::InMemory(buffered.into_boxed_slice()),
-            reservation,
-        ),
-    ))
+    check_terminal(cancellation, owner.deadline, RunPhase::AdapterIo)?;
+    writer
+        .finish()
+        .map(|stored| RuntimeValue::Artifact(Artifact::from_stored_value(kind, stored)))
 }
 
 fn artifact_payload(value: &RuntimeValue) -> (ArtifactValueKind, Option<DataSeriesMetadata>) {

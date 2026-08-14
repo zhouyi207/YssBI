@@ -80,15 +80,15 @@ function installGraph(
 function emitSuccessfulPreview(
   demand: ExecutionDemandDto,
   onEvent?: (event: RunEvent) => void,
-  sourceId = 'source-1',
+  resultId = 'result-1',
 ): void {
   if (demand.type !== 'pinPreview') throw new Error('expected pin preview demand');
   onEvent?.(runEvent({ type: 'runStarted' }));
   onEvent?.(runEvent({
-    type: 'outputReady',
+    type: 'outputResultChanged',
     output: demand.output,
     generation: demand.generation,
-    sourceId,
+    resultId,
   }));
   onEvent?.(runEvent({ type: 'runCompleted' }));
 }
@@ -157,7 +157,7 @@ describe('requestPinPreview', () => {
     );
     expect(useExecutionStore.getState().getGraph(eventGraphPath).pinPreviews.get(
       pinPreviewCacheKey(eventGraphPath, address),
-    )).toMatchObject({ status: 'ready', sourceId: 'source-1' });
+    )).toMatchObject({ status: 'ready', resultId: 'result-1' });
   });
 
   it('settles capture failure as a pure stale lifecycle rejection', async () => {
@@ -351,10 +351,10 @@ describe('requestPinPreview', () => {
         onEvent?.(runEvent({ type: 'runStarted' }));
         replace();
         onEvent?.(runEvent({
-          type: 'outputReady',
+          type: 'outputResultChanged',
           output: demand.output,
           generation: demand.generation,
-          sourceId: 'source-stale-projection',
+          resultId: 'result-stale-projection',
         }));
         onEvent?.(runEvent({ type: 'runCompleted' }));
         return { runId: 'run-1' };
@@ -433,10 +433,10 @@ describe('requestPinPreview', () => {
       if (settlement === 'resolution') {
         emit(runEvent({ type: 'runStarted' }));
         emit(runEvent({
-          type: 'outputReady',
+          type: 'outputResultChanged',
           output: { graphPath: eventGraphPath, port: outputAddress },
           generation: originalGeneration ?? 0,
-          sourceId: 'source-stale-project',
+          resultId: 'result-stale-project',
         }));
         emit(runEvent({ type: 'runCompleted' }));
         resolveExecution({ runId: 'run-1' });
@@ -555,10 +555,10 @@ describe('requestPinPreview', () => {
 
     callbacks[0](runEvent({ type: 'runStarted' }, 'run-old'));
     callbacks[0](runEvent({
-      type: 'outputReady',
+      type: 'outputResultChanged',
       output: { graphPath: eventGraphPath, port: outputAddress },
       generation: 1,
-      sourceId: 'source-old',
+      resultId: 'result-old',
     }, 'run-old'));
     callbacks[0](runEvent({ type: 'runCompleted' }, 'run-old'));
     resolvers[0]({ runId: 'run-old' });
@@ -575,10 +575,10 @@ describe('requestPinPreview', () => {
 
     callbacks[1](runEvent({ type: 'runStarted' }, 'run-new'));
     callbacks[1](runEvent({
-      type: 'outputReady',
+      type: 'outputResultChanged',
       output: { graphPath: eventGraphPath, port: outputAddress },
       generation: 2,
-      sourceId: 'source-new',
+      resultId: 'result-new',
     }, 'run-new'));
     callbacks[1](runEvent({ type: 'runCompleted' }, 'run-new'));
     resolvers[1]({ runId: 'run-new' });
@@ -586,7 +586,7 @@ describe('requestPinPreview', () => {
 
     expect(useExecutionStore.getState().getGraph(eventGraphPath).pinPreviews.get(
       pinPreviewCacheKey(eventGraphPath, outputAddress),
-    )).toMatchObject({ status: 'ready', sourceId: 'source-new' });
+    )).toMatchObject({ status: 'ready', resultId: 'result-new' });
   });
 
   it('settles a stale wire generation as a pure no-op', async () => {
@@ -596,10 +596,10 @@ describe('requestPinPreview', () => {
         if (demand.type !== 'pinPreview') throw new Error('expected pin preview demand');
         onEvent?.(runEvent({ type: 'runStarted' }));
         onEvent?.(runEvent({
-          type: 'outputReady',
+          type: 'outputResultChanged',
           output: demand.output,
           generation: demand.generation + 1,
-          sourceId: 'source-stale-generation',
+          resultId: 'result-stale-generation',
         }));
         onEvent?.(runEvent({ type: 'runCompleted' }));
         return { runId: 'run-1' };

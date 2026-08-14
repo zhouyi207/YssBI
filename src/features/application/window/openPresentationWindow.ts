@@ -35,13 +35,13 @@ export function presentationWindowPayloadFromDescriptor(
 }
 
 export async function openPresentationWindow(
-  sourceId: string,
+  resultId: string,
   presentation: PresentationWindowPayload,
 ): Promise<void> {
   const route = presentation.route || '/info';
   const labelKind = route.replace(/^\//, '') || 'source';
   const label = `${labelKind}-${Math.random().toString(36).substring(2, 10)}`;
-  const params = new URLSearchParams({ sourceId });
+  const params = new URLSearchParams({ resultId });
   if (presentation.plotType) params.set('plotType', presentation.plotType);
   const url = `index.html#${route}?${params.toString()}`;
 
@@ -54,12 +54,12 @@ export async function openPresentationWindow(
 }
 
 export async function openPresentationWindowSafe(
-  sourceId: string,
+  resultId: string,
   presentation: PresentationWindowPayload,
   logTag = 'Window',
 ): Promise<void> {
   try {
-    await openPresentationWindow(sourceId, presentation);
+    await openPresentationWindow(resultId, presentation);
   } catch (e) {
     logger.exec.error(
       `Failed to open window: ${e instanceof Error ? e.message : String(e)}`,

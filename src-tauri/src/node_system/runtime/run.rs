@@ -1,7 +1,7 @@
 use super::{
     BoundedStreamReceiver, DataSeriesContractError, DataSeriesMetadata, KernelErrorKind,
-    RelationalError, RelationalErrorCode, ReplayArtifact, RunResourceBudgets, SchedulingPolicy,
-    SpillArtifact, StreamReceiveError,
+    RelationalError, RelationalErrorCode, RunResourceBudgets, SchedulingPolicy, StoredValue,
+    StreamReceiveError,
 };
 use crate::node_system::analysis::{CompileProvenance, CorrelationContext, RunId};
 use crate::node_system::plan::{OperationIndex, RelationalBackendId, ResourceId, ValueRef};
@@ -86,7 +86,6 @@ pub enum ArtifactKind {
     Buffered,
     Collected,
     Spilled,
-    Replayable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -96,19 +95,17 @@ pub enum ArtifactValueKind {
     DataSeries,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum MaterializedArtifact {
-    InMemory(Box<[Value]>),
-    Spilled(SpillArtifact),
-    Replayable(ReplayArtifact),
+#[derive(Debug, Clone)]
+pub(crate) enum MaterializedArtifact {
+    InMemory(Arc<super::stored_value::InMemoryStorage>),
+    Spilled(Arc<super::spill::SpillStorage>),
 }
 
 impl MaterializedArtifact {
     pub fn len(&self) -> usize {
         match self {
-            Self::InMemory(values) => values.len(),
-            Self::Spilled(spill) => spill.len(),
-            Self::Replayable(replay) => replay.len(),
+            Self::InMemory(storage) => storage.values().len(),
+            Self::Spilled(storage) => storage.len(),
         }
     }
 
@@ -123,8 +120,7 @@ impl MaterializedArtifact {
     ) -> Result<(), RunError> {
         match self {
             Self::InMemory(_) => Ok(()),
-            Self::Spilled(spill) => spill.promote(cancellation, deadline),
-            Self::Replayable(replay) => replay.promote(cancellation, deadline),
+            Self::Spilled(storage) => storage.promote(cancellation, deadline),
         }
     }
 
@@ -133,23 +129,28 @@ impl MaterializedArtifact {
     }
 }
 
-#[derive(Debug)]
-struct ArtifactStorage {
-    value_kind: ArtifactValueKind,
-    data_series_metadata: Option<DataSeriesMetadata>,
-    materialized: MaterializedArtifact,
-    _memory_reservation: Option<super::materialization::MemoryReservation>,
+impl PartialEq for MaterializedArtifact {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::InMemory(left), Self::InMemory(right)) => Arc::ptr_eq(left, right),
+            (Self::Spilled(left), Self::Spilled(right)) => Arc::ptr_eq(left, right),
+            _ => false,
+        }
+    }
 }
+
+impl Eq for MaterializedArtifact {}
 
 #[derive(Debug, Clone)]
 pub struct Artifact {
     kind: ArtifactKind,
-    storage: Arc<ArtifactStorage>,
+    stored: StoredValue,
+    materialized: MaterializedArtifact,
 }
 
 impl Artifact {
     pub fn new(kind: ArtifactKind, values: impl Into<Box<[Value]>>) -> Self {
-        Self::from_materialized(kind, MaterializedArtifact::InMemory(values.into()))
+        Self::from_stored_value(kind, StoredValue::sequence(values.into()))
     }
 
     pub fn new_data_series(
@@ -159,50 +160,24 @@ impl Artifact {
     ) -> Result<Self, DataSeriesContractError> {
         let values = values.into();
         super::data_series::validate_data_series_values(&metadata, &values)?;
-        Ok(Self::from_materialized_with_payload(
+        Ok(Self::from_stored_value(
             kind,
-            ArtifactValueKind::DataSeries,
-            Some(metadata),
-            MaterializedArtifact::InMemory(values),
+            StoredValue::in_memory(values, ArtifactValueKind::DataSeries, Some(metadata), None),
         ))
     }
 
-    pub fn from_materialized(kind: ArtifactKind, materialized: MaterializedArtifact) -> Self {
-        Self::from_materialized_with_payload(kind, ArtifactValueKind::Sequence, None, materialized)
-    }
-
-    pub(crate) fn from_materialized_with_payload(
-        kind: ArtifactKind,
-        value_kind: ArtifactValueKind,
-        data_series_metadata: Option<DataSeriesMetadata>,
-        materialized: MaterializedArtifact,
-    ) -> Self {
+    pub(crate) fn from_stored_value(kind: ArtifactKind, stored: StoredValue) -> Self {
+        let materialized = if let Some(storage) = stored.in_memory_storage() {
+            MaterializedArtifact::InMemory(storage)
+        } else if let Some(storage) = stored.spill_storage() {
+            MaterializedArtifact::Spilled(storage)
+        } else {
+            unreachable!("scalar StoredValue cannot be exposed as an Artifact")
+        };
         Self {
             kind,
-            storage: Arc::new(ArtifactStorage {
-                value_kind,
-                data_series_metadata,
-                materialized,
-                _memory_reservation: None,
-            }),
-        }
-    }
-
-    pub(crate) fn from_materialized_with_reservation(
-        kind: ArtifactKind,
-        value_kind: ArtifactValueKind,
-        data_series_metadata: Option<DataSeriesMetadata>,
-        materialized: MaterializedArtifact,
-        memory_reservation: super::materialization::MemoryReservation,
-    ) -> Self {
-        Self {
-            kind,
-            storage: Arc::new(ArtifactStorage {
-                value_kind,
-                data_series_metadata,
-                materialized,
-                _memory_reservation: Some(memory_reservation),
-            }),
+            stored,
+            materialized,
         }
     }
 
@@ -211,30 +186,38 @@ impl Artifact {
     }
 
     pub fn value_kind(&self) -> ArtifactValueKind {
-        self.storage.value_kind
+        self.stored.value_kind()
     }
 
     pub fn data_series_metadata(&self) -> Option<&DataSeriesMetadata> {
-        self.storage.data_series_metadata.as_ref()
+        self.stored.data_series_metadata()
     }
 
-    pub fn materialized(&self) -> &MaterializedArtifact {
-        &self.storage.materialized
+    pub(crate) fn materialized(&self) -> &MaterializedArtifact {
+        &self.materialized
+    }
+
+    pub(crate) fn shares_storage_with(&self, other: &Self) -> bool {
+        self.stored.ptr_eq(&other.stored)
     }
 
     pub fn in_memory_values(&self) -> Option<&[Value]> {
-        match &self.storage.materialized {
-            MaterializedArtifact::InMemory(values) => Some(values),
-            MaterializedArtifact::Spilled(_) | MaterializedArtifact::Replayable(_) => None,
+        match &self.materialized {
+            MaterializedArtifact::InMemory(storage) => Some(storage.values()),
+            MaterializedArtifact::Spilled(_) => None,
         }
     }
 
-    pub fn cursor(&self) -> Result<ArtifactCursor, RunError> {
-        ArtifactCursor::from_storage(Arc::clone(&self.storage))
+    pub(crate) fn cursor(&self) -> Result<ArtifactCursor, RunError> {
+        ArtifactCursor::from_stored_value(self.stored.clone())
     }
 
     pub(crate) fn into_cursor(self) -> Result<ArtifactCursor, RunError> {
-        ArtifactCursor::from_storage(self.storage)
+        ArtifactCursor::from_stored_value(self.stored)
+    }
+
+    pub(crate) fn into_stored_value(self) -> StoredValue {
+        self.stored
     }
 
     pub(crate) fn promote(
@@ -242,44 +225,32 @@ impl Artifact {
         cancellation: &CancellationToken,
         deadline: Option<RunDeadline>,
     ) -> Result<(), RunError> {
-        self.storage.materialized.promote(cancellation, deadline)
+        self.materialized.promote(cancellation, deadline)
     }
 
     pub(crate) fn is_memoization_complete(&self) -> bool {
-        self.storage.materialized.is_memoization_complete()
+        self.materialized.is_memoization_complete()
     }
 }
 
 impl PartialEq for Artifact {
     fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind
-            && self.storage.value_kind == other.storage.value_kind
-            && self.storage.data_series_metadata == other.storage.data_series_metadata
-            && self.storage.materialized == other.storage.materialized
+        self.kind == other.kind && self.materialized == other.materialized
     }
 }
 
 impl Eq for Artifact {}
 
-pub struct InMemoryArtifactCursor {
-    storage: Arc<ArtifactStorage>,
-    index: usize,
-}
-
-pub enum ArtifactCursor {
-    InMemory(InMemoryArtifactCursor),
-    Spilled(super::SpillCursor),
+pub(crate) struct ArtifactCursor {
+    reader: super::StoredValueReader,
 }
 
 impl ArtifactCursor {
-    fn from_storage(storage: Arc<ArtifactStorage>) -> Result<Self, RunError> {
-        match &storage.materialized {
-            MaterializedArtifact::InMemory(_) => {
-                Ok(Self::InMemory(InMemoryArtifactCursor { storage, index: 0 }))
-            }
-            MaterializedArtifact::Spilled(spill) => Ok(Self::Spilled(spill.cursor()?)),
-            MaterializedArtifact::Replayable(replay) => Ok(Self::Spilled(replay.cursor()?)),
-        }
+    fn from_stored_value(stored: StoredValue) -> Result<Self, RunError> {
+        let reader = stored
+            .open_reader()
+            .map_err(|error| RunError::Stream(error.to_string().into()))?;
+        Ok(Self { reader })
     }
 }
 
@@ -287,17 +258,9 @@ impl Iterator for ArtifactCursor {
     type Item = Result<Value, RunError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::InMemory(cursor) => {
-                let MaterializedArtifact::InMemory(values) = &cursor.storage.materialized else {
-                    unreachable!("in-memory cursor storage kind is stable");
-                };
-                let value = values.get(cursor.index)?.clone();
-                cursor.index += 1;
-                Some(Ok(value))
-            }
-            Self::Spilled(values) => values.next(),
-        }
+        self.reader
+            .next()
+            .map(|value| value.map_err(|error| RunError::Stream(error.to_string().into())))
     }
 }
 
@@ -573,14 +536,33 @@ pub struct RunResult {
     pub run_id: RunId,
     pub provenance: CompileProvenance,
     pub correlation: CorrelationContext,
-    pub values: BTreeMap<Box<str>, RuntimeValue>,
+    pub result_ids: BTreeMap<Box<str>, super::ResultId>,
+    pub(crate) results: super::ResultStore,
     pub committed_variable_ids: Box<[crate::variable::VariableId]>,
     pub resource_mutation: Option<crate::event::ResourceMutationResultDto>,
+}
+
+impl RunResult {
+    pub fn result(&self, name: &str) -> Option<Arc<super::StoredResult>> {
+        self.result_ids
+            .get(name)
+            .and_then(|result_id| self.results.result(*result_id))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn value_for_test(&self, name: &str) -> Option<RuntimeValue> {
+        let result = self.result(name)?;
+        match &result.state {
+            super::ResultState::Ready(value) => Some(value.to_runtime_value()),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RunError {
     InvalidPlan(Box<str>),
+    MemoizationRetry,
     Cancelled,
     ActivationIdExhausted,
     DeadlineExceeded {
@@ -605,6 +587,13 @@ pub enum RunError {
     },
     Stream(Box<str>),
     MissingValue(ValueRef),
+    UpstreamResultFailed {
+        source_result_id: super::ResultId,
+        message: Box<str>,
+    },
+    UpstreamResultCancelled {
+        source_result_id: super::ResultId,
+    },
     InvalidCondition {
         value: ValueRef,
     },
@@ -675,6 +664,7 @@ impl fmt::Display for RunError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidPlan(message) => write!(formatter, "invalid execution plan: {message}"),
+            Self::MemoizationRetry => formatter.write_str("memoization flight must be retried"),
             Self::Cancelled => formatter.write_str("run was cancelled"),
             Self::ActivationIdExhausted => formatter.write_str("activation ID space is exhausted"),
             Self::DeadlineExceeded { phase } => {
@@ -714,6 +704,19 @@ impl fmt::Display for RunError {
             Self::MissingValue(value) => {
                 write!(formatter, "runtime value {} is unavailable", value.index())
             }
+            Self::UpstreamResultFailed {
+                source_result_id,
+                message,
+            } => write!(
+                formatter,
+                "upstream result {} failed: {message}",
+                source_result_id.get()
+            ),
+            Self::UpstreamResultCancelled { source_result_id } => write!(
+                formatter,
+                "upstream result {} was cancelled",
+                source_result_id.get()
+            ),
             Self::InvalidCondition { value } => write!(
                 formatter,
                 "condition value {} is not boolean",

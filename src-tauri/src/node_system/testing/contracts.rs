@@ -27,7 +27,7 @@ use crate::node_system::plan::{EXECUTION_DEMAND_VARIANT_COUNT, ExecutionDemand, 
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::registry::{NodeRegistry, canonical_semantic_protocol_snapshot};
 use crate::node_system::runtime::{
-    OrdinaryRunErrorCode, RUN_EVENT_KIND_VARIANT_COUNT, ResultSourceId, RunErrorOutcome, RunEvent,
+    OrdinaryRunErrorCode, RUN_EVENT_KIND_VARIANT_COUNT, ResultId, RunErrorOutcome, RunEvent,
     RunEventKind, RunPhase,
 };
 use crate::project::{
@@ -327,19 +327,23 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
                 code: OrdinaryRunErrorCode::KernelFailed,
             },
         },
-        RunEventKind::ResultReady {
-            name: "contract-result".into(),
-            source_id: ResultSourceId::new(UNSAFE_ID),
+        RunEventKind::ResultGroupChanged {
+            activation_id: UNSAFE_ID,
+            result_ids: vec![ResultId::new(UNSAFE_ID)].into_boxed_slice(),
+            state: crate::node_system::runtime::ResultStateKind::Ready,
         },
-        RunEventKind::OutputReady {
+        RunEventKind::OutputResultChanged {
             output: declared.clone(),
             generation: None,
-            source_id: ResultSourceId::new(UNSAFE_ID),
+            result_id: ResultId::new(UNSAFE_ID),
         },
-        RunEventKind::OutputReady {
+        RunEventKind::OutputResultChanged {
             output: declared.clone(),
             generation: Some(17),
-            source_id: ResultSourceId::new(UNSAFE_ID),
+            result_id: ResultId::new(UNSAFE_ID),
+        },
+        RunEventKind::OpenResultWindow {
+            result_id: ResultId::new(UNSAFE_ID),
         },
     ];
     let run_events = kinds

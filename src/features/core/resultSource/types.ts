@@ -1,26 +1,15 @@
-
-
 export type {
-  PlotChart,
-  Presentation,
-  ReportKind,
-  SourceDescriptor,
-  SourceKind,
-  SourcePage,
-  SourceStructKind,
-  SourceValue,
-} from '@/shared/types/dto/resultSource';
+  ResultPlotKind as PlotChart,
+  ResultPresentation as Presentation,
+  ResultReportKind as ReportKind,
+  ResultDescriptor,
+  ResultPage,
+  ResultValue,
+} from '@/shared/types/dto/result';
 
-export type SourceRendererKind =
-  | 'dataframe'
-  | 'dataseries'
-  | 'scalar'
-  | 'null'
-  | 'json'
-  | 'plot'
-  | 'info';
+export type ResultRendererKind = 'sequence' | 'dataseries' | 'scalar' | 'json' | 'plot' | 'info';
 
-export interface SourcePageState {
+export interface ResultPageState {
   offset: number;
   limit: number;
   totalCount: number;

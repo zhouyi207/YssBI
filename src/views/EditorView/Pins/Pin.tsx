@@ -37,16 +37,16 @@ export function pinConnectionFeedbackClass(feedback: ConnectionFeedback | null):
 import {
   buildPinViewParams,
   evaluatePinViewState,
+  pinHistoryCacheKey,
   pinViewDisabledTitle,
-  pinResultsForSourceGraph,
-  executionStatusForSourceGraph,
   useExecutionStore,
 } from "@/features/core/execution";
-import { openPinInspectableView } from "@/features/application/execution/openInspectableSource";
+import { openPinInspectableView } from "@/features/application/execution/openInspectableResult";
 import {
   isPinPreviewActionAvailable,
   requestAndOpenPinPreview,
 } from "@/features/application/editor/requestPinPreview";
+import type { PinHistoryProjection } from '@/shared/types/ui';
 import type {
   PortAddressDto,
   PortKindDto,
@@ -135,6 +135,7 @@ export const Pin: React.FC<PinProps> = (props) => {
   );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [historyProjection, setHistoryProjection] = useState<PinHistoryProjection>();
   const menuActions = useCanvasContextMenuActionsOptional();
   const canRemoveRepeatable = useRepeatablePinRemovable(nodeId, id, graphPath);
   const canRemovePin =
@@ -149,18 +150,25 @@ export const Pin: React.FC<PinProps> = (props) => {
       ? session.feedback
       : null;
   });
-  const connectionIds = useGraphDataStore((s) =>
-    graphPath ? s.getGraphPinConnections(graphPath, id) : EMPTY_CONNECTION_IDS,
+  const connectionIds = useGraphDataStore((state) =>
+    graphPath ? state.getGraphPinConnections(graphPath, id) : EMPTY_CONNECTION_IDS,
   );
-  const executionGraphs = useExecutionStore((s) => s.graphs);
-  const pinResults = useMemo(() => {
-    if (!graphPath) return undefined;
-    const merged = pinResultsForSourceGraph(executionGraphs, graphPath);
-    return merged.size > 0 ? merged : undefined;
-  }, [executionGraphs, graphPath]);
-  const executionStatus = useMemo(
-    () => (graphPath ? executionStatusForSourceGraph(executionGraphs, graphPath) : undefined),
-    [executionGraphs, graphPath],
+  const graphConnections = useGraphDataStore((state) =>
+    graphPath ? state.graphEntities[graphPath]?.connections : undefined,
+  );
+  const connections = useMemo(
+    () => connectionIds.flatMap((connectionId) => {
+      const connection = graphConnections?.[connectionId];
+      return connection?.output && connection.input
+        ? [{
+            connectionId: connection.id,
+            output: connection.output,
+            input: connection.input,
+            order: connection.order ?? null,
+          }]
+        : [];
+    }),
+    [connectionIds, graphConnections],
   );
 
   const viewParams = useMemo(
@@ -168,15 +176,13 @@ export const Pin: React.FC<PinProps> = (props) => {
       graphPath
         ? buildPinViewParams({
             graphPath: graphPath,
-            pinId: id,
+            address,
             direction,
             isExec: isExecPin(pinSemantics),
-            connectionIds,
-            pinResults,
-            executionStatus,
+            connections,
           })
         : null,
-    [graphPath, id, direction, pinSemantics, connectionIds, pinResults, executionStatus],
+    [graphPath, address, direction, pinSemantics, connections],
   );
 
   const viewState = useMemo(
@@ -199,6 +205,10 @@ export const Pin: React.FC<PinProps> = (props) => {
   const viewDisabledReason = previewActionAvailable
     ? null
     : (viewState?.disabledReason ?? null);
+  const historyOutputs = useMemo(() => viewState?.refs.flatMap((ref) =>
+    ref.kind === 'outputPin' ? [ref.output] : [],
+  ) ?? [], [viewState]);
+  const firstHistoryOutput = historyOutputs[0];
 
   const handleRemovePin = useCallback(() => {
     if (onRemovePin) {
@@ -211,13 +221,18 @@ export const Pin: React.FC<PinProps> = (props) => {
   const handleView = useCallback(() => {
     if (!viewParams || !graphPath) return;
     if (viewState?.enabled) {
-      void openPinInspectableView(viewParams, t);
+      void openPinInspectableView(viewParams, t).then(() => {
+        if (!firstHistoryOutput) return;
+        setHistoryProjection(useExecutionStore.getState().graphs[graphPath]?.pinHistories.get(
+          pinHistoryCacheKey(graphPath, firstHistoryOutput),
+        ));
+      });
       return;
     }
     if (previewActionAvailable) {
       void requestAndOpenPinPreview(graphPath, id, t);
     }
-  }, [graphPath, id, previewActionAvailable, t, viewParams, viewState?.enabled]);
+  }, [firstHistoryOutput, graphPath, id, previewActionAvailable, t, viewParams, viewState?.enabled]);
 
   const hasLinks = linkCount > 0 || (connectionIds?.length ?? 0) > 0;
   const scalarInputKey = scalarPinInputKey(dataType);
@@ -457,6 +472,15 @@ export const Pin: React.FC<PinProps> = (props) => {
           viewEnabled={viewEnabled}
           viewDisabledTitle={pinViewDisabledTitle(viewDisabledReason, t)}
           onView={handleView}
+          historyEntries={historyProjection?.entries}
+          onViewHistory={(resultId) => {
+            if (!historyProjection) return;
+            useExecutionStore.getState().recordPinHistory({
+              ...historyProjection,
+              selectedResultId: resultId,
+            });
+            void openPinInspectableView(viewParams!, t, { selectedResultId: resultId });
+          }}
           onRemove={handleRemovePin}
           onClose={() => setContextMenu(null)}
         />

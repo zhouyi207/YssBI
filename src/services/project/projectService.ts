@@ -601,9 +601,6 @@ export class ProjectService {
         return invoke<boolean>("cancel_graph_run", { runId });
     }
 
-    static async clearGraphExecutionArtifacts(graphPath: string): Promise<void> {
-        await invoke("clear_graph_execution_artifacts", { graphPath });
-    }
 
     static async revealProjectResource(
         projectInstanceId: string,

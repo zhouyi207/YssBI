@@ -50,8 +50,8 @@ vi.mock('@/features/core/execution', () => ({
   graphHasClearableArtifacts: vi.fn(),
   enqueueLiveExecutionEvent: vi.fn(),
 }));
-vi.mock('@/features/application/execution/openInspectableSource', () => ({
-  openWindowInspectableSource: vi.fn(),
+vi.mock('@/features/application/execution/openInspectableResult', () => ({
+  openWindowInspectableResult: vi.fn(),
 }));
 vi.mock('@/features/application/graphDiagnostics/warnCallFunctionIssues', () => ({
   warnCallFunctionIssuesBeforeSave: vi.fn(),

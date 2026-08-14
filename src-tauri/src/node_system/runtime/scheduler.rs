@@ -1,15 +1,16 @@
 use super::relational::RunRelationalBackends;
 use super::scheduling::ClassScheduler;
 use super::{
-    ACTIVATION_IDS, ActivationId, ActivationIdAllocator, CancellationToken, CompiledParameterStore,
-    DemandFingerprint, EffectiveComputationSettings, FrameId, KernelContext, KernelErrorKind,
-    KernelRegistry, NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey,
-    PendingResultSource, ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider,
-    RelationalContext, ResourceErrorKind, ResourceProvider, ResultReportKind,
-    ResultSourceDescriptor, ResultSourcePresentation, ResultStore, RunDeadline, RunError,
-    RunErrorOutcome, RunEvent, RunEventKind, RunEventSink, RunMemoization, RunOptions, RunPhase,
-    RunResourceBudgets, RunResourceOwner, RunResourceSet, RunResult, RuntimeValue,
-    SchedulingPolicy, check_terminal, execute_planned_adapter, validate_data_series_type_expr,
+    ACTIVATION_IDS, ActivationId, ActivationIdAllocator, ActivationProvenance,
+    ActivationResultGroup, CancellationToken, CompiledParameterStore, DemandFingerprint,
+    EffectiveComputationSettings, FrameId, KernelContext, KernelErrorKind, KernelRegistry,
+    NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey, PendingOutputDescriptor,
+    ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider, RelationalContext,
+    ResourceErrorKind, ResourceProvider, ResultFailure, ResultId, ResultState, ResultStore,
+    ResultUsage, RunDeadline, RunError, RunErrorOutcome, RunEvent, RunEventKind, RunEventSink,
+    RunOptions, RunPhase, RunResourceBudgets, RunResourceOwner, RunResourceSet, RunResult,
+    RuntimeValue, SchedulingPolicy, SessionMemoization, StoredValue, check_terminal,
+    execute_planned_adapter, validate_data_series_type_expr,
 };
 use crate::node_system::analysis::{
     CorrelationContext, NOOP_TRACE_SINK, ParentCallId, ResourceVersionSet, RunId,
@@ -18,8 +19,8 @@ use crate::node_system::analysis::{
 };
 use crate::node_system::plan::{
     AttemptId, CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan,
-    FunctionPlanHandle, GraphOutputRef, OperationIndex, PlannedKernel, PlannedPublication,
-    PlannedValueKind, StructuredControlRegion, ValueRef, WorkloadClass,
+    FunctionPlanHandle, OperationIndex, PlannedKernel, PlannedPublication, PlannedValueContract,
+    PlannedValueKind, ResultPresentation, StructuredControlRegion, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::{CachePolicy, RetryPolicy, Value};
 use std::cell::Cell;
@@ -36,9 +37,9 @@ static NEXT_PARENT_CALL_ID: AtomicU64 = AtomicU64::new(1);
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SchedulerCheckpoint {
-    ResultSourceStaged,
     FinalResultPublication,
     WorkerOutcomeProduced,
+    BeforeGroupCommit,
     AdmissionBlocked(WorkloadClass),
     RetryBackoff {
         operation: OperationIndex,
@@ -65,101 +66,18 @@ pub(crate) enum SchedulerCheckpoint {
     },
 }
 
-enum PendingSourceEvent {
-    GraphResult {
-        output: GraphOutputRef,
-    },
-    PinPreview {
-        output: GraphOutputRef,
-        generation: u64,
-    },
-}
-
-impl PendingSourceEvent {
-    fn output(&self) -> &GraphOutputRef {
-        match self {
-            Self::GraphResult { output } | Self::PinPreview { output, .. } => output,
-        }
-    }
-}
-
-fn report_kind_for_node_type(node_type: &str) -> Option<ResultReportKind> {
-    Some(match node_type {
-        "yssbi.statistics.ols.summary"
-        | "yssbi.statistics.gls.summary"
-        | "yssbi.statistics.wls.summary" => ResultReportKind::OlsSummary,
-        "yssbi.statistics.logit.summary" | "yssbi.statistics.probit.summary" => {
-            ResultReportKind::BinarySummary
-        }
-        "yssbi.statistics.iv.2sls.summary" => ResultReportKind::Iv2slsSummary,
-        "yssbi.statistics.iv.liml.summary" => ResultReportKind::IvLimlSummary,
-        "yssbi.statistics.prais.summary" => ResultReportKind::PraisSummary,
-        "yssbi.statistics.var.summary" => ResultReportKind::VarSummary,
-        "yssbi.statistics.var.lag_order" => ResultReportKind::VarSoc,
-        "yssbi.statistics.panel.summary" => ResultReportKind::PanelSummary,
-        "yssbi.statistics.panel.did.twfe" => ResultReportKind::PanelDid,
-        "yssbi.statistics.adf.summary" => ResultReportKind::DfAdfSummary,
-        "yssbi.statistics.vec.fit" => ResultReportKind::VecSummary,
-        "yssbi.statistics.vec.rank_test" => ResultReportKind::VecRankSummary,
-        _ => return None,
-    })
-}
-
-fn report_kind_for_value(
-    plan: &ExecutionPlan,
-    value: crate::node_system::plan::ValueRef,
-) -> Option<ResultReportKind> {
-    let producer = plan
-        .operations
-        .iter()
-        .find(|operation| operation.outputs.iter().any(|output| output.value == value))?;
-    if let Some(report) = report_kind_for_node_type(producer.source_node_type_id.as_str()) {
-        return Some(report);
-    }
-    let preserves_presentation = producer.source_node_type_id.as_str() == "yssbi.debug.view"
-        || matches!(producer.kernel, PlannedKernel::Adapter(_));
-    if !preserves_presentation {
-        return None;
-    }
-    let input = producer.inputs.first()?.value;
-    let source = plan
-        .value_dependencies
-        .iter()
-        .find(|dependency| dependency.destination == input)?
-        .source;
-    report_kind_for_value(plan, source)
-}
-
-pub(super) fn result_presentation(
-    plan: &ExecutionPlan,
-    output: &GraphOutputRef,
-) -> ResultSourcePresentation {
-    let Some(value) = plan
-        .results
-        .iter()
-        .find(|result| result.output == *output)
-        .map(|result| result.value)
-    else {
-        return ResultSourcePresentation::Inspector;
-    };
-    report_kind_for_value(plan, value)
-        .map(|report| ResultSourcePresentation::Report { report })
-        .unwrap_or(ResultSourcePresentation::Inspector)
-}
-
-struct PendingSourcePublication {
-    source: PendingResultSource,
-    event: PendingSourceEvent,
-}
-
 struct PreparedOperation {
     operation: OperationIndex,
     owner_activation: ActivationId,
     activation: ActivationId,
     attempt: AttemptId,
-    inputs: Box<[RuntimeValue]>,
+    input_result_ids: Box<[ResultId]>,
+    output_group: Option<ActivationResultGroup>,
     memo_key: Option<OperationMemoKey>,
+    memo_policy: CachePolicy,
     owns_memo_flight: bool,
+    awaits_memo_flight: bool,
+    reused_memo: bool,
     class: WorkloadClass,
 }
 
@@ -168,9 +86,12 @@ struct DelayedRetry {
     tie_break: u64,
     operation: OperationIndex,
     owner_activation: ActivationId,
+    activation: ActivationId,
     attempt: AttemptId,
-    inputs: Box<[RuntimeValue]>,
+    input_result_ids: Box<[ResultId]>,
+    output_group: Option<ActivationResultGroup>,
     memo_key: Option<OperationMemoKey>,
+    memo_policy: CachePolicy,
     class: WorkloadClass,
 }
 
@@ -199,8 +120,12 @@ struct RunningOperation {
     owner_activation: ActivationId,
     activation: ActivationId,
     attempt: AttemptId,
-    inputs: Box<[RuntimeValue]>,
+    input_result_ids: Box<[ResultId]>,
+    output_group: Option<ActivationResultGroup>,
     memo_key: Option<OperationMemoKey>,
+    memo_policy: CachePolicy,
+    owns_memo_flight: bool,
+    reused_memo: bool,
 }
 
 struct AdmissionBookkeeping {
@@ -209,6 +134,71 @@ struct AdmissionBookkeeping {
     activation_key: MemoKey,
     previous_attempt: Option<AttemptId>,
     memo_key: Option<OperationMemoKey>,
+}
+
+struct MemoTables<'a> {
+    per_run: &'a SessionMemoization,
+    per_session: &'a SessionMemoization,
+}
+
+impl MemoTables<'_> {
+    fn for_policy(&self, policy: CachePolicy) -> Option<&SessionMemoization> {
+        match policy {
+            CachePolicy::Disabled => None,
+            CachePolicy::PerRun => Some(self.per_run),
+            CachePolicy::PerSession => Some(self.per_session),
+        }
+    }
+
+    fn abort_owned(&self, operation: &RunningOperation, error: RunError) {
+        self.abort_flight(
+            operation.owns_memo_flight,
+            operation.memo_key.as_ref(),
+            operation.memo_policy,
+            error,
+        );
+    }
+
+    fn abort_prepared(&self, operation: &PreparedOperation, error: RunError) {
+        self.abort_flight(
+            operation.owns_memo_flight,
+            operation.memo_key.as_ref(),
+            operation.memo_policy,
+            error,
+        );
+    }
+
+    fn abort_delayed(&self, operation: &DelayedRetry, error: RunError) {
+        self.abort_flight(
+            true,
+            operation.memo_key.as_ref(),
+            operation.memo_policy,
+            error,
+        );
+    }
+
+    fn abort_flight(
+        &self,
+        owned: bool,
+        key: Option<&OperationMemoKey>,
+        policy: CachePolicy,
+        error: RunError,
+    ) {
+        if !owned {
+            return;
+        }
+        let Some(key) = key else {
+            return;
+        };
+        let retryable = policy == CachePolicy::PerSession
+            && matches!(
+                error,
+                RunError::Cancelled | RunError::DeadlineExceeded { .. }
+            );
+        self.for_policy(policy)
+            .expect("memoized operation has a memo table")
+            .abort(key, error, retryable);
+    }
 }
 
 struct OperationWorkerContext<'a> {
@@ -221,6 +211,7 @@ struct OperationWorkerContext<'a> {
     resources: &'a RunResourceSet,
     resource_owner: &'a RunResourceOwner,
     relational_backends: &'a RunRelationalBackends,
+    results: &'a ResultStore,
     cancellation: &'a CancellationToken,
     deadline: Option<RunDeadline>,
     run_parent_span_id: SpanId,
@@ -635,7 +626,8 @@ pub struct RunExecutor<'a> {
     recursion_limit: usize,
     trace: &'a dyn TraceSink,
     events: &'a dyn RunEventSink,
-    results: Option<&'a ResultStore>,
+    results: ResultStore,
+    memoization: Arc<SessionMemoization>,
     success_finalizer: Option<
         &'a dyn Fn(&mut RunResult, &CancellationToken, Option<RunDeadline>) -> Result<(), RunError>,
     >,
@@ -661,6 +653,8 @@ impl<'a> RunExecutor<'a> {
         kernels: &'a KernelRegistry,
         resources: &'a dyn ResourceProvider,
         functions: &'a dyn FunctionPlanProvider,
+        results: ResultStore,
+        memoization: Arc<SessionMemoization>,
     ) -> Self {
         Self {
             kernels,
@@ -674,7 +668,8 @@ impl<'a> RunExecutor<'a> {
             recursion_limit: functions.recursion_limit().max(1),
             trace: &NOOP_TRACE_SINK,
             events: &NOOP_RUN_EVENT_SINK,
-            results: None,
+            results,
+            memoization,
             success_finalizer: None,
             atomic_success_preparer: None,
             atomic_success_finalizer: None,
@@ -732,9 +727,13 @@ impl<'a> RunExecutor<'a> {
         self
     }
 
-    pub fn with_result_store(mut self, results: &'a ResultStore) -> Self {
-        self.results = Some(results);
+    pub fn with_result_store(mut self, results: &ResultStore) -> Self {
+        self.results = results.clone();
         self
+    }
+
+    fn result_store(&self) -> &ResultStore {
+        &self.results
     }
 
     pub fn with_resource_budgets(mut self, budgets: RunResourceBudgets) -> Self {
@@ -943,12 +942,6 @@ impl<'a> RunExecutor<'a> {
             },
         };
         self.record_event(plan, correlation, event);
-        if let Some(results) = self.results {
-            if result.is_err() {
-                results.release_run_sources(run_id);
-            }
-            results.cleanup_run(run_id);
-        }
         result
     }
 
@@ -985,26 +978,7 @@ impl<'a> RunExecutor<'a> {
             {
                 result = Err(error);
             }
-            if let Ok(run_result) = result.as_ref()
-                && let Err(error) =
-                    promote_run_result(run_result, &cancellation, self.options.deadline)
-            {
-                result = Err(error);
-            }
-            let mut pending_sources = Vec::new();
-            if let (Some(results), Ok(run_result)) = (self.results, result.as_ref())
-                && let Err(error) = self.stage_result_sources(
-                    results,
-                    plan,
-                    &correlation,
-                    run_result,
-                    &cancellation,
-                    &mut pending_sources,
-                )
-            {
-                result = Err(error);
-                pending_sources.clear();
-            }
+
             #[cfg(test)]
             if result.is_ok() {
                 self.run_test_checkpoint(
@@ -1020,59 +994,26 @@ impl<'a> RunExecutor<'a> {
                 )
             {
                 result = Err(error);
-                pending_sources.clear();
             }
             if let (Some(finalizer), Ok(run_result)) = (self.success_finalizer, result.as_mut())
                 && let Err(error) = finalizer(run_result, &cancellation, self.options.deadline)
             {
-                pending_sources.clear();
                 result = Err(error);
             }
             if let (Some(preparer), Ok(run_result)) =
                 (self.atomic_success_preparer, result.as_mut())
                 && let Err(error) = preparer(run_result, &cancellation, self.options.deadline)
             {
-                pending_sources.clear();
                 result = Err(error);
             }
-            if let (Some(finalizer), Some(results), Ok(run_result)) =
-                (self.atomic_success_finalizer, self.results, result.as_mut())
+            if let (Some(finalizer), Ok(run_result)) =
+                (self.atomic_success_finalizer, result.as_mut())
+                && let Err(error) = finalizer(run_result, &cancellation, self.options.deadline)
             {
-                let (sources, source_events): (Vec<_>, Vec<_>) = pending_sources
-                    .drain(..)
-                    .map(|pending| (pending.source, pending.event))
-                    .unzip();
-                let mut publication = results.begin_publication(run_id, sources);
-                publication.prepare(&cancellation, self.options.deadline)?;
-                match publication.publish_with_authority(
-                    &cancellation,
-                    self.options.deadline,
-                    |_| finalizer(run_result, &cancellation, self.options.deadline),
-                ) {
-                    Ok(descriptors) => {
-                        for (event, descriptor) in source_events.into_iter().zip(descriptors) {
-                            if let Some(descriptor) = descriptor {
-                                self.record_source_event(descriptor, event);
-                            }
-                        }
-                    }
-                    Err(error) => result = Err(error),
-                }
+                result = Err(error);
             }
-            if result.is_ok()
-                && self.atomic_success_finalizer.is_none()
-                && let Some(results) = self.results
-            {
-                let committed_publications = self.commit_result_sources(
-                    results,
-                    run_id,
-                    pending_sources,
-                    &cancellation,
-                    self.success_finalizer.is_some(),
-                )?;
-                for (descriptor, event) in committed_publications {
-                    self.record_source_event(descriptor, event);
-                }
+            if let Ok(run_result) = result.as_ref() {
+                self.record_output_result_events(plan, run_result);
             }
             result
         })();
@@ -1100,142 +1041,40 @@ impl<'a> RunExecutor<'a> {
         });
     }
 
-    fn stage_result_sources(
-        &self,
-        results: &ResultStore,
-        plan: &ExecutionPlan,
-        correlation: &CorrelationContext,
-        run_result: &RunResult,
-        cancellation: &CancellationToken,
-        pending_sources: &mut Vec<PendingSourcePublication>,
-    ) -> Result<(), RunError> {
+    fn record_output_result_events(&self, plan: &ExecutionPlan, run_result: &RunResult) {
         for publication in &plan.publications {
-            let (name, value, event) = match publication {
-                PlannedPublication::GraphResult { name, output, .. } => {
-                    let value = run_result.values.get(name).ok_or_else(|| {
-                        RunError::InvalidPlan(
-                            "graph publication does not match a retained result value".into(),
-                        )
-                    })?;
-                    (
-                        name.clone(),
-                        value,
-                        PendingSourceEvent::GraphResult {
-                            output: output.clone(),
-                        },
-                    )
-                }
+            let (output, generation, result_id) = match publication {
+                PlannedPublication::GraphResult { name, output, .. } => (
+                    output.clone(),
+                    None,
+                    run_result.result_ids.get(name).copied(),
+                ),
                 PlannedPublication::PinPreview {
                     output,
                     generation,
                     value,
                 } => {
-                    let result = plan
+                    let result_id = plan
                         .results
                         .iter()
                         .find(|result| result.output == *output && result.value == *value)
-                        .ok_or_else(|| {
-                            RunError::InvalidPlan(
-                                "preview publication does not match its selected result".into(),
-                            )
-                        })?;
-                    let value = run_result.values.get(&result.name).ok_or_else(|| {
-                        RunError::InvalidPlan(
-                            "preview publication result value is unavailable".into(),
-                        )
-                    })?;
-                    (
-                        format!("preview:{}", output.port).into(),
-                        value,
-                        PendingSourceEvent::PinPreview {
-                            output: output.clone(),
-                            generation: *generation,
-                        },
-                    )
+                        .and_then(|result| run_result.result_ids.get(&result.name))
+                        .copied();
+                    (output.clone(), Some(*generation), result_id)
                 }
             };
-            let presentation = result_presentation(plan, event.output());
-            if let Some(source) = results.prepare_runtime_value_with_presentation(
-                correlation.clone(),
-                plan.provenance.basis.clone(),
-                name,
-                presentation,
-                value,
-            ) {
-                pending_sources.push(PendingSourcePublication { source, event });
-                #[cfg(test)]
-                self.run_test_checkpoint(SchedulerCheckpoint::ResultSourceStaged, cancellation);
-            }
-            check_terminal(
-                cancellation,
-                self.options.deadline,
-                RunPhase::ResultPublication,
-            )?;
-        }
-        Ok(())
-    }
-
-    fn commit_result_sources(
-        &self,
-        results: &ResultStore,
-        run_id: RunId,
-        pending_sources: Vec<PendingSourcePublication>,
-        cancellation: &CancellationToken,
-        finalizer_linearized: bool,
-    ) -> Result<Vec<(ResultSourceDescriptor, PendingSourceEvent)>, RunError> {
-        let (sources, events): (Vec<_>, Vec<_>) = pending_sources
-            .into_iter()
-            .map(|pending| (pending.source, pending.event))
-            .unzip();
-        let descriptors = if finalizer_linearized {
-            results.commit_batch(run_id, sources)
-        } else {
-            results.commit_batch_with_deadline(
-                run_id,
-                sources,
-                cancellation,
-                self.options.deadline,
-            )?
-        };
-        Ok(events
-            .into_iter()
-            .zip(descriptors)
-            .filter_map(|(event, descriptor)| descriptor.map(|descriptor| (descriptor, event)))
-            .collect())
-    }
-
-    fn record_source_event(&self, descriptor: ResultSourceDescriptor, event: PendingSourceEvent) {
-        let ResultSourceDescriptor {
-            source_id,
-            name,
-            correlation,
-            basis,
-            ..
-        } = descriptor;
-        let kind = match event {
-            PendingSourceEvent::GraphResult { output } => {
+            if let Some(result_id) = result_id {
                 self.events.record(RunEvent {
-                    correlation: correlation.clone(),
-                    basis: basis.clone(),
-                    kind: RunEventKind::ResultReady { name, source_id },
+                    correlation: run_result.correlation.clone(),
+                    basis: plan.provenance.basis.clone(),
+                    kind: RunEventKind::OutputResultChanged {
+                        output,
+                        generation,
+                        result_id,
+                    },
                 });
-                RunEventKind::OutputReady {
-                    output,
-                    generation: None,
-                    source_id,
-                }
             }
-            PendingSourceEvent::PinPreview { output, generation } => RunEventKind::OutputReady {
-                output,
-                generation: Some(generation),
-                source_id,
-            },
-        };
-        self.events.record(RunEvent {
-            correlation,
-            basis,
-            kind,
-        });
+        }
     }
 
     fn run_root(
@@ -1258,8 +1097,12 @@ impl<'a> RunExecutor<'a> {
             &cancellation,
         )?;
         let mut frame = Frame::new(plan.value_count);
-        frame.bind(&plan.bound_values)?;
-        let memoization = RunMemoization::new();
+        self.bind_internal_values(run_id, plan, &mut frame, &plan.bound_values)?;
+        let run_memoization = SessionMemoization::new();
+        let memoization = MemoTables {
+            per_run: &run_memoization,
+            per_session: self.memoization.as_ref(),
+        };
         let root_demand = DemandFingerprint::for_root(plan, self.selection_digest);
         let result = (|| {
             self.execute_region(
@@ -1281,22 +1124,221 @@ impl<'a> RunExecutor<'a> {
             )?;
             cancellation.check()?;
 
-            let mut values = BTreeMap::new();
+            let mut result_ids = BTreeMap::new();
             for result in &plan.results {
-                values.insert(result.name.clone(), frame.value(result.value)?.clone());
+                let result_id = frame.result_id(result.value)?;
+                result_ids.insert(result.name.clone(), result_id);
             }
             Ok(RunResult {
                 run_id,
                 provenance: plan.provenance.clone(),
                 correlation,
-                values,
+                result_ids,
+                results: self.results.clone(),
                 committed_variable_ids: Box::new([]),
                 resource_mutation: None,
             })
         })();
-        frame.close_streams();
-        memoization.finalize();
+        run_memoization.finalize();
         result
+    }
+
+    fn activation_provenance(
+        &self,
+        run_id: RunId,
+        activation_id: ActivationId,
+        plan: &ExecutionPlan,
+        node_id: crate::node_system::document::NodeId,
+    ) -> ActivationProvenance {
+        ActivationProvenance {
+            run_id,
+            activation_id,
+            graph_path: plan.provenance.graph_path.clone(),
+            graph_revision: plan.provenance.basis.graph_revision,
+            node_id,
+            created_at_ms: current_time_ms(),
+            usage: ResultUsage::Produced,
+        }
+    }
+
+    fn create_internal_ready_result(
+        &self,
+        run_id: RunId,
+        plan: &ExecutionPlan,
+        node_id: crate::node_system::document::NodeId,
+        value_ref: ValueRef,
+        contract: PlannedValueContract,
+        value: Value,
+    ) -> Result<ResultId, RunError> {
+        let activation = self.activation_ids.allocate()?;
+        let group = self
+            .result_store()
+            .create_pending_group(
+                self.activation_provenance(run_id, activation, plan, node_id),
+                &[PendingOutputDescriptor {
+                    value: value_ref,
+                    output: None,
+                    presentation: ResultPresentation::Inspector,
+                    contract,
+                }],
+            )
+            .map_err(result_store_error)?;
+        self.complete_result_group(
+            plan,
+            &group,
+            vec![StoredValue::scalar(value)].into_boxed_slice(),
+        )?;
+        Ok(group.output_result_ids[0])
+    }
+
+    fn bind_internal_values(
+        &self,
+        run_id: RunId,
+        plan: &ExecutionPlan,
+        frame: &mut Frame,
+        values: &BTreeMap<ValueRef, Value>,
+    ) -> Result<(), RunError> {
+        for (value_ref, value) in values {
+            let result_id = self.create_internal_ready_result(
+                run_id,
+                plan,
+                crate::node_system::document::NodeId::from_uuid(uuid::Uuid::nil()),
+                *value_ref,
+                plan.value_contracts
+                    .get(value_ref)
+                    .cloned()
+                    .ok_or(RunError::MissingValue(*value_ref))?,
+                value.clone(),
+            )?;
+            frame.bind_result(*value_ref, result_id)?;
+        }
+        Ok(())
+    }
+
+    fn ready_runtime_value(
+        &self,
+        result_id: ResultId,
+        cancellation: &CancellationToken,
+    ) -> Result<RuntimeValue, RunError> {
+        let result = self
+            .result_store()
+            .wait_terminal(result_id, cancellation, self.options.deadline)
+            .map_err(result_store_error)?;
+        match &result.state {
+            ResultState::Ready(value) => Ok(value.to_runtime_value()),
+            ResultState::Failed(failure) => Err(RunError::InvalidPlan(failure.message.clone())),
+            ResultState::Cancelled => Err(RunError::Cancelled),
+            ResultState::Pending(_) => unreachable!("wait_terminal returned pending result"),
+        }
+    }
+
+    fn boolean(
+        &self,
+        frame: &Frame,
+        reference: ValueRef,
+        cancellation: &CancellationToken,
+    ) -> Result<bool, RunError> {
+        match self.ready_runtime_value(frame.result_id(reference)?, cancellation)? {
+            RuntimeValue::Scalar(Value::Bool(value)) => Ok(value),
+            _ => Err(RunError::InvalidCondition { value: reference }),
+        }
+    }
+
+    fn transition_group_terminal(
+        &self,
+        plan: &ExecutionPlan,
+        group: Option<&ActivationResultGroup>,
+        error: &RunError,
+    ) {
+        let Some(group) = group else {
+            return;
+        };
+        let transition = if matches!(
+            error,
+            RunError::Cancelled | RunError::UpstreamResultCancelled { .. }
+        ) {
+            self.result_store().cancel_group(group)
+        } else {
+            let failure = match error {
+                RunError::UpstreamResultFailed {
+                    source_result_id,
+                    message,
+                } => ResultFailure::upstream(*source_result_id, message.clone()),
+                _ => ResultFailure::new(error.to_string()),
+            };
+            self.result_store().fail_group(group, Arc::new(failure))
+        };
+        match transition {
+            Ok(()) => self.record_result_group_changed(
+                plan,
+                group,
+                if matches!(
+                    error,
+                    RunError::Cancelled | RunError::UpstreamResultCancelled { .. }
+                ) {
+                    super::ResultStateKind::Cancelled
+                } else {
+                    super::ResultStateKind::Failed
+                },
+            ),
+            Err(super::ResultStoreError::TerminalResult(_)) => {}
+            Err(error) => tauri_plugin_log::log::warn!(
+                target: "yssbi::node_system::runtime::results",
+                "failed to transition activation result group: {error}"
+            ),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn transition_group_terminal_for_test(
+        &self,
+        plan: &ExecutionPlan,
+        group: &ActivationResultGroup,
+        error: &RunError,
+    ) {
+        self.transition_group_terminal(plan, Some(group), error);
+    }
+
+    fn complete_result_group(
+        &self,
+        plan: &ExecutionPlan,
+        group: &ActivationResultGroup,
+        values: Box<[StoredValue]>,
+    ) -> Result<(), RunError> {
+        self.result_store()
+            .complete_group(group, values)
+            .map_err(result_store_error)?;
+        self.record_result_group_changed(plan, group, super::ResultStateKind::Ready);
+        Ok(())
+    }
+
+    fn record_result_group_changed(
+        &self,
+        plan: &ExecutionPlan,
+        group: &ActivationResultGroup,
+        state: super::ResultStateKind,
+    ) {
+        let Some(result) = group
+            .output_result_ids
+            .first()
+            .and_then(|result_id| self.result_store().result(*result_id))
+        else {
+            return;
+        };
+        let mut correlation =
+            CorrelationContext::compile(&plan.provenance).for_run(result.provenance.run_id, None);
+        if let Some(selection_digest) = self.selection_digest {
+            correlation = correlation.with_selection_digest(selection_digest);
+        }
+        self.events.record(RunEvent {
+            correlation,
+            basis: plan.provenance.basis.clone(),
+            kind: RunEventKind::ResultGroupChanged {
+                activation_id: group.activation_id.get(),
+                result_ids: group.output_result_ids.clone(),
+                state,
+            },
+        });
     }
 
     fn acquire_resources(
@@ -1330,7 +1372,7 @@ impl<'a> RunExecutor<'a> {
         resources: &RunResourceSet,
         resource_owner: &RunResourceOwner,
         relational_backends: &RunRelationalBackends,
-        memoization: &RunMemoization,
+        memoization: &MemoTables,
         demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         frame_depth: usize,
@@ -1362,7 +1404,7 @@ impl<'a> RunExecutor<'a> {
                 else_region,
                 results,
             } => {
-                let selected_then = boolean(frame, *condition)?;
+                let selected_then = self.boolean(frame, *condition, cancellation)?;
                 let selected = if selected_then {
                     then_region
                 } else {
@@ -1389,7 +1431,7 @@ impl<'a> RunExecutor<'a> {
                     } else {
                         binding.else_source
                     };
-                    frame.copy(source, binding.destination)?;
+                    frame.copy_result(source, binding.destination)?;
                 }
             }
             StructuredControlRegion::Loop {
@@ -1399,7 +1441,7 @@ impl<'a> RunExecutor<'a> {
                 max_iterations,
             } => {
                 for binding in carried {
-                    frame.copy(binding.initial_source, binding.body_input)?;
+                    frame.copy_result(binding.initial_source, binding.body_input)?;
                 }
                 let mut should_continue = true;
                 for _ in 0..*max_iterations {
@@ -1419,11 +1461,11 @@ impl<'a> RunExecutor<'a> {
                         run_parent_span_id,
                         parent_call,
                     )?;
-                    should_continue = boolean(frame, *continue_condition)?;
+                    should_continue = self.boolean(frame, *continue_condition, cancellation)?;
                     for binding in carried {
-                        frame.copy(binding.next_source, binding.result)?;
+                        frame.copy_result(binding.next_source, binding.result)?;
                         if should_continue {
-                            frame.copy(binding.next_source, binding.body_input)?;
+                            frame.copy_result(binding.next_source, binding.body_input)?;
                         }
                     }
                     if !should_continue {
@@ -1484,7 +1526,7 @@ impl<'a> RunExecutor<'a> {
                         .map(|binding| {
                             Ok((
                                 binding.callee_destination,
-                                frame.value(binding.caller_source)?.clone(),
+                                frame.result_id(binding.caller_source)?,
                             ))
                         })
                         .collect::<Result<Vec<_>, RunError>>()?;
@@ -1496,12 +1538,17 @@ impl<'a> RunExecutor<'a> {
                         cancellation,
                     )?;
                     let mut callee_frame = Frame::new(callee.value_count);
-                    callee_frame.bind(&callee.bound_values)?;
+                    self.bind_internal_values(
+                        run_id,
+                        &callee,
+                        &mut callee_frame,
+                        &callee.bound_values,
+                    )?;
                     let callee_demand =
                         DemandFingerprint::for_callee(&callee, target, arguments, results);
                     let result = (|| {
-                        for (destination, value) in argument_values {
-                            callee_frame.set(destination, value)?;
+                        for (destination, result_id) in argument_values {
+                            callee_frame.bind_result(destination, result_id)?;
                         }
                         self.execute_region(
                             run_id,
@@ -1521,16 +1568,13 @@ impl<'a> RunExecutor<'a> {
                             Some(call_id),
                         )?;
                         for binding in results {
-                            frame.set(
+                            frame.bind_result(
                                 binding.caller_destination,
-                                callee_frame.value(binding.callee_source)?.clone(),
+                                callee_frame.result_id(binding.callee_source)?,
                             )?;
                         }
                         Ok(())
                     })();
-                    if result.is_err() {
-                        callee_frame.close_streams();
-                    }
                     result
                 })();
                 call_trace_coverage.ensure_not_reached(SpanKind::ResourceAcquire);
@@ -1557,7 +1601,7 @@ impl<'a> RunExecutor<'a> {
         resources: &RunResourceSet,
         resource_owner: &RunResourceOwner,
         relational_backends: &RunRelationalBackends,
-        memoization: &RunMemoization,
+        memoization: &MemoTables,
         demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         frame_depth: usize,
@@ -1638,7 +1682,7 @@ impl<'a> RunExecutor<'a> {
         resources: &RunResourceSet,
         resource_owner: &RunResourceOwner,
         relational_backends: &RunRelationalBackends,
-        memoization: &RunMemoization,
+        memoization: &MemoTables,
         demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         run_parent_span_id: SpanId,
@@ -1679,6 +1723,7 @@ impl<'a> RunExecutor<'a> {
             resources,
             resource_owner,
             relational_backends,
+            results: self.result_store(),
             cancellation,
             deadline: self.options.deadline,
             run_parent_span_id,
@@ -1699,6 +1744,7 @@ impl<'a> RunExecutor<'a> {
                         let operation = job.operation;
                         let activation = job.activation;
                         let attempt = job.attempt;
+                        let output_group = job.output_group.clone();
                         let trace = WorkerTrace::default();
                         let (outputs, panic, completed_at) =
                             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -1726,6 +1772,7 @@ impl<'a> RunExecutor<'a> {
                                     operation,
                                     activation,
                                     attempt,
+                                    output_group,
                                     outputs,
                                 },
                                 trace_spans: trace.into_spans(),
@@ -1778,27 +1825,27 @@ impl<'a> RunExecutor<'a> {
                                 if let Some(key) = &retry.memo_key {
                                     memo_inflight.remove(key);
                                 }
+                                memoization.abort_delayed(&retry, error.clone());
+                                self.transition_group_terminal(
+                                    plan,
+                                    retry.output_group.as_ref(),
+                                    &error,
+                                );
                                 terminal_error = Some(error);
                                 break;
                             }
-                            let activation = match self.activation_ids.allocate() {
-                                Ok(activation) => activation,
-                                Err(error) => {
-                                    if let Some(key) = &retry.memo_key {
-                                        memo_inflight.remove(key);
-                                    }
-                                    terminal_error = Some(error);
-                                    break;
-                                }
-                            };
                             let prepared_retry = PreparedOperation {
                                 operation: retry.operation,
                                 owner_activation: retry.owner_activation,
-                                activation,
+                                activation: retry.activation,
                                 attempt: retry.attempt,
-                                inputs: retry.inputs,
+                                input_result_ids: retry.input_result_ids,
+                                output_group: retry.output_group,
                                 memo_key: retry.memo_key,
+                                memo_policy: retry.memo_policy,
                                 owns_memo_flight: true,
+                                awaits_memo_flight: false,
+                                reused_memo: false,
                                 class: retry.class,
                             };
                             #[cfg(test)]
@@ -1833,7 +1880,10 @@ impl<'a> RunExecutor<'a> {
                                 operation,
                                 activation_id,
                                 frame,
+                                memoization,
                                 demand,
+                                run_id,
+                                cancellation,
                             ) {
                                 Ok(operation) => {
                                     #[cfg(test)]
@@ -1865,15 +1915,121 @@ impl<'a> RunExecutor<'a> {
 
                         while let Some((operation, class)) = admission.admit() {
                             queued.remove(&operation);
-                            let job = prepared
+                            let mut job = prepared
                                 .remove(&operation)
                                 .expect("admitted operations are prepared");
 
-                            if let Some(outputs) = job
-                                .memo_key
-                                .as_ref()
-                                .and_then(|key| memoization.completed(key))
-                            {
+                            let memo_table = memoization.for_policy(job.memo_policy);
+                            let cached_result_ids = if job.awaits_memo_flight {
+                                let key = job.memo_key.as_ref().expect("memo waiter has a key");
+                                loop {
+                                    match memo_table
+                                        .expect("memoized job has a memo table")
+                                        .wait_completed(key, cancellation)
+                                    {
+                                        Ok(result_ids) => break Some(result_ids),
+                                        Err(RunError::MemoizationRetry)
+                                            if job.memo_policy == CachePolicy::PerSession =>
+                                        {
+                                            match memo_table
+                                                .expect("memoized job has a memo table")
+                                                .reserve(key, self.result_store())
+                                            {
+                                                Ok(super::MemoReservation::Complete(
+                                                    result_ids,
+                                                )) => {
+                                                    break Some(result_ids);
+                                                }
+                                                Ok(super::MemoReservation::Producer) => {
+                                                    job.owns_memo_flight = true;
+                                                    job.awaits_memo_flight = false;
+                                                    break None;
+                                                }
+                                                Ok(super::MemoReservation::Running) => continue,
+                                                Err(error) => {
+                                                    terminal_error = Some(error);
+                                                    break None;
+                                                }
+                                            }
+                                        }
+                                        Err(error) => {
+                                            terminal_error = Some(error);
+                                            break None;
+                                        }
+                                    }
+                                }
+                            } else {
+                                job.memo_key.as_ref().and_then(|key| {
+                                    memo_table
+                                        .expect("memoized job has a memo table")
+                                        .completed(key, self.result_store())
+                                })
+                            };
+                            if terminal_error.is_some() {
+                                break;
+                            }
+                            if let Some(result_ids) = cached_result_ids {
+                                if job.output_group.is_none()
+                                    && let Err(error) = self.bind_reused_operation(
+                                        plan,
+                                        frame,
+                                        run_id,
+                                        &mut job,
+                                        &result_ids,
+                                    )
+                                {
+                                    let key = job.memo_key.as_ref().expect("cache hit has a key");
+                                    memo_table
+                                        .expect("memoized job has a memo table")
+                                        .invalidate(key);
+                                    match memo_table
+                                        .expect("memoized job has a memo table")
+                                        .reserve(key, self.result_store())
+                                    {
+                                        Ok(super::MemoReservation::Producer) => {
+                                            job.owns_memo_flight = true;
+                                            job.awaits_memo_flight = false;
+                                            job.reused_memo = false;
+                                            if let Err(group_error) = self
+                                                .create_pending_operation_group(
+                                                    plan, frame, run_id, &mut job,
+                                                )
+                                            {
+                                                memoization
+                                                    .abort_prepared(&job, group_error.clone());
+                                                terminal_error = Some(group_error);
+                                                break;
+                                            }
+                                        }
+                                        Ok(_) => {
+                                            terminal_error = Some(error);
+                                            break;
+                                        }
+                                        Err(reserve_error) => {
+                                            terminal_error = Some(reserve_error);
+                                            break;
+                                        }
+                                    }
+                                }
+                                if !job.reused_memo {
+                                    if let Err(error) = self.submit_admitted_operation(
+                                        plan,
+                                        frame,
+                                        &mut admission,
+                                        &mut running,
+                                        &mut memo_inflight,
+                                        &job_queue,
+                                        memoization,
+                                        job,
+                                        class,
+                                        cancellation,
+                                        parent_call,
+                                        run_id,
+                                    ) {
+                                        terminal_error = Some(error);
+                                    }
+                                    continue;
+                                }
                                 self.bookkeep_admission(
                                     frame,
                                     &mut admission,
@@ -1915,13 +2071,23 @@ impl<'a> RunExecutor<'a> {
                                             operation,
                                             activation: job.activation,
                                             attempt: job.attempt,
-                                            outputs: Ok(outputs),
+                                            output_group: job.output_group,
+                                            outputs: Ok(Box::new([])),
                                         },
                                         trace_spans: Box::new([]),
                                         panic: None,
                                     },
                                 );
                                 continue;
+                            }
+                            if job.owns_memo_flight
+                                && job.output_group.is_none()
+                                && let Err(error) = self
+                                    .create_pending_operation_group(plan, frame, run_id, &mut job)
+                            {
+                                memoization.abort_prepared(&job, error.clone());
+                                terminal_error.get_or_insert(error);
+                                break;
                             }
                             if let Err(error) = self.submit_admitted_operation(
                                 plan,
@@ -1930,6 +2096,7 @@ impl<'a> RunExecutor<'a> {
                                 &mut running,
                                 &mut memo_inflight,
                                 &job_queue,
+                                memoization,
                                 job,
                                 class,
                                 cancellation,
@@ -2111,6 +2278,20 @@ impl<'a> RunExecutor<'a> {
                     }
                 }
             })();
+            if let Err(error) = &scheduler_result {
+                for job in prepared.values() {
+                    memoization.abort_prepared(job, error.clone());
+                    self.transition_group_terminal(plan, job.output_group.as_ref(), error);
+                }
+                for operation in running.values() {
+                    memoization.abort_owned(operation, error.clone());
+                    self.transition_group_terminal(plan, operation.output_group.as_ref(), error);
+                }
+                for retry in delayed_retries.iter() {
+                    memoization.abort_delayed(&retry.0, error.clone());
+                    self.transition_group_terminal(plan, retry.0.output_group.as_ref(), error);
+                }
+            }
             scheduler_result
         });
         if let Some(payload) = worker_panic {
@@ -2134,7 +2315,7 @@ impl<'a> RunExecutor<'a> {
                 if !operation_outputs.contains(&dependency.destination)
                     && frame.has(dependency.source)
                 {
-                    frame.copy(dependency.source, dependency.destination)?;
+                    frame.copy_result(dependency.source, dependency.destination)?;
                 }
             }
         }
@@ -2150,15 +2331,25 @@ impl<'a> RunExecutor<'a> {
         frame: &Frame,
     ) -> bool {
         let operation = &plan.operations[operation_index.index()];
-        let inputs_ready = operation
-            .inputs
-            .iter()
-            .all(|input| frame.has(input.value) || input.bound_value.is_some());
+        let inputs_ready = operation.inputs.iter().all(|input| {
+            frame
+                .result_id(input.value)
+                .ok()
+                .and_then(|result_id| self.result_store().result(result_id))
+                .is_some_and(|result| result.state.is_terminal())
+                || (!frame.has(input.value) && input.bound_value.is_some())
+        });
         let values_ready = operation.outputs.iter().all(|output| {
             plan.value_dependencies
                 .iter()
                 .filter(|edge| edge.destination == output.value)
-                .all(|edge| frame.has(edge.source))
+                .all(|edge| {
+                    frame
+                        .result_id(edge.source)
+                        .ok()
+                        .and_then(|result_id| self.result_store().result(result_id))
+                        .is_some_and(|result| result.state.is_terminal())
+                })
         });
         let relational_ready = true;
         let effects_ready = plan
@@ -2220,76 +2411,234 @@ impl<'a> RunExecutor<'a> {
         RunError::InvalidPlan("dependency gating produced no ready operation".into())
     }
 
+    fn create_pending_operation_group(
+        &self,
+        plan: &ExecutionPlan,
+        frame: &mut Frame,
+        run_id: RunId,
+        job: &mut PreparedOperation,
+    ) -> Result<(), RunError> {
+        if job.output_group.is_some() {
+            return Ok(());
+        }
+        let operation = &plan.operations[job.operation.index()];
+        if operation.outputs.is_empty() {
+            return Ok(());
+        }
+        let descriptors = operation
+            .outputs
+            .iter()
+            .map(|output| PendingOutputDescriptor {
+                value: output.value,
+                output: output.public_output.clone(),
+                presentation: output.presentation,
+                contract: output.contract.clone(),
+            })
+            .collect::<Vec<_>>();
+        let group = self
+            .result_store()
+            .create_pending_group(
+                self.activation_provenance(run_id, job.activation, plan, operation.source_node_id),
+                &descriptors,
+            )
+            .map_err(result_store_error)?;
+        for (output, result_id) in operation
+            .outputs
+            .iter()
+            .zip(group.output_result_ids.iter().copied())
+        {
+            frame.bind_result(output.value, result_id)?;
+        }
+        job.output_group = Some(group);
+        Ok(())
+    }
+
+    fn bind_reused_operation(
+        &self,
+        plan: &ExecutionPlan,
+        frame: &mut Frame,
+        run_id: RunId,
+        job: &mut PreparedOperation,
+        result_ids: &[ResultId],
+    ) -> Result<(), RunError> {
+        let operation = &plan.operations[job.operation.index()];
+        let descriptors = operation
+            .outputs
+            .iter()
+            .map(|output| PendingOutputDescriptor {
+                value: output.value,
+                output: output.public_output.clone(),
+                presentation: output.presentation,
+                contract: output.contract.clone(),
+            })
+            .collect::<Vec<_>>();
+        if descriptors.is_empty() {
+            job.reused_memo = true;
+            return Ok(());
+        }
+        let original_activation_id = result_ids
+            .first()
+            .and_then(|result_id| self.result_store().result(*result_id))
+            .map(|result| result.provenance.activation_id)
+            .ok_or_else(|| RunError::InvalidPlan("memoized result is unavailable".into()))?;
+        let mut provenance =
+            self.activation_provenance(run_id, job.activation, plan, operation.source_node_id);
+        provenance.usage = ResultUsage::Reused {
+            original_activation_id,
+        };
+        let group = self
+            .result_store()
+            .record_reused_group(provenance, &descriptors, result_ids)
+            .map_err(result_store_error)?;
+        self.record_result_group_changed(plan, &group, super::ResultStateKind::Ready);
+        for (output, result_id) in operation
+            .outputs
+            .iter()
+            .zip(group.output_result_ids.iter().copied())
+        {
+            frame.bind_result(output.value, result_id)?;
+        }
+        job.output_group = Some(group);
+        job.reused_memo = true;
+        Ok(())
+    }
+
     fn prepare_operation(
         &self,
         plan: &ExecutionPlan,
         operation_index: OperationIndex,
-        activation_id: ActivationId,
+        owner_activation: ActivationId,
         frame: &mut Frame,
+        memoization: &MemoTables,
         demand: &DemandFingerprint,
+        run_id: RunId,
+        _cancellation: &CancellationToken,
     ) -> Result<PreparedOperation, RunError> {
         let attempt = AttemptId::initial();
+        let activation = self.activation_ids.allocate()?;
         let operation = &plan.operations[operation_index.index()];
-        let inputs = operation
+        if operation.source_node_type_id.as_str() == "yssbi.debug.view"
+            && (operation.inputs.len() != 1 || !operation.outputs.is_empty())
+        {
+            return Err(RunError::InvalidPlan(
+                "View Data operation must have exactly one Data input and no data outputs".into(),
+            ));
+        }
+        for input in &operation.inputs {
+            if !frame.has(input.value) {
+                let value = input
+                    .bound_value
+                    .as_ref()
+                    .ok_or(RunError::MissingValue(input.value))?;
+                let result_id = self.create_internal_ready_result(
+                    run_id,
+                    plan,
+                    operation.source_node_id,
+                    input.value,
+                    input.contract.clone(),
+                    value.clone(),
+                )?;
+                frame.bind_result(input.value, result_id)?;
+            }
+        }
+        let input_result_ids = operation
             .inputs
             .iter()
-            .map(|input| {
-                let value = if frame.has(input.value) {
-                    frame.value(input.value).cloned()
-                } else if let Some(value) = &input.bound_value {
-                    Ok(RuntimeValue::Scalar(value.clone()))
-                } else {
-                    frame.value(input.value).cloned()
-                }?;
-                if input.contract.kind == PlannedValueKind::DataSeries {
-                    let RuntimeValue::Artifact(artifact) = &value else {
-                        return Err(RunError::InvalidPlan(
-                            format!(
-                                "DataSeries input value {} did not receive a DataSeries Artifact",
-                                input.value.index()
-                            )
-                            .into(),
-                        ));
-                    };
-                    let metadata = artifact.data_series_metadata().ok_or_else(|| {
-                        RunError::InvalidPlan(
-                            format!(
-                                "DataSeries input value {} did not receive a DataSeries Artifact",
-                                input.value.index()
-                            )
-                            .into(),
-                        )
-                    })?;
-                    validate_data_series_type_expr(metadata, &input.contract.type_expr)
-                        .map_err(|error| RunError::InvalidPlan(error.to_string().into()))?;
-                }
-                Ok(value)
-            })
+            .map(|input| frame.result_id(input.value))
             .collect::<Result<Vec<_>, _>>()?
             .into_boxed_slice();
-        let memo_key = if operation.cache_policy == CachePolicy::PerRun
+        let memo_key = if operation.cache_policy != CachePolicy::Disabled
             && operation_memoization_safe(plan, operation_index)
         {
             operation_resource_versions(plan, operation_index).and_then(|resource_versions| {
                 OperationMemoKey::from_inputs(
                     operation.stable_id.clone(),
-                    &inputs,
+                    &input_result_ids,
+                    self.result_store(),
                     resource_versions,
                     operation.semantics_version,
+                    self.computation_settings,
                     demand.clone(),
                 )
             })
         } else {
             None
         };
+        let memo_reservation = memo_key
+            .as_ref()
+            .map(|key| {
+                memoization
+                    .for_policy(operation.cache_policy)
+                    .expect("memoized operation has a memo table")
+                    .reserve(key, self.result_store())
+            })
+            .transpose()?;
+        let owns_memo_flight = matches!(memo_reservation, Some(super::MemoReservation::Producer));
+        let waiting_for_memo = matches!(memo_reservation, Some(super::MemoReservation::Running));
+        let cached_result_ids = match memo_reservation {
+            Some(super::MemoReservation::Complete(result_ids)) => Some(result_ids),
+            Some(super::MemoReservation::Running | super::MemoReservation::Producer) | None => None,
+        };
+        let descriptors = operation
+            .outputs
+            .iter()
+            .map(|output| PendingOutputDescriptor {
+                value: output.value,
+                output: output.public_output.clone(),
+                presentation: output.presentation,
+                contract: output.contract.clone(),
+            })
+            .collect::<Vec<_>>();
+        let reused_memo = cached_result_ids.is_some();
+        let output_group = if descriptors.is_empty() || waiting_for_memo || reused_memo {
+            None
+        } else {
+            let group = match self.result_store().create_pending_group(
+                self.activation_provenance(run_id, activation, plan, operation.source_node_id),
+                &descriptors,
+            ) {
+                Ok(group) => group,
+                Err(error) => {
+                    let error = result_store_error(error);
+                    memoization.abort_flight(
+                        owns_memo_flight,
+                        memo_key.as_ref(),
+                        operation.cache_policy,
+                        error.clone(),
+                    );
+                    return Err(error);
+                }
+            };
+            for (output, result_id) in operation
+                .outputs
+                .iter()
+                .zip(group.output_result_ids.iter().copied())
+            {
+                if let Err(error) = frame.bind_result(output.value, result_id) {
+                    memoization.abort_flight(
+                        owns_memo_flight,
+                        memo_key.as_ref(),
+                        operation.cache_policy,
+                        error.clone(),
+                    );
+                    self.transition_group_terminal(plan, Some(&group), &error);
+                    return Err(error);
+                }
+            }
+            Some(group)
+        };
         Ok(PreparedOperation {
             operation: operation_index,
-            owner_activation: activation_id,
-            activation: activation_id,
+            owner_activation,
+            activation,
             attempt,
-            inputs,
+            input_result_ids,
+            output_group,
             memo_key,
-            owns_memo_flight: false,
+            memo_policy: operation.cache_policy,
+            owns_memo_flight,
+            awaits_memo_flight: waiting_for_memo,
+            reused_memo,
             class: operation.workload,
         })
     }
@@ -2325,17 +2674,18 @@ impl<'a> RunExecutor<'a> {
                 owner_activation: job.owner_activation,
                 activation: job.activation,
                 attempt: job.attempt,
-                inputs: job.inputs.clone(),
+                input_result_ids: job.input_result_ids.clone(),
+                output_group: job.output_group.clone(),
                 memo_key: job.memo_key.clone(),
+                memo_policy: job.memo_policy,
+                owns_memo_flight: job.owns_memo_flight,
+                reused_memo: job.reused_memo,
             },
         );
         debug_assert!(previous_running.is_none());
         if track_memo && let Some(key) = &job.memo_key {
-            if job.owns_memo_flight {
-                debug_assert!(memo_inflight.contains(key));
-            } else {
-                debug_assert!(memo_inflight.insert(key.clone()));
-            }
+            let inserted = memo_inflight.insert(key.clone());
+            debug_assert!(inserted || job.attempt != AttemptId::initial());
         }
         debug_assert_eq!(admission.running_count(), running.len());
         AdmissionBookkeeping {
@@ -2402,6 +2752,7 @@ impl<'a> RunExecutor<'a> {
         running: &mut BTreeMap<OperationIndex, RunningOperation>,
         memo_inflight: &mut BTreeSet<OperationMemoKey>,
         job_queue: &WorkerQueue<PreparedOperation>,
+        memoization: &MemoTables,
         job: PreparedOperation,
         class: WorkloadClass,
         cancellation: &CancellationToken,
@@ -2411,6 +2762,7 @@ impl<'a> RunExecutor<'a> {
         let operation = job.operation;
         let activation = job.activation;
         let attempt = job.attempt;
+        let output_group = job.output_group.clone();
         let bookkeeping =
             self.bookkeep_admission(frame, admission, running, memo_inflight, &job, class, true);
         #[cfg(test)]
@@ -2422,6 +2774,7 @@ impl<'a> RunExecutor<'a> {
             },
             cancellation,
         );
+        let owned_memo_key = job.owns_memo_flight.then(|| job.memo_key.clone()).flatten();
         if job_queue.push(job).is_err() {
             self.rollback_admission(
                 frame,
@@ -2432,13 +2785,17 @@ impl<'a> RunExecutor<'a> {
                 attempt,
                 cancellation,
             );
-            return Err(
-                check_terminal(cancellation, self.options.deadline, RunPhase::QueueWait)
-                    .err()
-                    .unwrap_or_else(|| {
-                        RunError::InvalidPlan("operation worker queue closed".into())
-                    }),
+            let error = check_terminal(cancellation, self.options.deadline, RunPhase::QueueWait)
+                .err()
+                .unwrap_or_else(|| RunError::InvalidPlan("operation worker queue closed".into()));
+            memoization.abort_flight(
+                owned_memo_key.is_some(),
+                owned_memo_key.as_ref(),
+                plan.operations[operation.index()].cache_policy,
+                error.clone(),
             );
+            self.transition_group_terminal(plan, output_group.as_ref(), &error);
+            return Err(error);
         }
         let correlation = operation_correlation(plan, run_id, parent_call, operation);
         self.record_operation_started(plan, correlation, operation, activation, attempt);
@@ -2450,7 +2807,7 @@ impl<'a> RunExecutor<'a> {
         &self,
         plan: &ExecutionPlan,
         frame: &mut Frame,
-        memoization: &RunMemoization,
+        _memoization: &MemoTables,
         admission: &mut ClassScheduler,
         running: &mut BTreeMap<OperationIndex, RunningOperation>,
         _prepared: &mut BTreeMap<OperationIndex, PreparedOperation>,
@@ -2547,6 +2904,17 @@ impl<'a> RunExecutor<'a> {
             *worker_panic = envelope.panic;
         }
         if suppress_completion {
+            if active.owns_memo_flight {
+                _memoization.abort_owned(
+                    &active,
+                    terminal_error.clone().unwrap_or(RunError::Cancelled),
+                );
+            }
+            self.transition_group_terminal(
+                plan,
+                completion.output_group.as_ref(),
+                terminal_error.as_ref().unwrap_or(&RunError::Cancelled),
+            );
             return;
         }
 
@@ -2565,6 +2933,20 @@ impl<'a> RunExecutor<'a> {
             {
                 *terminal_error = completion.outputs.clone().err();
             }
+            if active.owns_memo_flight {
+                _memoization.abort_owned(
+                    &active,
+                    terminal_error
+                        .as_ref()
+                        .expect("terminal error is present")
+                        .clone(),
+                );
+            }
+            self.transition_group_terminal(
+                plan,
+                completion.output_group.as_ref(),
+                terminal_error.as_ref().expect("terminal error is present"),
+            );
             self.record_operation_terminal_event(plan, correlation, &completion);
             if let Some(key) = &active.memo_key {
                 memo_inflight.remove(key);
@@ -2594,9 +2976,12 @@ impl<'a> RunExecutor<'a> {
                 if let Some(key) = &active.memo_key {
                     memo_inflight.remove(key);
                 }
-                *terminal_error = Some(RunError::DeadlineExceeded {
+                let error = RunError::DeadlineExceeded {
                     phase: RunPhase::QueueWait,
-                });
+                };
+                _memoization.abort_owned(&active, error.clone());
+                self.transition_group_terminal(plan, active.output_group.as_ref(), &error);
+                *terminal_error = Some(error);
                 return;
             };
             if cancellation.is_cancelled()
@@ -2608,22 +2993,26 @@ impl<'a> RunExecutor<'a> {
                 if let Some(key) = &active.memo_key {
                     memo_inflight.remove(key);
                 }
-                *terminal_error = Some(if cancellation.is_cancelled() {
+                let error = if cancellation.is_cancelled() {
                     RunError::Cancelled
                 } else {
                     RunError::DeadlineExceeded {
                         phase: RunPhase::QueueWait,
                     }
-                });
+                };
+                _memoization.abort_owned(&active, error.clone());
+                self.transition_group_terminal(plan, active.output_group.as_ref(), &error);
+                *terminal_error = Some(error);
                 return;
             }
             let Some(attempt) = completion.attempt.next_checked() else {
                 if let Some(key) = &active.memo_key {
                     memo_inflight.remove(key);
                 }
-                *terminal_error = Some(RunError::InvalidPlan(
-                    "retry attempt identity overflowed".into(),
-                ));
+                let error = RunError::InvalidPlan("retry attempt identity overflowed".into());
+                _memoization.abort_owned(&active, error.clone());
+                self.transition_group_terminal(plan, active.output_group.as_ref(), &error);
+                *terminal_error = Some(error);
                 return;
             };
             let tie_break = *next_retry_tie;
@@ -2631,9 +3020,11 @@ impl<'a> RunExecutor<'a> {
                 if let Some(key) = &active.memo_key {
                     memo_inflight.remove(key);
                 }
-                *terminal_error = Some(RunError::InvalidPlan(
-                    "delayed retry tie-break identity overflowed".into(),
-                ));
+                let error =
+                    RunError::InvalidPlan("delayed retry tie-break identity overflowed".into());
+                _memoization.abort_owned(&active, error.clone());
+                self.transition_group_terminal(plan, active.output_group.as_ref(), &error);
+                *terminal_error = Some(error);
                 return;
             };
             *next_retry_tie = next_tie;
@@ -2652,9 +3043,12 @@ impl<'a> RunExecutor<'a> {
                 tie_break,
                 operation: completion.operation,
                 owner_activation: active.owner_activation,
+                activation: active.activation,
                 attempt,
-                inputs: active.inputs,
+                input_result_ids: active.input_result_ids,
+                output_group: active.output_group,
                 memo_key: active.memo_key,
+                memo_policy: active.memo_policy,
                 class: active.class,
             }));
             return;
@@ -2666,6 +3060,14 @@ impl<'a> RunExecutor<'a> {
         match completion.outputs {
             Ok(outputs) => {
                 if cancellation.is_cancelled() {
+                    if active.owns_memo_flight {
+                        _memoization.abort_owned(&active, RunError::Cancelled);
+                    }
+                    self.transition_group_terminal(
+                        plan,
+                        completion.output_group.as_ref(),
+                        &RunError::Cancelled,
+                    );
                     *terminal_error = Some(RunError::Cancelled);
                     return;
                 }
@@ -2677,18 +3079,46 @@ impl<'a> RunExecutor<'a> {
                 if frame.attempted.get(&activation_key) != Some(&completion.attempt)
                     || frame.completed.contains(&activation_key)
                 {
+                    let error = RunError::InvalidPlan(
+                        "operation completion no longer matches its active attempt".into(),
+                    );
+                    _memoization.abort_owned(&active, error.clone());
+                    self.transition_group_terminal(plan, completion.output_group.as_ref(), &error);
+                    *terminal_error = Some(error);
                     return;
                 }
-                if let Some(key) = active.memo_key {
-                    memoization.commit_completed(key, &outputs);
+                #[cfg(test)]
+                if completion.output_group.is_some() {
+                    self.run_test_checkpoint(SchedulerCheckpoint::BeforeGroupCommit, cancellation);
                 }
-                let operation = &plan.operations[completion.operation.index()];
-                for (output, value) in operation.outputs.iter().zip(outputs) {
-                    if let Err(error) = frame.set(output.value, value) {
-                        *terminal_error = Some(error);
-                        cancellation.cancel();
-                        return;
+                if !active.reused_memo
+                    && let Some(group) = completion.output_group.as_ref()
+                    && let Err(error) = self.complete_result_group(plan, group, outputs)
+                {
+                    if active.owns_memo_flight {
+                        _memoization.abort_owned(&active, error.clone());
                     }
+                    self.transition_group_terminal(plan, Some(group), &error);
+                    *terminal_error = Some(error);
+                    cancellation.cancel();
+                    return;
+                }
+                if active.owns_memo_flight
+                    && let (Some(key), Some(group)) = (&active.memo_key, &completion.output_group)
+                    && !_memoization
+                        .for_policy(active.memo_policy)
+                        .expect("memoized operation has a memo table")
+                        .commit_completed(
+                            key.clone(),
+                            &group.output_result_ids,
+                            self.result_store(),
+                        )
+                {
+                    let error = RunError::Cancelled;
+                    self.transition_group_terminal(plan, Some(group), &error);
+                    *terminal_error = Some(error);
+                    cancellation.cancel();
+                    return;
                 }
                 frame.completed.insert(activation_key);
                 *frame
@@ -2696,6 +3126,32 @@ impl<'a> RunExecutor<'a> {
                     .entry(completion.operation)
                     .or_default() += 1;
                 pending.remove(&completion.operation);
+                let operation = &plan.operations[completion.operation.index()];
+                if operation.source_node_type_id.as_str() == "yssbi.debug.view" {
+                    let Some(result_id) = active.input_result_ids.first().copied() else {
+                        *terminal_error = Some(RunError::InvalidPlan(
+                            "View Data operation has no Data input result".into(),
+                        ));
+                        cancellation.cancel();
+                        return;
+                    };
+                    crate::log::emit_notify_log(
+                        crate::log::LogLevel::Info,
+                        format!(
+                            "View Data resultId={} runId={} activationId={} nodeId={}",
+                            result_id.get(),
+                            run_id.get(),
+                            completion.activation.get(),
+                            operation.source_node_id,
+                        ),
+                        Some("yssbi.debug.view".into()),
+                    );
+                    self.record_event(
+                        plan,
+                        correlation.clone(),
+                        RunEventKind::OpenResultWindow { result_id },
+                    );
+                }
                 if let Err(error) = self.propagate_value_dependencies(plan, frame) {
                     *terminal_error = Some(error);
                     cancellation.cancel();
@@ -2712,6 +3168,16 @@ impl<'a> RunExecutor<'a> {
                 );
             }
             Err(error) => {
+                if active.owns_memo_flight {
+                    _memoization.abort_owned(&active, error.clone());
+                }
+                self.transition_group_terminal(plan, completion.output_group.as_ref(), &error);
+                if let Err(propagation_error) = self.propagate_value_dependencies(plan, frame) {
+                    *terminal_error = Some(propagation_error);
+                    cancellation.cancel();
+                    return;
+                }
+                self.terminalize_dependent_operations(plan, frame, pending, run_id, &error);
                 self.record_event(
                     plan,
                     correlation,
@@ -2725,6 +3191,93 @@ impl<'a> RunExecutor<'a> {
                 *terminal_error = Some(error);
                 cancellation.cancel();
             }
+        }
+    }
+
+    fn terminalize_dependent_operations(
+        &self,
+        plan: &ExecutionPlan,
+        frame: &mut Frame,
+        pending: &mut BTreeSet<OperationIndex>,
+        run_id: RunId,
+        upstream_error: &RunError,
+    ) {
+        loop {
+            let affected = pending
+                .iter()
+                .copied()
+                .filter_map(|operation_index| {
+                    let operation = &plan.operations[operation_index.index()];
+                    let source = operation.inputs.iter().find_map(|input| {
+                        let result_id = frame.result_id(input.value).ok()?;
+                        let result = self.result_store().result(result_id)?;
+                        matches!(
+                            result.state,
+                            ResultState::Failed(_) | ResultState::Cancelled
+                        )
+                        .then_some((result_id, result.state.clone()))
+                    })?;
+                    Some((operation_index, source))
+                })
+                .collect::<Vec<_>>();
+            if affected.is_empty() {
+                break;
+            }
+            for (operation_index, (source_result_id, source_state)) in affected {
+                let operation = &plan.operations[operation_index.index()];
+                let activation = match self.activation_ids.allocate() {
+                    Ok(activation) => activation,
+                    Err(_) => continue,
+                };
+                let descriptors = operation
+                    .outputs
+                    .iter()
+                    .map(|output| PendingOutputDescriptor {
+                        value: output.value,
+                        output: output.public_output.clone(),
+                        presentation: output.presentation,
+                        contract: output.contract.clone(),
+                    })
+                    .collect::<Vec<_>>();
+                let group = if descriptors.is_empty() {
+                    None
+                } else {
+                    match self.result_store().create_pending_group(
+                        self.activation_provenance(
+                            run_id,
+                            activation,
+                            plan,
+                            operation.source_node_id,
+                        ),
+                        &descriptors,
+                    ) {
+                        Ok(group) => Some(group),
+                        Err(_) => continue,
+                    }
+                };
+                if let Some(group) = &group {
+                    for (output, result_id) in operation
+                        .outputs
+                        .iter()
+                        .zip(group.output_result_ids.iter().copied())
+                    {
+                        let _ = frame.bind_result(output.value, result_id);
+                    }
+                    let error = match source_state {
+                        ResultState::Failed(failure) => RunError::UpstreamResultFailed {
+                            source_result_id,
+                            message: failure.message.clone(),
+                        },
+                        ResultState::Cancelled => {
+                            RunError::UpstreamResultCancelled { source_result_id }
+                        }
+                        _ => upstream_error.clone(),
+                    };
+                    self.transition_group_terminal(plan, Some(group), &error);
+                }
+                pending.remove(&operation_index);
+            }
+            let _ = self.propagate_value_dependencies(plan, frame);
         }
     }
 
@@ -2783,6 +3336,25 @@ impl<'a> RunExecutor<'a> {
     }
 }
 
+fn result_store_error(error: super::ResultStoreError) -> RunError {
+    match error {
+        super::ResultStoreError::WaitCancelled => RunError::Cancelled,
+        super::ResultStoreError::WaitDeadlineExceeded => RunError::DeadlineExceeded {
+            phase: RunPhase::ResultPublication,
+        },
+        error => RunError::InvalidPlan(error.to_string().into()),
+    }
+}
+
+fn current_time_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .try_into()
+        .unwrap_or(u64::MAX)
+}
+
 fn ordinary_precedes_cancellation(
     produced_ordinary_error: bool,
     completed_at: Instant,
@@ -2835,7 +3407,7 @@ fn execute_operation_worker(
     context: &OperationWorkerContext<'_>,
     job: PreparedOperation,
     trace: &dyn TraceSink,
-) -> Result<Box<[RuntimeValue]>, RunError> {
+) -> Result<Box<[StoredValue]>, RunError> {
     let operation = job.operation;
     let activation = job.activation;
     let attempt = job.attempt;
@@ -2870,124 +3442,203 @@ fn execute_operation_worker_inner(
     job: PreparedOperation,
     trace: &dyn TraceSink,
     operation_span_id: SpanId,
-) -> Result<Box<[RuntimeValue]>, RunError> {
+) -> Result<Box<[StoredValue]>, RunError> {
     check_terminal(context.cancellation, context.deadline, RunPhase::Kernel)?;
     let operation = &context.plan.operations[job.operation.index()];
-    let inputs = job.inputs;
-    let outputs = match &operation.kernel {
-        PlannedKernel::Native(handle) => {
-            let kernel = context
-                .kernels
-                .get(handle)
-                .ok_or_else(|| RunError::KernelNotFound(handle.as_str().into()))?;
-            let kernel_context = KernelContext {
-                run_id: context.run_id,
-                frame_id: context.frame_id,
-                activation_id: job.activation,
-                computation_settings: context.computation_settings,
-                params: &operation.params,
-                compiled_parameters: context.compiled_parameters,
-                resources: context.resources,
-                resource_owner: context.resource_owner,
-                cancellation: context.cancellation,
-                deadline: context.deadline,
-            };
-            match kernel.execute(&kernel_context, &inputs) {
-                Ok(outputs) => outputs,
-                Err(error) if error.kind() == KernelErrorKind::Cancelled => {
-                    return Err(RunError::Cancelled);
-                }
-                Err(error) if error.kind() == KernelErrorKind::DeadlineExceeded => {
-                    return Err(RunError::DeadlineExceeded {
-                        phase: RunPhase::Kernel,
+    let inputs = if operation.source_node_type_id.as_str() == "yssbi.debug.view" {
+        for result_id in &job.input_result_ids {
+            let result = context
+                .results
+                .wait_terminal(*result_id, context.cancellation, context.deadline)
+                .map_err(result_store_error)?;
+            match &result.state {
+                ResultState::Ready(_) => {}
+                ResultState::Failed(failure) => {
+                    return Err(RunError::UpstreamResultFailed {
+                        source_result_id: *result_id,
+                        message: failure.message.clone(),
                     });
                 }
-                Err(error) => {
-                    return Err(RunError::KernelFailed {
-                        operation: job.operation,
-                        kind: error.kind(),
-                        message: error.message().into(),
+                ResultState::Cancelled => {
+                    return Err(RunError::UpstreamResultCancelled {
+                        source_result_id: *result_id,
                     });
                 }
+                ResultState::Pending(_) => unreachable!("wait_terminal returned pending result"),
             }
         }
-        PlannedKernel::Adapter(adapter) => {
-            let input =
-                inputs.into_vec().into_iter().next().ok_or_else(|| {
+        Box::new([])
+    } else {
+        job.input_result_ids
+            .iter()
+            .zip(&operation.inputs)
+            .map(|(result_id, input)| {
+                let result = context
+                    .results
+                    .wait_terminal(*result_id, context.cancellation, context.deadline)
+                    .map_err(result_store_error)?;
+                let value = match &result.state {
+                    ResultState::Ready(value) => value.to_runtime_value(),
+                    ResultState::Failed(failure) => {
+                        return Err(RunError::UpstreamResultFailed {
+                            source_result_id: *result_id,
+                            message: failure.message.clone(),
+                        });
+                    }
+                    ResultState::Cancelled => {
+                        return Err(RunError::UpstreamResultCancelled {
+                            source_result_id: *result_id,
+                        });
+                    }
+                    ResultState::Pending(_) => {
+                        unreachable!("wait_terminal returned pending result")
+                    }
+                };
+                if input.contract.kind == PlannedValueKind::DataSeries {
+                    let RuntimeValue::Artifact(artifact) = &value else {
+                        return Err(RunError::InvalidPlan(
+                            format!(
+                                "DataSeries input value {} did not receive a DataSeries Artifact",
+                                input.value.index()
+                            )
+                            .into(),
+                        ));
+                    };
+                    let metadata = artifact.data_series_metadata().ok_or_else(|| {
+                        RunError::InvalidPlan(
+                            format!(
+                                "DataSeries input value {} did not receive a DataSeries Artifact",
+                                input.value.index()
+                            )
+                            .into(),
+                        )
+                    })?;
+                    validate_data_series_type_expr(metadata, &input.contract.type_expr)
+                        .map_err(|error| RunError::InvalidPlan(error.to_string().into()))?;
+                }
+                Ok(value)
+            })
+            .collect::<Result<Vec<_>, RunError>>()?
+            .into_boxed_slice()
+    };
+    let outputs = if operation.source_node_type_id.as_str() == "yssbi.debug.view" {
+        debug_assert_eq!(job.input_result_ids.len(), 1);
+        Vec::new()
+    } else {
+        match &operation.kernel {
+            PlannedKernel::Native(handle) => {
+                let kernel = context
+                    .kernels
+                    .get(handle)
+                    .ok_or_else(|| RunError::KernelNotFound(handle.as_str().into()))?;
+                let kernel_context = KernelContext {
+                    run_id: context.run_id,
+                    frame_id: context.frame_id,
+                    activation_id: job.activation,
+                    computation_settings: context.computation_settings,
+                    params: &operation.params,
+                    compiled_parameters: context.compiled_parameters,
+                    resources: context.resources,
+                    resource_owner: context.resource_owner,
+                    cancellation: context.cancellation,
+                    deadline: context.deadline,
+                };
+                match kernel.execute(&kernel_context, &inputs) {
+                    Ok(outputs) => outputs,
+                    Err(error) if error.kind() == KernelErrorKind::Cancelled => {
+                        return Err(RunError::Cancelled);
+                    }
+                    Err(error) if error.kind() == KernelErrorKind::DeadlineExceeded => {
+                        return Err(RunError::DeadlineExceeded {
+                            phase: RunPhase::Kernel,
+                        });
+                    }
+                    Err(error) => {
+                        return Err(RunError::KernelFailed {
+                            operation: job.operation,
+                            kind: error.kind(),
+                            message: error.message().into(),
+                        });
+                    }
+                }
+            }
+            PlannedKernel::Adapter(adapter) => {
+                let input = inputs.into_vec().into_iter().next().ok_or_else(|| {
                     RunError::InvalidPlan("adapter operation has no input".into())
                 })?;
-            let correlation = operation_correlation(
-                context.plan,
-                context.run_id,
-                context.parent_call,
-                job.operation,
-            );
-            let mut adapter_span = start_span_safely(
-                trace,
-                SpanSpec {
-                    parent_span_id: Some(operation_span_id),
-                    run_id: Some(context.run_id),
-                    operation_id: Some(operation.stable_id.clone()),
-                    activation_id: Some(job.activation),
-                    attempt_id: Some(job.attempt),
-                    kind: SpanKind::AdapterIo,
-                    correlation,
-                },
-            );
-            let result = execute_planned_adapter(
-                adapter,
-                input,
-                context.resource_owner,
-                context.cancellation,
-            );
-            adapter_span.finish(span_outcome(&result));
-            vec![result?]
-        }
-        PlannedKernel::Relational(index) => {
-            let subplan = &context.plan.relational_subplans[index.index()];
-            let backend = context
-                .relational_backends
-                .get(&subplan.backend)
-                .ok_or_else(|| RunError::RelationalBackendNotFound(subplan.backend.clone()))?;
-            let relational_context = RelationalContext {
-                run_id: context.run_id,
-                resources: context.resources,
-                resource_owner: context.resource_owner,
-                cancellation: context.cancellation,
-                deadline: context.deadline,
-            };
-            let correlation = operation_correlation(
-                context.plan,
-                context.run_id,
-                context.parent_call,
-                job.operation,
-            );
-            let mut adapter_span = start_span_safely(
-                trace,
-                SpanSpec {
-                    parent_span_id: Some(operation_span_id),
-                    run_id: Some(context.run_id),
-                    operation_id: Some(operation.stable_id.clone()),
-                    activation_id: Some(job.activation),
-                    attempt_id: Some(job.attempt),
-                    kind: SpanKind::AdapterIo,
-                    correlation,
-                },
-            );
-            let backend_result =
-                backend.execute(&relational_context, &subplan.compiled_plan, &inputs);
-            let backend_outcome = match &backend_result {
-                Err(error) if error.code() == super::RelationalErrorCode::Cancelled => {
-                    SpanOutcome::Cancellation
+                let correlation = operation_correlation(
+                    context.plan,
+                    context.run_id,
+                    context.parent_call,
+                    job.operation,
+                );
+                let mut adapter_span = start_span_safely(
+                    trace,
+                    SpanSpec {
+                        parent_span_id: Some(operation_span_id),
+                        run_id: Some(context.run_id),
+                        operation_id: Some(operation.stable_id.clone()),
+                        activation_id: Some(job.activation),
+                        attempt_id: Some(job.attempt),
+                        kind: SpanKind::AdapterIo,
+                        correlation,
+                    },
+                );
+                let result = execute_planned_adapter(
+                    adapter,
+                    input,
+                    context.resource_owner,
+                    context.cancellation,
+                );
+                adapter_span.finish(span_outcome(&result));
+                vec![result?]
+            }
+            PlannedKernel::Relational(index) => {
+                let subplan = &context.plan.relational_subplans[index.index()];
+                let backend = context
+                    .relational_backends
+                    .get(&subplan.backend)
+                    .ok_or_else(|| RunError::RelationalBackendNotFound(subplan.backend.clone()))?;
+                let relational_context = RelationalContext {
+                    run_id: context.run_id,
+                    resources: context.resources,
+                    resource_owner: context.resource_owner,
+                    cancellation: context.cancellation,
+                    deadline: context.deadline,
+                };
+                let correlation = operation_correlation(
+                    context.plan,
+                    context.run_id,
+                    context.parent_call,
+                    job.operation,
+                );
+                let mut adapter_span = start_span_safely(
+                    trace,
+                    SpanSpec {
+                        parent_span_id: Some(operation_span_id),
+                        run_id: Some(context.run_id),
+                        operation_id: Some(operation.stable_id.clone()),
+                        activation_id: Some(job.activation),
+                        attempt_id: Some(job.attempt),
+                        kind: SpanKind::AdapterIo,
+                        correlation,
+                    },
+                );
+                let backend_result =
+                    backend.execute(&relational_context, &subplan.compiled_plan, &inputs);
+                let backend_outcome = match &backend_result {
+                    Err(error) if error.code() == super::RelationalErrorCode::Cancelled => {
+                        SpanOutcome::Cancellation
+                    }
+                    Err(_) => SpanOutcome::Error,
+                    Ok(_) if context.cancellation.is_cancelled() => SpanOutcome::Cancellation,
+                    Ok(_) => SpanOutcome::Success,
+                };
+                adapter_span.finish(backend_outcome);
+                match backend_result {
+                    Ok(execution) => execution.outputs,
+                    Err(error) => return Err(RunError::from_relational(job.operation, error)),
                 }
-                Err(_) => SpanOutcome::Error,
-                Ok(_) if context.cancellation.is_cancelled() => SpanOutcome::Cancellation,
-                Ok(_) => SpanOutcome::Success,
-            };
-            adapter_span.finish(backend_outcome);
-            match backend_result {
-                Ok(execution) => execution.outputs,
-                Err(error) => return Err(RunError::from_relational(job.operation, error)),
             }
         }
     };
@@ -2999,7 +3650,11 @@ fn execute_operation_worker_inner(
             actual: outputs.len(),
         });
     }
-    Ok(outputs.into_boxed_slice())
+    outputs
+        .into_iter()
+        .map(|value| StoredValue::prepare(value, context.resource_owner))
+        .collect::<Result<Vec<_>, _>>()
+        .map(Vec::into_boxed_slice)
 }
 
 pub(super) fn operation_resource_versions(
@@ -3026,19 +3681,6 @@ pub(super) fn operation_memoization_safe(plan: &ExecutionPlan, operation: Operat
         PlannedKernel::Adapter(_) => false,
         PlannedKernel::Relational(_) => true,
     }
-}
-
-fn promote_run_result(
-    run_result: &RunResult,
-    cancellation: &CancellationToken,
-    deadline: Option<RunDeadline>,
-) -> Result<(), RunError> {
-    for value in run_result.values.values() {
-        if let RuntimeValue::Artifact(artifact) = value {
-            artifact.promote(cancellation, deadline)?;
-        }
-    }
-    Ok(())
 }
 
 fn apply_authoritative_attempt_outcome(
@@ -3110,7 +3752,7 @@ struct MemoKey {
 
 struct Frame {
     id: FrameId,
-    values: Vec<Option<RuntimeValue>>,
+    bindings: Vec<Option<ResultId>>,
 
     attempted: BTreeMap<MemoKey, AttemptId>,
     completed: BTreeSet<MemoKey>,
@@ -3121,7 +3763,7 @@ impl Frame {
     fn new(value_count: u32) -> Self {
         Self {
             id: FrameId::next(),
-            values: vec![None; value_count as usize],
+            bindings: vec![None; value_count as usize],
 
             attempted: BTreeMap::new(),
             completed: BTreeSet::new(),
@@ -3155,51 +3797,39 @@ impl Frame {
             cleared.extend(derived);
         }
         for reference in cleared {
-            if let Some(slot) = self.values.get_mut(reference.index())
-                && let Some(value) = slot.take()
-            {
-                value.close_stream();
-            }
+            self.clear_result(reference);
         }
-    }
-
-    fn bind(&mut self, values: &BTreeMap<ValueRef, Value>) -> Result<(), RunError> {
-        for (reference, value) in values {
-            self.set(*reference, RuntimeValue::Scalar(value.clone()))?;
-        }
-        Ok(())
     }
 
     fn has(&self, reference: ValueRef) -> bool {
-        self.values
+        self.bindings
             .get(reference.index())
             .is_some_and(Option::is_some)
     }
 
-    fn value(&self, reference: ValueRef) -> Result<&RuntimeValue, RunError> {
-        self.values
+    fn result_id(&self, reference: ValueRef) -> Result<ResultId, RunError> {
+        self.bindings
             .get(reference.index())
-            .and_then(Option::as_ref)
+            .and_then(|result| *result)
             .ok_or(RunError::MissingValue(reference))
     }
 
-    fn set(&mut self, reference: ValueRef, value: RuntimeValue) -> Result<(), RunError> {
+    fn bind_result(&mut self, reference: ValueRef, result_id: ResultId) -> Result<(), RunError> {
         let slot = self
-            .values
+            .bindings
             .get_mut(reference.index())
             .ok_or(RunError::MissingValue(reference))?;
-        *slot = Some(value);
+        *slot = Some(result_id);
         Ok(())
     }
 
-    fn copy(&mut self, source: ValueRef, destination: ValueRef) -> Result<(), RunError> {
-        let value = self.value(source)?.clone();
-        self.set(destination, value)
+    fn copy_result(&mut self, source: ValueRef, destination: ValueRef) -> Result<(), RunError> {
+        self.bind_result(destination, self.result_id(source)?)
     }
 
-    fn close_streams(&self) {
-        for value in self.values.iter().flatten() {
-            value.close_stream();
+    fn clear_result(&mut self, reference: ValueRef) {
+        if let Some(slot) = self.bindings.get_mut(reference.index()) {
+            *slot = None;
         }
     }
 
@@ -3246,9 +3876,72 @@ fn collect_region_operations(
     }
 }
 
-fn boolean(frame: &Frame, reference: ValueRef) -> Result<bool, RunError> {
-    match frame.value(reference)? {
-        RuntimeValue::Scalar(Value::Bool(value)) => Ok(*value),
-        _ => Err(RunError::InvalidCondition { value: reference }),
+#[cfg(test)]
+mod result_id_frame_tests {
+    use super::*;
+    use crate::node_system::plan::GraphOutputRef;
+
+    #[test]
+    fn frame_bindings_are_result_ids_and_do_not_own_values() {
+        let result_id = ResultId::new(42);
+        let mut frame = Frame::new(1);
+
+        frame.bind_result(ValueRef::new(0), result_id).unwrap();
+        assert_eq!(frame.result_id(ValueRef::new(0)).unwrap(), result_id);
+        frame.clear_result(ValueRef::new(0));
+
+        assert!(!frame.has(ValueRef::new(0)));
+    }
+
+    #[test]
+    fn scheduler_uses_current_frame_binding_not_latest_pin_history() {
+        let store = ResultStore::new();
+        let graph_path = crate::node_system::document::GraphResourcePath("events/test".into());
+        let node_id = crate::node_system::document::NodeId::new();
+        let output = GraphOutputRef {
+            graph_path: graph_path.clone(),
+            port: crate::node_system::document::PortAddress::declared(
+                node_id,
+                crate::node_system::protocol::PortKey::new("result").unwrap(),
+            ),
+        };
+        let descriptor = PendingOutputDescriptor {
+            value: ValueRef::new(0),
+            output: Some(output.clone()),
+            presentation: ResultPresentation::Inspector,
+            contract: PlannedValueContract::opaque(),
+        };
+        let create_ready = |value| {
+            let activation_id = ActivationId::next().unwrap();
+            let group = store
+                .create_pending_group(
+                    ActivationProvenance {
+                        run_id: RunId::new(1),
+                        activation_id,
+                        graph_path: graph_path.clone(),
+                        graph_revision: crate::node_system::document::GraphRevision::new(1),
+                        node_id,
+                        created_at_ms: activation_id.get(),
+                        usage: ResultUsage::Produced,
+                    },
+                    std::slice::from_ref(&descriptor),
+                )
+                .unwrap();
+            store
+                .complete_group(
+                    &group,
+                    vec![StoredValue::scalar(Value::Integer(value))].into_boxed_slice(),
+                )
+                .unwrap();
+            group.output_result_ids[0]
+        };
+        let current = create_ready(1);
+        let latest = create_ready(2);
+        let mut frame = Frame::new(1);
+        frame.bind_result(ValueRef::new(0), current).unwrap();
+
+        assert_eq!(frame.result_id(ValueRef::new(0)).unwrap(), current);
+        assert_eq!(store.pin_history(&output).last().unwrap().result_id, latest);
+        assert_ne!(current, latest);
     }
 }

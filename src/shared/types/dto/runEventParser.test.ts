@@ -131,17 +131,17 @@ describe('execution wire parsers', () => {
 
   it('rejects removed valueReady and requires exact preview generation wire', () => {
     const valid = executionWire.runEvents[0];
-    const outputReady = executionWire.runEvents.find((event) => event.kind.type === 'outputReady');
-    if (!outputReady) throw new Error('missing output publication fixture');
+    const outputResultChanged = executionWire.runEvents.find((event) => event.kind.type === 'outputResultChanged');
+    if (!outputResultChanged) throw new Error('missing output publication fixture');
 
     expect(() => parseRunEvent({
       ...valid,
-      kind: { type: 'valueReady', valueIndex: 4, sourceId: '17' },
+      kind: { type: 'outputReady', output: {}, generation: null, resultId: '17' },
     })).toThrow();
-    const missingGeneration = clone(outputReady);
+    const missingGeneration = clone(outputResultChanged);
     delete record(record(missingGeneration).kind).generation;
     expect(() => parseRunEvent(missingGeneration)).toThrow();
-    expect(parseRunEvent(outputReady)).toEqual(outputReady);
+    expect(parseRunEvent(outputResultChanged)).toEqual(outputResultChanged);
   });
 
   it('strictly parses typed deadline phases and rejects malformed timeout wire', () => {
@@ -206,16 +206,16 @@ describe('execution wire parsers', () => {
     })).not.toThrow();
   });
 
-  it('rejects malformed OutputReady graph and port identities', () => {
-    const outputReady = executionWire.runEvents.find((event) => event.kind.type === 'outputReady');
-    if (!outputReady) throw new Error('missing outputReady fixture');
+  it('rejects malformed OutputResultChanged graph and port identities', () => {
+    const outputResultChanged = executionWire.runEvents.find((event) => event.kind.type === 'outputResultChanged');
+    if (!outputResultChanged) throw new Error('missing outputResultChanged fixture');
 
-    const malformedPath = clone(outputReady);
+    const malformedPath = clone(outputResultChanged);
     (record(record(malformedPath).kind).output as Record<string, unknown>).graphPath =
       'functions/contract.yssbi-event';
     expect(() => parseRunEvent(malformedPath)).toThrow('graph output reference');
 
-    const malformedPort = clone(outputReady);
+    const malformedPort = clone(outputResultChanged);
     const output = record(record(malformedPort).kind).output as Record<string, unknown>;
     (output.port as Record<string, unknown>).nodeId = 'not-a-uuid';
     expect(() => parseRunEvent(malformedPort)).toThrow('graph output reference');
@@ -225,7 +225,7 @@ describe('execution wire parsers', () => {
     const operation = executionWire.runEvents.find(
       (event) => event.kind.type === 'operationStarted',
     );
-    const output = executionWire.runEvents.find((event) => event.kind.type === 'outputReady');
+    const output = executionWire.runEvents.find((event) => event.kind.type === 'outputResultChanged');
     if (!operation || !output) throw new Error('missing indexed event fixtures');
 
     expect(() => parseRunEvent({
