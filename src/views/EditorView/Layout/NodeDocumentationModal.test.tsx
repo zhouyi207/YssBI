@@ -278,7 +278,7 @@ describe('NodeDocumentationModal', () => {
     expect(document.body.textContent).toContain('No matching node documentation');
   });
 
-  it('preserves the flex min-height contract around vertical OverlayScrollbars', () => {
+  it('preserves the flex min-height contract around vertical scroll areas', () => {
     catalogState.current = stateFor(catalog('en-US', {
       title: 'Call Helper',
       description: 'English description',
@@ -288,7 +288,7 @@ describe('NodeDocumentationModal', () => {
     render();
 
     const content = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')!;
-    const viewports = [...document.querySelectorAll<HTMLElement>('.overlay-scrollbar-viewport')];
+    const viewports = [...document.querySelectorAll<HTMLElement>('[data-slot="scroll-area-viewport"]')];
 
     expect(content.className).toContain('flex');
     expect(content.className).toContain('min-h-0');

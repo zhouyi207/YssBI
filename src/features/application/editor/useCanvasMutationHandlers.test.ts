@@ -3,7 +3,6 @@ import { createCanvasMutationHandlers } from './useCanvasMutationHandlers';
 
 const executeSafeGraphMutationOutcome = vi.hoisted(() => vi.fn());
 const insertRerouteAtConnection = vi.hoisted(() => vi.fn());
-const showToast = vi.hoisted(() => vi.fn());
 const graphWarn = vi.hoisted(() => vi.fn());
 
 vi.mock('@/features/application/editorMutation/safeGraphMutation', () => ({ executeSafeGraphMutationOutcome }));
@@ -11,8 +10,12 @@ vi.mock('./edgeOperations', () => ({ insertRerouteAtConnection }));
 vi.mock('@/features/application/editorMutation/registerGraphMutationPort', () => ({
   ensureGraphMutationPortRegistered: vi.fn(),
 }));
-vi.mock('@/features/core/ui/UIStore', () => ({ uiStore: { showToast } }));
-vi.mock('@/utils/appLogger', () => ({ logger: { graph: { warn: graphWarn } } }));
+vi.mock('@/utils/appLogger', () => ({
+  logger: {
+    graph: { warn: graphWarn },
+    notify: { error: () => undefined },
+  },
+}));
 vi.mock('@/app/i18n', () => ({ i18n: { t: (key: string) => `localized:${key}` } }));
 
 describe('canvas mutation application wiring', () => {
@@ -67,7 +70,7 @@ describe('canvas mutation application wiring', () => {
     );
   });
 
-  it('adapts application error codes to a safe core outcome and reports only its message', async () => {
+  it('adapts application error codes to a safe core outcome', async () => {
     executeSafeGraphMutationOutcome.mockResolvedValueOnce({
       status: 'rejected',
       code: 'graph_connection_type_mismatch',
@@ -92,10 +95,6 @@ describe('canvas mutation application wiring', () => {
         message: outcome.message,
       });
     }
-    expect(showToast).toHaveBeenCalledWith(
-      'localized:canvas.connection.errors.graph_connection_type_mismatch',
-      'error',
-    );
     expect(JSON.stringify(graphWarn.mock.calls)).not.toContain('graph_connection_type_mismatch');
   });
 });

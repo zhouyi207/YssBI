@@ -48,6 +48,7 @@ describe('canvas pointer loop', () => {
   let frame: FrameRequestCallback | undefined;
   let activeTabIdRef: { current: string | null };
   let setSelectedNodeIds: ReturnType<typeof vi.fn<CanvasPointerLoopDeps['setSelectedNodeIds']>>;
+  let setContextMenu: ReturnType<typeof vi.fn<CanvasPointerLoopDeps['setContextMenu']>>;
   let submitConnection: ReturnType<typeof vi.fn<CanvasPointerLoopDeps['submitConnection']>>;
   let reportMutationFailure: ReturnType<typeof vi.fn<CanvasPointerLoopDeps['reportMutationFailure']>>;
 
@@ -78,6 +79,7 @@ describe('canvas pointer loop', () => {
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     activeTabIdRef = { current: graphPath };
     setSelectedNodeIds = vi.fn<CanvasPointerLoopDeps['setSelectedNodeIds']>();
+    setContextMenu = vi.fn<CanvasPointerLoopDeps['setContextMenu']>();
     submitConnection = vi.fn<CanvasPointerLoopDeps['submitConnection']>();
     reportMutationFailure = vi.fn<CanvasPointerLoopDeps['reportMutationFailure']>();
     detach = attachCanvasPointerLoop({
@@ -86,7 +88,7 @@ describe('canvas pointer loop', () => {
       viewportRef: { current: { x: 0, y: 0, scale: 1 } },
       setSelectedNodeIds,
       persistViewport: vi.fn(),
-      setContextMenu: vi.fn(),
+      setContextMenu,
       submitConnection,
       reportMutationFailure,
     });
@@ -116,6 +118,21 @@ describe('canvas pointer loop', () => {
 
     expect(setSelectedNodeIds).toHaveBeenCalledOnce();
     expect(setSelectedNodeIds).toHaveBeenCalledWith([], 'group-1');
+  });
+
+  it('opens the canvas context menu when right-click movement stays below the drag threshold', () => {
+    useGraphInteractionStore.getState().startInteraction(graphPath, {
+      type: 'panning',
+      session: { groupId: 'group-1', startX: 20, startY: 30, lastX: 20, lastY: 30, moved: false },
+    });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1' });
+
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 22, clientY: 31, button: 2 }));
+    frame?.(0);
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 22, clientY: 31, button: 2 }));
+
+    expect(setContextMenu).toHaveBeenCalledWith({ x: 22, y: 31, visible: true });
+    expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, 'group-1').type).toBe('idle');
   });
 
   it('changes only graph-scoped overrides during pointer movement', () => {

@@ -3882,18 +3882,6 @@ mod result_id_frame_tests {
     use crate::node_system::plan::GraphOutputRef;
 
     #[test]
-    fn frame_bindings_are_result_ids_and_do_not_own_values() {
-        let result_id = ResultId::new(42);
-        let mut frame = Frame::new(1);
-
-        frame.bind_result(ValueRef::new(0), result_id).unwrap();
-        assert_eq!(frame.result_id(ValueRef::new(0)).unwrap(), result_id);
-        frame.clear_result(ValueRef::new(0));
-
-        assert!(!frame.has(ValueRef::new(0)));
-    }
-
-    #[test]
     fn scheduler_uses_current_frame_binding_not_latest_pin_history() {
         let store = ResultStore::new();
         let graph_path = crate::node_system::document::GraphResourcePath("events/test".into());

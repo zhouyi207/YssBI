@@ -192,7 +192,7 @@ describe('graph binding resource mutation wire', () => {
     return delta as unknown as ResourceDeltaDto;
   }
 
-  it('accepts current and historical resolved binding metadata', () => {
+  it('requires current resolved binding metadata', () => {
     const origin = { kind: 'schema_field', source: 'databases/sales', field: 'amount' };
     expect(areResourceDeltasValid([graphBindingDelta({
       kind: 'resolved', origin, order: 'a',
@@ -200,7 +200,7 @@ describe('graph binding resource mutation wire', () => {
     })])).toBe(true);
     expect(areResourceDeltasValid([graphBindingDelta({
       kind: 'resolved', origin, order: 'a',
-    })])).toBe(true);
+    })])).toBe(false);
   });
 
   it('strictly rejects malformed resolved binding metadata', () => {

@@ -1,9 +1,10 @@
+import { logger } from "@/utils/appLogger";
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { Select } from "@/shared/ui";
-import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -140,9 +141,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
         setIsResetting(true);
         try {
             await resetAllToDefaults();
-            uiStore.showToast(t("settings.restoredAll"), "success");
+            logger.notify.info(t("settings.restoredAll"), "UI");
         } catch (error) {
-            uiStore.showToast(t("settings.restoreAllFailed", { error: String(error) }), "error");
+            logger.notify.error(t("settings.restoreAllFailed", { error: String(error) }), "UI");
         } finally {
             setIsResetting(false);
         }
@@ -177,9 +178,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                     await resetThemeToDefaults();
                     break;
             }
-            uiStore.showToast(t("settings.restoredSection", { section: sectionName }), "success");
+            logger.notify.info(t("settings.restoredSection", { section: sectionName }), "UI");
         } catch (error) {
-            uiStore.showToast(t("settings.restoreSectionFailed", { section: sectionName, error: String(error) }), "error");
+            logger.notify.error(t("settings.restoreSectionFailed", { section: sectionName, error: String(error) }), "UI");
         } finally {
             setIsResetting(false);
         }
@@ -719,7 +720,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
             <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Sidebar Navigation */}
                 <aside className="w-64 border-r border-border bg-[var(--sidebar-bg)] shrink-0 flex flex-col min-h-0">
-                    <OverlayScrollbar className="flex-1 pt-4 min-h-0" direction="vertical">
+                    <ScrollArea className="flex-1 pt-4 min-h-0" orientation="vertical">
                     <nav className="px-4 space-y-0.5">
                         {visibleSections.map(section => (
                             <Button
@@ -733,16 +734,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                             </Button>
                         ))}
                     </nav>
-                    </OverlayScrollbar>
+                    </ScrollArea>
                 </aside>
 
                 {/* Main Content Area */}
                 <main className="flex-1 min-h-0 flex flex-col">
-                    <OverlayScrollbar className="flex-1 min-h-0" direction="vertical">
+                    <ScrollArea className="flex-1 min-h-0" orientation="vertical">
                     <div className="max-w-4xl px-12 py-8">
                         {renderContent()}
                     </div>
-                    </OverlayScrollbar>
+                    </ScrollArea>
                 </main>
             </div>
 

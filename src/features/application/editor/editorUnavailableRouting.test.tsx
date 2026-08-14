@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { useEditorStore } from '@/features/core/editor';
@@ -104,7 +103,6 @@ describe('unavailable creation routing', () => {
   let canvas: HTMLDivElement;
   let root: Root;
   const createNode = vi.fn();
-  const showToast = vi.spyOn(uiStore, 'showToast');
   const logError = vi.spyOn(logger.graph, 'error').mockImplementation(() => {});
 
   beforeEach(() => {
@@ -177,7 +175,6 @@ describe('unavailable creation routing', () => {
     });
     expect(createNode).not.toHaveBeenCalled();
     expect(executeCommand).not.toHaveBeenCalled();
-    expect(showToast).not.toHaveBeenCalled();
     expect(setContextMenu).not.toHaveBeenCalled();
     expect(setPendingConnection).not.toHaveBeenCalled();
   });
@@ -259,7 +256,7 @@ describe('unavailable creation routing', () => {
     }
   });
 
-  it('handles descriptor creation rejection with actionable feedback', async () => {
+  it('logs descriptor creation rejection', async () => {
     vi.mocked(createNodeFromDescriptor).mockRejectedValueOnce(new Error('mutation transport unavailable'));
     let select!: ReturnType<typeof useCanvasOverlayHandlers>['handleNodePaletteSelect'];
     function Harness() {
@@ -284,11 +281,6 @@ describe('unavailable creation routing', () => {
     expect(logError).toHaveBeenCalledWith(
       "Failed to create node 'math.add' in 'events/main.yssbi-event': mutation transport unavailable",
       'NodePalette',
-    );
-    expect(showToast).toHaveBeenCalledWith(
-      'Failed to create node: mutation transport unavailable',
-      'error',
-      4000,
     );
   });
 
@@ -336,7 +328,6 @@ describe('unavailable creation routing', () => {
     )).resolves.toBeUndefined();
 
     expect(logError).not.toHaveBeenCalled();
-    expect(showToast).not.toHaveBeenCalled();
   });
 
   it('routes resource-bound palette descriptors unchanged', async () => {
@@ -365,7 +356,6 @@ describe('unavailable creation routing', () => {
     expect(createNodeFromDescriptor).toHaveBeenCalledWith(expect.objectContaining({
       descriptor: resourceDescriptor,
     }));
-    expect(showToast).not.toHaveBeenCalled();
   });
 
   it('shift-drops a function only through its exact current opaque Catalog path', async () => {
@@ -392,7 +382,7 @@ describe('unavailable creation routing', () => {
     expect(refreshCatalog).not.toHaveBeenCalled();
   });
 
-  it('rejects a shift-drop without an exact path, refreshes, and toasts without synthesis', async () => {
+  it('rejects a shift-drop without an exact path and refreshes without synthesis', async () => {
     let routeDrop!: ReturnType<typeof useCanvasDrop>['handleSidebarCanvasDrop'];
     function Harness() {
       routeDrop = useCanvasDrop({
@@ -413,10 +403,6 @@ describe('unavailable creation routing', () => {
 
     expect(createNode).not.toHaveBeenCalled();
     expect(refreshCatalog).toHaveBeenCalledOnce();
-    expect(showToast).toHaveBeenCalledWith(
-      'Resource catalog is stale. Refreshing before node creation.',
-      'warning',
-    );
   });
 
   it('forwards sidebar node-template descriptors unchanged', async () => {
@@ -447,6 +433,5 @@ describe('unavailable creation routing', () => {
     }, { altKey: false, ctrlKey: false, shiftKey: false })).resolves.toBe(true);
 
     expect(createNode).toHaveBeenCalledWith(descriptor, { x: 20, y: 30 });
-    expect(showToast).not.toHaveBeenCalled();
   });
 });

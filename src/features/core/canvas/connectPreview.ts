@@ -41,5 +41,10 @@ export function getConnectPreview(scope: CanvasPreviewScope): ConnectPreviewStat
 }
 
 export function subscribeConnectPreview(listener: () => void): () => void {
-  return useGraphInteractionStore.subscribe(listener);
+  let previous = useGraphInteractionStore.getState().interactions;
+  return useGraphInteractionStore.subscribe((state) => {
+    if (state.interactions === previous) return;
+    previous = state.interactions;
+    listener();
+  });
 }

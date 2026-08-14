@@ -1,4 +1,11 @@
 import type { ReactNode } from 'react';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from '@/components/ui/empty';
 import { cn } from '@/lib/utils';
 
 export function SidebarEmptyState({
@@ -13,14 +20,18 @@ export function SidebarEmptyState({
   className?: string;
 }) {
   return (
-    <div className={cn('min-w-0 px-3 py-3 text-xs', className)}>
-      <div className="break-words text-foreground/85">{title}</div>
-      {description ? (
-        <div className="mt-1 break-words leading-relaxed text-muted-foreground">
-          {description}
-        </div>
-      ) : null}
-      {action ? <div className="mt-2">{action}</div> : null}
-    </div>
+    <Empty className={cn('min-w-0 gap-2 rounded-none px-3 py-4 text-xs', className)}>
+      <EmptyHeader className="items-start text-left">
+        <EmptyTitle className="break-words text-xs font-normal text-foreground/85">
+          {title}
+        </EmptyTitle>
+        {description ? (
+          <EmptyDescription className="break-words text-left leading-relaxed">
+            {description}
+          </EmptyDescription>
+        ) : null}
+      </EmptyHeader>
+      {action ? <EmptyContent className="items-start">{action}</EmptyContent> : null}
+    </Empty>
   );
 }

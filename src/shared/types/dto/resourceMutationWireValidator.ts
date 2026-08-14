@@ -75,10 +75,9 @@ function isDynamicPortBinding(value: unknown): boolean {
   if (!isRecord(value) || typeof value.order !== 'string') return false;
   if (value.kind === 'user_created') return hasExactKeys(value, ['kind', 'order']);
   if (value.kind === 'resolved') {
-    return isDynamicMemberLocator(value.origin)
-      && (hasExactKeys(value, ['kind', 'origin', 'order'])
-        || (hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])
-          && isLastKnownPortMetadata(value.last_known)));
+    return hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])
+      && isDynamicMemberLocator(value.origin)
+      && isLastKnownPortMetadata(value.last_known);
   }
   return value.kind === 'orphan'
     && hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])

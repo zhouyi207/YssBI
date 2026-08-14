@@ -5,7 +5,6 @@ import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useHistoryStore } from '@/features/core/history';
 import { VariableService } from '@/services/variable/variableService';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/ProjectMutationEventHandler';
 import { createVariableAction, deleteVariableAction, updateVariableAction } from './variableActions';
@@ -112,7 +111,6 @@ describe('variable command lifecycle guards', () => {
       result: null,
     });
     const submit = vi.spyOn(projectPublicationCoordinator, 'submit');
-    const toast = vi.spyOn(uiStore, 'showToast');
     const before = {
       variables: structuredClone(authority.variables),
       revisions: structuredClone(authority.revisions),
@@ -123,7 +121,6 @@ describe('variable command lifecycle guards', () => {
     expect(update).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
     expect(useVariableStore.getState()).toMatchObject(before);
-    expect(toast).not.toHaveBeenCalled();
   });
 
   it('returns without effects when variable revision authority is missing', async () => {
@@ -138,10 +135,9 @@ describe('variable command lifecycle guards', () => {
     expect(useVariableStore.getState().variables).toEqual({});
   });
 
-  it('ignores a delayed update completion from the previous project without a toast', async () => {
+  it('ignores a delayed update completion from the previous project', async () => {
     const request = deferred<Awaited<ReturnType<typeof VariableService.updateVariable>>>();
     vi.spyOn(VariableService, 'updateVariable').mockReturnValue(request.promise);
-    const toast = vi.spyOn(uiStore, 'showToast');
 
     const completion = updateVariableAction(original.id, { name: 'Changed' });
     startProject('project-b');
@@ -154,14 +150,12 @@ describe('variable command lifecycle guards', () => {
 
     await expect(completion).resolves.toBeNull();
     expect(useVariableStore.getState().variables).toEqual({});
-    expect(toast).not.toHaveBeenCalled();
   });
 
   it('does not issue the follow-up read after a stale create completion', async () => {
     const request = deferred<Awaited<ReturnType<typeof VariableService.createVariable>>>();
     vi.spyOn(VariableService, 'createVariable').mockReturnValue(request.promise);
     const getVariable = vi.spyOn(VariableService, 'getVariable');
-    const toast = vi.spyOn(uiStore, 'showToast');
 
     const completion = createVariableAction({ activeGraphPath: null, isGlobal: true });
     startProject('project-b');
@@ -175,7 +169,6 @@ describe('variable command lifecycle guards', () => {
     await expect(completion).resolves.toBeNull();
     expect(getVariable).not.toHaveBeenCalled();
     expect(useVariableStore.getState().variables).toEqual({});
-    expect(toast).not.toHaveBeenCalled();
   });
 
   it('deduplicates event-first global update and advances the coordinator watermark once', async () => {

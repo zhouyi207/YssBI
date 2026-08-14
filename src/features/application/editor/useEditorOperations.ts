@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import { useCallback, useRef } from 'react';
 import {
   canCutNode,
@@ -18,7 +19,6 @@ import {
   redoEditorHistory,
   undoEditorHistory,
 } from '@/features/application/editorMutation/historyCoordinator';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { executeSafeGraphMutation } from '@/features/application/editorMutation/safeGraphMutation';
 import { notifyNodeCreationUnavailable } from './editorMutationAvailability';
 import { disconnectConnectionsById } from './edgeOperations';
@@ -152,7 +152,7 @@ export function useEditorOperations() {
     const tid = activeTabIdRef.current;
     if (!tid) return;
     const applied = await executeCommand(tid, 'SetPinValue', { nodeId, pinId, newValue: null });
-    if (!applied) uiStore.showToast("恢复默认值失败", "error", 2000);
+    if (!applied) logger.notify.error("恢复默认值失败", "UI");
     return applied;
   }, []);
 

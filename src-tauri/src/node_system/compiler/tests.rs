@@ -102,22 +102,6 @@ fn node_id(value: u128) -> NodeId {
 fn key(value: &str) -> PortKey {
     PortKey::new(value).unwrap()
 }
-#[test]
-fn owned_protocol_fixture_preserves_catalog_style_and_fingerprint() {
-    let first = registry();
-    let second = registry();
-    let type_id = NodeTypeId::new("yssbi.test.constant").unwrap();
-
-    assert_eq!(
-        first.catalog_manifest().node_protocols.get(&type_id),
-        second.catalog_manifest().node_protocols.get(&type_id),
-        "the owned fixture must retain a stable protocol fingerprint"
-    );
-    assert_eq!(
-        first.protocol(&type_id).unwrap().catalog.style_id.as_str(),
-        "test"
-    );
-}
 
 fn protocol() -> NodeProtocol {
     TestProtocolBuilder::new("yssbi.test.constant", "test")
@@ -2481,6 +2465,60 @@ fn function_plan_store_rejects_data_series_kind_mismatch() {
         error,
         FunctionPlanStoreError::AbiValueContractMismatch { .. }
     ));
+}
+
+#[test]
+fn compiler_keeps_fully_materialized_ols_report_directly_connected_to_view_data() {
+    let builtins = crate::node_system::catalog::build_builtin_node_system().unwrap();
+    let mut ols = builtins
+        .registry
+        .protocol(&NodeTypeId::new("yssbi.statistics.ols.summary").unwrap())
+        .unwrap()
+        .clone();
+    ols.interface.ports = ols
+        .interface
+        .ports
+        .iter()
+        .filter(|port| port.key.as_str() == "report")
+        .cloned()
+        .collect();
+    let mut view = builtins
+        .registry
+        .protocol(&NodeTypeId::new("yssbi.debug.view").unwrap())
+        .unwrap()
+        .clone();
+    view.interface.ports = view
+        .interface
+        .ports
+        .iter()
+        .filter(|port| port.key.as_str() == "data")
+        .cloned()
+        .collect();
+    let registry = TestRegistry::new(vec![ols, view]);
+    let mut graph =
+        builtin_graph_with_nodes(&[(1, "yssbi.statistics.ols.summary"), (2, "yssbi.debug.view")]);
+    connect(&mut graph, 10, 1, "report", 2, "data");
+
+    let result = GraphCompiler::new(&registry, &Resources).compile(&graph);
+    let plan = result.plan.unwrap_or_else(|| {
+        panic!(
+            "OLS report -> View Data diagnostics: {:?}",
+            result.analysis.diagnostics
+        )
+    });
+    let ols = &plan.operations[operation_index_for_node(&plan, 1).index()];
+    let view = &plan.operations[operation_index_for_node(&plan, 2).index()];
+
+    assert!(
+        plan.operations
+            .iter()
+            .all(|operation| !matches!(operation.kernel, PlannedKernel::Adapter(_))),
+        "an already fully-materialized boundary must not insert an adapter operation"
+    );
+    assert!(plan.value_dependencies.contains(&ValueDependency {
+        source: ols.outputs[0].value,
+        destination: view.inputs[0].value,
+    }));
 }
 
 #[test]

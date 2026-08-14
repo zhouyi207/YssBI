@@ -1,5 +1,5 @@
 import { LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from '@/app/appConfig/default';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { LogMessage } from '@/shared/types/ui';
 import { LogItemRow } from './LogItemRow';
 import { useLogPanelVirtualList } from './useLogPanelVirtualList';
@@ -39,10 +39,10 @@ export function LogPanelVirtualList({
   });
 
   return (
-    <OverlayScrollbar
-      ref={viewportRef}
-      onScroll={handleScroll}
-      direction="vertical"
+    <ScrollArea
+      viewportRef={viewportRef}
+      onViewportScroll={handleScroll}
+      orientation="vertical"
       className="relative min-h-0 flex-1 bg-[var(--workbench-bg)]"
     >
       {loading ? (
@@ -78,6 +78,6 @@ export function LogPanelVirtualList({
           })}
         </div>
       </div>
-    </OverlayScrollbar>
+    </ScrollArea>
   );
 }

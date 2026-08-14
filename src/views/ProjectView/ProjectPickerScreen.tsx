@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -30,6 +31,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -42,10 +50,9 @@ import {
 import { cn } from "@/lib/utils";
 import { useProjectPicker, type ManagedProject } from "@/features/application/project";
 import { useProjectIOStore } from "@/features/core/dataStore";
-import { uiStore } from "@/features/core/ui/UIStore";
 import { usePersistedWindow, useWindowMaximized } from "@/features/application/window";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
-import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ContextMenu, usePositionedContextMenu } from "@/shared/ui/contextMenu";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
@@ -391,12 +398,9 @@ export function ProjectPickerScreen() {
     try {
       await ProjectService.revealProjectPath(projectPath);
     } catch (error) {
-      uiStore.showToast(
-        t("contextMenu.sidebar.revealInExplorerFailed", {
+      logger.notify.error(t("contextMenu.sidebar.revealInExplorerFailed", {
           error: formatErrorMessage(error, "Unknown error"),
-        }),
-        "error",
-      );
+        }), "UI");
     }
   }, [t]);
 
@@ -475,13 +479,21 @@ export function ProjectPickerScreen() {
           onClick={handleListAreaClick}
         >
           {filtered.length === 0 ? (
-            <div className="flex h-full min-h-[12rem] flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground">
-              <VscProject size={42} className="opacity-35" />
-              {projects.length === 0 ? t("projectPicker.emptyTitle") : t("projectPicker.noMatchesTitle")}
-              <p className="max-w-sm text-xs">{projects.length === 0 ? t("projectPicker.emptyDescription") : t("projectPicker.noMatchesDescription")}</p>
-            </div>
+            <Empty className="h-full min-h-[12rem] rounded-none px-6">
+              <EmptyHeader>
+                <EmptyMedia variant="icon" className="size-12 text-muted-foreground">
+                  <VscProject className="size-6" />
+                </EmptyMedia>
+                <EmptyTitle>
+                  {projects.length === 0 ? t("projectPicker.emptyTitle") : t("projectPicker.noMatchesTitle")}
+                </EmptyTitle>
+                <EmptyDescription>
+                  {projects.length === 0 ? t("projectPicker.emptyDescription") : t("projectPicker.noMatchesDescription")}
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
-            <OverlayScrollbar className="flex-1">
+            <ScrollArea className="flex-1">
               <div className="min-h-full">
               <ul className="divide-y divide-border/60">
                 {filtered.map((project) => {
@@ -567,7 +579,7 @@ export function ProjectPickerScreen() {
                 })}
               </ul>
               </div>
-            </OverlayScrollbar>
+            </ScrollArea>
           )}
         </div>
 

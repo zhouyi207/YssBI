@@ -2358,10 +2358,9 @@ mod tests {
     }
 
     #[test]
-    fn projection_basis_rejects_legacy_and_malformed_registry_fingerprint_wire_values() {
+    fn projection_basis_rejects_malformed_registry_fingerprint_wire_values() {
         let valid = serde_json::to_value(basis(7)).unwrap();
         for malformed in [
-            serde_json::to_value(vec![7_u8; 32]).unwrap(),
             serde_json::json!("070707070707070707070707070707070707070707070707070707070707070A"),
             serde_json::json!("070707070707070707070707070707070707070707070707070707070707070"),
             serde_json::json!("07070707070707070707070707070707070707070707070707070707070707070"),
@@ -2371,10 +2370,6 @@ mod tests {
             value["registryFingerprint"] = malformed;
             assert!(serde_json::from_value::<ProjectionBasis>(value).is_err());
         }
-
-        let mut unknown = valid;
-        unknown["legacyFingerprint"] = serde_json::json!(true);
-        assert!(serde_json::from_value::<ProjectionBasis>(unknown).is_err());
     }
 
     #[test]

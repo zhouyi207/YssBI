@@ -150,22 +150,3 @@ fn performance_logging() {
         log_exec::warn!("Computation took longer than expected: {:?}", duration);
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_all_examples() {
-        // 注意：这些测试需要日志管理器已初始化
-        example_app_logs();
-        example_exec_logs();
-        example_sys_logs();
-
-        let _ = process_data(&[1, 2, 3, 4, 5]);
-        handle_error_example();
-        loop_example();
-        conditional_logging(true);
-        performance_logging();
-    }
-}

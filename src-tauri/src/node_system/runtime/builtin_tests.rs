@@ -1481,7 +1481,7 @@ fn statistics_prediction_flows_into_plot() {
 }
 
 #[test]
-fn statistics_fit_executes_instead_of_returning_an_adapter_error() {
+fn ols_fit_produces_a_model_and_fitted_values() {
     let mut parameters = CompiledParameterStore::new();
     insert_constant(&mut parameters, "start", Value::Integer(1));
     insert_constant(&mut parameters, "end", Value::Integer(5));
@@ -1549,7 +1549,7 @@ fn statistics_fit_executes_instead_of_returning_an_adapter_error() {
 }
 
 #[test]
-fn logit_fit_uses_the_real_binary_response_implementation() {
+fn logit_fit_rejects_non_binary_response_values() {
     let mut parameters = CompiledParameterStore::new();
     insert_constant(&mut parameters, "start", Value::Integer(0));
     insert_constant(&mut parameters, "end", Value::Integer(4));
@@ -2255,7 +2255,7 @@ fn series_int_math_rejects_overflow() {
 }
 
 #[test]
-fn series_conversion_kernels_cover_every_legacy_conversion() {
+fn series_conversion_kernels_convert_supported_types_and_preserve_nulls() {
     let cases = [
         (
             "yssbi.data_series.convert.string_to_categorical",
@@ -2421,7 +2421,7 @@ fn series_conversion_kernels_cover_every_legacy_conversion() {
 }
 
 #[test]
-fn unary_math_kernels_execute_each_legacy_operation() {
+fn unary_math_kernels_execute_supported_operations() {
     let params = handle("unary", CompiledParameterHandle::new);
     for (kernel, input, expected) in [
         ("yssbi.numeric.ln", "1", "0"),
@@ -2770,7 +2770,7 @@ fn real_graph_connection_overrides_print_protocol_default_at_runtime() {
 #[test]
 fn print_protocol_has_default_and_ordered_chain_contract() {
     use crate::node_system::catalog::build_builtin_node_system;
-    use crate::node_system::protocol::{EffectSemantics, ParameterKey, PortKey, Purity};
+    use crate::node_system::protocol::{EffectSemantics, PortKey, Purity};
 
     let system = build_builtin_node_system().unwrap();
     let print = system
@@ -2794,7 +2794,6 @@ fn print_protocol_has_default_and_ordered_chain_contract() {
             .map(|value| &value.value),
         Some(&Value::String("Hello, World!".into()))
     );
-    let _ = ParameterKey::new("unused").unwrap();
 
     let mut default_print = effect_operation("yssbi.debug.print", "unused.default", &[0]);
     default_print.inputs[0].bound_value = Some(Value::String("Hello, World!".into()));

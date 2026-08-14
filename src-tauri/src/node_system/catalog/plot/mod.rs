@@ -30,8 +30,6 @@ enum PlotInputs {
 
 #[derive(Clone, Copy)]
 struct PlotSpec {
-    #[allow(dead_code)]
-    legacy_name: &'static str,
     id: &'static str,
     kernel: &'static str,
     en: &'static str,
@@ -43,7 +41,6 @@ struct PlotSpec {
 
 const SPECS: &[PlotSpec] = &[
     PlotSpec {
-        legacy_name: "Scatter",
         id: "yssbi.plot.scatter.view",
         kernel: "yssbi.plot.scatter.view",
         en: "Scatter Plot",
@@ -53,7 +50,6 @@ const SPECS: &[PlotSpec] = &[
         inputs: PlotInputs::Pair,
     },
     PlotSpec {
-        legacy_name: "Line",
         id: "yssbi.plot.line.view",
         kernel: "yssbi.plot.line.view",
         en: "Line Plot",
@@ -63,7 +59,6 @@ const SPECS: &[PlotSpec] = &[
         inputs: PlotInputs::Pair,
     },
     PlotSpec {
-        legacy_name: "ECDF",
         id: "yssbi.plot.ecdf.view",
         kernel: "yssbi.plot.ecdf.view",
         en: "Empirical CDF",
@@ -73,7 +68,6 @@ const SPECS: &[PlotSpec] = &[
         inputs: PlotInputs::NumericSeries,
     },
     PlotSpec {
-        legacy_name: "KDE",
         id: "yssbi.plot.kde.view",
         kernel: "yssbi.plot.kde.view",
         en: "Kernel Density Estimate",
@@ -88,7 +82,6 @@ const SPECS: &[PlotSpec] = &[
         inputs: PlotInputs::NumericSeries,
     },
     PlotSpec {
-        legacy_name: "Histogram",
         id: "yssbi.plot.histogram.view",
         kernel: "yssbi.plot.histogram.view",
         en: "Histogram",
@@ -98,7 +91,6 @@ const SPECS: &[PlotSpec] = &[
         inputs: PlotInputs::NumericSeries,
     },
     PlotSpec {
-        legacy_name: "Correlation Plot",
         id: "yssbi.plot.correlation.view",
         kernel: "yssbi.plot.correlation.view",
         en: "Correlation Plot",
@@ -113,7 +105,6 @@ const SPECS: &[PlotSpec] = &[
         inputs: PlotInputs::CorrelationSeries,
     },
     PlotSpec {
-        legacy_name: "Correlogram (ACF & PACF)",
         id: "yssbi.plot.correlogram.view",
         kernel: "yssbi.plot.correlogram.view",
         en: "Correlogram (ACF & PACF)",
@@ -123,11 +114,6 @@ const SPECS: &[PlotSpec] = &[
         inputs: PlotInputs::Correlogram,
     },
 ];
-
-#[cfg(test)]
-pub(crate) fn legacy_manifest() -> impl Iterator<Item = (&'static str, &'static str)> {
-    SPECS.iter().map(|spec| (spec.legacy_name, spec.id))
-}
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut nodes = Vec::with_capacity(SPECS.len());
@@ -454,39 +440,30 @@ mod tests {
     use super::*;
     use std::collections::BTreeSet;
 
-    const LEGACY_NODES: &[&str] = &[
-        "Scatter",
-        "Line",
-        "ECDF",
-        "KDE",
-        "Histogram",
-        "Correlation Plot",
-        "Correlogram (ACF & PACF)",
-    ];
-
     #[test]
-    fn migration_covers_every_legacy_plot_node_once() {
-        assert_eq!(SPECS.len(), LEGACY_NODES.len());
-        assert_eq!(
-            SPECS
-                .iter()
-                .map(|spec| spec.legacy_name)
-                .collect::<BTreeSet<_>>(),
-            LEGACY_NODES.iter().copied().collect()
-        );
-        assert_eq!(
-            SPECS
-                .iter()
-                .map(|spec| spec.id)
-                .collect::<BTreeSet<_>>()
-                .len(),
-            SPECS.len()
-        );
-        assert!(
-            SPECS
-                .iter()
-                .all(|spec| spec.id.starts_with("yssbi.plot.") && spec.id.ends_with(".view"))
-        );
+    fn every_protocol_localization_key_exists_in_both_locales() {
+        let fragment = build_provider_fragment().expect("plot fixture must assemble");
+        let localized_keys = fragment
+            .messages
+            .iter()
+            .map(|(locale, key, _)| (*locale, *key))
+            .collect::<BTreeSet<_>>();
+        for node in &fragment.nodes {
+            let protocol = node.protocol();
+            let keys = [
+                Some(&protocol.catalog.title_key),
+                protocol.catalog.description_key.as_ref(),
+                protocol.catalog.documentation_key.as_ref(),
+                protocol.catalog.aliases_key.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .chain(protocol.interface.ports.iter().map(|port| &port.label_key));
+            for key in keys {
+                assert!(localized_keys.contains(&("en-US", key.as_str())));
+                assert!(localized_keys.contains(&("zh-CN", key.as_str())));
+            }
+        }
     }
 
     fn input_type(node: &NodeProtocol, key: &str) -> TypeExpr {

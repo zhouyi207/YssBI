@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
 
@@ -41,11 +42,7 @@ export async function closeWorksheetTab(
         if (!saved || !context.isCurrent()) return false;
       } catch (error) {
         if (!context.isCurrent()) return false;
-        uiStore.showToast(
-          `保存失败：${error instanceof Error ? error.message : String(error)}`,
-          'error',
-          3000,
-        );
+        logger.notify.error(`保存失败：${error instanceof Error ? error.message : String(error)}`, "UI");
         return false;
       }
     }
@@ -112,11 +109,7 @@ export async function deleteWorksheetWithConfirm(worksheetPath: string): Promise
     return await performWorksheetDelete(worksheetPath, context);
   } catch (error) {
     if (!context.isCurrent()) return false;
-    uiStore.showToast(
-      `删除失败：${error instanceof Error ? error.message : String(error)}`,
-      'error',
-      3000,
-    );
+    logger.notify.error(`删除失败：${error instanceof Error ? error.message : String(error)}`, "UI");
     return false;
   }
 }

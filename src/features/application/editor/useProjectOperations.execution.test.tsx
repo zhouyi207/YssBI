@@ -4,7 +4,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectService } from '@/services/project/projectService';
-import { uiStore } from '@/features/core/ui/UIStore';
 import {
   clearProjectLifecycle,
   startProjectLifecycle,
@@ -105,7 +104,6 @@ describe('useProjectOperations execution demand', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    vi.spyOn(uiStore, 'showToast').mockImplementation(() => undefined);
     vi.spyOn(ProjectService, 'executeGraphDocument').mockResolvedValue({ runId: 'run-1' });
 
     function Harness() {
@@ -217,6 +215,5 @@ describe('useProjectOperations execution demand', () => {
     expect(executionState.completeExecution).not.toHaveBeenCalled();
     expect(executionState.failExecution).not.toHaveBeenCalled();
     expect(executionState.interruptExecution).not.toHaveBeenCalled();
-    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 });

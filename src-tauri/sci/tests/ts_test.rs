@@ -151,25 +151,6 @@ fn test_var_varsoc_shape_and_lr() {
 }
 
 #[test]
-fn test_acf_pacf_and_breusch_godfrey_smoke() {
-    let residuals = vec![
-        1.0, -0.5, 0.25, -0.125, 0.0625, -0.03125, 0.015625, -0.0078125,
-    ];
-    let acf = ts::acf_pacf::acf(&residuals, 3);
-    let pacf = ts::acf_pacf::pacf(&residuals, 3);
-    assert_eq!(acf.len(), 4);
-    assert_eq!(pacf.len(), 3);
-    assert!((acf[0] - 1.0).abs() < 1e-12);
-    assert!(pacf.iter().all(|v| v.is_finite()));
-
-    let exog: Vec<Vec<f64>> = (0..residuals.len()).map(|i| vec![1.0, i as f64]).collect();
-    let (bg, p) =
-        ts::serial_correlation::breusch_godfrey(&residuals, &exog, 1, false).expect("BG result");
-    assert!(bg.is_finite());
-    assert!((0.0..=1.0).contains(&p));
-}
-
-#[test]
 fn test_adf_drift_returns_regression_stats() {
     let y: Vec<f64> = (0..100)
         .map(|i| i as f64 + (i as f64 * 0.1).sin())

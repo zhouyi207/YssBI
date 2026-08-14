@@ -96,7 +96,6 @@ pub struct ProjectedMemberRef {
     template: PortKey,
     direction: PortDirection,
     locator: DynamicMemberLocator,
-    #[serde(default)]
     last_known: LastKnownPortMetadata,
 }
 

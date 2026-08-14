@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { InfoSegmentedToggle } from './shared/InfoViewControls';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { formatNum } from './shared/utils';
@@ -129,12 +129,12 @@ const VARFormulaBlock: React.FC<VARFormulaBlockProps> = ({ varNames, coefficient
       </div>
 
       {/* Formula */}
-      <OverlayScrollbar direction="both">
+      <ScrollArea orientation="both">
         <div
           className="px-6 py-5 min-w-full [&_.katex]:text-foreground [&_.katex]:text-[1.05em] [&_.katex-display]:py-3 [&_.katex-display]:leading-relaxed"
           dangerouslySetInnerHTML={{ __html: (mode === 'expanded' ? expandedHtml : symbolicHtml) || '' }}
         />
-      </OverlayScrollbar>
+      </ScrollArea>
 
       {/* Symbolic mode: variable mapping */}
       {mode === 'symbolic' && (

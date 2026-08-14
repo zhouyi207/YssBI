@@ -233,7 +233,7 @@ describe('project event wire parser', () => {
     }
   });
 
-  it('accepts resolved last_known metadata and historical resolved bindings without it', () => {
+  it('accepts resolved last_known metadata with an optional current value type', () => {
     for (const last_known of [
       { label: 'Amount', value_type: { Concrete: 'core.float64' } },
       { label: 'Amount' },
@@ -249,7 +249,9 @@ describe('project event wire parser', () => {
 
       expect(parseResourceMutationCommittedPayload({ result })).toEqual({ result });
     }
+  });
 
+  it('rejects a resolved binding without last_known metadata', () => {
     const result = graphResourceResult({ Concrete: 'core.float64' }) as Record<string, any>;
     const binding = result.deltas[0].payload.patch.operations[0].binding;
     result.deltas[0].payload.patch.operations[0].binding = {
@@ -257,7 +259,8 @@ describe('project event wire parser', () => {
       origin: binding.origin,
       order: binding.order,
     };
-    expect(parseResourceMutationCommittedPayload({ result })).toEqual({ result });
+
+    expect(() => parseResourceMutationCommittedPayload({ result })).toThrow('resource deltas');
   });
 
   it('rejects malformed resolved last_known metadata', () => {
@@ -273,7 +276,7 @@ describe('project event wire parser', () => {
     expect(() => parseResourceMutationCommittedPayload({ result })).toThrow();
   });
 
-  it('accepts label-only historical orphan metadata without inferring value_type', () => {
+  it('accepts label-only orphan metadata without inferring value_type', () => {
     const result = graphResourceResult({ Concrete: 'core.float64' }) as Record<string, any>;
     delete result.deltas[0].payload.patch.operations[0].binding.last_known.value_type;
 

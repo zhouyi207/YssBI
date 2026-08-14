@@ -423,7 +423,7 @@ describe('editor mutation wire parser', () => {
     }
   });
 
-  it('accepts current resolved metadata and historical resolved bindings without metadata', () => {
+  it('accepts resolved metadata with an optional current value type', () => {
     for (const last_known of [
       { label: 'Amount', value_type: { Concrete: 'core.float64' } },
       { label: 'Amount' },
@@ -440,16 +440,19 @@ describe('editor mutation wire parser', () => {
 
       expect(parseGraphDeltaDto(value)).toEqual(value);
     }
+  });
 
-    const historical = delta();
+  it('rejects a resolved binding without last_known metadata', () => {
+    const value = delta();
     const operation = structuredClone(operations[4]) as Record<string, any>;
     operation.binding = {
       kind: 'resolved',
       origin: operation.binding.origin,
       order: operation.binding.order,
     };
-    (historical.payload.operations as unknown[]) = [operation];
-    expect(parseGraphDeltaDto(historical)).toEqual(historical);
+    (value.payload.operations as unknown[]) = [operation];
+
+    expect(() => parseGraphDeltaDto(value)).toThrow('graph patch operation');
   });
 
   it('rejects malformed or extended resolved last_known metadata', () => {
@@ -474,7 +477,7 @@ describe('editor mutation wire parser', () => {
     }
   });
 
-  it('keeps historical label-only orphan metadata without inferring value_type', () => {
+  it('keeps label-only orphan metadata without inferring value_type', () => {
     const value = delta();
     const operation = structuredClone(operations[4]) as Record<string, any>;
     delete operation.binding.last_known.value_type;

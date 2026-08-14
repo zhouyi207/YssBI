@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { VscClose } from 'react-icons/vsc';
+import { VscBook, VscClose, VscSearch } from 'react-icons/vsc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,11 +10,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
 import { MarkdownRenderer } from '@/shared/ui/MarkdownRenderer';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { detailProseClass } from './Detail/shared/detailStyles';
 
 interface NodeDocumentationModalProps {
@@ -179,7 +186,7 @@ export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentation
               placeholder={t('nodeDocumentationModal.searchPlaceholder')}
               onChange={(event) => setQuery(event.target.value)}
             />
-            <OverlayScrollbar className="min-h-0 flex-1">
+            <ScrollArea className="min-h-0 flex-1">
               <div className="space-y-1 pr-2">
                 {status === 'error' && !catalog ? (
                   <p role="alert" className="px-2 py-3 text-sm text-destructive">
@@ -190,9 +197,16 @@ export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentation
                     {t('common.loading')}
                   </p>
                 ) : items.length === 0 ? (
-                  <p className="px-2 py-3 text-center text-sm text-muted-foreground">
-                    {t('nodeDocumentationModal.noMatches')}
-                  </p>
+                  <Empty className="min-h-32 gap-2 rounded-none px-2 py-4">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon" className="text-muted-foreground">
+                        <VscSearch />
+                      </EmptyMedia>
+                      <EmptyTitle className="text-xs font-normal text-muted-foreground">
+                        {t('nodeDocumentationModal.noMatches')}
+                      </EmptyTitle>
+                    </EmptyHeader>
+                  </Empty>
                 ) : items.map((item) => {
                   const key = documentationItemKey(item);
                   const selected = key === selectedKey;
@@ -215,19 +229,25 @@ export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentation
                   );
                 })}
               </div>
-            </OverlayScrollbar>
+            </ScrollArea>
           </aside>
 
           <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <OverlayScrollbar className="min-h-0 flex-1">
+            <ScrollArea className="min-h-0 flex-1">
               {selectedItem ? (
                 <ItemDetails item={selectedItem} />
               ) : (
-                <div className="flex min-h-full items-center justify-center p-6 text-sm text-muted-foreground">
-                  {t('nodeDocumentationModal.selectNode')}
-                </div>
+                <Empty className="min-h-full rounded-none p-6">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon" className="size-10 text-muted-foreground">
+                      <VscBook className="size-5" />
+                    </EmptyMedia>
+                    <EmptyTitle>{t('nodeDocumentationModal.selectNode')}</EmptyTitle>
+                    <EmptyDescription>{t('nodeDocumentationModal.description')}</EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
-            </OverlayScrollbar>
+            </ScrollArea>
           </main>
         </div>
       </DialogContent>

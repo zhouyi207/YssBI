@@ -21,6 +21,7 @@ describe('graphInteractionStore position overrides', () => {
     });
   });
 
+
   it('keeps one interaction owner per graph and replaces the initiating pane', () => {
     const store = useGraphInteractionStore.getState();
     store.startInteraction('events/one', {

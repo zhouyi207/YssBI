@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -16,7 +17,7 @@ import {
 import type { ProjectRecordRow } from "@/shared/types/dto/project";
 import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { formatDisplayPath, pathsEqualForCompare } from "@/shared/utils/formatDisplayPath";
-import { uiStore } from "@/features/core/ui/UIStore";
+
 import {
   ProjectLifecycleProtocolError,
   applyProjectLifecycleReceipt,
@@ -85,7 +86,7 @@ export function useProjectPicker() {
     try {
       setProjects(await listManagedProjects());
     } catch (error) {
-      uiStore.showToast(formatErrorMessage(error), "error");
+      logger.notify.error(formatErrorMessage(error), "UI");
     }
   }, []);
 
@@ -123,7 +124,7 @@ export function useProjectPicker() {
 
   const handlePickerTaskCancelled = useCallback(async (messageKey: "scanCancelled" | "cleanupCancelled") => {
     setProjects(await listManagedProjects());
-    uiStore.showToast(t(`projectPicker.${messageKey}`), "info");
+    logger.notify.info(t(`projectPicker.${messageKey}`), "UI");
   }, [t]);
 
   const scanProjectsFromFolder = useCallback(async () => {
@@ -165,27 +166,21 @@ export function useProjectPicker() {
       setProjects(await listManagedProjects());
 
       if (result.discovered === 0) {
-        uiStore.showToast(t("projectPicker.scanNoneFound"), "info");
+        logger.notify.info(t("projectPicker.scanNoneFound"), "UI");
       } else if (result.newlyRegistered > 0) {
-        uiStore.showToast(
-          t("projectPicker.scanSuccess", {
+        logger.notify.info(t("projectPicker.scanSuccess", {
             added: result.newlyRegistered,
             found: result.discovered,
-          }),
-          "success",
-        );
+          }), "UI");
       } else {
-        uiStore.showToast(
-          t("projectPicker.scanAlreadyRegistered", { found: result.discovered }),
-          "info",
-        );
+        logger.notify.info(t("projectPicker.scanAlreadyRegistered", { found: result.discovered }), "UI");
       }
     } catch (error) {
       if (isPickerTaskCancelledError(error)) {
         await handlePickerTaskCancelled("scanCancelled");
         return;
       }
-      uiStore.showToast(formatErrorMessage(error), "error");
+      logger.notify.error(formatErrorMessage(error), "UI");
     } finally {
       setBusy("idle");
     }
@@ -224,16 +219,16 @@ export function useProjectPicker() {
       setProjects(await listManagedProjects());
 
       if (result.removed === 0) {
-        uiStore.showToast(t("projectPicker.cleanupNone"), "info");
+        logger.notify.info(t("projectPicker.cleanupNone"), "UI");
       } else {
-        uiStore.showToast(t("projectPicker.cleanupSuccess", { count: result.removed }), "success");
+        logger.notify.info(t("projectPicker.cleanupSuccess", { count: result.removed }), "UI");
       }
     } catch (error) {
       if (isPickerTaskCancelledError(error)) {
         await handlePickerTaskCancelled("cleanupCancelled");
         return;
       }
-      uiStore.showToast(formatErrorMessage(error), "error");
+      logger.notify.error(formatErrorMessage(error), "UI");
     } finally {
       setBusy("idle");
     }
@@ -277,21 +272,15 @@ export function useProjectPicker() {
           markProjectPickerProgressDone(t, update);
           const result = claimed.result;
           if (result.outcome === 'committed' && result.record) {
-            uiStore.showToast(
-              t("projectPicker.createSuccess", { name: result.record.name }),
-              "success",
-            );
+            logger.notify.info(t("projectPicker.createSuccess", { name: result.record.name }), "UI");
           } else {
-            uiStore.showToast(
-              `${t("projectPicker.createSuccess", { name })}: ${result.recovery?.action ?? result.outcome}`,
-              "warning",
-            );
+            logger.notify.warn(`${t("projectPicker.createSuccess", { name })}: ${result.recovery?.action ?? result.outcome}`, "UI");
           }
         },
       );
     } catch (error) {
       if (error instanceof ProjectLifecycleProtocolError && error.zeroEffects) return;
-      if (!pending || pending.isCurrent()) uiStore.showToast(formatErrorMessage(error), "error");
+      if (!pending || pending.isCurrent()) logger.notify.error(formatErrorMessage(error), "UI");
     } finally {
       if (!pending || pending.isCurrent()) setBusy("idle");
     }
@@ -327,7 +316,7 @@ export function useProjectPicker() {
         },
       );
     } catch (error) {
-      uiStore.showToast(formatErrorMessage(error), "error");
+      logger.notify.error(formatErrorMessage(error), "UI");
     } finally {
       setBusy("idle");
     }
@@ -344,9 +333,9 @@ export function useProjectPicker() {
         rowToManagedProject(row),
         ...previous.filter((project) => project.id !== row.id),
       ]);
-      uiStore.showToast(t("projectPicker.importSuccess", { name: row.name }), "success");
+      logger.notify.info(t("projectPicker.importSuccess", { name: row.name }), "UI");
     } catch (error) {
-      uiStore.showToast(formatErrorMessage(error), "error");
+      logger.notify.error(formatErrorMessage(error), "UI");
     } finally {
       setBusy("idle");
     }
@@ -363,7 +352,7 @@ export function useProjectPicker() {
         await ProjectService.removeRegisteredProject(id);
         setProjects((previous) => previous.filter((project) => project.id !== id));
       } catch (error) {
-        uiStore.showToast(formatErrorMessage(error), "error");
+        logger.notify.error(formatErrorMessage(error), "UI");
       }
     })();
   }, []);
@@ -404,25 +393,24 @@ export function useProjectPicker() {
         if (active
           && result.kind === 'registryCleanup'
           && result.outcome === 'registryFailed') {
-          uiStore.showToast(
-            `${t("projectPicker.deleteProjectConfirm.failed")}: ${result.recovery?.action ?? result.outcome}`,
-            "error",
-          );
+          logger.notify.error(`${t("projectPicker.deleteProjectConfirm.failed")}: ${result.recovery?.action ?? result.outcome}`, "UI");
           return;
         }
         const requiresRecovery = result.outcome !== 'committed';
-        uiStore.showToast(
-          requiresRecovery
-            ? `${t("projectPicker.deleteProjectConfirm.success")} (${result.recovery?.action ?? result.outcome})`
-            : t("projectPicker.deleteProjectConfirm.success"),
-          requiresRecovery ? "warning" : "success",
-        );
+        const message = requiresRecovery
+          ? `${t("projectPicker.deleteProjectConfirm.success")} (${result.recovery?.action ?? result.outcome})`
+          : t("projectPicker.deleteProjectConfirm.success");
+        if (requiresRecovery) {
+          logger.notify.warn(message, "UI");
+        } else {
+          logger.notify.info(message, "UI");
+        }
       } catch (error) {
         if (error instanceof ProjectLifecycleProtocolError && error.zeroEffects) return;
         if (pending && !pending.isCurrent()) return;
-        uiStore.showToast(
+        logger.notify.error(
           `${t("projectPicker.deleteProjectConfirm.failed")}: ${formatErrorMessage(error)}`,
-          "error",
+          "UI",
         );
         throw error;
       }
@@ -439,7 +427,7 @@ export function useProjectPicker() {
           ),
         );
       } catch (error) {
-        uiStore.showToast(formatErrorMessage(error), "error");
+        logger.notify.error(formatErrorMessage(error), "UI");
       }
     })();
   }, []);

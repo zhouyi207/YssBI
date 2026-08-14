@@ -43,9 +43,7 @@
   --interactive-hover-strong: rgba(37, 99, 235, 0.18);
   --interactive-active: rgba(37, 99, 235, 0.16);
   --interactive-divider: rgba(17, 24, 39, 0.10);
-  --overlay-scrollbar-thumb: rgba(15, 23, 42, 0.34);
-  --overlay-scrollbar-thumb-hover: rgba(15, 23, 42, 0.48);
-  --overlay-scrollbar-arrow: rgba(15, 23, 42, 0.48);
+
   --sidebar-section-bg: rgba(17, 24, 39, 0.04);
   --sidebar-section-active: rgba(37, 99, 235, 0.08);
   --sidebar-hover: var(--interactive-hover);
@@ -122,13 +120,8 @@
   animation: pinResultSearchPanelIn 0.28s cubic-bezier(0.34, 1.25, 0.64, 1) forwards;
 }
 
-/* OverlayScrollbar：隐藏原生滚动条 */
-.overlay-scrollbar-viewport::-webkit-scrollbar {
-  display: none;
-}
-
-/* OverlayScrollbar vertical viewports — toggled by appearance.smoothScroll via SettingsEffectsProvider */
-html[data-smooth-scroll='true'] .overlay-scrollbar-viewport {
+/* Scroll area viewports — toggled by appearance.smoothScroll via SettingsEffectsProvider */
+html[data-smooth-scroll='true'] [data-slot='scroll-area-viewport'] {
   scroll-behavior: smooth;
 }
 
@@ -372,9 +365,7 @@ body.layout-sash-dragging canvas {
   --interactive-hover-strong: rgba(255, 255, 255, 0.11);
   --interactive-active: rgba(255, 255, 255, 0.10);
   --interactive-divider: rgba(255, 255, 255, 0.06);
-  --overlay-scrollbar-thumb: rgba(255, 255, 255, 0.24);
-  --overlay-scrollbar-thumb-hover: rgba(255, 255, 255, 0.40);
-  --overlay-scrollbar-arrow: rgba(255, 255, 255, 0.45);
+
   --sidebar-section-bg: rgba(255, 255, 255, 0.03);
   --sidebar-section-active: rgba(255, 255, 255, 0.06);
   --sidebar-hover: var(--interactive-hover);

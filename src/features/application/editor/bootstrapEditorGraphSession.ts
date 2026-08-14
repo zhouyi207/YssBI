@@ -1,4 +1,4 @@
-import { uiStore } from '@/features/core/ui/UIStore';
+import { logger } from "@/utils/appLogger";
 import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
 import { activateCurrentEditorTab } from './switchEditorTab';
 
@@ -33,6 +33,6 @@ export async function bootstrapEditorGraphSession(
     }
   }
 
-  uiStore.showToast('当前编辑器图未能加载，请重新点击标签页或画布', 'warning', 4000);
+  logger.notify.warn('当前编辑器图未能加载，请重新点击标签页或画布', "UI");
   return false;
 }

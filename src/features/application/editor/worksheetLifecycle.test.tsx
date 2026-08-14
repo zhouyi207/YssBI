@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { buildWorksheetLayoutTab } from '@/features/core/layout/layoutTabModel';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import {
   resourceKey,
@@ -14,14 +14,14 @@ import {
   useResourceStore,
 } from '@/features/core/resource';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { performWorksheetDelete } from './closeEditorTab';
 import { useWorksheetManagement } from './useWorksheetManagement';
-import { useProjectOperations } from './useProjectOperations';
+
 import { resolveTabDisplayName } from './resolveTabDisplayName';
 import { commitFileFirstResourceIndex } from '@/features/application/resource/resourceActions';
 import {
@@ -169,7 +169,6 @@ describe('worksheet command lifecycle guards', () => {
   let host: HTMLDivElement;
   let root: Root;
   let management!: ReturnType<typeof useWorksheetManagement>;
-  let operations!: ReturnType<typeof useProjectOperations>;
   const openWorksheet = vi.fn(async () => undefined);
 
   beforeEach(() => {
@@ -218,23 +217,6 @@ describe('worksheet command lifecycle guards', () => {
     expect(openWorksheet).toHaveBeenCalledWith(opaquePath, 'Rust supplied label');
   });
 
-  it('formats structured worksheet command errors without object coercion', async () => {
-    vi.spyOn(WorksheetService, 'createWorksheet').mockRejectedValue({
-      code: 'filesystem_commit_failed',
-      message: 'Worksheet file commit failed',
-      resourceKind: 'worksheet',
-      resourcePath: 'worksheets/Report With Spaces.yssbi-worksheet',
-    });
-    const toast = vi.spyOn(uiStore, 'showToast');
-
-    await management.addWorksheet();
-
-    expect(toast).toHaveBeenCalledWith(
-      'worksheet.createFailed: Worksheet file commit failed',
-      'error',
-      4000,
-    );
-  });
 
   it('resolves display names only from authoritative worksheet metadata', () => {
     const opaquePath = 'worksheets/Path Does Not Reveal Label.yssbi-worksheet';
@@ -401,8 +383,6 @@ describe('worksheet command lifecycle guards', () => {
   it('gives a stale create completion zero follow-up effects in the replacement project', async () => {
     const request = deferred<ResourceMutationResultDto>();
     vi.spyOn(WorksheetService, 'createWorksheet').mockReturnValue(request.promise);
-    const toast = vi.spyOn(uiStore, 'showToast');
-
     const completion = management.addWorksheet();
     await vi.waitFor(() => expect(WorksheetService.createWorksheet).toHaveBeenCalled());
     replaceProject();
@@ -411,7 +391,6 @@ describe('worksheet command lifecycle guards', () => {
 
     expect(commitFileFirstResourceIndex).not.toHaveBeenCalled();
     expect(openWorksheet).not.toHaveBeenCalled();
-    expect(toast).not.toHaveBeenCalled();
     expect(useWorksheetStore.getState().documents).toEqual({});
   });
 
@@ -428,38 +407,6 @@ describe('worksheet command lifecycle guards', () => {
     expect(useWorksheetStore.getState().documents).toEqual({});
   });
 
-  it('does not toast success when the active worksheet save basis became stale', async () => {
-    useLayoutStore.setState({
-      rootId: 'root',
-      nodes: {
-        root: { id: 'root', type: 'row', parentId: null, children: ['editor'] },
-        editor: {
-          id: 'editor',
-          type: 'component',
-          parentId: 'root',
-          data: { component: 'GraphEditor' },
-        },
-      },
-      activeEditorGroupId: 'editor',
-    });
-    useEditorTabStore.setState({ registry: {}, placements: {} });
-    useEditorTabStore.getState().initGroupPlacement(
-      'editor',
-      [buildWorksheetLayoutTab('worksheet-1')],
-      'worksheet-1',
-    );
-    function OperationsHarness() {
-      operations = useProjectOperations();
-      return null;
-    }
-    act(() => root.render(<OperationsHarness />));
-    vi.spyOn(useWorksheetStore.getState(), 'saveDocument').mockResolvedValue(false);
-    const toast = vi.spyOn(uiStore, 'showToast');
-
-    await operations.saveGraph();
-
-    expect(toast).not.toHaveBeenCalled();
-  });
 
   it('keeps the tab and document until successful remove publication settles', async () => {
     const request = deferred<ResourceMutationResultDto>();

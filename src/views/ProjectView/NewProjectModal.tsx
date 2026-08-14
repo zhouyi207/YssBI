@@ -1,7 +1,7 @@
+import { logger } from "@/utils/appLogger";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { uiStore } from "@/features/core/ui/UIStore";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -92,7 +92,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
       } catch (error) {
         if (cancelled) return;
         setPathAuto(false);
-        uiStore.showToast(formatErrorMessage(error), "error");
+        logger.notify.error(formatErrorMessage(error), "UI");
       }
     })();
 
@@ -123,7 +123,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
       setPathAuto(true);
       setPath(joinPath(parent, sanitizeDirSegment(name)));
     } catch (error) {
-      uiStore.showToast(formatErrorMessage(error), "error");
+      logger.notify.error(formatErrorMessage(error), "UI");
     }
   }
 
@@ -135,7 +135,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
       onOpenChange(false);
     } catch (error) {
       setFieldErrors({ path: true, name: true });
-      uiStore.showToast(formatErrorMessage(error), "error");
+      logger.notify.error(formatErrorMessage(error), "UI");
     } finally {
       setBusy(false);
     }

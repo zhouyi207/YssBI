@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorSessionCommandsContext } from '@/features/application/editor';
@@ -85,7 +86,7 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
 
   const demoteVariable = useCallback(async (id: string) => {
     if (!scopePath || !graphType) {
-      uiStore.showToast(t('sidebar.noActiveGraph'), 'warning');
+      logger.notify.warn(t('sidebar.noActiveGraph'), "UI");
       return;
     }
     const scope =

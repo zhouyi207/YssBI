@@ -471,7 +471,7 @@ export const zhCN = {
       language: "控制应用界面语言。",
       activityBarPosition: "控制活动栏的位置和可见性。",
       panelPosition: "控制面板停靠在编辑器区域的底部、左侧或右侧。",
-      smoothScroll: "为 OverlayScrollbar 包裹的纵向滚动区域（列表、设置、侧栏等）启用平滑滚动。",
+      smoothScroll: "为滚动区域（列表、设置、侧栏等）启用平滑滚动。",
       titleBarStyle: "使用应用内自绘标题栏或操作系统原生窗口边框。",
       workbenchBackground: "编辑器工作区的主背景色。",
       sidebarBackground: "侧栏和头部区域的背景色。",
@@ -859,6 +859,16 @@ export const zhCN = {
   },
   detail: {
     title: "详情",
+    tabs: {
+      details: "详情",
+      inspector: "检查器",
+    },
+    inspector: {
+      title: "检查器",
+      emptyTitle: "未选择结果",
+      empty: "检查 Pin 结果或执行输出后将在这里显示",
+      plotWindowOnly: "图表结果将在独立窗口中打开",
+    },
     titleWithName: "详情 : {{name}}",
     titleLog: "详情 : 日志",
     titleNode: "详情 : 节点",

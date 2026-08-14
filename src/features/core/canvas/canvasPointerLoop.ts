@@ -160,6 +160,10 @@ function installPointerLoop(): () => void {
 
     if (interaction.type === 'panning') {
       const session = interaction.session;
+      const crossedDragThreshold = Math.abs(event.clientX - session.startX) > CONTEXT_MENU_MOVE_THRESHOLD_PX
+        || Math.abs(event.clientY - session.startY) > CONTEXT_MENU_MOVE_THRESHOLD_PX;
+      if (!session.moved && !crossedDragThreshold) return;
+
       const dx = event.clientX - session.lastX;
       const dy = event.clientY - session.lastY;
       setViewportLive(editorViewportScope(session.groupId, graphPath), (viewport) => ({
@@ -188,17 +192,21 @@ function installPointerLoop(): () => void {
       const dx = (event.clientX - session.lastX) / scale;
       const dy = (event.clientY - session.lastY) / scale;
       const delta = { x: session.delta.x + dx, y: session.delta.y + dy };
+      const positions: Record<string, { x: number; y: number }> = {};
       for (const nodeId of session.nodeIds) {
         const position = useGraphDataStore.getState().getGraphNode(graphPath, nodeId)?.position;
-        if (position) store.setPositionOverride(graphPath, nodeId, {
+        if (position) positions[nodeId] = {
           x: position.x + delta.x,
           y: position.y + delta.y,
-        });
+        };
       }
-      store.updateInteraction(graphPath, session.groupId, () => ({
-        type: 'draggingNodes',
-        session: { ...session, moved: true, lastX: event.clientX, lastY: event.clientY, delta },
-      }));
+      store.updateNodeDragFrame(graphPath, session.groupId, positions, {
+        ...session,
+        moved: true,
+        lastX: event.clientX,
+        lastY: event.clientY,
+        delta,
+      });
     } else if (interaction.type === 'drawingConnection' || interaction.type === 'movingConnections') {
       processConnectionFrame(graphPath, interaction, event);
     }

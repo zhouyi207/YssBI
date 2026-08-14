@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_WORKSHEET_NAME } from '@/shared/constants/defaultResourceNames';
@@ -8,7 +9,6 @@ import { projectPublicationCoordinator } from '@/features/application/editorMuta
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 
-import { uiStore } from '@/features/core/ui/UIStore';
 import { useSidebarTab } from './useSidebarTab';
 import { buildWorksheetLayoutTab } from '@/features/core/layout/layoutTabModel';
 import { openEditorTab } from './openEditorTab';
@@ -93,15 +93,11 @@ export function useWorksheetManagement(
         switchSidebarTab('charts');
         await openWorksheet(createdState.path, createdState.name);
         if (!context.isCurrent()) return;
-        uiStore.showToast(t('worksheet.created'), 'success', 2000);
+        logger.notify.info(t('worksheet.created'), "UI");
       } catch (error) {
         if (context && !context.isCurrent()) return;
         rollbackStagedWorksheetDocument(stagedDocument);
-        uiStore.showToast(
-          `${t('worksheet.createFailed')}: ${formatErrorMessage(error)}`,
-          'error',
-          4000,
-        );
+        logger.notify.error(`${t('worksheet.createFailed')}: ${formatErrorMessage(error)}`, "UI");
       }
     },
     [openWorksheet, switchSidebarTab, t],
@@ -141,11 +137,7 @@ export function useWorksheetManagement(
     } catch (error) {
       if (context && !context.isCurrent()) return;
       rollbackStagedWorksheetDocument(stagedDocument);
-      uiStore.showToast(
-        `${t('worksheet.duplicateFailed')}: ${formatErrorMessage(error)}`,
-        'error',
-        4000,
-      );
+      logger.notify.error(`${t('worksheet.duplicateFailed')}: ${formatErrorMessage(error)}`, "UI");
     }
   }, [openWorksheet, switchSidebarTab, t]);
 

@@ -157,7 +157,7 @@ Wizard 可以减少一次性暴露过多概念。后续高级用户可以提供�
 - 使用现有 shadcn/ui primitives；
 - 普通提示使用项目 shared toast；
 - 不使用 `alert` / `confirm` / `prompt`；
-- 大内容区域使用 `OverlayScrollbar`；
+- 大内容区域使用 `ScrollArea`；
 - 保持 `flex`, `min-h-0`, `flex-1` 的滚动布局约定。
 
 ---

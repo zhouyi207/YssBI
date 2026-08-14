@@ -1,4 +1,4 @@
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { ResultDescriptor } from '../../types';
 import { useResultValue } from '../../useResultValue';
 import { usePagedResultRows } from '../../usePagedResultRows';
@@ -47,9 +47,9 @@ export function DataSeriesResultView({ payload }: { payload: ResultDescriptor })
   return (
     <ResultViewShell title={payload.title} meta={<span>Length: {totalCount}</span>}>
       {paging.error ? <SourceError error={paging.error} /> : (
-        <OverlayScrollbar className="min-h-0 flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           <JsonTreeView value={paging.values} />
-        </OverlayScrollbar>
+        </ScrollArea>
       )}
     </ResultViewShell>
   );
@@ -60,9 +60,9 @@ export function ScalarResultView({ payload }: { payload: ResultDescriptor }) {
   return (
     <ResultViewShell title={payload.title}>
       {error ? <SourceError error={error} /> : (
-        <OverlayScrollbar className="min-h-0 flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           <pre className="break-all text-sm">{loading ? 'Loading…' : JSON.stringify(value?.value, null, 2)}</pre>
-        </OverlayScrollbar>
+        </ScrollArea>
       )}
     </ResultViewShell>
   );
@@ -75,9 +75,9 @@ export function JsonResultView({ payload }: { payload: ResultDescriptor }) {
       {error ? <SourceError error={error} /> : loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
-        <OverlayScrollbar className="min-h-0 flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           <JsonTreeView value={value?.value ?? value} />
-        </OverlayScrollbar>
+        </ScrollArea>
       )}
     </ResultViewShell>
   );

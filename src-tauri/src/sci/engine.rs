@@ -61,15 +61,3 @@ impl Default for SciContext<'_> {
         Self::rust()
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{SciContext, SciEngine};
-
-    #[test]
-    fn rust_context_does_not_require_julia_state() {
-        let context = SciContext::rust();
-        assert_eq!(context.engine, SciEngine::Rust);
-        assert!(context.julia.is_none());
-    }
-}

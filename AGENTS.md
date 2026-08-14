@@ -60,8 +60,8 @@ the architecture changes.
 - Use the shared toast system in the bottom-right for ordinary messages.
   Never use browser `alert`, `prompt`, `confirm`, or native message dialogs;
   path selection dialogs are the only exception.
-- User-facing vertical scrolling uses `src/shared/ui/OverlayScrollbar.tsx`;
-  preserve the surrounding `flex`, `min-h-0`, and `flex-1` layout contract.
+- User-facing scrolling uses `src/components/ui/scroll-area.tsx`; preserve the
+  surrounding `flex`, `min-h-0`, and `flex-1` layout contract.
 - Context menus use compact spacing (`py-0`, no separator margins) and small
   outer radii (`rounded-sm`/`rounded-md`).
 - Centralize drag/drop constants, payload types, and guards in

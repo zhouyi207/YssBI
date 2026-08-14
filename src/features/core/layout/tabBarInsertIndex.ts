@@ -24,7 +24,7 @@ export function measureTabBarMetrics(
   stripElement: HTMLElement,
   tabIds: readonly string[],
 ): TabBarTabMetric[] {
-  const viewport = stripElement.closest('.overlay-scrollbar-viewport') as HTMLElement | null;
+  const viewport = stripElement.closest('[data-slot="scroll-area-viewport"]') as HTMLElement | null;
   const scrollLeft = viewport?.scrollLeft ?? stripElement.scrollLeft;
   const stripRect = stripElement.getBoundingClientRect();
   return tabIds.flatMap((tabId, index) => {

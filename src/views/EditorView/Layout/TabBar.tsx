@@ -7,7 +7,7 @@ import { resolveTabDragTransferIds } from "@/features/core/layout/tabSelection";
 import { useEditorTabStore } from "@/features/core/layout/editorTabStore";
 import { computeTabShiftOffset } from "@/features/core/layout/tabBarInsertIndex";
 import { layoutTabResourceRef } from "@/features/core/layout/layoutTabModel";
-import { OverlayScrollbar } from "@/shared/ui/OverlayScrollbar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { LayoutTab } from "@/shared/types/ui";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { useShallow } from "zustand/react/shallow";
@@ -154,9 +154,9 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
         data-tabbar-drop={layoutNodeId}
         className="relative flex min-h-0 flex-1 items-stretch h-full min-w-0"
       >
-        <OverlayScrollbar
-          ref={containerRef}
-          direction="horizontal"
+        <ScrollArea
+          viewportRef={containerRef}
+          orientation="horizontal"
           className="flex min-h-0 flex-1 items-stretch h-full"
         >
           <div
@@ -194,7 +194,7 @@ export const TabBar: React.FC<TabBarProps> = ({ layoutNodeId, tabs = [], activeT
               aria-hidden="true"
             />
           </div>
-        </OverlayScrollbar>
+        </ScrollArea>
       </div>
 
       <EditorGroupToolbar groupId={layoutNodeId} />

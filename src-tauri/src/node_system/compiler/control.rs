@@ -1229,44 +1229,8 @@ fn issue(node_id: NodeId, diagnostic: CompilerDiagnostic) -> ControlIssue {
 mod tests {
     use super::*;
     use crate::node_system::catalog::build_builtin_node_system;
-    use crate::node_system::protocol::{
-        I18nKey, NodeInterfaceProtocol, NodeTypeId, ParameterEditorSpec, ParameterPresentation,
-        ParameterSpec, PortKey, TypeExpr, TypeId,
-    };
-    use crate::node_system::testing::TestProtocolBuilder;
+    use crate::node_system::protocol::{NodeInterfaceProtocol, NodeTypeId, PortKey};
     use uuid::Uuid;
-
-    #[test]
-    fn prepared_call_target_rejects_string_fallback() {
-        let protocol = TestProtocolBuilder::new("yssbi.test.call_config", "test")
-            .style("test")
-            .parameters(vec![ParameterSpec {
-                key: ParameterKey::new("target").unwrap(),
-                title_key: I18nKey::new("nodes.test.call_config.target").unwrap(),
-                description_key: None,
-                value_type: TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
-                default_value: None,
-                constraints: Vec::new(),
-                editor: ParameterEditorSpec::Text { multiline: false },
-                presentation: ParameterPresentation::DetailPanel,
-            }])
-            .build();
-        let parameters = ValidatedNodeConfig::from_analysis(
-            &protocol,
-            BTreeMap::from([(
-                ParameterKey::new("target").unwrap(),
-                serde_json::json!("functions/raw-string"),
-            )]),
-            &BTreeMap::new(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            parameters.string(&ParameterKey::new("target").unwrap()),
-            Some("functions/raw-string")
-        );
-        assert_eq!(prepared_call_target(&parameters), None);
-    }
 
     fn node_id(value: u128) -> NodeId {
         NodeId::from_uuid(Uuid::from_u128(value))

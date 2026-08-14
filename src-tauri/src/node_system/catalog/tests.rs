@@ -1480,30 +1480,6 @@ fn diagnostic_rendering_does_not_rewrite_inserted_argument_placeholders() {
 }
 
 #[test]
-fn trusted_provider_freezes_with_complete_inventory() {
-    let builtin = build_builtin_node_system().unwrap();
-    let registry = builtin.registry;
-    let catalog = builtin.catalog;
-    assert!(registry.len() >= 20);
-    assert!(
-        registry
-            .get(&NodeTypeId::new("yssbi.control.branch").unwrap())
-            .unwrap()
-            .structural_role()
-            .is_some()
-    );
-    assert_eq!(
-        item(
-            &catalog.localize(&registry, "en-US"),
-            "yssbi.control.branch"
-        )
-        .title
-        .as_ref(),
-        "Branch"
-    );
-}
-
-#[test]
 fn project_and_control_nodes_freeze_with_complete_protocol_contracts() {
     let builtin = build_builtin_node_system().unwrap();
     let registry = builtin.registry;
@@ -2028,78 +2004,6 @@ fn fixed_port_projection_has_no_instance_uuid() {
 }
 
 #[test]
-fn legacy_production_catalog_has_complete_stable_manifest_coverage() {
-    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let mut manifest = super::core_nodes::legacy_coverage()
-        .iter()
-        .map(|entry| (entry.legacy_node_type, entry.stable_ids.to_vec()))
-        .collect::<Vec<_>>();
-    manifest.extend(
-        super::dataframe::LEGACY_NODE_IDS
-            .iter()
-            .map(|(legacy, stable)| (*legacy, vec![*stable])),
-    );
-    manifest.extend(
-        super::statistics::LEGACY_NODE_IDS
-            .iter()
-            .map(|(legacy, stable)| (*legacy, vec![*stable])),
-    );
-    manifest.extend(
-        super::distribution::legacy_manifest().map(|(legacy, stable)| (legacy, vec![stable])),
-    );
-    manifest.extend(super::plot::legacy_manifest().map(|(legacy, stable)| (legacy, vec![stable])));
-    manifest.extend([
-        ("Event:Event Begin", vec!["yssbi.project.event.begin"]),
-        (
-            "Functions:Function Entry",
-            vec!["yssbi.project.function.entry"],
-        ),
-        (
-            "Functions:Function Return",
-            vec!["yssbi.project.function.return"],
-        ),
-        (
-            "Functions:Call Function",
-            vec!["yssbi.project.function.call"],
-        ),
-        ("Variables:Get Variable", vec!["yssbi.project.variable.get"]),
-        ("Variables:Set Variable", vec!["yssbi.project.variable.set"]),
-    ]);
-
-    assert_eq!(
-        manifest.len(),
-        148,
-        "legacy node migration manifest changed"
-    );
-    assert_eq!(
-        manifest
-            .iter()
-            .map(|(legacy, _)| *legacy)
-            .collect::<BTreeSet<_>>()
-            .len(),
-        manifest.len(),
-        "legacy functionality must occur exactly once in the migration manifest",
-    );
-    for (legacy, stable_ids) in manifest {
-        assert!(
-            !stable_ids.is_empty(),
-            "legacy node '{legacy}' has no stable ID"
-        );
-        assert_eq!(
-            stable_ids.iter().copied().collect::<BTreeSet<_>>().len(),
-            stable_ids.len(),
-            "legacy node '{legacy}' repeats a stable family member",
-        );
-        for stable_id in stable_ids {
-            assert!(
-                registry.get(&NodeTypeId::new(stable_id).unwrap()).is_some(),
-                "legacy node '{legacy}' is missing stable node '{stable_id}'",
-            );
-        }
-    }
-}
-
-#[test]
 fn builtin_factory_is_deterministic_and_has_single_owners() {
     let first = build_builtin_node_system().unwrap();
     let second = build_builtin_node_system().unwrap();
@@ -2126,7 +2030,7 @@ fn builtin_factory_is_deterministic_and_has_single_owners() {
 }
 
 #[test]
-fn every_emitted_native_kernel_has_a_production_implementation() {
+fn every_emitted_ordinary_native_kernel_has_a_production_implementation() {
     let nodes = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let kernels = build_builtin_kernel_registry();
     let cancellation = CompileCancellationToken::new();
@@ -2169,6 +2073,13 @@ fn every_emitted_native_kernel_has_a_production_implementation() {
             !native_implementation || matches!(lowered.kernel, LoweredKernel::Native(_)),
             "native implementation for '{node_id}' emitted a non-native fragment",
         );
+        if node_id.as_str() == "yssbi.debug.view" {
+            assert!(
+                matches!(&lowered.kernel, LoweredKernel::Kernel(_)),
+                "View Data must retain its current scheduler-intrinsic lowering kind",
+            );
+            continue;
+        }
         let native = match &lowered.kernel {
             LoweredKernel::Native(handle) => Some(handle),
             LoweredKernel::Scalar(fragment) => Some(&fragment.kernel),

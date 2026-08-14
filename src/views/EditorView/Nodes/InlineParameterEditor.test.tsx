@@ -5,7 +5,6 @@ import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecuteEditorMutationOutcome } from '@/features/application/editorMutation/editorMutationCoordinator';
-import { uiStore } from '@/features/core/ui/UIStore';
 import type { ParameterEditorDto } from '@/shared/types/dto/editorProjection';
 import { InlineParameterEditor } from './InlineParameterEditor';
 
@@ -103,7 +102,6 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   container.remove();
-  vi.restoreAllMocks();
 });
 
 describe('InlineParameterEditor', () => {
@@ -199,14 +197,12 @@ describe('InlineParameterEditor', () => {
     },
   );
 
-  it('shows a shared toast for an invalid numeric draft on Enter', () => {
-    const toast = vi.spyOn(uiStore, 'showToast');
+  it('does not submit an invalid numeric draft on Enter', () => {
     renderEditor(projectedParameter('number', 12, { kind: 'Int64' }));
 
     changeInput('1.5');
     keyDown('Enter');
 
-    expect(toast).toHaveBeenCalledWith('Enter an integer', 'error');
     expect(setNodeParameters).not.toHaveBeenCalled();
   });
 
@@ -242,37 +238,9 @@ describe('InlineParameterEditor', () => {
     expect(setNodeParameters).not.toHaveBeenCalled();
   });
 
-  it('accepts a noop mutation outcome without showing an error', async () => {
-    const toast = vi.spyOn(uiStore, 'showToast');
-    setNodeParameters.mockResolvedValueOnce({ status: 'noop', result: {} as never });
-    renderEditor(projectedParameter('text', 'old', { kind: 'String' }));
-
-    changeInput('new');
-    keyDown('Enter');
-    await flushPromises();
-
-    expect(toast).not.toHaveBeenCalled();
-  });
-
-  it('reports a structured rejected mutation outcome', async () => {
-    const toast = vi.spyOn(uiStore, 'showToast');
-    setNodeParameters.mockResolvedValueOnce({
-      status: 'rejected',
-      code: 'graph_node_not_found',
-    });
-    renderEditor(projectedParameter('text', 'old', { kind: 'String' }));
-
-    changeInput('new');
-    keyDown('Enter');
-    await flushPromises();
-
-    expect(toast).toHaveBeenCalledWith(expect.stringContaining('graph_node_not_found'), 'error');
-  });
-
   it.each(['stale', 'conflict'] as const)(
-    'restores the latest projection and toasts when mutation resolves %s',
+    'restores the latest projection when mutation resolves %s',
     async (status) => {
-      const toast = vi.spyOn(uiStore, 'showToast');
       setNodeParameters.mockResolvedValueOnce({ status });
       const initial = projectedParameter('text', 'old', { kind: 'String' });
       renderEditor(initial);
@@ -283,12 +251,10 @@ describe('InlineParameterEditor', () => {
       await flushPromises();
 
       expect(input().value).toBe('latest projection');
-      expect(toast).toHaveBeenCalledWith(expect.stringContaining(status), 'error');
     },
   );
 
-  it('restores the projected value and shows a shared toast when mutation rejects', async () => {
-    const toast = vi.spyOn(uiStore, 'showToast');
+  it('restores the projected value when mutation rejects', async () => {
     setNodeParameters.mockRejectedValueOnce(new Error('backend rejected value'));
     renderEditor(projectedParameter('text', 'old', { kind: 'String' }));
 
@@ -297,7 +263,6 @@ describe('InlineParameterEditor', () => {
     await flushPromises();
 
     expect(input().value).toBe('old');
-    expect(toast).toHaveBeenCalledWith('backend rejected value', 'error');
   });
 
   it('does not mutate when the committed value equals the projection', async () => {

@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { SIDEBAR_FLAT_ROW_HEIGHT } from '@/features/core/sidebar';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { SidebarFlatRowItem } from './SidebarFlatRowItem';
 import type { SidebarRenderRow } from './sidebarRenderRows';
 
@@ -20,7 +20,7 @@ export function SidebarFlatRowList({ rows }: { rows: SidebarRenderRow[] }) {
   }
 
   return (
-    <OverlayScrollbar ref={scrollRef} className="min-h-0 min-w-0 flex-1 basis-0">
+    <ScrollArea viewportRef={scrollRef} className="min-h-0 min-w-0 flex-1 basis-0">
       <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const row = rows[virtualRow.index];
@@ -35,6 +35,6 @@ export function SidebarFlatRowList({ rows }: { rows: SidebarRenderRow[] }) {
           );
         })}
       </div>
-    </OverlayScrollbar>
+    </ScrollArea>
   );
 }

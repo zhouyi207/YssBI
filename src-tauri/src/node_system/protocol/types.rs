@@ -421,17 +421,17 @@ mod tests {
 
     #[test]
     fn schema_field_lineage_is_optional_and_round_trips() {
-        let legacy = SchemaField {
+        let without_lineage = SchemaField {
             name: SchemaColumnRef("amount".into()),
             scalar_type: RelationalScalarType::Float64,
             lineage: None,
         };
         assert_eq!(
-            serde_json::to_value(&legacy).unwrap(),
+            serde_json::to_value(&without_lineage).unwrap(),
             serde_json::json!({"name": "amount", "scalar_type": "Float64"})
         );
 
-        let stable = SchemaField {
+        let with_lineage = SchemaField {
             name: SchemaColumnRef("amount".into()),
             scalar_type: RelationalScalarType::Float64,
             lineage: Some(SchemaFieldLineage {
@@ -440,13 +440,14 @@ mod tests {
             }),
         };
         assert_eq!(
-            serde_json::from_value::<SchemaField>(serde_json::to_value(&stable).unwrap()).unwrap(),
-            stable
+            serde_json::from_value::<SchemaField>(serde_json::to_value(&with_lineage).unwrap())
+                .unwrap(),
+            with_lineage
         );
     }
 
     #[test]
-    fn filter_schema_expression_preserves_legacy_wire_without_predicate() {
+    fn filter_schema_expression_round_trips_without_predicate() {
         let expression = SchemaExpr::Filter {
             input: Box::new(SchemaExpr::Input(PortKey::new("source").unwrap())),
             predicate: None,

@@ -122,7 +122,6 @@ describe('closeGraphTab', () => {
     vi.spyOn(uiStore, 'confirm').mockResolvedValue(true);
     const save = deferred<Awaited<ReturnType<typeof GraphService.saveProjectGraph>>>();
     vi.spyOn(GraphService, 'saveProjectGraph').mockReturnValue(save.promise);
-    const toast = vi.spyOn(uiStore, 'showToast');
 
     const completion = closeGraphTab('g1', 'editor');
     await vi.waitFor(() => expect(GraphService.saveProjectGraph).toHaveBeenCalled());
@@ -133,7 +132,6 @@ describe('closeGraphTab', () => {
     await expect(completion).resolves.toBe(false);
     expect(useEditorTabStore.getState().getPlacement('editor').tabIds).toContain('g1');
     expect(isGraphResourceDirty('g1', 'event')).toBe(true);
-    expect(toast).not.toHaveBeenCalled();
   });
 
   it('keeps the graph dirty when its revision advances while save is pending', async () => {

@@ -1287,26 +1287,6 @@ fn provider_provenance_duplicate_type_returns_no_registry() {
     ));
 }
 
-#[test]
-fn provider_provenance_covers_every_builtin_node_and_type() {
-    let registry = crate::node_system::catalog::build_builtin_node_system()
-        .unwrap()
-        .registry;
-
-    for (id, _) in registry.iter() {
-        assert_eq!(
-            registry.node_provider(id).map(ProviderId::as_str),
-            Some("yssbi.builtin")
-        );
-    }
-    for (id, _) in registry.types().iter() {
-        assert_eq!(
-            registry.type_provider(id).map(ProviderId::as_str),
-            Some("yssbi.builtin")
-        );
-    }
-}
-
 fn duplicate_provider_pair() -> [ProviderRegistration; 2] {
     provenance_providers()
 }

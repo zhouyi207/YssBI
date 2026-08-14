@@ -5,9 +5,8 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { DatabaseService } from '@/services/database/databaseService';
-import { uiStore } from '@/features/core/ui/UIStore';
-import { useDatabaseStore } from '@/features/core/dataStore';
 import { logger } from '@/utils/appLogger';
+import { useDatabaseStore } from '@/features/core/dataStore';
 import { useEditActions } from './useEditActions';
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
@@ -63,8 +62,6 @@ describe('useEditActions project lifecycle ownership', () => {
   it('does not report a delayed export completion to a replacement project', async () => {
     const request = deferred<void>();
     vi.spyOn(DatabaseService, 'exportDatabase').mockReturnValue(request.promise);
-    const toast = vi.spyOn(uiStore, 'showToast');
-
     let completion!: Promise<void>;
     act(() => { completion = actions.handleExport(); });
     await vi.waitFor(() => expect(DatabaseService.exportDatabase).toHaveBeenCalledWith(
@@ -83,7 +80,6 @@ describe('useEditActions project lifecycle ownership', () => {
     request.resolve();
     await act(async () => completion);
 
-    expect(toast).not.toHaveBeenCalled();
     expect(reloadAllData).not.toHaveBeenCalled();
     expect(useDatabaseStore.getState()).toBe(replacementStoreSnapshot);
   });
@@ -91,7 +87,6 @@ describe('useEditActions project lifecycle ownership', () => {
   it('suppresses a delayed export rejection after replacement with zero effects', async () => {
     const request = deferred<void>();
     vi.spyOn(DatabaseService, 'exportDatabase').mockReturnValue(request.promise);
-    const toast = vi.spyOn(uiStore, 'showToast');
     const log = vi.spyOn(logger.data, 'error');
 
     const completion = actions.handleExport();
@@ -105,7 +100,6 @@ describe('useEditActions project lifecycle ownership', () => {
     request.reject(new Error('old export failed'));
     await act(async () => completion);
 
-    expect(toast).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
     expect(reloadAllData).not.toHaveBeenCalled();
     expect(useDatabaseStore.getState()).toBe(replacementStoreSnapshot);

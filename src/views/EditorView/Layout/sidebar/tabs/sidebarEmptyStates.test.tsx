@@ -35,9 +35,7 @@ const catalogState = vi.hoisted(() => ({
       },
     ],
   },
-  searchIndex: {
-    search: () => [],
-  },
+
   refresh: vi.fn(),
 }));
 
@@ -53,8 +51,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
   useTranslation: () => ({
     t: (key: string) =>
       ({
-        'canvas.nodePalette.searchPlaceholder': 'Search nodes...',
-        'canvas.nodePalette.noMatches': 'No matching nodes',
+
         'common.loading': 'Loading...',
         'common.error': 'Error',
         'sidebar.noActiveGraph': 'No active graph open',
@@ -94,13 +91,12 @@ describe('Sidebar tab-level empty states', () => {
     host.remove();
   });
 
-  it('registers backend Catalog items as draggable node templates', () => {
+  it('renders all Catalog items as draggable templates', () => {
     act(() => root.render(<SidebarNodesTab />));
 
     expect(host.textContent).toContain('Add');
     expect(host.textContent).toContain('yssbi.numeric.add.int64');
-    expect(host.querySelector('input[placeholder="Search nodes..."]')).not.toBeNull();
-    expect(host.querySelector('button')).toBeNull();
+
     expect(draggableInputs).toContainEqual({
       id: 'sidebar-item-node-static:yssbi.numeric.add.int64',
       disabled: false,
@@ -121,7 +117,7 @@ describe('Sidebar tab-level empty states', () => {
     act(() => root.render(<SidebarCommandsTab />));
     expect(host.textContent).toContain('No active graph open');
     expect(host.textContent).toContain('Open a graph to view commands');
-    expect(host.querySelector('.overlay-scrollbar-viewport')).toBeNull();
+    expect(host.querySelector('[data-slot="scroll-area-viewport"]')).toBeNull();
   });
 
   it('keeps command controls when an active graph exists', () => {

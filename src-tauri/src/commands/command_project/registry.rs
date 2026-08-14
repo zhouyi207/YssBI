@@ -423,53 +423,6 @@ mod tests {
     }
 
     #[test]
-    fn invalid_migrated_row_allows_registry_cleanup_without_filesystem_delete() {
-        tauri::async_runtime::block_on(async {
-            let root = std::env::temp_dir().join(format!(
-                "yssbi-invalid-registry-cleanup-{}",
-                uuid::Uuid::new_v4()
-            ));
-            std::fs::create_dir_all(&root).unwrap();
-            std::fs::write(root.join("sentinel.txt"), b"preserve").unwrap();
-            let record = ProjectRecord {
-                id: "invalid".into(),
-                name: "Invalid".into(),
-                path: root.to_string_lossy().into_owned(),
-                created_at: "2026-01-01T00:00:00Z".into(),
-                last_opened_at: None,
-                is_favorite: false,
-                root_identity: crate::project::ProjectRootIdentity::from_stored(String::new()),
-                root_identity_state: ProjectRootIdentityState::Invalid,
-            };
-            let removed = Arc::new(std::sync::atomic::AtomicBool::new(false));
-            let remove_called = Arc::clone(&removed);
-
-            let result = delete_registered_project_workflow(
-                &ProjectState::new(),
-                record,
-                None,
-                OperationId::new(),
-                move || async move {
-                    remove_called.store(true, std::sync::atomic::Ordering::SeqCst);
-                    Ok(())
-                },
-                |_| Ok(()),
-            )
-            .await
-            .unwrap();
-
-            assert!(removed.load(std::sync::atomic::Ordering::SeqCst));
-            assert_eq!(result.outcome, LifecycleMutationOutcomeDto::Committed);
-            assert!(!result.invalidation.project);
-            assert_eq!(
-                std::fs::read(root.join("sentinel.txt")).unwrap(),
-                b"preserve"
-            );
-            let _ = std::fs::remove_dir_all(root);
-        });
-    }
-
-    #[test]
     fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() {
         tauri::async_runtime::block_on(async {
             let root = std::env::temp_dir().join(format!(

@@ -11,6 +11,12 @@ import {
 } from '@glideapps/glide-data-grid';
 import '@glideapps/glide-data-grid/dist/index.css';
 import { VscDatabase } from 'react-icons/vsc';
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
 import type { ColumnInfo, DatabaseRow } from '@/shared/types/dto/database';
 import { emptyGridSelection, isEmptyGridSelection } from '@/features/application/databaseEditor';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
@@ -176,15 +182,23 @@ export const DataTable: React.FC<DataTableProps> = ({
   }, [columns]);
 
   if (!hasData) {
-    return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-card">
-        <div className="flex size-14 items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground">
-          <VscDatabase size={30} />
+    if (loading) {
+      return (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-card text-muted-foreground">
+          <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <span className="text-xs">{t('databaseEditor.loadingProjectData')}</span>
         </div>
-        <span className="text-sm font-medium text-muted-foreground">
-          {loading ? t('databaseEditor.loadingProjectData') : t('databaseEditor.noDataFrameSelected')}
-        </span>
-      </div>
+      );
+    }
+    return (
+      <Empty className="min-h-0 min-w-0 rounded-none bg-card">
+        <EmptyHeader>
+          <EmptyMedia variant="icon" className="size-12 text-muted-foreground">
+            <VscDatabase className="size-6" />
+          </EmptyMedia>
+          <EmptyTitle>{t('databaseEditor.noDataFrameSelected')}</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
     );
   }
 

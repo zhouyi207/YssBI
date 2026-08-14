@@ -22,9 +22,6 @@ export function useCanvasViewport(
   const viewportScope =
     groupId && graphPath ? editorViewportScope(groupId, graphPath) : null;
   const [pinOffsets, setPinOffsets] = useState<Record<string, { x: number; y: number }>>({});
-  const positionOverrides = useGraphInteractionStore(
-    useShallow((state) => graphPath ? state.positionOverrides[graphPath] ?? {} : {}),
-  );
 
   const graphNodeIds = useGraphDataStore(
     useShallow((s) => (graphPath ? s.getGraphNodeIds(graphPath) : [])),
@@ -150,7 +147,10 @@ export function useCanvasViewport(
     (pinId: string) => {
       const nodeId = pinNodeIdMap[pinId];
       if (!nodeId) return null;
-      const position = positionOverrides[nodeId] ?? nodePositionMap[nodeId];
+      const position = graphPath
+        ? useGraphInteractionStore.getState().positionOverrides[graphPath]?.[nodeId]
+          ?? nodePositionMap[nodeId]
+        : nodePositionMap[nodeId];
       const offset = pinOffsets[pinId];
       if (!position || !offset) return null;
       return {
@@ -158,7 +158,7 @@ export function useCanvasViewport(
         y: position.y + offset.y,
       };
     },
-    [pinNodeIdMap, nodePositionMap, pinOffsets, positionOverrides],
+    [graphPath, pinNodeIdMap, nodePositionMap, pinOffsets],
   );
 
   const getCanvasLocalPoint = useCallback(

@@ -1,9 +1,9 @@
+import { logger } from "@/utils/appLogger";
 import { useState, useEffect, useCallback } from "react";
 import { useGestureStore } from "@/features/core/gesture";
 import { useGraphDataStore } from "@/features/core/dataStore";
 import { canvasDropHandlerStore } from "@/features/core/sidebarDrag";
 import { executeCommand } from "@/features/core/history";
-import { uiStore } from "@/features/core/ui/UIStore";
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import {
   BUILTIN_NODE_TYPE_IDS,
@@ -93,11 +93,11 @@ export function useCanvasDrop({
         .find((pin) => pin?.instanceKind === 'userCreated' && pin.templateKey)
         ?.templateKey;
       if (!template) {
-        uiStore.showToast('Repeatable port template is unavailable', 'error');
+        logger.notify.error('Repeatable port template is unavailable', "UI");
         return;
       }
       void executeCommand(graphPath, 'AddRepeatablePin', { nodeId, template }).then((applied) => {
-        if (!applied) uiStore.showToast('Failed to add repeatable port', 'error');
+        if (!applied) logger.notify.error('Failed to add repeatable port', "UI");
       });
     },
     [graphPath]
@@ -107,7 +107,7 @@ export function useCanvasDrop({
     (nodeId: string, pinId: string) => {
       if (!graphPath) return Promise.resolve();
       return executeCommand(graphPath, 'RemoveRepeatablePin', { nodeId, pinId }).then((applied) => {
-        if (!applied) uiStore.showToast('Failed to remove repeatable port', 'error');
+        if (!applied) logger.notify.error('Failed to remove repeatable port', "UI");
       });
     },
     [graphPath]
@@ -141,7 +141,7 @@ export function useCanvasDrop({
         : null;
       if (!template) {
         refreshCatalog();
-        uiStore.showToast(RESOURCE_CATALOG_REFRESH_MESSAGE, 'warning');
+        logger.notify.warn(RESOURCE_CATALOG_REFRESH_MESSAGE, "UI");
         return;
       }
       await spawnNodeFromTemplate(
@@ -176,7 +176,7 @@ export function useCanvasDrop({
           : null;
         if (!template) {
           refreshCatalog();
-          uiStore.showToast(RESOURCE_CATALOG_REFRESH_MESSAGE, 'warning');
+          logger.notify.warn(RESOURCE_CATALOG_REFRESH_MESSAGE, "UI");
           return false;
         }
       }

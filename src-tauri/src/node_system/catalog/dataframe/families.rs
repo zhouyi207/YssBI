@@ -1,4 +1,4 @@
-//! Stable inventory for the DataFrame catalog and its legacy identity subset.
+//! Stable inventory for the DataFrame catalog.
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum InterfaceKind {
@@ -31,8 +31,6 @@ pub(super) enum InterfaceKind {
 
 #[derive(Clone, Copy)]
 pub(super) struct NodeSpec {
-    #[allow(dead_code)]
-    pub legacy_name: Option<&'static str>,
     pub id: &'static str,
     pub title: &'static str,
     pub zh_title: &'static str,
@@ -42,63 +40,8 @@ pub(super) struct NodeSpec {
     pub kernel: &'static str,
 }
 
-#[cfg(test)]
-pub const LEGACY_NODE_IDS: &[(&str, &str)] = &[
-    ("Get DataFrame", "yssbi.dataframe.source.get"),
-    ("Limit DataFrame", "yssbi.dataframe.limit"),
-    ("Decompose DataFrame", "yssbi.dataframe.decompose"),
-    ("Combine DataFrame", "yssbi.dataframe.combine"),
-    ("Filter DataFrame", "yssbi.dataframe.filter"),
-    ("Get DataSeries", "yssbi.dataframe.series.select"),
-    ("Int Range", "yssbi.dataframe.series.int_range"),
-    ("DataSeries Length", "yssbi.dataframe.series.length"),
-    ("DataSeries Sum", "yssbi.dataframe.series.sum"),
-    ("DataSeries Mean", "yssbi.dataframe.series.mean"),
-    (
-        "DataSeries Greater Than (>)",
-        "yssbi.dataframe.series.compare.greater",
-    ),
-    (
-        "DataSeries Less Than (<)",
-        "yssbi.dataframe.series.compare.less",
-    ),
-    (
-        "DataSeries Greater Equal (>=)",
-        "yssbi.dataframe.series.compare.greater_equal",
-    ),
-    (
-        "DataSeries Less Equal (<=)",
-        "yssbi.dataframe.series.compare.less_equal",
-    ),
-    (
-        "DataSeries Equal (==)",
-        "yssbi.dataframe.series.compare.equal",
-    ),
-    (
-        "DataSeries Not Equal (!=)",
-        "yssbi.dataframe.series.compare.not_equal",
-    ),
-    (
-        "Standardize DataSeries",
-        "yssbi.dataframe.series.standardize",
-    ),
-    (
-        "Inverse Standardize DataSeries",
-        "yssbi.dataframe.series.inverse_standardize",
-    ),
-    ("Add Dummy Info", "yssbi.dataframe.series.annotate_dummy"),
-    ("TS Align", "yssbi.dataframe.timeseries.align"),
-    ("TS Diff", "yssbi.dataframe.timeseries.difference"),
-    ("TS Pct Change", "yssbi.dataframe.timeseries.percent_change"),
-    ("TS Rolling Mean", "yssbi.dataframe.timeseries.rolling_mean"),
-    ("TS Lag", "yssbi.dataframe.timeseries.lag"),
-    ("XT Align", "yssbi.dataframe.panel.align"),
-    ("XT Diff", "yssbi.dataframe.panel.difference"),
-];
-
 pub(super) const NODES: &[NodeSpec] = &[
     spec(
-        "Get DataFrame",
         "yssbi.dataframe.source.get",
         "Get DataFrame",
         "获取数据框",
@@ -107,7 +50,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::DataframeSource,
     ),
     spec(
-        "Limit DataFrame",
         "yssbi.dataframe.limit",
         "Limit DataFrame",
         "限制数据框行数",
@@ -140,7 +82,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::FilterRows,
     ),
     spec(
-        "Decompose DataFrame",
         "yssbi.dataframe.decompose",
         "Decompose DataFrame",
         "拆分数据框",
@@ -149,7 +90,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::Decompose,
     ),
     spec(
-        "Combine DataFrame",
         "yssbi.dataframe.combine",
         "Combine DataFrame",
         "合并数据框",
@@ -158,7 +98,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::Combine,
     ),
     spec(
-        "Filter DataFrame",
         "yssbi.dataframe.filter",
         "Filter DataFrame",
         "筛选数据框",
@@ -167,7 +106,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::Filter,
     ),
     spec(
-        "Get DataSeries",
         "yssbi.dataframe.series.select",
         "Get DataSeries",
         "获取数据序列",
@@ -176,7 +114,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::SeriesSelect,
     ),
     spec(
-        "Int Range",
         "yssbi.dataframe.series.int_range",
         "Integer Range",
         "整数序列",
@@ -185,7 +122,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::IntRange,
     ),
     spec(
-        "DataSeries Length",
         "yssbi.dataframe.series.length",
         "DataSeries Length",
         "序列长度",
@@ -202,7 +138,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::SeriesCount,
     ),
     spec(
-        "DataSeries Sum",
         "yssbi.dataframe.series.sum",
         "DataSeries Sum",
         "序列求和",
@@ -211,7 +146,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::SeriesSum,
     ),
     spec(
-        "DataSeries Mean",
         "yssbi.dataframe.series.mean",
         "DataSeries Mean",
         "序列均值",
@@ -220,7 +154,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::SeriesMean,
     ),
     spec(
-        "DataSeries Greater Than (>)",
         "yssbi.dataframe.series.compare.greater",
         "DataSeries Greater Than",
         "序列大于",
@@ -229,7 +162,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::NumericCompare,
     ),
     spec(
-        "DataSeries Less Than (<)",
         "yssbi.dataframe.series.compare.less",
         "DataSeries Less Than",
         "序列小于",
@@ -238,7 +170,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::NumericCompare,
     ),
     spec(
-        "DataSeries Greater Equal (>=)",
         "yssbi.dataframe.series.compare.greater_equal",
         "DataSeries Greater or Equal",
         "序列大于等于",
@@ -247,7 +178,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::NumericCompare,
     ),
     spec(
-        "DataSeries Less Equal (<=)",
         "yssbi.dataframe.series.compare.less_equal",
         "DataSeries Less or Equal",
         "序列小于等于",
@@ -256,7 +186,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::NumericCompare,
     ),
     spec(
-        "DataSeries Equal (==)",
         "yssbi.dataframe.series.compare.equal",
         "DataSeries Equal",
         "序列等于",
@@ -265,7 +194,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::NumericCompare,
     ),
     spec(
-        "DataSeries Not Equal (!=)",
         "yssbi.dataframe.series.compare.not_equal",
         "DataSeries Not Equal",
         "序列不等于",
@@ -290,7 +218,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::StringCompare,
     ),
     spec(
-        "Standardize DataSeries",
         "yssbi.dataframe.series.standardize",
         "Standardize DataSeries",
         "标准化数据序列",
@@ -299,7 +226,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::Standardize,
     ),
     spec(
-        "Inverse Standardize DataSeries",
         "yssbi.dataframe.series.inverse_standardize",
         "Inverse Standardize DataSeries",
         "逆标准化数据序列",
@@ -308,7 +234,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::InverseStandardize,
     ),
     spec(
-        "Add Dummy Info",
         "yssbi.dataframe.series.annotate_dummy",
         "Add Dummy Information",
         "添加虚拟变量信息",
@@ -317,7 +242,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::DummyInfo,
     ),
     spec(
-        "TS Align",
         "yssbi.dataframe.timeseries.align",
         "Align Time Series",
         "对齐时间序列",
@@ -326,7 +250,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::TimeAlign,
     ),
     spec(
-        "TS Diff",
         "yssbi.dataframe.timeseries.difference",
         "Time-Series Difference",
         "时间序列差分",
@@ -335,7 +258,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::TimeUnary,
     ),
     spec(
-        "TS Pct Change",
         "yssbi.dataframe.timeseries.percent_change",
         "Time-Series Percent Change",
         "时间序列百分比变化",
@@ -344,7 +266,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::TimeUnary,
     ),
     spec(
-        "TS Rolling Mean",
         "yssbi.dataframe.timeseries.rolling_mean",
         "Time-Series Rolling Mean",
         "时间序列滚动均值",
@@ -353,7 +274,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::TimeWindow,
     ),
     spec(
-        "TS Lag",
         "yssbi.dataframe.timeseries.lag",
         "Lag Time Series",
         "时间序列滞后",
@@ -362,7 +282,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::TimeLag,
     ),
     spec(
-        "XT Align",
         "yssbi.dataframe.panel.align",
         "Align Panel Data",
         "对齐面板数据",
@@ -371,7 +290,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         InterfaceKind::PanelAlign,
     ),
     spec(
-        "XT Diff",
         "yssbi.dataframe.panel.difference",
         "Panel Difference",
         "面板数据差分",
@@ -382,7 +300,6 @@ pub(super) const NODES: &[NodeSpec] = &[
 ];
 
 const fn spec(
-    legacy_name: &'static str,
     id: &'static str,
     title: &'static str,
     zh_title: &'static str,
@@ -391,7 +308,6 @@ const fn spec(
     interface: InterfaceKind,
 ) -> NodeSpec {
     NodeSpec {
-        legacy_name: Some(legacy_name),
         id,
         title,
         zh_title,
@@ -411,7 +327,6 @@ const fn builtin_spec(
     interface: InterfaceKind,
 ) -> NodeSpec {
     NodeSpec {
-        legacy_name: None,
         id,
         title,
         zh_title,

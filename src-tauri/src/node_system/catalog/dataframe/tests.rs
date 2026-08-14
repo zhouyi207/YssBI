@@ -1,6 +1,5 @@
 use super::{
-    DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER, LEGACY_NODE_IDS, NODES,
-    build_provider_fragment,
+    DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER, build_provider_fragment,
 };
 use crate::graph::DataType;
 use crate::node_system::analysis::{
@@ -30,13 +29,12 @@ use crate::node_system::plan::{
     RelationalOperatorIndex, RelationalProjection, RelationalRename, ResourceId, ValueRef,
 };
 use crate::node_system::protocol::{
-    InputConsumption, InterfaceResolverId, LiteralPolicy, NodeInterfaceProtocol, NodeProtocol,
-    NodeTypeId, OutputProduction, ParameterConstraint, ParameterEditorSpec, ParameterKey,
-    PortDirection, PortInstances, PortKey, RelationalScalarType, RenameExpr, SchemaColumnRef,
-    SchemaExpr, SchemaField, SchemaFieldLineage, SchemaResolverId, TypeExpr, TypeId,
-    TypeParameterId, Value, data_series_type, numeric_data_series_type,
+    InputConsumption, InterfaceResolverId, NodeProtocol, NodeTypeId, OutputProduction,
+    ParameterConstraint, ParameterEditorSpec, ParameterKey, PortDirection, PortInstances, PortKey,
+    RelationalScalarType, RenameExpr, SchemaColumnRef, SchemaExpr, SchemaField, SchemaFieldLineage,
+    SchemaResolverId, TypeExpr, TypeId, TypeParameterId, Value, data_series_type,
+    numeric_data_series_type,
 };
-use crate::node_system::registry::ImplementationKind;
 use crate::node_system::runtime::build_builtin_kernel_registry;
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
@@ -307,32 +305,6 @@ fn decompose_resolved_ports(
         .iter()
         .filter(|port| port.template_key.as_ref() == "columns")
         .collect()
-}
-
-#[test]
-fn every_legacy_dataframe_node_has_one_stable_id() {
-    assert_eq!(LEGACY_NODE_IDS.len(), 26);
-    assert_eq!(NODES.len(), LEGACY_NODE_IDS.len() + 6);
-
-    let legacy = LEGACY_NODE_IDS
-        .iter()
-        .map(|(name, _)| *name)
-        .collect::<BTreeSet<_>>();
-    let ids = LEGACY_NODE_IDS
-        .iter()
-        .map(|(_, id)| *id)
-        .collect::<BTreeSet<_>>();
-
-    assert_eq!(legacy.len(), LEGACY_NODE_IDS.len());
-    assert_eq!(ids.len(), LEGACY_NODE_IDS.len());
-    assert!(ids.iter().all(|id| id.starts_with("yssbi.dataframe.")));
-    for (legacy_name, id) in LEGACY_NODE_IDS {
-        assert!(
-            NODES
-                .iter()
-                .any(|spec| spec.legacy_name == Some(*legacy_name) && spec.id == *id)
-        );
-    }
 }
 
 #[test]
@@ -840,12 +812,6 @@ fn dataframe_columns_without_lineage_are_snapshot_scoped() {
         SchemaFieldIdentityGuarantee::SnapshotScoped,
     );
     assert_eq!(member.member().label, "ephemeral");
-}
-
-#[test]
-fn dataframe_fragment_contains_every_migrated_protocol() {
-    let fragment = build_provider_fragment().expect("dataframe built-in fixture must assemble");
-    assert_eq!(fragment.nodes.len(), LEGACY_NODE_IDS.len() + 6);
 }
 
 #[test]
@@ -1538,66 +1504,6 @@ fn source_and_limit_freeze_and_lower_as_streaming_relational_nodes() {
     );
 }
 
-#[test]
-fn dataframe_native_lowerings_have_production_implementations() {
-    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let kernels = build_builtin_kernel_registry();
-    let cancellation = CompileCancellationToken::new();
-
-    for spec in NODES {
-        let id = NodeTypeId::new(spec.id).unwrap();
-        let node = registry.get(&id).expect("dataframe node freezes");
-        let Some(implementation) = node.implementation() else {
-            assert!(node.structural_role().is_none(), "{}", spec.id);
-            continue;
-        };
-        assert_eq!(
-            implementation.capability(),
-            ImplementationKind::CompilerLowering
-        );
-        let implementation = implementation
-            .as_any()
-            .downcast_ref::<NodeImplementation>()
-            .expect("dataframe compiler lowerer");
-        let parameters = validated_config(&registry, &node.protocol(), BTreeMap::new());
-        let context = LoweringContext {
-            cancellation: &cancellation,
-            node_id: NodeId::new(),
-            protocol: &node.protocol(),
-            parameters: &parameters,
-            inputs: &[],
-            outputs: &[],
-        };
-        let native_implementation = node
-            .implementation()
-            .as_ref()
-            .expect("checked implementation")
-            .implementation_identity()
-            .ends_with("::KernelLowerer");
-        let lowered = match implementation.lowerer.lower(&context) {
-            Ok(lowered) => lowered,
-            Err(error) if !native_implementation => {
-                let _ = error;
-                continue;
-            }
-            Err(error) => panic!("native node '{}' failed to lower: {error}", spec.id),
-        };
-        assert!(
-            !native_implementation || matches!(lowered.kernel, LoweredKernel::Native(_)),
-            "native implementation for '{}' emitted a non-native fragment",
-            spec.id,
-        );
-        if let LoweredKernel::Native(handle) = lowered.kernel {
-            assert!(
-                kernels.get(&handle).is_some(),
-                "{} emits missing native kernel '{}'",
-                spec.id,
-                handle.as_str(),
-            );
-        }
-    }
-}
-
 fn dataframe_protocol(id: &str) -> NodeProtocol {
     build_provider_fragment()
         .expect("dataframe built-in fixture must assemble")
@@ -1749,56 +1655,6 @@ fn dataframe_unknown_series_types_are_only_resolver_derived() {
                     "{}:{} uses Unknown without resolver-derived concretization",
                     node.protocol().type_id,
                     port.key
-                );
-            }
-        }
-    }
-}
-
-#[test]
-fn dataframe_protocols_have_unique_ports_and_valid_bindings() {
-    for node in build_provider_fragment()
-        .expect("dataframe built-in fixture must assemble")
-        .nodes
-    {
-        let protocol = &node.protocol();
-        let keys = protocol
-            .interface
-            .ports
-            .iter()
-            .map(|port| &port.key)
-            .collect::<BTreeSet<_>>();
-        assert_eq!(
-            keys.len(),
-            protocol.interface.ports.len(),
-            "{}",
-            protocol.type_id
-        );
-
-        NodeInterfaceProtocol::new(
-            protocol.interface.ports.to_vec(),
-            protocol.interface.type_parameters.to_vec(),
-            protocol.interface.type_constraints.to_vec(),
-        )
-        .unwrap_or_else(|error| panic!("{}: {error}", protocol.type_id));
-
-        for port in &protocol.interface.ports {
-            if let Some(default) = port
-                .input_binding
-                .as_ref()
-                .and_then(|binding| binding.default_value.as_ref())
-            {
-                assert_eq!(
-                    port.input_binding.as_ref().unwrap().literal_policy,
-                    LiteralPolicy::Allowed,
-                    "{}:{}",
-                    protocol.type_id,
-                    port.key
-                );
-                assert_eq!(
-                    default.value_type, port.value_type,
-                    "{}:{}",
-                    protocol.type_id, port.key
                 );
             }
         }

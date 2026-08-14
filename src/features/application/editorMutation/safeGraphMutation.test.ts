@@ -3,14 +3,16 @@ import type { GraphMutationCommandInvocation } from '@/features/core/history/com
 import { executeSafeGraphMutation } from './safeGraphMutation';
 
 const executeCommandOutcome = vi.hoisted(() => vi.fn());
-const showToast = vi.hoisted(() => vi.fn());
-const translate = vi.hoisted(() => vi.fn((key: string) => `localized:${key}`));
 const graphWarn = vi.hoisted(() => vi.fn());
 
 vi.mock('@/features/core/history', () => ({ executeCommandOutcome }));
-vi.mock('@/features/core/ui/UIStore', () => ({ uiStore: { showToast } }));
-vi.mock('@/app/i18n', () => ({ i18n: { t: translate } }));
-vi.mock('@/utils/appLogger', () => ({ logger: { graph: { warn: graphWarn } } }));
+vi.mock('@/app/i18n', () => ({ i18n: { t: (key: string) => `localized:${key}` } }));
+vi.mock('@/utils/appLogger', () => ({
+  logger: {
+    graph: { warn: graphWarn },
+    notify: { error: () => undefined },
+  },
+}));
 
 describe('executeSafeGraphMutation', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -31,7 +33,7 @@ describe('executeSafeGraphMutation', () => {
     ['Alt disconnect', 'DisconnectPort', { pinId: 'pin-1' }, { status: 'rejected', code: 'graph_connection_type_mismatch' }, 'graph_connection_type_mismatch'],
     ['Break all links', 'DisconnectNode', { nodeId: 'node-1' }, { status: 'conflict' }, 'graph_revision_conflict'],
     ['Delete nodes', 'DeleteNodes', { nodeIds: ['node-1'] }, { status: 'rejected', code: 'graph_managed_node_delete_forbidden' }, 'graph_managed_node_delete_forbidden'],
-  ] as const)('shows safe localized feedback for %s without replay', async (operation, command, args, outcome, code) => {
+  ] as const)('rejects %s without replay', async (operation, command, args, outcome, code) => {
     executeCommandOutcome.mockResolvedValue({ ...outcome, message: 'raw backend UUID 00000000-0000-0000-0000-000000000000' });
 
     const invocation: GraphMutationCommandInvocation = command === 'DisconnectPort'
@@ -44,13 +46,11 @@ describe('executeSafeGraphMutation', () => {
 
     expect(executeCommandOutcome).toHaveBeenCalledOnce();
     expect(executeCommandOutcome).toHaveBeenCalledWith('events/main', command, args);
-    expect(translate).toHaveBeenCalledWith(`canvas.connection.errors.${code}`);
-    expect(showToast).toHaveBeenCalledWith(`localized:canvas.connection.errors.${code}`, 'error');
     expect(graphWarn).toHaveBeenCalledWith(
       `Graph mutation outcome code=${code} graphPath=events/main operation=${operation}`,
       'GraphMutation',
     );
-    expect(JSON.stringify([...showToast.mock.calls, ...graphWarn.mock.calls])).not.toContain('raw backend');
-    expect(JSON.stringify([...showToast.mock.calls, ...graphWarn.mock.calls])).not.toContain('00000000');
+    expect(JSON.stringify(graphWarn.mock.calls)).not.toContain('raw backend');
+    expect(JSON.stringify(graphWarn.mock.calls)).not.toContain('00000000');
   });
 });

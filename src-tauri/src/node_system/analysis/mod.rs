@@ -63,15 +63,6 @@ mod tests {
     type Snapshot = AnalysisSnapshot<u64, u64, String, u64, String, String, String, String>;
     type SemanticGraph = ValidatedSemanticGraph<u64, u64, String, u64, String, String, String>;
 
-    #[test]
-    fn editor_projection_dtos_are_reexported() {
-        fn assert_public<T>() {}
-        assert_public::<EditorConnectionProjectionDto>();
-        assert_public::<EditorInputBindingDto>();
-        assert_public::<EffectiveInputBindingKindDto>();
-        assert_public::<NodePositionDto>();
-    }
-
     fn basis(revision: u64) -> CompilationBasis<u64> {
         CompilationBasis {
             graph_revision: revision,

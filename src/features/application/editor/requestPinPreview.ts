@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import type { TFunction } from 'i18next';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
@@ -13,7 +14,6 @@ import {
   lookupPinPreview,
   useExecutionStore,
 } from '@/features/core/execution';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { ProjectService } from '@/services/project/projectService';
 import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
 import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
@@ -74,7 +74,7 @@ type ValidPreviewRequest = {
 };
 
 function reject(reason: PinPreviewRejectionReason): PinPreviewRequestResult {
-  uiStore.showToast(`无法预览此输出：${reason}`, 'warning', 3000);
+  logger.notify.warn(`无法预览此输出：${reason}`, "UI");
   return { status: 'rejected', reason };
 }
 
@@ -210,7 +210,7 @@ export async function requestPinPreview(
     if (current?.generation !== generation) return staleSettlement();
     const message = formatErrorMessage(error);
     lease.fail(message);
-    uiStore.showToast(`预览失败：${message}`, 'error', 4000);
+    logger.notify.error(`预览失败：${message}`, "UI");
     return { status: 'failed', generation, error: message };
   }
 

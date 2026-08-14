@@ -1,4 +1,4 @@
-import { uiStore } from '@/features/core/ui/UIStore';
+import { logger } from "@/utils/appLogger";
 
 export const EDITOR_MUTATION_CAPABILITIES = {
   createStaticNodes: true,
@@ -17,5 +17,5 @@ export const RESOURCE_CATALOG_REFRESH_MESSAGE =
   'Resource catalog is stale. Refreshing before node creation.';
 
 export function notifyNodeCreationUnavailable(): void {
-  uiStore.showToast(NODE_CREATION_UNAVAILABLE_MESSAGE, 'info', 3000);
+  logger.notify.info(NODE_CREATION_UNAVAILABLE_MESSAGE, "UI");
 }

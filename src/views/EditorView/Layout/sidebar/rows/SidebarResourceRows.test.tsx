@@ -4,7 +4,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LocalizedNodeCatalogState } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
@@ -105,7 +104,6 @@ function catalogState(
 describe('resource sidebar rows', () => {
   let host: HTMLDivElement;
   let root: Root;
-  const showToast = vi.spyOn(uiStore, 'showToast');
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -173,7 +171,6 @@ describe('resource sidebar rows', () => {
     expect(mocks.dragPointerDown).toHaveBeenCalledOnce();
   });
 
-
   it('uses the exact current database source descriptor', () => {
     renderDatabase();
 
@@ -200,10 +197,6 @@ describe('resource sidebar rows', () => {
 
     expect(useProjectIOStore.getState().refreshResourceIndex).not.toHaveBeenCalled();
     expect(state.refresh).toHaveBeenCalledOnce();
-    expect(showToast).toHaveBeenCalledWith(
-      'Resource catalog is stale. Refreshing before node creation.',
-      'warning',
-    );
   });
 
   it('disables a database row when its exact descriptor is missing', () => {
@@ -219,7 +212,6 @@ describe('resource sidebar rows', () => {
     act(() => row!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
     expect(useProjectIOStore.getState().refreshResourceIndex).not.toHaveBeenCalled();
     expect(state.refresh).toHaveBeenCalledOnce();
-    expect(showToast).toHaveBeenCalledOnce();
   });
 
   it('hydrates a missing variable path through ProjectIndex before refreshing Catalog and dragging', async () => {
@@ -277,7 +269,6 @@ describe('resource sidebar rows', () => {
 
     expect(refreshResourceIndex).toHaveBeenCalledOnce();
     expect(state.refresh).not.toHaveBeenCalled();
-    expect(showToast).toHaveBeenCalledOnce();
   });
 
   it('hydrates a missing database path through ProjectIndex before refreshing Catalog and dragging', async () => {

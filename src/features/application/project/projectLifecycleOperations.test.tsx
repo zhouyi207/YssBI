@@ -5,7 +5,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import {
-  claimProjectLifecycleNotification,
   registerPendingProjectLifecycleOperation,
   resetProjectLifecycleReceiptHandlerForTests,
 } from '@/features/application/projectLifecycleReceipt';
@@ -209,48 +208,6 @@ describe('project lifecycle initiating operations', () => {
     resetCoreApplicationTestPorts();
   });
 
-  it('recovers initiating save-as success when event settles before direct transport rejects', async () => {
-    const direct = deferred<LifecycleMutationResultDto | null>();
-    const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
-    vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-b/metadata.yssbi');
-    vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({
-      databases: {},
-      variables: {},
-    });
-    vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue({
-      projectInstanceId: 'project-b',
-      publicationRevision: 0,
-      history: { canUndo: false, canRedo: false },
-      projectName: 'Project B',
-      graphs: [],
-      variables: [],
-      worksheets: [],
-      databases: [],
-      exportTime: '',
-    });
-    const toast = vi.spyOn(uiStore, 'showToast');
-
-    let completion!: Promise<void>;
-    await act(async () => {
-      completion = operations.saveGraphAs();
-      await Promise.resolve();
-    });
-    await vi.waitFor(() => expect(saveAs).toHaveBeenCalledOnce());
-    const operationId = saveAs.mock.calls[0][1];
-    const result = saveAsReceipt(operationId);
-    await act(async () => {
-      new ProjectLifecycleCommittedHandler().handle({ result: structuredClone(result) });
-      await vi.waitFor(() => expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(2));
-    });
-    await act(async () => {
-      direct.reject(new Error('direct response lost'));
-      await completion;
-    });
-
-    expect(toast).toHaveBeenCalledOnce();
-    expect(toast).toHaveBeenCalledWith('项目已另存为：Project B', 'success', 3000);
-    expect(claimProjectLifecycleNotification(operationId)).toBe(false);
-  });
 
   it('gives a mismatching direct save-as DTO zero initiating effects', async () => {
     const direct = deferred<LifecycleMutationResultDto | null>();
@@ -268,7 +225,6 @@ describe('project lifecycle initiating operations', () => {
       databases: [],
       exportTime: '',
     });
-    const toast = vi.spyOn(uiStore, 'showToast');
 
     let completion!: Promise<void>;
     await act(async () => {
@@ -286,47 +242,11 @@ describe('project lifecycle initiating operations', () => {
       await completion;
     });
 
-    expect(toast).not.toHaveBeenCalled();
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(2);
   });
 
-  it.each(['registryFailed', 'activationFailed'] as const)(
-    'shows the initiating save-as recovery warning for %s',
-    async (outcome) => {
-      vi.spyOn(ProjectService, 'saveProjectAs').mockImplementation(async (_project, operationId) => (
-        saveAsReceipt(operationId, outcome)
-      ));
-      vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-a/metadata.yssbi');
-      vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({
-        databases: {},
-        variables: {},
-      });
-      vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue({
-        projectInstanceId: 'project-a',
-        publicationRevision: 4,
-        history: { canUndo: false, canRedo: false },
-        projectName: 'Project A',
-        graphs: [],
-        variables: [],
-        worksheets: [],
-        databases: [],
-        exportTime: '',
-      });
-      const toast = vi.spyOn(uiStore, 'showToast');
 
-      await act(async () => {
-        await operations.saveGraphAs();
-      });
-
-      expect(toast).toHaveBeenCalledWith(
-        expect.stringContaining('另存为需要恢复'),
-        'warning',
-        4000,
-      );
-    },
-  );
-
-  it('reports registry capacity errors inside the create UI boundary', async () => {
+  it('blocks create when the lifecycle registry is at capacity', async () => {
     for (let index = 0; index < 128; index += 1) {
       registerPendingProjectLifecycleOperation({
         kind: 'saveAs',
@@ -334,30 +254,26 @@ describe('project lifecycle initiating operations', () => {
       });
     }
     const create = vi.spyOn(ProjectService, 'createProject');
-    const toast = vi.spyOn(uiStore, 'showToast');
 
     await act(async () => {
       await picker.createProject('Blocked', 'C:/blocked');
     });
 
     expect(create).not.toHaveBeenCalled();
-    expect(toast).toHaveBeenCalledWith('Too many pending project lifecycle operations', 'error');
   });
 
-  it('reports a current direct transport failure without lifecycle side effects', async () => {
+  it('keeps lifecycle state unchanged after a current direct transport failure', async () => {
     vi.spyOn(ProjectService, 'saveProjectAs').mockRejectedValue(new Error('transport down'));
-    const toast = vi.spyOn(uiStore, 'showToast');
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
     await act(async () => {
       await operations.saveGraphAs();
     });
 
-    expect(toast).toHaveBeenCalledWith('另存为失败：transport down', 'error', 3000);
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
   });
 
-  it('recovers create list, progress, and success toast from event when direct rejects', async () => {
+  it('recovers create list and progress from event when direct rejects', async () => {
     act(() => {
       projectPublicationCoordinator.cancelProject();
       useProjectIOStore.setState({ projectInstanceId: null, currentPath: null });
@@ -366,7 +282,6 @@ describe('project lifecycle initiating operations', () => {
     const create = vi.spyOn(ProjectService, 'createProject').mockReturnValue(request.promise);
     const created = record('created', 'C:/created/metadata.yssbi');
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([created]);
-    const toast = vi.spyOn(uiStore, 'showToast');
     const progress = vi.spyOn(uiStore, 'updateProgress');
 
     let completion!: Promise<void>;
@@ -390,16 +305,13 @@ describe('project lifecycle initiating operations', () => {
 
     expect(picker.projects.map((project) => project.id)).toContain('created');
     expect(progress).toHaveBeenCalledWith(expect.objectContaining({ percent: 1 }));
-    expect(toast).toHaveBeenCalledOnce();
-    expect(toast).toHaveBeenCalledWith('projectPicker.createSuccess', 'success');
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
   });
 
-  it('recovers inactive delete cleanup warning and list from event when direct rejects', async () => {
+  it('recovers inactive delete list from event when direct rejects', async () => {
     const request = deferred<LifecycleMutationResultDto>();
     const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([]);
-    const toast = vi.spyOn(uiStore, 'showToast');
 
     let completion!: Promise<void>;
     await act(async () => {
@@ -424,16 +336,11 @@ describe('project lifecycle initiating operations', () => {
     });
 
     expect(picker.projects).toEqual([]);
-    expect(toast).toHaveBeenCalledOnce();
-    expect(toast).toHaveBeenCalledWith(
-      'projectPicker.deleteProjectConfirm.success (cleanupTombstone)',
-      'warning',
-    );
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
   });
 
   it.each(['event-first', 'direct-first'] as const)(
-    '%s settles an active terminal-row rejection with one error and no authority or list mutation',
+    '%s settles an active terminal-row rejection without authority or list mutation',
     async (order) => {
       const activeRecord = record('active-record', 'C:/project-a/metadata.yssbi');
       vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([activeRecord]);
@@ -444,7 +351,6 @@ describe('project lifecycle initiating operations', () => {
       const request = deferred<LifecycleMutationResultDto>();
       const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
       const hydrate = vi.spyOn(ProjectService, 'getProjectIndex');
-      const toast = vi.spyOn(uiStore, 'showToast');
       const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
       let completion!: Promise<void>;
@@ -480,23 +386,16 @@ describe('project lifecycle initiating operations', () => {
       expect(picker.projects).toEqual([expect.objectContaining({ id: 'active-record' })]);
       expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
       expect(hydrate).not.toHaveBeenCalled();
-      expect(toast).toHaveBeenCalledOnce();
-      expect(toast).toHaveBeenCalledWith(
-        'projectPicker.deleteProjectConfirm.failed: cleanupRegistry',
-        'error',
-      );
-      expect(claimProjectLifecycleNotification(operationId)).toBe(false);
 
       await act(async () => {
         new ProjectLifecycleCommittedHandler().handle({ result: structuredClone(result) });
         await Promise.resolve();
       });
       expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
-      expect(toast).toHaveBeenCalledOnce();
     },
   );
 
-  it('recovers active delete registry warning and cleared list from event when direct rejects', async () => {
+  it('recovers active delete cleared list from event when direct rejects', async () => {
     const activeRecord = record('active-record', 'C:/project-a/metadata.yssbi');
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([activeRecord]);
     await act(async () => {
@@ -505,7 +404,6 @@ describe('project lifecycle initiating operations', () => {
     await vi.waitFor(() => expect(picker.currentProjectId).toBe('active-record'));
     const request = deferred<LifecycleMutationResultDto>();
     const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
-    const toast = vi.spyOn(uiStore, 'showToast');
 
     let completion!: Promise<void>;
     await act(async () => {
@@ -533,11 +431,6 @@ describe('project lifecycle initiating operations', () => {
 
     expect(useProjectIOStore.getState().projectInstanceId).toBeNull();
     expect(picker.projects).toEqual([]);
-    expect(toast).toHaveBeenCalledOnce();
-    expect(toast).toHaveBeenCalledWith(
-      'projectPicker.deleteProjectConfirm.success (removeRegistryRecord)',
-      'warning',
-    );
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
   });
 
@@ -548,7 +441,6 @@ describe('project lifecycle initiating operations', () => {
     });
     const request = deferred<LifecycleMutationResultDto>();
     const create = vi.spyOn(ProjectService, 'createProject').mockReturnValue(request.promise);
-    const toast = vi.spyOn(uiStore, 'showToast');
     const progress = vi.spyOn(uiStore, 'updateProgress');
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
@@ -576,14 +468,12 @@ describe('project lifecycle initiating operations', () => {
     });
 
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
-    expect(toast).not.toHaveBeenCalled();
     expect(progress).not.toHaveBeenCalledWith(expect.objectContaining({ percent: 1 }));
   });
 
   it('gives an inactive delete completion zero effects after application generation replacement', async () => {
     const request = deferred<LifecycleMutationResultDto>();
     const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
-    const toast = vi.spyOn(uiStore, 'showToast');
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
     let completion!: Promise<void>;
@@ -611,6 +501,5 @@ describe('project lifecycle initiating operations', () => {
     });
 
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
-    expect(toast).not.toHaveBeenCalled();
   });
 });

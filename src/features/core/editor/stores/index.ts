@@ -1,2 +1,2 @@
-export { useEditorStore } from './useEditorStore';
+export { useEditorStore, type DetailPaneTab } from './useEditorStore';
 export { useClipboardStore } from './useClipboardStore';

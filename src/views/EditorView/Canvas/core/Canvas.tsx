@@ -54,12 +54,13 @@ export default function Canvas({ interactive = true }: CanvasProps) {
     createNode,
   } = useEditorGroup({ withCanvasPointerLoop: interactive });
 
-  const interaction = useGraphInteractionStore((state) =>
-    activeTabId ? getCanvasInteraction(state, activeTabId, groupId) : { type: 'idle' as const });
-  const gesturePinData = interaction?.type === 'drawingConnection'
-    || interaction?.type === 'movingConnections'
-    ? interaction.session.source
-    : null;
+  const gesturePinData = useGraphInteractionStore((state) => {
+    if (!activeTabId) return null;
+    const interaction = getCanvasInteraction(state, activeTabId, groupId);
+    return interaction.type === 'drawingConnection' || interaction.type === 'movingConnections'
+      ? interaction.session.source
+      : null;
+  });
 
   const canvasElementRef = useRef<HTMLDivElement>(null);
   const selectionBoxRef = useRef<HTMLDivElement>(null);

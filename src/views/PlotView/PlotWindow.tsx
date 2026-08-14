@@ -1,8 +1,8 @@
+import { logger } from "@/utils/appLogger";
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { parsePlotPayload, usePresentationWindow } from '@/features/application/presentation';
 import { PresentationWindowShell } from '@/features/application/window/PresentationWindowShell';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { PlotWindowContent } from './PlotWindowContent';
 
 const PLOT_ICON = (
@@ -32,7 +32,7 @@ export const PlotWindow: React.FC = () => {
 
   useEffect(() => {
     if (!plotParseKey || plotPayload) return;
-    uiStore.showToast(t('plot.invalidData'), 'error', 4000);
+    logger.notify.error(t('plot.invalidData'), "UI");
   }, [plotParseKey, plotPayload, t]);
 
   const title =

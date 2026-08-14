@@ -8,7 +8,6 @@ import {
   useDocumentStateStore,
   useResourceStore,
 } from '@/features/core/resource';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 
 const worksheetPath = 'worksheets/Quarterly Sales Report.yssbi-worksheet';
@@ -29,11 +28,9 @@ describe('saveAllDirtyGraphs worksheet lifecycle', () => {
 
   it('keeps a worksheet dirty and reports incomplete when its save basis becomes stale', async () => {
     vi.spyOn(useWorksheetStore.getState(), 'saveDocument').mockResolvedValue(false);
-    const toast = vi.spyOn(uiStore, 'showToast');
 
     await expect(saveAllDirtyGraphs()).resolves.toBe(false);
 
     expect(isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' })).toBe(true);
-    expect(toast).not.toHaveBeenCalled();
   });
 });

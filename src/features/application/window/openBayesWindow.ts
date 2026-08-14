@@ -1,5 +1,4 @@
 import { i18n } from '@/app/i18n';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 import { createPersistedWindow } from './createPersistedWindow';
 import { createEphemeralWindowLabel } from './windowLabels';
@@ -18,6 +17,6 @@ export async function openBayesWindow(): Promise<void> {
       `Failed to open Bayes window: ${error instanceof Error ? error.message : String(error)}`,
       'Window',
     );
-    uiStore.showToast(i18n.t('bayes.failedOpenWindow'), 'error');
+    logger.notify.error(i18n.t('bayes.failedOpenWindow'), "UI");
   }
 }

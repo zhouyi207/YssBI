@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { InfoSegmentedToggle } from './shared/InfoViewControls';
 import { formatNum } from './shared/utils';
 import type { Coefficient } from '@/shared/types/report';
@@ -146,12 +146,12 @@ const FormulaBlock2SLS: React.FC<FormulaBlock2SLSProps> = ({
       </div>
 
       {/* Formula */}
-      <OverlayScrollbar direction="horizontal">
+      <ScrollArea orientation="horizontal">
         <div
           className="px-6 py-4 w-max min-w-full [&_.katex]:text-foreground"
           dangerouslySetInnerHTML={{ __html: currentHtml || '' }}
         />
-      </OverlayScrollbar>
+      </ScrollArea>
 
       {/* Mode description */}
       <div className="border-t border-border px-4 pb-4 pt-3">

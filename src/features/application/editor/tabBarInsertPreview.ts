@@ -46,7 +46,7 @@ export function buildTabBarInsertPreview(
     ? metrics.findIndex((metric) => metric.tabId === draggedTabId)
     : -1;
   const scrollLeft = (
-    stripElement.closest('.overlay-scrollbar-viewport') as HTMLElement | null
+    stripElement.closest('[data-slot="scroll-area-viewport"]') as HTMLElement | null
   )?.scrollLeft ?? 0;
   const insertIndex = computeTabInsertIndex(
     pointerX - stripElement.getBoundingClientRect().left + scrollLeft,

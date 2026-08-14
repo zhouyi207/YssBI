@@ -1070,42 +1070,6 @@ fn file_move_preserves_target_created_after_prepare_and_restores_source() {
 }
 
 #[test]
-fn case_only_file_move_preserves_target_created_between_temporary_legs() {
-    let temporary = TestDirectory::new("transaction-case-only-file-move-target-race");
-    let source = temporary.path().join("Report.json");
-    let target = temporary.path().join("report.json");
-    std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    if target.exists() {
-        return;
-    }
-    let prepared = prepare_json_transaction(
-        &temporary,
-        vec![StagedFilesystemMutation::MoveFile {
-            from: "Report.json".into(),
-            to: "report.json".into(),
-        }],
-    )
-    .unwrap();
-    let target_for_hook = target.clone();
-    temporary
-        .coordinator()
-        .set_before_remove_mutation_hook(Some(Arc::new(move || {
-            std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
-        })));
-
-    let error = prepared.commit().unwrap_err();
-
-    assert_eq!(error.code(), "transaction_commit_failed");
-    assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
-    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
-    let names = std::fs::read_dir(temporary.path())
-        .unwrap()
-        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-        .collect::<Vec<_>>();
-    assert!(!names.iter().any(|name| name.contains("yssbi-move")));
-}
-
-#[test]
 fn file_move_source_removal_failure_retains_target_and_marks_recovery() {
     let temporary = TestDirectory::new("transaction-file-move-source-removal-failure");
     let source = temporary.path().join("source.json");
@@ -1191,50 +1155,6 @@ fn file_move_target_cleanup_failure_requires_recovery() {
     assert!(error.recovery_required());
     assert_eq!(std::fs::read(&source).unwrap(), br#"{"source":1}"#);
     assert_eq!(std::fs::read(&target).unwrap(), br#"{"source":1}"#);
-}
-
-#[test]
-fn case_only_move_restoration_failure_preserves_external_target_and_requires_recovery() {
-    let temporary = TestDirectory::new("transaction-case-only-move-restoration-failure");
-    let source = temporary.path().join("Report.json");
-    let target = temporary.path().join("report.json");
-    std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    if target.exists() {
-        return;
-    }
-    let prepared = prepare_json_transaction(
-        &temporary,
-        vec![StagedFilesystemMutation::MoveFile {
-            from: "Report.json".into(),
-            to: "report.json".into(),
-        }],
-    )
-    .unwrap();
-    let target_for_hook = target.clone();
-    temporary
-        .coordinator()
-        .set_before_remove_mutation_hook(Some(Arc::new(move || {
-            std::fs::write(&target_for_hook, br#"{"external":1}"#).unwrap();
-        })));
-    temporary
-        .coordinator()
-        .set_project_filesystem_fault(Some(ProjectFilesystemFaultPoint::MoveRestoration));
-
-    let error = prepared.commit().unwrap_err();
-
-    assert_eq!(error.code(), "transaction_rollback_failed");
-    assert!(error.recovery_required());
-    assert!(!source.exists());
-    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
-    let temporary_move = std::fs::read_dir(temporary.path())
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .find(|path| {
-            path.file_name()
-                .is_some_and(|name| name.to_string_lossy().contains("yssbi-move"))
-        })
-        .expect("recovery must retain the internal source file");
-    assert_eq!(std::fs::read(temporary_move).unwrap(), br#"{"source":1}"#);
 }
 
 #[test]

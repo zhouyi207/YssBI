@@ -88,7 +88,7 @@ export function useEditActions({
     } catch (e) {
       const msg = String(e);
       logger.data.error('editCell failed: ' + msg, 'DatabaseEditorWindow');
-      uiStore.showToast(msg, 'error', 5000);
+      logger.notify.error(msg, "UI");
     } finally {
       commitInFlightRef.current = false;
     }
@@ -133,11 +133,11 @@ export function useEditActions({
           selectedDfId,
         ));
       await handleEditResult(es);
-      uiStore.showToast('数据已保存到项目', 'success', 3000);
+      logger.notify.info('数据已保存到项目', "UI");
     } catch (e) {
       const msg = String(e);
       logger.data.error('save changes failed: ' + msg, 'DatabaseEditorWindow');
-      uiStore.showToast(msg, 'error', 5000);
+      logger.notify.error(msg, "UI");
     }
   }, [selectedDfId, currentEditState.isModified, handleEditResult]);
 
@@ -343,7 +343,7 @@ export function useEditActions({
           if (isCurrentProjectIdentity(identity)) {
             const forceError = String(e2);
             logger.data.error('castColumn force failed: ' + forceError, 'DatabaseEditorWindow');
-            uiStore.showToast(forceError, 'error', 5000);
+            logger.notify.error(forceError, "UI");
           }
         }
       }

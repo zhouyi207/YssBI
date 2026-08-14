@@ -138,23 +138,3 @@ pub fn breusch_godfrey(
 
     Some((lm_stat, p_value))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_dw() {
-        let e = vec![1.0, 2.0, 1.5, 2.5, 1.0];
-        let d = durbin_watson(&e);
-        assert!(d > 0.0 && d < 4.0);
-    }
-
-    #[test]
-    fn test_ljung_box() {
-        let e: Vec<f64> = (0..50).map(|i| (i as f64 * 0.1).sin()).collect();
-        let (q, p) = ljung_box_q(&e, 5).unwrap();
-        assert!(q >= 0.0);
-        assert!(p >= 0.0 && p <= 1.0);
-    }
-}

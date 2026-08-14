@@ -12,7 +12,6 @@ import {
   useDocumentStateStore,
 } from '@/features/core/resource';
 import { pinPreviewCacheKey, useExecutionStore } from '@/features/core/execution';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { ProjectService } from '@/services/project/projectService';
 import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
@@ -108,7 +107,6 @@ describe('requestPinPreview', () => {
       playbackGraphPath: null,
       isPlaying: false,
     });
-    vi.spyOn(uiStore, 'showToast').mockImplementation(() => undefined);
     nextGeneration = 0;
     vi.spyOn(PinPreviewGenerationService, 'allocate')
       .mockImplementation(async () => ++nextGeneration);
@@ -172,7 +170,6 @@ describe('requestPinPreview', () => {
     });
 
     expect(execute).not.toHaveBeenCalled();
-    expect(uiStore.showToast).not.toHaveBeenCalled();
     expect(getExecutionState).not.toHaveBeenCalled();
   });
 
@@ -193,7 +190,6 @@ describe('requestPinPreview', () => {
     });
 
     expect(execute).not.toHaveBeenCalled();
-    expect(uiStore.showToast).not.toHaveBeenCalled();
     expect(getExecutionState).not.toHaveBeenCalled();
   });
 
@@ -215,7 +211,6 @@ describe('requestPinPreview', () => {
     expect(after.graphs).toBe(before.graphs);
     expect(beginPinPreview).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
-    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -307,7 +302,6 @@ describe('requestPinPreview', () => {
     });
 
     expect(execute).not.toHaveBeenCalled();
-    expect(uiStore.showToast).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -372,7 +366,6 @@ describe('requestPinPreview', () => {
     expect(completePinPreview).not.toHaveBeenCalled();
     expect(failPinPreview).not.toHaveBeenCalled();
     expect(removePinPreview).not.toHaveBeenCalled();
-    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 
   it.each(['resolution', 'rejection'] as const)(
@@ -427,7 +420,6 @@ describe('requestPinPreview', () => {
       failPinPreview.mockClear();
       removePinPreview.mockClear();
       setActiveRunId.mockClear();
-      vi.mocked(uiStore.showToast).mockClear();
       const getExecutionState = vi.spyOn(useExecutionStore, 'getState');
 
       if (settlement === 'resolution') {
@@ -453,7 +445,6 @@ describe('requestPinPreview', () => {
       expect(failPinPreview).not.toHaveBeenCalled();
       expect(removePinPreview).not.toHaveBeenCalled();
       expect(setActiveRunId).not.toHaveBeenCalled();
-      expect(uiStore.showToast).not.toHaveBeenCalled();
       expect(replacementStore.getGraph(eventGraphPath)).toEqual(replacementGraphSnapshot);
     },
   );
@@ -487,7 +478,6 @@ describe('requestPinPreview', () => {
     expect(store.getGraph(eventGraphPath)).toEqual(previewSnapshot);
     expect(failPinPreview).not.toHaveBeenCalled();
     expect(removePinPreview).not.toHaveBeenCalled();
-    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 
   it('does not let stale cleanup remove a newer preview generation for the same pin', async () => {
@@ -551,7 +541,6 @@ describe('requestPinPreview', () => {
     completePinPreview.mockClear();
     failPinPreview.mockClear();
     removePinPreview.mockClear();
-    vi.mocked(uiStore.showToast).mockClear();
 
     callbacks[0](runEvent({ type: 'runStarted' }, 'run-old'));
     callbacks[0](runEvent({
@@ -571,7 +560,6 @@ describe('requestPinPreview', () => {
     expect(completePinPreview).not.toHaveBeenCalled();
     expect(failPinPreview).not.toHaveBeenCalled();
     expect(removePinPreview).not.toHaveBeenCalled();
-    expect(uiStore.showToast).not.toHaveBeenCalled();
 
     callbacks[1](runEvent({ type: 'runStarted' }, 'run-new'));
     callbacks[1](runEvent({
@@ -622,6 +610,5 @@ describe('requestPinPreview', () => {
     expect(store.getGraph(eventGraphPath)).toEqual(previewSnapshot);
     expect(failPinPreview).not.toHaveBeenCalled();
     expect(removePinPreview).not.toHaveBeenCalled();
-    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 });

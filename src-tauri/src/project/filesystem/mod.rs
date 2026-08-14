@@ -30,6 +30,4 @@ pub(crate) use root::{
 pub use transaction::ProjectFilesystemFaultPoint;
 
 #[cfg(test)]
-mod source_audit_tests;
-#[cfg(test)]
 mod tests;

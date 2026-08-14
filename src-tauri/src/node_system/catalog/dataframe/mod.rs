@@ -31,8 +31,6 @@ use crate::node_system::registry::{
 };
 use std::sync::Arc;
 
-#[cfg(test)]
-pub use families::LEGACY_NODE_IDS;
 use families::{InterfaceKind, NODES, NodeSpec};
 
 pub use crate::node_system::compiler::DATAFRAME_COLUMNS_RESOLVER;

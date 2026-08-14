@@ -6,7 +6,6 @@ import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { useEditorStore } from '@/features/core/editor';
 import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 import { clientToWorldInCanvas } from './canvasDrop';
@@ -111,7 +110,7 @@ export function useCanvasOverlayHandlers({
           `Failed to create node '${descriptor.nodeTypeId}' in '${activeTabId}': ${message}`,
           'NodePalette',
         );
-        uiStore.showToast(`Failed to create node: ${message}`, 'error', 4000);
+        logger.notify.error(`Failed to create node: ${message}`, "UI");
       }
     },
     [

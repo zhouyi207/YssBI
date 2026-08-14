@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import type { EditorSplitEdge } from '@/features/core/layout/editorSplitLayout';
 import { EditorGroupsService } from '@/features/core/layout/editorGroupsService';
 import { useLayoutStore } from '@/features/core/layout/layoutStore';
@@ -6,7 +7,6 @@ import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { readEditorPartOptions } from '@/features/core/layout/editorPartOptions';
 import { canMergeEditorGroup, canMoveTabsAcrossEditorGroups } from '@/features/core/layout/editorGroupLock';
 import { splitComponentForTab } from '@/features/core/layout/layoutTabModel';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { i18n } from '@/app/i18n';
 import { switchEditorTab } from './switchEditorTab';
 
@@ -25,7 +25,7 @@ export function moveTabsBetweenGroups(
   targetTabIndex?: number,
 ): void {
   if (!canMoveTabsAcrossEditorGroups(sourceGroupId, targetGroupId)) {
-    uiStore.showToast(i18n.t('tabBar.lockedGroupMoveBlocked'), 'warning');
+    logger.notify.warn(i18n.t('tabBar.lockedGroupMoveBlocked'), "UI");
     return;
   }
   const wasInactive = useLayoutStore.getState().activeEditorGroupId !== targetGroupId;
@@ -85,7 +85,7 @@ export async function splitEditorWithTab(
   options?: { copy?: boolean },
 ): Promise<string | null> {
   if (!canMoveTabsAcrossEditorGroups(sourceGroupId, targetGroupId)) {
-    uiStore.showToast(i18n.t('tabBar.lockedGroupMoveBlocked'), 'warning');
+    logger.notify.warn(i18n.t('tabBar.lockedGroupMoveBlocked'), "UI");
     return null;
   }
   const sourceTabs = useEditorTabStore.getState().resolveGroupTabs(sourceGroupId);
@@ -123,7 +123,7 @@ export function mergeEditorGroupInto(
   insertIndex?: number,
 ): void {
   if (!canMergeEditorGroup(sourceGroupId, targetGroupId)) {
-    uiStore.showToast(i18n.t('tabBar.lockedGroupMoveBlocked'), 'warning');
+    logger.notify.warn(i18n.t('tabBar.lockedGroupMoveBlocked'), "UI");
     return;
   }
   useLayoutStore.getState().mergeEditorGroup(sourceGroupId, targetGroupId, insertIndex);
@@ -151,7 +151,7 @@ export async function splitEditorGroupWithGroup(
   edge: EditorSplitEdge,
 ): Promise<string | null> {
   if (!canMoveTabsAcrossEditorGroups(sourceGroupId, targetGroupId)) {
-    uiStore.showToast(i18n.t('tabBar.lockedGroupMoveBlocked'), 'warning');
+    logger.notify.warn(i18n.t('tabBar.lockedGroupMoveBlocked'), "UI");
     return null;
   }
   const created = useLayoutStore.getState().splitEditorGroupWithGroup(

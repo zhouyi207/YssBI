@@ -2,7 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 import type { BayesDatasetSelectionDTO, BayesInferenceTaskDTO, ValidationReportDTO } from '@/shared/types/bayes';
 import { useBayesInferenceTask, useBayesModelDraft, useBayesValidation } from '@/features/application/bayes';
@@ -154,7 +154,7 @@ export function BayesView() {
             onCancel={inference.cancel}
           />
         </section>
-        <OverlayScrollbar className="min-h-0 flex-1">
+        <ScrollArea className="min-h-0 flex-1">
           <main className="p-6">
             <TabsContent value="model">
               <section className="space-y-4">
@@ -179,7 +179,7 @@ export function BayesView() {
               <ResultOverview result={inference.result} />
             </TabsContent>
           </main>
-        </OverlayScrollbar>
+        </ScrollArea>
       </Tabs>
     </div>
   );

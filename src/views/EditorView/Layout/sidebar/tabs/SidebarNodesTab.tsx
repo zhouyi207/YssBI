@@ -1,32 +1,17 @@
-import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Input } from '@/components/ui/input';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { DRAG_TYPES, type NodeTemplateDragData } from '@/features/core/dnd';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { SidebarDraggableItem } from '../../sidebarUi';
 import { SidebarTabPanel } from '../sections/SidebarTabPanel';
 
 export function SidebarNodesTab() {
   const { t } = useTranslation();
-  const { status, error, catalog, searchIndex } = useLocalizedNodeCatalog();
-  const [query, setQuery] = useState('');
-  const items = useMemo(
-    () => (query.trim() && searchIndex ? searchIndex.search(query) : catalog?.items ?? []),
-    [catalog, query, searchIndex],
-  );
+  const { status, error, catalog } = useLocalizedNodeCatalog();
 
   return (
     <SidebarTabPanel>
-      <div className="shrink-0 border-b border-border px-2 py-2">
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder={t('canvas.nodePalette.searchPlaceholder')}
-          className="h-7"
-        />
-      </div>
-      <OverlayScrollbar className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-1 p-2">
           {status === 'error' && !catalog ? (
             <p role="alert" className="px-2 py-3 text-sm text-destructive">
@@ -36,11 +21,7 @@ export function SidebarNodesTab() {
             <p role="status" className="px-2 py-3 text-sm text-muted-foreground">
               {t('common.loading')}
             </p>
-          ) : items.length === 0 ? (
-            <p className="px-2 py-3 text-center text-sm text-muted-foreground">
-              {t('canvas.nodePalette.noMatches')}
-            </p>
-          ) : items.map((item) => {
+          ) : catalog.items.map((item) => {
             const itemKey = item.creation.kind === 'resourceBound'
               ? `${item.creation.kind}:${item.nodeTypeId}:${item.creation.resourcePath}`
               : `${item.creation.kind}:${item.nodeTypeId}`;
@@ -66,7 +47,7 @@ export function SidebarNodesTab() {
             );
           })}
         </div>
-      </OverlayScrollbar>
+      </ScrollArea>
     </SidebarTabPanel>
   );
 }

@@ -1,8 +1,8 @@
+import { logger } from "@/utils/appLogger";
 import { useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { setNodeParameters } from '@/features/application/editor/setNodeParameters';
-import { uiStore } from '@/features/core/ui/UIStore';
 import type {
   DiagnosticDto,
   ParameterEditorDto,
@@ -97,7 +97,7 @@ export function NodeParameterEditor({
       const message = errorMessage(error);
       setLocalError(message);
       callbacks.onRejected?.();
-      uiStore.showToast(message, 'error');
+      logger.notify.error(message, "UI");
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -237,7 +237,7 @@ function OrdinaryValueEditor({ parameter, pending, onCommit }: OrdinaryValueEdit
     if (parameter.editor === 'number') {
       const parsed = parseInlineNumber(draft, parameter.valueType);
       if (!parsed.ok) {
-        uiStore.showToast(parsed.message, 'error');
+        logger.notify.error(parsed.message, "UI");
         if (resetInvalid) reset();
         return;
       }

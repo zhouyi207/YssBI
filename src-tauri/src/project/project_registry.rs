@@ -142,54 +142,7 @@ impl ProjectRegistry {
         )
         .execute(&self.pool)
         .await?;
-        let columns =
-            sqlx::query_scalar::<_, String>("SELECT name FROM pragma_table_info('projects')")
-                .fetch_all(&self.pool)
-                .await?;
-        if !columns.iter().any(|column| column == "root_identity") {
-            sqlx::query("ALTER TABLE projects ADD COLUMN root_identity TEXT NOT NULL DEFAULT ''")
-                .execute(&self.pool)
-                .await?;
-        }
-        if !columns.iter().any(|column| column == "root_identity_state") {
-            sqlx::query(
-                "ALTER TABLE projects ADD COLUMN root_identity_state TEXT NOT NULL DEFAULT 'unmigrated'",
-            )
-            .execute(&self.pool)
-            .await?;
-        }
-        let rows = sqlx::query_as::<_, (String, String, String, String)>(
-            "SELECT id, path, root_identity, root_identity_state FROM projects WHERE root_identity_state = 'unmigrated'",
-        )
-        .fetch_all(&self.pool)
-        .await?;
-        for (id, path, identity, state) in rows {
-            if state == "valid" && !identity.is_empty() {
-                continue;
-            }
-            match ProjectRootBinding::for_existing(&path)
-                .ok()
-                .and_then(|binding| binding.identity().cloned())
-            {
-                Some(identity) => {
-                    sqlx::query(
-                        "UPDATE projects SET root_identity = ?, root_identity_state = 'valid' WHERE id = ?",
-                    )
-                    .bind(identity.as_str())
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?;
-                }
-                None => {
-                    sqlx::query(
-                        "UPDATE projects SET root_identity = '', root_identity_state = 'invalid' WHERE id = ?",
-                    )
-                    .bind(id)
-                    .execute(&self.pool)
-                    .await?;
-                }
-            }
-        }
+
         Ok(())
     }
 
@@ -631,148 +584,8 @@ pub fn normalize_existing_path(path: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::project::{ProjectRootBinding, ProjectState};
+    use crate::project::ProjectRootBinding;
     use std::fs;
-
-    #[test]
-    fn old_schema_backfills_real_root_identity_for_inactive_delete() {
-        tauri::async_runtime::block_on(async {
-            let app_dir = std::env::temp_dir()
-                .join(format!("yssbi-registry-migration-{}", uuid::Uuid::new_v4()));
-            let db_dir = app_dir.join("db");
-            let project_root = app_dir.join("project");
-            fs::create_dir_all(&db_dir).unwrap();
-            fs::create_dir_all(&project_root).unwrap();
-            let metadata = project_root.join(PROJECT_METADATA_FILE);
-            fs::write(&metadata, "{}").unwrap();
-            let db_path = db_dir.join("projects.sqlite");
-            let url = format!("sqlite://{}", db_path.to_string_lossy().replace('\\', "/"));
-            let pool = SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect_with(
-                    SqliteConnectOptions::from_str(&url)
-                        .unwrap()
-                        .create_if_missing(true),
-                )
-                .await
-                .unwrap();
-            sqlx::query(
-                "CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, last_opened_at TEXT, is_favorite INTEGER NOT NULL DEFAULT 0)",
-            )
-            .execute(&pool)
-            .await
-            .unwrap();
-            sqlx::query("INSERT INTO projects (id, name, path, created_at) VALUES ('legacy', 'Legacy', ?, '2026-01-01T00:00:00Z')")
-                .bind(metadata.to_string_lossy().as_ref())
-                .execute(&pool)
-                .await
-                .unwrap();
-            sqlx::query("INSERT INTO projects (id, name, path, created_at) VALUES ('missing', 'Missing', ?, '2026-01-01T00:00:00Z')")
-                .bind(app_dir.join("missing").to_string_lossy().as_ref())
-                .execute(&pool)
-                .await
-                .unwrap();
-            pool.close().await;
-
-            let registry = ProjectRegistry::init(app_dir.clone()).await.unwrap();
-            let record = registry.fetch_by_id("legacy").await.unwrap().unwrap();
-
-            assert_eq!(record.root_identity_state, ProjectRootIdentityState::Valid);
-            assert!(!record.root_identity.as_str().is_empty());
-            let missing = registry.fetch_by_id("missing").await.unwrap().unwrap();
-            assert_eq!(
-                missing.root_identity_state,
-                ProjectRootIdentityState::Invalid
-            );
-            assert!(missing.deletion_identity().is_none());
-            registry.remove_project("missing").await.unwrap();
-            let result = ProjectState::new().delete_project_transaction(
-                Path::new(&record.path),
-                record.deletion_identity(),
-                None,
-                crate::node_system::document::OperationId::new(),
-            );
-            assert!(result.is_ok());
-            drop(registry);
-            let _ = fs::remove_dir_all(app_dir);
-        });
-    }
-
-    #[test]
-    fn invalid_legacy_row_stays_invalid_across_restart_and_same_path_replacement() {
-        tauri::async_runtime::block_on(async {
-            let app_dir = std::env::temp_dir().join(format!(
-                "yssbi-registry-invalid-stable-{}",
-                uuid::Uuid::new_v4()
-            ));
-            let db_dir = app_dir.join("db");
-            let replacement_root = app_dir.join("replacement");
-            fs::create_dir_all(&db_dir).unwrap();
-            let db_path = db_dir.join("projects.sqlite");
-            let url = format!("sqlite://{}", db_path.to_string_lossy().replace('\\', "/"));
-            let pool = SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect_with(
-                    SqliteConnectOptions::from_str(&url)
-                        .unwrap()
-                        .create_if_missing(true),
-                )
-                .await
-                .unwrap();
-            sqlx::query(
-                "CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, last_opened_at TEXT, is_favorite INTEGER NOT NULL DEFAULT 0)",
-            )
-            .execute(&pool)
-            .await
-            .unwrap();
-            sqlx::query("INSERT INTO projects (id, name, path, created_at) VALUES ('invalid', 'Old Missing', ?, '2026-01-01T00:00:00Z')")
-                .bind(replacement_root.to_string_lossy().as_ref())
-                .execute(&pool)
-                .await
-                .unwrap();
-            pool.close().await;
-
-            let first = ProjectRegistry::init(app_dir.clone()).await.unwrap();
-            let invalid = first.fetch_by_id("invalid").await.unwrap().unwrap();
-            assert_eq!(
-                invalid.root_identity_state,
-                ProjectRootIdentityState::Invalid
-            );
-            assert!(invalid.deletion_identity().is_none());
-            drop(first);
-
-            fs::create_dir_all(&replacement_root).unwrap();
-            let metadata = replacement_root.join(PROJECT_METADATA_FILE);
-            fs::write(&metadata, "{}").unwrap();
-            let second = ProjectRegistry::init(app_dir.clone()).await.unwrap();
-            let still_invalid = second.fetch_by_id("invalid").await.unwrap().unwrap();
-
-            assert_eq!(
-                still_invalid.root_identity_state,
-                ProjectRootIdentityState::Invalid
-            );
-            assert!(still_invalid.root_identity.as_str().is_empty());
-            assert!(still_invalid.deletion_identity().is_none());
-            assert!(
-                second
-                    .register_project("Replacement", metadata.to_string_lossy().as_ref())
-                    .await
-                    .unwrap_err()
-                    .contains("identity")
-            );
-            second.remove_project("invalid").await.unwrap();
-            let registered = second
-                .register_project("Replacement", metadata.to_string_lossy().as_ref())
-                .await
-                .unwrap();
-            assert_eq!(
-                registered.root_identity_state,
-                ProjectRootIdentityState::Valid
-            );
-            drop(second);
-            let _ = fs::remove_dir_all(app_dir);
-        });
-    }
 
     #[test]
     fn cleanup_removes_terminal_and_replaced_valid_rows_before_reregistration() {
@@ -783,44 +596,24 @@ mod tests {
             ));
             let terminal_root = app_dir.join("terminal");
             let valid_root = app_dir.join("valid");
-            fs::create_dir_all(app_dir.join("db")).unwrap();
+            fs::create_dir_all(&terminal_root).unwrap();
             fs::create_dir_all(&valid_root).unwrap();
+            let terminal_metadata = terminal_root.join(PROJECT_METADATA_FILE);
             let valid_metadata = valid_root.join(PROJECT_METADATA_FILE);
+            fs::write(&terminal_metadata, "{}").unwrap();
             fs::write(&valid_metadata, "{}").unwrap();
 
-            let db_path = app_dir.join("db").join("projects.sqlite");
-            let url = format!("sqlite://{}", db_path.to_string_lossy().replace('\\', "/"));
-            let pool = SqlitePoolOptions::new()
-                .max_connections(1)
-                .connect_with(
-                    SqliteConnectOptions::from_str(&url)
-                        .unwrap()
-                        .create_if_missing(true),
-                )
-                .await
-                .unwrap();
-            sqlx::query(
-                "CREATE TABLE projects (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, path TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL, last_opened_at TEXT, is_favorite INTEGER NOT NULL DEFAULT 0)",
-            )
-            .execute(&pool)
-            .await
-            .unwrap();
-            sqlx::query("INSERT INTO projects (id, name, path, created_at) VALUES ('terminal', 'Terminal', ?, '2026-01-01T00:00:00Z')")
-                .bind(terminal_root.to_string_lossy().as_ref())
-                .execute(&pool)
-                .await
-                .unwrap();
-            pool.close().await;
-
             let registry = ProjectRegistry::init(app_dir.clone()).await.unwrap();
+            let terminal = registry
+                .register_project("Terminal", terminal_metadata.to_string_lossy().as_ref())
+                .await
+                .unwrap();
             let valid = registry
                 .register_project("Valid", valid_metadata.to_string_lossy().as_ref())
                 .await
                 .unwrap();
 
-            fs::create_dir_all(&terminal_root).unwrap();
-            let terminal_metadata = terminal_root.join(PROJECT_METADATA_FILE);
-            fs::write(&terminal_metadata, "{}").unwrap();
+            fs::remove_dir_all(&terminal_root).unwrap();
             fs::rename(&valid_root, app_dir.join("valid-original")).unwrap();
             fs::create_dir_all(&valid_root).unwrap();
             fs::write(&valid_metadata, "{}").unwrap();
@@ -834,8 +627,10 @@ mod tests {
                 .unwrap();
 
             assert_eq!(cleanup.removed, 2);
-            assert!(registry.fetch_by_id("terminal").await.unwrap().is_none());
+            assert!(registry.fetch_by_id(&terminal.id).await.unwrap().is_none());
             assert!(registry.fetch_by_id(&valid.id).await.unwrap().is_none());
+            fs::create_dir_all(&terminal_root).unwrap();
+            fs::write(&terminal_metadata, "{}").unwrap();
             let terminal_registered = registry
                 .register_project(
                     "Terminal Replacement",

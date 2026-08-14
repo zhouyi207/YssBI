@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -12,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { diagnosticSeverityClass, evaluateInferenceDiagnostics, parameterDiagnosticStatus } from '@/features/domain/bayes';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { exportBayesArtifactCsv, readBayesAutocorrelationData, readBayesDensityPlotData, readBayesPosteriorPredictive, readBayesTracePlotData, revealBayesResultFolder } from '@/services/bayes/bayesInferenceService';
 import { LatexInline, PanelTitle, formatNumber, latexSymbol } from './BayesPanels';
@@ -281,7 +281,7 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
   const openResultFolder = () => {
     if (!artifactPath) return;
     void revealBayesResultFolder(artifactPath).catch(error => {
-          uiStore.showToast(t('bayes.results.errors.openFolder', { error: formatErrorMessage(error) }), 'error');
+          logger.notify.error(t('bayes.results.errors.openFolder', { error: formatErrorMessage(error) }), "UI");
         });
   };
 
@@ -383,9 +383,9 @@ function BayesCsvExportButton({
       });
       if (!destination) return;
       await exportBayesArtifactCsv(result.artifactManifest.taskId, kind, destination);
-      uiStore.showToast(t('bayes.results.messages.exportSuccess'), 'success');
+      logger.notify.info(t('bayes.results.messages.exportSuccess'), "UI");
           } catch (error) {
-            uiStore.showToast(t('bayes.results.errors.exportCsv', { error: formatErrorMessage(error) }), 'error');
+            logger.notify.error(t('bayes.results.errors.exportCsv', { error: formatErrorMessage(error) }), "UI");
     }
   };
 

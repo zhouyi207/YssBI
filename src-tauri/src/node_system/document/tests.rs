@@ -73,8 +73,8 @@ fn assert_graph_content_eq(left: &GraphDocument, right: &GraphDocument) {
 }
 
 #[test]
-fn resolved_binding_serde_defaults_old_documents_and_serializes_metadata() {
-    let old = serde_json::json!({
+fn resolved_binding_serde_requires_and_serializes_metadata() {
+    let missing_metadata = serde_json::json!({
         "kind": "resolved",
         "origin": {
             "kind": "schema_field",
@@ -83,12 +83,7 @@ fn resolved_binding_serde_defaults_old_documents_and_serializes_metadata() {
         },
         "order": "a"
     });
-    let binding: DynamicPortBinding = serde_json::from_value(old).unwrap();
-    assert!(matches!(
-        &binding,
-        DynamicPortBinding::Resolved { last_known, .. }
-            if last_known == &LastKnownPortMetadata::default()
-    ));
+    assert!(serde_json::from_value::<DynamicPortBinding>(missing_metadata).is_err());
 
     let value = serde_json::to_value(DynamicPortBinding::Resolved {
         origin: DynamicMemberLocator::SchemaField {
@@ -594,22 +589,6 @@ fn phase1_collection_editor_mutation_wire_is_stable_and_camel_case() {
             serde_json::from_value::<EditorGraphMutationDto>(serialized).unwrap(),
             mutation
         );
-    }
-}
-
-#[test]
-fn phase1_collection_wire_rejects_removed_singular_variants() {
-    for value in [
-        json!({
-            "type": "deleteNode",
-            "payload": { "nodeId": node_id(901) }
-        }),
-        json!({
-            "type": "disconnect",
-            "payload": { "connectionId": connection_id(903) }
-        }),
-    ] {
-        assert!(serde_json::from_value::<EditorGraphMutationDto>(value).is_err());
     }
 }
 

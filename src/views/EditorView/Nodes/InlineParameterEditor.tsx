@@ -1,8 +1,8 @@
+import { logger } from "@/utils/appLogger";
 import { useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { setNodeParameters } from '@/features/application/editor/setNodeParameters';
-import { uiStore } from '@/features/core/ui/UIStore';
 import type { DataType } from '@/shared/types/domain/dataType';
 import type { ParameterEditorDto } from '@/shared/types/dto/editorProjection';
 
@@ -98,7 +98,7 @@ export function InlineParameterEditor({
       }
     } catch (error) {
       reset();
-      uiStore.showToast(errorMessage(error), 'error');
+      logger.notify.error(errorMessage(error), "UI");
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -109,7 +109,7 @@ export function InlineParameterEditor({
     if (parameter.editor === 'number') {
       const parsed = parseInlineNumber(draft, parameter.valueType);
       if (!parsed.ok) {
-        uiStore.showToast(parsed.message, 'error');
+        logger.notify.error(parsed.message, "UI");
         if (resetInvalid) reset();
         return;
       }

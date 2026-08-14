@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useRegressionReport } from '@/features/application/stats/useRegressionReport';
 import {
   ReportLayout,
@@ -82,11 +82,11 @@ export const PraisComponent: FC<{ data: PraisResultData }> = ({ data }) => {
         {praisInfo.iteration_log && praisInfo.iteration_log.length > 0 ? (
           <div className="mb-4 overflow-hidden rounded-lg border border-border bg-card">
             <ReportSubheading title="Iteration Log" />
-            <OverlayScrollbar direction="both" className="max-h-40">
+            <ScrollArea orientation="both" className="max-h-40">
               <pre className="min-w-max whitespace-pre px-4 py-3 font-mono text-xs text-foreground">
                 {praisInfo.iteration_log.join('\n')}
               </pre>
-            </OverlayScrollbar>
+            </ScrollArea>
           </div>
         ) : null}
 

@@ -1,5 +1,5 @@
+import { logger } from "@/utils/appLogger";
 import { i18n } from '@/app/i18n';
-import { uiStore } from '@/features/core/ui/UIStore';
 
 import { ProjectService, type RevealProjectResourceRequest } from '@/services/project/projectService';
 
@@ -16,12 +16,9 @@ export async function revealProjectResourceInExplorer(
     if (!context.isCurrent()) return;
   } catch (error) {
     if (!context.isCurrent()) return;
-    uiStore.showToast(
-      i18n.t('contextMenu.sidebar.revealInExplorerFailed', {
+    logger.notify.error(i18n.t('contextMenu.sidebar.revealInExplorerFailed', {
         error: formatErrorMessage(error, 'Unknown error'),
-      }),
-      'error',
-    );
+      }), "UI");
   }
 }
 

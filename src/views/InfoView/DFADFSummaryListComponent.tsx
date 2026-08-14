@@ -2,7 +2,7 @@ import { useState, type FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { ReportLayout, formatNum, SignificanceStars } from './shared';
 import {
   InfoStatsTable,
@@ -139,9 +139,9 @@ export const DFADFSummaryListComponent: FC<{ data: DFADFSummaryListResultData }>
                 </svg>
               </Button>
             </div>
-            <OverlayScrollbar className="flex-1">
+            <ScrollArea className="flex-1">
               <DFADFComponent data={selected} />
-            </OverlayScrollbar>
+            </ScrollArea>
           </div>
         </>
       )}

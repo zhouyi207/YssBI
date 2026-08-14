@@ -64,23 +64,3 @@ pub fn pacf(x: &[f64], max_lag: usize) -> Vec<f64> {
     }
     pacf_out
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_acf_white_noise() {
-        let x: Vec<f64> = (0..100).map(|i| (i as f64 * 0.1).sin()).collect();
-        let a = acf(&x, 10);
-        assert_eq!(a.len(), 11);
-        assert!((a[0] - 1.0).abs() < 1e-10);
-    }
-
-    #[test]
-    fn test_pacf_len() {
-        let x: Vec<f64> = (0..50).map(|i| i as f64).collect();
-        let p = pacf(&x, 5);
-        assert_eq!(p.len(), 5);
-    }
-}

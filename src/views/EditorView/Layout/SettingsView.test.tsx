@@ -34,8 +34,8 @@ vi.mock('@/app/i18n', () => ({
   i18n: { changeLanguage: vi.fn() },
 }));
 
-vi.mock('@/shared/ui/OverlayScrollbar', () => ({
-  OverlayScrollbar: ({ children }: { children: unknown }) => children,
+vi.mock('@/components/ui/scroll-area', () => ({
+  ScrollArea: ({ children }: { children: unknown }) => children,
 }));
 
 vi.mock('@/shared/ui', () => ({

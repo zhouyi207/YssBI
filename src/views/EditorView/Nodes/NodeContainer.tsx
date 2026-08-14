@@ -4,7 +4,6 @@ import { uiNodeHasNoHeader, uiNodeIsReroute } from "@/features/core/dataStore";
 import { useNodeExecution } from "@/features/core/node";
 import { useExecutionStore } from "@/features/core/execution";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
-import { useGraphInteractionStore } from '@/features/core/graphInteraction';
 import { getNodeClassName, getNodeBackgroundStyle, getNodeMinSize } from "@/features/domain/node/utils";
 import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
 import { useCallFunctionIssue } from "@/features/application/graphDiagnostics/useCallFunctionDiagnostics";
@@ -32,11 +31,8 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
   children,
 }) => {
   const { t } = useTranslation();
-  const positionOverride = useGraphInteractionStore((state) =>
-    _graphPath ? state.positionOverrides[_graphPath]?.[node.id] : undefined,
-  );
-  const posX = positionOverride?.x ?? node.position.x;
-  const posY = positionOverride?.y ?? node.position.y;
+  const posX = node.position.x;
+  const posY = node.position.y;
   const graphStatus = useExecutionStore((s) => (_graphPath ? s.graphs[_graphPath]?.status ?? 'idle' : 'idle'));
   const isReplay = useExecutionStore((s) => !!_graphPath && s.isPlaying && s.playbackGraphPath === _graphPath);
   const useStoreExecVisual = graphStatus !== 'running' && !isReplay;

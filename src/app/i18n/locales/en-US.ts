@@ -471,7 +471,7 @@ export const enUS = {
       language: "Controls the application interface language.",
       activityBarPosition: "Controls the visibility and position of the activity bar.",
       panelPosition: "Controls whether the panel is docked to the bottom, left, or right of the editor area.",
-      smoothScroll: "Enable smooth scrolling for OverlayScrollbar viewports (lists, settings, sidebars).",
+      smoothScroll: "Enable smooth scrolling for scroll areas (lists, settings, sidebars).",
       titleBarStyle: "Use custom in-app title bar or the native OS window frame.",
       workbenchBackground: "The primary background color of the editor environment.",
       sidebarBackground: "Background color for sidebars and headers.",
@@ -859,6 +859,16 @@ export const enUS = {
   },
   detail: {
     title: "Details",
+    tabs: {
+      details: "Details",
+      inspector: "Inspector",
+    },
+    inspector: {
+      title: "Inspector",
+      emptyTitle: "No result selected",
+      empty: "Inspect a pin result or execution output to view it here",
+      plotWindowOnly: "Plot results open in a dedicated window",
+    },
     titleWithName: "Details : {{name}}",
     titleLog: "Details : Log",
     titleNode: "Details : Node",

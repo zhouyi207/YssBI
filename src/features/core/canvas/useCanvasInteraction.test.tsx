@@ -36,6 +36,37 @@ describe('resolvePinPointerAction', () => {
   });
 });
 
+describe('idle canvas interaction subscription', () => {
+  it('mounts without an active graph using a stable store snapshot', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const root = createRoot(host);
+
+    function Harness() {
+      useCanvasInteraction({
+        activeGroupIdRef: { current: 'group-a' },
+        activeTabIdRef: { current: null },
+        viewportRef: createRef() as React.RefObject<typeof DEFAULT_VIEWPORT>,
+        setSelectedNodeIds: vi.fn(),
+        handlers: {
+          submitConnection: vi.fn(),
+          disconnectPort: vi.fn(),
+          insertRerouteAtConnection: vi.fn(),
+          reportMutationFailure: vi.fn(),
+        },
+        enabled: false,
+      });
+      return null;
+    }
+
+    expect(() => act(() => root.render(<Harness />))).not.toThrow();
+
+    act(() => root.unmount());
+    host.remove();
+  });
+
+});
+
 describe('reroute insertion', () => {
   const graphPath = 'events/main';
   const groupId = 'group-a';

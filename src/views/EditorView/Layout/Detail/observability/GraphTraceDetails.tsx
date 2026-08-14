@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useGraphTraceDetails } from '@/features/application/observability/useGraphTraceDetails';
 import type { TraceSpanProjection } from '@/features/application/observability/useGraphTraceDetails';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
 import { detailEmptyHintClass } from '../shared/detailStyles';
 import { DetailBadge, DetailText } from '../shared/DetailText';
@@ -125,16 +125,16 @@ function TraceContent({
   if (records.length === 0) return <TraceState>{t('detail.trace.empty')}</TraceState>;
 
   return (
-    <OverlayScrollbar
+    <ScrollArea
       className="max-h-80 rounded-md border border-border/60 bg-background/30"
-      direction="vertical"
+      orientation="vertical"
     >
       <div className="space-y-2 p-2">
         {records.map((span) => (
           <TraceRecord key={span.spanId} record={span} />
         ))}
       </div>
-    </OverlayScrollbar>
+    </ScrollArea>
   );
 }
 

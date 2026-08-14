@@ -13,7 +13,6 @@ export function useNodeDragPreview(
   graphPath: string | null,
 ): void {
   const lastDraggedRef = useRef<Set<string>>(new Set());
-  const rafRef = useRef(0);
 
   useEffect(() => {
     const root = canvasElementRef.current;
@@ -48,24 +47,7 @@ export function useNodeDragPreview(
       }
     };
 
-    const tick = () => {
-      apply();
-      if (getDragPreview(scope).active) {
-        rafRef.current = requestAnimationFrame(tick);
-      }
-    };
-
-    const unsub = subscribeDragPreview(() => {
-      cancelAnimationFrame(rafRef.current);
-      apply();
-      if (getDragPreview(scope).active) {
-        rafRef.current = requestAnimationFrame(tick);
-      }
-    });
-
-    return () => {
-      unsub();
-      cancelAnimationFrame(rafRef.current);
-    };
+    apply();
+    return subscribeDragPreview(scope, apply);
   }, [canvasElementRef, groupId, graphPath]);
 }

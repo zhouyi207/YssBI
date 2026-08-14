@@ -599,7 +599,7 @@ mod tests {
     }
 
     #[test]
-    fn effective_cache_policy_serde_rejects_legacy_none_spelling() {
+    fn effective_cache_policy_serde_uses_canonical_names() {
         assert_eq!(
             serde_json::to_string(&CachePolicy::Disabled).unwrap(),
             "\"Disabled\""
@@ -612,26 +612,6 @@ mod tests {
             serde_json::from_str::<CachePolicy>("\"PerSession\"").unwrap(),
             CachePolicy::PerSession
         );
-        assert!(serde_json::from_str::<CachePolicy>("\"None\"").is_err());
-    }
-
-    #[test]
-    fn retry_metadata_serde_rejects_unknown_legacy_fields() {
-        let execution = ExecutionSemantics {
-            determinism: Determinism::Deterministic,
-            purity: Purity::Pure,
-            evaluation: EvaluationPolicy::DemandDriven,
-            cache: CachePolicy::PerRun,
-            effects: EffectSemantics::None,
-            idempotent: true,
-            retry: Some(
-                RetryPolicy::new(NonZeroU32::new(2).unwrap(), Duration::ZERO, Duration::ZERO)
-                    .unwrap(),
-            ),
-        };
-        let mut value = serde_json::to_value(execution).unwrap();
-        value["legacy_retry"] = serde_json::json!(true);
-        assert!(serde_json::from_value::<ExecutionSemantics>(value).is_err());
     }
 
     #[test]

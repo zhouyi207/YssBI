@@ -1,133 +1,42 @@
-import { forwardRef, useEffect } from 'react';
+import { forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useEditorSessionDetailActions } from '@/features/application/editor';
-import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
-import { WorksheetService } from '@/services/worksheet/worksheetService';
-import { renameWorksheetResource } from '@/features/application/sidebar/sidebarResourceActions';
-import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
-import { renameResource } from '@/features/application/resource/resourceActions';
-import { updateFunctionSignature } from '@/features/application/graphDocument/graphDocumentActions';
-import { DetailEmptyState } from './DetailEmptyState';
-import { VariableDetailPanel } from './panels/VariableDetailPanel';
-import { EventDetailPanel } from './panels/EventDetailPanel';
-import { FunctionDetailPanel } from './panels/FunctionDetailPanel';
-import { DataDetailPanel } from './panels/DataDetailPanel';
-import { LogDetailPanel } from './panels/LogDetailPanel';
-import { NodeDetailPanel } from './panels/NodeDetailPanel';
-import { NodeDefinitionDetailPanel } from './panels/NodeDefinitionDetailPanel';
-import { WorksheetDetailPanel } from './panels/WorksheetDetailPanel';
-import { detailSectionTitleClass } from './shared/detailStyles';
-import { workbenchPanelHeaderClass } from '../workbenchPanelHeaderStyles';
-
-import { useDetailPanelModel } from './useDetailPanelModel';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useEditorStore, type DetailPaneTab } from '@/features/core/editor';
+import { DetailsPane } from './DetailsPane';
+import { InspectorPane } from './InspectorPane';
 
 export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
   const { t } = useTranslation();
-  const { updateVariable, updateDataFrame } = useEditorSessionDetailActions();
-  const { model, worksheetPath, worksheetName, worksheetDocument } = useDetailPanelModel();
-
-
-  useEffect(() => {
-    if (!worksheetPath || worksheetDocument) return;
-    const context = captureProjectCommandContext();
-    void WorksheetService.loadWorksheet(context.projectInstanceId, worksheetPath)
-      .then((loaded) => {
-        if (context.isCurrent()) {
-          useWorksheetStore.getState().upsertDocument(worksheetPath, loaded);
-        }
-      })
-      .catch(() => undefined);
-  }, [worksheetPath, worksheetDocument]);
-
-  const content = (() => {
-    switch (model.kind) {
-      case 'log':
-        return <LogDetailPanel log={model.log} />;
-      case 'node':
-        return <NodeDetailPanel graphPath={model.graphPath} nodeId={model.nodeId} />;
-      case 'nodeDefinition':
-        return <NodeDefinitionDetailPanel nodeType={model.nodeType} />;
-      case 'variable':
-        return (
-          <VariableDetailPanel
-            variable={model.variable}
-            onUpdate={(patch) => {
-              if (typeof patch.name === 'string') {
-                void renameResource({ id: model.id, kind: 'variable' }, patch.name);
-                return;
-              }
-              updateVariable(model.id, patch);
-            }}
-          />
-        );
-      case 'event':
-        return (
-          <EventDetailPanel
-            event={model.event}
-            onUpdate={(patch) => {
-              if (typeof patch.name === 'string') {
-                void renameResource({ id: model.path, kind: 'event' }, patch.name);
-              }
-            }}
-          />
-        );
-      case 'function':
-        return (
-          <FunctionDetailPanel
-            fn={model.fn}
-
-            onRename={(name) => {
-              void renameResource({ id: model.path, kind: 'function' }, name);
-            }}
-            onSignatureChange={(patch) => {
-              void updateFunctionSignature(model.path, patch);
-            }}
-          />
-        );
-      case 'worksheet':
-        return (
-          <WorksheetDetailPanel
-            worksheetPath={worksheetPath!}
-            name={worksheetName ?? ''}
-            document={model.document}
-            onRename={(name) => void renameWorksheetResource(worksheetPath!, name)}
-          />
-        );
-      case 'data':
-        return (
-          <DataDetailPanel
-            dataframe={model.dataframe}
-            onUpdate={(patch) => {
-              if (typeof patch.name === 'string') {
-                void renameResource({ id: model.id, kind: 'database' }, patch.name);
-                return;
-              }
-              updateDataFrame(model.id, patch);
-            }}
-          />
-        );
-      case 'empty':
-        return (
-          <div className="flex h-full min-h-0 flex-col bg-background/40">
-            <div className={workbenchPanelHeaderClass}>
-              <span className={detailSectionTitleClass}>{t('detail.title')}</span>
-            </div>
-            <DetailEmptyState />
-          </div>
-        );
-      default: {
-        const exhaustive: never = model;
-        return exhaustive;
-      }
-    }
-  })();
+  const activeTab = useEditorStore((state) => state.detailPaneTab);
+  const setActiveTab = useEditorStore((state) => state.setDetailPaneTab);
 
   return (
     <div
       ref={ref}
       className="right-sidebar-container flex h-full w-full select-none flex-col overflow-hidden bg-[var(--sidebar-bg)]"
     >
-      {content}
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as DetailPaneTab)}
+        className="min-h-0 flex-1 gap-0"
+      >
+        <div className="flex h-[var(--titlebar-height)] shrink-0 items-end border-b border-border bg-background px-2">
+          <TabsList variant="line" className="h-full w-full justify-start gap-0 p-0">
+            <TabsTrigger value="details" className="h-full flex-none rounded-none px-3">
+              {t('detail.tabs.details')}
+            </TabsTrigger>
+            <TabsTrigger value="inspector" className="h-full flex-none rounded-none px-3">
+              {t('detail.tabs.inspector')}
+            </TabsTrigger>
+          </TabsList>
+        </div>
+        <TabsContent value="details" className="min-h-0 overflow-hidden">
+          <DetailsPane />
+        </TabsContent>
+        <TabsContent value="inspector" className="min-h-0 overflow-hidden">
+          <InspectorPane />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 });

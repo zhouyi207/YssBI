@@ -8,9 +8,10 @@ import {
   VscExpandAll,
 } from 'react-icons/vsc';
 import { Button } from '@/components/ui/button';
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useDebouncedValue } from '@/shared/hooks/useDebouncedValue';
 import {
   NODE_CATALOG_ROW_HEIGHT,
@@ -212,13 +213,20 @@ export function NodeCatalogTreeView({
   );
 
   const treeContent = noResults ? (
-    <div className="flex flex-1 items-center justify-center px-4 py-8 text-center text-[13px] text-muted-foreground/80">
-      {t('canvas.nodePalette.noMatches')}
-    </div>
+    <Empty className="min-h-0 gap-2 rounded-none px-4 py-8">
+      <EmptyHeader>
+        <EmptyMedia variant="icon" className="text-muted-foreground">
+          <VscSearch />
+        </EmptyMedia>
+        <EmptyTitle className="text-xs font-normal text-muted-foreground">
+          {t('canvas.nodePalette.noMatches')}
+        </EmptyTitle>
+      </EmptyHeader>
+    </Empty>
   ) : (
-    <OverlayScrollbar
-      ref={scrollRef}
-      direction="vertical"
+    <ScrollArea
+      viewportRef={scrollRef}
+      orientation="vertical"
       className={cn('min-h-0 min-w-0 flex-1 basis-0 py-1', scrollClassName)}
     >
       <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
@@ -251,7 +259,7 @@ export function NodeCatalogTreeView({
           );
         })}
       </div>
-    </OverlayScrollbar>
+    </ScrollArea>
   );
 
   return (

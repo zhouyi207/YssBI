@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SqliteTableSelectDialogOptions } from "@/shared/types/ui";
-import { OverlayScrollbar } from "./OverlayScrollbar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export const SqliteTableSelectModal = ({
   options,
@@ -39,7 +39,7 @@ export const SqliteTableSelectModal = ({
             </TooltipTrigger>
             <TooltipContent side="bottom" className="max-w-sm break-all">{dbPath}</TooltipContent>
           </Tooltip>
-          <OverlayScrollbar className="max-h-60">
+          <ScrollArea className="max-h-60">
             <div className="flex flex-col gap-2">
               {tables.map((table) => (
                 <Button
@@ -58,7 +58,7 @@ export const SqliteTableSelectModal = ({
                 </Button>
               ))}
             </div>
-          </OverlayScrollbar>
+          </ScrollArea>
         </div>
 
         <DialogFooter className="justify-center">

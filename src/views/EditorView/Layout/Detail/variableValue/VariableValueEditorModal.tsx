@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -10,8 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { uiStore } from '@/features/core/ui/UIStore';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import type { DataType } from '@/shared/types/domain/dataType';
 import type { DataValue } from '@/shared/types/domain/dataValue';
 import {
@@ -77,7 +77,7 @@ export function VariableValueEditorModal({
     }
 
     if (!result.ok) {
-      uiStore.showToast(t(`detail.variableValue.errors.${result.error}`), 'error');
+      logger.notify.error(t(`detail.variableValue.errors.${result.error}`), "UI");
       return;
     }
     onSave(result.value);
@@ -101,14 +101,14 @@ export function VariableValueEditorModal({
         <div className="min-h-0 flex-1 px-6 py-5">
           <div className="flex min-h-0 flex-1 flex-col gap-2">
             <Label>{t('detail.variableValue.jsonLabel')}</Label>
-            <OverlayScrollbar className="min-h-0 flex-1">
+            <ScrollArea className="min-h-0 flex-1">
               <textarea
                 className={jsonTextareaClass}
                 value={jsonDraft}
                 spellCheck={false}
                 onChange={(event) => setJsonDraft(event.target.value)}
               />
-            </OverlayScrollbar>
+            </ScrollArea>
           </div>
         </div>
 

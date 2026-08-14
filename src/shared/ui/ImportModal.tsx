@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ImportDialogOptions, ImportDataSourceType } from "@/shared/types/ui";
-import { OverlayScrollbar } from "./OverlayScrollbar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type CategoryId = "file" | "sql" | "other";
 
@@ -162,13 +162,13 @@ export const ImportModal = ({ options, onClose }: { options: ImportDialogOptions
             })}
           </nav>
 
-          <OverlayScrollbar className="min-h-0 flex-1">
+          <ScrollArea className="min-h-0 flex-1">
             <div className="grid gap-2 p-4 sm:grid-cols-1">
               {types.map((type) => (
                 <TypeOptionCard key={type.id} type={type} onSelect={options.onSelect} onClose={onClose} />
               ))}
             </div>
-          </OverlayScrollbar>
+          </ScrollArea>
         </div>
       </DialogContent>
     </Dialog>

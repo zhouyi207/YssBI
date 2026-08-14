@@ -65,7 +65,7 @@ export async function closeGraphTab(graphPath: string, nodeId?: string, skipDirt
         }
       } catch (error) {
         if (context && !context.isCurrent()) return false;
-        uiStore.showToast(`保存失败：${error instanceof Error ? error.message : String(error)}`, 'error', 3000);
+        logger.notify.error(`保存失败：${error instanceof Error ? error.message : String(error)}`, "UI");
         return false;
       }
     }

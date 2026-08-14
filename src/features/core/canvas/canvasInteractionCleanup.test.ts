@@ -20,6 +20,16 @@ afterEach(() => {
 });
 
 describe('canvasInteractionCleanup', () => {
+  it('starts the first interaction when the graph has no interaction bucket', () => {
+    expect(() => startCanvasInteraction(graphPath, {
+      type: 'panning',
+      session: { groupId, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false },
+    })).not.toThrow();
+
+    expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId).type)
+      .toBe('panning');
+  });
+
   it('runs registered selection DOM cleanup before returning the interaction to idle', () => {
     document.body.innerHTML = `<div data-editor-group-id="${groupId}"><div data-selection-preview="true"></div></div>`;
     const canvas = document.querySelector(`[data-editor-group-id="${groupId}"]`)!;

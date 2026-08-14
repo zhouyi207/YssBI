@@ -1,6 +1,6 @@
+import { logger } from "@/utils/appLogger";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { uiStore } from "@/features/core/ui/UIStore";
 import { usePositionedContextMenu } from "@/shared/ui/contextMenu";
 import type { SidebarContextMenuTarget, SidebarInputDialogState } from "../sidebarContextMenu/sidebarContextMenuTypes";
 
@@ -32,7 +32,7 @@ export function useSidebarContextMenu() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setInputDialog((prev) => (prev ? { ...prev, error: message } : null));
-      uiStore.showToast(message, "error");
+      logger.notify.error(message, "UI");
     }
   }, [inputDialog]);
 

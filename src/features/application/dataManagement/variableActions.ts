@@ -7,7 +7,6 @@ import { useResourceStore } from '@/features/core/resource';
 import { variableCatalogToResourceMetas } from '@/features/core/variable/variableCatalog';
 import { VariableService } from '@/services/variable/variableService';
 import { logger } from '@/utils/appLogger';
-import { uiStore } from '@/features/core/ui/UIStore';
 import {
   captureRevisionedProjectCommandSnapshot,
   type ProjectCommandContext,
@@ -62,7 +61,7 @@ export async function createVariableAction(params: {
     const baseName = params.name || DEFAULT_VARIABLE_NAME;
     const dataType = dataTypeFromKey(params.type ?? 'Int64');
     if (!isVariableDataTypeAllowed(dataType)) {
-      uiStore.showToast('变量类型不能为 Any', 'error');
+      logger.notify.error('变量类型不能为 Any', "UI");
       return null;
     }
     const snapshot = captureRevisionedProjectCommandSnapshot(
@@ -96,7 +95,7 @@ export async function createVariableAction(params: {
   } catch (e) {
     if (isStaleProjectLifecycleError(e) || (context && !context.isCurrent())) return null;
     logger.data.error('Failed to create variable: ' + String(e), 'VariableActions');
-    uiStore.showToast(`变量创建失败: ${e}`, 'error');
+    logger.notify.error(`变量创建失败: ${e}`, "UI");
     return null;
   }
 }
@@ -119,7 +118,7 @@ export async function updateVariableAction(
     if (!previous || expectedRevision == null) return null;
 
     if (data.dataType && !isVariableDataTypeAllowed(data.dataType)) {
-      uiStore.showToast('变量类型不能为 Any', 'error');
+      logger.notify.error('变量类型不能为 Any', "UI");
       return null;
     }
 
@@ -142,7 +141,7 @@ export async function updateVariableAction(
   } catch (e) {
     if (isStaleProjectLifecycleError(e) || (context && !context.isCurrent())) return null;
     logger.data.error('Failed to update variable in backend: ' + String(e), 'VariableActions');
-    uiStore.showToast(`变量更新失败: ${e}`, 'error');
+    logger.notify.error(`变量更新失败: ${e}`, "UI");
     return null;
   }
 }
@@ -178,7 +177,7 @@ export async function deleteVariableAction(id: string): Promise<boolean> {
   } catch (e) {
     if (isStaleProjectLifecycleError(e) || (context && !context.isCurrent())) return false;
     logger.data.error('Failed to delete variable in backend: ' + String(e), 'VariableActions');
-    uiStore.showToast(`变量删除失败: ${e}`, 'error');
+    logger.notify.error(`变量删除失败: ${e}`, "UI");
     return false;
   }
 }

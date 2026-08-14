@@ -1,4 +1,4 @@
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { ReportView } from '@/views/InfoView/ReportView';
 import type { ResultDescriptor } from '../types';
 import { reportResultValuePayload } from '../resultValuePayload';
@@ -34,8 +34,8 @@ export function ReportResultView({
   const content = <ReportView descriptor={payload} report={report} data={data} />;
 
   return (
-    <OverlayScrollbar className="min-h-0 flex-1" direction="vertical">
+    <ScrollArea className="min-h-0 flex-1" orientation="vertical">
       {content}
-    </OverlayScrollbar>
+    </ScrollArea>
   );
 }

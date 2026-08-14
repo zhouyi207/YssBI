@@ -1,6 +1,6 @@
 import { SASH_DRAG_BODY_CLASS, SASH_DRAG_END_EVENT } from '@/views/EditorView/Renderer/sashResizeLogic';
 
-/** Skip layout work during sash drag; flush once when drag ends (OverlayScrollbar pattern). */
+/** Skip layout work during sash drag and flush once when dragging ends. */
 export function createSashAwareResizeHandler(onResize: () => void): {
   handler: () => void;
   flushAfterSashDrag: () => void;

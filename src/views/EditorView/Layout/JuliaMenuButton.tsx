@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
     try {
       setStatus(await JuliaRuntimeService.getWorkerStatus());
     } catch (error) {
-      uiStore.showToast(formatErrorMessage(error), "error");
+      logger.notify.error(formatErrorMessage(error), "UI");
     }
   }, []);
 
@@ -46,12 +47,12 @@ export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
     try {
       const nextStatus = await JuliaRuntimeService.install();
       if (nextStatus.state === "ready") {
-        uiStore.showToast(t("julia.install.success", { version: nextStatus.version }), "success");
+        logger.notify.info(t("julia.install.success", { version: nextStatus.version }), "UI");
       } else {
-        uiStore.showToast(nextStatus.message ?? t("julia.install.failed"), "error");
+        logger.notify.error(nextStatus.message ?? t("julia.install.failed"), "UI");
       }
     } catch (error) {
-      uiStore.showToast(formatErrorMessage(error), "error");
+      logger.notify.error(formatErrorMessage(error), "UI");
     } finally {
       uiStore.finishProgress();
       setLoading(false);

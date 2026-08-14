@@ -14,8 +14,6 @@ use super::localization::{Aliases, Message, Text};
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{CategoryRegistration, TypeRegistration};
 
-#[cfg(test)]
-pub use families::LEGACY_NODE_IDS;
 use families::{Family, NODES, NodeSpec, Stage};
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SqlRemoteTableSelectDialogOptions } from "@/shared/types/ui";
-import { OverlayScrollbar } from "./OverlayScrollbar";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const LABELS: Record<string, string> = {
     postgres: "PostgreSQL",
@@ -50,7 +50,7 @@ export const SqlRemoteTableSelectModal = ({
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-sm break-all">{connectionString}</TooltipContent>
                     </Tooltip>
-                    <OverlayScrollbar className="max-h-60">
+                    <ScrollArea className="max-h-60">
                         <div className="flex flex-col gap-2">
                             {tables.map((table) => (
                                 <Button
@@ -69,7 +69,7 @@ export const SqlRemoteTableSelectModal = ({
                                 </Button>
                             ))}
                         </div>
-                    </OverlayScrollbar>
+                    </ScrollArea>
                 </div>
 
                 <DialogFooter className="justify-center">

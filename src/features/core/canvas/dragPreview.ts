@@ -20,6 +20,25 @@ export function getDragPreview(scope: CanvasPreviewScope): DragPreviewState {
   };
 }
 
-export function subscribeDragPreview(listener: () => void): () => void {
-  return useGraphInteractionStore.subscribe(listener);
+export function subscribeDragPreview(
+  scope: CanvasPreviewScope,
+  listener: () => void,
+): () => void {
+  const initialState = useGraphInteractionStore.getState();
+  let previousInteraction = getCanvasInteraction(
+    initialState,
+    scope.graphPath,
+    scope.groupId,
+  );
+  let previousOverrides = initialState.positionOverrides[scope.graphPath];
+  return useGraphInteractionStore.subscribe((state) => {
+    const nextInteraction = getCanvasInteraction(state, scope.graphPath, scope.groupId);
+    const nextOverrides = state.positionOverrides[scope.graphPath];
+    const interactionChanged = nextInteraction !== previousInteraction;
+    const settledOverridesChanged = nextInteraction.type !== 'draggingNodes'
+      && nextOverrides !== previousOverrides;
+    previousInteraction = nextInteraction;
+    previousOverrides = nextOverrides;
+    if (interactionChanged || settledOverridesChanged) listener();
+  });
 }

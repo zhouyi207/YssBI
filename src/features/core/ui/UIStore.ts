@@ -1,9 +1,4 @@
-import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
-import { LogService } from "@/services/log";
 import {
-    LogLevel,
-    LogType,
-    MessageType,
     DialogOptions,
     InputDialogOptions,
     ImportDialogOptions,
@@ -53,17 +48,6 @@ class UIStore {
 
   getState(): UIState {
     return this.state;
-  }
-
-  // --- Notifications ---
-  showToast(content: string, type: MessageType = "info", _duration = 3000) {
-    const message = typeof content === "string" ? content : formatErrorMessage(content);
-    const level = type === "error"
-      ? LogLevel.Error
-      : type === "warning"
-        ? LogLevel.Warn
-        : LogLevel.Info;
-    void LogService.frontendLog(level, LogType.Notify, message, "UI").catch(() => {});
   }
 
   // --- Modal Stack ---

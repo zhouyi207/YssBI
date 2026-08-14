@@ -9,7 +9,6 @@ import {
   type GraphResourceKind,
 } from '@/features/application/resource/resourceActions';
 import { deleteGraphWithConfirm } from '@/features/application/dataManagement/deleteGraphWithConfirm';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
@@ -71,7 +70,7 @@ export function useGraphManagement(
     } catch (error) {
       const message = formatErrorMessage(error);
       logger.graph.error(`Failed to create event: ${message}`, 'GraphManagement');
-      uiStore.showToast(`创建 Event 失败: ${message}`, 'error');
+      logger.notify.error(`创建 Event 失败: ${message}`, "UI");
       throw error;
     }
   }, [openCreatedGraph, switchSidebarTab]);
@@ -108,7 +107,7 @@ export function useGraphManagement(
     } catch (error) {
       const message = formatErrorMessage(error);
       logger.graph.error(`Failed to create function: ${message}`, 'GraphManagement');
-      uiStore.showToast(`创建 Function 失败: ${message}`, 'error');
+      logger.notify.error(`创建 Function 失败: ${message}`, "UI");
       throw error;
     }
   }, [openCreatedGraph, switchSidebarTab]);

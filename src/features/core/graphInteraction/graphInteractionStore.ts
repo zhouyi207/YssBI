@@ -38,7 +38,7 @@ export type CanvasInteraction =
 
 export interface CanvasInteractionScope { graphPath: GraphPath; groupId: string }
 
-const IDLE_CANVAS_INTERACTION: CanvasInteraction = { type: 'idle' };
+export const IDLE_CANVAS_INTERACTION: CanvasInteraction = { type: 'idle' };
 
 export function getCanvasInteraction(
   state: Pick<GraphInteractionState, 'interactions'>,
@@ -56,6 +56,12 @@ export interface GraphInteractionState {
   interactions: Record<string, CanvasInteraction>;
   startInteraction(graphPath: GraphPath, interaction: Exclude<CanvasInteraction, { type: 'idle' }>): void;
   updateInteraction(graphPath: GraphPath, groupId: string, updater: (interaction: CanvasInteraction) => CanvasInteraction): void;
+  updateNodeDragFrame(
+    graphPath: GraphPath,
+    groupId: string,
+    positions: Record<NodeId, NodePosition>,
+    session: NodeDragSession,
+  ): void;
   finishInteraction(graphPath: GraphPath, groupId: string): CanvasInteraction['type'];
   cancelInteraction(graphPath: GraphPath, groupId: string): CanvasInteraction['type'];
   setPositionOverride(graphPath: GraphPath, nodeId: NodeId, position: NodePosition): void;
@@ -73,6 +79,23 @@ export const useGraphInteractionStore = create<GraphInteractionState>((set, get)
     const current = state.interactions[graphPath] ?? { type: 'idle' };
     if (current.type !== 'idle' && current.session.groupId !== groupId) return state;
     return { interactions: { ...state.interactions, [graphPath]: updater(current) } };
+  }),
+  updateNodeDragFrame: (graphPath, groupId, positions, session) => set((state) => {
+    const current = getCanvasInteraction(state, graphPath, groupId);
+    if (current.type !== 'draggingNodes') return state;
+    return {
+      interactions: {
+        ...state.interactions,
+        [graphPath]: { type: 'draggingNodes', session },
+      },
+      positionOverrides: {
+        ...state.positionOverrides,
+        [graphPath]: {
+          ...state.positionOverrides[graphPath],
+          ...positions,
+        },
+      },
+    };
   }),
   finishInteraction: (graphPath, groupId) => {
     const previous = getCanvasInteraction(get(), graphPath, groupId);

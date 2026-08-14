@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { workbenchPanelHeaderClass } from '../../workbenchPanelHeaderStyles';
 import { detailSectionTitleClass } from './detailStyles';
 
@@ -14,9 +14,9 @@ export function DetailPanelShell({ title, children }: DetailPanelShellProps) {
       <div className={workbenchPanelHeaderClass}>
         <span className={detailSectionTitleClass}>{title}</span>
       </div>
-      <OverlayScrollbar className="flex-1" direction="vertical">
+      <ScrollArea className="flex-1" orientation="vertical">
         <div className="space-y-3 p-3 pb-4">{children}</div>
-      </OverlayScrollbar>
+      </ScrollArea>
     </div>
   );
 }

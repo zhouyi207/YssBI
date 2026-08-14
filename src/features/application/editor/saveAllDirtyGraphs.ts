@@ -3,7 +3,6 @@ import { useEditorTabStore } from "@/features/core/layout/editorTabStore";
 import { useWorksheetStore } from "@/features/core/worksheet/worksheetStore";
 import { collectDirtyGraphTabs } from "@/features/core/layout/tabDirty";
 import { markResourceDirty } from "@/features/core/resource";
-import { uiStore } from "@/features/core/ui/UIStore";
 import { logger } from "@/utils/appLogger";
 import { warnCallFunctionIssuesBeforeSave } from "@/features/application/graphDiagnostics/warnCallFunctionIssues";
 import {
@@ -50,7 +49,7 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
                 `Failed to save graph '${tab.title}' (${tab.graphPath}): ${message}`,
                 "saveAllDirtyGraphs"
             );
-            uiStore.showToast(`保存「${tab.title}」失败：${message}`, "error", 3000);
+            logger.notify.error(`保存「${tab.title}」失败：${message}`, "UI");
             return false;
         }
     }

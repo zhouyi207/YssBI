@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import type { TFunction } from 'i18next';
 import {
   resolveInspectableResult,
@@ -12,13 +13,14 @@ import {
   presentationWindowPayload,
   presentationWindowPayloadFromDescriptor,
 } from '@/features/application/window';
-import { uiStore } from '@/features/core/ui/UIStore';
 import {
   evaluatePinViewState,
   pinViewDisabledTitle,
   type ResolvePinViewTargetParams,
 } from '@/features/core/execution/pinViewTarget';
 import { useExecutionStore } from '@/features/core/execution/useExecutionStore';
+import { useEditorStore } from '@/features/core/editor';
+import { ensureDetailVisible } from '@/features/application/editor/ensureDetailVisible';
 
 export async function launchInspectablePresentation(
   descriptor: ResultDescriptor,
@@ -45,16 +47,21 @@ export async function openInspectableResult(
       : null;
     if (!descriptor) {
       if (!options?.silent) {
-        uiStore.showToast(t('sourceInspector.noSource'), 'error');
+        logger.notify.error(t('sourceInspector.noSource'), "UI");
       }
       return false;
     }
-    await launchInspectablePresentation(descriptor, t('contextMenu.pin.view'));
+    if (descriptor.presentation.kind === 'plot') {
+      await launchInspectablePresentation(descriptor, t('contextMenu.pin.view'));
+    } else {
+      useEditorStore.getState().inspectResult(descriptor.resultId);
+      ensureDetailVisible();
+    }
     return true;
   } catch (error) {
     if (!options?.silent) {
       const message = error instanceof Error ? error.message : String(error);
-      uiStore.showToast(t('toast.viewOpenFailed', { error: message }), 'error');
+      logger.notify.error(t('toast.viewOpenFailed', { error: message }), "UI");
     }
     return false;
   }
@@ -77,7 +84,7 @@ export async function openPinInspectableView(
   }
 
   const hint = pinViewDisabledTitle(disabledReason, t);
-  uiStore.showToast(hint ?? t('sourceInspector.noSource'), 'error');
+  logger.notify.error(hint ?? t('sourceInspector.noSource'), "UI");
   return false;
 }
 

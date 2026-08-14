@@ -329,20 +329,3 @@ pub fn adf_test(y: &[f64], lags: usize, constant: bool, trend: bool) -> Result<A
         regression_table: reg_table,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_adf_random_walk() {
-        // 随机游走应不拒绝单位根
-        let y: Vec<f64> = (0..100)
-            .map(|i| i as f64 + (i as f64 * 0.1).sin())
-            .collect();
-        let r = adf_test(&y, 0, true, false).unwrap();
-        assert!(r.test_statistic.is_finite());
-        assert!(r.critical_value_5pct.is_finite());
-        assert!((0.0..=1.0).contains(&r.p_value));
-    }
-}

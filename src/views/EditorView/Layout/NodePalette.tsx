@@ -11,8 +11,9 @@ import {
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export function nodePaletteItemKey(item: LocalizedCatalogItem): string {
   return item.creation.kind === 'resourceBound'
@@ -125,12 +126,16 @@ export function NodePalette({
             placeholder={t('canvas.nodePalette.searchPlaceholder')}
             onChange={(event) => setQuery(event.target.value)}
           />
-          <OverlayScrollbar className="max-h-80 min-h-0 flex-1">
+          <ScrollArea className="max-h-80 min-h-0 flex-1">
             <div className="space-y-2 pr-2">
               {items.length === 0 ? (
-                <p className="px-2 py-3 text-center text-muted-foreground">
-                  {t('canvas.nodePalette.noMatches')}
-                </p>
+                <Empty className="gap-1 rounded-none px-2 py-4">
+                  <EmptyHeader>
+                    <EmptyTitle className="text-xs font-normal text-muted-foreground">
+                      {t('canvas.nodePalette.noMatches')}
+                    </EmptyTitle>
+                  </EmptyHeader>
+                </Empty>
               ) : categoryTree.map((node) => (
                 <CatalogCategorySection
                   key={node.category.categoryId}
@@ -141,7 +146,7 @@ export function NodePalette({
                 />
               ))}
             </div>
-          </OverlayScrollbar>
+          </ScrollArea>
         </>
       )}
     </Card>

@@ -1,16 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/features/core/ui/UIStore', () => ({
-  uiStore: {
-    showToast: vi.fn(),
-  },
-}));
 
 vi.mock('./switchEditorTab', () => ({
   activateCurrentEditorTab: vi.fn(),
 }));
 
-import { uiStore } from '@/features/core/ui/UIStore';
 import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import { activateCurrentEditorTab } from './switchEditorTab';
 import { bootstrapEditorGraphSession } from './bootstrapEditorGraphSession';
@@ -27,12 +21,11 @@ describe('bootstrapEditorGraphSession', () => {
     useEditorTabStore.setState({ registry: {}, placements: {} });
   });
 
-  it('does not warn when the restored group has no active tab', async () => {
+  it('returns true when the restored group has no active tab', async () => {
     const ok = await bootstrapEditorGraphSession('default_editor');
 
     expect(ok).toBe(true);
     expect(activateCurrentEditorTab).not.toHaveBeenCalled();
-    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 
   it('returns true on first successful activation', async () => {
@@ -46,10 +39,9 @@ describe('bootstrapEditorGraphSession', () => {
 
     expect(ok).toBe(true);
     expect(activateCurrentEditorTab).toHaveBeenCalledTimes(1);
-    expect(uiStore.showToast).not.toHaveBeenCalled();
   });
 
-  it('retries transient failures and surfaces a toast when all attempts fail', async () => {
+  it('retries transient failures and returns false when all attempts fail', async () => {
     seedActiveGraphTab();
     vi.mocked(activateCurrentEditorTab).mockResolvedValue(false);
 
@@ -60,10 +52,5 @@ describe('bootstrapEditorGraphSession', () => {
 
     expect(ok).toBe(false);
     expect(activateCurrentEditorTab).toHaveBeenCalledTimes(3);
-    expect(uiStore.showToast).toHaveBeenCalledWith(
-      '当前编辑器图未能加载，请重新点击标签页或画布',
-      'warning',
-      4000,
-    );
   });
 });

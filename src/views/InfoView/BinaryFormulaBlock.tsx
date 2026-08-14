@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { InfoSegmentedToggle } from './shared/InfoViewControls';
 import { FormulaMappingTable } from './shared/FormulaMappingTable';
 import { formatNum } from './shared/utils';
@@ -153,12 +153,12 @@ const BinaryFormulaBlock: React.FC<BinaryFormulaBlockProps> = ({ modelType, endo
       </div>
 
       {/* Formula */}
-      <OverlayScrollbar direction="both">
+      <ScrollArea orientation="both">
         <div
           className="px-6 py-5 min-w-full [&_.katex]:text-foreground [&_.katex]:text-[1.05em] [&_.katex-display]:py-3 [&_.katex-display]:leading-relaxed"
           dangerouslySetInnerHTML={{ __html: (mode === 'expanded' ? expandedHtml : symbolicHtml) || '' }}
         />
-      </OverlayScrollbar>
+      </ScrollArea>
 
       {/* Mapping table (symbolic mode only) */}
       {mode === 'symbolic' && (

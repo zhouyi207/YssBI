@@ -81,10 +81,9 @@ function isDynamicPortBindingShape(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (value.kind === 'user_created') return hasExactKeys(value, ['kind', 'order']);
   if (value.kind === 'resolved') {
-    return isDynamicMemberLocatorShape(value.origin)
-      && (hasExactKeys(value, ['kind', 'origin', 'order'])
-        || (hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])
-          && isLastKnownPortMetadataShape(value.last_known)));
+    return hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])
+      && isDynamicMemberLocatorShape(value.origin)
+      && isLastKnownPortMetadataShape(value.last_known);
   }
   return value.kind === 'orphan'
     && hasExactKeys(value, ['kind', 'origin', 'order', 'last_known'])

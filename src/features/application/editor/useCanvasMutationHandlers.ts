@@ -6,7 +6,6 @@ import type {
 } from '@/features/core/canvas';
 import { executeSafeGraphMutationOutcome } from '@/features/application/editorMutation/safeGraphMutation';
 import { graphMutationErrorMessageKey } from '@/features/application/editorMutation/graphMutationError';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { logger } from '@/utils/appLogger';
 import { insertRerouteAtConnection } from './edgeOperations';
 import { ensureGraphMutationPortRegistered } from '@/features/application/editorMutation/registerGraphMutationPort';
@@ -56,7 +55,7 @@ export function createCanvasMutationHandlers(): CanvasInteractionHandlers {
         `Graph mutation failed graphPath=${graphPath} intent=${intent}`,
         'CanvasInteraction',
       );
-      uiStore.showToast(message, 'error');
+      logger.notify.error(message, "UI");
     },
   };
 }

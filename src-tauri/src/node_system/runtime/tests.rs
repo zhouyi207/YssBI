@@ -1201,7 +1201,7 @@ fn checked_int64_float_promotion_rejects_inexact_values() {
     );
 }
 
-fn task_8_tolerance() -> NumericTolerance {
+fn numeric_test_tolerance() -> NumericTolerance {
     NumericTolerance {
         absolute: 1e-12,
         relative: 1e-9,
@@ -1221,7 +1221,7 @@ fn numeric_view(
 
 #[test]
 fn approximate_equality_handles_special_values_and_exact_ints() {
-    let tolerance = task_8_tolerance();
+    let tolerance = numeric_test_tolerance();
 
     assert!(approximately_equal(0.0, 5e-13, tolerance));
     assert!(approximately_equal(1e9, 1e9 + 0.5, tolerance));
@@ -1259,7 +1259,7 @@ fn mixed_numeric_comparison_rejects_lossy_int64_conversion() {
     let error = numeric_equal(
         NumericValue::Int64(9_007_199_254_740_993),
         NumericValue::Float64(9_007_199_254_740_992.0),
-        task_8_tolerance(),
+        numeric_test_tolerance(),
     )
     .unwrap_err();
 
@@ -5610,18 +5610,14 @@ fn assert_parallel_class_limit(class: WorkloadClass, policy: SchedulingPolicy) {
 }
 
 #[test]
-fn parallel_scheduler_enforces_hard_cpu_limit_after_blocked_admission() {
-    assert_parallel_class_limit(WorkloadClass::Cpu, parallel_policy(2, 1, 1));
-}
-
-#[test]
-fn parallel_scheduler_enforces_hard_io_limit_after_blocked_admission() {
-    assert_parallel_class_limit(WorkloadClass::Io, parallel_policy(1, 2, 1));
-}
-
-#[test]
-fn parallel_scheduler_enforces_hard_adapter_limit_after_blocked_admission() {
-    assert_parallel_class_limit(WorkloadClass::AdapterIo, parallel_policy(1, 1, 2));
+fn parallel_scheduler_enforces_hard_class_limits_after_blocked_admission() {
+    for (class, policy) in [
+        (WorkloadClass::Cpu, parallel_policy(2, 1, 1)),
+        (WorkloadClass::Io, parallel_policy(1, 2, 1)),
+        (WorkloadClass::AdapterIo, parallel_policy(1, 1, 2)),
+    ] {
+        assert_parallel_class_limit(class, policy);
+    }
 }
 
 #[test]
@@ -6747,23 +6743,18 @@ fn run_promoted_retry_admission_rejection(rejection: AdmissionRejection) {
 }
 
 #[test]
-fn initial_admission_cancellation_rolls_back_before_queue_submission() {
-    run_initial_admission_rejection(AdmissionRejection::Cancellation);
-}
-
-#[test]
-fn initial_admission_deadline_rolls_back_before_queue_submission() {
-    run_initial_admission_rejection(AdmissionRejection::Deadline);
-}
-
-#[test]
-fn promoted_retry_admission_cancellation_rolls_back_before_queue_submission() {
-    run_promoted_retry_admission_rejection(AdmissionRejection::Cancellation);
-}
-
-#[test]
-fn promoted_retry_admission_deadline_rolls_back_before_queue_submission() {
-    run_promoted_retry_admission_rejection(AdmissionRejection::Deadline);
+fn admission_rejections_roll_back_before_queue_submission() {
+    for run_rejection in [
+        run_initial_admission_rejection as fn(AdmissionRejection),
+        run_promoted_retry_admission_rejection,
+    ] {
+        for rejection in [
+            AdmissionRejection::Cancellation,
+            AdmissionRejection::Deadline,
+        ] {
+            run_rejection(rejection);
+        }
+    }
 }
 
 #[test]

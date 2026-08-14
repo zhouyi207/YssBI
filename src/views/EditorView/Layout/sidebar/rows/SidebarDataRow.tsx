@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscDatabase } from 'react-icons/vsc';
@@ -8,7 +9,6 @@ import {
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { findResourceNodeSpawnTemplate } from '@/features/application/editor/canvasDrop';
 import { RESOURCE_CATALOG_REFRESH_MESSAGE } from '@/features/application/editor/editorMutationAvailability';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { openDatabaseEditorWindow } from '@/features/application/window';
 import { focusDetail } from '@/features/core/editor/detail/detailFocusCommands';
 import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
@@ -59,7 +59,7 @@ export const SidebarDataRow = memo(function SidebarDataRow({
         refreshCatalog: refresh,
       });
     }
-    uiStore.showToast(RESOURCE_CATALOG_REFRESH_MESSAGE, 'warning');
+    logger.notify.warn(RESOURCE_CATALOG_REFRESH_MESSAGE, "UI");
   };
 
   return (

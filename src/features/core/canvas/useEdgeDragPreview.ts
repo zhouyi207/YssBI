@@ -68,6 +68,7 @@ export function useEdgeDragPreview(
       updateEdgePaths(svg, currentEdges, getPos, true, preview.dragNodeIds);
     };
 
-    return subscribeDragPreview(sync);
+    sync();
+    return subscribeDragPreview(scope, sync);
   }, [svgRef, scope.graphPath, scope.groupId]);
 }

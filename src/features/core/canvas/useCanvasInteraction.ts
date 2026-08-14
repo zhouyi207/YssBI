@@ -88,13 +88,13 @@ export function useCanvasInteraction({
   const contextMenu = useEditorStore((state) => uiEnabled ? state.contextMenu : null);
   const setContextMenu = useEditorStore((state) => state.setContextMenu);
   const activeGraphPath = activeTabIdRef.current;
-  const pendingInteraction = useGraphInteractionStore((state) =>
-    activeGraphPath
-      ? getCanvasInteraction(state, activeGraphPath, activeGroupIdRef.current)
-      : { type: 'idle' as const });
-  const pendingConnection = pendingInteraction?.type === 'pendingNodeCreation'
-    ? pendingInteraction.session.source as Pin | null
-    : null;
+  const pendingConnection = useGraphInteractionStore((state) => {
+    if (!activeGraphPath) return null;
+    const interaction = getCanvasInteraction(state, activeGraphPath, activeGroupIdRef.current);
+    return interaction.type === 'pendingNodeCreation'
+      ? interaction.session.source as Pin
+      : null;
+  });
   const setSelectedNodeIdsRef = useRef(setSelectedNodeIds);
   setSelectedNodeIdsRef.current = setSelectedNodeIds;
 

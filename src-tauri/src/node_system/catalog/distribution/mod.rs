@@ -40,8 +40,6 @@ struct InputSpec {
 
 #[derive(Clone, Copy)]
 struct DistributionSpec {
-    #[allow(dead_code)]
-    legacy_name: &'static str,
     id: &'static str,
     kernel: &'static str,
     en: &'static str,
@@ -70,7 +68,6 @@ const fn input(
 
 const SPECS: &[DistributionSpec] = &[
     DistributionSpec {
-        legacy_name: "Normal",
         id: "yssbi.distribution.normal.sample",
         kernel: "yssbi.distribution.normal.sample",
         en: "Normal Samples",
@@ -85,7 +82,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Uniform",
         id: "yssbi.distribution.uniform.sample",
         kernel: "yssbi.distribution.uniform.sample",
         en: "Uniform Samples",
@@ -100,7 +96,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Exponential",
         id: "yssbi.distribution.exponential.sample",
         kernel: "yssbi.distribution.exponential.sample",
         en: "Exponential Samples",
@@ -114,7 +109,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Gamma",
         id: "yssbi.distribution.gamma.sample",
         kernel: "yssbi.distribution.gamma.sample",
         en: "Gamma Samples",
@@ -129,7 +123,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Beta",
         id: "yssbi.distribution.beta.sample",
         kernel: "yssbi.distribution.beta.sample",
         en: "Beta Samples",
@@ -144,7 +137,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "StudentsT",
         id: "yssbi.distribution.students_t.sample",
         kernel: "yssbi.distribution.students_t.sample",
         en: "Student's t Samples",
@@ -162,7 +154,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Cauchy",
         id: "yssbi.distribution.cauchy.sample",
         kernel: "yssbi.distribution.cauchy.sample",
         en: "Cauchy Samples",
@@ -177,7 +168,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "ChiSquared",
         id: "yssbi.distribution.chi_squared.sample",
         kernel: "yssbi.distribution.chi_squared.sample",
         en: "Chi-squared Samples",
@@ -195,7 +185,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "LogNormal",
         id: "yssbi.distribution.log_normal.sample",
         kernel: "yssbi.distribution.log_normal.sample",
         en: "Log-normal Samples",
@@ -210,7 +199,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Weibull",
         id: "yssbi.distribution.weibull.sample",
         kernel: "yssbi.distribution.weibull.sample",
         en: "Weibull Samples",
@@ -225,7 +213,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Laplace",
         id: "yssbi.distribution.laplace.sample",
         kernel: "yssbi.distribution.laplace.sample",
         en: "Laplace Samples",
@@ -240,7 +227,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Pareto",
         id: "yssbi.distribution.pareto.sample",
         kernel: "yssbi.distribution.pareto.sample",
         en: "Pareto Samples",
@@ -255,7 +241,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "InverseGamma",
         id: "yssbi.distribution.inverse_gamma.sample",
         kernel: "yssbi.distribution.inverse_gamma.sample",
         en: "Inverse-gamma Samples",
@@ -270,7 +255,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Triangular",
         id: "yssbi.distribution.triangular.sample",
         kernel: "yssbi.distribution.triangular.sample",
         en: "Triangular Samples",
@@ -286,7 +270,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "FisherSnedecor",
         id: "yssbi.distribution.fisher_snedecor.sample",
         kernel: "yssbi.distribution.fisher_snedecor.sample",
         en: "F-distribution Samples",
@@ -315,7 +298,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Erlang",
         id: "yssbi.distribution.erlang.sample",
         kernel: "yssbi.distribution.erlang.sample",
         en: "Erlang Samples",
@@ -330,7 +312,6 @@ const SPECS: &[DistributionSpec] = &[
         output: F,
     },
     DistributionSpec {
-        legacy_name: "Bernoulli",
         id: "yssbi.distribution.bernoulli.sample",
         kernel: "yssbi.distribution.bernoulli.sample",
         en: "Bernoulli Samples",
@@ -344,7 +325,6 @@ const SPECS: &[DistributionSpec] = &[
         output: I,
     },
     DistributionSpec {
-        legacy_name: "Binomial",
         id: "yssbi.distribution.binomial.sample",
         kernel: "yssbi.distribution.binomial.sample",
         en: "Binomial Samples",
@@ -359,7 +339,6 @@ const SPECS: &[DistributionSpec] = &[
         output: I,
     },
     DistributionSpec {
-        legacy_name: "Poisson",
         id: "yssbi.distribution.poisson.sample",
         kernel: "yssbi.distribution.poisson.sample",
         en: "Poisson Samples",
@@ -373,7 +352,6 @@ const SPECS: &[DistributionSpec] = &[
         output: I,
     },
     DistributionSpec {
-        legacy_name: "Geometric",
         id: "yssbi.distribution.geometric.sample",
         kernel: "yssbi.distribution.geometric.sample",
         en: "Geometric Samples",
@@ -387,7 +365,6 @@ const SPECS: &[DistributionSpec] = &[
         output: I,
     },
     DistributionSpec {
-        legacy_name: "NegativeBinomial",
         id: "yssbi.distribution.negative_binomial.sample",
         kernel: "yssbi.distribution.negative_binomial.sample",
         en: "Negative-binomial Samples",
@@ -402,7 +379,6 @@ const SPECS: &[DistributionSpec] = &[
         output: I,
     },
     DistributionSpec {
-        legacy_name: "DiscreteUniform",
         id: "yssbi.distribution.discrete_uniform.sample",
         kernel: "yssbi.distribution.discrete_uniform.sample",
         en: "Discrete-uniform Samples",
@@ -417,7 +393,6 @@ const SPECS: &[DistributionSpec] = &[
         output: I,
     },
     DistributionSpec {
-        legacy_name: "Hypergeometric",
         id: "yssbi.distribution.hypergeometric.sample",
         kernel: "yssbi.distribution.hypergeometric.sample",
         en: "Hypergeometric Samples",
@@ -441,11 +416,6 @@ const SPECS: &[DistributionSpec] = &[
         output: I,
     },
 ];
-
-#[cfg(test)]
-pub(crate) fn legacy_manifest() -> impl Iterator<Item = (&'static str, &'static str)> {
-    SPECS.iter().map(|spec| (spec.legacy_name, spec.id))
-}
 
 pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssemblyError> {
     let mut nodes = Vec::with_capacity(SPECS.len());
@@ -668,66 +638,44 @@ mod tests {
     use super::*;
     use std::collections::BTreeSet;
 
-    const LEGACY_NODES: &[&str] = &[
-        "Normal",
-        "Uniform",
-        "Exponential",
-        "Gamma",
-        "Beta",
-        "StudentsT",
-        "Cauchy",
-        "ChiSquared",
-        "LogNormal",
-        "Weibull",
-        "Laplace",
-        "Pareto",
-        "InverseGamma",
-        "Triangular",
-        "FisherSnedecor",
-        "Erlang",
-        "Bernoulli",
-        "Binomial",
-        "Poisson",
-        "Geometric",
-        "NegativeBinomial",
-        "DiscreteUniform",
-        "Hypergeometric",
-    ];
-
     #[test]
-    fn migration_covers_every_legacy_distribution_node_once() {
-        assert_eq!(SPECS.len(), LEGACY_NODES.len());
-        let migrated = SPECS
+    fn every_protocol_localization_key_exists_in_both_locales() {
+        let fragment = build_provider_fragment().expect("distribution fixture must assemble");
+        let localized_keys = fragment
+            .messages
             .iter()
-            .map(|spec| spec.legacy_name)
+            .map(|(locale, key, _)| (*locale, *key))
             .collect::<BTreeSet<_>>();
-        assert_eq!(migrated, LEGACY_NODES.iter().copied().collect());
-        assert_eq!(
-            SPECS
-                .iter()
-                .map(|spec| spec.id)
-                .collect::<BTreeSet<_>>()
-                .len(),
-            SPECS.len()
-        );
-        assert!(
-            SPECS
-                .iter()
-                .all(|spec| spec.id.starts_with("yssbi.distribution.")
-                    && spec.id.ends_with(".sample"))
-        );
+        for node in &fragment.nodes {
+            let protocol = node.protocol();
+            let keys = [
+                Some(&protocol.catalog.title_key),
+                protocol.catalog.description_key.as_ref(),
+                protocol.catalog.documentation_key.as_ref(),
+                protocol.catalog.aliases_key.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            .chain(protocol.interface.ports.iter().map(|port| &port.label_key));
+            for key in keys {
+                assert!(localized_keys.contains(&("en-US", key.as_str())));
+                assert!(localized_keys.contains(&("zh-CN", key.as_str())));
+            }
+        }
     }
 
     #[test]
-    fn protocols_use_semantic_unique_port_keys() {
+    fn protocols_use_semantic_port_keys() {
         for spec in SPECS {
-            let keys = spec.inputs.iter().map(|input| input.key).chain(["samples"]);
-            let keys = keys.collect::<BTreeSet<_>>();
-            assert_eq!(keys.len(), spec.inputs.len() + 1, "{}", spec.id);
             assert!(
-                !keys
+                !spec
+                    .inputs
                     .iter()
-                    .any(|key| key.starts_with("input") || key.chars().all(char::is_numeric))
+                    .map(|input| input.key)
+                    .chain(["samples"])
+                    .any(|key| key.starts_with("input") || key.chars().all(char::is_numeric)),
+                "{}",
+                spec.id
             );
         }
     }

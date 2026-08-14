@@ -1,4 +1,4 @@
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   detailAccentMonoTextClass,
@@ -35,7 +35,7 @@ export function DetailColumnList({
 
   if (variant === 'table') {
     return (
-      <OverlayScrollbar className={detailNestedScrollClass} direction="vertical">
+      <ScrollArea className={detailNestedScrollClass} orientation="vertical">
         <Table className={detailNestedTableClass}>
           {(columnLabel || typeLabel) && (
             <TableHeader>
@@ -54,7 +54,7 @@ export function DetailColumnList({
             ))}
           </TableBody>
         </Table>
-      </OverlayScrollbar>
+      </ScrollArea>
     );
   }
 

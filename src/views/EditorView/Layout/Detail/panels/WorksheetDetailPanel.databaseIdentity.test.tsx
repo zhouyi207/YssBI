@@ -14,8 +14,8 @@ vi.mock('react-i18next', () => ({
 vi.mock('@/features/application/editor', () => ({
   useEditorSessionResources: () => ({ dataframes: {} }),
 }));
-vi.mock('@/shared/ui/OverlayScrollbar', () => ({
-  OverlayScrollbar: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+vi.mock('@/components/ui/scroll-area', () => ({
+  ScrollArea: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })

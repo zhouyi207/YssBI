@@ -157,7 +157,7 @@ components/ui and shared/ui → reusable UI
 - `features/domain/`：目前较薄，主要放纯函数、节点命名、sidebar 常量等。
 - `services/`：Tauri `invoke` 封装，是前端访问后端命令的主要边界。
 - `components/ui/`：shadcn primitives。
-- `shared/ui/`：应用级共享组件，例如 `OverlayScrollbar`、Toast、Modal、SQL/导入相关 modal。
+- `shared/ui/`：应用级共享组件，例如 Toast、Modal、SQL/导入相关 modal；通用滚动区域使用 `components/ui/scroll-area.tsx`。
 
 ### 4.5 状态管理
 
@@ -673,7 +673,7 @@ App mount
 2. 在 `src/app/App.tsx` 增加 route。
 3. 如需独立 Tauri window，通过 window service 或 Tauri WebviewWindow 打开对应 hash route。
 4. 普通业务提示使用统一 Toast，不使用原生 `alert/confirm/prompt`。
-5. 用户可滚动纵向区域使用 `OverlayScrollbar`。
+5. 用户可滚动区域使用 `components/ui/scroll-area.tsx` 提供的 `ScrollArea`。
 
 ## 15. 已知架构风险
 

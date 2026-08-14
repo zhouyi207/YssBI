@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscSearch } from 'react-icons/vsc';
+import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
@@ -8,7 +9,7 @@ import {
   usePinResultSearch,
   type PinResultSearchEntry,
 } from '@/features/application/execution/usePinResultSearch';
-import { OverlayScrollbar } from '@/shared/ui/OverlayScrollbar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
@@ -181,11 +182,15 @@ export function PinResultSearch({ graphPath }: PinResultSearchProps) {
         {showPanel ? (
           <div className="pin-result-search-panel border-t border-[var(--border-color)]">
             {entries.length === 0 ? (
-              <div className="px-4 py-6 text-center text-xs italic text-muted-foreground">
-                {t('canvas.pinResultSearch.noMatches')}
-              </div>
+              <Empty className="gap-1 rounded-none px-4 py-6">
+                <EmptyHeader>
+                  <EmptyTitle className="text-xs font-normal italic text-muted-foreground">
+                    {t('canvas.pinResultSearch.noMatches')}
+                  </EmptyTitle>
+                </EmptyHeader>
+              </Empty>
             ) : (
-              <OverlayScrollbar direction="vertical" className="max-h-64 py-1">
+              <ScrollArea orientation="vertical" className="max-h-64 py-1">
                 <div className="flex flex-col gap-0.5 px-1 pb-1">
                   {entries.map((entry) => (
                     <PinResultSearchRow
@@ -195,7 +200,7 @@ export function PinResultSearch({ graphPath }: PinResultSearchProps) {
                     />
                   ))}
                 </div>
-              </OverlayScrollbar>
+              </ScrollArea>
             )}
           </div>
         ) : null}

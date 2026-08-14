@@ -1,3 +1,4 @@
+import { logger } from "@/utils/appLogger";
 import type { DragEndEvent } from '@dnd-kit/core';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { handleGraphResourceDrop } from '@/features/application/editor/handleGraphResourceDrop';
@@ -21,7 +22,6 @@ import {
   resolveFunctionTabForDrop,
   tryDropFunctionIntoEventCanvas,
 } from '@/features/application/editor/dropFunctionIntoEventEditor';
-import { uiStore } from '@/features/core/ui/UIStore';
 import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 import { useSidebarDragStore, canvasDropHandlerStore } from '@/features/core/sidebarDrag';
 import { isEditorDragCopyOperation } from '@/features/core/layout/editorDragModifiers';
@@ -86,7 +86,7 @@ async function executeSidebarSpawnDragEnd(
         sidebarResource,
         overData.targetNodeId,
         { insertIndex: resolveTabBarDropIndex(overData.targetNodeId, overData.targetTabIndex) },
-      ).catch((error) => uiStore.showToast(formatErrorMessage(error), 'error'));
+      ).catch((error) => logger.notify.error(formatErrorMessage(error), "UI"));
     } else if (preview?.kind === 'function-into-event') {
       const groupId = resolveCanvasDropGroupId(event, preview);
       const dropState = resolveDropIntoEditorDragState(
@@ -106,12 +106,12 @@ async function executeSidebarSpawnDragEnd(
         sidebarResource,
         preview.targetGroupId,
         { edge: preview.edge },
-      ).catch((error) => uiStore.showToast(formatErrorMessage(error), 'error'));
+      ).catch((error) => logger.notify.error(formatErrorMessage(error), "UI"));
     } else if (preview?.kind === 'merge') {
       void handleGraphResourceDrop(
         sidebarResource,
         preview.targetGroupId,
-      ).catch((error) => uiStore.showToast(formatErrorMessage(error), 'error'));
+      ).catch((error) => logger.notify.error(formatErrorMessage(error), "UI"));
     }
     clearEditorDragSession();
     return;

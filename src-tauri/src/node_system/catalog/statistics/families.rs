@@ -1,4 +1,4 @@
-//! Stable inventory for statistical node families formerly registered under DataFrame.
+//! Stable inventory for statistical node families.
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Stage {
@@ -30,8 +30,6 @@ pub(super) enum Family {
 
 #[derive(Clone, Copy)]
 pub(super) struct NodeSpec {
-    #[allow(dead_code)]
-    pub legacy_name: &'static str,
     pub id: &'static str,
     pub title: &'static str,
     pub zh_title: &'static str,
@@ -41,61 +39,8 @@ pub(super) struct NodeSpec {
     pub stage: Stage,
 }
 
-#[cfg(test)]
-pub const LEGACY_NODE_IDS: &[(&str, &str)] = &[
-    ("DF & ADF", "yssbi.statistics.adf.test"),
-    ("DF & ADF Summary", "yssbi.statistics.adf.summary"),
-    ("VCE: NonRobust", "yssbi.statistics.ols.vce.non_robust"),
-    ("VCE: HC0", "yssbi.statistics.ols.vce.hc0"),
-    ("VCE: HC1 (robust)", "yssbi.statistics.ols.vce.hc1"),
-    ("VCE: HC2", "yssbi.statistics.ols.vce.hc2"),
-    ("VCE: HC3", "yssbi.statistics.ols.vce.hc3"),
-    (
-        "OLS Fixed Scale Config",
-        "yssbi.statistics.ols.vce.fixed_scale",
-    ),
-    ("OLS Cluster Config", "yssbi.statistics.ols.vce.cluster"),
-    ("OLS HAC Config", "yssbi.statistics.ols.vce.hac"),
-    ("VCE: Newey", "yssbi.statistics.ols.vce.newey_west"),
-    ("OLS & WLS Configure", "yssbi.statistics.ols.configure"),
-    ("OLS", "yssbi.statistics.ols.fit"),
-    ("OLS Summary", "yssbi.statistics.ols.summary"),
-    ("GLS Configure", "yssbi.statistics.gls.configure"),
-    ("GLS", "yssbi.statistics.gls.fit"),
-    ("GLS Summary", "yssbi.statistics.gls.summary"),
-    ("IV:2SLS Configure", "yssbi.statistics.iv.2sls.configure"),
-    ("IV:2SLS Summary", "yssbi.statistics.iv.2sls.summary"),
-    ("IV:LIML Summary", "yssbi.statistics.iv.liml.summary"),
-    ("Logit Configure", "yssbi.statistics.logit.configure"),
-    ("Logit", "yssbi.statistics.logit.fit"),
-    ("Logit Summary", "yssbi.statistics.logit.summary"),
-    ("Panel Configure", "yssbi.statistics.panel.configure"),
-    (
-        "VCE: Cluster (by Entity)",
-        "yssbi.statistics.panel.vce.cluster_entity",
-    ),
-    ("Panel Summary", "yssbi.statistics.panel.summary"),
-    ("Panel DID (TWFE)", "yssbi.statistics.panel.did.twfe"),
-    ("Prais Configure", "yssbi.statistics.prais.configure"),
-    ("Prais", "yssbi.statistics.prais.fit"),
-    ("Prais Summary", "yssbi.statistics.prais.summary"),
-    ("Predict", "yssbi.statistics.linear.predict"),
-    ("Logit Predict", "yssbi.statistics.logit.predict"),
-    ("Probit Predict", "yssbi.statistics.probit.predict"),
-    ("Probit Configure", "yssbi.statistics.probit.configure"),
-    ("Probit", "yssbi.statistics.probit.fit"),
-    ("Probit Summary", "yssbi.statistics.probit.summary"),
-    ("VAR Lag Order (varsoc)", "yssbi.statistics.var.lag_order"),
-    ("VAR Summary", "yssbi.statistics.var.summary"),
-    ("VEC (Cointegration)", "yssbi.statistics.vec.fit"),
-    ("VECRANK (Johansen)", "yssbi.statistics.vec.rank_test"),
-    ("WLS", "yssbi.statistics.wls.fit"),
-    ("WLS Summary", "yssbi.statistics.wls.summary"),
-];
-
 pub(super) const NODES: &[NodeSpec] = &[
     node(
-        "DF & ADF",
         "yssbi.statistics.adf.test",
         "Dickey–Fuller / Augmented Dickey–Fuller",
         "DF / ADF 单位根检验",
@@ -105,7 +50,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Test,
     ),
     node(
-        "DF & ADF Summary",
         "yssbi.statistics.adf.summary",
         "DF / ADF Summary",
         "DF / ADF 汇总",
@@ -115,7 +59,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "VCE: NonRobust",
         "yssbi.statistics.ols.vce.non_robust",
         "Non-robust VCE",
         "非稳健协方差",
@@ -125,7 +68,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Constant,
     ),
     node(
-        "VCE: HC0",
         "yssbi.statistics.ols.vce.hc0",
         "HC0 VCE",
         "HC0 协方差",
@@ -135,7 +77,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Constant,
     ),
     node(
-        "VCE: HC1 (robust)",
         "yssbi.statistics.ols.vce.hc1",
         "HC1 Robust VCE",
         "HC1 稳健协方差",
@@ -145,7 +86,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Constant,
     ),
     node(
-        "VCE: HC2",
         "yssbi.statistics.ols.vce.hc2",
         "HC2 VCE",
         "HC2 协方差",
@@ -155,7 +95,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Constant,
     ),
     node(
-        "VCE: HC3",
         "yssbi.statistics.ols.vce.hc3",
         "HC3 VCE",
         "HC3 协方差",
@@ -165,7 +104,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Constant,
     ),
     node(
-        "OLS Fixed Scale Config",
         "yssbi.statistics.ols.vce.fixed_scale",
         "Fixed-scale VCE",
         "固定尺度协方差",
@@ -175,7 +113,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "OLS Cluster Config",
         "yssbi.statistics.ols.vce.cluster",
         "Clustered VCE",
         "聚类协方差",
@@ -185,7 +122,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "OLS HAC Config",
         "yssbi.statistics.ols.vce.hac",
         "HAC VCE",
         "HAC 协方差",
@@ -195,7 +131,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "VCE: Newey",
         "yssbi.statistics.ols.vce.newey_west",
         "Newey–West VCE",
         "Newey–West 协方差",
@@ -205,7 +140,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "OLS & WLS Configure",
         "yssbi.statistics.ols.configure",
         "Configure OLS / WLS",
         "配置 OLS / WLS",
@@ -219,7 +153,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "OLS",
         "yssbi.statistics.ols.fit",
         "Fit OLS",
         "拟合 OLS",
@@ -229,7 +162,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Fit,
     ),
     node(
-        "OLS Summary",
         "yssbi.statistics.ols.summary",
         "OLS Summary",
         "OLS 汇总",
@@ -239,7 +171,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "GLS Configure",
         "yssbi.statistics.gls.configure",
         "Configure GLS",
         "配置 GLS",
@@ -249,7 +180,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "GLS",
         "yssbi.statistics.gls.fit",
         "Fit GLS",
         "拟合 GLS",
@@ -259,7 +189,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Fit,
     ),
     node(
-        "GLS Summary",
         "yssbi.statistics.gls.summary",
         "GLS Summary",
         "GLS 汇总",
@@ -269,7 +198,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "IV:2SLS Configure",
         "yssbi.statistics.iv.2sls.configure",
         "Configure IV 2SLS",
         "配置工具变量 2SLS",
@@ -279,7 +207,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "IV:2SLS Summary",
         "yssbi.statistics.iv.2sls.summary",
         "IV 2SLS Summary",
         "工具变量 2SLS 汇总",
@@ -289,7 +216,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "IV:LIML Summary",
         "yssbi.statistics.iv.liml.summary",
         "IV LIML Summary",
         "工具变量 LIML 汇总",
@@ -303,7 +229,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "Logit Configure",
         "yssbi.statistics.logit.configure",
         "Configure Logit",
         "配置 Logit",
@@ -313,7 +238,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "Logit",
         "yssbi.statistics.logit.fit",
         "Fit Logit",
         "拟合 Logit",
@@ -323,7 +247,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Fit,
     ),
     node(
-        "Logit Summary",
         "yssbi.statistics.logit.summary",
         "Logit Summary",
         "Logit 汇总",
@@ -333,7 +256,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "Panel Configure",
         "yssbi.statistics.panel.configure",
         "Configure Panel Model",
         "配置面板模型",
@@ -343,7 +265,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "VCE: Cluster (by Entity)",
         "yssbi.statistics.panel.vce.cluster_entity",
         "Entity-clustered VCE",
         "个体聚类协方差",
@@ -353,7 +274,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Constant,
     ),
     node(
-        "Panel Summary",
         "yssbi.statistics.panel.summary",
         "Panel Model Summary",
         "面板模型汇总",
@@ -363,7 +283,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "Panel DID (TWFE)",
         "yssbi.statistics.panel.did.twfe",
         "Panel DID (TWFE)",
         "面板双重差分（双向固定效应）",
@@ -378,7 +297,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "Prais Configure",
         "yssbi.statistics.prais.configure",
         "Configure Prais–Winsten",
         "配置 Prais–Winsten",
@@ -388,7 +306,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "Prais",
         "yssbi.statistics.prais.fit",
         "Fit Prais–Winsten",
         "拟合 Prais–Winsten",
@@ -398,7 +315,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Fit,
     ),
     node(
-        "Prais Summary",
         "yssbi.statistics.prais.summary",
         "Prais–Winsten Summary",
         "Prais–Winsten 汇总",
@@ -408,7 +324,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "Predict",
         "yssbi.statistics.linear.predict",
         "Linear Prediction",
         "线性模型预测",
@@ -418,7 +333,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Predict,
     ),
     node(
-        "Logit Predict",
         "yssbi.statistics.logit.predict",
         "Logit Prediction",
         "Logit 预测",
@@ -428,7 +342,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Predict,
     ),
     node(
-        "Probit Predict",
         "yssbi.statistics.probit.predict",
         "Probit Prediction",
         "Probit 预测",
@@ -438,7 +351,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Predict,
     ),
     node(
-        "Probit Configure",
         "yssbi.statistics.probit.configure",
         "Configure Probit",
         "配置 Probit",
@@ -448,7 +360,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Configure,
     ),
     node(
-        "Probit",
         "yssbi.statistics.probit.fit",
         "Fit Probit",
         "拟合 Probit",
@@ -458,7 +369,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Fit,
     ),
     node(
-        "Probit Summary",
         "yssbi.statistics.probit.summary",
         "Probit Summary",
         "Probit 汇总",
@@ -468,7 +378,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "VAR Lag Order (varsoc)",
         "yssbi.statistics.var.lag_order",
         "VAR Lag-order Selection",
         "VAR 滞后阶数选择",
@@ -478,7 +387,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Test,
     ),
     node(
-        "VAR Summary",
         "yssbi.statistics.var.summary",
         "VAR Summary",
         "VAR 汇总",
@@ -488,7 +396,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Summary,
     ),
     node(
-        "VEC (Cointegration)",
         "yssbi.statistics.vec.fit",
         "Vector Error-correction Model",
         "向量误差修正模型",
@@ -498,7 +405,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Fit,
     ),
     node(
-        "VECRANK (Johansen)",
         "yssbi.statistics.vec.rank_test",
         "Johansen Cointegration Rank",
         "Johansen 协整秩检验",
@@ -508,7 +414,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Test,
     ),
     node(
-        "WLS",
         "yssbi.statistics.wls.fit",
         "Fit WLS",
         "拟合 WLS",
@@ -518,7 +423,6 @@ pub(super) const NODES: &[NodeSpec] = &[
         Stage::Fit,
     ),
     node(
-        "WLS Summary",
         "yssbi.statistics.wls.summary",
         "WLS Summary",
         "WLS 汇总",
@@ -530,7 +434,6 @@ pub(super) const NODES: &[NodeSpec] = &[
 ];
 
 const fn node(
-    legacy_name: &'static str,
     id: &'static str,
     title: &'static str,
     zh_title: &'static str,
@@ -540,7 +443,6 @@ const fn node(
     stage: Stage,
 ) -> NodeSpec {
     NodeSpec {
-        legacy_name,
         id,
         title,
         zh_title,

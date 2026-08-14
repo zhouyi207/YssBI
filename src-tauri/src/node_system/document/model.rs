@@ -158,7 +158,6 @@ pub enum DynamicPortBinding {
     Resolved {
         origin: DynamicMemberLocator,
         order: OrderKey,
-        #[serde(default)]
         last_known: LastKnownPortMetadata,
     },
     Orphan {

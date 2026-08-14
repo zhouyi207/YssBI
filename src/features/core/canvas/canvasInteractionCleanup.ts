@@ -35,7 +35,7 @@ export function startCanvasInteraction(
   interaction: Exclude<CanvasInteraction, { type: 'idle' }>,
 ): void {
   const current = useGraphInteractionStore.getState().interactions[graphPath];
-  if (current?.type !== 'idle') {
+  if (current && current.type !== 'idle') {
     cancelCanvasInteraction(graphPath, current.session.groupId);
   }
   useGraphInteractionStore.getState().startInteraction(graphPath, interaction);

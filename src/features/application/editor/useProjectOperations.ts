@@ -27,7 +27,6 @@ import {
   isGraphSaveCommandRevisionCurrent,
   type GraphSaveCommandContext,
 } from '@/features/application/projectCommandContext';
-import { uiStore } from '@/features/core/ui/UIStore';
 import {
   useExecutionStore,
   getExecutionEventGraph,
@@ -52,10 +51,10 @@ import { createProjectLifecycleReceiptDependencies } from '@/features/applicatio
 
 function notifySaveAsSettlement(result: import('@/shared/types/dto/project').LifecycleMutationResultDto): void {
   if (result.outcome !== 'committed' || !result.record) {
-    uiStore.showToast(`另存为需要恢复：${result.recovery?.action ?? result.outcome}`, "warning", 4000);
+    logger.notify.warn(`另存为需要恢复：${result.recovery?.action ?? result.outcome}`, "UI");
     return;
   }
-  uiStore.showToast(`项目已另存为：${result.record.name}`, "success", 3000);
+  logger.notify.info(`项目已另存为：${result.record.name}`, "UI");
 }
 
 /**
@@ -76,7 +75,7 @@ export function useProjectOperations() {
       }
       if (!projectPath) {
         cancelPendingProjectLifecycleOperation(pending.operationId);
-        uiStore.showToast("项目尚未加载", "warning", 2000);
+        logger.notify.warn("项目尚未加载", "UI");
         return;
       }
       const dirtySaved = await saveAllDirtyGraphs();
@@ -118,7 +117,7 @@ export function useProjectOperations() {
         if (!pending.isCurrent()) return;
       }
       logger.app.error(String(e), 'ProjectOperations');
-      uiStore.showToast(`另存为失败：${formatErrorMessage(e)}`, "error", 3000);
+      logger.notify.error(`另存为失败：${formatErrorMessage(e)}`, "UI");
     }
   }, []);
 
@@ -126,33 +125,33 @@ export function useProjectOperations() {
     let context: GraphSaveCommandContext | undefined;
     const projectPath = await resolveActiveProjectPath();
     if (!projectPath) {
-      uiStore.showToast("项目尚未加载", "warning", 2000);
+      logger.notify.warn("项目尚未加载", "UI");
       return;
     }
     try {
       const layoutStore = useLayoutStore.getState();
       const editorGroupId = resolveEditorGroupId(undefined, layoutStore);
       if (!editorGroupId) {
-        uiStore.showToast("请先打开一个图或工作表", "warning", 2000);
+        logger.notify.warn("请先打开一个图或工作表", "UI");
         return;
       }
 
       const active = getActiveLayoutTab(editorGroupId, layoutStore.nodes);
       const activeTabId = active?.activeTabId;
       if (!activeTabId) {
-        uiStore.showToast("请先打开一个图或工作表", "warning", 2000);
+        logger.notify.warn("请先打开一个图或工作表", "UI");
         return;
       }
 
       const activeTab = active?.tab;
       if (activeTab?.type === 'worksheet') {
         const saved = await useWorksheetStore.getState().saveDocument(activeTabId);
-        if (saved) uiStore.showToast(t('worksheet.saved'), 'success', 2000);
+        if (saved) logger.notify.info(t('worksheet.saved'), "UI");
         return;
       }
 
       if (activeTab?.type !== 'event' && activeTab?.type !== 'function') {
-        uiStore.showToast("请先打开一个图或工作表", "warning", 2000);
+        logger.notify.warn("请先打开一个图或工作表", "UI");
         return;
       }
 
@@ -167,11 +166,11 @@ export function useProjectOperations() {
       );
       if (!isGraphSaveCommandRevisionCurrent(context, activeTabId)) return;
       markResourceDirty({ id: activeTabId, kind: activeTab.type }, false);
-      uiStore.showToast("图已保存", "success", 2000);
+      logger.notify.info("图已保存", "UI");
     } catch (e) {
       if (context && !context.isCurrent()) return;
       logger.app.error(String(e), 'ProjectOperations');
-      uiStore.showToast(`保存失败：${formatErrorMessage(e)}`, "error", 2000);
+      logger.notify.error(`保存失败：${formatErrorMessage(e)}`, "UI");
     }
   }, [t]);
 
@@ -184,7 +183,7 @@ export function useProjectOperations() {
 
       const projectData = await loadActivatedProject(activation);
       if (!projectData) {
-        uiStore.showToast("加载项目失败", "error", 3000);
+        logger.notify.error("加载项目失败", "UI");
         return;
       }
 
@@ -195,10 +194,10 @@ export function useProjectOperations() {
         layoutStore.removeTab(editorGroupId, tabId);
       }
 
-      uiStore.showToast("项目已加载", "success", 2000);
+      logger.notify.info("项目已加载", "UI");
     } catch (e) {
       logger.app.error(String(e), 'ProjectOperations');
-      uiStore.showToast("加载项目失败", "error", 3000);
+      logger.notify.error("加载项目失败", "UI");
     }
   }, []);
 
@@ -226,13 +225,13 @@ export function useProjectOperations() {
   const executeGraph = useCallback(async (targetGraphPath?: string) => {
     const graphPath = resolveExecutionGraphPath(targetGraphPath);
     if (!graphPath) {
-      uiStore.showToast("请先打开一个 Event 才能执行", "warning", 3000);
+      logger.notify.warn("请先打开一个 Event 才能执行", "UI");
       return;
     }
 
     const target = getExecutionEventGraph(graphPath);
     if (!target) {
-      uiStore.showToast("只能执行 Event，当前打开的不是 Event", "warning", 3000);
+      logger.notify.warn("只能执行 Event，当前打开的不是 Event", "UI");
       return;
     }
 
@@ -269,24 +268,24 @@ export function useProjectOperations() {
       logger.exec.debug(`执行 runId: ${result.runId}`);
 
       if (runState.outcome === 'cancelled') {
-        uiStore.showToast(t('canvas.executionCancelled'), "warning", 2500);
+        logger.notify.warn(t('canvas.executionCancelled'), "UI");
       } else if (runState.outcome === 'error') {
-        uiStore.showToast(`执行失败: ${currentGraph.name}`, "error", 5000);
+        logger.notify.error(`执行失败: ${currentGraph.name}`, "UI");
       } else {
-        uiStore.showToast(`执行完成: ${currentGraph.name}`, "success", 2000);
+        logger.notify.info(`执行完成: ${currentGraph.name}`, "UI");
       }
     } catch (e) {
       if (!isCurrentProjectIdentity(project)) return;
       if (isExecutionCancelledError(e)) {
         logger.exec.info(`执行已中断: ${currentGraph.name} (${graphPath})`);
         finalizeExecutionRun(graphPath, [], 'cancelled');
-        uiStore.showToast(t('canvas.executionCancelled'), "warning", 2500);
+        logger.notify.warn(t('canvas.executionCancelled'), "UI");
         return;
       }
 
       logger.exec.error(`执行失败: ${e instanceof Error ? e.message : String(e)}`);
       finalizeExecutionRun(graphPath, [], 'error');
-      uiStore.showToast(`执行失败: ${formatErrorMessage(e)}`, "error", 5000);
+      logger.notify.error(`执行失败: ${formatErrorMessage(e)}`, "UI");
     }
   }, [finalizeExecutionRun, t]);
 
@@ -297,14 +296,14 @@ export function useProjectOperations() {
       await cancelActiveGraphRun(graphPath);
     } catch (e) {
       logger.exec.error(`中断执行失败: ${formatErrorMessage(e)}`);
-      uiStore.showToast(`中断执行失败: ${formatErrorMessage(e)}`, "error", 3000);
+      logger.notify.error(`中断执行失败: ${formatErrorMessage(e)}`, "UI");
     }
   }, []);
 
   const clearGraphArtifacts = useCallback(async (targetGraphPath?: string) => {
     const graphPath = resolveExecutionGraphPath(targetGraphPath);
     if (!graphPath) {
-      uiStore.showToast("请先打开一个 Event", "warning", 3000);
+      logger.notify.warn("请先打开一个 Event", "UI");
       return;
     }
 
@@ -318,7 +317,7 @@ export function useProjectOperations() {
     }
 
     store.clearGraphRunProjections(graphPath);
-    uiStore.showToast(t("canvas.executionArtifactsCleared"), "success", 2000);
+    logger.notify.info(t("canvas.executionArtifactsCleared"), "UI");
   }, [t]);
 
   return {

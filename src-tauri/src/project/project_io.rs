@@ -30,7 +30,6 @@ pub struct ProjectManifest {
     pub schema_version: u32,
     pub project_name: String,
     pub export_time: String,
-    #[serde(default)]
     pub computation_settings: ProjectComputationSettings,
 }
 
@@ -1102,7 +1101,7 @@ mod tests {
         NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
     };
     use crate::node_system::protocol::{NodeTypeId, PortKey};
-    use crate::project::{GraphResourceDocument, NumericTolerance, ProjectComputationSettings};
+    use crate::project::{GraphResourceDocument, NumericTolerance};
     use serde_json::json;
 
     fn temp_project_dir() -> PathBuf {
@@ -1121,18 +1120,15 @@ mod tests {
     }
 
     #[test]
-    fn legacy_manifest_defaults_computation_settings() {
-        let manifest = serde_json::from_value::<ProjectManifest>(json!({
+    fn project_manifest_requires_computation_settings() {
+        let error = serde_json::from_value::<ProjectManifest>(json!({
             "schemaVersion": 3,
-            "projectName": "Legacy",
+            "projectName": "Missing Computation Settings",
             "exportTime": "2026-08-12T00:00:00Z"
         }))
-        .unwrap();
+        .unwrap_err();
 
-        assert_eq!(
-            manifest.computation_settings,
-            ProjectComputationSettings::default()
-        );
+        assert!(error.to_string().contains("computationSettings"));
     }
 
     #[test]
