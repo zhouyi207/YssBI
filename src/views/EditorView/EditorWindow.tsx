@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useWorkbenchStore } from '@/features/core/workbench';
 import { useTranslation } from "react-i18next";
 import { ActivityBar } from "./Layout/ActivityBar";
 import { BottomBar } from "./Layout/BottomBar";
@@ -27,12 +27,11 @@ import { NodeDocumentationModal } from "./Layout/NodeDocumentationModal";
 import { useProjectionLocaleSync } from "@/features/application/editor/useProjectionLocaleSync";
 
 function EditorWindowReady() {
-  const rootId = useLayoutStore((s) => s.rootId);
-  const isSettingsOpen = useLayoutStore((s) => s.isSettingsOpen);
-  const isNodeDocumentationOpen = useLayoutStore((s) => s.isNodeDocumentationOpen);
-  const zenMode = useLayoutStore((s) => s.zenMode);
-  const setSettingsOpen = useLayoutStore((s) => s.setSettingsOpen);
-  const setNodeDocumentationOpen = useLayoutStore((s) => s.setNodeDocumentationOpen);
+  const isSettingsOpen = useWorkbenchStore((state) => state.isSettingsOpen);
+  const isNodeDocumentationOpen = useWorkbenchStore((state) => state.isNodeDocumentationOpen);
+  const zenMode = useWorkbenchStore((state) => state.zenMode);
+  const setSettingsOpen = useWorkbenchStore((state) => state.setSettingsOpen);
+  const setNodeDocumentationOpen = useWorkbenchStore((state) => state.setNodeDocumentationOpen);
   const activityBar = useActivityBarLayout(zenMode);
   const [, setSettingsDirty] = useState(false);
 
@@ -72,7 +71,7 @@ function EditorWindowReady() {
       {!zenMode ? <Menubar /> : null}
       <div className="flex flex-1 overflow-hidden isolate">
         {showActivityBar && !activityBarOnRight ? <ActivityBar side="left" /> : null}
-        <Workspace nodeId={rootId} />
+        <Workspace />
         {showActivityBar && activityBarOnRight ? <ActivityBar side="right" /> : null}
       </div>
       {!zenMode ? <BottomBar /> : null}

@@ -1,12 +1,12 @@
 import type { RefObject } from 'react';
 
-import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
+import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { getViewport, editorViewportScope } from '@/features/core/viewport';
 
 import { queryCanvasElement } from './selectionHitTargets';
 
 export function resolveTabId(groupId: string, activeTabIdRef: RefObject<string | null>): string | null {
-  return getEditorGroupActiveTabId(groupId) ?? activeTabIdRef.current ?? null;
+  return getActiveLayoutTab(groupId)?.activeTabId ?? activeTabIdRef.current ?? null;
 }
 
 export function getCanvasWorldPoint(

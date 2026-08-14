@@ -1,90 +1,90 @@
 import type { LayoutTab } from '@/shared/types';
 import type { DetailFocus } from '@/features/core/editor/detail/types';
 import { useEditorStore } from '@/features/core/editor';
-import {
-  getLayoutTabById,
-  isEditorGroupNode,
-  resolveEditorTargetGroupId,
-  useLayoutStore,
-} from '@/features/core/layout';
-import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
-import {
-  applyTabPinState,
-  findPreviewTabInTabs,
-} from '@/features/core/layout/layoutTabModel';
-import { applyEditorTabSelection } from './editorTabSelection';
+import { editorDockviewPort } from '@/features/core/dockview';
+import { applyTabPinState, findPreviewTabInTabs } from '@/features/core/layout/layoutTabModel';
+import { resolveTabDisplayName } from './resolveTabDisplayName';
 import { ensureDetailVisible } from './ensureDetailVisible';
 
 export interface OpenEditorTabOptions {
   targetGroupId?: string;
-  /** Insert or move to this index on the target editor group TabBar. */
   insertIndex?: number;
   focusDetail?: DetailFocus;
-  /** `false` opens in the preview slot (VS Code single-click). Default: pinned. */
+  /** `false` opens in the preview slot. Default: pinned. */
   pinned?: boolean;
 }
 
-/**
- * Open or activate a tab in the main editor area.
- */
+let panelSequence = 0;
+
+function createPanelInstanceId(): string {
+  panelSequence += 1;
+  return `editor-panel-${panelSequence}`;
+}
+
+function tabFromPanel(panel: ReturnType<typeof editorDockviewPort.listPanels>[number]): LayoutTab | null {
+  const data = panel.tab?.data?.layoutTab;
+  if (!data || typeof data !== 'object') return null;
+  return data as unknown as LayoutTab;
+}
+
+/** Open or activate an editor panel. Dockview owns group topology and placement. */
 export function openEditorTab(tab: LayoutTab, options?: OpenEditorTabOptions): void {
   const pinned = options?.pinned !== false;
   const tabToOpen = applyTabPinState(tab, pinned);
-  const editorGroupId = resolveEditorTargetGroupId(options?.targetGroupId);
-  const insertIndex = options?.insertIndex;
-  const layoutStore = useLayoutStore.getState();
-  const tabStore = useEditorTabStore.getState();
-  const existing = getLayoutTabById(tab.id);
+  const existing = editorDockviewPort.findPanelsByResource(tab.id)[0];
 
   if (existing) {
-    const fromNodeId = existing.nodeId;
-
-    if (pinned && existing.tab.pinned === false) {
-      layoutStore.setTabPinned(fromNodeId, tab.id, true);
+    if (existing.tab) {
+      const currentTab = tabFromPanel(existing);
+      if (currentTab?.pinned === false && pinned) {
+        void editorDockviewPort.updateTab(existing.panelInstanceId, {
+          ...existing.tab,
+          data: { ...existing.tab.data, layoutTab: { ...currentTab, pinned: true } },
+        });
+      }
     }
-
-    const needsMove =
-      insertIndex !== undefined
-      || !isEditorGroupNode(layoutStore.nodes[fromNodeId])
-      || fromNodeId !== editorGroupId;
-
-    if (needsMove) {
-      layoutStore.moveTab(fromNodeId, tab.id, editorGroupId, insertIndex);
-      applyEditorTabSelection(editorGroupId, tab.id);
-    } else if (tabStore.getPlacement(fromNodeId).activeTabId !== tab.id) {
-      applyEditorTabSelection(fromNodeId, tab.id);
+    if (options?.targetGroupId && existing.groupId !== options.targetGroupId) {
+      void editorDockviewPort.move({
+        panelInstanceId: existing.panelInstanceId,
+        groupId: options.targetGroupId,
+        index: options.insertIndex,
+      });
+    } else {
+      void editorDockviewPort.activate(existing.panelInstanceId);
     }
-
-    layoutStore.setActiveGroup(editorGroupId);
-  } else if (!pinned) {
-    openPreviewTabInGroup(editorGroupId, tabToOpen);
   } else {
-    layoutStore.addTab(editorGroupId, tabToOpen, insertIndex);
-    layoutStore.setActiveGroup(editorGroupId);
+    if (!pinned) replacePreviewPanel(options?.targetGroupId);
+    const title = resolveTabDisplayName(
+      tab.type === 'event' || tab.type === 'function' || tab.type === 'worksheet'
+        ? { id: tab.id, kind: tab.type }
+        : null,
+      tab.id,
+    );
+    void editorDockviewPort.open({
+      panelInstanceId: createPanelInstanceId(),
+      component: tab.component,
+      title,
+      groupId: options?.targetGroupId,
+      index: options?.insertIndex,
+      tab: {
+        resourceRef: tab.id,
+        kind: tab.type,
+        data: { layoutTab: tabToOpen },
+      },
+    });
   }
 
-  if (options?.focusDetail) {
-    useEditorStore.getState().setDetailFocus(options.focusDetail);
-  }
+  if (options?.focusDetail) useEditorStore.getState().setDetailFocus(options.focusDetail);
   ensureDetailVisible();
 }
 
-/** At most one preview tab per editor group; replaces the previous preview when opening another. */
-function openPreviewTabInGroup(groupId: string, tab: LayoutTab): void {
-  const layoutStore = useLayoutStore.getState();
-  const tabStore = useEditorTabStore.getState();
-  const groupTabs = tabStore.resolveGroupTabs(groupId);
-  const previewTab = findPreviewTabInTabs(groupTabs);
-
-  if (previewTab && previewTab.id !== tab.id) {
-    layoutStore.removeTab(groupId, previewTab.id);
-  }
-
-  const tabsAfterReplace = useEditorTabStore.getState().resolveGroupTabs(groupId);
-  if (tabsAfterReplace.some((item) => item.id === tab.id)) {
-    applyEditorTabSelection(groupId, tab.id);
-  } else {
-    layoutStore.addTab(groupId, tab);
-  }
-  layoutStore.setActiveGroup(groupId);
+function replacePreviewPanel(groupId?: string): void {
+  const panels = editorDockviewPort
+    .listPanels()
+    .filter((panel) => !groupId || panel.groupId === groupId);
+  const tabs = panels.map(tabFromPanel).filter((tab): tab is LayoutTab => tab !== null);
+  const preview = findPreviewTabInTabs(tabs);
+  if (!preview) return;
+  const panel = panels.find((candidate) => candidate.tab?.resourceRef === preview.id);
+  if (panel) void editorDockviewPort.remove(panel.panelInstanceId);
 }

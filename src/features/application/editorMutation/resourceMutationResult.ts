@@ -53,17 +53,11 @@ import {
   type ProjectResourceMeta,
   type ResourceKey,
 } from '@/features/core/resource';
-import { useEditorTabStore, type EditorTabMemento } from '@/features/core/layout/editorTabStore';
-import {
-  remapPlacementActiveTab,
-  replacePlacementActiveTab,
-} from '@/features/core/layout/editorGraphSelectionPlacement';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { useViewportStore } from '@/features/core/viewport';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { parseViewportScopeKey, viewportScopeKey } from '@/features/core/viewport/viewportScope';
-
-
+import { commitEditorDockviewPublication } from './editorDockviewPublicationCommit';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -285,22 +279,6 @@ function validateMoveCorrelation(result: ResourceMutationResultDto): void {
 }
 
 
-function removeTabFromMemento(memento: EditorTabMemento, tabId: string): void {
-  delete memento.registry[tabId];
-  for (const [groupId, placement] of Object.entries(memento.placements)) {
-    const closingIndex = placement.tabIds.indexOf(tabId);
-    if (closingIndex < 0) continue;
-    placement.tabIds = placement.tabIds.filter((id) => id !== tabId);
-    placement.selectedTabIds = placement.selectedTabIds.filter((id) => id !== tabId);
-    if (placement.activeTabId === tabId) {
-      replacePlacementActiveTab(
-        placement,
-        placement.tabIds[Math.max(0, closingIndex - 1)] ?? null,
-      );
-    }
-    if (placement.tabIds.length === 0) delete memento.placements[groupId];
-  }
-}
 
 interface PublicationAggregate {
   graphEntities?: Record<string, GraphEntityBucket>;
@@ -314,7 +292,6 @@ interface PublicationAggregate {
   variableRevisions: ReturnType<typeof useVariableStore.getState>['revisions'];
   worksheetIndex: WorksheetIndexEntry[];
   worksheetDocuments: Record<string, WorksheetDocument>;
-  tabs: EditorTabMemento;
   focusedSession?: ReturnType<typeof useGraphSessionStore.getState>['focusedSession'];
   viewports?: ReturnType<typeof useViewportStore.getState>['viewports'];
 }
@@ -342,23 +319,9 @@ function createPublicationAggregate(
     variableRevisions: structuredClone(useVariableStore.getState().revisions),
     worksheetIndex: structuredClone(worksheet.index),
     worksheetDocuments: structuredClone(worksheet.documents),
-    tabs: structuredClone(useEditorTabStore.getState().snapshotMemento()),
   };
 }
 
-function renameTabInMemento(tabs: EditorTabMemento, from: string, to: string): void {
-  const source = tabs.registry[from];
-  if (source && tabs.registry[to]) throw new Error(`move tab destination '${to}' already exists`);
-  if (source) {
-    tabs.registry[to] = { ...source, id: to };
-    delete tabs.registry[from];
-  }
-  for (const placement of Object.values(tabs.placements)) {
-    placement.tabIds = placement.tabIds.map((id) => id === from ? to : id);
-    placement.selectedTabIds = placement.selectedTabIds.map((id) => id === from ? to : id);
-    remapPlacementActiveTab(placement, from, to);
-  }
-}
 
 function remapAggregateViewports(
   viewports: NonNullable<PublicationAggregate['viewports']>,
@@ -455,7 +418,6 @@ function applyResourceLifecycleDeltasToAggregate(
         aggregate.worksheetIndex = aggregate.worksheetIndex.filter(
           (candidate) => candidate.worksheetPath !== state.path,
         );
-        removeTabFromMemento(aggregate.tabs, state.path);
       }
       continue;
     }
@@ -494,7 +456,6 @@ function applyResourceLifecycleDeltasToAggregate(
     delete graphMeta[before.path];
     delete graphEntities[before.path];
     if (aggregate.focusedSession?.graphPath === before.path) aggregate.focusedSession = null;
-    removeTabFromMemento(aggregate.tabs, before.path);
     for (const viewportKey of Object.keys(viewports)) {
       if (parseViewportScopeKey(viewportKey)?.graphPath === before.path) {
         delete viewports[viewportKey];
@@ -555,7 +516,6 @@ function applyMovesToAggregate(
             revision: moveDelta.toRevision,
           }
         : entry);
-      renameTabInMemento(aggregate.tabs, move.from, move.to);
       continue;
     }
     const graphMeta = aggregate.graphMeta;
@@ -587,7 +547,6 @@ function applyMovesToAggregate(
     if (aggregate.focusedSession?.graphPath === move.from) {
       aggregate.focusedSession = { ...aggregate.focusedSession, graphPath: move.to };
     }
-    renameTabInMemento(aggregate.tabs, move.from, move.to);
     remapAggregateViewports(viewports, move.from, move.to);
   }
 }
@@ -607,8 +566,6 @@ function markPreparedVariableScopeDirty(
   if (resource) aggregate.resources[key] = { ...resource, hasDirtyDocument: true };
   const document = aggregate.documents[key];
   if (document) aggregate.documents[key] = { ...document, dirty: true };
-  const tab = aggregate.tabs.registry[graphPath];
-  if (tab) aggregate.tabs.registry[graphPath] = { ...tab, pinned: true };
 }
 
 function worksheetMatchesPatchState(
@@ -816,7 +773,6 @@ export function prepareSynchronousPublicationCommit(
       variableRevisions: aggregate.variableRevisions,
       worksheetIndex: aggregate.worksheetIndex,
       worksheetDocuments: aggregate.worksheetDocuments,
-      tabs: aggregate.tabs,
       ...('focusedSession' in aggregate ? { focusedSession: aggregate.focusedSession } : {}),
       ...(aggregate.viewports ? { viewports: aggregate.viewports } : {}),
     },
@@ -824,48 +780,55 @@ export function prepareSynchronousPublicationCommit(
   };
 }
 
-export function commitPreparedPublication(plan: PreparedProjectPublication): void {
-  if (plan.graphProjectionPlan) {
-    commitPreparedGraphProjectionReplacements(plan.graphProjectionPlan);
-  }
-  useResourceStore.setState({
-    resources: plan.storeState.resources,
-    graphOrder: plan.storeState.graphOrder,
-  });
-  useDocumentStateStore.setState({ documents: plan.storeState.documents });
-  if (plan.storeState.graphMeta) {
-    useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
-  }
-  useDatabaseStore.setState({
-    databases: plan.storeState.databases,
-    revisions: plan.storeState.databaseRevisions,
-  });
-  useVariableStore.setState({
-    variables: plan.storeState.variables,
-    revisions: plan.storeState.variableRevisions,
-  });
-  useWorksheetStore.setState({
-    index: plan.storeState.worksheetIndex,
-    documents: plan.storeState.worksheetDocuments,
-  });
-  if ('focusedSession' in plan.storeState) {
-    useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession ?? null });
-  }
-  useEditorTabStore.setState(plan.storeState.tabs);
-  if (plan.storeState.viewports) {
-    useViewportStore.setState({ viewports: plan.storeState.viewports });
-  }
-  const detailFocus = useEditorStore.getState().detailFocus;
-  if (detailFocus?.kind === 'worksheet'
-    && plan.removedWorksheetPaths.has(detailFocus.worksheetPath)) {
-    useEditorStore.getState().clearDetailFocus();
-  }
-  for (const move of plan.moves) {
-    if (move.kind === 'worksheet') {
-      remapWorksheetNonViewportUiState(move.from, move.to);
-      invalidateWorksheetPreviewCacheForMove(plan.projectInstanceId, move.from, move.to);
-    } else {
-      remapGraphNonViewportUiState(move.from, move.to);
-    }
-  }
+export function commitPreparedPublication(
+  plan: PreparedProjectPublication,
+): void | Promise<void> {
+  return commitEditorDockviewPublication(
+    plan.moves,
+    plan.storeState.resources,
+    () => {
+      if (plan.graphProjectionPlan) {
+        commitPreparedGraphProjectionReplacements(plan.graphProjectionPlan);
+      }
+      useResourceStore.setState({
+        resources: plan.storeState.resources,
+        graphOrder: plan.storeState.graphOrder,
+      });
+      useDocumentStateStore.setState({ documents: plan.storeState.documents });
+      if (plan.storeState.graphMeta) {
+        useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
+      }
+      useDatabaseStore.setState({
+        databases: plan.storeState.databases,
+        revisions: plan.storeState.databaseRevisions,
+      });
+      useVariableStore.setState({
+        variables: plan.storeState.variables,
+        revisions: plan.storeState.variableRevisions,
+      });
+      useWorksheetStore.setState({
+        index: plan.storeState.worksheetIndex,
+        documents: plan.storeState.worksheetDocuments,
+      });
+      if ('focusedSession' in plan.storeState) {
+        useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession ?? null });
+      }
+      if (plan.storeState.viewports) {
+        useViewportStore.setState({ viewports: plan.storeState.viewports });
+      }
+      const detailFocus = useEditorStore.getState().detailFocus;
+      if (detailFocus?.kind === 'worksheet'
+        && plan.removedWorksheetPaths.has(detailFocus.worksheetPath)) {
+        useEditorStore.getState().clearDetailFocus();
+      }
+      for (const move of plan.moves) {
+        if (move.kind === 'worksheet') {
+          remapWorksheetNonViewportUiState(move.from, move.to);
+          invalidateWorksheetPreviewCacheForMove(plan.projectInstanceId, move.from, move.to);
+        } else {
+          remapGraphNonViewportUiState(move.from, move.to);
+        }
+      }
+    },
+  );
 }

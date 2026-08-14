@@ -1,9 +1,5 @@
-import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import {
-  getActiveLayoutTab,
-  resolveEditorGroupId,
-} from '@/features/core/layout/layoutTabQueries';
+import { editorDockviewPort, type DockviewPanelInfo } from '@/features/core/dockview';
+import type { LayoutTab } from '@/shared/types';
 import { useEditorStore } from '../stores/useEditorStore';
 import { setVariablesGraphScopeFromResource } from './variablesGraphScope';
 import type { DetailFocus } from './types';
@@ -15,26 +11,33 @@ export function focusDetail(focus: DetailFocus): void {
   }
 }
 
-export function focusDetailOnActiveGraph(groupId?: string | null): void {
-  const layout = useLayoutStore.getState();
-  const gid = resolveEditorGroupId(groupId, layout);
-  if (!gid) return;
+function activePanelForGroup(groupId?: string | null): DockviewPanelInfo | undefined {
+  if (!groupId) return editorDockviewPort.getActivePanel();
+  const activePanelInstanceId = editorDockviewPort
+    .listGroups()
+    .find((group: { groupId: string }) => group.groupId === groupId)
+    ?.activePanelInstanceId;
+  return editorDockviewPort
+    .listPanels()
+    .find((panel: DockviewPanelInfo) => panel.panelInstanceId === activePanelInstanceId);
+}
 
-  const active = getActiveLayoutTab(gid, layout.nodes);
-  if (active?.tab.type === 'event' || active?.tab.type === 'function') {
-    focusDetail({ kind: active.tab.type, path: active.activeTabId });
+function readLayoutTab(panel: DockviewPanelInfo | undefined): LayoutTab | null {
+  const value = panel?.tab?.data?.layoutTab;
+  return value && typeof value === 'object' ? value as LayoutTab : null;
+}
+
+export function focusDetailOnActiveGraph(groupId?: string | null): void {
+  const tab = readLayoutTab(activePanelForGroup(groupId));
+  if (tab?.type === 'event' || tab?.type === 'function') {
+    focusDetail({ kind: tab.type, path: tab.id });
   }
 }
 
 export function focusDetailOnNode(nodeId: string, groupId?: string | null): void {
-  const layout = useLayoutStore.getState();
-  const gid = resolveEditorGroupId(groupId, layout);
-  if (!gid) return;
-
-  const graphPath = getEditorGroupActiveTabId(gid);
-  if (!graphPath) return;
-
-  focusDetail({ kind: 'node', id: nodeId, graphPath });
+  const tab = readLayoutTab(activePanelForGroup(groupId));
+  if (!tab) return;
+  focusDetail({ kind: 'node', id: nodeId, graphPath: tab.id });
 }
 
 export function focusDetailOnNodeDefinition(nodeType: string): void {

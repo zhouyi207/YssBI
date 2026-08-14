@@ -23,7 +23,6 @@ import {
   startProjectLifecycle,
   type ProjectIdentitySnapshot,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import type { EditorTabMemento } from '@/features/core/layout/editorTabStore';
 import type { GraphMeta } from '@/features/core/dataStore/graphMetaStore';
 import type { FocusedGraphSession } from '@/features/core/graphSession/graphSessionStore';
 import type { EditorViewport } from '@/features/core/viewport/editorViewport';
@@ -114,7 +113,6 @@ export interface PreparedPublicationStoreState {
   readonly variableRevisions: Readonly<Record<string, number>>;
   readonly worksheetIndex: WorksheetIndexEntry[];
   readonly worksheetDocuments: Readonly<Record<string, WorksheetDocument>>;
-  readonly tabs: EditorTabMemento;
   readonly focusedSession?: FocusedGraphSession | null;
   readonly viewports?: Readonly<Record<string, EditorViewport>>;
 }
@@ -183,8 +181,8 @@ export interface ProjectPublicationDependencies {
     move: ResourceMoveDto,
     hasAuthoritativeDestinationReplacement: boolean,
   ): PreparedResourceMove;
-  commitPublication(plan: PreparedProjectPublication): void;
-  commitRecovery(plan: PreparedProjectRecovery): void;
+  commitPublication(plan: PreparedProjectPublication): void | Promise<void>;
+  commitRecovery(plan: PreparedProjectRecovery): void | Promise<void>;
   markProjectProjectionStale(): void;
 }
 
@@ -494,7 +492,8 @@ export class ProjectPublicationCoordinator {
         affectedGraphPaths: pending.affectedGraphPaths,
         moves,
       });
-      this.dependencies.commitPublication(plan);
+      const committed = this.dependencies.commitPublication(plan);
+      if (committed) await committed;
       this.assertLifecycle(projectInstanceId, epoch);
       this.state.appliedFingerprint = pending.fingerprint;
       this.state.appliedRevision = pending.revision;
@@ -624,7 +623,8 @@ export class ProjectPublicationCoordinator {
         worksheetPathRemaps,
       };
       const plan = this.dependencies.prepareRecovery(recoveryPreparation);
-      this.dependencies.commitRecovery(plan);
+      const committed = this.dependencies.commitRecovery(plan);
+      if (committed) await committed;
       this.assertLifecycle(projectInstanceId, epoch);
       this.state.appliedRevision = index.publicationRevision;
       this.state.appliedFingerprint = undefined;
@@ -653,6 +653,16 @@ export class ProjectPublicationCoordinator {
   }
 }
 
+function commitHistoryAfterPublication(plan: PreparedProjectPublication): void | Promise<void> {
+  const committed = commitPreparedPublication(plan);
+  const updateHistory = () => useHistoryStore.setState({
+    canUndo: plan.history.canUndo,
+    canRedo: plan.history.canRedo,
+  });
+  if (committed) return committed.then(updateHistory);
+  updateHistory();
+}
+
 const productionDependencies: ProjectPublicationDependencies = {
   loadRecoverySnapshot: (projectInstanceId) => ProjectService.getProjectIndex(projectInstanceId),
   prepareGraphProjection: prepareGraphProjectionForPublication,
@@ -660,13 +670,7 @@ const productionDependencies: ProjectPublicationDependencies = {
   preparePublication: prepareSynchronousPublicationCommit,
   prepareRecovery: prepareProjectRecoveryCommit,
   prepareMove: prepareResourceMove,
-  commitPublication: (plan) => {
-    commitPreparedPublication(plan);
-    useHistoryStore.setState({
-      canUndo: plan.history.canUndo,
-      canRedo: plan.history.canRedo,
-    });
-  },
+  commitPublication: commitHistoryAfterPublication,
   commitRecovery: commitPreparedProjectRecovery,
   markProjectProjectionStale: () => {
     useResourceStore.setState((state) => ({

@@ -1,6 +1,10 @@
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { editorDockviewPort } from '@/features/core/dockview';
 
-/** Update layout store active tab for an editor group (no graph session side effects). */
-export function applyEditorTabSelection(groupId: string, tabId: string | null): void {
-  useLayoutStore.getState().setEditorGroupActiveTab(groupId, tabId);
+/** Activate a Dockview panel by resource identity within an editor group. */
+export function applyEditorTabSelection(groupId: string, resourceId: string | null): void {
+  if (!resourceId) return;
+  const panel = editorDockviewPort
+    .findPanelsByResource(resourceId)
+    .find((candidate) => candidate.groupId === groupId);
+  if (panel) void editorDockviewPort.activate(panel.panelInstanceId);
 }

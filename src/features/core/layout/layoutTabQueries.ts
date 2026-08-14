@@ -1,89 +1,55 @@
-import type { LayoutTab, LayoutTree } from '@/shared/types';
-import { useLayoutStore } from './layoutStore';
-import { useEditorTabStore } from './editorTabStore';
+import type { LayoutTab } from '@/shared/types';
+import {
+  editorDockviewPort,
+  getPaneSelection,
+  useEditorPaneStateStore,
+} from '@/features/core/dockview';
 import { DEFAULT_EDITOR_GROUP_ID } from './workbenchLayoutDefaults';
-import { isEditorGroupNode } from './layoutEditorGroupNode';
 
 export type LocatedLayoutTab = { nodeId: string; tab: LayoutTab };
+export interface LayoutGroupContext { activeEditorGroupId: string | null }
 
-export interface LayoutGroupContext {
-  activeEditorGroupId: string | null;
+
+function readTab(value: unknown): LayoutTab | null {
+  return value && typeof value === 'object' ? value as LayoutTab : null;
 }
 
-function readNodes(nodes?: LayoutTree): LayoutTree {
-  return nodes ?? useLayoutStore.getState().nodes;
+function panelTab(panel: ReturnType<typeof editorDockviewPort.listPanels>[number]): LayoutTab | null {
+  return readTab(panel.tab?.data?.layoutTab);
 }
 
-export { isEditorGroupNode } from './layoutEditorGroupNode';
-
-/**
- * Resolve the editor group that should receive a new or activated tab.
- * Never returns fixed chrome nodes (sidebar / detail / panel).
- */
-export function resolveEditorTargetGroupId(
-  explicitGroupId?: string | null,
-  nodes?: LayoutTree,
-  context?: LayoutGroupContext,
-): string {
-  const tree = readNodes(nodes);
-  const ctx = context ?? useLayoutStore.getState();
-
-  const candidates = [
-    explicitGroupId,
-    ctx.activeEditorGroupId,
-  ].filter((id): id is string => Boolean(id));
-
+export function resolveEditorTargetGroupId(explicitGroupId?: string | null): string {
+  const groups = editorDockviewPort.listGroups();
+  const candidates = [explicitGroupId, editorDockviewPort.getActiveGroupId()];
   for (const id of candidates) {
-    if (isEditorGroupNode(tree[id])) return id;
+    if (id && groups.some((group) => group.groupId === id)) return id;
   }
-
-  const fallback = Object.values(tree).find(isEditorGroupNode);
-  if (fallback) return fallback.id;
-
-  return DEFAULT_EDITOR_GROUP_ID;
+  return groups[0]?.groupId ?? DEFAULT_EDITOR_GROUP_ID;
 }
 
 export function getLayoutTabById(tabId: string): LocatedLayoutTab | null {
-  const located = useEditorTabStore.getState().locateTab(tabId);
-  if (located) return { nodeId: located.groupId, tab: located.tab };
-  return null;
+  return locateLayoutTab(tabId);
 }
 
-export function locateLayoutTab(
-  tabId: string,
-  nodeId?: string,
-  _nodes?: LayoutTree,
-): LocatedLayoutTab | null {
-  const located = useEditorTabStore.getState().locateTab(tabId, nodeId);
-  return located ? { nodeId: located.groupId, tab: located.tab } : null;
+export function locateLayoutTab(tabId: string, nodeId?: string): LocatedLayoutTab | null {
+  const panel = editorDockviewPort
+    .findPanelsByResource(tabId)
+    .find((candidate) => !nodeId || candidate.groupId === nodeId);
+  const tab = panel ? panelTab(panel) : null;
+  return panel && tab ? { nodeId: panel.groupId, tab } : null;
 }
 
-export function getActiveLayoutTab(
-  groupId: string,
-  _nodes?: LayoutTree,
-): { activeTabId: string; tab: LayoutTab } | null {
-  const placement = useEditorTabStore.getState().getPlacement(groupId);
-  const activeTabId = placement.activeTabId;
-  if (!activeTabId) return null;
-  const tab = useEditorTabStore.getState().resolveTab(activeTabId);
-  if (!tab) return null;
-  return { activeTabId, tab };
+export function getActiveLayoutTab(groupId: string): { activeTabId: string; tab: LayoutTab } | null {
+  const group = editorDockviewPort.listGroups().find((candidate) => candidate.groupId === groupId);
+  const panel = editorDockviewPort
+    .listPanels()
+    .find((candidate) => candidate.panelInstanceId === group?.activePanelInstanceId);
+  const tab = panel ? panelTab(panel) : null;
+  return panel && tab ? { activeTabId: tab.id, tab } : null;
 }
 
-export function resolveEditorGroupId(
-  groupId?: string | null,
-  context?: LayoutGroupContext,
-): string | null {
-  const ctx = context ?? useLayoutStore.getState();
-  return groupId ?? ctx.activeEditorGroupId ?? null;
-}
-
-function normalizeIds(ids: readonly string[]): string[] {
-  return [...new Set(ids)];
-}
-
-function areStringArraysEqual(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
+export function resolveEditorGroupId(groupId?: string | null, context?: LayoutGroupContext): string | null {
+  return groupId ?? context?.activeEditorGroupId ?? editorDockviewPort.getActiveGroupId() ?? null;
 }
 
 export interface GraphSelection {
@@ -91,52 +57,49 @@ export interface GraphSelection {
   connectionIds: Set<string>;
 }
 
-export function createGraphSelection(
-  nodeIds: readonly string[],
-  connectionIds: readonly string[],
-): GraphSelection {
-  return {
-    nodeIds: new Set(nodeIds),
-    connectionIds: new Set(connectionIds),
-  };
+export function createGraphSelection(nodeIds: readonly string[], connectionIds: readonly string[]): GraphSelection {
+  return { nodeIds: new Set(nodeIds), connectionIds: new Set(connectionIds) };
+}
+
+function activePanelInstanceId(groupId: string): string | undefined {
+  return editorDockviewPort.listGroups().find((group) => group.groupId === groupId)?.activePanelInstanceId;
 }
 
 export function getEditorGroupGraphSelection(groupId: string): GraphSelection {
-  const placement = useEditorTabStore.getState().getPlacement(groupId);
-  return createGraphSelection(placement.selectedNodeIds, placement.selectedConnectionIds);
+  const selection = getPaneSelection(activePanelInstanceId(groupId));
+  return createGraphSelection(selection.selectedNodeIds, selection.selectedConnectionIds);
 }
 
-/** 更新编辑器组内画布选中节点（目标组由 `resolveEditorGroupId` 解析） */
 export function updateEditorGroupSelectedNodeIds(
   updater: string[] | ((prev: string[]) => string[]),
   targetGroupId?: string | null,
 ): void {
-  const gid = resolveEditorGroupId(targetGroupId);
-  if (!gid) return;
-
-  const current = useEditorTabStore.getState().getPlacement(gid).selectedNodeIds;
-  const next = normalizeIds(typeof updater === 'function' ? updater(current) : updater);
-  const placement = useEditorTabStore.getState().getPlacement(gid);
-  if (areStringArraysEqual(current, next) && placement.selectedConnectionIds.length === 0) return;
-  useEditorTabStore.getState().setSelectedNodeIds(gid, next);
+  const groupId = resolveEditorGroupId(targetGroupId);
+  const panelId = groupId ? activePanelInstanceId(groupId) : undefined;
+  if (!panelId) return;
+  const current = getPaneSelection(panelId).selectedNodeIds;
+  useEditorPaneStateStore.getState().setSelectedNodeIds(
+    panelId,
+    typeof updater === 'function' ? updater(current) : updater,
+  );
 }
 
 export function updateEditorGroupSelectedConnectionIds(
   updater: string[] | ((prev: string[]) => string[]),
   targetGroupId?: string | null,
 ): void {
-  const gid = resolveEditorGroupId(targetGroupId);
-  if (!gid) return;
-
-  const placement = useEditorTabStore.getState().getPlacement(gid);
-  const current = placement.selectedConnectionIds;
-  const next = normalizeIds(typeof updater === 'function' ? updater(current) : updater);
-  if (areStringArraysEqual(current, next) && placement.selectedNodeIds.length === 0) return;
-  useEditorTabStore.getState().setSelectedConnectionIds(gid, next);
+  const groupId = resolveEditorGroupId(targetGroupId);
+  const panelId = groupId ? activePanelInstanceId(groupId) : undefined;
+  if (!panelId) return;
+  const current = getPaneSelection(panelId).selectedConnectionIds;
+  useEditorPaneStateStore.getState().setSelectedConnectionIds(
+    panelId,
+    typeof updater === 'function' ? updater(current) : updater,
+  );
 }
 
 export function clearEditorGroupGraphSelection(targetGroupId?: string | null): void {
-  const gid = resolveEditorGroupId(targetGroupId);
-  if (!gid) return;
-  useEditorTabStore.getState().clearGraphSelection(gid);
+  const groupId = resolveEditorGroupId(targetGroupId);
+  const panelId = groupId ? activePanelInstanceId(groupId) : undefined;
+  if (panelId) useEditorPaneStateStore.getState().clearSelection(panelId);
 }

@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { showSidebarTab as persistShowSidebarTab } from '@/features/core/layout/workbenchLayoutService';
-import type { SidebarTabId } from '@/features/core/layout/layoutStore';
+import type { SidebarTabId } from '@/features/core/workbench';
 
 export type { SidebarTabId };
 

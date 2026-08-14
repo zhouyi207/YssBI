@@ -3,7 +3,7 @@
  * 所有被 reset 的 store 须在本文件显式 import（dataStore.audit 校验）。
  */
 import { collapseEditorGroupsForProjectSwitch } from '@/features/core/layout/workbenchLayoutService';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useEditorPaneStateStore } from '@/features/core/dockview';
 import { useViewportStore } from '@/features/core/viewport';
 import { projectIOApplicationPort } from './projectIOApplicationPort';
 import { useGraphInteractionStore } from '@/features/core/graphInteraction';
@@ -20,8 +20,8 @@ import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 /** 清空 tab / viewport / history / 数据视图缓存等；变量与 graph 正文由调用方立即覆写。 */
 export function resetClientProjectState(): void {
   projectIOApplicationPort().cancelPublication();
-  useLayoutStore.getState().closeAllGraphTabs();
   collapseEditorGroupsForProjectSwitch();
+  useEditorPaneStateStore.getState().reset();
   useViewportStore.getState().clear();
   projectIOApplicationPort().resetFunctionSignatures();
   projectIOApplicationPort().resetHistory();

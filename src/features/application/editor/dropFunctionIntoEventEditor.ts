@@ -11,7 +11,7 @@ import { canvasDropHandlerStore } from '@/features/core/sidebarDrag';
 import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 import { useSidebarDragStore } from '@/features/core/sidebarDrag';
 import { resolveTabDisplayName } from '@/features/application/editor/resolveTabDisplayName';
-import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import type { LayoutTab } from '@/shared/types/ui';
 
 export function resolveDropPointerFromDragEnd(event: Pick<DragEndEvent, 'activatorEvent' | 'delta'>): {
@@ -103,5 +103,5 @@ export function resolveDropIntoEditorDragStateFromTab(
 }
 
 export function resolveFunctionTabForDrop(tabId: string): LayoutTab | null {
-  return useEditorTabStore.getState().resolveTab(tabId);
+  return locateLayoutTab(tabId)?.tab ?? null;
 }

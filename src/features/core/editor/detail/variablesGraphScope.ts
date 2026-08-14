@@ -1,18 +1,12 @@
-import {
-  getActiveLayoutTab,
-  resolveEditorGroupId,
-} from '@/features/core/layout/layoutTabQueries';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { editorDockviewPort } from '@/features/core/dockview';
+import type { LayoutTab } from '@/shared/types';
 import { useEditorStore } from '../stores/useEditorStore';
 
 function readActiveGraphTab(): { id: string; type: 'event' | 'function' } | null {
-  const layout = useLayoutStore.getState();
-  const groupId = resolveEditorGroupId(undefined, layout);
-  if (!groupId) return null;
-
-  const active = getActiveLayoutTab(groupId, layout.nodes);
-  if (active?.tab.type === 'event' || active?.tab.type === 'function') {
-    return { id: active.activeTabId, type: active.tab.type };
+  const value = editorDockviewPort.getActivePanel()?.tab?.data?.layoutTab;
+  const tab = value && typeof value === 'object' ? value as LayoutTab : null;
+  if (tab?.type === 'event' || tab?.type === 'function') {
+    return { id: tab.id, type: tab.type };
   }
   return null;
 }

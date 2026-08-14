@@ -5,9 +5,10 @@ import {
   canDeleteNode,
 } from '@/features/core/dataStore/graphNodeSelectors';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { editorDockviewPort } from '@/features/core/dockview';
 import {
+  getActiveLayoutTab,
+  getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
   updateEditorGroupSelectedNodeIds,
 } from '@/features/core/layout';
@@ -166,44 +167,42 @@ export function useEditorOperations() {
     graphPath: string,
     groupId: string,
   ) => {
-    const placement = useEditorTabStore.getState().getPlacement(groupId);
-    if (placement.activeTabId !== graphPath || connectionIds.length === 0) return false;
+    if (getActiveLayoutTab(groupId)?.activeTabId !== graphPath || connectionIds.length === 0) return false;
 
-    const selectionSnapshot = [...placement.selectedConnectionIds];
+    const selectionSnapshot = [...getEditorGroupGraphSelection(groupId).connectionIds];
     const applied = await disconnectConnectionsById(graphPath, connectionIds);
-    const currentPlacement = useEditorTabStore.getState().getPlacement(groupId);
-    const selectionUnchanged = currentPlacement.selectedConnectionIds.length === selectionSnapshot.length
-      && currentPlacement.selectedConnectionIds.every((id, index) => id === selectionSnapshot[index]);
-    if (applied && currentPlacement.activeTabId === graphPath && selectionUnchanged) {
+    const currentSelection = [...getEditorGroupGraphSelection(groupId).connectionIds];
+    const selectionUnchanged = currentSelection.length === selectionSnapshot.length
+      && currentSelection.every((id, index) => id === selectionSnapshot[index]);
+    if (applied && getActiveLayoutTab(groupId)?.activeTabId === graphPath && selectionUnchanged) {
       setSelectedConnectionIds([], groupId);
     }
     return applied;
   }, [setSelectedConnectionIds]);
 
   const deleteSelected = useCallback(async () => {
-    const groupId = useLayoutStore.getState().activeEditorGroupId;
+    const groupId = editorDockviewPort.getActiveGroupId();
     if (!groupId) return;
-    const capturedPlacement = useEditorTabStore.getState().getPlacement(groupId);
-    const graphPath = capturedPlacement.activeTabId;
+    const graphPath = getActiveLayoutTab(groupId)?.activeTabId;
     if (!graphPath) return;
-    const connectionSnapshot = [...capturedPlacement.selectedConnectionIds];
+    const capturedSelection = getEditorGroupGraphSelection(groupId);
+    const connectionSnapshot = [...capturedSelection.connectionIds];
 
     if (connectionSnapshot.length > 0) {
       const applied = await disconnectConnectionsById(graphPath, connectionSnapshot);
-      const currentGroupId = useLayoutStore.getState().activeEditorGroupId;
-      const currentPlacement = useEditorTabStore.getState().getPlacement(groupId);
-      const selectionUnchanged = currentPlacement.selectedConnectionIds.length === connectionSnapshot.length
-        && currentPlacement.selectedConnectionIds.every((id, index) => id === connectionSnapshot[index]);
+      const currentSelection = [...getEditorGroupGraphSelection(groupId).connectionIds];
+      const selectionUnchanged = currentSelection.length === connectionSnapshot.length
+        && currentSelection.every((id, index) => id === connectionSnapshot[index]);
       if (applied
-        && currentGroupId === groupId
-        && currentPlacement.activeTabId === graphPath
+        && editorDockviewPort.getActiveGroupId() === groupId
+        && getActiveLayoutTab(groupId)?.activeTabId === graphPath
         && selectionUnchanged) {
         setSelectedConnectionIds([], groupId);
       }
       return applied;
     }
 
-    const selectedSnapshot = [...capturedPlacement.selectedNodeIds];
+    const selectedSnapshot = [...capturedSelection.nodeIds];
     const selectedIds = new Set(selectedSnapshot);
     if (selectedIds.size === 0) return;
     const dataStore = useGraphDataStore.getState();
@@ -218,13 +217,12 @@ export function useEditorOperations() {
       'DeleteNodes',
       { nodeIds: idsToDelete },
     );
-    const currentGroupId = useLayoutStore.getState().activeEditorGroupId;
-    const currentPlacement = useEditorTabStore.getState().getPlacement(groupId);
-    const selectionUnchanged = currentPlacement.selectedNodeIds.length === selectedSnapshot.length
-      && currentPlacement.selectedNodeIds.every((nodeId, index) => nodeId === selectedSnapshot[index]);
+    const currentSelection = [...getEditorGroupGraphSelection(groupId).nodeIds];
+    const selectionUnchanged = currentSelection.length === selectedSnapshot.length
+      && currentSelection.every((nodeId, index) => nodeId === selectedSnapshot[index]);
     if (applied
-      && currentGroupId === groupId
-      && currentPlacement.activeTabId === graphPath
+      && editorDockviewPort.getActiveGroupId() === groupId
+      && getActiveLayoutTab(groupId)?.activeTabId === graphPath
       && selectionUnchanged) {
       setSelectedNodeIds([], groupId);
     }

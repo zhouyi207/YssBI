@@ -5,7 +5,7 @@ import type { Pin } from '@/shared/types/domain/pin';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { useEditorStore } from '@/features/core/editor';
 import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
-import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 import { clientToWorldInCanvas } from './canvasDrop';
@@ -42,7 +42,7 @@ function interactionStillMatches(
   menu: { x: number; y: number },
   sourceAddress: PortAddressDto | null,
 ): boolean {
-  if (useEditorTabStore.getState().getPlacement(groupId).activeTabId !== graphPath) return false;
+  if (getActiveLayoutTab(groupId)?.activeTabId !== graphPath) return false;
   const contextMenu = useEditorStore.getState().contextMenu;
   if (!contextMenu?.visible
     || contextMenu.x !== menu.x

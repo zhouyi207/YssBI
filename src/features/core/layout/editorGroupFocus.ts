@@ -1,32 +1,52 @@
-import { listEditorGroupIds, firstEditorGroupId, isActiveEditorGroupValid } from './editorGridLayout';
+import {
+  editorDockviewPort,
+  type DockviewGroupInfo,
+  type DockviewPanelInfo,
+} from '@/features/core/dockview';
 import { readEditorPartOptions } from './editorPartOptions';
-import { listEditorGroupTabIds } from './editorTabStore';
-import { useLayoutStore } from './layoutStore';
+
+const MAX_RECENT_EDITOR_GROUPS = 12;
+let recentGroupIds: string[] = editorDockviewPort.getActiveGroupId()
+  ? [editorDockviewPort.getActiveGroupId()!]
+  : [];
+
+editorDockviewPort.subscribe(() => {
+  const activeGroupId = editorDockviewPort.getActiveGroupId();
+  if (!activeGroupId) return;
+  recentGroupIds = [
+    activeGroupId,
+    ...recentGroupIds.filter((groupId) => groupId !== activeGroupId),
+  ].slice(0, MAX_RECENT_EDITOR_GROUPS);
+});
 
 /** VS Code MRU — next group to focus when closing the active empty group. */
 export function getNextActiveEditorGroupId(excludeGroupId?: string): string | null {
-  const state = useLayoutStore.getState();
-  for (const groupId of state.recentEditorGroupIds) {
-    if (groupId === excludeGroupId) continue;
-    if (isActiveEditorGroupValid(state.nodes, groupId)) return groupId;
+  const groups = editorDockviewPort.listGroups();
+  const groupIds = new Set(groups.map(({ groupId }: DockviewGroupInfo) => groupId));
+  for (const groupId of recentGroupIds) {
+    if (groupId !== excludeGroupId && groupIds.has(groupId)) return groupId;
   }
-  const fallback = firstEditorGroupId(state.nodes);
-  if (fallback === excludeGroupId) {
-    return listEditorGroupIds(state.nodes).find((id) => id !== excludeGroupId) ?? null;
-  }
-  return fallback;
+  return groups.find(({ groupId }: DockviewGroupInfo) => groupId !== excludeGroupId)?.groupId ?? null;
 }
 
 /** Pre-activate MRU group before removing the last tab (VS Code `doCloseActiveEditor`). */
 export function prepareActiveGroupBeforeLastTabClose(groupId: string): string | null {
   if (!readEditorPartOptions().closeEmptyGroups) return null;
-  const state = useLayoutStore.getState();
-  if (listEditorGroupIds(state.nodes).length <= 1) return null;
-  if (listEditorGroupTabIds(groupId).length !== 1) return null;
+  const groups = editorDockviewPort.listGroups();
+  if (groups.length <= 1) return null;
+  const groupPanelCount = editorDockviewPort
+    .listPanels()
+    .filter((panel: DockviewPanelInfo) => panel.groupId === groupId)
+    .length;
+  if (groupPanelCount !== 1) return null;
 
   const nextGroupId = getNextActiveEditorGroupId(groupId);
   if (!nextGroupId) return null;
 
-  useLayoutStore.getState().setActiveGroup(nextGroupId);
+  const nextGroup = groups.find(
+    ({ groupId: candidateId }: DockviewGroupInfo) => candidateId === nextGroupId,
+  );
+  if (!nextGroup?.activePanelInstanceId) return null;
+  void editorDockviewPort.activate(nextGroup.activePanelInstanceId);
   return nextGroupId;
 }

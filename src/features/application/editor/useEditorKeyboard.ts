@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { getEditorGroupActiveTabId, useEditorTabStore } from '@/features/core/layout/editorTabStore';
-import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
+import { editorDockviewPort } from '@/features/core/dockview';
+import {
+  clearEditorGroupGraphSelection,
+  getActiveLayoutTab,
+  getEditorGroupGraphSelection,
+  resolveEditorTargetGroupId,
+} from '@/features/core/layout/layoutTabQueries';
 import { getViewport, editorViewportScope } from '@/features/core/viewport';
 import { isAppModalOpen, useModifierKeyStore } from '@/features/core/keyboard';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { exitZenMode, isZenModeActive } from '@/features/core/layout/workbenchZenMode';
+import { useWorkbenchStore } from '@/features/core/workbench';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { useHistoryStore } from '@/features/core/history';
 import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
@@ -15,6 +20,7 @@ import {
   EDITOR_MUTATION_CAPABILITIES,
   notifyNodeCreationUnavailable,
 } from './editorMutationAvailability';
+import { listDockviewGroupTabs } from './dockviewTabProjection';
 
 interface UseEditorKeyboardProps {
   deleteSelected: () => void;
@@ -68,12 +74,11 @@ export function useEditorKeyboard({
   const pendingCtrlKTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getActiveCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
-    const layoutStore = useLayoutStore.getState();
-    const gid = resolveEditorTargetGroupId(undefined, layoutStore.nodes, layoutStore);
-    const el = document.getElementById(`layout-node-${gid}`);
-    if (!el) return { x: 0, y: 0 };
+    const gid = resolveEditorTargetGroupId();
+    const el = document.querySelector(`[data-editor-group-id="${gid}"]`);
+    if (!(el instanceof HTMLElement)) return { x: 0, y: 0 };
     const rect = el.getBoundingClientRect();
-    const graphPath = getEditorGroupActiveTabId(gid);
+    const graphPath = getActiveLayoutTab(gid)?.activeTabId;
     const currentCanvas = graphPath ? getViewport(editorViewportScope(gid, graphPath)) : DEFAULT_VIEWPORT;
     return {
       x: (clientX - rect.left - currentCanvas.x) / currentCanvas.scale,
@@ -97,9 +102,8 @@ export function useEditorKeyboard({
       }
 
       if (e.key === 'Escape') {
-        const layout = useLayoutStore.getState();
-        const groupId = layout.activeEditorGroupId;
-        const graphPath = groupId ? getEditorGroupActiveTabId(groupId) : null;
+        const groupId = editorDockviewPort.getActiveGroupId();
+        const graphPath = groupId ? getActiveLayoutTab(groupId)?.activeTabId : null;
         if (graphPath && groupId) {
           const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
           if (interaction.type !== 'idle') {
@@ -112,15 +116,10 @@ export function useEditorKeyboard({
           }
         }
         if (groupId) {
-          const placement = useEditorTabStore.getState().getPlacement(groupId);
-          if (placement.selectedConnectionIds.length > 0) {
+          const selection = getEditorGroupGraphSelection(groupId);
+          if (selection.connectionIds.size > 0 || selection.nodeIds.size > 0) {
             e.preventDefault();
-            useEditorTabStore.getState().setSelectedConnectionIds(groupId, []);
-            return;
-          }
-          if (placement.selectedNodeIds.length > 0) {
-            e.preventDefault();
-            useEditorTabStore.getState().setSelectedNodeIds(groupId, []);
+            clearEditorGroupGraphSelection(groupId);
             return;
           }
         }
@@ -133,7 +132,7 @@ export function useEditorKeyboard({
 
       if (e.key === 'F1') {
         e.preventDefault();
-        useLayoutStore.getState().setNodeDocumentationOpen(true);
+        useWorkbenchStore.getState().setNodeDocumentationOpen(true);
         return;
       }
 
@@ -190,18 +189,14 @@ export function useEditorKeyboard({
         addEvent(undefined, { openAfterCreate: true });
       } else if (isControlKey && e.key.toLowerCase() === "w") {
         e.preventDefault();
-        const layoutStore = useLayoutStore.getState();
-        const gid = layoutStore.activeEditorGroupId;
-        if (gid) {
-          const activeTabId = getEditorGroupActiveTabId(gid);
-          if (activeTabId) closeTab(activeTabId);
-        }
+        const activeTabId = editorDockviewPort.getActivePanel()?.tab?.resourceRef;
+        if (activeTabId) closeTab(activeTabId);
       } else if (isControlKey && e.key === "Tab") {
         e.preventDefault();
-        const gid = useLayoutStore.getState().activeEditorGroupId;
+        const gid = editorDockviewPort.getActiveGroupId();
         if (gid) {
-          const tabs = useEditorTabStore.getState().resolveGroupTabs(gid);
-          const activeTabId = getEditorGroupActiveTabId(gid);
+          const tabs = listDockviewGroupTabs(gid);
+          const activeTabId = getActiveLayoutTab(gid)?.activeTabId;
           if (tabs.length > 1 && activeTabId) {
             const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
             const nextIndex = e.shiftKey
@@ -212,7 +207,7 @@ export function useEditorKeyboard({
         }
       } else if (isControlKey && e.key === "\\") {
         e.preventDefault();
-        const gid = useLayoutStore.getState().activeEditorGroupId;
+        const gid = editorDockviewPort.getActiveGroupId();
         if (gid) splitEditorRight(gid);
       } else if (isControlKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();

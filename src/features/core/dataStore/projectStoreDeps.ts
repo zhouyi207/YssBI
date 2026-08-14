@@ -8,7 +8,7 @@ const DATA_STORE_DIR = dirname(fileURLToPath(import.meta.url));
 export const PROJECT_SNAPSHOT_STORE_HOOKS = ['useGraphDataStore', 'useResourceStore'] as const;
 
 export const PROJECT_RESET_STORE_HOOKS = [
-  'useLayoutStore',
+  'useEditorPaneStateStore',
   'useViewportStore',
 
   'useEditStateStore',

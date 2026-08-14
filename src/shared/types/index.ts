@@ -31,7 +31,7 @@ export * from './dto';
 
 // ==================== UI Types ====================
 // UI 状态类型 - 前端专用
-export type { LayoutDirection, LayoutNode, LayoutTab, LayoutTabType, LayoutTabComponent, EditorGroupSnapshot, LayoutTree, LoadStatus, ExecutionStatus } from './ui';
+export type { LayoutTab, LayoutTabType, LayoutTabComponent, EditorGroupSnapshot, LoadStatus, ExecutionStatus } from './ui';
 export type { Position, Size, Rect } from './ui/common';
 
 // ==================== Store Types ====================

@@ -13,12 +13,6 @@ import {
 
 let resizeCallback: (() => void) | null = null;
 
-vi.mock('@/shared/utils/sashResizeGuard', () => ({
-  bindSashAwareResizeObserver: vi.fn((_element: Element, callback: () => void) => {
-    resizeCallback = callback;
-    return vi.fn();
-  }),
-}));
 
 vi.mock('@/features/core/viewport', () => ({
   getViewport: () => ({ x: 0, y: 0, scale: 1 }),
@@ -102,6 +96,14 @@ describe('ConnectionLine canvas sizing', () => {
       context as unknown as CanvasRenderingContext2D,
     );
     vi.stubGlobal('devicePixelRatio', 2);
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = () => callback([], this as unknown as ResizeObserver);
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    });
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);

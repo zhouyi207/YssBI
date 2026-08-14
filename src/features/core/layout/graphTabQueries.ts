@@ -1,5 +1,5 @@
-import { useEditorTabStore } from './editorTabStore';
+import { editorDockviewPort } from '@/features/core/dockview';
 
 export function isGraphOpenInAnyTab(graphPath: string): boolean {
-  return useEditorTabStore.getState().isTabOpen(graphPath);
+  return editorDockviewPort.findPanelsByResource(graphPath).length > 0;
 }

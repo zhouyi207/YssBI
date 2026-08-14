@@ -1,16 +1,23 @@
-import { useLayoutStore } from "./layoutStore";
-import { getLayoutTabById } from "./layoutTabQueries";
+import { editorDockviewPort } from "@/features/core/dockview";
+import type { LayoutTab } from "@/shared/types";
 import { isGraphResourceDirty, markResourceDirty, useResourceStore } from "@/features/core/resource";
 import { layoutTabResourceRef } from "./layoutTabModel";
 
-import { listAllOpenEditorTabs } from "./editorTabStore";
+function readLayoutTab(panel: ReturnType<typeof editorDockviewPort.listPanels>[number]): LayoutTab | null {
+    const value = panel.tab?.data?.layoutTab;
+    return value && typeof value === "object" ? value as LayoutTab : null;
+}
 
 export function markGraphTabDirty(graphPath: string): void {
-    const located = getLayoutTabById(graphPath);
-    if (located?.tab.type === "event" || located?.tab.type === "function" || located?.tab.type === "worksheet") {
-        markResourceDirty({ id: graphPath, kind: located.tab.type }, true);
-        if (located.tab.pinned === false) {
-            useLayoutStore.getState().setTabPinned(located.nodeId, graphPath, true);
+    const panel = editorDockviewPort.findPanelsByResource(graphPath)[0];
+    const tab = panel ? readLayoutTab(panel) : null;
+    if (tab?.type === "event" || tab?.type === "function" || tab?.type === "worksheet") {
+        markResourceDirty({ id: graphPath, kind: tab.type }, true);
+        if (tab.pinned === false && panel?.tab) {
+            void editorDockviewPort.updateTab(panel.panelInstanceId, {
+                ...panel.tab,
+                data: { ...panel.tab.data, layoutTab: { ...tab, pinned: true } },
+            });
         }
     }
 }
@@ -37,13 +44,14 @@ export interface DirtyTabSnapshot {
 export function collectDirtyGraphTabs(): DirtyTabSnapshot[] {
     const seen = new Set<string>();
     const out: DirtyTabSnapshot[] = [];
-    for (const { groupId, tab } of listAllOpenEditorTabs()) {
-        if (tab.type !== "event" && tab.type !== "function" && tab.type !== "worksheet") continue;
+    for (const panel of editorDockviewPort.listPanels()) {
+        const tab = readLayoutTab(panel);
+        if (!tab || (tab.type !== "event" && tab.type !== "function" && tab.type !== "worksheet")) continue;
         if (seen.has(tab.id)) continue;
         if (!isGraphResourceDirty(tab.id, tab.type)) continue;
         seen.add(tab.id);
         out.push({
-          nodeId: groupId,
+          nodeId: panel.groupId,
           graphPath: tab.id,
           title: resolveCoreTabDisplayName(layoutTabResourceRef(tab), tab.id),
         });

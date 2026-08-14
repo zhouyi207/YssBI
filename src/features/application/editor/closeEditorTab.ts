@@ -1,8 +1,5 @@
 import { logger } from "@/utils/appLogger";
-import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
-import { layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
-
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { editorDockviewPort } from '@/features/core/dockview';
 import { isResourceDocumentDirty } from '@/features/core/resource';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
@@ -22,11 +19,13 @@ export async function closeWorksheetTab(
   nodeId?: string,
   skipDirtyPrompt = false,
 ): Promise<boolean> {
-  const located = locateLayoutTab(worksheetPath, nodeId);
-  if (!located?.tab) return false;
+  const panel = editorDockviewPort
+    .findPanelsByResource(worksheetPath)
+    .find((candidate) => !nodeId || candidate.groupId === nodeId);
+  if (!panel || panel.tab?.kind !== 'worksheet') return false;
 
   if (isResourceDocumentDirty({ id: worksheetPath, kind: 'worksheet' }) && !skipDirtyPrompt) {
-    const displayName = resolveTabDisplayName(layoutTabResourceRef(located.tab), worksheetPath);
+    const displayName = resolveTabDisplayName({ id: worksheetPath, kind: 'worksheet' }, worksheetPath);
     const context = captureProjectCommandContext();
     const shouldSave = await uiStore.confirm({
       title: '保存更改？',
@@ -48,7 +47,7 @@ export async function closeWorksheetTab(
     }
   }
 
-  useLayoutStore.getState().removeTab(located.nodeId, worksheetPath);
+  await editorDockviewPort.remove(panel.panelInstanceId);
   clearDetailFocusForClosedTab(worksheetPath);
   return true;
 }
@@ -58,21 +57,14 @@ export async function closeEditorTab(
   nodeId?: string,
   skipDirtyPrompt = false,
 ): Promise<boolean> {
-  const located = locateLayoutTab(tabId, nodeId);
-
-  const tabType = located?.tab?.type;
-  if (tabType === 'worksheet') {
-    return closeWorksheetTab(tabId, nodeId, skipDirtyPrompt);
-  }
-  if (tabType === 'event' || tabType === 'function') {
-    return closeGraphTab(tabId, nodeId, skipDirtyPrompt);
-  }
-
-  if (located?.nodeId) {
-    useLayoutStore.getState().removeTab(located.nodeId, tabId);
-    return true;
-  }
-  return false;
+  const panel = editorDockviewPort
+    .findPanelsByResource(tabId)
+    .find((candidate) => !nodeId || candidate.groupId === nodeId);
+  const tabType = panel?.tab?.kind;
+  if (tabType === 'worksheet') return closeWorksheetTab(tabId, nodeId, skipDirtyPrompt);
+  if (tabType === 'event' || tabType === 'function') return closeGraphTab(tabId, nodeId, skipDirtyPrompt);
+  if (!panel) return false;
+  return editorDockviewPort.remove(panel.panelInstanceId);
 }
 
 export async function performWorksheetDelete(

@@ -1,14 +1,23 @@
-import { logger } from "@/utils/appLogger";
 import type { EditorSplitEdge } from '@/features/core/layout/editorSplitLayout';
-import { EditorGroupsService } from '@/features/core/layout/editorGroupsService';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { editorDockviewPort, type SplitDirection } from '@/features/core/dockview';
 import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
-import { readEditorPartOptions } from '@/features/core/layout/editorPartOptions';
-import { canMergeEditorGroup, canMoveTabsAcrossEditorGroups } from '@/features/core/layout/editorGroupLock';
-import { splitComponentForTab } from '@/features/core/layout/layoutTabModel';
-import { i18n } from '@/app/i18n';
 import { switchEditorTab } from './switchEditorTab';
+import {
+  findDockviewPanel,
+  layoutTabFromDockviewPanel,
+  listDockviewGroupPanels,
+} from './dockviewTabProjection';
+
+let copiedPanelSequence = 0;
+
+function copiedPanelId(sourcePanelId: string): string {
+  copiedPanelSequence += 1;
+  return `${sourcePanelId}-copy-${copiedPanelSequence}`;
+}
+
+function splitDirection(edge: EditorSplitEdge): SplitDirection | null {
+  return edge === 'center' ? null : edge;
+}
 
 async function activateCreatedEditorGroup(groupId: string | null): Promise<string | null> {
   if (!groupId) return null;
@@ -17,25 +26,47 @@ async function activateCreatedEditorGroup(groupId: string | null): Promise<strin
   return groupId;
 }
 
-/** Move one or more tabs onto another editor group's TabBar (removes from source). */
+async function copyPanelToGroup(
+  panel: ReturnType<typeof editorDockviewPort.listPanels>[number],
+  targetGroupId: string,
+  index?: number,
+): Promise<string | null> {
+  const tab = layoutTabFromDockviewPanel(panel);
+  if (!tab || !panel.tab) return null;
+  const panelInstanceId = copiedPanelId(panel.panelInstanceId);
+  await editorDockviewPort.open({
+    panelInstanceId,
+    component: panel.component,
+    title: panel.title,
+    groupId: targetGroupId,
+    index,
+    tab: panel.tab,
+  });
+  return panelInstanceId;
+}
+
+/** Programmatic counterpart to Dockview's native panel move/order operation. */
 export function moveTabsBetweenGroups(
   sourceGroupId: string,
   tabIds: string[],
   targetGroupId: string,
   targetTabIndex?: number,
 ): void {
-  if (!canMoveTabsAcrossEditorGroups(sourceGroupId, targetGroupId)) {
-    logger.notify.warn(i18n.t('tabBar.lockedGroupMoveBlocked'), "UI");
-    return;
-  }
-  const wasInactive = useLayoutStore.getState().activeEditorGroupId !== targetGroupId;
-  useLayoutStore.getState().moveTabs(sourceGroupId, tabIds, targetGroupId, targetTabIndex);
-  if (!wasInactive && sourceGroupId === targetGroupId) return;
-  const activeTab = getActiveLayoutTab(targetGroupId)?.tab;
-  if (activeTab) void switchEditorTab(targetGroupId, activeTab);
+  void (async () => {
+    let index = targetTabIndex;
+    for (const tabId of tabIds) {
+      const panel = findDockviewPanel(tabId, sourceGroupId);
+      if (!panel) continue;
+      await editorDockviewPort.move({
+        panelInstanceId: panel.panelInstanceId,
+        groupId: targetGroupId,
+        index,
+      });
+      if (index !== undefined) index += 1;
+    }
+  })();
 }
 
-/** Move a tab onto another editor group's TabBar (removes from source). */
 export function moveTabBetweenGroups(
   sourceGroupId: string,
   tabId: string,
@@ -45,24 +76,23 @@ export function moveTabBetweenGroups(
   moveTabsBetweenGroups(sourceGroupId, [tabId], targetGroupId, targetTabIndex);
 }
 
-/** VS Code copy editor — duplicate tab reference into target group. */
 export function copyTabsBetweenGroups(
-  _sourceGroupId: string,
+  sourceGroupId: string,
   tabIds: string[],
   targetGroupId: string,
   targetTabIndex?: number,
 ): void {
-  let insertAt = targetTabIndex;
-  for (const tabId of tabIds) {
-    useEditorTabStore.getState().duplicateTabReference(targetGroupId, tabId, insertAt);
-    if (insertAt !== undefined) insertAt += 1;
-  }
-  useLayoutStore.getState().setActiveGroup(targetGroupId);
-  const activeTab = getActiveLayoutTab(targetGroupId)?.tab;
-  if (activeTab) void switchEditorTab(targetGroupId, activeTab);
+  void (async () => {
+    let index = targetTabIndex;
+    for (const tabId of tabIds) {
+      const panel = findDockviewPanel(tabId, sourceGroupId);
+      if (!panel) continue;
+      await copyPanelToGroup(panel, targetGroupId, index);
+      if (index !== undefined) index += 1;
+    }
+  })();
 }
 
-/** VS Code copy editor — duplicate tab reference into target group. */
 export function copyTabBetweenGroups(
   sourceGroupId: string,
   tabId: string,
@@ -72,11 +102,6 @@ export function copyTabBetweenGroups(
   copyTabsBetweenGroups(sourceGroupId, [tabId], targetGroupId, targetTabIndex);
 }
 
-/**
- * Drag tab to editor edge split:
- * - Multiple tabs in source → move dragged tab to the new group.
- * - Single tab in source → copy (keep source group alive; moving empties it and breaks the grid).
- */
 export async function splitEditorWithTab(
   sourceGroupId: string,
   tabId: string,
@@ -84,131 +109,130 @@ export async function splitEditorWithTab(
   edge: EditorSplitEdge,
   options?: { copy?: boolean },
 ): Promise<string | null> {
-  if (!canMoveTabsAcrossEditorGroups(sourceGroupId, targetGroupId)) {
-    logger.notify.warn(i18n.t('tabBar.lockedGroupMoveBlocked'), "UI");
-    return null;
+  const sourcePanel = findDockviewPanel(tabId, sourceGroupId);
+  if (!sourcePanel) return null;
+
+  let panelInstanceId = sourcePanel.panelInstanceId;
+  if (options?.copy) {
+    const copiedId = await copyPanelToGroup(sourcePanel, targetGroupId);
+    if (!copiedId) return null;
+    panelInstanceId = copiedId;
   }
-  const sourceTabs = useEditorTabStore.getState().resolveGroupTabs(sourceGroupId);
-  const tab = sourceTabs.find((t) => t.id === tabId);
-  if (!tab) return null;
 
-  const copy = options?.copy ?? false;
-  const moveFromSource = !copy && sourceTabs.length > 1;
-
-  const created = EditorGroupsService.splitGroupAtEdge(targetGroupId, edge, {
-    component: tab.component || 'GraphEditor',
-    tabs: [{ ...tab, pinned: true as const }],
-    activeTabId: tabId,
+  const direction = splitDirection(edge);
+  if (!direction) return null;
+  const split = await editorDockviewPort.split({
+    panelInstanceId,
+    referenceGroupId: targetGroupId,
+    direction,
   });
-  if (!created) return null;
-
-  if (moveFromSource) {
-    const sourceStillHasTab = useEditorTabStore
-      .getState()
-      .getPlacement(sourceGroupId)
-      .tabIds
-      .includes(tabId);
-    if (sourceStillHasTab) {
-      useLayoutStore.getState().removeTab(sourceGroupId, tabId);
-    }
-  }
-
-  return activateCreatedEditorGroup(created);
+  if (!split) return null;
+  const createdGroupId = editorDockviewPort
+    .listPanels()
+    .find((panel) => panel.panelInstanceId === panelInstanceId)?.groupId ?? null;
+  return activateCreatedEditorGroup(createdGroupId);
 }
 
-/** VS Code mergeGroup — move all tabs from source into target. */
 export function mergeEditorGroupInto(
   sourceGroupId: string,
   targetGroupId: string,
   insertIndex?: number,
 ): void {
-  if (!canMergeEditorGroup(sourceGroupId, targetGroupId)) {
-    logger.notify.warn(i18n.t('tabBar.lockedGroupMoveBlocked'), "UI");
-    return;
-  }
-  useLayoutStore.getState().mergeEditorGroup(sourceGroupId, targetGroupId, insertIndex);
-  const activeTab = getActiveLayoutTab(targetGroupId)?.tab;
-  if (activeTab) void switchEditorTab(targetGroupId, activeTab);
+  const tabIds = listDockviewGroupPanels(sourceGroupId)
+    .map(layoutTabFromDockviewPanel)
+    .filter((tab) => tab !== null)
+    .map((tab) => tab.id);
+  moveTabsBetweenGroups(sourceGroupId, tabIds, targetGroupId, insertIndex);
 }
 
-/** VS Code copyGroup on merge drop — duplicate tabs without removing source group. */
 export function copyEditorGroupInto(
   sourceGroupId: string,
   targetGroupId: string,
   insertIndex?: number,
 ): void {
-  if (sourceGroupId === targetGroupId) return;
-  useEditorTabStore.getState().duplicateGroupTabs(sourceGroupId, targetGroupId, insertIndex);
-  useLayoutStore.getState().setActiveGroup(targetGroupId);
-  const activeTab = getActiveLayoutTab(targetGroupId)?.tab;
-  if (activeTab) void switchEditorTab(targetGroupId, activeTab);
+  const tabIds = listDockviewGroupPanels(sourceGroupId)
+    .map(layoutTabFromDockviewPanel)
+    .filter((tab) => tab !== null)
+    .map((tab) => tab.id);
+  copyTabsBetweenGroups(sourceGroupId, tabIds, targetGroupId, insertIndex);
 }
 
-/** VS Code moveGroup + addGroup split. */
 export async function splitEditorGroupWithGroup(
   sourceGroupId: string,
   targetGroupId: string,
   edge: EditorSplitEdge,
 ): Promise<string | null> {
-  if (!canMoveTabsAcrossEditorGroups(sourceGroupId, targetGroupId)) {
-    logger.notify.warn(i18n.t('tabBar.lockedGroupMoveBlocked'), "UI");
-    return null;
+  const panels = listDockviewGroupPanels(sourceGroupId);
+  const first = panels[0];
+  if (!first) return null;
+  const direction = splitDirection(edge);
+  if (!direction) return null;
+  const split = await editorDockviewPort.split({
+    panelInstanceId: first.panelInstanceId,
+    referenceGroupId: targetGroupId,
+    direction,
+  });
+  if (!split) return null;
+  const createdGroupId = findDockviewPanel(first.tab?.resourceRef ?? '', undefined)?.groupId;
+  if (!createdGroupId) return null;
+  for (const panel of panels.slice(1)) {
+    await editorDockviewPort.move({ panelInstanceId: panel.panelInstanceId, groupId: createdGroupId });
   }
-  const created = useLayoutStore.getState().splitEditorGroupWithGroup(
-    sourceGroupId,
-    targetGroupId,
-    edge,
-  );
-  return activateCreatedEditorGroup(created);
+  return activateCreatedEditorGroup(createdGroupId);
 }
 
-/** VS Code copyGroup + addGroup split. */
 export async function copyEditorGroupWithSplit(
   sourceGroupId: string,
   targetGroupId: string,
   edge: EditorSplitEdge,
 ): Promise<string | null> {
-  const nodes = useLayoutStore.getState().nodes;
-  const sourceTabs = useEditorTabStore.getState().resolveGroupTabs(sourceGroupId);
-  const activeTab = getActiveLayoutTab(sourceGroupId, nodes)?.tab;
-
-  const created = EditorGroupsService.splitGroupAtEdge(targetGroupId, edge, {
-    component: splitComponentForTab(activeTab) || sourceTabs[0]?.component || 'GraphEditor',
-    tabs: [],
-    activeTabId: activeTab?.id,
+  const panels = listDockviewGroupPanels(sourceGroupId);
+  const first = panels[0];
+  if (!first) return null;
+  const copiedId = await copyPanelToGroup(first, targetGroupId);
+  if (!copiedId) return null;
+  const direction = splitDirection(edge);
+  if (!direction) return null;
+  const split = await editorDockviewPort.split({
+    panelInstanceId: copiedId,
+    referenceGroupId: targetGroupId,
+    direction,
   });
-  if (!created) return null;
-
-  useEditorTabStore.getState().duplicateGroupTabs(sourceGroupId, created);
-  return activateCreatedEditorGroup(created);
+  if (!split) return null;
+  const createdGroupId = editorDockviewPort
+    .listPanels()
+    .find((panel) => panel.panelInstanceId === copiedId)?.groupId;
+  if (!createdGroupId) return null;
+  for (const panel of panels.slice(1)) await copyPanelToGroup(panel, createdGroupId);
+  return activateCreatedEditorGroup(createdGroupId);
 }
 
-/** Single-tab source + split + move (VS Code closeEmptyGroups optimization). */
 export async function splitOrMoveSingleTabGroup(
   sourceGroupId: string,
   tabId: string,
   targetGroupId: string,
   edge: EditorSplitEdge,
 ): Promise<string | null> {
-  const sourceTabs = useEditorTabStore.getState().resolveGroupTabs(sourceGroupId);
-  if (sourceTabs.length !== 1) {
-    return splitEditorWithTab(sourceGroupId, tabId, targetGroupId, edge);
-  }
-
-  const closeEmptyGroups = readEditorPartOptions().closeEmptyGroups;
-  if (closeEmptyGroups) {
-    return splitEditorGroupWithGroup(sourceGroupId, targetGroupId, edge);
-  }
   return splitEditorWithTab(sourceGroupId, tabId, targetGroupId, edge);
 }
 
-/** Button / command split — copies active tab to right or bottom. */
+/** Split the active Dockview panel. Dockview owns the resulting group topology. */
 export async function splitEditorAtEdge(
   groupId: string,
   edge: 'right' | 'bottom',
 ): Promise<string | null> {
-  const created = edge === 'right'
-    ? EditorGroupsService.splitActiveTabRight(groupId)
-    : EditorGroupsService.splitActiveTabDown(groupId);
-  return activateCreatedEditorGroup(created);
+  const activePanelId = editorDockviewPort
+    .listGroups()
+    .find((group) => group.groupId === groupId)?.activePanelInstanceId;
+  if (!activePanelId) return null;
+  const split = await editorDockviewPort.split({
+    panelInstanceId: activePanelId,
+    referenceGroupId: groupId,
+    direction: edge,
+  });
+  if (!split) return null;
+  const createdGroupId = editorDockviewPort
+    .listPanels()
+    .find((panel) => panel.panelInstanceId === activePanelId)?.groupId ?? null;
+  return activateCreatedEditorGroup(createdGroupId);
 }

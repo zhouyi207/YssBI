@@ -33,8 +33,7 @@ import { resetClientProjectState } from './projectClientReset';
 import { useGraphMetaStore } from './graphMetaStore';
 import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { editorDockviewPort, useEditorPaneStateStore } from '@/features/core/dockview';
 import { useViewportStore } from '@/features/core/viewport';
 import { useGraphInteractionStore } from '@/features/core/graphInteraction';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
@@ -257,9 +256,6 @@ export async function prepareAuthoritativeProjectLoad(
     { path, databases, index },
     {
       databases: useDatabaseStore.getState().databases,
-      layoutNodes: useLayoutStore.getState().nodes,
-      editorTabs: useEditorTabStore.getState().snapshotMemento(),
-      recentEditorGroupIds: useLayoutStore.getState().recentEditorGroupIds,
       detailFocus: useEditorStore.getState().detailFocus,
     },
     {
@@ -302,14 +298,8 @@ export function commitPreparedAuthoritativeProjectLoad(
   commitProjectLoadStep('function signature coordinator', () => projectIOApplicationPort().resetFunctionSignatures());
   commitProjectLoadStep('history coordinator', () => projectIOApplicationPort().resetHistory());
 
-  commitProjectLoadStep('layout', () => useLayoutStore.setState({
-    nodes: prepared.storeState.layout.nodes,
-    activeEditorGroupId: prepared.storeState.layout.activeEditorGroupId,
-    recentEditorGroupIds: prepared.storeState.layout.recentEditorGroupIds,
-  }));
-  commitProjectLoadStep('editor tabs', () => useEditorTabStore.setState(
-    prepared.storeState.layout.tabs,
-  ));
+  commitProjectLoadStep('editor dock', () => { void editorDockviewPort.reset(); });
+  commitProjectLoadStep('editor pane state', () => useEditorPaneStateStore.getState().reset());
   commitProjectLoadStep('detail focus', () => useEditorStore.setState({
     detailFocus: prepared.storeState.detailFocus,
   }));

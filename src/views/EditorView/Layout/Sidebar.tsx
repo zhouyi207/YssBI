@@ -1,8 +1,8 @@
-import { forwardRef, useCallback, useContext, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorSessionResources } from '@/features/application/editor';
-import { GroupContext } from '@/features/core/editor';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+
+import { useWorkbenchStore } from '@/features/core/workbench';
 import { ContextMenu } from '@/shared/ui/contextMenu';
 import {
   buildSidebarContextMenuSections,
@@ -30,12 +30,10 @@ const TAB_TITLE_KEYS: Record<SidebarTab, string> = {
   charts: 'activityBar.charts',
 };
 
-const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
+function Sidebar() {
   const { t } = useTranslation();
-  useContext(GroupContext);
 
-  const sidebarNode = useLayoutStore((s) => s.nodes['sidebar']);
-  const currentTab = (sidebarNode?.data?.currentTab as SidebarTab | null) ?? null;
+  const currentTab = useWorkbenchStore((state) => state.sidebarCurrentTab) as SidebarTab;
 
   const {
     variables,
@@ -146,7 +144,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
 
   return (
     <div
-      ref={ref}
       className="sidebar-container relative z-30 flex h-full w-full min-w-0 overflow-hidden select-none bg-[var(--sidebar-bg)]"
       style={{ pointerEvents: 'auto' }}
     >
@@ -219,8 +216,6 @@ const Sidebar = forwardRef<HTMLDivElement>((_, ref) => {
       />
     </div>
   );
-});
-
-Sidebar.displayName = 'Sidebar';
+}
 
 export default Sidebar;

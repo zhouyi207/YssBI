@@ -10,9 +10,7 @@ import {
 import { useGraphDataStore } from '@/features/core/dataStore';
 import { useGraphInteractionStore } from '@/features/core/graphInteraction';
 import { resolvePinOffsetWaiters } from '@/features/core/canvas/pinOffsetWaiter';
-import { createSashAwareResizeHandler } from '@/shared/utils/sashResizeGuard';
-import { SASH_DRAG_END_EVENT } from '@/views/EditorView/Renderer/sashResizeLogic';
-import { addGlobalEventListener } from '@/shared/utils/globalEvent';
+
 
 export function useCanvasViewport(
   canvasElementRef: React.RefObject<HTMLDivElement | null>,
@@ -61,13 +59,9 @@ export function useCanvasViewport(
     const bumpResizeVersion = () => {
       setNodeResizeVersion((v) => v + 1);
     };
-    const { handler, flushAfterSashDrag } = createSashAwareResizeHandler(bumpResizeVersion);
-
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(resizeRafRef.current);
-      resizeRafRef.current = requestAnimationFrame(() => {
-        handler();
-      });
+      resizeRafRef.current = requestAnimationFrame(bumpResizeVersion);
     });
 
     for (const nodeId of graphNodeIds) {
@@ -75,12 +69,9 @@ export function useCanvasViewport(
       if (el) observer.observe(el);
     }
 
-    const cleanupSashDragEnd = addGlobalEventListener(window, SASH_DRAG_END_EVENT, flushAfterSashDrag);
-
     return () => {
       cancelAnimationFrame(resizeRafRef.current);
       observer.disconnect();
-      cleanupSashDragEnd();
     };
   }, [canvasElementRef, graphNodeIds]);
 

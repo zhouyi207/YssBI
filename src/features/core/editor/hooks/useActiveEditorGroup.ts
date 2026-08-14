@@ -1,17 +1,12 @@
-/**
- * Focused editor group workspace — tabs/activeTab from editorTabStore placements.
- */
-
-import { useLayoutStore, LayoutState } from '@/features/core/layout/layoutStore';
+import { editorDockviewPort, useDockviewPortSnapshot } from '@/features/core/dockview';
 import { DEFAULT_EDITOR_GROUP_ID } from '@/features/core/layout/workbenchLayoutDefaults';
 import { useEditorGroupPlacement } from './useEditorGroupPlacement';
 import { createGraphSelection } from '@/features/core/layout/layoutTabQueries';
 
 export function useActiveEditorGroup(overrideGroupId?: string | null) {
-  const focusedEditorGroupId = useLayoutStore((s: LayoutState) => s.activeEditorGroupId);
+  useDockviewPortSnapshot(editorDockviewPort);
+  const focusedEditorGroupId = editorDockviewPort.getActiveGroupId() ?? null;
   const groupId = overrideGroupId ?? focusedEditorGroupId ?? DEFAULT_EDITOR_GROUP_ID;
-
-  const node = useLayoutStore((s: LayoutState) => s.nodes[groupId]);
   const placement = useEditorGroupPlacement(groupId);
 
   return {
@@ -21,10 +16,7 @@ export function useActiveEditorGroup(overrideGroupId?: string | null) {
     tabs: placement.tabs,
     selectedNodeIds: placement.selectedNodeIds,
     selectedConnectionIds: placement.selectedConnectionIds,
-    selection: createGraphSelection(
-      placement.selectedNodeIds,
-      placement.selectedConnectionIds,
-    ),
-    node,
+    selection: createGraphSelection(placement.selectedNodeIds, placement.selectedConnectionIds),
+    node: undefined,
   };
 }

@@ -1,63 +1,57 @@
 import { useEditorStore } from '@/features/core/editor';
 import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { getEditorGroupActiveTabId, useEditorTabStore } from '@/features/core/layout/editorTabStore';
+import { editorDockviewPort } from '@/features/core/dockview';
+import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import type { LayoutTab } from '@/shared/types/ui';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { activateGraphTab } from './activateGraphTab';
-import { applyEditorTabSelection } from './editorTabSelection';
 import { ensureDetailVisible } from './ensureDetailVisible';
 import { suspendEditorGroupGraphSession } from './graphSessionLifecycle';
 
 let editorGroupSessionChain: Promise<void> = Promise.resolve();
+let latestTabSwitchRequest = 0;
+const pendingGroupSuspensions = new Set<string>();
 
 function scheduleSuspendPreviousGroup(prevGroupId: string): void {
+  if (pendingGroupSuspensions.has(prevGroupId)) return;
+  pendingGroupSuspensions.add(prevGroupId);
   editorGroupSessionChain = editorGroupSessionChain
     .then(() => suspendEditorGroupGraphSession(prevGroupId))
-    .catch(() => undefined);
+    .catch(() => undefined)
+    .finally(() => pendingGroupSuspensions.delete(prevGroupId));
 }
 
-/**
- * VS Code MOUSE_DOWN — update active editor group immediately.
- * Previous group session suspend runs on a serialized background chain.
- */
+/** Activate a Dockview group immediately; graph-session suspension remains serialized. */
 export function focusEditorGroupSync(groupId: string): boolean {
-  const prevGroupId = useLayoutStore.getState().activeEditorGroupId;
-  if (prevGroupId === groupId) return false;
-  useLayoutStore.getState().setActiveGroup(groupId);
-  if (prevGroupId) {
-    scheduleSuspendPreviousGroup(prevGroupId);
+  const previousGroupId = useGraphSessionStore.getState().getFocusedGroupId();
+  const group = editorDockviewPort.listGroups().find((candidate) => candidate.groupId === groupId);
+  if (!group) return false;
+  if (editorDockviewPort.getActiveGroupId() !== groupId && group.activePanelInstanceId) {
+    void editorDockviewPort.activate(group.activePanelInstanceId);
   }
-  return true;
+  if (previousGroupId && previousGroupId !== groupId) scheduleSuspendPreviousGroup(previousGroupId);
+  return previousGroupId !== groupId;
 }
 
 export async function awaitEditorGroupSessionChain(): Promise<void> {
   await editorGroupSessionChain;
 }
 
-/** Load the group's current tab session after any pending suspend work. */
 export async function hydrateEditorGroup(groupId: string): Promise<boolean> {
   await editorGroupSessionChain;
   return activateCurrentEditorTab(groupId);
 }
 
-async function focusEditorGroup(groupId: string): Promise<void> {
-  focusEditorGroupSync(groupId);
-  await editorGroupSessionChain;
-}
-
-/**
- * Unified editor tab activation: graph reload, worksheet detail, layout selection, session.
- */
-export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<boolean> {
-  await focusEditorGroup(groupId);
-  applyEditorTabSelection(groupId, tab.id);
-
+async function synchronizeTabSession(
+  request: number,
+  groupId: string,
+  tab: LayoutTab,
+): Promise<boolean> {
   if (tab.type === 'event' || tab.type === 'function') {
     useEditorStore.getState().setDetailFocus({ kind: tab.type, path: tab.id });
     ensureDetailVisible();
     const loaded = await activateGraphTab(tab.id, groupId);
-    if (!loaded) return false;
+    if (!loaded || request !== latestTabSwitchRequest) return false;
     syncVariablesGraphScopeFromActiveTab();
     return true;
   }
@@ -66,44 +60,50 @@ export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<
     useEditorStore.getState().setDetailFocus({ kind: 'worksheet', worksheetPath: tab.id });
     ensureDetailVisible();
     const sessionStore = useGraphSessionStore.getState();
-    if (sessionStore.getFocusedGroupId() === groupId) {
-      sessionStore.clearFocusedSession(groupId);
-    }
-    return true;
+    if (sessionStore.getFocusedGroupId() === groupId) sessionStore.clearFocusedSession(groupId);
   }
-
   return true;
 }
 
-/** Restore session + backend load after close without changing detail focus. */
-export async function activateCurrentEditorTab(groupId: string): Promise<boolean> {
-  const activeTabId = getEditorGroupActiveTabId(groupId);
-  if (!activeTabId) {
-    useGraphSessionStore.getState().clearFocusedSession(groupId);
-    return false;
-  }
-  const activeTab = useEditorTabStore.getState().resolveTab(activeTabId);
-  if (!activeTab) {
-    useGraphSessionStore.getState().clearFocusedSession(groupId);
-    return false;
-  }
+/** Synchronize a user-originated Dockview activation without writing back to Dockview. */
+export async function synchronizeActiveEditorTab(groupId: string, tab: LayoutTab): Promise<boolean> {
+  const request = ++latestTabSwitchRequest;
+  focusEditorGroupSync(groupId);
+  await editorGroupSessionChain;
+  if (request !== latestTabSwitchRequest) return false;
+  return synchronizeTabSession(request, groupId, tab);
+}
 
-  if (activeTab.type === 'event' || activeTab.type === 'function') {
-    const loaded = await activateGraphTab(activeTab.id, groupId);
+/** Activate a tab requested by application code, then synchronize its business session. */
+export async function switchEditorTab(groupId: string, tab: LayoutTab): Promise<boolean> {
+  const request = ++latestTabSwitchRequest;
+  focusEditorGroupSync(groupId);
+  await editorGroupSessionChain;
+  if (request !== latestTabSwitchRequest) return false;
+
+  const panel = editorDockviewPort
+    .findPanelsByResource(tab.id)
+    .find((candidate) => candidate.groupId === groupId);
+  if (panel && !panel.active) await editorDockviewPort.activate(panel.panelInstanceId);
+  if (request !== latestTabSwitchRequest) return false;
+  return synchronizeTabSession(request, groupId, tab);
+}
+
+export async function activateCurrentEditorTab(groupId: string): Promise<boolean> {
+  const active = getActiveLayoutTab(groupId);
+  if (!active) {
+    useGraphSessionStore.getState().clearFocusedSession(groupId);
+    return false;
+  }
+  if (active.tab.type === 'event' || active.tab.type === 'function') {
+    const loaded = await activateGraphTab(active.tab.id, groupId);
     if (!loaded) return false;
     syncVariablesGraphScopeFromActiveTab();
     return true;
   }
-
-  if (activeTab.type === 'worksheet') {
-    return true;
-  }
-
-  useGraphSessionStore.getState().clearFocusedSession(groupId);
-  return false;
+  return active.tab.type === 'worksheet';
 }
 
-/** Activate an editor group and hydrate its current graph-backed session as one application action. */
 export async function activateEditorGroup(groupId: string): Promise<boolean> {
   focusEditorGroupSync(groupId);
   return hydrateEditorGroup(groupId);

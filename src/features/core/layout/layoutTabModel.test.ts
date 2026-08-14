@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { LayoutNode } from '@/shared/types';
+
 import type { LayoutTabInput } from './layoutTabModel';
 import {
   buildGraphLayoutTab,
@@ -7,7 +7,6 @@ import {
   isGraphLayoutTab,
   isPreviewLayoutTab,
   normalizeLayoutTab,
-  readEditorGroupSnapshot,
   splitComponentForTab,
 } from './layoutTabModel';
 
@@ -39,17 +38,6 @@ describe('layoutTabModel', () => {
     });
   });
 
-  it('readEditorGroupSnapshot returns stable group identity', () => {
-    const node: LayoutNode = {
-      id: 'editor-a',
-      type: 'component',
-      parentId: 'root',
-      data: {
-        component: 'GraphEditor',
-      },
-    };
-    expect(readEditorGroupSnapshot(node)).toEqual({ id: 'editor-a' });
-  });
 
   it('isGraphLayoutTab and splitComponentForTab', () => {
     const graphTab = buildGraphLayoutTab('events/G.yssbi-event', 'event');

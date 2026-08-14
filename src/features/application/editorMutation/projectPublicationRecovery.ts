@@ -36,11 +36,6 @@ import {
 } from '@/features/core/variable/variableCatalog';
 import { useHistoryStore } from '@/features/core/history';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { useEditorTabStore, type EditorTabMemento } from '@/features/core/layout/editorTabStore';
-import {
-  remapPlacementActiveTab,
-  replacePlacementActiveTab,
-} from '@/features/core/layout/editorGraphSelectionPlacement';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { useViewportStore } from '@/features/core/viewport';
 import { parseViewportScopeKey, viewportScopeKey } from '@/features/core/viewport/viewportScope';
@@ -49,6 +44,7 @@ import {
   remapWorksheetNonViewportUiState,
 } from '@/features/application/editor/cascadeGraphPathReferences';
 import { invalidateWorksheetPreviewCacheForMove } from '@/services/worksheet/worksheetPreviewCache';
+import { commitEditorDockviewPublication } from './editorDockviewPublicationCommit';
 
 function publicationPaths(result: ResourceMutationResultDto): string[] {
   const statusPaths = result.projectionStatus.status === 'complete'
@@ -366,53 +362,6 @@ function applyDocumentPatches(
   }
 }
 
-function remapTabs(
-  current: EditorTabMemento,
-  pathRemaps: ReadonlyMap<string, string>,
-): EditorTabMemento {
-  const tabs = structuredClone(current);
-  for (const [from, to] of pathRemaps) {
-    const source = tabs.registry[from];
-    if (source) {
-      tabs.registry[to] = { ...source, id: to };
-      delete tabs.registry[from];
-    }
-    for (const placement of Object.values(tabs.placements)) {
-      placement.tabIds = placement.tabIds.map((id) => id === from ? to : id);
-      placement.selectedTabIds = placement.selectedTabIds.map((id) => id === from ? to : id);
-      remapPlacementActiveTab(placement, from, to);
-    }
-  }
-  return tabs;
-}
-
-function reconcileTabs(
-  tabs: EditorTabMemento,
-  resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
-): EditorTabMemento {
-  for (const [tabId, tab] of Object.entries(tabs.registry)) {
-    if ((tab.type === 'event' || tab.type === 'function' || tab.type === 'worksheet')
-      && !resources[resourceKey({ id: tabId, kind: tab.type })]) {
-      delete tabs.registry[tabId];
-    }
-  }
-  for (const [groupId, placement] of Object.entries(tabs.placements)) {
-    placement.tabIds = [...new Set(
-      placement.tabIds.filter((tabId) => Boolean(tabs.registry[tabId])),
-    )];
-    placement.selectedTabIds = [...new Set(
-      placement.selectedTabIds.filter((tabId) => placement.tabIds.includes(tabId)),
-    )];
-    if (!placement.activeTabId || !placement.tabIds.includes(placement.activeTabId)) {
-      replacePlacementActiveTab(
-        placement,
-        placement.tabIds[placement.tabIds.length - 1] ?? null,
-      );
-    }
-    if (placement.tabIds.length === 0) delete tabs.placements[groupId];
-  }
-  return tabs;
-}
 
 function prepareViewports(
   current: ReturnType<typeof useViewportStore.getState>['viewports'],
@@ -575,13 +524,6 @@ export function prepareProjectRecoveryCommit(
   const focusedSession = focused && remappedFocusedPath && authoritativeGraphPaths.has(remappedFocusedPath)
     ? { ...focused, graphPath: remappedFocusedPath }
     : null;
-  const tabs = reconcileTabs(
-    remapTabs(
-      remapTabs(useEditorTabStore.getState().snapshotMemento(), plan.pathRemaps),
-      plan.worksheetPathRemaps ?? new Map(),
-    ),
-    resources,
-  );
   const viewports = prepareViewports(
     useViewportStore.getState().viewports,
     plan.pathRemaps,
@@ -602,7 +544,6 @@ export function prepareProjectRecoveryCommit(
       variableRevisions,
       worksheetIndex,
       worksheetDocuments,
-      tabs,
       focusedSession,
       viewports,
     },
@@ -610,43 +551,54 @@ export function prepareProjectRecoveryCommit(
   };
 }
 
-export function commitPreparedProjectRecovery(plan: PreparedProjectRecovery): void {
-  useDatabaseStore.setState({
-    databases: plan.storeState.databases,
-    revisions: plan.storeState.databaseRevisions,
-  });
-  useVariableStore.setState({
-    variables: plan.storeState.variables,
-    revisions: plan.storeState.variableRevisions,
-  });
-  useWorksheetStore.setState({
-    index: plan.storeState.worksheetIndex,
-    documents: plan.storeState.worksheetDocuments,
-  });
-  useDocumentStateStore.setState({ documents: plan.storeState.documents });
-  useResourceStore.setState({
-    resources: plan.storeState.resources,
-    graphOrder: plan.storeState.graphOrder,
-  });
-  useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
-  commitPreparedGraphProjectionReplacements(plan.graphProjectionPlan);
-  useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession });
-  useEditorTabStore.setState(plan.storeState.tabs);
-  useViewportStore.setState({ viewports: plan.storeState.viewports });
-  useHistoryStore.setState({
-    canUndo: plan.history.canUndo,
-    canRedo: plan.history.canRedo,
-  });
-  for (const [from, to] of plan.pathRemaps) remapGraphNonViewportUiState(from, to);
-  for (const [from, to] of plan.worksheetPathRemaps ?? []) {
-    remapWorksheetNonViewportUiState(from, to);
-    invalidateWorksheetPreviewCacheForMove(plan.projectInstanceId, from, to);
-  }
-  const detailFocus = useEditorStore.getState().detailFocus;
-  if (detailFocus?.kind === 'worksheet'
-    && !plan.index.worksheets.some(
-      (worksheet) => worksheet.worksheetPath === detailFocus.worksheetPath,
-    )) {
-    useEditorStore.getState().clearDetailFocus();
-  }
+export function commitPreparedProjectRecovery(
+  plan: PreparedProjectRecovery,
+): void | Promise<void> {
+  const moves = [
+    ...[...plan.pathRemaps].map(([from, to]) => ({ from, to })),
+    ...[...(plan.worksheetPathRemaps ?? [])].map(([from, to]) => ({ from, to })),
+  ];
+  return commitEditorDockviewPublication(
+    moves,
+    plan.storeState.resources,
+    () => {
+      useDatabaseStore.setState({
+        databases: plan.storeState.databases,
+        revisions: plan.storeState.databaseRevisions,
+      });
+      useVariableStore.setState({
+        variables: plan.storeState.variables,
+        revisions: plan.storeState.variableRevisions,
+      });
+      useWorksheetStore.setState({
+        index: plan.storeState.worksheetIndex,
+        documents: plan.storeState.worksheetDocuments,
+      });
+      useDocumentStateStore.setState({ documents: plan.storeState.documents });
+      useResourceStore.setState({
+        resources: plan.storeState.resources,
+        graphOrder: plan.storeState.graphOrder,
+      });
+      useGraphMetaStore.setState({ graphs: plan.storeState.graphMeta });
+      commitPreparedGraphProjectionReplacements(plan.graphProjectionPlan);
+      useGraphSessionStore.setState({ focusedSession: plan.storeState.focusedSession });
+      useViewportStore.setState({ viewports: plan.storeState.viewports });
+      useHistoryStore.setState({
+        canUndo: plan.history.canUndo,
+        canRedo: plan.history.canRedo,
+      });
+      for (const [from, to] of plan.pathRemaps) remapGraphNonViewportUiState(from, to);
+      for (const [from, to] of plan.worksheetPathRemaps ?? []) {
+        remapWorksheetNonViewportUiState(from, to);
+        invalidateWorksheetPreviewCacheForMove(plan.projectInstanceId, from, to);
+      }
+      const detailFocus = useEditorStore.getState().detailFocus;
+      if (detailFocus?.kind === 'worksheet'
+        && !plan.index.worksheets.some(
+          (worksheet) => worksheet.worksheetPath === detailFocus.worksheetPath,
+        )) {
+        useEditorStore.getState().clearDetailFocus();
+      }
+    },
+  );
 }

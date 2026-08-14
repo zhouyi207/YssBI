@@ -1,18 +1,17 @@
-import { forwardRef } from 'react';
+
 import { useTranslation } from 'react-i18next';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useEditorStore, type DetailPaneTab } from '@/features/core/editor';
 import { DetailsPane } from './DetailsPane';
 import { InspectorPane } from './InspectorPane';
 
-export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
+export function Detail() {
   const { t } = useTranslation();
   const activeTab = useEditorStore((state) => state.detailPaneTab);
   const setActiveTab = useEditorStore((state) => state.setDetailPaneTab);
 
   return (
     <div
-      ref={ref}
       className="right-sidebar-container flex h-full w-full select-none flex-col overflow-hidden bg-[var(--sidebar-bg)]"
     >
       <Tabs
@@ -39,6 +38,4 @@ export const Detail = forwardRef<HTMLDivElement>((_, ref) => {
       </Tabs>
     </div>
   );
-});
-
-Detail.displayName = 'Detail';
+}

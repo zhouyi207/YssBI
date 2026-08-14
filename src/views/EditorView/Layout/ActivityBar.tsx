@@ -3,8 +3,7 @@ import { useTranslation } from "react-i18next";
 import { PiGraph } from "react-icons/pi";
 import { HiVariable } from "react-icons/hi2";
 import { VscDatabase, VscGraphLine, VscLibrary, VscTerminal } from "react-icons/vsc";
-import { useLayoutStore, SIDEBAR_NODE_ID, type SidebarTabId, isSidebarTabId } from "@/features/core/layout/layoutStore";
-import { WORKBENCH_CHROME_PART_ATTR } from "@/features/core/layout/workbenchSidebarDropSurface";
+import { useWorkbenchStore, type SidebarTabId } from '@/features/core/workbench';
 import { toggleSidebarTab as persistToggleSidebarTab } from "@/features/core/layout/workbenchLayoutService";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -28,11 +27,9 @@ const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolea
 
 export function ActivityBar({ side = 'left' }: { side?: 'left' | 'right' }) {
   const { t } = useTranslation();
-  const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
-  const isSidebarVisible = sidebarNode?.data?.visible !== false;
-  const activeTab = isSidebarVisible && isSidebarTabId(sidebarNode?.data?.currentTab)
-    ? sidebarNode.data.currentTab
-    : null;
+  const sidebarCurrentTab = useWorkbenchStore((state) => state.sidebarCurrentTab);
+  const sidebarHidden = useWorkbenchStore((state) => state.sidebarUserHidden);
+  const activeTab = sidebarHidden ? null : sidebarCurrentTab;
 
   const activityBarRef = useRef<HTMLDivElement>(null);
   const [indicatorTop, setIndicatorTop] = useState({ top: 0, opacity: 0 });
@@ -60,7 +57,7 @@ export function ActivityBar({ side = 'left' }: { side?: 'left' | 'right' }) {
   return (
     <div
       ref={activityBarRef}
-      {...{ [WORKBENCH_CHROME_PART_ATTR]: SIDEBAR_NODE_ID }}
+
       className={`w-12 h-full bg-[var(--sidebar-bg)] flex flex-col items-center py-2 shrink-0 relative ${
         side === 'right' ? 'border-l border-border' : 'border-r border-border'
       }`}

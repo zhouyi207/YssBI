@@ -3,11 +3,6 @@ import { useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore'
 import type { GraphMeta } from '@/features/core/dataStore/graphMetaStore';
 import { useGraphSessionStore, type FocusedGraphSession } from '@/features/core/graphSession/graphSessionStore';
 import {
-  useEditorTabStore,
-  type EditorTabMemento,
-} from '@/features/core/layout/editorTabStore';
-import { remapPlacementActiveTab } from '@/features/core/layout/editorGraphSelectionPlacement';
-import {
   buildGraphResourceMeta,
   lookupGraphResource,
   resourceKey,
@@ -22,7 +17,6 @@ import { useViewportStore } from '@/features/core/viewport/useViewportStore';
 import type { EditorViewport } from '@/features/core/viewport/editorViewport';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import type { WorksheetDocument, WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
-
 
 export interface PreparedResourceMoveSnapshot {
   readonly fromKey: ResourceKey;
@@ -41,10 +35,6 @@ export interface PreparedDocumentMoveSnapshot {
   readonly destinationAfter?: DocumentState;
 }
 
-export interface PreparedTabMoveSnapshot {
-  readonly before: EditorTabMemento;
-  readonly after: EditorTabMemento;
-}
 
 export interface PreparedSessionMoveSnapshot {
   readonly before: FocusedGraphSession | null;
@@ -71,7 +61,6 @@ export interface PreparedGraphResourceMove {
   readonly hasAuthoritativeDestinationReplacement: boolean;
   readonly resourceSnapshot: PreparedResourceMoveSnapshot;
   readonly documentSnapshot: PreparedDocumentMoveSnapshot;
-  readonly tabSnapshot: PreparedTabMoveSnapshot;
   readonly sessionSnapshot: PreparedSessionMoveSnapshot;
 
   readonly graphMetaSnapshot: PreparedGraphMetaMoveSnapshot;
@@ -87,7 +76,6 @@ export interface PreparedWorksheetResourceMove {
   readonly index: WorksheetIndexEntry[];
   readonly resources: Record<ResourceKey, ProjectResourceMeta>;
   readonly documentStates: Record<ResourceKey, DocumentState>;
-  readonly tabs: EditorTabMemento;
 }
 
 export type PreparedResourceMove = PreparedGraphResourceMove | PreparedWorksheetResourceMove;
@@ -102,21 +90,6 @@ function assertMove(
   }
 }
 
-function prepareTabs(from: string, to: string): PreparedTabMoveSnapshot {
-  const before = structuredClone(useEditorTabStore.getState().snapshotMemento());
-  const after = structuredClone(before);
-  const tab = after.registry[from];
-  if (tab) {
-    after.registry[to] = { ...tab, id: to };
-    delete after.registry[from];
-  }
-  for (const placement of Object.values(after.placements)) {
-    placement.tabIds = placement.tabIds.map((id) => id === from ? to : id);
-    placement.selectedTabIds = placement.selectedTabIds.map((id) => id === from ? to : id);
-    remapPlacementActiveTab(placement, from, to);
-  }
-  return { before, after };
-}
 
 function prepareViewport(from: string, to: string): PreparedViewportMoveSnapshot {
   const before = structuredClone(useViewportStore.getState().viewports);
@@ -187,7 +160,6 @@ function prepareWorksheetResourceMove(move: ResourceMoveDto): PreparedWorksheetR
     index,
     resources,
     documentStates,
-    tabs: prepareTabs(move.from, move.to).after,
   });
 }
 
@@ -266,7 +238,6 @@ export function prepareGraphResourceMove(
       destinationBefore: undefined,
       destinationAfter: destinationDocument,
     }),
-    tabSnapshot: Object.freeze(prepareTabs(move.from, move.to)),
     sessionSnapshot: Object.freeze({
       before: focused ? structuredClone(focused) : null,
       after: focused?.graphPath === move.from ? { ...focused, graphPath: move.to } : focused,

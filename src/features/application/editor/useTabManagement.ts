@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { openGraphInEditor } from './openGraphInEditor';
 import { getActiveLayoutTab, locateLayoutTab, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+import { useWorkbenchStore } from '@/features/core/workbench';
 import { logger } from '@/utils/appLogger';
 import { applyEditorTabSelection } from './editorTabSelection';
 import {
@@ -50,7 +50,7 @@ export function useTabManagement() {
 
   const openSettingsTab = useCallback(() => {
     const targetGroupId = resolveEditorTargetGroupId();
-    useLayoutStore.getState().openSettings();
+    useWorkbenchStore.getState().openSettings();
     handleSetActiveTabId("settings", "setting", targetGroupId);
   }, [handleSetActiveTabId]);
 

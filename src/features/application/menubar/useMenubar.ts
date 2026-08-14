@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { editorDockviewPort, useDockviewPortSnapshot } from '@/features/core/dockview';
+import { useWorkbenchStore } from '@/features/core/workbench';
 import {
   resetWorkbenchLayout,
   toggleDetailVisibility,
@@ -31,15 +32,12 @@ import { logger } from '@/utils/appLogger';
  * 拦截关闭以处理脏标签，不再自行写入 settings。
  */
 export function useMenubar() {
-  const openSettings = useLayoutStore((s) => s.openSettings);
-  const activeEditorGroupId = useLayoutStore((s) => s.activeEditorGroupId);
-  const detailNode = useLayoutStore((s) => s.nodes["detail"]);
-  const panelNode = useLayoutStore((s) => s.nodes["panel"]);
-  const sidebarNode = useLayoutStore((s) => s.nodes["sidebar"]);
-
-  const isDetailVisible = detailNode?.data?.visible !== false;
-  const isLogPanelVisible = panelNode?.data?.visible !== false;
-  const isSidebarVisible = sidebarNode?.data?.visible !== false;
+  const openSettings = useWorkbenchStore((state) => state.openSettings);
+  const isDetailVisible = useWorkbenchStore((state) => !state.detailUserHidden);
+  const isLogPanelVisible = useWorkbenchStore((state) => !state.panelUserHidden);
+  const isSidebarVisible = useWorkbenchStore((state) => !state.sidebarUserHidden);
+  useDockviewPortSnapshot(editorDockviewPort);
+  const activeEditorGroupId = editorDockviewPort.getActiveGroupId() ?? null;
 
   useEffect(() => {
     const appWindow = getCurrentWindow();
@@ -133,7 +131,7 @@ export function useMenubar() {
     const panelPosition = normalizePanelPosition(
       useSettingsStore.getState().appearance.panelPosition,
     );
-    resetWorkbenchLayout(panelPosition);
+    void resetWorkbenchLayout(panelPosition);
   }, []);
 
   return {

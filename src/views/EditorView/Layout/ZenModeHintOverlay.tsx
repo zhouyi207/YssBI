@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { useWorkbenchStore } from '@/features/core/workbench';
 import { editorDropPreviewLabelClass } from "./editorDropPreviewStyles";
 
 const AUTO_DISMISS_MS = 4000;
 
 export function ZenModeHintOverlay() {
   const { t } = useTranslation();
-  const zenMode = useLayoutStore((s) => s.zenMode);
+  const zenMode = useWorkbenchStore((state) => state.zenMode);
   const [visible, setVisible] = useState(false);
   const prevZenRef = useRef(false);
 

@@ -55,8 +55,9 @@ the architecture changes.
 
 ## UI and interaction
 
-- Use shadcn/ui primitives for interactive controls; do not introduce a second
-  UI component library.
+- Use shadcn/ui primitives for ordinary interactive controls. Dockview is the
+  specialized workbench/editor docking infrastructure; do not introduce another
+  general-purpose UI component library.
 - Use the shared toast system in the bottom-right for ordinary messages.
   Never use browser `alert`, `prompt`, `confirm`, or native message dialogs;
   path selection dialogs are the only exception.
@@ -67,6 +68,21 @@ the architecture changes.
 - Centralize drag/drop constants, payload types, and guards in
   `src/features/core/dnd/`; workspace routes drops and visual zones stay thin.
 
+## Workbench and editor layout
+
+- Dockview is the sole authority for workbench pane topology/sizes, editor group
+  topology/sizes, panel placement/order, active group/panel, and serialized
+  layout restoration. Do not mirror those values into Zustand or recreate a
+  `LayoutTree` compatibility model.
+- `GridviewReact` owns the outer workbench panes and nested `DockviewReact` owns
+  editor groups and panels. Keep menubar, activity bar, status bar, and modals
+  outside the Dockview workspace.
+- Application stores may keep non-placement panel metadata and pane-local state
+  keyed by `panelInstanceId`; resource identity remains separate and opaque.
+- Route all panel closes through application dirty/save confirmation before
+  removing the Dockview panel. Floating groups and browser popouts stay disabled;
+  Tauri owns application windows.
+
 ## Graph lifecycle and synchronization
 
 - On project load, clear backend state before hydrating it. On graph open,
@@ -75,9 +91,11 @@ the architecture changes.
 - Writes go through backend commands and return through project events. If a
   UI action is optimistic, track pending keys and suppress only its matching
   echo.
-- Graph tab IDs and all IPC/store references use `graphPath`. Do not infer
-  backend-loaded state from `graphEntities` alone; use the graph session and
-  resource loaded state.
+- Graph resources and all IPC references use opaque `graphPath` values. Dockview
+  panel IDs are separate `panelInstanceId` values because one resource may be
+  open in multiple groups; panel metadata carries the resource reference. Do not
+  infer backend-loaded state from `graphEntities` alone; use the graph session
+  and resource loaded state.
 - Save/close flows use the application confirmation modal and keep sub-windows
   read-only with respect to project state.
 

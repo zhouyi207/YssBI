@@ -1,7 +1,5 @@
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
-import { isGraphLayoutTab, layoutTabResourceRef } from '@/features/core/layout/layoutTabModel';
-import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
+import type { LayoutTab } from '@/shared/types';
+import { editorDockviewPort } from '@/features/core/dockview';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { GraphService } from '@/services/graph/graphService';
 import { logger } from '@/utils/appLogger';
@@ -14,8 +12,7 @@ import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { clearResourceDocumentState, isGraphResourceDirty, markResourceDirty } from '@/features/core/resource';
 import { releaseEditorViewport } from '@/features/core/viewport';
 import { editorViewportScope } from '@/features/core/viewport/viewportScope';
-import { prepareActiveGroupBeforeLastTabClose } from '@/features/core/layout/editorGroupFocus';
-import { activateCurrentEditorTab, activateEditorGroup } from './switchEditorTab';
+import { switchEditorTab } from './switchEditorTab';
 import { deactivateGraphTab } from './activateGraphTab';
 import {
   captureSettledGraphSaveCommandContext,
@@ -23,28 +20,22 @@ import {
   type GraphSaveCommandContext,
 } from '@/features/application/projectCommandContext';
 
-async function restoreActiveGraphAfterClose(preferredNodeId: string): Promise<void> {
-  const layoutStore = useLayoutStore.getState();
-  const candidateGroupIds = [preferredNodeId, layoutStore.activeEditorGroupId]
-    .filter((id): id is string => Boolean(id));
-  for (const groupId of candidateGroupIds) {
-    const activated = await activateCurrentEditorTab(groupId);
-    if (activated) return;
-  }
+function readLayoutTab(panel: ReturnType<typeof editorDockviewPort.listPanels>[number]): LayoutTab | null {
+  const value = panel.tab?.data?.layoutTab;
+  return value && typeof value === 'object' ? value as unknown as LayoutTab : null;
 }
 
-export async function closeGraphTab(graphPath: string, nodeId?: string, skipDirtyPrompt = false): Promise<boolean> {
-  const located = locateLayoutTab(graphPath, nodeId);
-  if (!located?.tab) return false;
+export async function closeGraphTab(graphPath: string, groupId?: string, skipDirtyPrompt = false): Promise<boolean> {
+  const panel = editorDockviewPort
+    .findPanelsByResource(graphPath)
+    .find((candidate) => !groupId || candidate.groupId === groupId);
+  const tab = panel ? readLayoutTab(panel) : null;
+  if (!panel || !tab || (tab.type !== 'event' && tab.type !== 'function')) return false;
 
-  let effectivePath = graphPath;
-  const graphKind =
-    located.tab.type === 'event' || located.tab.type === 'function' ? located.tab.type : null;
-  if (graphKind && isGraphResourceDirty(effectivePath, graphKind) && !skipDirtyPrompt) {
-    const displayName = resolveTabDisplayName(layoutTabResourceRef(located.tab), effectivePath);
+  if (isGraphResourceDirty(graphPath, tab.type) && !skipDirtyPrompt) {
     const shouldSave = await uiStore.confirm({
       title: '保存更改？',
-      message: `“${displayName}” 已修改。关闭前是否保存？`,
+      message: `“${resolveTabDisplayName({ id: graphPath, kind: tab.type }, graphPath)}” 已修改。关闭前是否保存？`,
       confirmText: '保存',
       cancelText: '不保存',
       type: 'info',
@@ -52,49 +43,39 @@ export async function closeGraphTab(graphPath: string, nodeId?: string, skipDirt
     if (shouldSave) {
       let context: GraphSaveCommandContext | undefined;
       try {
-        context = await captureSettledGraphSaveCommandContext(effectivePath);
+        context = await captureSettledGraphSaveCommandContext(graphPath);
         await GraphService.saveProjectGraph(
           context.projectInstanceId,
-          effectivePath,
+          graphPath,
           context.expectedRevision,
           context.operationId,
         );
-        if (!isGraphSaveCommandRevisionCurrent(context, effectivePath)) return false;
-        if (isGraphLayoutTab(located.tab)) {
-          markResourceDirty({ id: effectivePath, kind: located.tab.type }, false);
-        }
+        if (!isGraphSaveCommandRevisionCurrent(context, graphPath)) return false;
+        markResourceDirty({ id: graphPath, kind: tab.type }, false);
       } catch (error) {
         if (context && !context.isCurrent()) return false;
-        logger.notify.error(`保存失败：${error instanceof Error ? error.message : String(error)}`, "UI");
+        logger.notify.error(`保存失败：${error instanceof Error ? error.message : String(error)}`, 'UI');
         return false;
       }
     }
   }
 
-  const closingActiveTab = getEditorGroupActiveTabId(located.nodeId) === effectivePath;
+  const wasActive = editorDockviewPort.getActivePanel()?.panelInstanceId === panel.panelInstanceId;
+  await editorDockviewPort.remove(panel.panelInstanceId);
+  releaseEditorViewport(editorViewportScope(panel.groupId, graphPath));
+  if (wasActive) deactivateGraphTab(panel.groupId, graphPath);
+  clearDetailFocusForClosedTab(graphPath);
+  syncVariablesGraphScopeAfterClose(graphPath);
 
-  const nextGroupId = prepareActiveGroupBeforeLastTabClose(located.nodeId);
-  if (nextGroupId) {
-    await activateEditorGroup(nextGroupId);
-  }
+  const active = editorDockviewPort.getActivePanel();
+  const activeTab = active ? readLayoutTab(active) : null;
+  if (active && activeTab) await switchEditorTab(active.groupId, activeTab);
+  if (!useEditorStore.getState().detailFocus) focusDetailOnActiveGraph(active?.groupId ?? panel.groupId);
 
-  useLayoutStore.getState().removeTab(located.nodeId, effectivePath);
-  releaseEditorViewport(editorViewportScope(located.nodeId, effectivePath));
-  if (closingActiveTab) {
-    deactivateGraphTab(located.nodeId, effectivePath);
-  }
-  clearDetailFocusForClosedTab(effectivePath);
-  syncVariablesGraphScopeAfterClose(effectivePath);
-  if (!useEditorStore.getState().detailFocus) {
-    focusDetailOnActiveGraph(located.nodeId);
-  }
-  await restoreActiveGraphAfterClose(located.nodeId);
-  if (isGraphLayoutTab(located.tab)) {
-    clearResourceDocumentState({ id: effectivePath, kind: located.tab.type });
-  }
-  void unloadGraphDocument(effectivePath).catch((error) => {
+  clearResourceDocumentState({ id: graphPath, kind: tab.type });
+  void unloadGraphDocument(graphPath).catch((error) => {
     logger.graph.warn(
-      `Failed to release graph cache '${effectivePath}': ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to release graph cache '${graphPath}': ${error instanceof Error ? error.message : String(error)}`,
       'closeGraphTab',
     );
   });

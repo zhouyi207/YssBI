@@ -1,42 +1,34 @@
 import { useEffect } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
-  hydrateWorkbenchChrome,
-  hydrateWorkbenchLayout,
-  reclampWorkbenchPanelSize,
-  subscribeWorkbenchViewportResize,
-} from '@/features/core/layout/workbenchLayoutService';
-import { setWorkbenchLayoutWindowScope } from '@/features/core/layout/workbenchLayoutMemento';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
+  editorDockviewPort,
+  hydrateDockviewLayout,
+  persistDockviewLayoutDebounced,
+  setDockviewLayoutWindowScope,
+} from '@/features/core/dockview';
+import { workbenchGridPort, useWorkbenchStore } from '@/features/core/workbench';
 import { bootstrapEditorGraphSession } from '@/features/application/editor/bootstrapEditorGraphSession';
-import { reconcileOpenLayoutTabsWithResources } from '@/features/application/editor/reconcileOpenLayoutTabs';
-import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
-import { persistEditorTabsDebounced } from '@/features/core/layout/workbenchLayoutService';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
-import { LoadStatus } from '@/shared/types/ui/common';
 
-/** Hydrate persisted workbench chrome + editor grid from localStorage on mount. */
+/** Restore and persist the single Dockview-owned workbench/editor layout. */
 export function useWorkbenchLayout(): void {
   useEffect(() => {
-    setWorkbenchLayoutWindowScope(getCurrentWindow().label);
-    if (useProjectIOStore.getState().status === LoadStatus.Ready) {
-      hydrateWorkbenchChrome();
-    } else {
-      hydrateWorkbenchLayout();
-    }
-    reconcileOpenLayoutTabsWithResources();
-    reclampWorkbenchPanelSize();
-    const activeEditorGroupId = useLayoutStore.getState().activeEditorGroupId;
-    if (activeEditorGroupId) {
-      void bootstrapEditorGraphSession(activeEditorGroupId);
-    }
-    const unsubscribeTabs = useEditorTabStore.subscribe(() => {
-      persistEditorTabsDebounced();
+    setDockviewLayoutWindowScope(getCurrentWindow().label);
+    let disposed = false;
+    void hydrateDockviewLayout().then(() => {
+      if (disposed) return;
+      const groupId = editorDockviewPort.getActiveGroupId();
+      if (groupId) void bootstrapEditorGraphSession(groupId);
     });
-    const unsubscribeViewport = subscribeWorkbenchViewportResize();
+
+    const persist = () => persistDockviewLayoutDebounced();
+    const unsubscribeEditor = editorDockviewPort.subscribe(persist);
+    const unsubscribeWorkbench = workbenchGridPort.subscribe(persist);
+    const unsubscribePreferences = useWorkbenchStore.subscribe(persist);
     return () => {
-      unsubscribeTabs();
-      unsubscribeViewport();
+      disposed = true;
+      unsubscribeEditor();
+      unsubscribeWorkbench();
+      unsubscribePreferences();
     };
   }, []);
 }

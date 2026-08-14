@@ -1,45 +1,26 @@
-import { logger } from "@/utils/appLogger";
 import type { DragEndEvent } from '@dnd-kit/core';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
-import { handleGraphResourceDrop } from '@/features/application/editor/handleGraphResourceDrop';
-import {
-  copyEditorGroupInto,
-  copyEditorGroupWithSplit,
-  copyTabsBetweenGroups,
-  mergeEditorGroupInto,
-  moveTabsBetweenGroups,
-  splitEditorGroupWithGroup,
-  splitEditorWithTab,
-  splitOrMoveSingleTabGroup,
-} from '@/features/application/editor/editorGroupCommands';
-import { resolveTabBarDropIndex } from '@/features/application/editor/tabBarReorderStore';
-import { useEditorDropPreviewStore } from '@/features/application/editor/editorDropPreviewStore';
-import { clearEditorDragSession } from '@/features/application/editor/useEditorDragPreviewMonitor';
+import { handleGraphResourceDrop } from './handleGraphResourceDrop';
+
+import { clearEditorDragSession } from './useEditorDragPreviewMonitor';
 import {
   resolveDropIntoEditorDragState,
-  resolveDropIntoEditorDragStateFromTab,
   resolveDropPointerFromDragEnd,
-  resolveFunctionTabForDrop,
   tryDropFunctionIntoEventCanvas,
-} from '@/features/application/editor/dropFunctionIntoEventEditor';
-import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
-import { useSidebarDragStore, canvasDropHandlerStore } from '@/features/core/sidebarDrag';
-import { isEditorDragCopyOperation } from '@/features/core/layout/editorDragModifiers';
-import { findEditorGroupAtPointer } from '@/features/core/layout/editorDropTarget';
+} from './dropFunctionIntoEventEditor';
+import { activateEditorGroup } from './switchEditorTab';
+import { canvasDropHandlerStore, useSidebarDragStore } from '@/features/core/sidebarDrag';
 import type { SidebarDragPayload } from '@/features/core/dnd';
-import { isSidebarSpawnDropAllowed } from '@/features/application/editor/sidebarSpawnDropPolicy';
+import { isSidebarSpawnDropAllowed } from './sidebarSpawnDropPolicy';
 import {
-  isTabbarDrop,
-  isEditorGroupDragData,
   isGraphResourceDragPayload,
   isNodeTemplateDragData,
   isNodeTemplateDragState,
-  isTabDragData,
+  isSidebarSpawnDrag,
   parseCanvasDragPayload,
   readDragModifiers,
-  resolveDragClientPoint,
-  isSidebarSpawnDrag,
 } from '@/features/core/dnd';
+import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
+import { logger } from '@/utils/appLogger';
 
 export function readEditorDragModifiers(event: DragEndEvent): {
   altKey: boolean;
@@ -49,17 +30,12 @@ export function readEditorDragModifiers(event: DragEndEvent): {
   return readDragModifiers(event);
 }
 
-function resolveCanvasDropGroupId(
-  event: DragEndEvent,
-  preview: ReturnType<typeof useEditorDropPreviewStore.getState>['preview'],
-): string | null {
+function resolveCanvasDropGroupId(event: DragEndEvent): string | null {
   const overData = event.over?.data.current;
-  if (preview?.targetGroupId) return preview.targetGroupId;
-  if (overData && typeof overData === 'object' && overData !== null && 'groupId' in overData) {
+  if (overData && typeof overData === 'object' && 'groupId' in overData) {
     return String((overData as { groupId: string }).groupId);
   }
-  const pointer = resolveDragClientPoint(event);
-  return pointer ? findEditorGroupAtPointer(pointer.x, pointer.y) : null;
+  return null;
 }
 
 async function executeSidebarSpawnDragEnd(
@@ -67,13 +43,11 @@ async function executeSidebarSpawnDragEnd(
   activeData: SidebarDragPayload,
   options: { finishSidebarDrag: () => void },
 ): Promise<void> {
-  const overData = event.over?.data.current;
-  const preview = useEditorDropPreviewStore.getState().preview;
   const modifiers = readEditorDragModifiers(event);
   const dropPointer = resolveDropPointerFromDragEnd(event);
   const capturedSidebarDrag = useSidebarDragStore.getState().activeDrag;
-
   options.finishSidebarDrag();
+
   if (!isSidebarSpawnDropAllowed(activeData, dropPointer)) {
     clearEditorDragSession();
     return;
@@ -81,157 +55,47 @@ async function executeSidebarSpawnDragEnd(
 
   if (isGraphResourceDragPayload(activeData)) {
     const { sidebarResource } = activeData;
-    if (isTabbarDrop(overData)) {
-      void handleGraphResourceDrop(
-        sidebarResource,
-        overData.targetNodeId,
-        { insertIndex: resolveTabBarDropIndex(overData.targetNodeId, overData.targetTabIndex) },
-      ).catch((error) => logger.notify.error(formatErrorMessage(error), "UI"));
-    } else if (preview?.kind === 'function-into-event') {
-      const groupId = resolveCanvasDropGroupId(event, preview);
-      const dropState = resolveDropIntoEditorDragState(
-        sidebarResource,
-        dropPointer,
-        capturedSidebarDrag,
-      );
-      if (groupId && dropState) {
-        const handled = await tryDropFunctionIntoEventCanvas(groupId, dropState, modifiers);
-        if (handled) {
-          clearEditorDragSession();
-          return;
-        }
+    const groupId = resolveCanvasDropGroupId(event);
+    const dropState = resolveDropIntoEditorDragState(sidebarResource, dropPointer, capturedSidebarDrag);
+    if (groupId && dropState && modifiers.shiftKey) {
+      const handled = await tryDropFunctionIntoEventCanvas(groupId, dropState, modifiers);
+      if (handled) {
+        clearEditorDragSession();
+        return;
       }
-    } else if (preview?.kind === 'split') {
-      void handleGraphResourceDrop(
-        sidebarResource,
-        preview.targetGroupId,
-        { edge: preview.edge },
-      ).catch((error) => logger.notify.error(formatErrorMessage(error), "UI"));
-    } else if (preview?.kind === 'merge') {
-      void handleGraphResourceDrop(
-        sidebarResource,
-        preview.targetGroupId,
-      ).catch((error) => logger.notify.error(formatErrorMessage(error), "UI"));
     }
+    if (groupId) await handleGraphResourceDrop(sidebarResource, groupId);
     clearEditorDragSession();
     return;
   }
 
   if (isNodeTemplateDragData(activeData)) {
-    const groupId = resolveCanvasDropGroupId(event, preview);
+    const groupId = resolveCanvasDropGroupId(event);
     if (groupId && capturedSidebarDrag && isNodeTemplateDragState(capturedSidebarDrag)) {
       void activateEditorGroup(groupId);
       const handler = canvasDropHandlerStore.getHandler(groupId);
-      if (handler) {
-        await handler(capturedSidebarDrag, modifiers);
-      }
+      if (handler) await handler(capturedSidebarDrag, modifiers);
     }
   }
 
   clearEditorDragSession();
 }
 
+/** Handle only sidebar-to-editor DnD; Dockview owns tab/group drag, order, move, and split. */
 export async function executeEditorDragEnd(
   event: DragEndEvent,
   options: { finishSidebarDrag: () => void },
 ): Promise<void> {
-  const { active, over } = event;
-  const activeData = parseCanvasDragPayload(active.data.current);
-  const overData = over?.data.current;
-  const preview = useEditorDropPreviewStore.getState().preview;
-  const modifiers = readEditorDragModifiers(event);
-  const isCopy = isEditorDragCopyOperation(modifiers);
-  const dropPointer = resolveDropPointerFromDragEnd(event);
-
-  if (isSidebarSpawnDrag(activeData)) {
-    await executeSidebarSpawnDragEnd(event, activeData, options);
-    return;
-  }
-
-  if (isEditorGroupDragData(activeData)) {
-    const { sourceNodeId } = activeData;
-
-    if (isTabbarDrop(overData) && overData.targetNodeId !== sourceNodeId) {
-      const insertIndex = resolveTabBarDropIndex(overData.targetNodeId, overData.targetTabIndex);
-      if (isCopy) {
-        copyEditorGroupInto(sourceNodeId, overData.targetNodeId, insertIndex);
-      } else {
-        mergeEditorGroupInto(sourceNodeId, overData.targetNodeId, insertIndex);
-      }
-    } else if (preview?.kind === 'split' && preview.targetGroupId !== sourceNodeId) {
-      if (isCopy) {
-        void copyEditorGroupWithSplit(sourceNodeId, preview.targetGroupId, preview.edge);
-      } else {
-        void splitEditorGroupWithGroup(sourceNodeId, preview.targetGroupId, preview.edge);
-      }
-    } else if (preview?.kind === 'merge' && preview.targetGroupId !== sourceNodeId) {
-      if (isCopy) {
-        copyEditorGroupInto(sourceNodeId, preview.targetGroupId);
-      } else {
-        mergeEditorGroupInto(sourceNodeId, preview.targetGroupId);
-      }
-    }
-
+  const activeData = parseCanvasDragPayload(event.active.data.current);
+  if (!isSidebarSpawnDrag(activeData)) {
     clearEditorDragSession();
     return;
   }
 
-  if (isTabDragData(activeData)) {
-    const { sourceNodeId, tabId, draggedTabIds } = activeData;
-    const transferTabIds = draggedTabIds?.length ? draggedTabIds : [tabId];
-
-    if (!isTabbarDrop(overData) && preview?.kind === 'merge' && modifiers.shiftKey) {
-      const tab = resolveFunctionTabForDrop(tabId);
-      const dropState = tab ? resolveDropIntoEditorDragStateFromTab(tab, dropPointer) : null;
-      if (tab && dropState) {
-        const handled = await tryDropFunctionIntoEventCanvas(preview.targetGroupId, dropState, modifiers);
-        if (handled) {
-          clearEditorDragSession();
-          return;
-        }
-      }
-    }
-
-    if (isTabbarDrop(overData)) {
-      if (isCopy) {
-        copyTabsBetweenGroups(
-          sourceNodeId,
-          transferTabIds,
-          overData.targetNodeId,
-          resolveTabBarDropIndex(overData.targetNodeId, overData.targetTabIndex),
-        );
-      } else {
-        moveTabsBetweenGroups(
-          sourceNodeId,
-          transferTabIds,
-          overData.targetNodeId,
-          resolveTabBarDropIndex(overData.targetNodeId, overData.targetTabIndex),
-        );
-      }
-    } else if (preview?.kind === 'split') {
-      if (transferTabIds.length > 1) {
-        for (const [index, transferTabId] of transferTabIds.entries()) {
-          if (isCopy) {
-            void splitEditorWithTab(sourceNodeId, transferTabId, preview.targetGroupId, preview.edge, { copy: true });
-          } else if (index === 0) {
-            void splitOrMoveSingleTabGroup(sourceNodeId, transferTabId, preview.targetGroupId, preview.edge);
-          } else {
-            moveTabsBetweenGroups(sourceNodeId, [transferTabId], preview.targetGroupId);
-          }
-        }
-      } else if (isCopy) {
-        void splitEditorWithTab(sourceNodeId, tabId, preview.targetGroupId, preview.edge, { copy: true });
-      } else {
-        void splitOrMoveSingleTabGroup(sourceNodeId, tabId, preview.targetGroupId, preview.edge);
-      }
-    } else if (preview?.kind === 'merge') {
-      if (isCopy) {
-        copyTabsBetweenGroups(sourceNodeId, transferTabIds, preview.targetGroupId);
-      } else {
-        moveTabsBetweenGroups(sourceNodeId, transferTabIds, preview.targetGroupId);
-      }
-    }
+  try {
+    await executeSidebarSpawnDragEnd(event, activeData, options);
+  } catch (error) {
+    logger.notify.error(formatErrorMessage(error), 'UI');
+    clearEditorDragSession();
   }
-
-  clearEditorDragSession();
 }

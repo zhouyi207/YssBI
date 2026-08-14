@@ -1,10 +1,10 @@
-import type { LayoutDirection } from '@/shared/types/ui';
+type SplitAxis = 'row' | 'col';
 
 /** Drop edge on an editor group canvas — `center` maps to VS Code default (split right). */
 export type EditorSplitEdge = 'left' | 'right' | 'top' | 'bottom' | 'center';
 
 export interface EditorSplitPlacement {
-  direction: LayoutDirection;
+  direction: SplitAxis;
   /** Insert the new group after the target along `direction` (right / bottom). */
   isAfter: boolean;
 }

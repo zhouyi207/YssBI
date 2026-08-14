@@ -3,7 +3,7 @@ import { subscribeToViewport, getViewport, type ViewportScope } from '@/features
 import { useTheme } from "@/features/core/theme/useTheme";
 import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
 import { drawEdge } from "./Edge";
-import { bindSashAwareResizeObserver } from '@/shared/utils/sashResizeGuard';
+
 
 import { Pin } from "@/shared/types/domain";
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
@@ -151,7 +151,9 @@ export const ConnectionLine = ({
         };
 
         syncCanvasSize();
-        return bindSashAwareResizeObserver(parent, syncCanvasSize);
+        const observer = new ResizeObserver(syncCanvasSize);
+        observer.observe(parent);
+        return () => observer.disconnect();
     }, []);
 
     const preview = viewportScope

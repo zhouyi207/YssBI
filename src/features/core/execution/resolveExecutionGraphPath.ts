@@ -1,14 +1,13 @@
-import { useLayoutStore } from '@/features/core/layout';
-import { getEditorGroupActiveTabId } from '@/features/core/layout/editorTabStore';
+import { editorDockviewPort } from '@/features/core/dockview';
+import type { LayoutTab } from '@/shared/types';
 import { getGraphByPath } from '@/features/core/dataStore';
 
 export function resolveExecutionGraphPath(targetGraphPath?: string): string | undefined {
   if (targetGraphPath) return targetGraphPath;
 
-  const layoutStore = useLayoutStore.getState();
-  const editorGroupId = layoutStore.activeEditorGroupId;
-  if (!editorGroupId) return undefined;
-  return getEditorGroupActiveTabId(editorGroupId) ?? undefined;
+  const value = editorDockviewPort.getActivePanel()?.tab?.data?.layoutTab;
+  if (!value || typeof value !== 'object') return undefined;
+  return (value as LayoutTab).id;
 }
 
 export function getExecutionEventGraph(targetGraphPath?: string) {

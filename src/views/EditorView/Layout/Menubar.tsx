@@ -6,9 +6,9 @@ import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from
 import { useMenubar } from "@/features/application/menubar";
 import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
 import { useActiveProjectPath } from "@/features/core/dataStore";
-import { useLayoutStore } from "@/features/core/layout/layoutStore";
+import { editorDockviewPort, useDockviewPortSnapshot } from '@/features/core/dockview';
+import { useWorkbenchStore } from '@/features/core/workbench';
 import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
-import { getActiveLayoutTab, resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
 import { APP_LINKS } from "@/app/appConfig/default";
 import { Button } from "@/components/ui/button";
 import {
@@ -148,22 +148,17 @@ export function Menubar() {
   } = useMenubar();
 
   const currentPath = useActiveProjectPath();
-  const zenMode = useLayoutStore((s) => s.zenMode);
-  const saveableEditorTabId = useLayoutStore((s) => {
-    const editorGroupId = resolveEditorTargetGroupId(undefined, s.nodes, s);
-    const active = getActiveLayoutTab(editorGroupId, s.nodes);
-    const tab = active?.tab;
-    if (!active?.activeTabId || active.activeTabId === "settings") return null;
-    if (
-      tab &&
-      tab.type !== "event" &&
-      tab.type !== "function" &&
-      tab.type !== "worksheet"
-    ) {
-      return null;
-    }
-    return active.activeTabId;
-  });
+  const zenMode = useWorkbenchStore((state) => state.zenMode);
+  useDockviewPortSnapshot(editorDockviewPort);
+  const activePanel = editorDockviewPort.getActivePanel();
+  const activeTabValue = activePanel?.tab?.data?.layoutTab;
+  const activeTab = activeTabValue && typeof activeTabValue === 'object'
+    ? activeTabValue as { id: string; type: string }
+    : null;
+  const saveableEditorTabId = activeTab
+    && (activeTab.type === 'event' || activeTab.type === 'function' || activeTab.type === 'worksheet')
+    ? activeTab.id
+    : null;
   const canSaveProject = Boolean(currentPath && saveableEditorTabId);
   const canSaveProjectAs = Boolean(currentPath);
 

@@ -4,9 +4,8 @@ import {
   loadActivatedProject,
   resolveActiveProjectPath,
 } from '@/features/core/dataStore';
-import { listEditorGroupTabIds } from '@/features/core/layout/editorTabStore';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { getActiveLayoutTab, resolveEditorGroupId, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
+import { editorDockviewPort } from '@/features/core/dockview';
+import { getActiveLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { markResourceDirty } from '@/features/core/resource';
 import {
@@ -129,14 +128,13 @@ export function useProjectOperations() {
       return;
     }
     try {
-      const layoutStore = useLayoutStore.getState();
-      const editorGroupId = resolveEditorGroupId(undefined, layoutStore);
+      const editorGroupId = resolveEditorGroupId();
       if (!editorGroupId) {
         logger.notify.warn("请先打开一个图或工作表", "UI");
         return;
       }
 
-      const active = getActiveLayoutTab(editorGroupId, layoutStore.nodes);
+      const active = getActiveLayoutTab(editorGroupId);
       const activeTabId = active?.activeTabId;
       if (!activeTabId) {
         logger.notify.warn("请先打开一个图或工作表", "UI");
@@ -187,12 +185,8 @@ export function useProjectOperations() {
         return;
       }
 
-      // 清空当前 tabs，用户从侧栏自行打开资源
-      const layoutStore = useLayoutStore.getState();
-      const editorGroupId = resolveEditorTargetGroupId(undefined, layoutStore.nodes, layoutStore);
-      for (const tabId of [...listEditorGroupTabIds(editorGroupId)]) {
-        layoutStore.removeTab(editorGroupId, tabId);
-      }
+      // 清空 Dockview 中的当前编辑器面板，用户从侧栏自行打开资源。
+      await editorDockviewPort.reset();
 
       logger.notify.info("项目已加载", "UI");
     } catch (e) {

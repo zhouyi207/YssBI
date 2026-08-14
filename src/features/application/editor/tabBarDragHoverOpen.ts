@@ -1,50 +1,6 @@
-import { getEditorGroupActiveTabId, useEditorTabStore } from '@/features/core/layout/editorTabStore';
-import { findTabUnderPointer } from '@/features/core/layout/editorDropTarget';
-import { switchEditorTab } from './switchEditorTab';
-
-/** VS Code `MultiEditorTabsControl.DRAG_OVER_OPEN_TAB_THRESHOLD` */
+/** Dockview owns drag-hover activation for native tabs. */
 export const DRAG_OVER_OPEN_TAB_MS = 1500;
 
-let hoverTimer: ReturnType<typeof setTimeout> | null = null;
-let hoverKey: string | null = null;
-let hoverSession = 0;
+export function clearTabDragHoverOpen(): void {}
 
-export function clearTabDragHoverOpen(): void {
-  hoverSession += 1;
-  if (hoverTimer) {
-    clearTimeout(hoverTimer);
-    hoverTimer = null;
-  }
-  hoverKey = null;
-}
-
-export function scheduleTabDragHoverOpen(pointerX: number, pointerY: number): void {
-  const hovered = findTabUnderPointer(pointerX, pointerY);
-  if (!hovered) {
-    clearTabDragHoverOpen();
-    return;
-  }
-
-  const activeTabId = getEditorGroupActiveTabId(hovered.groupId);
-  if (activeTabId === hovered.tabId) {
-    clearTabDragHoverOpen();
-    return;
-  }
-
-  const key = `${hovered.groupId}:${hovered.tabId}`;
-  if (hoverKey === key && hoverTimer) return;
-
-  clearTabDragHoverOpen();
-  hoverKey = key;
-  const session = hoverSession;
-  hoverTimer = setTimeout(() => {
-    hoverTimer = null;
-    if (session !== hoverSession) return;
-    const tab = useEditorTabStore.getState().resolveTab(hovered.tabId);
-    if (!tab) return;
-    if (getEditorGroupActiveTabId(hovered.groupId) === hovered.tabId) return;
-    // VS Code openEditor(..., { preserveFocus: true }) — preview tab without stealing drag focus
-    useEditorTabStore.getState().setActiveTab(hovered.groupId, hovered.tabId);
-    void switchEditorTab(hovered.groupId, tab);
-  }, DRAG_OVER_OPEN_TAB_MS);
-}
+export function scheduleTabDragHoverOpen(_pointerX: number, _pointerY: number): void {}

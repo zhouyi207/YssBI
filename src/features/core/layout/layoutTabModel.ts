@@ -1,6 +1,4 @@
 import type {
-  EditorGroupSnapshot,
-  LayoutNode,
   LayoutTab,
   LayoutTabComponent,
   LayoutTabType,
@@ -91,9 +89,4 @@ export function isWorksheetLayoutTab(
 /** Editor group split: choose the component for the current tab. */
 export function splitComponentForTab(tab: LayoutTab | null | undefined): LayoutTabComponent {
   return tab?.component ?? 'GraphEditor';
-}
-
-export function readEditorGroupSnapshot(node: LayoutNode): EditorGroupSnapshot | null {
-  if (node.type !== 'component' || node.data?.isFixed) return null;
-  return { id: node.id };
 }

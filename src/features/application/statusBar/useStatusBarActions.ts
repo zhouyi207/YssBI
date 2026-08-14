@@ -1,11 +1,11 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
-import { useLayoutStore } from '@/features/core/layout/layoutStore';
-import { getActiveLayoutTab, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
+import { editorDockviewPort } from '@/features/core/dockview';
 import { togglePanelVisibility, setPanelActiveView } from '@/features/core/layout/workbenchLayoutService';
 import { setViewportLive, editorViewportScope } from '@/features/core/viewport';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
+import { useWorkbenchStore } from '@/features/core/workbench';
 import { syncColorThemePreset } from '@/features/application/settings/appearanceRuntime';
 import { getNextColorThemePreset, getThemeModeForPreset } from '@/features/application/settings/colorThemePresets';
 
@@ -26,19 +26,19 @@ export function useStatusBarActions() {
   }, [updateTheme]);
 
   const openLogsPanel = useCallback(() => {
-    const panel = useLayoutStore.getState().nodes.panel;
-    if (panel?.data?.visible === false) {
+    if (useWorkbenchStore.getState().panelUserHidden) {
       togglePanelVisibility();
     }
     setPanelActiveView('logs');
   }, []);
 
   const resetCanvasViewport = useCallback(() => {
-    const state = useLayoutStore.getState();
-    const groupId = resolveEditorTargetGroupId(undefined, state.nodes, state);
-    const graphPath = getActiveLayoutTab(groupId, state.nodes)?.activeTabId ?? null;
-    if (!graphPath) return;
-    setViewportLive(editorViewportScope(groupId, graphPath), { ...DEFAULT_VIEWPORT });
+    const panel = editorDockviewPort.getActivePanel();
+    const value = panel?.tab?.data?.layoutTab;
+    if (!panel || !value || typeof value !== 'object') return;
+    const graphPath = (value as { id?: unknown }).id;
+    if (typeof graphPath !== 'string') return;
+    setViewportLive(editorViewportScope(panel.groupId, graphPath), { ...DEFAULT_VIEWPORT });
   }, []);
 
   const cycleColorTheme = useCallback(() => {

@@ -1,38 +1,15 @@
-import { useEditorTabStore } from '@/features/core/layout/editorTabStore';
-import type { LayoutTabInput } from '@/features/core/layout/layoutTabModel';
-import { normalizeLayoutTab } from '@/features/core/layout/layoutTabModel';
-import { replacePlacementActiveTab } from '@/features/core/layout/editorGraphSelectionPlacement';
+import { editorDockviewPort, useEditorPaneStateStore } from '@/features/core/dockview';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
+import { layoutTabFromDockviewPanel } from './dockviewTabProjection';
 
-/**
- * Keep restored editor tabs aligned with the current project resource index.
- */
+/** Remove restored Dockview panels whose project resources no longer exist. */
 export function reconcileOpenLayoutTabsWithResources(): void {
   const resources = useResourceStore.getState().resources;
-  useEditorTabStore.setState((state) => {
-    for (const [tabId, tab] of Object.entries(state.registry)) {
-      const input = tab as LayoutTabInput;
-      if (tab.type === 'event' || tab.type === 'function' || tab.type === 'worksheet') {
-        if (!resources[resourceKey({ id: tabId, kind: tab.type })]) {
-          delete state.registry[tabId];
-          continue;
-        }
-      }
-      if (input.title !== undefined) {
-        const { title: _title, ...rest } = input;
-        state.registry[tabId] = normalizeLayoutTab(rest);
-      }
-    }
-
-    for (const placement of Object.values(state.placements)) {
-      placement.tabIds = placement.tabIds.filter((tabId) => Boolean(state.registry[tabId]));
-      placement.selectedTabIds = placement.selectedTabIds.filter((tabId) => placement.tabIds.includes(tabId));
-      if (!placement.activeTabId || !placement.tabIds.includes(placement.activeTabId)) {
-        replacePlacementActiveTab(
-          placement,
-          placement.tabIds[placement.tabIds.length - 1] ?? null,
-        );
-      }
-    }
-  });
+  for (const panel of editorDockviewPort.listPanels()) {
+    const tab = layoutTabFromDockviewPanel(panel);
+    if (!tab || (tab.type !== 'event' && tab.type !== 'function' && tab.type !== 'worksheet')) continue;
+    if (resources[resourceKey({ id: tab.id, kind: tab.type })]) continue;
+    useEditorPaneStateStore.getState().release(panel.panelInstanceId);
+    void editorDockviewPort.remove(panel.panelInstanceId);
+  }
 }

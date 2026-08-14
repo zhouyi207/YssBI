@@ -16,20 +16,7 @@ import {
 } from '@/features/core/resource';
 import type { GraphMeta } from './graphMetaStore';
 import type { WorksheetIndexEntry } from '@/shared/types/domain/worksheet';
-import type { EditorTabMemento } from '@/features/core/layout/editorTabStore';
-import type { LayoutTree } from '@/shared/types/ui';
 import type { DetailFocus } from '@/features/core/editor/detail/types';
-import {
-  clearEditorGroupMaximizedHidden,
-  listEditorGroupIds,
-  writeEditorAreaMaximizeState,
-} from '@/features/core/layout/editorGridLayout';
-import { commitEditorGridLayoutState } from '@/features/core/layout/editorGridSizing';
-import {
-  createInitialWorkbenchNodes,
-  DEFAULT_EDITOR_GROUP_ID,
-  EDITOR_AREA_ID,
-} from '@/features/core/layout/workbenchLayoutDefaults';
 import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
 import { LoadStatus } from '@/shared/types/ui/common';
 
@@ -39,12 +26,6 @@ export interface AuthoritativeProjectLoadSource {
   readonly index: ProjectIndexRow;
 }
 
-interface PreparedLayoutState {
-  readonly nodes: LayoutTree;
-  readonly activeEditorGroupId: string;
-  readonly recentEditorGroupIds: string[];
-  readonly tabs: EditorTabMemento;
-}
 
 export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLoadSource {
   readonly projectData: ProjectData;
@@ -57,7 +38,6 @@ export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLo
     readonly worksheetIndex: WorksheetIndexEntry[];
     readonly resources: Record<ResourceKey, ProjectResourceMeta>;
     readonly graphOrder: string[];
-    readonly layout: PreparedLayoutState;
     readonly detailFocus: DetailFocus | null;
     readonly history: { canUndo: boolean; canRedo: boolean; pending: false };
     readonly projectIO: {
@@ -71,9 +51,6 @@ export interface PreparedAuthoritativeProjectLoad extends AuthoritativeProjectLo
 
 export interface AuthoritativeProjectLoadPlanContext {
   readonly databases: Record<string, DatabaseRecord>;
-  readonly layoutNodes: LayoutTree;
-  readonly editorTabs: EditorTabMemento;
-  readonly recentEditorGroupIds: string[];
   readonly detailFocus: DetailFocus | null;
 }
 
@@ -93,10 +70,7 @@ export interface AuthoritativeProjectLoadPlanDependencies {
     variables: Record<string, Variable>;
     databases: Record<string, DatabaseRecord>;
   }): { resources: Record<ResourceKey, ProjectResourceMeta>; graphOrder: string[] };
-  prepareLayoutState(
-    context: AuthoritativeProjectLoadPlanContext,
-    authoritativeWorksheetPaths: ReadonlySet<string>,
-  ): PreparedLayoutState;
+
   validateCoordinatorStart(projectInstanceId: string, publicationRevision: number): void;
 }
 
@@ -168,96 +142,6 @@ export function buildProjectResourceState(input: {
   };
 }
 
-function collectDescendants(nodes: LayoutTree, rootId: string, skipId: string): string[] {
-  const result: string[] = [];
-  const visit = (id: string) => {
-    if (id === skipId) return;
-    const node = nodes[id];
-    if (!node) return;
-    result.push(id);
-    node.children?.forEach(visit);
-  };
-  nodes[rootId]?.children?.forEach(visit);
-  return result;
-}
-
-function prepareTabs(
-  memento: EditorTabMemento,
-  authoritativeWorksheetPaths: ReadonlySet<string>,
-): EditorTabMemento {
-  const tabs = structuredClone(memento);
-  for (const [tabId, tab] of Object.entries(tabs.registry)) {
-    const staleProjectTab = tab.type === 'event'
-      || tab.type === 'function'
-      || (tab.type === 'worksheet' && !authoritativeWorksheetPaths.has(tab.id));
-    if (staleProjectTab) delete tabs.registry[tabId];
-  }
-
-  const mergedIds: string[] = [];
-  const selectedTabIds: string[] = [];
-  const seenTabs = new Set<string>();
-  const seenSelectedTabs = new Set<string>();
-  let activeTabId: string | null = null;
-  for (const placement of Object.values(tabs.placements)) {
-    for (const tabId of placement.tabIds) {
-      if (!tabs.registry[tabId] || seenTabs.has(tabId)) continue;
-      seenTabs.add(tabId);
-      mergedIds.push(tabId);
-    }
-    if (placement.activeTabId && tabs.registry[placement.activeTabId]) {
-      activeTabId ??= placement.activeTabId;
-    }
-
-    for (const tabId of placement.selectedTabIds) {
-      if (!tabs.registry[tabId] || seenSelectedTabs.has(tabId)) continue;
-      seenSelectedTabs.add(tabId);
-      selectedTabIds.push(tabId);
-    }
-  }
-  tabs.placements = mergedIds.length === 0 ? {} : {
-    [DEFAULT_EDITOR_GROUP_ID]: {
-      tabIds: mergedIds,
-      activeTabId: activeTabId ?? mergedIds[mergedIds.length - 1] ?? null,
-      selectedNodeIds: [],
-      selectedConnectionIds: [],
-      selectedTabIds,
-    },
-  };
-  return tabs;
-}
-
-function prepareLayout(
-  context: AuthoritativeProjectLoadPlanContext,
-  authoritativeWorksheetPaths: ReadonlySet<string>,
-): PreparedLayoutState {
-  const nodes = structuredClone(context.layoutNodes);
-  const editorArea = nodes[EDITOR_AREA_ID];
-  if (!editorArea?.children) throw new Error('Project layout is missing the editor area');
-  for (const id of collectDescendants(nodes, EDITOR_AREA_ID, DEFAULT_EDITOR_GROUP_ID)) {
-    delete nodes[id];
-  }
-  const defaultEditor = nodes[DEFAULT_EDITOR_GROUP_ID]
-    ?? structuredClone(createInitialWorkbenchNodes()[DEFAULT_EDITOR_GROUP_ID]);
-  nodes[DEFAULT_EDITOR_GROUP_ID] = defaultEditor;
-  editorArea.children = [DEFAULT_EDITOR_GROUP_ID];
-  writeEditorAreaMaximizeState(nodes, null, null);
-  clearEditorGroupMaximizedHidden(nodes);
-  defaultEditor.parentId = EDITOR_AREA_ID;
-  defaultEditor.size = 1;
-  defaultEditor.pixelSize = undefined;
-  defaultEditor.data = { ...defaultEditor.data, component: 'GraphEditor' };
-  commitEditorGridLayoutState(nodes);
-  return {
-    nodes,
-    activeEditorGroupId: DEFAULT_EDITOR_GROUP_ID,
-    recentEditorGroupIds: [
-      DEFAULT_EDITOR_GROUP_ID,
-      ...context.recentEditorGroupIds.filter((id) =>
-        id !== DEFAULT_EDITOR_GROUP_ID && listEditorGroupIds(nodes).includes(id)),
-    ],
-    tabs: prepareTabs(context.editorTabs, authoritativeWorksheetPaths),
-  };
-}
 
 export const defaultAuthoritativeProjectLoadPlanDependencies: Omit<
   AuthoritativeProjectLoadPlanDependencies,
@@ -267,7 +151,6 @@ export const defaultAuthoritativeProjectLoadPlanDependencies: Omit<
   normalizeVariables: prepareVariables,
   prepareFunctionState,
   prepareResourceState: buildProjectResourceState,
-  prepareLayoutState: prepareLayout,
 };
 
 export function buildAuthoritativeProjectLoadPlan(
@@ -305,7 +188,7 @@ export function buildAuthoritativeProjectLoadPlan(
   const authoritativeWorksheetPaths = new Set(
     worksheetIndex.map((worksheet) => worksheet.worksheetPath),
   );
-  const layout = dependencies.prepareLayoutState(context, authoritativeWorksheetPaths);
+
   const detailFocus = context.detailFocus?.kind === 'worksheet'
     && authoritativeWorksheetPaths.has(context.detailFocus.worksheetPath)
     ? structuredClone(context.detailFocus)
@@ -334,7 +217,6 @@ export function buildAuthoritativeProjectLoadPlan(
       worksheetIndex,
       resources: resourceState.resources,
       graphOrder: resourceState.graphOrder,
-      layout,
       detailFocus,
       history: {
         canUndo: source.index.history.canUndo,

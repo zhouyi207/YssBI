@@ -1,31 +1,10 @@
 import { useMemo } from 'react';
-import { useShallow } from 'zustand/react/shallow';
 import type { LayoutTab } from '@/shared/types';
 import {
-  type EditorTabState,
-  useEditorTabStore,
-} from '@/features/core/layout/editorTabStore';
-
-const EMPTY_TAB_IDS: string[] = [];
-const EMPTY_SELECTED: string[] = [];
-const EMPTY_SELECTED_CONNECTIONS: string[] = [];
-const EMPTY_PLACEMENT = {
-  tabIds: EMPTY_TAB_IDS,
-  activeTabId: null as string | null,
-  selectedNodeIds: EMPTY_SELECTED,
-  selectedConnectionIds: EMPTY_SELECTED_CONNECTIONS,
-};
-export const EMPTY_GROUP_TABS: LayoutTab[] = [];
-
-function resolveGroupTabs(state: EditorTabState, tabIds: readonly string[]): LayoutTab[] {
-  if (tabIds.length === 0) return EMPTY_GROUP_TABS;
-  const tabs: LayoutTab[] = [];
-  for (const tabId of tabIds) {
-    const tab = state.registry[tabId];
-    if (tab) tabs.push(tab);
-  }
-  return tabs.length > 0 ? tabs : EMPTY_GROUP_TABS;
-}
+  editorDockviewPort,
+  useDockviewPortSnapshot,
+  useEditorPaneStateStore,
+} from '@/features/core/dockview';
 
 export interface EditorGroupPlacementSlice {
   tabIds: string[];
@@ -35,42 +14,30 @@ export interface EditorGroupPlacementSlice {
   tabs: LayoutTab[];
 }
 
-/**
- * Narrow per-group placement subscription.
- * Avoids selecting the full registry object (cross-group fan-out + unstable snapshots).
- */
+function readLayoutTab(data: unknown): LayoutTab | null {
+  return data && typeof data === 'object' ? data as LayoutTab : null;
+}
+
+/** Read-only projection of a Dockview group plus pane-local canvas selection. */
 export function useEditorGroupPlacement(groupId: string): EditorGroupPlacementSlice {
-  const placement = useEditorTabStore(
-    useShallow((state) => {
-      const p = state.placements[groupId];
-      if (!p) return EMPTY_PLACEMENT;
-      return {
-        tabIds: p.tabIds,
-        activeTabId: p.activeTabId,
-        selectedNodeIds: p.selectedNodeIds,
-        selectedConnectionIds: p.selectedConnectionIds,
-      };
-    }),
-  );
+  useDockviewPortSnapshot(editorDockviewPort);
+  const group = editorDockviewPort.listGroups().find((candidate) => candidate.groupId === groupId);
+  const panels = editorDockviewPort.listPanels().filter((panel) => panel.groupId === groupId);
+  const activePanel = panels.find((panel) => panel.panelInstanceId === group?.activePanelInstanceId);
+  const selection = useEditorPaneStateStore((state) => (
+    activePanel ? state.selections[activePanel.panelInstanceId] : undefined
+  ));
 
-  const tabs = useEditorTabStore(
-    useShallow((state) => resolveGroupTabs(state, placement.tabIds)),
-  );
-
-  return useMemo(
-    () => ({
-      tabIds: placement.tabIds,
-      activeTabId: placement.activeTabId,
-      selectedNodeIds: placement.selectedNodeIds,
-      selectedConnectionIds: placement.selectedConnectionIds,
+  return useMemo(() => {
+    const tabs = panels
+      .map((panel) => readLayoutTab(panel.tab?.data?.layoutTab))
+      .filter((tab): tab is LayoutTab => tab !== null);
+    return {
+      tabIds: tabs.map((tab) => tab.id),
+      activeTabId: activePanel?.tab?.resourceRef ?? null,
+      selectedNodeIds: selection?.selectedNodeIds ?? [],
+      selectedConnectionIds: selection?.selectedConnectionIds ?? [],
       tabs,
-    }),
-    [
-      placement.tabIds,
-      placement.activeTabId,
-      placement.selectedNodeIds,
-      placement.selectedConnectionIds,
-      tabs,
-    ],
-  );
+    };
+  }, [activePanel, panels, selection]);
 }

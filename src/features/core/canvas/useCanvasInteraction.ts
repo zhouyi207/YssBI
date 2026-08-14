@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { getGraphByPath } from '@/features/core/dataStore';
-import { getEditorGroupSelectedNodeIds, useEditorTabStore } from '@/features/core/layout/editorTabStore';
 import {
+  getActiveLayoutTab,
+  getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
   updateEditorGroupSelectedNodeIds,
 } from '@/features/core/layout/layoutTabQueries';
@@ -32,13 +33,13 @@ interface DoubleClickSelectionSnapshot {
 }
 
 function selectionMatches(
-  placement: { selectedNodeIds: string[]; selectedConnectionIds: string[] },
+  actual: GraphSelection,
   expected: GraphSelection,
 ): boolean {
-  return placement.selectedNodeIds.length === expected.nodeIds.size
-    && placement.selectedNodeIds.every((id) => expected.nodeIds.has(id))
-    && placement.selectedConnectionIds.length === expected.connectionIds.size
-    && placement.selectedConnectionIds.every((id) => expected.connectionIds.has(id));
+  return actual.nodeIds.size === expected.nodeIds.size
+    && [...actual.nodeIds].every((id) => expected.nodeIds.has(id))
+    && actual.connectionIds.size === expected.connectionIds.size
+    && [...actual.connectionIds].every((id) => expected.connectionIds.has(id));
 }
 
 function restoreGraphSelection(groupId: string, selection: GraphSelection): void {
@@ -152,17 +153,15 @@ export function useCanvasInteraction({
     groupId: string,
     selection: DoubleClickSelectionSnapshot,
   ) => {
-    const placement = useEditorTabStore.getState().getPlacement(groupId);
-    if (placement.activeTabId !== graphPath) return false;
+    if (getActiveLayoutTab(groupId)?.activeTabId !== graphPath) return false;
     let outcome;
     try {
       outcome = await handlers.insertRerouteAtConnection({ graphPath, connectionId, position });
     } catch {
       outcome = false as const;
     }
-    const currentPlacement = useEditorTabStore.getState().getPlacement(groupId);
-    if (currentPlacement.activeTabId !== graphPath
-      || !selectionMatches(currentPlacement, selection.temporary)) return outcome;
+    if (getActiveLayoutTab(groupId)?.activeTabId !== graphPath
+      || !selectionMatches(getEditorGroupGraphSelection(groupId), selection.temporary)) return outcome;
 
     if (outcome !== false && outcome.status === 'applied') {
       updateEditorGroupSelectedConnectionIds(
@@ -200,7 +199,7 @@ export function useCanvasInteraction({
     const gid = groupId ?? activeGroupIdRef.current;
     const graphPath = resolveTabId(gid, activeTabIdRef);
     if (!graphPath) return;
-    const selected = getEditorGroupSelectedNodeIds(gid);
+    const selected = [...getEditorGroupGraphSelection(gid).nodeIds];
     const toggleSelection = event.shiftKey || event.ctrlKey || event.metaKey;
     const nodeIds = toggleSelection
       ? (selected.includes(nodeId)

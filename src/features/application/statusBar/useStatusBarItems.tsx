@@ -4,14 +4,16 @@ import { useTranslation } from "react-i18next";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
 import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
-import { useLayoutStore } from "@/features/core/layout/layoutStore";
-import { getActiveLayoutTab, resolveEditorTargetGroupId } from "@/features/core/layout/layoutTabQueries";
-import { getEditorGroupSelectedNodeIds } from "@/features/core/layout/editorTabStore";
+import {
+  editorDockviewPort,
+  useDockviewPortSnapshot,
+  useEditorPaneStateStore,
+} from "@/features/core/dockview";
 import { layoutTabResourceRef } from "@/features/core/layout/layoutTabModel";
 import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { getViewport, subscribeToViewport, editorViewportScope, type ViewportScope } from "@/features/core/viewport";
-import { LoadStatus } from "@/shared/types/ui";
+import { LoadStatus, type LayoutTab } from "@/shared/types/ui";
 import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import {
   createBuiltInStatusBarItems,
@@ -65,25 +67,24 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
   const actions = useStatusBarActions();
   const juliaWorker = useJuliaWorkerStatus();
 
-  const editor = useLayoutStore(
-    useShallow((state) => {
-      const groupId = resolveEditorTargetGroupId(undefined, state.nodes, state);
-      const active = getActiveLayoutTab(groupId, state.nodes);
-      const activeTabId = active?.activeTabId ?? null;
-      const activeTab = active?.tab ?? null;
-      const selectedNodeIds = getEditorGroupSelectedNodeIds(groupId);
-
-      return {
-        activeEditorGroupId: groupId,
-        activeTabId,
-        activeTitle: activeTab
-          ? resolveTabDisplayName(layoutTabResourceRef(activeTab), activeTab.id)
-          : t("bottomBar.noActiveGraph"),
-        activeType: activeTab?.type ?? null,
-        selectedCount: Array.isArray(selectedNodeIds) ? selectedNodeIds.length : 0,
-      };
-    }),
+  useDockviewPortSnapshot(editorDockviewPort);
+  const activePanel = editorDockviewPort.getActivePanel();
+  const selectedNodeIds = useEditorPaneStateStore((state) =>
+    activePanel ? state.selections[activePanel.panelInstanceId]?.selectedNodeIds : undefined,
   );
+  const editor = useMemo(() => {
+    const value = activePanel?.tab?.data?.layoutTab;
+    const activeTab = value && typeof value === "object" ? value as LayoutTab : null;
+    return {
+      activeEditorGroupId: activePanel?.groupId ?? null,
+      activeTabId: activeTab?.id ?? null,
+      activeTitle: activeTab
+        ? resolveTabDisplayName(layoutTabResourceRef(activeTab), activeTab.id)
+        : t("bottomBar.noActiveGraph"),
+      activeType: activeTab?.type ?? null,
+      selectedCount: selectedNodeIds?.length ?? 0,
+    };
+  }, [activePanel, selectedNodeIds, t]);
 
   const graphStats = useGraphDataStore(
     useShallow((state) => {

@@ -1,7 +1,17 @@
-import { useEditorTabStore } from './editorTabStore';
+import { editorDockviewPort, type DockviewPanelInfo } from '@/features/core/dockview';
+
+interface GroupLockState {
+  locked?: boolean;
+}
 
 export function isEditorGroupLocked(groupId: string): boolean {
-  return useEditorTabStore.getState().getPlacement(groupId).locked === true;
+  return editorDockviewPort
+    .listPanels()
+    .filter((panel: DockviewPanelInfo) => panel.groupId === groupId)
+    .some((panel: DockviewPanelInfo) => {
+      const value = panel.tab?.data?.layoutTab;
+      return value && typeof value === 'object' && (value as GroupLockState).locked === true;
+    });
 }
 
 /** Locked groups allow in-group tab reorder only. */

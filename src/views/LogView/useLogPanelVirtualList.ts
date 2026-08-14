@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from '@/app/appConfig/default';
-import { usePartResizeCommit } from '@/features/application/layout/usePartResizeCommit';
+
 import type { LogMessage } from '@/shared/types/ui';
 import {
   isLogViewportPinnedToBottom,
@@ -105,13 +105,16 @@ export function useLogPanelVirtualList({
     }
   }, [tryLoadOlder]);
 
-  usePartResizeCommit('panel', useCallback(() => {
-    if (variant !== 'embedded') return;
-    virtualizer.measure();
-    if (autoScroll && pinnedToBottomRef.current) {
-      snapToBottom();
-    }
-  }, [autoScroll, snapToBottom, variant, virtualizer]));
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || variant !== 'embedded') return;
+    const observer = new ResizeObserver(() => {
+      virtualizer.measure();
+      if (autoScroll && pinnedToBottomRef.current) snapToBottom();
+    });
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [autoScroll, snapToBottom, variant, virtualizer]);
 
   return {
     viewportRef,
