@@ -6,11 +6,12 @@ const selecting = {
   type: 'selecting' as const,
   session: {
     groupId: 'group-a',
+    pointerId: 0,
     startX: 0,
     startY: 0,
     currentX: 20,
     currentY: 20,
-    preserveSelection: false,
+    baseNodeIds: [],
   },
 };
 

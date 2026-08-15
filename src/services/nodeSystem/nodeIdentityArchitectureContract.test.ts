@@ -523,21 +523,11 @@ function sourceOffendersFromSourceFile(
   };
 
   const auditsGraphMutationBoundary = path.includes('/features/application/editorMutation/');
-  const auditsClipboardSnapshot = path.endsWith('/features/core/editor/clipboardSnapshot.ts')
-    || path.endsWith('/features/core/editor/stores/useClipboardStore.ts');
   const auditsNodeDetailPanel = path.replace(/\\/g, '/').endsWith(nodeDetailPanelSource);
   const visit = (node: ts.Node): void => {
     if (auditsNodeDetailPanel) {
       const finding = nodeDetailScopedLookupFinding(node, checker, staticString);
       if (finding) report(node, finding);
-    }
-    if (auditsClipboardSnapshot && ts.isObjectLiteralExpression(node)) {
-      const fields = new Set(
-        node.properties.map(propertyName).filter((name): name is string => name !== null),
-      );
-      if (fields.has('position') && fields.has('pins') && !fields.has('nodeType')) {
-        report(node, 'clipboard entry does not preserve its stable NodeTypeId descriptor');
-      }
     }
     if (auditsGraphMutationBoundary && ts.isCallExpression(node)) {
       const expression = unwrapExpression(node.expression);
@@ -638,20 +628,6 @@ describe('frontend stable node identity architecture audit behavior', () => {
   it('does not confuse DTO type declarations with descriptor construction', () => {
     const source = 'interface Descriptor { nodeTypeId: string; resourcePath: string; createArgs: unknown }';
     expect(sourceOffendersFromSource('src/shared/types/example.ts', source)).toEqual([]);
-  });
-
-
-  it('keeps clipboard node identity based on stable NodeTypeId', () => {
-    expect(sourceOffendersFromSource(
-      'src/features/core/editor/clipboardSnapshot.ts',
-      `const entry = { position: { x: 0, y: 0 }, pins: [] };`,
-    )).toEqual(expect.arrayContaining([
-      expect.stringContaining('clipboard entry does not preserve its stable NodeTypeId descriptor'),
-    ]));
-    expect(sourceOffendersFromSource(
-      'src/features/core/editor/clipboardSnapshot.ts',
-      `const entry = { nodeType: descriptor, position: { x: 0, y: 0 }, pins: [] };`,
-    )).toEqual([]);
   });
 
   it.each<Record<string, string>>([

@@ -1,10 +1,10 @@
 use super::materialization::ProjectedMemberRef;
 use super::{
-    ConnectionId, DocumentConnection, DocumentError, DocumentNode, DynamicPortBinding,
-    GraphDocument, GraphDocumentOperation, GraphDocumentPatch, GraphResourcePath,
-    MaterializationAuthorization, NodeId, NodePosition, OperationId, OrderKey, ParameterValues,
-    PortAddress, PortInstanceId, PortRef, ResourceKey, ResourceRevision, TypedValue,
-    port_member_group_state,
+    ConnectionId, DocumentConnection, DocumentError, DocumentNode, DynamicMemberLocator,
+    DynamicPortBinding, GraphDocument, GraphDocumentOperation, GraphDocumentPatch,
+    GraphResourcePath, MaterializationAuthorization, NodeId, NodePosition, OperationId, OrderKey,
+    ParameterValues, PortAddress, PortInstanceId, PortRef, ResourceKey, ResourceRevision,
+    TypedValue, port_member_group_state,
 };
 use crate::node_system::catalog::{
     CatalogResourcePath, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
@@ -163,6 +163,8 @@ pub enum MutationConflict {
     StaleProjectLifecycle(Box<str>),
     CatalogResourceStale(Box<str>),
     CatalogDescriptorInvalid(Box<str>),
+    ClipboardSubgraphInvalid(Box<str>),
+    ReferencedResourceUnavailable(Box<str>),
     Editor(EditorMutationError),
     InvalidEditorMutation(Box<str>),
     Projection(Box<str>),
@@ -177,6 +179,8 @@ impl MutationConflict {
             Self::StaleProjectLifecycle(_) => "stale_project_lifecycle",
             Self::CatalogResourceStale(_) => "catalog_resource_stale",
             Self::CatalogDescriptorInvalid(_) => "catalog_descriptor_invalid",
+            Self::ClipboardSubgraphInvalid(_) => "clipboard_subgraph_invalid",
+            Self::ReferencedResourceUnavailable(_) => "referenced_resource_unavailable",
             Self::Editor(error) => error.code.as_str(),
             _ => "mutation_conflict",
         }
@@ -222,6 +226,8 @@ impl fmt::Display for MutationConflict {
             Self::StaleProjectLifecycle(message)
             | Self::CatalogResourceStale(message)
             | Self::CatalogDescriptorInvalid(message)
+            | Self::ClipboardSubgraphInvalid(message)
+            | Self::ReferencedResourceUnavailable(message)
             | Self::InvalidEditorMutation(message) => formatter.write_str(message),
             Self::Editor(error) => formatter.write_str(&error.detail),
             Self::Projection(message) => {
@@ -376,6 +382,14 @@ pub enum EditorGraphMutationDto {
     },
     RemovePortInstance {
         address: PortAddressDto,
+    },
+    DuplicateSubgraph {
+        node_ids: Vec<NodeId>,
+        offset: NodePosition,
+    },
+    InsertSubgraph {
+        snapshot_json: String,
+        anchor: NodePosition,
     },
 }
 
@@ -864,6 +878,34 @@ impl EditorGraphMutationDto {
                     editor_error(EditorMutationErrorCode::GraphPortNotFound, detail)
                 })?,
             )?,
+            Self::DuplicateSubgraph { node_ids, offset } => {
+                return super::duplicate_subgraph(
+                    graph_path,
+                    document,
+                    registry,
+                    catalog_validation.ok_or_else(|| {
+                        catalog_resource_stale("subgraph catalog snapshot is unavailable")
+                    })?,
+                    node_ids,
+                    offset,
+                );
+            }
+            Self::InsertSubgraph {
+                snapshot_json,
+                anchor,
+            } => {
+                let snapshot = super::deserialize_clipboard_subgraph(snapshot_json.as_bytes())?;
+                return super::instantiate_subgraph(
+                    graph_path,
+                    document,
+                    registry,
+                    catalog_validation.ok_or_else(|| {
+                        catalog_resource_stale("subgraph catalog snapshot is unavailable")
+                    })?,
+                    snapshot,
+                    anchor,
+                );
+            }
         };
         Ok(GraphDocumentPatch::new(operations))
     }
@@ -1255,7 +1297,7 @@ fn disconnect_connection_operations(
         .collect())
 }
 
-fn validate_node_scope(
+pub(super) fn validate_node_scope(
     graph_path: &GraphResourcePath,
     protocol: &NodeProtocol,
 ) -> Result<(), MutationConflict> {
@@ -1826,6 +1868,135 @@ fn projected_connect_operations(
     Ok(operations)
 }
 
+pub(super) fn validate_resolved_dynamic_binding_authority(
+    protocol: &NodeProtocol,
+    spec: &PortSpec,
+    parameters: &ParameterValues,
+    origin: &DynamicMemberLocator,
+    catalog: &crate::project::CatalogMutationValidationSnapshot,
+) -> Result<crate::node_system::protocol::TypeExpr, MutationConflict> {
+    let PortInstances::Derived { resolver } = &spec.instances else {
+        return Err(invalid_editor_mutation(
+            "resolved dynamic binding requires a derived port template",
+        ));
+    };
+    match origin {
+        DynamicMemberLocator::FunctionParameter {
+            function,
+            parameter,
+        } => {
+            let target = parameters
+                .get(
+                    &crate::node_system::protocol::ParameterKey::new("target")
+                        .expect("function target is a valid parameter key"),
+                )
+                .and_then(serde_json::Value::as_str);
+            if target != Some(function.0.as_ref()) {
+                return Err(invalid_editor_mutation(
+                    "resolved function member does not match the node target",
+                ));
+            }
+            let path = CatalogResourcePath::new(function.0.clone());
+            let Some(crate::project::CatalogMutationResource::Function { signature, .. }) =
+                catalog.resources.get(&path)
+            else {
+                return Err(MutationConflict::ReferencedResourceUnavailable(
+                    format!("function resource '{}' is unavailable", function.0).into(),
+                ));
+            };
+            let resolver_id = resolver.as_str();
+            let type_name = if resolver_id
+                == crate::node_system::compiler::FUNCTION_CALL_ARGUMENTS_RESOLVER
+                && spec.direction == PortDirection::Input
+            {
+                signature
+                    .parameters
+                    .iter()
+                    .find(|candidate| candidate.id == *parameter)
+                    .map(|parameter| parameter.type_name.as_str())
+            } else if resolver_id == crate::node_system::compiler::FUNCTION_CALL_RESULTS_RESOLVER
+                && spec.direction == PortDirection::Output
+                && parameter.0.as_ref() == "return"
+            {
+                signature.return_type.as_deref()
+            } else {
+                None
+            };
+            let type_name = type_name.ok_or_else(|| {
+                invalid_editor_mutation(format!(
+                    "function member '{}:{}' is not authoritative for template '{}' on '{}'",
+                    function.0, parameter.0, spec.key, protocol.type_id
+                ))
+            })?;
+            crate::node_system::compatibility::function_type_expr(type_name).map_err(|error| {
+                invalid_editor_mutation(format!(
+                    "function member '{}:{}' has invalid authoritative type '{}': {error}",
+                    function.0, parameter.0, type_name
+                ))
+            })
+        }
+        DynamicMemberLocator::SchemaField { source, field } => {
+            let path = CatalogResourcePath::new(source.0.clone());
+            if !matches!(
+                catalog.resources.get(&path),
+                Some(crate::project::CatalogMutationResource::Database { .. })
+            ) {
+                return Err(MutationConflict::ReferencedResourceUnavailable(
+                    format!("database resource '{}' is unavailable", source.0).into(),
+                ));
+            }
+            if resolver.as_str() != crate::node_system::compiler::DATAFRAME_COLUMNS_RESOLVER {
+                return Err(invalid_editor_mutation(format!(
+                    "schema member '{}:{}' is invalid for template '{}'",
+                    source.0, field.0, spec.key
+                )));
+            }
+            Err(MutationConflict::ReferencedResourceUnavailable(
+                format!(
+                    "current database field authority for '{}:{}' is unavailable",
+                    source.0, field.0
+                )
+                .into(),
+            ))
+        }
+    }
+}
+
+pub(super) fn validate_subgraph_port(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    address: &PortAddress,
+) -> Result<(), MutationConflict> {
+    resolve_mutation_port(document, registry, address).map(|_| ())
+}
+
+pub(super) fn validate_subgraph_connection(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    output: &PortAddress,
+    input: &PortAddress,
+    order: Option<&OrderKey>,
+) -> Result<(), MutationConflict> {
+    let output_port = resolve_mutation_port(document, registry, output)?;
+    let input_port = resolve_mutation_port(document, registry, input)?;
+    validate_document_connection_endpoints(&output_port, &input_port)?;
+    validate_connection_does_not_exist(document, output, input)?;
+    let output_type = authoritative_subgraph_port_type(&output_port);
+    let input_type = authoritative_subgraph_port_type(&input_port);
+    validate_connection_type_exprs(
+        document,
+        registry,
+        output,
+        input,
+        output_port.spec.kind,
+        output_type,
+        input_type,
+    )?;
+    validate_connection_order(input_port.spec.connections, order)?;
+    validate_connection_capacity(document, output, output_port.spec.connections)?;
+    validate_connection_capacity(document, input, input_port.spec.connections)
+}
+
 fn connect_operations(
     document: &GraphDocument,
     registry: &NodeRegistry,
@@ -1909,6 +2080,18 @@ fn connect_operations_prevalidated_type(
     )
 }
 
+fn authoritative_subgraph_port_type<'a>(
+    port: &'a MutationPort<'a>,
+) -> &'a crate::node_system::protocol::TypeExpr {
+    match port.binding {
+        Some(DynamicPortBinding::Resolved { last_known, .. }) => last_known
+            .value_type
+            .as_ref()
+            .unwrap_or(&port.spec.value_type),
+        _ => &port.spec.value_type,
+    }
+}
+
 fn validate_static_connection_types(
     document: &GraphDocument,
     registry: &NodeRegistry,
@@ -1917,7 +2100,27 @@ fn validate_static_connection_types(
     output_port: &MutationPort<'_>,
     input_port: &MutationPort<'_>,
 ) -> Result<(), MutationConflict> {
-    if output_port.spec.kind != PortKind::Data {
+    validate_connection_type_exprs(
+        document,
+        registry,
+        output,
+        input,
+        output_port.spec.kind,
+        &output_port.spec.value_type,
+        &input_port.spec.value_type,
+    )
+}
+
+fn validate_connection_type_exprs(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    output: &PortAddress,
+    input: &PortAddress,
+    kind: PortKind,
+    output_type: &crate::node_system::protocol::TypeExpr,
+    input_type: &crate::node_system::protocol::TypeExpr,
+) -> Result<(), MutationConflict> {
+    if kind != PortKind::Data {
         return Ok(());
     }
     let output_type_parameters = registry
@@ -1933,8 +2136,8 @@ fn validate_static_connection_types(
         .type_parameters
         .as_ref();
     if crate::node_system::compiler::type_exprs_compatibility(
-        &output_port.spec.value_type,
-        &input_port.spec.value_type,
+        output_type,
+        input_type,
         output_type_parameters,
         input_type_parameters,
     ) == crate::node_system::compiler::TypeCompatibility::Incompatible
@@ -2100,7 +2303,7 @@ fn validate_connection_capacity(
     })
 }
 
-fn validate_literal_target(
+pub(super) fn validate_literal_target(
     document: &GraphDocument,
     registry: &NodeRegistry,
     address: &PortAddress,

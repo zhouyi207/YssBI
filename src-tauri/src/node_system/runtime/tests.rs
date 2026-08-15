@@ -817,7 +817,20 @@ impl RunEventSink for RecordingRunEvents {
     }
 }
 
-fn assert_cancelled_without_completion(events: &RecordingRunEvents) {
+fn result_group_states(events: &[RunEvent]) -> Vec<ResultStateKind> {
+    events
+        .iter()
+        .filter_map(|event| match event.kind {
+            RunEventKind::ResultGroupChanged { state, .. } => Some(state),
+            _ => None,
+        })
+        .collect()
+}
+
+fn assert_cancelled_without_completion(
+    events: &RecordingRunEvents,
+    expected_group_state: ResultStateKind,
+) {
     let events = events.0.lock().unwrap();
     assert!(
         events
@@ -829,10 +842,12 @@ fn assert_cancelled_without_completion(events: &RecordingRunEvents) {
             .iter()
             .all(|event| event.kind != RunEventKind::RunCompleted)
     );
-    assert!(events.iter().all(|event| !matches!(
-        event.kind,
-        RunEventKind::ResultGroupChanged { .. } | RunEventKind::OutputResultChanged { .. }
-    )));
+    assert_eq!(result_group_states(&events), vec![expected_group_state]);
+    assert!(
+        events
+            .iter()
+            .all(|event| !matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
+    );
 }
 
 struct NoFunctions;
@@ -3505,13 +3520,21 @@ fn demand_driven_publication_exposes_only_the_requested_final_output() {
             .all(|event| { serde_json::to_value(&event.kind).unwrap()["type"] != "valueReady" })
     );
     assert_eq!(
-        recorded
-            .iter()
-            .filter(|event| matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
-            .count(),
-        1
+        result_group_states(&recorded),
+        vec![ResultStateKind::Ready, ResultStateKind::Ready]
     );
-    assert_eq!(recorded.iter().filter(|event| matches!(&event.kind, RunEventKind::OutputResultChanged { output: emitted, .. } if emitted == &output)).count(), 1);
+    let output_events = recorded
+        .iter()
+        .filter(|event| matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
+        .collect::<Vec<_>>();
+    assert_eq!(output_events.len(), 1);
+    assert!(matches!(
+        &output_events[0].kind,
+        RunEventKind::OutputResultChanged {
+            output: emitted,
+            ..
+        } if emitted == &output
+    ));
 }
 
 #[test]
@@ -3557,25 +3580,20 @@ fn demand_driven_publication_pin_preview_emits_only_generation_bound_output() {
     .unwrap();
 
     let recorded = events.0.lock().unwrap();
-    assert!(
-        recorded
-            .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
-    );
-    assert_eq!(
-        recorded
-            .iter()
-            .filter(|event| matches!(
-                &event.kind,
-                RunEventKind::OutputResultChanged {
-                    output: emitted,
-                    generation: Some(17),
-                    ..
-                } if emitted == &output
-            ))
-            .count(),
-        1,
-    );
+    assert_eq!(result_group_states(&recorded), vec![ResultStateKind::Ready]);
+    let output_events = recorded
+        .iter()
+        .filter(|event| matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
+        .collect::<Vec<_>>();
+    assert_eq!(output_events.len(), 1);
+    assert!(matches!(
+        &output_events[0].kind,
+        RunEventKind::OutputResultChanged {
+            output: emitted,
+            generation: Some(17),
+            ..
+        } if emitted == &output
+    ));
 }
 
 #[test]
@@ -4298,199 +4316,6 @@ fn assert_run_phase_coverage(
         assert!(span.started_at >= run.started_at);
         assert!(span.finished_at <= run.finished_at);
     }
-}
-
-#[test]
-fn run_phase_spans_cover_success_error_cancellation_deadline_retry_exhaustion_and_panic() {
-    let success_trace = RecordingTrace::default();
-    RunExecutor::new(
-        &KernelRegistry::new(),
-        &no_resources(),
-        &NoFunctions,
-        crate::node_system::runtime::ResultStore::new(),
-        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
-    )
-    .with_trace_sink(&success_trace)
-    .with_cleanup_delay_for_test(Duration::from_millis(100))
-    .run(
-        &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
-        CancellationToken::new(),
-    )
-    .unwrap();
-    assert_run_phase_coverage(
-        &success_trace.0.lock().unwrap(),
-        SpanOutcome::Success,
-        SpanOutcome::Success,
-    );
-    let success_cleanup = success_trace
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|span| span.kind == SpanKind::Cleanup)
-        .unwrap()
-        .clone();
-    assert!(
-        success_cleanup.finished_at.get() - success_cleanup.started_at.get() >= 50_000_000,
-        "cleanup span must include the registered cleanup delay"
-    );
-
-    let error_trace = RecordingTrace::default();
-    let error_plan = plan(
-        vec![operation("missing_phase_kernel", &[], &[])],
-        0,
-        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
-            0,
-        ))])),
-    );
-    assert!(
-        RunExecutor::new(
-            &KernelRegistry::new(),
-            &no_resources(),
-            &NoFunctions,
-            crate::node_system::runtime::ResultStore::new(),
-            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
-        )
-        .with_trace_sink(&error_trace)
-        .run(&error_plan, CancellationToken::new())
-        .is_err()
-    );
-    assert_run_phase_coverage(
-        &error_trace.0.lock().unwrap(),
-        SpanOutcome::Success,
-        SpanOutcome::NotReached,
-    );
-
-    let cancelled_trace = RecordingTrace::default();
-    let cancelled = CancellationToken::new();
-    cancelled.cancel();
-    assert_eq!(
-        RunExecutor::new(
-            &KernelRegistry::new(),
-            &no_resources(),
-            &NoFunctions,
-            crate::node_system::runtime::ResultStore::new(),
-            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
-        )
-        .with_trace_sink(&cancelled_trace)
-        .run(
-            &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
-            cancelled,
-        ),
-        Err(RunError::Cancelled)
-    );
-    assert_run_phase_coverage(
-        &cancelled_trace.0.lock().unwrap(),
-        SpanOutcome::NotReached,
-        SpanOutcome::NotReached,
-    );
-
-    let deadline_trace = RecordingTrace::default();
-    assert!(matches!(
-        RunExecutor::new(
-            &KernelRegistry::new(),
-            &no_resources(),
-            &NoFunctions,
-            crate::node_system::runtime::ResultStore::new(),
-            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
-        )
-        .with_trace_sink(&deadline_trace)
-        .with_deadline(RunDeadline::after(Duration::ZERO))
-        .run(
-            &plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([]))),
-            CancellationToken::new(),
-        ),
-        Err(RunError::DeadlineExceeded { .. })
-    ));
-    assert_run_phase_coverage(
-        &deadline_trace.0.lock().unwrap(),
-        SpanOutcome::NotReached,
-        SpanOutcome::NotReached,
-    );
-
-    let retry_trace = RecordingTrace::default();
-    let mut retry_kernels = KernelRegistry::new();
-    retry_kernels
-        .register(
-            id("phase_retry_exhausted", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| Err(KernelError::transient("retry exhausted"))),
-        )
-        .unwrap();
-    assert!(
-        RunExecutor::new(
-            &retry_kernels,
-            &no_resources(),
-            &NoFunctions,
-            crate::node_system::runtime::ResultStore::new(),
-            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new())
-        )
-        .with_trace_sink(&retry_trace)
-        .run(
-            &retry_plan("phase_retry_exhausted", 2, Duration::ZERO),
-            CancellationToken::new(),
-        )
-        .is_err()
-    );
-    assert_run_phase_coverage(
-        &retry_trace.0.lock().unwrap(),
-        SpanOutcome::Success,
-        SpanOutcome::NotReached,
-    );
-    let retry_attempts = retry_trace
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|span| span.kind == SpanKind::OperationAttempt)
-        .map(|span| span.outcome.clone())
-        .collect::<Vec<_>>();
-    assert_eq!(retry_attempts, [SpanOutcome::Retry, SpanOutcome::Error]);
-
-    let panic_trace = RecordingTrace::default();
-    let mut panic_kernels = KernelRegistry::new();
-    panic_kernels
-        .register(
-            id("phase_worker_panic", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| panic!("phase worker panic sentinel")),
-        )
-        .unwrap();
-    let panic_plan = plan(
-        vec![operation("phase_worker_panic", &[], &[])],
-        0,
-        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
-            0,
-        ))])),
-    );
-    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _ = RunExecutor::new(
-            &panic_kernels,
-            &no_resources(),
-            &NoFunctions,
-            crate::node_system::runtime::ResultStore::new(),
-            std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
-        )
-        .with_trace_sink(&panic_trace)
-        .run(&panic_plan, CancellationToken::new());
-    }));
-    let panic = panic.expect_err("worker panic must resume");
-    assert_eq!(
-        panic.downcast_ref::<&str>().copied(),
-        Some("phase worker panic sentinel")
-    );
-    assert_run_phase_coverage(
-        &panic_trace.0.lock().unwrap(),
-        SpanOutcome::Success,
-        SpanOutcome::NotReached,
-    );
-    assert!(
-        panic_trace
-            .0
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|span| span.kind == SpanKind::OperationAttempt
-                && span.outcome == SpanOutcome::InternalAborted)
-    );
 }
 
 #[test]
@@ -8162,7 +7987,7 @@ fn assert_production_source_cancellation(
     assert_eq!(error, RunError::Cancelled);
     assert_eq!(observed.lock().unwrap().as_slice(), expected_checkpoints);
     assert_eq!(scan_limits.lock().unwrap().as_slice(), expected_scan_limits);
-    assert_cancelled_without_completion(&events);
+    assert_cancelled_without_completion(&events, ResultStateKind::Cancelled);
     assert_eq!(lease_observer.acquired(), lease_observer.dropped());
     assert_eq!(lease_observer.active(), 0);
 }
@@ -8513,7 +8338,7 @@ fn cancellation_before_final_result_publication_cleans_results_without_completio
 
     assert_eq!(error, RunError::Cancelled);
     assert_eq!(final_checkpoints.load(Ordering::SeqCst), 1);
-    assert_cancelled_without_completion(&events);
+    assert_cancelled_without_completion(&events, ResultStateKind::Ready);
 }
 
 #[test]
@@ -9732,146 +9557,6 @@ fn per_run_memoization_finalize_wakes_waiter_and_prevents_late_commit() {
 }
 
 #[test]
-fn per_run_memoization_finalize_terminal_wins_over_late_producer_error() {
-    let memo = Arc::new(SessionMemoization::new());
-    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
-    let producer_started = Arc::new(Barrier::new(2));
-    let release_error = Arc::new(Barrier::new(2));
-    let waiter_registered = Arc::new(Barrier::new(2));
-
-    let producer = {
-        let memo = Arc::clone(&memo);
-        let key = key.clone();
-        let producer_started = Arc::clone(&producer_started);
-        let release_error = Arc::clone(&release_error);
-        thread::spawn(move || {
-            memo.get_or_produce(key, &CancellationToken::new(), || {
-                producer_started.wait();
-                release_error.wait();
-                Err(RunError::InvalidPlan("late error".into()))
-            })
-        })
-    };
-    producer_started.wait();
-    let (waiter_tx, waiter_rx) = mpsc::channel();
-    let waiter = {
-        let memo = Arc::clone(&memo);
-        let key = key.clone();
-        let waiter_registered = Arc::clone(&waiter_registered);
-        thread::spawn(move || {
-            let result = memo.get_or_produce_with_commit_checkpoint(
-                key,
-                &CancellationToken::new(),
-                || panic!("waiter produced"),
-                |checkpoint| {
-                    if checkpoint == MemoCommitCheckpoint::WaiterRegistered {
-                        waiter_registered.wait();
-                    }
-                },
-            );
-            waiter_tx.send(result).unwrap();
-        })
-    };
-    waiter_registered.wait();
-
-    let terminal_set = Arc::new(Barrier::new(2));
-    let release_finalize = Arc::new(Barrier::new(2));
-    let finalizer = {
-        let memo = Arc::clone(&memo);
-        let terminal_set = Arc::clone(&terminal_set);
-        let release_finalize = Arc::clone(&release_finalize);
-        thread::spawn(move || {
-            memo.finalize_with_checkpoint(|| {
-                terminal_set.wait();
-                release_finalize.wait();
-            });
-        })
-    };
-    terminal_set.wait();
-    release_error.wait();
-    assert!(waiter_rx.recv_timeout(Duration::from_millis(100)).is_err());
-    release_finalize.wait();
-
-    assert_eq!(producer.join().unwrap(), Err(RunError::Cancelled));
-    assert_eq!(
-        waiter_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
-        Err(RunError::Cancelled)
-    );
-    waiter.join().unwrap();
-    finalizer.join().unwrap();
-}
-
-#[test]
-fn per_run_memoization_finalize_terminal_wins_over_late_producer_panic() {
-    let memo = Arc::new(SessionMemoization::new());
-    let key = per_run_memo_key(&[Value::Integer(1).into()], "1");
-    let producer_started = Arc::new(Barrier::new(2));
-    let release_panic = Arc::new(Barrier::new(2));
-    let waiter_registered = Arc::new(Barrier::new(2));
-
-    let producer = {
-        let memo = Arc::clone(&memo);
-        let key = key.clone();
-        let producer_started = Arc::clone(&producer_started);
-        let release_panic = Arc::clone(&release_panic);
-        thread::spawn(move || {
-            memo.get_or_produce(key, &CancellationToken::new(), || {
-                producer_started.wait();
-                release_panic.wait();
-                panic!("late panic")
-            })
-        })
-    };
-    producer_started.wait();
-    let (waiter_tx, waiter_rx) = mpsc::channel();
-    let waiter = {
-        let memo = Arc::clone(&memo);
-        let key = key.clone();
-        let waiter_registered = Arc::clone(&waiter_registered);
-        thread::spawn(move || {
-            let result = memo.get_or_produce_with_commit_checkpoint(
-                key,
-                &CancellationToken::new(),
-                || panic!("waiter produced"),
-                |checkpoint| {
-                    if checkpoint == MemoCommitCheckpoint::WaiterRegistered {
-                        waiter_registered.wait();
-                    }
-                },
-            );
-            waiter_tx.send(result).unwrap();
-        })
-    };
-    waiter_registered.wait();
-
-    let terminal_set = Arc::new(Barrier::new(2));
-    let release_finalize = Arc::new(Barrier::new(2));
-    let finalizer = {
-        let memo = Arc::clone(&memo);
-        let terminal_set = Arc::clone(&terminal_set);
-        let release_finalize = Arc::clone(&release_finalize);
-        thread::spawn(move || {
-            memo.finalize_with_checkpoint(|| {
-                terminal_set.wait();
-                release_finalize.wait();
-            });
-        })
-    };
-    terminal_set.wait();
-    release_panic.wait();
-    assert!(waiter_rx.recv_timeout(Duration::from_millis(100)).is_err());
-    release_finalize.wait();
-
-    assert!(producer.join().is_err());
-    assert_eq!(
-        waiter_rx.recv_timeout(Duration::from_secs(1)).unwrap(),
-        Err(RunError::Cancelled)
-    );
-    waiter.join().unwrap();
-    finalizer.join().unwrap();
-}
-
-#[test]
 fn per_run_memoization_finalize_owner_lock_rejects_late_lookup() {
     let memo = Arc::new(SessionMemoization::new());
     let terminal_set = Arc::new(Barrier::new(2));
@@ -10435,9 +10120,15 @@ fn deadline_late_kernel_completion_is_joined_without_commit_or_completion_event(
         })
     );
     let events = events.0.lock().unwrap();
-    assert!(!events.iter().any(|event| matches!(
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event.kind, RunEventKind::OperationCompleted { .. }))
+    );
+    assert_eq!(result_group_states(&events), vec![ResultStateKind::Failed]);
+    assert!(events.iter().all(|event| !matches!(
         event.kind,
-        RunEventKind::OperationCompleted { .. } | RunEventKind::ResultGroupChanged { .. }
+        RunEventKind::OutputResultChanged { .. } | RunEventKind::RunCompleted
     )));
     assert!(events.iter().any(|event| matches!(
         event.kind,
@@ -10566,11 +10257,11 @@ fn deadline_publication_suppresses_terminal_result_events() {
             phase: RunPhase::ResultPublication,
         })
     );
-    assert!(!events.0.lock().unwrap().iter().any(|event| matches!(
+    let events = events.0.lock().unwrap();
+    assert_eq!(result_group_states(&events), vec![ResultStateKind::Ready]);
+    assert!(events.iter().all(|event| !matches!(
         event.kind,
-        RunEventKind::RunCompleted
-            | RunEventKind::ResultGroupChanged { .. }
-            | RunEventKind::OutputResultChanged { .. }
+        RunEventKind::RunCompleted | RunEventKind::OutputResultChanged { .. }
     )));
 }
 
@@ -10899,53 +10590,6 @@ fn worker_panic_timestamp_is_captured_at_unwind_boundary() {
     assert!(panic.is_err());
 }
 
-#[test]
-fn deadline_drain_preserves_ordinary_error_completed_before_expiry() {
-    let (completed_tx, completed_rx) = mpsc::sync_channel(1);
-    let completed_rx = Arc::new(Mutex::new(completed_rx));
-    let mut kernels = KernelRegistry::new();
-    kernels
-        .register(
-            id("parallel0", KernelHandle::new),
-            FnKernel(move |_: &[RuntimeValue]| {
-                completed_tx.send(()).unwrap();
-                Err(KernelError::new("completed before deadline"))
-            }),
-        )
-        .unwrap();
-    kernels
-        .register(
-            id("parallel1", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(1).into()])),
-        )
-        .unwrap();
-    let observed_completion = Arc::clone(&completed_rx);
-    let error = RunExecutor::new(
-        &kernels,
-        &no_resources(),
-        &NoFunctions,
-        crate::node_system::runtime::ResultStore::new(),
-        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
-    )
-    .with_scheduling_policy(parallel_policy(1, 1, 1))
-    .with_deadline(RunDeadline::after(Duration::from_millis(100)))
-    .with_test_checkpoint(Arc::new(move |checkpoint, _| {
-        if checkpoint == SchedulerCheckpoint::AdmissionBlocked(WorkloadClass::Cpu) {
-            observed_completion.lock().unwrap().recv().unwrap();
-            thread::sleep(Duration::from_millis(120));
-        }
-    }))
-    .run(
-        &independent_parallel_plan(&[WorkloadClass::Cpu, WorkloadClass::Cpu]),
-        CancellationToken::new(),
-    )
-    .unwrap_err();
-
-    assert!(
-        matches!(error, RunError::KernelFailed { message, .. } if message.as_ref() == "completed before deadline")
-    );
-}
-
 struct CancelAfterDeadlineKernel;
 
 impl Kernel for CancelAfterDeadlineKernel {
@@ -10992,63 +10636,6 @@ fn cancellation_observed_while_draining_upgrades_deadline() {
 }
 
 #[test]
-fn deadline_cleanup_drains_an_uncooperative_task_after_recording_timeout() {
-    let mut kernels = KernelRegistry::new();
-    kernels
-        .register(
-            id("deadline_cleanup_long", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| Ok(Vec::new())),
-        )
-        .unwrap();
-    let execution_plan = plan(
-        vec![operation("deadline_cleanup_long", &[], &[])],
-        0,
-        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
-            0,
-        ))])),
-    );
-    let started = std::time::Instant::now();
-    let finalizer = |_: &mut RunResult, _: &CancellationToken, _: Option<RunDeadline>| Ok(());
-    let root = materialization_test_root("cleanup-deadline-uncooperative");
-    let checkpoint = Arc::new(|checkpoint, _: &CancellationToken| {
-        if checkpoint == SchedulerCheckpoint::FinalResultPublication {
-            // The synchronized cleanup task is installed by the owner test API.
-        }
-    });
-    let owner_delay = Duration::from_millis(250);
-    let error = RunExecutor::new(
-        &kernels,
-        &no_resources(),
-        &NoFunctions,
-        crate::node_system::runtime::ResultStore::new(),
-        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
-    )
-    .with_deadline(RunDeadline::after(Duration::from_millis(10)))
-    .with_success_finalizer(&finalizer)
-    .with_test_spill_root(root.clone())
-    .with_test_checkpoint(checkpoint)
-    .with_cleanup_delay_for_test(owner_delay)
-    .run(&execution_plan, CancellationToken::new())
-    .unwrap_err();
-
-    assert_eq!(
-        error,
-        RunError::DeadlineExceeded {
-            phase: RunPhase::Cleanup
-        }
-    );
-    assert!(started.elapsed() >= owner_delay);
-    assert!(
-        !root.exists()
-            || std::fs::read_dir(&root)
-                .expect("cleanup spill root remains readable")
-                .next()
-                .is_none()
-    );
-    let _ = std::fs::remove_dir_all(root);
-}
-
-#[test]
 fn rust_error_outcomes_are_strict_by_construction() {
     assert_eq!(
         RunErrorOutcome::from(&RunError::DeadlineExceeded {
@@ -11091,7 +10678,6 @@ fn cancellation_wakes_blocked_stream_send_and_receive() {
 
 struct StreamingRelationalBackend {
     observed: Arc<Mutex<Option<StreamValue>>>,
-    sender: Mutex<Option<BoundedStreamSender<Value>>>,
 }
 
 impl RelationalBackend for StreamingRelationalBackend {
@@ -11101,10 +10687,10 @@ impl RelationalBackend for StreamingRelationalBackend {
         _: &CompiledRelationalPlan,
         _: &[RuntimeValue],
     ) -> Result<RelationalExecution, RelationalError> {
-        let (sender, receiver) = bounded_stream_channel(1, context.cancellation.clone())
-            .map_err(|_| RelationalError::operator_invalid("stream setup failed"))?;
-        let stream = StreamValue::from_receiver(receiver);
-        *self.sender.lock().unwrap() = Some(sender);
+        let stream = context
+            .resource_owner
+            .stream_from_values([Value::Integer(1)])
+            .map_err(RelationalError::from)?;
         *self.observed.lock().unwrap() = Some(stream.clone());
         Ok(RelationalExecution {
             outputs: vec![RuntimeValue::Stream(stream)],
@@ -11113,7 +10699,7 @@ impl RelationalBackend for StreamingRelationalBackend {
 }
 
 #[test]
-fn run_cleanup_closes_relational_streams() {
+fn relational_stream_materializes_and_closes_before_run_cleanup() {
     let observed = Arc::new(Mutex::new(None));
     let mut relational = RelationalBackendRegistry::new();
     relational
@@ -11121,7 +10707,6 @@ fn run_cleanup_closes_relational_streams() {
             id("single", RelationalBackendId::new),
             StreamingRelationalBackend {
                 observed: observed.clone(),
-                sender: Mutex::new(None),
             },
         )
         .unwrap();

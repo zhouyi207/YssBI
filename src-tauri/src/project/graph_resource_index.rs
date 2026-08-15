@@ -198,13 +198,24 @@ mod tests {
     }
 
     #[cfg(windows)]
-    fn link_file(link: &std::path::Path, target: &std::path::Path) {
-        std::os::windows::fs::symlink_file(target, link).unwrap();
+    fn try_link_file(link: &std::path::Path, target: &std::path::Path) -> bool {
+        match std::os::windows::fs::symlink_file(target, link) {
+            Ok(()) => true,
+            Err(error)
+                if error.raw_os_error() == Some(1314)
+                    || error.kind() == std::io::ErrorKind::Unsupported =>
+            {
+                eprintln!("skipping test: Windows file symlinks are unavailable: {error}");
+                false
+            }
+            Err(error) => panic!("failed to create test file symlink: {error}"),
+        }
     }
 
     #[cfg(unix)]
-    fn link_file(link: &std::path::Path, target: &std::path::Path) {
+    fn try_link_file(link: &std::path::Path, target: &std::path::Path) -> bool {
         std::os::unix::fs::symlink(target, link).unwrap();
+        true
     }
 
     #[test]
@@ -241,7 +252,9 @@ mod tests {
         let tree = TestTree::new("external-file");
         let outside = tree.outside.join("External.yssbi-event");
         std::fs::write(&outside, b"{}").unwrap();
-        link_file(&tree.root.join("events/External.yssbi-event"), &outside);
+        if !try_link_file(&tree.root.join("events/External.yssbi-event"), &outside) {
+            return;
+        }
 
         assert!(scan_graph_resource_index(&tree.root).is_err());
     }

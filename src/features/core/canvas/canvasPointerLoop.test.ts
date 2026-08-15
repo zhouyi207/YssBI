@@ -30,6 +30,7 @@ function connectionSession(sourceId: string): ConnectionSession {
   const source = useGraphDataStore.getState().getGraphPin(graphPath, sourceId)!;
   return {
     groupId: 'group-1',
+    pointerId: 0,
     graphPath,
     source,
     screenX: 0,
@@ -41,6 +42,46 @@ function connectionSession(sourceId: string): ConnectionSession {
     snappedWorld: null,
     feedback: null,
   };
+}
+
+function appendSelectionNode(
+  id: string,
+  bounds: { left: number; top: number; right: number; bottom: number },
+): HTMLElement {
+  const canvas = document.querySelector<HTMLElement>('[data-editor-group-id="group-1"]')!;
+  const node = document.createElement('div');
+  node.dataset.nodeId = id;
+  node.getBoundingClientRect = () => ({
+    ...bounds,
+    width: bounds.right - bounds.left,
+    height: bounds.bottom - bounds.top,
+    x: bounds.left,
+    y: bounds.top,
+    toJSON: () => ({}),
+  });
+  canvas.append(node);
+  return node;
+}
+
+function startSelection(
+  baseNodeIds: readonly string[],
+  startX = 0,
+  startY = 0,
+  pointerId = 0,
+): void {
+  useGraphInteractionStore.getState().startInteraction(graphPath, {
+    type: 'selecting',
+    session: {
+      groupId: 'group-1',
+      pointerId,
+      startX,
+      startY,
+      currentX: startX,
+      currentY: startY,
+      baseNodeIds,
+    },
+  });
+  registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId });
 }
 
 describe('canvas pointer loop', () => {
@@ -105,14 +146,15 @@ describe('canvas pointer loop', () => {
       type: 'selecting',
       session: {
         groupId: 'group-1',
+        pointerId: 0,
         startX: 20,
         startY: 30,
         currentX: 20,
         currentY: 30,
-        preserveSelection: false,
+        baseNodeIds: [],
       },
     });
-    registerCanvasPointerScope({ graphPath, groupId: 'group-1' });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
 
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 20, clientY: 30, button: 0 }));
 
@@ -120,12 +162,135 @@ describe('canvas pointer loop', () => {
     expect(setSelectedNodeIds).toHaveBeenCalledWith([], 'group-1');
   });
 
+  it('uses the Shift selection captured at pointerdown for preview and finalization', () => {
+    const nodeA = appendSelectionNode('a', { left: 200, top: 200, right: 220, bottom: 220 });
+    const nodeB = appendSelectionNode('b', { left: 10, top: 10, right: 20, bottom: 20 });
+    const nodeC = appendSelectionNode('c', { left: 30, top: 30, right: 40, bottom: 40 });
+    startSelection(['a', 'b']);
+
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 50, clientY: 50, button: 0 }));
+    frame?.(0);
+
+    expect(nodeA.dataset.selectionPreview).toBe('true');
+    expect(nodeB.dataset.selectionPreview).toBe('true');
+    expect(nodeC.dataset.selectionPreview).toBe('true');
+
+    setSelectedNodeIds(['store-change'], 'group-1');
+    setSelectedNodeIds.mockClear();
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 50, clientY: 50, button: 0 }));
+
+    expect(setSelectedNodeIds).toHaveBeenCalledOnce();
+    expect(setSelectedNodeIds).toHaveBeenCalledWith(['a', 'b', 'c'], 'group-1');
+  });
+
+  it('preserves the session-start selection after an empty Shift drag', () => {
+    startSelection(['a', 'b']);
+
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 50, clientY: 50, button: 0 }));
+    frame?.(0);
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 50, clientY: 50, button: 0 }));
+
+    expect(setSelectedNodeIds).toHaveBeenCalledWith(['a', 'b'], 'group-1');
+  });
+
+  it('replaces selection with current hits after a plain drag', () => {
+    appendSelectionNode('hit-a', { left: 10, top: 10, right: 20, bottom: 20 });
+    appendSelectionNode('hit-b', { left: 30, top: 30, right: 40, bottom: 40 });
+    startSelection([]);
+
+    window.dispatchEvent(new PointerEvent('pointermove', { clientX: 50, clientY: 50, button: 0 }));
+    frame?.(0);
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 50, clientY: 50, button: 0 }));
+
+    expect(setSelectedNodeIds).toHaveBeenCalledWith(['hit-a', 'hit-b'], 'group-1');
+  });
+
+  it('preserves the session-start selection after a Shift blank click', () => {
+    startSelection(['a', 'b'], 20, 30);
+
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 20, clientY: 30, button: 0 }));
+
+    expect(setSelectedNodeIds).toHaveBeenCalledWith(['a', 'b'], 'group-1');
+  });
+
+  it('cancels selection without preview or final writes when the initiating group switches graphs', () => {
+    const node = appendSelectionNode('hit', { left: 10, top: 10, right: 20, bottom: 20 });
+    startSelection(['base'], 0, 0, 7);
+    activeTabIdRef.current = 'events/other.yssbi-event';
+
+    window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 7, clientX: 50, clientY: 50 }));
+    frame?.(0);
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, clientX: 50, clientY: 50 }));
+
+    expect(node.dataset.selectionPreview).toBeUndefined();
+    expect(setSelectedNodeIds).not.toHaveBeenCalled();
+    expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, 'group-1')).toEqual({ type: 'idle' });
+  });
+
+  it('does not restore a Shift blank-click baseline after the initiating group switches graphs', () => {
+    startSelection(['base'], 20, 30, 7);
+    activeTabIdRef.current = 'events/other.yssbi-event';
+
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, clientX: 20, clientY: 30 }));
+
+    expect(setSelectedNodeIds).not.toHaveBeenCalled();
+    expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, 'group-1')).toEqual({ type: 'idle' });
+  });
+
+  it('ignores foreign pointer movement and release', () => {
+    const node = appendSelectionNode('hit', { left: 10, top: 10, right: 20, bottom: 20 });
+    startSelection([], 0, 0, 7);
+
+    window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 8, clientX: 50, clientY: 50 }));
+    frame?.(0);
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 8, clientX: 50, clientY: 50 }));
+    window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 8 }));
+
+    expect(node.dataset.selectionPreview).toBeUndefined();
+    expect(setSelectedNodeIds).not.toHaveBeenCalled();
+    expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, 'group-1').type).toBe('selecting');
+
+    window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, clientX: 0, clientY: 0 }));
+    expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, 'group-1')).toEqual({ type: 'idle' });
+  });
+
+  it('cancels the owning pointer on pointercancel and clears preview without writes', () => {
+    const node = appendSelectionNode('hit', { left: 10, top: 10, right: 20, bottom: 20 });
+    startSelection([], 0, 0, 7);
+    window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 7, clientX: 50, clientY: 50 }));
+    frame?.(0);
+    expect(node.dataset.selectionPreview).toBe('true');
+
+    window.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 7 }));
+
+    expect(node.dataset.selectionPreview).toBeUndefined();
+    expect(setSelectedNodeIds).not.toHaveBeenCalled();
+    expect(submitConnection).not.toHaveBeenCalled();
+    expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, 'group-1')).toEqual({ type: 'idle' });
+  });
+
+  it('cancels its scoped interaction and preview when the final pointer loop detaches', () => {
+    const node = appendSelectionNode('hit', { left: 10, top: 10, right: 20, bottom: 20 });
+    startSelection([], 0, 0, 7);
+    window.dispatchEvent(new PointerEvent('pointermove', { pointerId: 7, clientX: 50, clientY: 50 }));
+    frame?.(0);
+    expect(node.dataset.selectionPreview).toBe('true');
+
+    detach?.();
+    detach = undefined;
+
+    expect(node.dataset.selectionPreview).toBeUndefined();
+    expect(setSelectedNodeIds).not.toHaveBeenCalled();
+    expect(submitConnection).not.toHaveBeenCalled();
+    expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, 'group-1')).toEqual({ type: 'idle' });
+  });
+
   it('opens the canvas context menu when right-click movement stays below the drag threshold', () => {
     useGraphInteractionStore.getState().startInteraction(graphPath, {
       type: 'panning',
-      session: { groupId: 'group-1', startX: 20, startY: 30, lastX: 20, lastY: 30, moved: false },
+      session: { groupId: 'group-1', pointerId: 0, startX: 20, startY: 30, lastX: 20, lastY: 30, moved: false },
     });
-    registerCanvasPointerScope({ graphPath, groupId: 'group-1' });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
 
     window.dispatchEvent(new PointerEvent('pointermove', { clientX: 22, clientY: 31, button: 2 }));
     frame?.(0);
@@ -138,8 +303,9 @@ describe('canvas pointer loop', () => {
   it('changes only graph-scoped overrides during pointer movement', () => {
     useGraphInteractionStore.getState().startInteraction(graphPath, {
       type: 'draggingNodes',
-      session: { groupId: 'group-1', nodeId: 'local-node', lastX: 0, lastY: 0, moved: false, nodeIds: ['local-node'], delta: { x: 0, y: 0 } },
+      session: { groupId: 'group-1', pointerId: 0, nodeId: 'local-node', lastX: 0, lastY: 0, moved: false, nodeIds: ['local-node'], delta: { x: 0, y: 0 } },
     });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
     window.dispatchEvent(new PointerEvent('pointermove', { clientX: 5, clientY: 8 }));
     frame?.(0);
     expect(executeCommand).not.toHaveBeenCalled();
@@ -162,6 +328,7 @@ describe('canvas pointer loop', () => {
         feedback: { kind: 'append' },
       },
     });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
     submitConnection.mockResolvedValue({ status: 'applied' });
 
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 9, clientY: 9, button: 0 }));
@@ -199,7 +366,7 @@ describe('canvas pointer loop', () => {
       type: 'drawingConnection',
       session: connectionSession(source.id),
     });
-    registerCanvasPointerScope({ graphPath, groupId: 'group-1' });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
 
     window.dispatchEvent(new PointerEvent('pointermove', { clientX: 100, clientY: 100 }));
     expect(submitConnection).not.toHaveBeenCalled();
@@ -239,6 +406,7 @@ describe('canvas pointer loop', () => {
         feedback: { kind: 'replace', displacedConnectionIds: ['visual-only-id'] },
       },
     });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
     submitConnection.mockResolvedValue({ status: 'applied' });
     window.dispatchEvent(new PointerEvent('pointerup', { button: 0 }));
     await Promise.resolve();
@@ -253,7 +421,7 @@ describe('canvas pointer loop', () => {
       type: 'drawingConnection',
       session: { ...connectionSession(source.id), snappedTarget: target, feedback: { kind: 'append' } },
     });
-    registerCanvasPointerScope({ graphPath, groupId: 'group-1' });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
     submitConnection.mockResolvedValue({ status: 'applied' });
     activeTabIdRef.current = 'events/other.yssbi-event';
 
@@ -270,7 +438,7 @@ describe('canvas pointer loop', () => {
       type: 'drawingConnection',
       session: connectionSession(source.id),
     });
-    registerCanvasPointerScope({ graphPath, groupId: 'group-1' });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
     useGraphDataStore.getState().clearGraph(graphPath);
 
     window.dispatchEvent(new PointerEvent('pointermove', { clientX: 5, clientY: 5 }));
@@ -311,7 +479,7 @@ describe('canvas pointer loop', () => {
       type: 'drawingConnection',
       session: connectionSession(source.id),
     });
-    registerCanvasPointerScope({ graphPath, groupId: 'group-1' });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
 
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 500, clientY: 500, button: 0 }));
 
@@ -330,6 +498,7 @@ describe('canvas pointer loop', () => {
       type: 'drawingConnection',
       session: connectionSession(source.id),
     });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
     window.dispatchEvent(new PointerEvent('pointerup', { clientX: 9, clientY: 9, button: 0 }));
     expect(submitConnection).not.toHaveBeenCalled();
     expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, 'group-1')).toEqual({ type: 'idle' });
@@ -343,6 +512,7 @@ describe('canvas pointer loop', () => {
       type: 'drawingConnection',
       session: { ...connectionSession(source.id), snappedTarget: target, feedback: { kind: 'append' } },
     });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
     submitConnection.mockResolvedValue({
       status: 'failed',
       message: 'Connection types are incompatible',
@@ -368,9 +538,9 @@ describe('canvas pointer loop', () => {
       executeCommand.mockReturnValueOnce(pending.promise);
       useGraphInteractionStore.getState().startInteraction(graphPath, {
         type: 'draggingNodes',
-        session: { groupId: 'group-1', nodeId: 'local-node', lastX: 0, lastY: 0, moved: false, nodeIds: ['local-node'], delta: { x: 0, y: 0 } },
+        session: { groupId: 'group-1', pointerId: 0, nodeId: 'local-node', lastX: 0, lastY: 0, moved: false, nodeIds: ['local-node'], delta: { x: 0, y: 0 } },
       });
-      registerCanvasPointerScope({ graphPath, groupId: 'group-1' });
+      registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
 
       window.dispatchEvent(new PointerEvent('pointermove', { clientX: 5, clientY: 8 }));
       frame?.(0);

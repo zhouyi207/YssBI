@@ -116,7 +116,10 @@ the architecture changes.
   explicitly requested, or the focused checks cannot cover the risk. For
   frontend changes, run `pnpm typecheck` and the relevant `pnpm test` coverage.
   Run `git diff --check` before reporting completion.
-- Use `pnpm verify` before delivery when changes span both frontend and Rust;
-  it is a local verification command and does not build a release installer.
+- Use `pnpm verify` before delivery when changes span both frontend and Rust. It
+  runs the frontend suite plus Rust format/compile checks; run focused Rust tests
+  separately for the touched area. Use `pnpm verify:full` only for release
+  validation, cross-cutting runtime changes, or when explicitly requested. Neither
+  command builds a release installer.
 - Do not claim success without fresh command output. Preserve unrelated user
   changes in the working tree.

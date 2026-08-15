@@ -18,6 +18,8 @@ export type CommandType =
   | 'InsertReroute'
   | 'MoveConnections'
   | 'DeleteNodes'
+  | 'DuplicateSubgraph'
+  | 'InsertSubgraph'
   | 'AddRepeatablePin'
   | 'RemoveRepeatablePin';
 

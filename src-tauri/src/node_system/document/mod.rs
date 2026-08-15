@@ -7,6 +7,7 @@ pub mod materialization;
 mod model;
 mod mutation;
 mod patch;
+mod subgraph;
 mod transaction;
 
 pub use error::DocumentError;
@@ -45,6 +46,16 @@ pub use mutation::{
 #[cfg(test)]
 pub(crate) use mutation::{GraphMutation, RevisionedGraphStore};
 pub use patch::{GraphDocumentOperation, GraphDocumentPatch};
+#[cfg(test)]
+pub(crate) use subgraph::instantiate_subgraph_for_test;
+pub use subgraph::{
+    CLIPBOARD_SUBGRAPH_SCHEMA_VERSION, ClipboardConnectionDto, ClipboardDynamicMemberOriginDto,
+    ClipboardDynamicPortBindingDto, ClipboardInputStateDto, ClipboardLastKnownPortMetadataDto,
+    ClipboardNodeCreationDto, ClipboardNodeDto, ClipboardNodeId, ClipboardPortAddressDto,
+    ClipboardPortBindingDto, ClipboardPortInstanceId, ClipboardPortRefDto, ClipboardSubgraphDto,
+    duplicate_subgraph, export_subgraph,
+};
+pub(crate) use subgraph::{deserialize_clipboard_subgraph, instantiate_subgraph};
 
 #[cfg(test)]
 mod tests;

@@ -16,6 +16,7 @@ import type { CanvasInteractionHandlers } from './canvasMutationContracts';
 import { CONTEXT_MENU_MOVE_THRESHOLD_PX } from '@/app/appConfig/default';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { getCanvasWorldPoint, resolveTabId } from './canvasInteractionUtils';
+import { unionSelectionIds } from './selectionSession';
 import { resolveConnectionTarget, type ConnectionCandidate } from './connectionInteraction';
 import {
   cancelCanvasInteraction,
@@ -48,14 +49,18 @@ let removeWindowListeners: (() => void) | null = null;
 const depsRef: { current: CanvasPointerLoopDeps | null } = { current: null };
 export { registerCanvasPointerScope } from './pointerScope';
 
-function activeInteraction(deps: CanvasPointerLoopDeps): [CanvasInteractionScope, CanvasInteraction] | null {
-  const scope = getCanvasPointerScope() ?? (() => {
-    const groupId = deps.activeGroupIdRef.current;
-    const graphPath = resolveTabId(groupId, deps.activeTabIdRef);
-    return graphPath ? { graphPath, groupId } : null;
-  })();
-  if (!scope) return null;
-  return [scope, getCanvasInteraction(useGraphInteractionStore.getState(), scope.graphPath, scope.groupId)];
+function activeInteraction(event: PointerEvent): [CanvasInteractionScope, CanvasInteraction] | null {
+  const scope = getCanvasPointerScope();
+  if (!scope || scope.pointerId !== event.pointerId) return null;
+  const interaction = getCanvasInteraction(
+    useGraphInteractionStore.getState(),
+    scope.graphPath,
+    scope.groupId,
+  );
+  if (interaction.type === 'idle'
+    || !('pointerId' in interaction.session)
+    || interaction.session.pointerId !== scope.pointerId) return null;
+  return [scope, interaction];
 }
 
 
@@ -87,6 +92,21 @@ function installPointerLoop(): () => void {
       },
     );
     selectionCleanupRegistrations.set(key, unregister);
+  };
+
+  const selectionScopeIsValid = (
+    deps: CanvasPointerLoopDeps,
+    scope: CanvasInteractionScope,
+    session: Extract<CanvasInteraction, { type: 'selecting' }>['session'],
+  ) => {
+    const currentScope = getCanvasPointerScope();
+    return currentScope?.graphPath === scope.graphPath
+      && currentScope.groupId === scope.groupId
+      && currentScope.pointerId === scope.pointerId
+      && session.groupId === scope.groupId
+      && session.pointerId === scope.pointerId
+      && resolveTabId(scope.groupId, deps.activeTabIdRef) === scope.graphPath
+      && queryCanvasElement(scope.groupId) !== null;
   };
 
   const processConnectionFrame = (
@@ -152,7 +172,7 @@ function installPointerLoop(): () => void {
   const processFrame = (event: PointerEvent) => {
     const deps = depsRef.current;
     if (!deps) return;
-    const active = activeInteraction(deps);
+    const active = activeInteraction(event);
     if (!active) return;
     const [scope, interaction] = active;
     const { graphPath } = scope;
@@ -176,12 +196,17 @@ function installPointerLoop(): () => void {
         session: { ...session, lastX: event.clientX, lastY: event.clientY, moved: true },
       }));
     } else if (interaction.type === 'selecting') {
+      if (!selectionScopeIsValid(deps, scope, interaction.session)) {
+        cancelCanvasInteraction(graphPath, interaction.session.groupId);
+        return;
+      }
       const session = { ...interaction.session, currentX: event.clientX, currentY: event.clientY };
       const key = scopeKey(scope);
       ensureSelectionCleanup(scope);
       const canvas = queryCanvasElement(session.groupId);
       if (canvas) {
-        const ids = hitTestSelection(collectSelectionHitTargets(canvas), selectionRect(session));
+        const hitIds = hitTestSelection(collectSelectionHitTargets(canvas), selectionRect(session));
+        const ids = unionSelectionIds(session.baseNodeIds, hitIds);
         syncSelectionPreview(canvas, selectionPreviewIds.get(key) ?? [], ids);
         selectionPreviewIds.set(key, ids);
       }
@@ -220,6 +245,7 @@ function installPointerLoop(): () => void {
   };
 
   const onMove = (event: PointerEvent) => {
+    if (getCanvasPointerScope()?.pointerId !== event.pointerId) return;
     latestEvent = event;
     if (rAFId === null) rAFId = requestAnimationFrame(flushMove);
   };
@@ -227,13 +253,13 @@ function installPointerLoop(): () => void {
   const onUp = (event: PointerEvent) => {
     const deps = depsRef.current;
     if (!deps) return;
+    const active = activeInteraction(event);
+    if (!active) return;
     if (rAFId !== null) {
       cancelAnimationFrame(rAFId);
       rAFId = null;
     }
     latestEvent = null;
-    const active = activeInteraction(deps);
-    if (!active) return;
     const [scope] = active;
     const { graphPath, groupId } = scope;
     processFrame(event);
@@ -296,6 +322,10 @@ function installPointerLoop(): () => void {
       cancelCanvasInteraction(graphPath, groupId);
     } else if (interaction.type === 'selecting') {
       const session = interaction.session;
+      if (!selectionScopeIsValid(deps, scope, session)) {
+        cancelCanvasInteraction(graphPath, groupId);
+        return;
+      }
       const ids = selectionPreviewIds.get(scopeKey(scope)) ?? [];
       const moved = Math.abs(session.currentX - session.startX) > CONTEXT_MENU_MOVE_THRESHOLD_PX
         || Math.abs(session.currentY - session.startY) > CONTEXT_MENU_MOVE_THRESHOLD_PX;
@@ -303,7 +333,7 @@ function installPointerLoop(): () => void {
         deps.setSelectedNodeIds(ids, session.groupId);
         applyCanvasDetailFocus({ type: 'box-select', groupId: session.groupId, selectedIds: ids });
       } else {
-        if (!session.preserveSelection) deps.setSelectedNodeIds([], session.groupId);
+        deps.setSelectedNodeIds([...session.baseNodeIds], session.groupId);
         applyCanvasDetailFocus({ type: 'blank-click', groupId: session.groupId });
       }
       cancelCanvasInteraction(graphPath, groupId);
@@ -327,12 +357,29 @@ function installPointerLoop(): () => void {
     clearCanvasPointerScope();
   };
 
+  const onCancel = (event: PointerEvent) => {
+    const active = activeInteraction(event);
+    if (!active) return;
+    if (rAFId !== null) {
+      cancelAnimationFrame(rAFId);
+      rAFId = null;
+    }
+    latestEvent = null;
+    const [scope] = active;
+    cancelCanvasInteraction(scope.graphPath, scope.groupId);
+  };
+
   const cleanupPointerMove = addGlobalEventListener(window, 'pointermove', onMove);
   const cleanupPointerUp = addGlobalEventListener(window, 'pointerup', onUp);
+  const cleanupPointerCancel = addGlobalEventListener(window, 'pointercancel', onCancel);
   return () => {
+    const scope = getCanvasPointerScope();
+    if (scope) cancelCanvasInteraction(scope.graphPath, scope.groupId);
     cleanupPointerMove();
     cleanupPointerUp();
+    cleanupPointerCancel();
     if (rAFId !== null) cancelAnimationFrame(rAFId);
+    latestEvent = null;
     for (const unregister of selectionCleanupRegistrations.values()) unregister();
     selectionCleanupRegistrations.clear();
     clearCanvasPointerScope();

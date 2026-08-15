@@ -3,6 +3,8 @@ import type { CommandType } from './types';
 
 const STRUCTURAL_COMMANDS: ReadonlySet<CommandType> = new Set([
   'DeleteNodes',
+  'DuplicateSubgraph',
+  'InsertSubgraph',
   'ConnectPins',
   'DisconnectPort',
   'DisconnectNode',

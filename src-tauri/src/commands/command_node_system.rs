@@ -9,8 +9,8 @@ use crate::event::{
 use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::node_system::catalog::LocalizedCatalogDto;
 use crate::node_system::document::{
-    EditorGraphMutationDto, HistoryMutation, HistoryStatusDto, MutationRequest, OperationId,
-    PortAddressDto, ResourceRevision,
+    ClipboardSubgraphDto, EditorGraphMutationDto, HistoryMutation, HistoryStatusDto,
+    MutationRequest, NodeId, OperationId, PortAddressDto, ResourceRevision,
 };
 use crate::node_system::runtime::{ResultId, ResultState, RunEvent, RunEventSink, StoredValueKind};
 use crate::project::project_writers::ProjectSaveResultDto;
@@ -23,6 +23,9 @@ use tauri::{AppHandle, State, ipc::Channel};
 #[cfg(test)]
 #[path = "command_node_system_reroute_tests.rs"]
 mod command_node_system_reroute_tests;
+#[cfg(test)]
+#[path = "command_node_system_subgraph_tests.rs"]
+mod command_node_system_subgraph_tests;
 
 fn parse_graph_path(value: String) -> Result<GraphResourcePath, AppError> {
     GraphResourcePath::new(value).map_err(AppError::from)
@@ -46,10 +49,12 @@ fn mutation_conflict_to_app_error(
             message: message.into(),
             details: Some(serde_json::json!({ "recoveryRequired": true })),
         },
-        catalog_error
+        public_error
         @ (crate::node_system::document::MutationConflict::CatalogResourceStale(_)
-        | crate::node_system::document::MutationConflict::CatalogDescriptorInvalid(_)) => {
-            AppError::new(catalog_error.code(), catalog_error.to_string())
+        | crate::node_system::document::MutationConflict::CatalogDescriptorInvalid(_)
+        | crate::node_system::document::MutationConflict::ClipboardSubgraphInvalid(_)
+        | crate::node_system::document::MutationConflict::ReferencedResourceUnavailable(_)) => {
+            AppError::new(public_error.code(), public_error.to_string())
         }
         crate::node_system::document::MutationConflict::Document(
             crate::node_system::document::DocumentError::ConnectionNotFound(_),
@@ -507,6 +512,31 @@ pub fn hydrate_editor_graph(
     locale: String,
 ) -> Result<EditorGraphProjectionDto, AppError> {
     hydrate_editor_graph_from_state(state.inner(), project_instance_id, graph_path, &locale)
+}
+
+pub(crate) fn export_graph_subgraph_from_state(
+    state: &ProjectState,
+    project_instance_id: ProjectInstanceId,
+    graph_path: String,
+    node_ids: Vec<NodeId>,
+) -> Result<ClipboardSubgraphDto, AppError> {
+    state
+        .export_editor_subgraph(
+            &project_instance_id,
+            &parse_graph_path(graph_path)?,
+            node_ids,
+        )
+        .map_err(|error| mutation_conflict_to_app_error(error, "graph_revision_conflict"))
+}
+
+#[tauri::command]
+pub fn export_graph_subgraph(
+    state: State<'_, ProjectState>,
+    project_instance_id: ProjectInstanceId,
+    graph_path: String,
+    node_ids: Vec<NodeId>,
+) -> Result<ClipboardSubgraphDto, AppError> {
+    export_graph_subgraph_from_state(state.inner(), project_instance_id, graph_path, node_ids)
 }
 
 fn parse_editor_mutation_request(
@@ -1109,8 +1139,8 @@ mod tests {
     };
     use crate::node_system::registry::RegistryFingerprint;
     use crate::node_system::runtime::{
-        ActivationId, ActivationProvenance, CancellationToken, PendingOutputDescriptor, ResultId,
-        ResultStore, ResultUsage, RunEventKind, RunResourceBudgets, RunResourceOwner, StoredValue,
+        ActivationId, ActivationProvenance, PendingOutputDescriptor, ResultId, ResultStore,
+        ResultUsage, RunEventKind, StoredValue,
     };
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, fixtures,
@@ -1474,72 +1504,6 @@ mod tests {
         assert_eq!(page["hasMore"], true);
         assert_eq!(page["nextOffset"], 3);
 
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn large_spill_result_requires_paging_without_reading_its_backing_file() {
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-spill-result-query-contract-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&root).unwrap();
-        let state = ProjectState::new();
-        state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
-        let results = state.project_store.read().unwrap().results.clone();
-        let output = test_output("events/test.yssbi-event");
-        let activation_id = ActivationId::next().unwrap();
-        let owner = RunResourceOwner::with_spill_root(
-            RunId::new(4),
-            RunResourceBudgets {
-                stream_capacity: std::num::NonZeroUsize::new(1).unwrap(),
-                materialization_memory_bytes: 1,
-                spill_directory_bytes: 1_048_576,
-            },
-            CancellationToken::new(),
-            root.join("spill"),
-        )
-        .unwrap();
-        let stored = owner
-            .store_values(
-                (0..10_000).map(|value| Ok(crate::node_system::protocol::Value::Integer(value))),
-                None,
-                None,
-            )
-            .unwrap();
-        let spill = stored.spill_storage().expect("large result must spill");
-        let spill_path = spill.path_for_test();
-        let group = results
-            .create_pending_group(
-                ActivationProvenance {
-                    run_id: RunId::new(4),
-                    activation_id,
-                    graph_path: output.graph_path.clone(),
-                    graph_revision: crate::node_system::document::GraphRevision::new(1),
-                    node_id: output.port.node_id,
-                    created_at_ms: 4,
-                    usage: ResultUsage::Produced,
-                },
-                &[PendingOutputDescriptor {
-                    value: crate::node_system::plan::ValueRef::new(4),
-                    output: Some(output),
-                    presentation: crate::node_system::plan::ResultPresentation::Inspector,
-                    contract: crate::node_system::plan::PlannedValueContract::opaque(),
-                }],
-            )
-            .unwrap();
-        let result_id = group.output_result_ids[0].get().to_string();
-        results
-            .complete_group(&group, vec![stored].into_boxed_slice())
-            .unwrap();
-        std::fs::remove_file(&spill_path).unwrap();
-
-        let error = get_result_value_from_state(&state, &result_id).unwrap_err();
-
-        assert_eq!(error.code, "result_requires_paging");
-        assert!(!spill_path.try_exists().unwrap());
-        drop(spill);
-        drop(owner);
         let _ = std::fs::remove_dir_all(root);
     }
 

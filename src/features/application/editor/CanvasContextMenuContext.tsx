@@ -3,7 +3,7 @@ import { createContext, useContext } from "react";
 export interface CanvasContextMenuActions {
   selectNode: (nodeId: string, groupId?: string) => void;
   copyNode: (nodeId: string) => void;
-  cutNode: (nodeId: string) => Promise<void>;
+  cutNode: (nodeId: string) => Promise<boolean | undefined>;
   duplicateNode: (nodeId: string) => Promise<boolean | undefined>;
   deleteNode: (nodeId: string) => Promise<boolean | undefined>;
   breakAllNodeLinks: (nodeId: string) => Promise<boolean | undefined>;

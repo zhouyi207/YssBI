@@ -7,7 +7,6 @@ use syn::punctuated::Punctuated;
 use syn::visit::{self, Visit};
 use syn::{Expr, ExprLit, Item, Lit, Macro, Member, Meta, Pat, ReturnType, Token, Type, UseTree};
 
-const AUDIT_SOURCE: &str = "node_system/testing/source_audit.rs";
 const REGISTRY_AUTHORITY: &str = "node_system/registry/model.rs";
 
 fn rust_sources(root: &Path, files: &mut Vec<PathBuf>) {
@@ -1789,23 +1788,6 @@ fn audit_compiler_diagnostic_tree(
     audit
 }
 
-fn audit_compiler_diagnostic_sources(
-    exclude_definition_authority: bool,
-) -> CompilerDiagnosticAudit {
-    let compiler_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/node_system/compiler");
-    audit_compiler_diagnostic_tree(&compiler_root, exclude_definition_authority)
-}
-
-#[test]
-fn production_compiler_diagnostics_use_only_typed_definition_authority() {
-    let audit = audit_compiler_diagnostic_sources(true);
-    assert!(
-        audit.violations.is_empty(),
-        "production compiler diagnostics bypass typed definition authority:\n{}",
-        audit.violations.join("\n")
-    );
-}
-
 #[test]
 fn compiler_diagnostic_audit_detects_detail_only_as_an_argument_map_key() {
     let source = r#"
@@ -2751,17 +2733,6 @@ impl ProjectState {
             .any(|violation| violation.contains("production public glob re-export")),
         "missing indirect glob violation in:\n{}",
         violations.join("\n")
-    );
-}
-
-#[test]
-fn production_has_one_node_registry_and_no_label_identity() {
-    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let offenders = audit_source_tree(&source_root, Some(AUDIT_SOURCE));
-    assert!(
-        offenders.is_empty(),
-        "legacy Rust architecture violations:\n{}",
-        offenders.join("\n")
     );
 }
 

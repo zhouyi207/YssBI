@@ -6,8 +6,8 @@ export const EDITOR_MUTATION_CAPABILITIES = {
   resourceBoundDescriptors: true,
   contextualCompatibility: true,
   nodeDocumentation: true,
-  duplicateNodes: false,
-  pasteNodes: false,
+  duplicateNodes: true,
+  pasteNodes: true,
 } as const;
 
 export const NODE_CREATION_UNAVAILABLE_MESSAGE =

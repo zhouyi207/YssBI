@@ -903,6 +903,12 @@ impl ExecutionPlanBasis {
                                     || result_values.contains(&output.value)
                             })
                             .cloned()
+                            .map(|mut output| {
+                                if members.len() > 1 {
+                                    output.public_output = None;
+                                }
+                                output
+                            })
                             .collect::<Vec<_>>();
                         if !outputs.is_empty() {
                             outputs_by_fragment.insert(fragment.id.clone(), outputs);

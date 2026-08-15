@@ -26,11 +26,11 @@ describe('graphInteractionStore position overrides', () => {
     const store = useGraphInteractionStore.getState();
     store.startInteraction('events/one', {
       type: 'selecting',
-      session: { groupId: 'group-1', startX: 0, startY: 0, currentX: 0, currentY: 0, preserveSelection: false },
+      session: { groupId: 'group-1', pointerId: 0, startX: 0, startY: 0, currentX: 0, currentY: 0, baseNodeIds: [] },
     });
     store.startInteraction('events/one', {
       type: 'panning',
-      session: { groupId: 'group-2', startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false },
+      session: { groupId: 'group-2', pointerId: 0, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false },
     });
     store.startInteraction('events/two', {
       type: 'pendingNodeCreation',
@@ -51,7 +51,7 @@ describe('graphInteractionStore position overrides', () => {
     store.setPositionOverride('events/two', 'node-b', { x: 30, y: 40 });
     store.startInteraction('events/one', {
       type: 'draggingNodes',
-      session: { groupId: 'group-1', nodeId: 'node-a', lastX: 0, lastY: 0, moved: false, nodeIds: ['node-a'], delta: { x: 0, y: 0 } },
+      session: { groupId: 'group-1', pointerId: 0, nodeId: 'node-a', lastX: 0, lastY: 0, moved: false, nodeIds: ['node-a'], delta: { x: 0, y: 0 } },
     });
 
     expect(store.cancelInteraction('events/one', 'group-2')).toBe('idle');

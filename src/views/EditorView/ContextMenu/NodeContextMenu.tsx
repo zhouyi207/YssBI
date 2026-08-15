@@ -1,12 +1,8 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { VscCopy, VscEdit, VscLink, VscTrash } from "react-icons/vsc";
+import { VscCopy, VscLink, VscTrash } from "react-icons/vsc";
 import { ContextMenu, type ContextMenuPosition, type ContextMenuSection } from "@/shared/ui/contextMenu";
 import type { NodeCapabilitiesDto } from '@/shared/types/dto/editorProjection';
-import {
-  EDITOR_MUTATION_CAPABILITIES,
-  NODE_CREATION_UNAVAILABLE_MESSAGE,
-} from '@/features/application/editor/editorMutationAvailability';
 
 export interface NodeContextMenuProps {
   position: ContextMenuPosition;
@@ -49,18 +45,10 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
             id: "duplicate",
             label: n("duplicate"),
             icon: <VscCopy size={12} />,
-            disabled: !EDITOR_MUTATION_CAPABILITIES.duplicateNodes,
-            title: NODE_CREATION_UNAVAILABLE_MESSAGE,
+            disabled: !canCopy,
             shortcut: "Ctrl+D",
             onClick: onDuplicate,
           },
-        ],
-      },
-      {
-        items: [
-          { id: "disable", label: n("disableNode"), icon: <VscEdit size={12} />, disabled: true },
-          { id: "rename", label: n("rename"), icon: <VscEdit size={12} />, disabled: true, shortcut: "F2" },
-          { id: "collapse", label: n("collapse"), icon: <VscEdit size={12} />, disabled: true },
         ],
       },
       {

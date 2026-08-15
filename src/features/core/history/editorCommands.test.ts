@@ -3,7 +3,7 @@ import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFix
 import { portAddressKey } from '@/features/domain/editorProjection';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useExecutionStore } from '@/features/core/execution';
-import { executeCommand, executeCommandOutcome } from './commandExecutor';
+import { executeCommand, executeCommandOutcome, executeCommandWithResult } from './commandExecutor';
 import { ensureGraphMutationPortRegistered } from '@/features/application/editorMutation/registerGraphMutationPort';
 
 const executeEditorMutation = vi.hoisted(() => vi.fn());
@@ -174,6 +174,62 @@ describe('forward-only editor commands', () => {
 
     pending.resolve({ status: 'applied' });
     await expect(command).resolves.toBe(true);
+    randomId.mockRestore();
+  });
+
+  it.each([
+    {
+      type: 'DuplicateSubgraph' as const,
+      args: { nodeIds: ['node-a', 'node-b'], offset: { x: 40, y: 40 } },
+      mutation: {
+        type: 'duplicateSubgraph',
+        payload: { nodeIds: ['node-a', 'node-b'], offset: { x: 40, y: 40 } },
+      },
+    },
+    {
+      type: 'InsertSubgraph' as const,
+      args: { snapshotJson: '{"schemaVersion":1}', anchor: { x: 120, y: 240 } },
+      mutation: {
+        type: 'insertSubgraph',
+        payload: { snapshotJson: '{"schemaVersion":1}', anchor: { x: 120, y: 240 } },
+      },
+    },
+  ])('sends $type as one authoritative mutation and preserves its committed result', async ({
+    type,
+    args,
+    mutation,
+  }) => {
+    installProjection();
+    const markGraphDirty = vi.spyOn(useExecutionStore.getState(), 'markGraphDirty');
+    const result = {
+      projectInstanceId: 'project-a',
+      delta: {
+        graphPath,
+        fromRevision: 3,
+        toRevision: 4,
+        causedBy: 'operation-a',
+        payload: { operations: [] },
+      },
+      projectionReplacement: {} as never,
+      history: { canUndo: true, canRedo: false },
+    };
+    executeEditorMutation.mockResolvedValueOnce({ status: 'applied', result });
+    const randomId = vi.spyOn(crypto, 'randomUUID');
+
+    await expect(executeCommandWithResult(graphPath, type, args)).resolves.toEqual({
+      status: 'applied',
+      result,
+    });
+
+    expect(executeEditorMutation).toHaveBeenCalledOnce();
+    expect(executeEditorMutation).toHaveBeenCalledWith({
+      graphPath,
+      locale: 'en-US',
+      mutation,
+    });
+    expect(markGraphDirty).toHaveBeenCalledOnce();
+    expect(markGraphDirty).toHaveBeenCalledWith(graphPath);
+    expect(randomId).not.toHaveBeenCalled();
     randomId.mockRestore();
   });
 

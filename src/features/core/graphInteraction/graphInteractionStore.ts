@@ -3,11 +3,12 @@ import type { GraphPath, NodeId, PinData } from '@/shared/types';
 import type { ConnectionFeedback } from '@/features/core/canvas/connectionInteraction';
 
 export interface NodePosition { x: number; y: number }
-export interface PanSession { groupId: string; startX: number; startY: number; lastX: number; lastY: number; moved: boolean }
-export interface SelectionSession { groupId: string; startX: number; startY: number; currentX: number; currentY: number; preserveSelection: boolean }
-export interface NodeDragSession { groupId: string; nodeId: string; lastX: number; lastY: number; moved: boolean; nodeIds: string[]; delta: NodePosition }
+export interface PanSession { groupId: string; pointerId: number; startX: number; startY: number; lastX: number; lastY: number; moved: boolean }
+export interface SelectionSession { groupId: string; pointerId: number; startX: number; startY: number; currentX: number; currentY: number; baseNodeIds: readonly string[] }
+export interface NodeDragSession { groupId: string; pointerId: number; nodeId: string; lastX: number; lastY: number; moved: boolean; nodeIds: string[]; delta: NodePosition }
 export interface ConnectionSession {
   groupId: string;
+  pointerId: number;
   graphPath: GraphPath;
   source: PinData;
   screenX: number;
@@ -36,7 +37,7 @@ export type CanvasInteraction =
   | { type: 'movingConnections'; session: ConnectionSession }
   | { type: 'pendingNodeCreation'; session: PendingNodeCreationSession };
 
-export interface CanvasInteractionScope { graphPath: GraphPath; groupId: string }
+export interface CanvasInteractionScope { graphPath: GraphPath; groupId: string; pointerId: number }
 
 export const IDLE_CANVAS_INTERACTION: CanvasInteraction = { type: 'idle' };
 

@@ -1,6 +1,6 @@
 export { useHistoryStore, EMPTY_HISTORY_STATE } from './historyStore';
 export type { HistoryStoreState } from './historyStore';
-export { executeCommand, executeCommandOutcome } from './commandExecutor';
+export { executeCommand, executeCommandOutcome, executeCommandWithResult } from './commandExecutor';
 export { commandRegistry, getCommandHandler } from './commands';
 export type { CommandType, CommandHandler } from './types';
 export type {
@@ -13,6 +13,8 @@ export type {
   InsertRerouteArgs,
   MoveConnectionsArgs,
   DeleteNodesArgs,
+  DuplicateSubgraphArgs,
+  InsertSubgraphArgs,
   AddRepeatablePinArgs,
   RemoveRepeatablePinArgs,
 } from './commands';

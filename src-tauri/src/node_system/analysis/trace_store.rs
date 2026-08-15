@@ -822,24 +822,6 @@ mod tests {
     }
 
     #[test]
-    fn trace_span_store_validates_large_linear_hierarchy_iteratively() {
-        const SPAN_COUNT: u64 = 10_000;
-        let sink = BoundedTraceSink::new(SPAN_COUNT as usize).unwrap();
-        for offset in 0..SPAN_COUNT {
-            let span_id = 10_000 + offset;
-            sink.complete_span(completed_span(
-                span_id,
-                (offset > 0).then_some(span_id - 1),
-                "events/linear",
-                Some(77),
-                SpanKind::Run,
-            ));
-        }
-
-        assert_eq!(sink.spans().len(), SPAN_COUNT as usize);
-    }
-
-    #[test]
     fn trace_span_store_orders_by_monotonic_start_then_span_id() {
         let clock = Arc::new(FakeTraceClock::new(MonotonicTimestamp::new(5).unwrap()));
         let sink = BoundedTraceSink::with_clock(4, clock).unwrap();

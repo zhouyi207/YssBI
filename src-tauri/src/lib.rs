@@ -85,6 +85,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         // 注册全局状态管理器
         .manage(project::ProjectWatcherState::new())
         .manage(project::ProjectPickerTaskCancelRegistry::new())
@@ -147,6 +148,7 @@ pub fn run() {
             rename_graph_resource,
             update_function_signature,
             hydrate_editor_graph,
+            export_graph_subgraph,
             mutate_graph_document,
             get_project_history_status,
             undo_graph_document,

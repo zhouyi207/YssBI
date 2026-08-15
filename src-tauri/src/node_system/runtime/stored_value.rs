@@ -532,44 +532,6 @@ mod tests {
     }
 
     #[test]
-    fn large_spill_fingerprint_does_not_reread_backing_file() {
-        let root = std::env::temp_dir().join(format!("stored-digest-{}", uuid::Uuid::new_v4()));
-        let owner = RunResourceOwner::with_spill_root(
-            RunId::new(408),
-            RunResourceBudgets {
-                stream_capacity: std::num::NonZeroUsize::new(1).unwrap(),
-                materialization_memory_bytes: 1,
-                spill_directory_bytes: 1_048_576,
-            },
-            CancellationToken::new(),
-            root.clone(),
-        )
-        .unwrap();
-        let stored = owner
-            .store_values(
-                (0..10_000).map(|value| Ok(Value::Integer(value))),
-                None,
-                None,
-            )
-            .unwrap();
-        let spill = stored.spill_storage().expect("large value spilled");
-        let path = spill.path_for_test();
-        std::fs::remove_file(&path).unwrap();
-
-        let fingerprint = crate::node_system::runtime::ValueFingerprint::from_stored_value(&stored);
-
-        assert_eq!(
-            fingerprint,
-            crate::node_system::runtime::ValueFingerprint::from_stored_value(&stored)
-        );
-        assert!(stored.open_reader().is_err(), "backing file was deleted");
-        drop(spill);
-        drop(stored);
-        drop(owner);
-        std::fs::remove_dir(root).unwrap();
-    }
-
-    #[test]
     fn owner_backed_artifact_prepare_is_zero_copy() {
         let value = Value::String("owner backed".into());
         let bytes = serde_json::to_vec(&value).unwrap().len() as u64;

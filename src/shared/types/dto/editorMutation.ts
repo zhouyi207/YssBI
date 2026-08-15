@@ -64,7 +64,15 @@ export type EditorGraphMutationDto =
       type: 'addPortInstance';
       payload: { nodeId: string; template: string; order: string | null };
     }
-  | { type: 'removePortInstance'; payload: { address: PortAddressDto } };
+  | { type: 'removePortInstance'; payload: { address: PortAddressDto } }
+  | {
+      type: 'duplicateSubgraph';
+      payload: { nodeIds: string[]; offset: NodePositionDto };
+    }
+  | {
+      type: 'insertSubgraph';
+      payload: { snapshotJson: string; anchor: NodePositionDto };
+    };
 
 export type HistoryMutationDto = Record<string, never>;
 

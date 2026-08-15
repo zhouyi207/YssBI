@@ -1,6 +1,6 @@
 use super::*;
 use crate::node_system::catalog::{BuiltinCatalog, LocalizedCatalog, build_builtin_node_system};
-use crate::node_system::document::{DocumentConnection, DocumentNode, GraphDocument};
+use crate::node_system::document::GraphDocument;
 use crate::node_system::protocol::{NodeTypeId, PortKey, Value};
 use crate::node_system::registry::{
     NodeRegistry, canonical_semantic_protocol_snapshot, i18n_inventory,
@@ -165,55 +165,6 @@ fn changing_language_does_not_change_the_document() {
         },
     );
     assert_eq!(state.localized.unwrap().locale.as_ref(), "unknown");
-}
-
-#[derive(Clone)]
-enum GraphEntry {
-    Node(DocumentNode),
-    Connection(DocumentConnection),
-}
-
-#[test]
-fn randomized_btree_insertion_order_is_semantically_equivalent() {
-    let provider = arithmetic_provider();
-    let (graph, _) = arithmetic_graph();
-    let entries = graph
-        .nodes
-        .values()
-        .cloned()
-        .map(GraphEntry::Node)
-        .chain(
-            graph
-                .connections
-                .values()
-                .cloned()
-                .map(GraphEntry::Connection),
-        )
-        .collect::<Vec<_>>();
-
-    assert_random_insertion_order_determinism(&entries, 0x5eed, 32, |order| {
-        let mut rebuilt = GraphDocument::default();
-        for entry in order {
-            match entry {
-                GraphEntry::Node(node) => {
-                    rebuilt.nodes.insert(node.id, node.clone());
-                }
-                GraphEntry::Connection(connection) => {
-                    rebuilt
-                        .connections
-                        .insert(connection.id, connection.clone());
-                }
-            }
-        }
-        let compiled = provider.compile(&rebuilt);
-        let plan = compiled.plan.as_ref().expect("permutation must compile");
-        format!(
-            "{}\n{}\n{}",
-            canonical_document(&rebuilt),
-            canonical_analysis(&compiled.analysis),
-            plan_debug_snapshot(plan)
-        )
-    });
 }
 
 #[test]

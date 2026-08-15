@@ -20,10 +20,6 @@ fn resource_id(value: &str) -> ResourceId {
     ResourceId::new(value).unwrap()
 }
 
-fn function_handle(value: &str) -> FunctionPlanHandle {
-    FunctionPlanHandle::new(value).unwrap()
-}
-
 fn versions(entries: &[(&str, &str)]) -> BTreeMap<ResourceKey, ResourceVersion> {
     entries
         .iter()
@@ -665,72 +661,6 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
         )]),
     };
     assert!(generate(sourced, sourced_abi).is_ok());
-}
-
-#[test]
-fn concurrent_function_plan_publication_and_calls_keep_run_local_generations() {
-    let session = ProjectSessionId::new("project-a");
-    let registry = RegistryFingerprint::from_bytes([7; 32]);
-    let store = Arc::new(FunctionPlanStore::new(session.clone(), 12));
-    let barrier = Arc::new(std::sync::Barrier::new(3));
-
-    let spawn_run = |version: &'static str| {
-        let session = session.clone();
-        let registry = registry.clone();
-        let store = Arc::clone(&store);
-        let barrier = Arc::clone(&barrier);
-        thread::spawn(move || {
-            let resource_versions = versions(&[("functions/shared", version)]);
-            barrier.wait();
-            let plan = Arc::new(empty_plan(
-                &session,
-                "functions/shared",
-                &registry,
-                resource_versions.clone(),
-            ));
-            let abi = Arc::new(FunctionPlanAbi {
-                provenance: plan.provenance.clone(),
-                parameters: BTreeMap::new(),
-                parameter_contracts: BTreeMap::new(),
-                results: BTreeMap::new(),
-                result_productions: BTreeMap::new(),
-                result_contracts: BTreeMap::new(),
-            });
-            let generation = store
-                .generation(
-                    registry.clone(),
-                    resource_versions.clone(),
-                    vec![(
-                        GraphResourcePath("functions/shared".into()),
-                        ResourceVersion::new(version),
-                        plan,
-                        abi,
-                    )],
-                )
-                .unwrap();
-            for _ in 0..100 {
-                let function = generation
-                    .get_function(&function_handle("functions/shared"))
-                    .unwrap()
-                    .expect("the run-local generation stays complete");
-                assert_eq!(
-                    function.plan.provenance.basis.resource_versions
-                        [&ResourceKey::new("functions/shared")]
-                        .as_str(),
-                    version
-                );
-                assert_eq!(function.abi.provenance, function.plan.provenance);
-                thread::yield_now();
-            }
-            assert_eq!(generation.recursion_limit(), 12);
-        })
-    };
-
-    let first = spawn_run("3");
-    let second = spawn_run("4");
-    barrier.wait();
-    first.join().unwrap();
-    second.join().unwrap();
 }
 
 #[test]

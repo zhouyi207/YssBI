@@ -64,6 +64,31 @@ describe('unavailable node actions', () => {
     expect(onDelete).not.toHaveBeenCalled();
   });
 
+  it('enables duplicate only for an unmanaged copyable node', () => {
+    const onDuplicate = vi.fn();
+    act(() => {
+      root.render(
+        <NodeContextMenu
+          position={{ x: 0, y: 0 }}
+          capabilities={{ managed: false, canCopy: true, canDelete: false }}
+          onCopy={vi.fn()}
+          onCut={vi.fn()}
+          onDuplicate={onDuplicate}
+          onDelete={vi.fn()}
+          onBreakAllLinks={vi.fn()}
+          onSelectLinked={vi.fn()}
+          onClose={vi.fn()}
+        />,
+      );
+    });
+
+    const duplicate = [...document.querySelectorAll('button')]
+      .find((button) => button.textContent?.includes('contextMenu.node.duplicate')) as HTMLButtonElement;
+    expect(duplicate.disabled).toBe(false);
+    act(() => duplicate.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+    expect(onDuplicate).toHaveBeenCalledOnce();
+  });
+
   it('requires both copy and delete capability before enabling cut', () => {
     act(() => {
       root.render(

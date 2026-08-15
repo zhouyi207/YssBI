@@ -1,4 +1,4 @@
-import type { EditorViewport } from './editorViewport';
+import { EDITOR_VIEWPORT_SCALE_LIMITS, type EditorViewport } from './editorViewport';
 import { clamp } from '@/shared/utils';
 import {
   getViewport,
@@ -8,9 +8,6 @@ import {
 } from './viewportSession';
 import { persistGraphViewport } from './persistGraphViewport';
 import type { ViewportScope } from './viewportScope';
-
-const ZOOM_CLAMP = { min: 0.1, max: 5 } as const;
-
 
 
 export function applyWheelZoomToViewport(
@@ -23,7 +20,11 @@ export function applyWheelZoomToViewport(
   const mouseX = e.clientX - canvasRect.left;
   const mouseY = e.clientY - canvasRect.top;
   const factor = Math.pow(1.1, -e.deltaY / 100);
-  const nextScale = clamp(current.scale * factor, ZOOM_CLAMP.min, ZOOM_CLAMP.max);
+  const nextScale = clamp(
+    current.scale * factor,
+    EDITOR_VIEWPORT_SCALE_LIMITS.min,
+    EDITOR_VIEWPORT_SCALE_LIMITS.max,
+  );
   const worldX = (mouseX - current.x) / current.scale;
   const worldY = (mouseY - current.y) / current.scale;
 

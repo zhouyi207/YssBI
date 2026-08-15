@@ -1,4 +1,8 @@
 export { useCanvasInteraction } from './useCanvasInteraction';
+export {
+  collectCanvasNodeWorldBounds,
+  type CollectCanvasNodeWorldBoundsInput,
+} from './canvasNodeBounds';
 export type {
   CanvasInteractionHandlers,
   CanvasMutationOutcome,

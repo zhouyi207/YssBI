@@ -642,8 +642,6 @@ pub struct RunExecutor<'a> {
     #[cfg(test)]
     spill_root: Option<std::path::PathBuf>,
     #[cfg(test)]
-    cleanup_delay: Option<std::time::Duration>,
-    #[cfg(test)]
     checkpoint:
         Option<Arc<dyn Fn(SchedulerCheckpoint, &CancellationToken) + Send + Sync + 'static>>,
 }
@@ -677,8 +675,6 @@ impl<'a> RunExecutor<'a> {
             activation_ids: &ACTIVATION_IDS,
             #[cfg(test)]
             spill_root: None,
-            #[cfg(test)]
-            cleanup_delay: None,
             #[cfg(test)]
             checkpoint: None,
         }
@@ -762,12 +758,6 @@ impl<'a> RunExecutor<'a> {
         allocator: &'a ActivationIdAllocator,
     ) -> Self {
         self.activation_ids = allocator;
-        self
-    }
-
-    #[cfg(test)]
-    pub(crate) fn with_cleanup_delay_for_test(mut self, delay: std::time::Duration) -> Self {
-        self.cleanup_delay = Some(delay);
         self
     }
 
@@ -900,10 +890,6 @@ impl<'a> RunExecutor<'a> {
             self.options.deadline,
         );
         let result = resource_owner.and_then(|resource_owner| {
-            #[cfg(test)]
-            if let Some(delay) = self.cleanup_delay {
-                resource_owner.register_cleanup_delay_for_test(delay);
-            }
             let execution = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 self.finish_run(
                     plan,

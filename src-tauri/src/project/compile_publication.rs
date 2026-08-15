@@ -198,7 +198,6 @@ impl ProjectState {
             return Ok(None);
         };
         let current = self.capture_current_basis_at_gate(input, &candidate.0.basis)?;
-        self.run_compile_after_exact_authority_capture_test_hook();
         let products = coordinator.get_current_with_observations(
             &input.document_path,
             &current.basis,
@@ -384,7 +383,6 @@ impl ProjectState {
             task.cancellation.cancel();
             return Ok(PublishOutcome::Stale);
         }
-        self.run_compile_after_exact_authority_capture_test_hook();
         let report = coordinator.publish_with_observations(
             task,
             &current.basis,

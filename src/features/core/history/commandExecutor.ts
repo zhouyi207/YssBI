@@ -36,6 +36,28 @@ function executeRegisteredCommand<K extends AvailableCommandType>(
   return handler.execute(graphPath, args);
 }
 
+async function executeAndNotify<K extends AvailableCommandType>(
+  graphPath: string,
+  type: K,
+  args: CommandArgs<K>,
+): Promise<CommandResult<K>> {
+  const result = await executeRegisteredCommand(graphPath, type, args);
+  if (isAppliedResult(result)) notifyStructuralChange(type, graphPath);
+  return result;
+}
+
+export async function executeCommandWithResult<K extends AvailableCommandType>(
+  graphPath: string,
+  type: K,
+  args: CommandArgs<K>,
+): Promise<CommandResult<K> | null> {
+  try {
+    return await executeAndNotify(graphPath, type, args);
+  } catch {
+    return null;
+  }
+}
+
 export async function executeCommandOutcome(
   graphPath: string,
   ...invocation: GraphMutationCommandInvocation
@@ -45,18 +67,13 @@ export async function executeCommandOutcome(
   ...invocation: CommandInvocation
 ): Promise<GraphMutationCommandResult> {
   const [type, args] = invocation;
-  const result = await executeRegisteredCommand(graphPath, type, args);
-  if (isAppliedResult(result)) notifyStructuralChange(type, graphPath);
-  return result;
+  return executeAndNotify(graphPath, type, args);
 }
 
 export async function executeCommand(
   graphPath: string,
   ...invocation: CommandInvocation
 ): Promise<boolean> {
-  try {
-    return isAppliedResult(await executeCommandOutcome(graphPath, ...invocation));
-  } catch {
-    return false;
-  }
+  const [type, args] = invocation;
+  return isAppliedResult(await executeCommandWithResult(graphPath, type, args));
 }

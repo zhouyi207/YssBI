@@ -9,7 +9,6 @@ use uuid::Uuid;
 
 pub(super) const PARAMETER_ID: &str = "amount";
 pub(super) const RETURN_ID: &str = "return";
-pub(super) const RECURSIVE_DO_NODE: u128 = 240;
 
 pub(super) fn parameter_id() -> FunctionParameterId {
     FunctionParameterId(PARAMETER_ID.into())
@@ -61,9 +60,9 @@ fn function_shell(path: &GraphResourcePath, name: &str) -> GraphResourceDocument
         parameters: vec![FunctionParameter {
             id: parameter_id(),
             name: "Amount".into(),
-            type_name: "int64".into(),
+            type_name: "Int64".into(),
         }],
-        return_type: Some("int64".into()),
+        return_type: Some("Int64".into()),
     }));
     for (id, node_type) in [
         (100, "yssbi.project.function.entry"),
@@ -135,77 +134,4 @@ pub(super) fn unary_add_function(
         resource,
         offset_node: offset_node.id,
     }
-}
-
-pub(super) fn recursive_function(path: &GraphResourcePath, name: &str) -> GraphResourceDocument {
-    let mut resource = function_shell(path, name);
-    let do_node = node(RECURSIVE_DO_NODE, "yssbi.control.do");
-    let mut call = node(250, "yssbi.project.function.call");
-    call.parameters.insert(
-        ParameterKey::new("target").unwrap(),
-        serde_json::json!(path.as_str()),
-    );
-    let entry_parameter = resolved_function_port(
-        &mut resource,
-        100,
-        "parameters",
-        9_101,
-        path,
-        &parameter_id(),
-        "parameter-z",
-    );
-    let call_argument = resolved_function_port(
-        &mut resource,
-        250,
-        "arguments",
-        9_102,
-        path,
-        &parameter_id(),
-        "call-argument-a",
-    );
-    let call_result = resolved_function_port(
-        &mut resource,
-        250,
-        "results",
-        9_103,
-        path,
-        &return_id(),
-        "call-result-z",
-    );
-    let return_result = resolved_function_port(
-        &mut resource,
-        400,
-        "results",
-        9_104,
-        path,
-        &return_id(),
-        "result-a",
-    );
-    for entry in [do_node, call] {
-        assert!(resource.document.nodes.insert(entry.id, entry).is_none());
-    }
-    for edge in [
-        connection(
-            91_001,
-            declared(100, "then"),
-            declared(RECURSIVE_DO_NODE, "enter"),
-        ),
-        connection(
-            91_002,
-            declared(RECURSIVE_DO_NODE, "then"),
-            declared(250, "enter"),
-        ),
-        connection(91_003, declared(250, "then"), declared(400, "enter")),
-        connection(91_004, entry_parameter, call_argument),
-        connection(91_005, call_result, return_result),
-    ] {
-        assert!(
-            resource
-                .document
-                .connections
-                .insert(edge.id, edge)
-                .is_none()
-        );
-    }
-    resource
 }

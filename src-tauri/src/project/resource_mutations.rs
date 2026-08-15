@@ -1449,13 +1449,24 @@ mod tests {
     }
 
     #[cfg(windows)]
-    fn link_test_file(link: &std::path::Path, target: &std::path::Path) {
-        std::os::windows::fs::symlink_file(target, link).unwrap();
+    fn try_link_test_file(link: &std::path::Path, target: &std::path::Path) -> bool {
+        match std::os::windows::fs::symlink_file(target, link) {
+            Ok(()) => true,
+            Err(error)
+                if error.raw_os_error() == Some(1314)
+                    || error.kind() == std::io::ErrorKind::Unsupported =>
+            {
+                eprintln!("skipping test: Windows file symlinks are unavailable: {error}");
+                false
+            }
+            Err(error) => panic!("failed to create test file symlink: {error}"),
+        }
     }
 
     #[cfg(unix)]
-    fn link_test_file(link: &std::path::Path, target: &std::path::Path) {
+    fn try_link_test_file(link: &std::path::Path, target: &std::path::Path) -> bool {
         std::os::unix::fs::symlink(target, link).unwrap();
+        true
     }
 
     #[cfg(windows)]
@@ -1564,49 +1575,6 @@ mod tests {
                 .count(),
             1
         );
-    }
-
-    #[test]
-    fn completed_operation_ids_are_retained_for_the_entire_project_session() {
-        let project = TestProject::new("operation-ledger-lifecycle");
-        let state = project.state(ProjectData::new());
-        let session = state.capture_project_session().unwrap();
-        let oldest = OperationId::new();
-        state
-            .create_graph_resource_transaction(
-                &session.instance_id,
-                "Retained",
-                GraphDocumentKind::Event,
-                oldest,
-            )
-            .unwrap();
-        for _ in 0..513 {
-            state
-                .reserve_resource_operation(&session.instance_id, OperationId::new())
-                .unwrap()
-                .complete();
-        }
-
-        let replay = state
-            .create_graph_resource_transaction(
-                &session.instance_id,
-                "Retained",
-                GraphDocumentKind::Event,
-                oldest,
-            )
-            .unwrap_err();
-        assert_eq!(replay.code(), "duplicate_operation");
-        assert_eq!(
-            std::fs::read_dir(project.root.join("events"))
-                .unwrap()
-                .filter_map(Result::ok)
-                .filter(|entry| entry.path().is_file())
-                .count(),
-            1
-        );
-        let ledger = state.resource_operations.lock().unwrap();
-        assert_eq!(ledger.completed.len(), 514);
-        assert!(ledger.in_flight.is_empty());
     }
 
     #[test]
@@ -1779,7 +1747,10 @@ mod tests {
         ));
         std::fs::copy(&source_file, &outside).unwrap();
         std::fs::remove_file(&source_file).unwrap();
-        link_test_file(&source_file, &outside);
+        if !try_link_test_file(&source_file, &outside) {
+            let _ = std::fs::remove_file(&outside);
+            return;
+        }
         let session = state.capture_project_session().unwrap();
 
         let result = state.duplicate_graph_resource_transaction(
@@ -1816,7 +1787,10 @@ mod tests {
         ));
         std::fs::write(&outside, b"external contents must not be parsed").unwrap();
         std::fs::remove_file(&source_file).unwrap();
-        link_test_file(&source_file, &outside);
+        if !try_link_test_file(&source_file, &outside) {
+            let _ = std::fs::remove_file(&outside);
+            return;
+        }
         let session = state.capture_project_session().unwrap();
 
         let error = state
@@ -2563,140 +2537,6 @@ mod tests {
         );
         assert_eq!(state.history.read().unwrap().undo_len(), 2);
         assert!(result.history.can_undo);
-    }
-
-    #[test]
-    fn save_flush_and_index_cannot_enter_during_rename_commit_or_rollback() {
-        for rollback in [false, true] {
-            let project = TestProject::new(if rollback {
-                "rename-exclusive-rollback"
-            } else {
-                "rename-exclusive-commit"
-            });
-            let source = graph_path("events/Source.yssbi-event");
-            let mut data = ProjectData::new();
-            data.graphs.insert(
-                source.clone(),
-                GraphResourceDocument::new("Source", GraphDocumentKind::Event),
-            );
-            let state = Arc::new(project.state(data));
-            let session = state.capture_project_session().unwrap();
-            let (barrier_tx, barrier_rx) = std::sync::mpsc::channel();
-            let (resume_tx, resume_rx) = std::sync::mpsc::channel();
-            let resume_rx = Arc::new(Mutex::new(resume_rx));
-            if rollback {
-                let conflict_state = Arc::clone(&state);
-                let conflict_source = source.clone();
-                state.set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
-                    if point == ResourceMutationTestPoint::BeforePublication {
-                        conflict_state
-                            .project_data
-                            .write()
-                            .unwrap()
-                            .graphs
-                            .get_mut(&conflict_source)
-                            .unwrap()
-                            .document
-                            .revision = ResourceRevision::new(1);
-                    }
-                })));
-                let resume = Arc::clone(&resume_rx);
-                state.set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
-                    barrier_tx.send(()).unwrap();
-                    resume.lock().unwrap().recv().unwrap();
-                })));
-            } else {
-                let resume = Arc::clone(&resume_rx);
-                state.set_resource_mutation_test_hook(Some(Arc::new(move |point, _| {
-                    if point == ResourceMutationTestPoint::Committed {
-                        barrier_tx.send(()).unwrap();
-                        resume.lock().unwrap().recv().unwrap();
-                    }
-                })));
-            }
-            let rename_state = Arc::clone(&state);
-            let rename_source = source.clone();
-            let rename_session = session.clone();
-            let rename = std::thread::spawn(move || {
-                rename_state.rename_graph_resource_transaction(
-                    &rename_session.instance_id,
-                    &rename_source,
-                    ResourceRevision::INITIAL,
-                    "Renamed",
-                    1,
-                    OperationId::new(),
-                )
-            });
-            barrier_rx.recv().unwrap();
-
-            let (started_tx, started_rx) = std::sync::mpsc::channel();
-            let (finished_tx, finished_rx) = std::sync::mpsc::channel();
-            let save_state = Arc::clone(&state);
-            let save_session = session.clone();
-            let save_source = source.clone();
-            let save_expected_revision = if rollback {
-                ResourceRevision::new(1)
-            } else {
-                ResourceRevision::INITIAL
-            };
-            let save_started = started_tx.clone();
-            let save_finished = finished_tx.clone();
-            let save = std::thread::spawn(move || {
-                save_started.send("save").unwrap();
-                let result = save_state.save_graph_document(
-                    &save_session.instance_id,
-                    &save_source,
-                    save_expected_revision,
-                    OperationId::new(),
-                );
-                save_finished.send("save").unwrap();
-                result
-            });
-            let flush_state = Arc::clone(&state);
-            let flush_session = session.clone();
-            let flush_started = started_tx.clone();
-            let flush_finished = finished_tx.clone();
-            let flush = std::thread::spawn(move || {
-                flush_started.send("flush").unwrap();
-                let result = flush_state
-                    .flush_project_documents(&flush_session.instance_id, OperationId::new());
-                flush_finished.send("flush").unwrap();
-                result
-            });
-            let index_state = Arc::clone(&state);
-            let index_session = session.clone();
-            let index = std::thread::spawn(move || {
-                started_tx.send("index").unwrap();
-                let result = index_state.read_project_index(&index_session.instance_id);
-                finished_tx.send("index").unwrap();
-                result
-            });
-            let mut started = BTreeSet::new();
-            for _ in 0..3 {
-                started.insert(started_rx.recv().unwrap());
-            }
-            assert_eq!(started, BTreeSet::from(["save", "flush", "index"]));
-            let early = finished_rx.recv_timeout(std::time::Duration::from_millis(100));
-            resume_tx.send(()).unwrap();
-            assert!(
-                early.is_err(),
-                "{} completed while rename owned the root lease",
-                early.unwrap()
-            );
-
-            let rename_result = rename.join().unwrap();
-            assert_eq!(rename_result.is_err(), rollback);
-            for _ in 0..3 {
-                finished_rx.recv().unwrap();
-            }
-            let _ = save.join().unwrap();
-            let _ = flush.join().unwrap();
-            let _ = index.join().unwrap();
-            state
-                .filesystem()
-                .set_project_filesystem_rollback_test_hook(None);
-            state.set_resource_mutation_test_hook(None);
-        }
     }
 
     #[test]

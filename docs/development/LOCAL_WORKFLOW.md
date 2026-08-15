@@ -30,20 +30,28 @@ D:\Desktop\YssBI\target
 | 前端 Vitest 测试 | `pnpm test` |
 | 格式检查 Rust | `pnpm rust:fmt:check` |
 | 检查 Rust 编译 | `pnpm rust:check` |
-| 测试 Tauri/Rust 主 crate | `pnpm rust:test` |
+| 测试 Tauri/Rust library | `pnpm rust:test:lib` |
+| 测试 Tauri/Rust 主 crate（完整） | `pnpm rust:test` |
 | 测试科学计算 crate | `pnpm rust:test:sci` |
 | 运行宽表统计基准 | `pnpm rust:bench:column-analytics` |
 | 运行前端完整验证 | `pnpm verify:frontend` |
-| 运行 Rust 完整验证 | `pnpm verify:rust` |
-| 运行全部本地验证 | `pnpm verify` |
+| 运行 Rust 日常静态验证 | `pnpm verify:rust` |
+| 运行日常跨栈验证 | `pnpm verify` |
+| 运行完整仓库回归 | `pnpm verify:full` |
 | 清除标准 Rust 构建产物 | `pnpm rust:clean` |
 
-`pnpm rust:test` 和 `pnpm rust:test:sci` 通过 Cargo `--jobs 1` 序列化 Rust
-测试链接，以避免 Windows 链接器内存峰值。`pnpm rust:check` 和开发构建
-仍保留 Cargo 的正常并行度。
+`pnpm rust:test`、`pnpm rust:test:lib` 和 `pnpm rust:test:sci` 通过 Cargo
+`--jobs 1` 序列化 Rust 测试链接，以避免 Windows 链接器内存峰值。
+`pnpm rust:check` 和开发构建仍保留 Cargo 的正常并行度。
 
-`pnpm verify` 会执行前端类型检查、前端测试、Rust 格式/编译/测试，以及
-`git diff --check`。它不会启动应用、打包安装包或修改项目状态。
+`pnpm verify` 是日常跨栈交付检查：执行前端类型检查与完整 Vitest、Rust
+格式/编译检查，以及 `git diff --check`。Rust 行为改动仍必须先运行受影响的
+focused tests；`verify` 不会隐式运行全部 Rust runtime、integration 和 SCI
+测试。
+
+`pnpm verify:full` 才执行完整主 Rust crate 与 SCI 测试。仅在发布前、执行
+引擎/Runtime 跨切面改动、或明确要求完整仓库回归时运行。两种验证命令都
+不会启动应用、打包安装包或修改项目状态。
 
 ## 按改动范围验证
 
@@ -52,7 +60,8 @@ D:\Desktop\YssBI\target
   `pnpm verify:frontend`。
 - **Rust、Tauri command、项目状态或执行引擎改动：**
   先添加或更新聚焦回归测试，运行 `pnpm rust:check`、受影响的测试，
-  提交前运行 `pnpm verify:rust`。
+  提交前运行 `pnpm verify:rust`。执行引擎跨切面改动或发布前再运行
+  `pnpm verify:full`。
 - **`yss-sci` 数值计算改动：**
   运行 `pnpm rust:test:sci`；性能敏感的列统计或分布改动还应运行
   `pnpm rust:bench:column-analytics`，并记录与基线相比的结果。

@@ -40,6 +40,11 @@ export interface EditorSessionLayoutBindings {
 // ─── Command slices（与各 application hook 1:1）────────────────────────────
 
 export type EditorSessionHistoryActions = ReturnType<typeof useEditorOperations>;
+export interface EditorSessionCanvasActions {
+  selectAllNodes(): boolean;
+  focusSelectedNodes(): boolean;
+  fitCompleteGraph(): boolean;
+}
 
 export type EditorSessionHistoryAvailability = {
   canUndo: boolean;
@@ -64,6 +69,7 @@ export type EditorSessionNodeActions = Pick<
 export type EditorSession = EditorSessionState &
   EditorSessionLayoutBindings &
   EditorSessionHistoryActions &
+  EditorSessionCanvasActions &
   EditorSessionHistoryAvailability &
   EditorSessionTabActions &
   EditorSessionWorksheetActions &
@@ -133,6 +139,7 @@ export type EditorGroupSession = EditorSessionResourcesSlice & {
     EditorSession,
     | keyof EditorSessionLayoutBindings
     | keyof EditorSessionHistoryActions
+    | keyof EditorSessionCanvasActions
     | keyof EditorSessionTabActions
     | keyof EditorSessionWorksheetActions
     | keyof EditorSessionProjectActions
@@ -150,7 +157,9 @@ export function composeEditorGroupSession(
   ui: ReturnType<typeof import('./useEditorSessionUi').useEditorSessionUi>,
   commands: Pick<
     EditorSession,
-    keyof EditorSessionLayoutBindings | keyof EditorSessionHistoryActions
+    | keyof EditorSessionLayoutBindings
+    | keyof EditorSessionHistoryActions
+    | keyof EditorSessionCanvasActions
   > &
     EditorSessionTabActions &
     EditorSessionWorksheetActions &

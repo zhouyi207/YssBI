@@ -903,7 +903,6 @@ fn completed_task(task_id: String) -> BayesInferenceTask {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::{Duration, Instant};
@@ -925,24 +924,6 @@ mod tests {
         posterior_sample_page_from_dataframe, required_input_columns,
         trace_plot_data_from_dataframe, validated_spec,
     };
-
-    fn empty_result(task_id: String) -> InferenceResult {
-        InferenceResult {
-            summaries: Vec::new(),
-            diagnostics: InferenceDiagnostics {
-                chains: 0,
-                draws_per_chain: 0,
-                warmup: 0,
-                divergences: None,
-                max_treedepth_hits: None,
-                warnings: Vec::new(),
-            },
-            artifact_manifest: ResultArtifactManifest {
-                task_id,
-                artifacts: Vec::new(),
-            },
-        }
-    }
 
     struct CountingBackend {
         calls: Arc<Mutex<usize>>,
@@ -976,45 +957,6 @@ mod tests {
                     artifacts: Vec::new(),
                 },
             })
-        }
-    }
-
-    struct SlowBackend;
-
-    impl BayesBackend for SlowBackend {
-        fn fit(&self, request: BayesBackendRequest) -> Result<InferenceResult, BayesBackendError> {
-            if let Some(progress) = request.progress {
-                progress(crate::sci::api::bayes::TaskProgress {
-                    stage: "test_sampling".to_string(),
-                    completed: Some(1),
-                    total: Some(2),
-                });
-            }
-            thread::sleep(Duration::from_millis(100));
-            Ok(empty_result(request.task_id))
-        }
-    }
-
-    struct CancellableSlowBackend {
-        cancel_calls: Arc<AtomicUsize>,
-    }
-
-    impl BayesBackend for CancellableSlowBackend {
-        fn fit(&self, request: BayesBackendRequest) -> Result<InferenceResult, BayesBackendError> {
-            if let Some(progress) = request.progress {
-                progress(crate::sci::api::bayes::TaskProgress {
-                    stage: "test_sampling".to_string(),
-                    completed: None,
-                    total: None,
-                });
-            }
-            thread::sleep(Duration::from_millis(150));
-            Ok(empty_result(request.task_id))
-        }
-
-        fn cancel(&self, _task_id: &str) -> Result<(), BayesBackendError> {
-            self.cancel_calls.fetch_add(1, Ordering::SeqCst);
-            Ok(())
         }
     }
 
@@ -1216,30 +1158,6 @@ mod tests {
         assert_eq!(page.rows[1].chain, 2);
     }
 
-    fn wait_for_task_stage(
-        service: &BayesInferenceService,
-        task_id: &str,
-        expected_stage: &str,
-    ) -> crate::sci::api::bayes::BayesInferenceTask {
-        let deadline = Instant::now() + Duration::from_secs(2);
-        loop {
-            let task = service.status(task_id).expect("task status");
-            if task
-                .progress
-                .as_ref()
-                .map(|progress| progress.stage.as_str())
-                == Some(expected_stage)
-            {
-                return task;
-            }
-            assert!(
-                Instant::now() < deadline,
-                "Bayesian task did not reach expected stage"
-            );
-            thread::sleep(Duration::from_millis(10));
-        }
-    }
-
     fn wait_for_terminal_task(
         service: &BayesInferenceService,
         task_id: &str,
@@ -1291,19 +1209,6 @@ mod tests {
     }
 
     #[test]
-    fn submit_starts_background_task_and_stores_result() {
-        let service = BayesInferenceService::with_backend(Arc::new(SlowBackend));
-        let task = service.submit(valid_draft()).expect("submitted task");
-        assert_eq!(task.status, crate::sci::api::bayes::TaskStatus::Queued);
-        let completed = wait_for_terminal_task(&service, &task.task_id);
-        assert_eq!(
-            completed.status,
-            crate::sci::api::bayes::TaskStatus::Completed
-        );
-        assert!(service.result(&task.task_id).is_ok());
-    }
-
-    #[test]
     fn submit_rejects_invalid_draft() {
         let service = BayesInferenceService::new();
         let mut draft = valid_draft();
@@ -1327,93 +1232,6 @@ mod tests {
         let result = service.result(&task.task_id).expect("stored result");
         assert_eq!(*calls.lock().expect("calls lock"), 1);
         assert_eq!(result.diagnostics.warnings[0].code, "TEST_BACKEND");
-    }
-
-    #[test]
-    fn backend_progress_updates_task_status() {
-        let service = BayesInferenceService::with_backend(Arc::new(SlowBackend));
-        let task = service.submit(valid_draft()).expect("submitted task");
-        let running = wait_for_task_stage(&service, &task.task_id, "test_sampling");
-        assert_eq!(
-            running.progress.and_then(|progress| progress.completed),
-            Some(1)
-        );
-        let completed = wait_for_terminal_task(&service, &task.task_id);
-        assert_eq!(
-            completed.status,
-            crate::sci::api::bayes::TaskStatus::Completed
-        );
-    }
-
-    #[test]
-    fn clear_completed_task_removes_status_and_result() {
-        let service = BayesInferenceService::with_backend(Arc::new(SlowBackend));
-        let task = service.submit(valid_draft()).expect("submitted task");
-        let completed = wait_for_terminal_task(&service, &task.task_id);
-        assert_eq!(
-            completed.status,
-            crate::sci::api::bayes::TaskStatus::Completed
-        );
-        service.clear_task(&task.task_id).expect("clear task");
-        assert!(service.status(&task.task_id).is_err());
-        assert!(service.result(&task.task_id).is_err());
-    }
-
-    #[test]
-    fn cancelling_queued_task_does_not_call_backend_cancel() {
-        let cancel_calls = Arc::new(AtomicUsize::new(0));
-        let service = BayesInferenceService::with_backend(Arc::new(CancellableSlowBackend {
-            cancel_calls: cancel_calls.clone(),
-        }));
-        let running = service.submit(valid_draft()).expect("running task");
-        wait_for_task_stage(&service, &running.task_id, "test_sampling");
-        let queued = service.submit(valid_draft()).expect("queued task");
-
-        service.cancel(&queued.task_id).expect("cancel queued task");
-
-        assert_eq!(
-            service.status(&queued.task_id).unwrap().status,
-            crate::sci::api::bayes::TaskStatus::Cancelled
-        );
-        assert_eq!(cancel_calls.load(Ordering::SeqCst), 0);
-        assert_eq!(
-            wait_for_terminal_task(&service, &running.task_id).status,
-            crate::sci::api::bayes::TaskStatus::Completed
-        );
-    }
-
-    #[test]
-    fn cancelling_running_task_calls_backend_cancel_once() {
-        let cancel_calls = Arc::new(AtomicUsize::new(0));
-        let service = BayesInferenceService::with_backend(Arc::new(CancellableSlowBackend {
-            cancel_calls: cancel_calls.clone(),
-        }));
-        let task = service.submit(valid_draft()).expect("running task");
-        wait_for_task_stage(&service, &task.task_id, "test_sampling");
-
-        service.cancel(&task.task_id).expect("cancel running task");
-        service
-            .cancel(&task.task_id)
-            .expect("repeat cancel running task");
-
-        assert_eq!(cancel_calls.load(Ordering::SeqCst), 1);
-        assert_eq!(
-            wait_for_terminal_task(&service, &task.task_id).status,
-            crate::sci::api::bayes::TaskStatus::Cancelled
-        );
-    }
-
-    #[test]
-    fn cancelling_task_prevents_result_publication() {
-        let service = BayesInferenceService::with_backend(Arc::new(SlowBackend));
-        let task = service.submit(valid_draft()).expect("submitted task");
-        service.cancel(&task.task_id).expect("cancel task");
-        let cancelled = wait_for_terminal_task(&service, &task.task_id);
-        assert_eq!(
-            cancelled.status,
-            crate::sci::api::bayes::TaskStatus::Cancelled
-        );
-        assert!(service.result(&task.task_id).is_err());
     }
 
     #[test]

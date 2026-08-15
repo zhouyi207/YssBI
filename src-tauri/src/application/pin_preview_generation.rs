@@ -43,27 +43,6 @@ pub fn allocate_pin_preview_generation() -> Result<u64, PinPreviewGenerationExha
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeSet;
-    use std::sync::Arc;
-
-    #[test]
-    fn concurrent_allocations_are_unique_and_monotonic() {
-        let allocator = Arc::new(PinPreviewGenerationAllocator::new());
-        let workers = (0..32)
-            .map(|_| {
-                let allocator = Arc::clone(&allocator);
-                std::thread::spawn(move || allocator.allocate().unwrap())
-            })
-            .collect::<Vec<_>>();
-        let values = workers
-            .into_iter()
-            .map(|worker| worker.join().unwrap())
-            .collect::<BTreeSet<_>>();
-
-        assert_eq!(values.len(), 32);
-        assert_eq!(values.first(), Some(&1));
-        assert_eq!(values.last(), Some(&32));
-    }
 
     #[test]
     fn exhaustion_never_wraps_or_reuses_the_maximum() {

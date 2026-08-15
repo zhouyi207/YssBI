@@ -12,7 +12,7 @@ function start(graphPath: string, groupId: string, worldX: number, connectionId:
   useGraphInteractionStore.getState().startInteraction(graphPath, {
     type: 'drawingConnection',
     session: {
-      groupId, graphPath, source: sourcePin, screenX: 0, screenY: 0,
+      groupId, pointerId: 0, graphPath, source: sourcePin, screenX: 0, screenY: 0,
       worldX, worldY: worldX, hoveredTarget: null, snappedTarget: null,
       snappedWorld: null,
       feedback: { kind: 'replace', displacedConnectionIds: [connectionId] },

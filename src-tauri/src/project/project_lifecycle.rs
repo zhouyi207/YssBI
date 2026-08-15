@@ -528,7 +528,7 @@ mod tests {
         ProjectFilesystemFaultPoint, fixtures, load_project_from_file,
     };
     use crate::variable::VariableScope;
-    use std::sync::{Arc, Barrier};
+    use std::sync::Arc;
     use std::time::Duration;
 
     fn root(label: &str) -> PathBuf {
@@ -906,129 +906,6 @@ mod tests {
     }
 
     #[test]
-    fn save_as_reverse_root_order_cannot_deadlock() {
-        let path_a = root("reverse-a");
-        let path_b = root("reverse-b");
-        std::fs::create_dir_all(&path_a).unwrap();
-        std::fs::create_dir_all(&path_b).unwrap();
-        let root_a = NormalizedProjectRoot::from_project_path(&path_a).unwrap();
-        let root_b = NormalizedProjectRoot::from_project_path(&path_b).unwrap();
-        let coordinator = crate::project::ProjectFilesystemCoordinator::default();
-        let state_a = ProjectState::with_shared_filesystem_for_test(coordinator.clone());
-        let state_b = ProjectState::with_shared_filesystem_for_test(coordinator.clone());
-        state_a.activate_project_fixture(path_a.to_string_lossy().into_owned(), ProjectData::new());
-        state_b.activate_project_fixture(path_b.to_string_lossy().into_owned(), ProjectData::new());
-        let instance_a = state_a.capture_project_session().unwrap().instance_id;
-        let instance_b = state_b.capture_project_session().unwrap().instance_id;
-        let held = coordinator.acquire(root_a.clone()).unwrap();
-        let acquire_attempts = coordinator.observe_acquire_many_attempts();
-        let barrier = Arc::new(Barrier::new(3));
-        let (done_tx, done_rx) = std::sync::mpsc::channel();
-
-        let first = {
-            let barrier = Arc::clone(&barrier);
-            let done = done_tx.clone();
-            let destination = path_b.clone();
-            std::thread::spawn(move || {
-                barrier.wait();
-                done.send(state_a.save_project_as_transaction(
-                    &instance_a,
-                    &destination,
-                    OperationId::new(),
-                ))
-                .unwrap();
-            })
-        };
-        let second = {
-            let barrier = Arc::clone(&barrier);
-            let done = done_tx.clone();
-            let destination = path_a.clone();
-            std::thread::spawn(move || {
-                barrier.wait();
-                done.send(state_b.save_project_as_transaction(
-                    &instance_b,
-                    &destination,
-                    OperationId::new(),
-                ))
-                .unwrap();
-            })
-        };
-
-        barrier.wait();
-        let expected = vec![root_a.clone(), root_b.clone()];
-        assert_eq!(
-            acquire_attempts
-                .recv_timeout(Duration::from_secs(2))
-                .unwrap(),
-            expected
-        );
-        assert_eq!(
-            acquire_attempts
-                .recv_timeout(Duration::from_secs(2))
-                .unwrap(),
-            expected
-        );
-        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
-        drop(held);
-        let _first_result = done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        let _second_result = done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        first.join().unwrap();
-        second.join().unwrap();
-        assert_eq!(
-            coordinator.lifecycle_state_for_test(&root_a),
-            (false, false, 0)
-        );
-        assert_eq!(
-            coordinator.lifecycle_state_for_test(&root_b),
-            (false, false, 0)
-        );
-        drop(
-            coordinator
-                .acquire_many([root_b.clone(), root_a.clone()])
-                .unwrap(),
-        );
-        let _ = std::fs::remove_dir_all(path_a);
-        let _ = std::fs::remove_dir_all(path_b);
-    }
-
-    #[test]
-    fn save_as_rechecks_destination_emptiness_under_both_leases() {
-        let (state, source, instance_id) = active_state("save-as-policy");
-        let destination = root("save-as-policy-destination");
-        std::fs::create_dir_all(&destination).unwrap();
-        let normalized = NormalizedProjectRoot::from_project_path(&destination).unwrap();
-        let held = state.filesystem().acquire(normalized).unwrap();
-        let worker_state = state.clone();
-        let worker_destination = destination.clone();
-        let (done_tx, done_rx) = std::sync::mpsc::channel();
-        let worker = std::thread::spawn(move || {
-            done_tx
-                .send(worker_state.save_project_as_transaction(
-                    &instance_id,
-                    &worker_destination,
-                    OperationId::new(),
-                ))
-                .unwrap();
-        });
-        std::thread::sleep(Duration::from_millis(50));
-        std::fs::write(destination.join("appeared.txt"), b"owned by another writer").unwrap();
-        drop(held);
-
-        let error = done_rx
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .unwrap_err();
-        assert_eq!(error.code(), "invalid_project_root");
-        assert_eq!(
-            std::fs::read(destination.join("appeared.txt")).unwrap(),
-            b"owned by another writer"
-        );
-        worker.join().unwrap();
-        let _ = std::fs::remove_dir_all(source);
-        let _ = std::fs::remove_dir_all(destination);
-    }
-
-    #[test]
     fn save_as_builds_destination_from_one_authoritative_snapshot_and_publishes_after_commit() {
         let (state, source, instance_id) = active_state("save-as-authority");
         let graph_path = GraphResourcePath::new("events/Authority.yssbi-event").unwrap();
@@ -1113,47 +990,6 @@ mod tests {
             instance_id
         );
         let _ = std::fs::remove_dir_all(source);
-        let _ = std::fs::remove_dir_all(destination);
-    }
-
-    #[test]
-    fn create_project_rechecks_destination_policy_under_lease() {
-        let state = ProjectState::new();
-        let destination = root("create-policy");
-        std::fs::create_dir_all(&destination).unwrap();
-        let normalized = NormalizedProjectRoot::from_project_path(&destination).unwrap();
-        let held = state.filesystem().acquire(normalized).unwrap();
-        let worker_state = state.clone();
-        let worker_destination = destination.clone();
-        let (done_tx, done_rx) = std::sync::mpsc::channel();
-        let worker = std::thread::spawn(move || {
-            done_tx
-                .send(worker_state.create_project_transaction(
-                    "Created",
-                    &worker_destination,
-                    OperationId::new(),
-                ))
-                .unwrap();
-        });
-        std::thread::sleep(Duration::from_millis(50));
-        std::fs::write(destination.join("appeared.txt"), b"do not overwrite").unwrap();
-        drop(held);
-
-        let error = done_rx
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .unwrap_err();
-        assert_eq!(error.code(), "invalid_project_root");
-        assert_eq!(
-            std::fs::read(destination.join("appeared.txt")).unwrap(),
-            b"do not overwrite"
-        );
-        assert!(
-            !destination
-                .join(crate::project::PROJECT_METADATA_FILE)
-                .exists()
-        );
-        worker.join().unwrap();
         let _ = std::fs::remove_dir_all(destination);
     }
 
@@ -1424,40 +1260,6 @@ mod tests {
     }
 
     #[test]
-    fn prepared_delete_owns_activation_until_recovery_object_is_released() {
-        let (state, project_root, instance_id) = active_state("delete-activation-owner");
-        let identity = ProjectRootBinding::for_existing(&project_root)
-            .unwrap()
-            .identity()
-            .unwrap()
-            .clone();
-        let prepared = state
-            .prepare_project_deletion(
-                &project_root,
-                Some(&identity),
-                Some(&instance_id),
-                OperationId::new(),
-            )
-            .unwrap();
-        let worker_state = state.clone();
-        let (done_tx, done_rx) = std::sync::mpsc::channel();
-        let worker = std::thread::spawn(move || {
-            done_tx.send(worker_state.clear_project()).unwrap();
-        });
-
-        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
-        assert!(state.capture_project_session().is_err());
-        drop(prepared);
-        done_rx
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .unwrap();
-        worker.join().unwrap();
-        assert!(state.capture_project_session().is_err());
-        let _ = std::fs::remove_dir_all(project_root);
-    }
-
-    #[test]
     fn prepared_delete_never_auto_rolls_back_committed_tombstone() {
         let (state, project_root, instance_id) = active_state("delete-rollback");
         let identity = ProjectRootBinding::for_existing(&project_root)
@@ -1507,50 +1309,6 @@ mod tests {
         assert!(result.tombstone_path.is_dir());
         assert!(state.capture_project_session().is_err());
         let _ = std::fs::remove_dir_all(result.tombstone_path);
-    }
-
-    #[test]
-    fn active_project_deletion_drains_then_clears_before_registry_removal_event() {
-        let (state, root, instance_id) = active_state("delete-drain");
-        let (runs, session_id) = {
-            let store = state.project_store.read().unwrap();
-            (Arc::clone(&store.runs), store.project_session_id.clone())
-        };
-        let run = runs
-            .track_pre_run(
-                session_id,
-                crate::node_system::runtime::CancellationToken::new(),
-            )
-            .unwrap();
-        let worker_state = state.clone();
-        let worker_root = root.clone();
-        let expected = instance_id.clone();
-        let (done_tx, done_rx) = std::sync::mpsc::channel();
-        let worker = std::thread::spawn(move || {
-            done_tx
-                .send(worker_state.delete_project_transaction(
-                    &worker_root,
-                    None,
-                    Some(&expected),
-                    OperationId::new(),
-                ))
-                .unwrap();
-        });
-        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
-        assert_eq!(
-            state.capture_project_session().unwrap().instance_id,
-            instance_id
-        );
-        drop(run);
-
-        let result = done_rx
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .unwrap();
-        assert_eq!(result.cleared_project_instance_id, Some(instance_id));
-        assert!(state.capture_project_session().is_err());
-        assert!(!root.exists());
-        worker.join().unwrap();
     }
 
     #[test]

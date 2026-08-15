@@ -74,6 +74,7 @@ const lifecycleOwnedNodeCommandIdentityFields = {
   mutate_graph_document: 'projectInstanceId',
   update_function_signature: 'projectInstanceId',
   hydrate_editor_graph: 'projectInstanceId',
+  export_graph_subgraph: 'projectInstanceId',
   get_project_history_status: 'projectInstanceId',
   undo_graph_document: 'projectInstanceId',
   redo_graph_document: 'projectInstanceId',

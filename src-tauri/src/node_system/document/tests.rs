@@ -30,6 +30,7 @@ use uuid::Uuid;
 
 mod editor_mutation_validation;
 mod insert_reroute;
+mod subgraph;
 
 fn node_id(value: u128) -> NodeId {
     NodeId::from_uuid(Uuid::from_u128(value))

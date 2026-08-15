@@ -20,7 +20,7 @@ pub use assertions::{CompileAssertions, RunAssertions, compile_assertions, run_a
 pub use builders::{
     EmptyResourceSnapshot, TestGraphBuilder, TestNode, TestProvider, TestProviderBuilder,
 };
-pub use determinism::{assert_locale_invariance, assert_random_insertion_order_determinism};
+pub use determinism::assert_locale_invariance;
 pub(crate) use protocol::TestProtocolBuilder;
 pub use runtime::{
     KernelRecord, KernelRecorder, NoFunctionPlans, ResourceLeakTracker, tracked_requirement,

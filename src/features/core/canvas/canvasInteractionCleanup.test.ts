@@ -23,7 +23,7 @@ describe('canvasInteractionCleanup', () => {
   it('starts the first interaction when the graph has no interaction bucket', () => {
     expect(() => startCanvasInteraction(graphPath, {
       type: 'panning',
-      session: { groupId, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false },
+      session: { groupId, pointerId: 0, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false },
     })).not.toThrow();
 
     expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId).type)
@@ -35,7 +35,7 @@ describe('canvasInteractionCleanup', () => {
     const canvas = document.querySelector(`[data-editor-group-id="${groupId}"]`)!;
     useGraphInteractionStore.getState().startInteraction(graphPath, {
       type: 'selecting',
-      session: { groupId, startX: 0, startY: 0, currentX: 10, currentY: 10, preserveSelection: false },
+      session: { groupId, pointerId: 0, startX: 0, startY: 0, currentX: 10, currentY: 10, baseNodeIds: [] },
     });
     const unregister = registerCanvasInteractionCleanup(
       { graphPath, groupId, interactionType: 'selecting' },
@@ -56,13 +56,13 @@ describe('canvasInteractionCleanup', () => {
     );
     useGraphInteractionStore.getState().startInteraction(graphPath, {
       type: 'selecting',
-      session: { groupId, startX: 0, startY: 0, currentX: 1, currentY: 1, preserveSelection: false },
+      session: { groupId, pointerId: 0, startX: 0, startY: 0, currentX: 1, currentY: 1, baseNodeIds: [] },
     });
     cancelCanvasInteraction(graphPath, groupId);
 
     useGraphInteractionStore.getState().startInteraction(graphPath, {
       type: 'selecting',
-      session: { groupId, startX: 0, startY: 0, currentX: 2, currentY: 2, preserveSelection: false },
+      session: { groupId, pointerId: 0, startX: 0, startY: 0, currentX: 2, currentY: 2, baseNodeIds: [] },
     });
     cancelCanvasInteraction(graphPath, groupId);
 
@@ -73,7 +73,7 @@ describe('canvasInteractionCleanup', () => {
     const cleanup = vi.fn();
     useGraphInteractionStore.getState().startInteraction(graphPath, {
       type: 'selecting',
-      session: { groupId, startX: 0, startY: 0, currentX: 4, currentY: 4, preserveSelection: false },
+      session: { groupId, pointerId: 0, startX: 0, startY: 0, currentX: 4, currentY: 4, baseNodeIds: [] },
     });
     registerCanvasInteractionCleanup(
       { graphPath, groupId, interactionType: 'selecting' },
@@ -82,7 +82,7 @@ describe('canvasInteractionCleanup', () => {
 
     startCanvasInteraction(graphPath, {
       type: 'panning',
-      session: { groupId: 'group-b', startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false },
+      session: { groupId: 'group-b', pointerId: 0, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false },
     });
 
     expect(cleanup).toHaveBeenCalledOnce();
@@ -99,7 +99,7 @@ describe('canvasInteractionCleanup', () => {
     unregister();
     useGraphInteractionStore.getState().startInteraction(graphPath, {
       type: 'selecting',
-      session: { groupId, startX: 0, startY: 0, currentX: 3, currentY: 3, preserveSelection: false },
+      session: { groupId, pointerId: 0, startX: 0, startY: 0, currentX: 3, currentY: 3, baseNodeIds: [] },
     });
 
     cancelCanvasInteraction(graphPath, groupId);
@@ -111,7 +111,7 @@ describe('canvasInteractionCleanup', () => {
     const cleanup = vi.fn();
     useGraphInteractionStore.getState().startInteraction(graphPath, {
       type: 'draggingNodes',
-      session: { groupId, nodeId: 'node-1', lastX: 0, lastY: 0, moved: true, nodeIds: ['node-1'], delta: { x: 1, y: 2 } },
+      session: { groupId, pointerId: 0, nodeId: 'node-1', lastX: 0, lastY: 0, moved: true, nodeIds: ['node-1'], delta: { x: 1, y: 2 } },
     });
     useGraphInteractionStore.getState().setPositionOverride(graphPath, 'node-1', { x: 1, y: 2 });
     registerCanvasInteractionCleanup(
@@ -139,8 +139,8 @@ describe('canvasInteractionCleanup', () => {
     );
     useGraphInteractionStore.setState({
       interactions: {
-        'events/one': { type: 'selecting', session: { groupId, startX: 0, startY: 0, currentX: 1, currentY: 1, preserveSelection: false } },
-        'events/two': { type: 'selecting', session: { groupId, startX: 0, startY: 0, currentX: 1, currentY: 1, preserveSelection: false } },
+        'events/one': { type: 'selecting', session: { groupId, pointerId: 0, startX: 0, startY: 0, currentX: 1, currentY: 1, baseNodeIds: [] } },
+        'events/two': { type: 'selecting', session: { groupId, pointerId: 0, startX: 0, startY: 0, currentX: 1, currentY: 1, baseNodeIds: [] } },
       },
       positionOverrides: {
         'events/one': { node: { x: 1, y: 1 } },
@@ -163,7 +163,7 @@ describe('canvasInteractionCleanup', () => {
     );
     useGraphInteractionStore.getState().startInteraction(graphPath, {
       type: 'selecting',
-      session: { groupId, startX: 0, startY: 0, currentX: 0, currentY: 0, preserveSelection: false },
+      session: { groupId, pointerId: 0, startX: 0, startY: 0, currentX: 0, currentY: 0, baseNodeIds: [] },
     });
     cancelCanvasInteraction(graphPath, groupId);
     expect(called).toBe(false);

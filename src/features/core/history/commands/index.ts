@@ -9,6 +9,8 @@ import { disconnectConnectionsCommand } from './disconnectConnections';
 import { insertRerouteCommand } from './insertReroute';
 import { moveConnectionsCommand } from './moveConnections';
 import { deleteNodesCommand } from './deleteNodes';
+import { duplicateSubgraphCommand } from './duplicateSubgraph';
+import { insertSubgraphCommand } from './insertSubgraph';
 import { addRepeatablePinCommand, removeRepeatablePinCommand } from './repeatablePin';
 
 export const commandRegistry: CommandHandlerMap = {
@@ -21,6 +23,8 @@ export const commandRegistry: CommandHandlerMap = {
   InsertReroute: insertRerouteCommand,
   MoveConnections: moveConnectionsCommand,
   DeleteNodes: deleteNodesCommand,
+  DuplicateSubgraph: duplicateSubgraphCommand,
+  InsertSubgraph: insertSubgraphCommand,
   AddRepeatablePin: addRepeatablePinCommand,
   RemoveRepeatablePin: removeRepeatablePinCommand,
 };
@@ -39,4 +43,6 @@ export type { DisconnectConnectionsArgs } from './disconnectConnections';
 export type { InsertRerouteArgs } from './insertReroute';
 export type { MoveConnectionsArgs } from './moveConnections';
 export type { DeleteNodesArgs } from './deleteNodes';
+export type { DuplicateSubgraphArgs } from './duplicateSubgraph';
+export type { InsertSubgraphArgs } from './insertSubgraph';
 export type { AddRepeatablePinArgs, RemoveRepeatablePinArgs } from './repeatablePin';

@@ -1,4 +1,5 @@
-export type { EditorViewport } from './editorViewport';
+export { EDITOR_VIEWPORT_SCALE_LIMITS, type EditorViewport } from './editorViewport';
+export { fitWorldBounds, type FitWorldBoundsOptions, type WorldBounds } from './fitViewport';
 export type { ViewportScope } from './viewportScope';
 export {
   editorViewportScope,

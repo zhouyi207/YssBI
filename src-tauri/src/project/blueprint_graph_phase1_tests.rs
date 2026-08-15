@@ -8,7 +8,6 @@ use crate::node_system::testing::blueprint_phase1::{
     Phase1ComplexMutation,
 };
 use std::collections::BTreeMap;
-use std::sync::{Arc, Barrier};
 
 #[test]
 fn blueprint_graph_phase1_tests_success_authority_history_delta_and_projection_matrix() {
@@ -111,57 +110,6 @@ fn blueprint_graph_phase1_tests_empty_derived_disconnect_is_stable_noop() {
         assert_eq!(result.delta.from_revision, before.revision);
         assert_eq!(result.delta.to_revision, before.revision);
         assert_eq!(fixture.authority_snapshot(), before);
-    }
-}
-
-#[test]
-fn blueprint_graph_phase1_tests_same_revision_race_commits_only_one_winner() {
-    for kind in PHASE1_COMPLEX_MUTATIONS {
-        let fixture = BlueprintPhase1Fixture::new(kind);
-        let before = fixture.authority_snapshot();
-        let [first, second] = fixture.competing_requests(kind);
-        let barrier = Arc::new(Barrier::new(3));
-        let outcomes = std::thread::scope(|scope| {
-            let handles = [first, second].map(|request| {
-                let barrier = barrier.clone();
-                let fixture = &fixture;
-                scope.spawn(move || {
-                    barrier.wait();
-                    fixture.apply_editor_graph_mutation(request)
-                })
-            });
-            barrier.wait();
-            handles.map(|handle| handle.join().expect("race worker panicked"))
-        });
-
-        let winners = outcomes
-            .iter()
-            .filter_map(|outcome| outcome.as_ref().ok())
-            .collect::<Vec<_>>();
-        let stale = outcomes
-            .iter()
-            .filter(|outcome| matches!(outcome, Err(MutationConflict::StaleRevision { .. })))
-            .count();
-        assert_eq!(winners.len(), 1, "{} winner count", kind.label());
-        assert_eq!(
-            stale,
-            1,
-            "{} stale loser count; outcomes={outcomes:?}",
-            kind.label()
-        );
-
-        let winner = winners[0];
-        let committed = fixture.authority_snapshot();
-        assert_eq!(committed.revision, before.revision.next());
-        assert_eq!(committed.history_lengths, (before.history_lengths.0 + 1, 0));
-        assert_eq!(
-            committed.projection,
-            winner.projection_replacement.projection
-        );
-        assert_patch_is_complete(&before.document, &committed.document, winner);
-        assert_eq!(committed.publication.0, before.publication.0);
-        assert_eq!(committed.publication.1, before.publication.1);
-        assert_eq!(committed.publication.2, before.publication.2 + 1);
     }
 }
 

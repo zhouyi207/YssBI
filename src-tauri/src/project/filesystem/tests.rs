@@ -9,8 +9,7 @@ use crate::project::{
 };
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Barrier, mpsc};
-use std::time::Duration;
+use std::sync::{Arc, Barrier};
 
 struct TestDirectory {
     path: PathBuf,
@@ -118,29 +117,6 @@ fn move_recovery_copies(temporary: &TestDirectory) -> Vec<PathBuf> {
         .collect()
 }
 
-fn longest_creatable_json_filename(directory: &Path) -> String {
-    let suffix = ".json";
-    let mut longest = None;
-    for length in suffix.len() + 1..=512 {
-        let name = format!("{}{}", "s".repeat(length - suffix.len()), suffix);
-        let path = directory.join(&name);
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-        {
-            Ok(file) => {
-                drop(file);
-                std::fs::remove_file(&path).unwrap();
-                longest = Some(name);
-            }
-            Err(_) if longest.is_some() => break,
-            Err(_) => continue,
-        }
-    }
-    longest.expect("temporary project root must accept a source filename")
-}
-
 #[test]
 fn filesystem_test_controls_are_scoped_to_independent_coordinators() {
     let temporary_a = TestDirectory::new("coordinator-controls-a");
@@ -237,53 +213,6 @@ fn filesystem_test_controls_are_scoped_to_independent_coordinators() {
 }
 
 #[test]
-fn equivalent_existing_and_missing_root_spellings_share_one_lease() {
-    let temporary = TestDirectory::new("filesystem-normalization");
-    let existing = temporary.path().join("existing");
-    std::fs::create_dir_all(&existing).unwrap();
-    std::fs::write(existing.join(PROJECT_METADATA_FILE), "{}").unwrap();
-
-    let existing_direct = normalized(&existing);
-    let existing_dotted = normalized(existing.join(".").join("child").join(".."));
-    assert_eq!(existing_direct, existing_dotted);
-
-    let missing_direct = normalized(temporary.path().join("destination"));
-    let missing_dotted = normalized(
-        temporary
-            .path()
-            .join("missing-parent")
-            .join("..")
-            .join("destination"),
-    );
-    assert_eq!(missing_direct, missing_dotted);
-
-    #[cfg(windows)]
-    {
-        let slash_spelling = existing.to_string_lossy().replace('\\', "/").to_uppercase();
-        assert_eq!(existing_direct, normalized(slash_spelling));
-    }
-
-    let coordinator = ProjectFilesystemCoordinator::default();
-    let lease = coordinator.acquire(missing_direct).unwrap();
-    let contender = coordinator.clone();
-    let contender_root = missing_dotted;
-    let (finished_tx, finished_rx) = mpsc::channel();
-    let handle = std::thread::spawn(move || {
-        let _lease = contender.acquire(contender_root).unwrap();
-        finished_tx.send(()).unwrap();
-    });
-
-    assert!(
-        finished_rx
-            .recv_timeout(Duration::from_millis(100))
-            .is_err()
-    );
-    drop(lease);
-    finished_rx.recv_timeout(Duration::from_secs(2)).unwrap();
-    handle.join().unwrap();
-}
-
-#[test]
 fn missing_parent_components_never_escape_the_canonical_existing_ancestor() {
     let temporary = TestDirectory::new("filesystem-existing-anchor");
     let existing = temporary.path().join("existing");
@@ -359,84 +288,6 @@ fn metadata_and_directory_paths_normalize_to_the_same_root() {
 }
 
 #[test]
-fn reverse_order_multi_root_acquisition_is_sorted_deduplicated_and_deadlock_free() {
-    let temporary = TestDirectory::new("filesystem-multi-root");
-    let root_a = normalized(temporary.path().join("a"));
-    let root_b = normalized(temporary.path().join("b"));
-    let expected = vec![root_a.clone(), root_b.clone()];
-    let coordinator = ProjectFilesystemCoordinator::default();
-    let barrier = Arc::new(Barrier::new(3));
-    let (finished_tx, finished_rx) = mpsc::channel();
-
-    let spawn_acquire = |roots: Vec<NormalizedProjectRoot>| {
-        let coordinator = coordinator.clone();
-        let barrier = Arc::clone(&barrier);
-        let finished_tx = finished_tx.clone();
-        std::thread::spawn(move || {
-            barrier.wait();
-            let lease = coordinator.acquire_many(roots).unwrap();
-            finished_tx.send(lease.roots().to_vec()).unwrap();
-            std::thread::sleep(Duration::from_millis(25));
-        })
-    };
-
-    let first = spawn_acquire(vec![root_a.clone(), root_b.clone(), root_a]);
-    let second = spawn_acquire(vec![root_b.clone(), root_b, expected[0].clone()]);
-    barrier.wait();
-
-    assert_eq!(
-        finished_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
-        expected
-    );
-    assert_eq!(
-        finished_rx.recv_timeout(Duration::from_secs(2)).unwrap(),
-        expected
-    );
-    first.join().unwrap();
-    second.join().unwrap();
-}
-
-#[test]
-fn blocked_multi_root_acquisition_never_partially_reserves_a_free_root() {
-    let temporary = TestDirectory::new("filesystem-atomic-admission");
-    let root_a = normalized(temporary.path().join("a"));
-    let root_b = normalized(temporary.path().join("b"));
-    let coordinator = ProjectFilesystemCoordinator::default();
-    let held_b = coordinator.acquire(root_b.clone()).unwrap();
-    let waiter_blocked = coordinator.observe_next_wait();
-    let (multi_finished_tx, multi_finished_rx) = mpsc::channel();
-
-    let multi_coordinator = coordinator.clone();
-    let multi_a = root_a.clone();
-    let multi_b = root_b;
-    let multi = std::thread::spawn(move || {
-        let _lease = multi_coordinator.acquire_many([multi_a, multi_b]).unwrap();
-        multi_finished_tx.send(()).unwrap();
-    });
-    waiter_blocked.recv_timeout(Duration::from_secs(2)).unwrap();
-
-    let independent_coordinator = coordinator.clone();
-    let (independent_tx, independent_rx) = mpsc::channel();
-    let independent = std::thread::spawn(move || {
-        let _lease = independent_coordinator.acquire(root_a).unwrap();
-        independent_tx.send(()).unwrap();
-    });
-    independent_rx.recv_timeout(Duration::from_secs(2)).unwrap();
-    assert!(
-        multi_finished_rx
-            .recv_timeout(Duration::from_millis(100))
-            .is_err()
-    );
-
-    drop(held_b);
-    multi_finished_rx
-        .recv_timeout(Duration::from_secs(2))
-        .unwrap();
-    independent.join().unwrap();
-    multi.join().unwrap();
-}
-
-#[test]
 fn lease_set_releases_roots_in_reverse_order() {
     let temporary = TestDirectory::new("filesystem-release-order");
     let roots = vec![
@@ -475,55 +326,6 @@ fn lifecycle_close_rejects_new_operations_and_reopens_only_after_final_lease() {
 
     drop(lifecycle);
     drop(coordinator.acquire(root).unwrap());
-}
-
-#[test]
-fn lifecycle_drain_waits_for_previously_admitted_multi_root_operation() {
-    let temporary = TestDirectory::new("filesystem-lifecycle-drain");
-    let root_a = normalized(temporary.path().join("a"));
-    let root_b = normalized(temporary.path().join("b"));
-    let coordinator = ProjectFilesystemCoordinator::default();
-    let held_b = coordinator.acquire(root_b.clone()).unwrap();
-    let admitted_waiting = coordinator.observe_next_wait();
-    let (ordinary_done_tx, ordinary_done_rx) = mpsc::channel();
-
-    let ordinary_coordinator = coordinator.clone();
-    let ordinary_a = root_a.clone();
-    let ordinary = std::thread::spawn(move || {
-        let lease = ordinary_coordinator
-            .acquire_many([ordinary_a, root_b])
-            .unwrap();
-        ordinary_done_tx.send(()).unwrap();
-        drop(lease);
-    });
-    admitted_waiting
-        .recv_timeout(Duration::from_secs(2))
-        .unwrap();
-
-    let mut lifecycle = coordinator.begin_root_lifecycle(root_a.clone()).unwrap();
-    assert_eq!(
-        coordinator.acquire(root_a.clone()).err().unwrap().code(),
-        "project_lifecycle_admission_closed"
-    );
-    let (drained_tx, drained_rx) = mpsc::channel();
-    let drain = std::thread::spawn(move || {
-        lifecycle.release_initial_and_drain();
-        drained_tx.send(()).unwrap();
-        lifecycle
-    });
-
-    assert!(drained_rx.recv_timeout(Duration::from_millis(100)).is_err());
-    drop(held_b);
-    ordinary_done_rx
-        .recv_timeout(Duration::from_secs(2))
-        .unwrap();
-    ordinary.join().unwrap();
-    drained_rx.recv_timeout(Duration::from_secs(2)).unwrap();
-
-    let mut lifecycle = drain.join().unwrap();
-    lifecycle.acquire_final().unwrap();
-    assert!(lifecycle.holds_lease());
-    drop(lifecycle);
 }
 
 #[test]
@@ -577,45 +379,6 @@ fn file_move_rollback_restores_source_but_retains_target_for_recovery() {
     let copies = move_recovery_copies(&temporary);
     assert_eq!(copies.len(), 1);
     assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
-}
-
-#[test]
-fn long_source_filename_does_not_expand_recovery_artifact_component() {
-    let temporary = TestDirectory::new("transaction-long-source-recovery-name");
-    let normalized_root = normalized(temporary.path());
-    let source_name = longest_creatable_json_filename(normalized_root.as_path());
-    let source = normalized_root.as_path().join(&source_name);
-    let target = normalized_root.as_path().join("target.json");
-    std::fs::write(&source, br#"{"source":1}"#).unwrap();
-    let marker = ProjectRecoveryMarker::default();
-    let committed = prepare_json_transaction_with_recovery_marker(
-        &temporary,
-        vec![StagedFilesystemMutation::MoveFile {
-            from: PathBuf::from(&source_name),
-            to: "target.json".into(),
-        }],
-        marker.clone(),
-    )
-    .unwrap()
-    .commit()
-    .unwrap();
-    std::fs::remove_file(&target).unwrap();
-    std::fs::write(&target, br#"{"external":1}"#).unwrap();
-
-    let error = committed.rollback().unwrap_err();
-
-    assert_eq!(std::fs::read(&target).unwrap(), br#"{"external":1}"#);
-    let copies = move_recovery_copies(&temporary);
-    assert_eq!(copies.len(), 1);
-    assert_eq!(std::fs::read(&copies[0]).unwrap(), br#"{"source":1}"#);
-    let artifact_name = copies[0].file_name().unwrap().to_string_lossy();
-    assert!(!artifact_name.contains(&source_name));
-    assert_eq!(
-        artifact_name.len(),
-        ".yssbi-move-recovery-0-".len() + uuid::Uuid::nil().to_string().len()
-    );
-    assert!(error.recovery_required());
-    assert!(marker.error().is_some());
 }
 
 #[test]

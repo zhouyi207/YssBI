@@ -1073,6 +1073,11 @@ mod tests {
     #[test]
     fn global_create_update_delete_history_restores_full_documents_and_publishes_once() {
         let (root, state, project_instance_id) = active_state("crud-history");
+        crate::project::fixtures::write_project(
+            &ProjectData::new(),
+            root.to_string_lossy().as_ref(),
+        )
+        .unwrap();
         let created = create_variable_with_emitter(
             &state,
             "before",

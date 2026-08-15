@@ -16,10 +16,7 @@ import { useHistoryStore } from '@/features/core/history';
 import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
 import { cancelCanvasInteraction } from '@/features/core/canvas/canvasInteractionCleanup';
 import { useEditorStore } from '@/features/core/editor';
-import {
-  EDITOR_MUTATION_CAPABILITIES,
-  notifyNodeCreationUnavailable,
-} from './editorMutationAvailability';
+import { EDITOR_MUTATION_CAPABILITIES } from './editorMutationAvailability';
 import { listDockviewGroupTabs } from './dockviewTabProjection';
 
 interface UseEditorKeyboardProps {
@@ -30,6 +27,9 @@ interface UseEditorKeyboardProps {
   cut: () => void;
   paste: (pos?: { x: number; y: number }) => void;
   duplicateSelected?: () => void;
+  selectAllNodes: () => boolean;
+  focusSelectedNodes: () => boolean;
+  fitCompleteGraph: () => boolean;
   saveGraph: () => void;
   saveGraphAs: () => void;
   importGraph: () => void;
@@ -55,6 +55,9 @@ export function useEditorKeyboard({
   cut,
   paste,
   duplicateSelected,
+  selectAllNodes,
+  focusSelectedNodes,
+  fitCompleteGraph,
   saveGraph,
   saveGraphAs,
   importGraph,
@@ -153,7 +156,15 @@ export function useEditorKeyboard({
       }
 
       // Keyboard shortcuts
-      if (e.key === "Delete" || e.key === "Backspace") {
+      if (!e.repeat && isControlKey && e.key.toLowerCase() === 'a') {
+        if (selectAllNodes()) e.preventDefault();
+      } else if (
+        !e.repeat && !isControlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f'
+      ) {
+        if (focusSelectedNodes()) e.preventDefault();
+      } else if (!e.repeat && !isControlKey && !e.altKey && !e.shiftKey && e.key === 'Home') {
+        if (fitCompleteGraph()) e.preventDefault();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
         deleteSelected();
       } else if (isControlKey && e.key.toLowerCase() === "z") {
         if (e.shiftKey) {
@@ -162,21 +173,19 @@ export function useEditorKeyboard({
       } else if (isControlKey && e.key.toLowerCase() === "y") {
         if (canRedo) redo();
       } else if (isControlKey && e.key.toLowerCase() === "c") {
-        copy();
+        e.preventDefault();
+        if (!e.repeat) copy();
       } else if (isControlKey && e.key.toLowerCase() === "x") {
         e.preventDefault();
         if (!e.repeat) cut();
       } else if (isControlKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
-        if (EDITOR_MUTATION_CAPABILITIES.pasteNodes) {
+        if (!e.repeat && EDITOR_MUTATION_CAPABILITIES.pasteNodes) {
           paste(getActiveCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y));
-        } else {
-          notifyNodeCreationUnavailable();
         }
       } else if (isControlKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        if (EDITOR_MUTATION_CAPABILITIES.duplicateNodes) duplicateSelected?.();
-        else notifyNodeCreationUnavailable();
+        if (!e.repeat && EDITOR_MUTATION_CAPABILITIES.duplicateNodes) duplicateSelected?.();
       } else if (isControlKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (e.shiftKey) saveGraphAs();
@@ -267,6 +276,9 @@ export function useEditorKeyboard({
     cut,
     paste,
     duplicateSelected,
+    selectAllNodes,
+    focusSelectedNodes,
+    fitCompleteGraph,
     saveGraph,
     saveGraphAs,
     importGraph,

@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { VscEye, VscLink, VscRefresh, VscSymbolVariable, VscTrash } from "react-icons/vsc";
+import { VscEye, VscLink, VscRefresh, VscTrash } from "react-icons/vsc";
 import { ContextMenu, type ContextMenuPosition, type ContextMenuSection, type ContextMenuItem } from "@/shared/ui/contextMenu";
 import type { PinResultEntry } from '@/shared/types/dto/result';
 
@@ -66,14 +66,6 @@ export const PinContextMenu: React.FC<PinContextMenuProps> = ({
         shortcut: `${time} · ${entry.runId}`,
         onClick: () => onViewHistory?.(entry.resultId),
       });
-    });
-
-    primaryItems.push({
-      id: "promoteToVar",
-      label: p("promoteToVar"),
-      icon: <VscSymbolVariable size={12} />,
-      disabled: true,
-      onClick: undefined,
     });
 
     return [

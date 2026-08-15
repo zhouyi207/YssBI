@@ -118,10 +118,7 @@ fn test_project_reload_discovers_duckdb_from_directory() {
     let state = ProjectState::try_new().expect("initialize built-in node system");
     let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
     assert_eq!(databases.len(), 1);
-    assert_eq!(
-        databases.get(&db_id).and_then(|d| d.name.as_deref()),
-        Some("iris")
-    );
+    assert_eq!(databases.get(&db_id).map(|d| d.name.as_str()), Some("iris"));
     state.activate_project_from_path(&project_root).unwrap();
 
     let mut store = state.project_store.write().unwrap();
@@ -157,11 +154,11 @@ fn test_single_project_duckdb_multiple_tables() {
     let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
     assert_eq!(databases.len(), 2);
     assert_eq!(
-        databases.get("db-a").and_then(|d| d.name.as_deref()),
+        databases.get("db-a").map(|d| d.name.as_str()),
         Some("iris-a")
     );
     assert_eq!(
-        databases.get("db-b").and_then(|d| d.name.as_deref()),
+        databases.get("db-b").map(|d| d.name.as_str()),
         Some("iris-b")
     );
     assert_eq!(

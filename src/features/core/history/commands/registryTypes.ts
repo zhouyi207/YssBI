@@ -8,6 +8,8 @@ import type { DisconnectConnectionsArgs } from './disconnectConnections';
 import type { InsertRerouteArgs } from './insertReroute';
 import type { MoveConnectionsArgs } from './moveConnections';
 import type { DeleteNodesArgs } from './deleteNodes';
+import type { DuplicateSubgraphArgs } from './duplicateSubgraph';
+import type { InsertSubgraphArgs } from './insertSubgraph';
 import type { AddRepeatablePinArgs, RemoveRepeatablePinArgs } from './repeatablePin';
 
 export interface CommandHandlerMap {
@@ -20,6 +22,8 @@ export interface CommandHandlerMap {
   InsertReroute: CommandHandler<InsertRerouteArgs, GraphMutationCommandResult>;
   MoveConnections: CommandHandler<MoveConnectionsArgs, GraphMutationCommandResult>;
   DeleteNodes: CommandHandler<DeleteNodesArgs, GraphMutationCommandResult>;
+  DuplicateSubgraph: CommandHandler<DuplicateSubgraphArgs, GraphMutationCommandResult>;
+  InsertSubgraph: CommandHandler<InsertSubgraphArgs, GraphMutationCommandResult>;
   AddRepeatablePin: CommandHandler<AddRepeatablePinArgs, GraphMutationCommandResult>;
   RemoveRepeatablePin: CommandHandler<RemoveRepeatablePinArgs, GraphMutationCommandResult>;
 }

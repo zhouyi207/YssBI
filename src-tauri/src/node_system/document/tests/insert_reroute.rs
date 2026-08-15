@@ -484,8 +484,8 @@ struct Case {
 impl Case {
     const fn data(order: Option<&'static str>) -> Self {
         Self {
-            source_type: "yssbi.debug.view",
-            source_port: "snapshot",
+            source_type: "yssbi.constant.int64",
+            source_port: "value",
             target_type: "yssbi.debug.view",
             target_port: "data",
             reroute_type: DATA_REROUTE_NODE_TYPE,

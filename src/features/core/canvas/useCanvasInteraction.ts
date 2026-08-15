@@ -179,16 +179,24 @@ export function useCanvasInteraction({
     const graphPath = resolveTabId(gid, activeTabIdRef);
     if (!graphPath) return;
     if (event.button === 1 || event.button === 2 || (event.button === 0 && event.altKey)) {
-      registerCanvasPointerScope({ graphPath, groupId: gid });
+      registerCanvasPointerScope({ graphPath, groupId: gid, pointerId: event.pointerId });
       startCanvasInteraction(graphPath, {
         type: 'panning',
-        session: { groupId: gid, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false },
+        session: { groupId: gid, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false },
       });
     } else if (event.button === 0) {
-      registerCanvasPointerScope({ graphPath, groupId: gid });
+      registerCanvasPointerScope({ graphPath, groupId: gid, pointerId: event.pointerId });
       startCanvasInteraction(graphPath, {
         type: 'selecting',
-        session: { groupId: gid, startX: event.clientX, startY: event.clientY, currentX: event.clientX, currentY: event.clientY, preserveSelection: event.shiftKey },
+        session: {
+          groupId: gid,
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          currentX: event.clientX,
+          currentY: event.clientY,
+          baseNodeIds: event.shiftKey ? [...getEditorGroupGraphSelection(gid).nodeIds] : [],
+        },
       });
     }
   }, [activeGroupIdRef, activeTabIdRef]);
@@ -207,10 +215,10 @@ export function useCanvasInteraction({
         : [...selected, nodeId])
       : [nodeId];
     setSelectedNodeIdsRef.current(nodeIds, gid);
-    registerCanvasPointerScope({ graphPath, groupId: gid });
+    registerCanvasPointerScope({ graphPath, groupId: gid, pointerId: event.pointerId });
     startCanvasInteraction(graphPath, {
       type: 'draggingNodes',
-      session: { groupId: gid, nodeId, lastX: event.clientX, lastY: event.clientY, moved: false, nodeIds, delta: { x: 0, y: 0 } },
+      session: { groupId: gid, pointerId: event.pointerId, nodeId, lastX: event.clientX, lastY: event.clientY, moved: false, nodeIds, delta: { x: 0, y: 0 } },
     });
   }, [activeGroupIdRef, activeTabIdRef]);
 
@@ -228,11 +236,12 @@ export function useCanvasInteraction({
     }
     if (action === 'none') return;
     const world = getCanvasWorldPoint(gid, graphPath, event.clientX, event.clientY);
-    registerCanvasPointerScope({ graphPath, groupId: gid });
+    registerCanvasPointerScope({ graphPath, groupId: gid, pointerId: event.pointerId });
     startCanvasInteraction(graphPath, {
       type: action === 'move' ? 'movingConnections' : 'drawingConnection',
       session: {
         groupId: gid,
+        pointerId: event.pointerId,
         graphPath,
         source: projected,
         screenX: event.clientX,

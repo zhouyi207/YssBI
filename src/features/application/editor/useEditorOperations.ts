@@ -1,6 +1,7 @@
-import { logger } from "@/utils/appLogger";
+import { logger } from '@/utils/appLogger';
 import { useCallback, useRef } from 'react';
 import {
+  canCopyNode,
   canCutNode,
   canDeleteNode,
 } from '@/features/core/dataStore/graphNodeSelectors';
@@ -13,25 +14,85 @@ import {
   updateEditorGroupSelectedNodeIds,
 } from '@/features/core/layout';
 import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
-import { useClipboardStore } from '@/features/core/editor';
-import { buildClipboardSnapshot } from '@/features/core/editor/clipboardSnapshot';
-import { executeCommand } from '@/features/core/history';
+import { executeCommand, executeCommandWithResult } from '@/features/core/history';
+import type { GraphMutationCommandResult } from '@/features/core/history/types';
 import {
   redoEditorHistory,
   undoEditorHistory,
 } from '@/features/application/editorMutation/historyCoordinator';
 import { executeSafeGraphMutation } from '@/features/application/editorMutation/safeGraphMutation';
-import { notifyNodeCreationUnavailable } from './editorMutationAvailability';
+import { exportEditorSubgraph } from '@/features/application/editorMutation/subgraphExportCoordinator';
+import { insertedNodeIdsFromDelta } from '@/features/application/editorMutation/insertedNodeIdsFromDelta';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import { readGraphClipboard, writeGraphClipboard } from '@/services/clipboard';
 import { disconnectConnectionsById } from './edgeOperations';
 
+const DUPLICATE_SUBGRAPH_OFFSET = { x: 40, y: 40 } as const;
+const EDITOR_OPERATIONS_LOG_SOURCE = 'EditorOperations';
+
+interface EditorOperationContext {
+  groupId: string;
+  graphPath: string;
+  identity: ProjectIdentitySnapshot;
+}
+
+interface SelectionAwareEditorOperationContext extends EditorOperationContext {
+  nodeSelection: string[];
+}
+
+function captureEditorOperationContext(groupId: string): EditorOperationContext | null {
+  if (editorDockviewPort.getActiveGroupId() !== groupId) return null;
+  const graphPath = getActiveLayoutTab(groupId)?.activeTabId;
+  if (!graphPath) return null;
+  return { groupId, graphPath, identity: captureProjectIdentity() };
+}
+
+function captureSelectionAwareEditorOperationContext(
+  groupId: string,
+): SelectionAwareEditorOperationContext | null {
+  const context = captureEditorOperationContext(groupId);
+  if (!context) return null;
+  return {
+    ...context,
+    nodeSelection: [...getEditorGroupGraphSelection(groupId).nodeIds],
+  };
+}
+
+function isEditorOperationContextCurrent(context: EditorOperationContext): boolean {
+  return isCurrentProjectIdentity(context.identity)
+    && editorDockviewPort.getActiveGroupId() === context.groupId
+    && getActiveLayoutTab(context.groupId)?.activeTabId === context.graphPath;
+}
+
+function isCapturedNodeSelectionCurrent(context: SelectionAwareEditorOperationContext): boolean {
+  const current = [...getEditorGroupGraphSelection(context.groupId).nodeIds];
+  return current.length === context.nodeSelection.length
+    && current.every((nodeId, index) => nodeId === context.nodeSelection[index]);
+}
+
+function logEditorOperationError(operation: string, error: unknown): void {
+  logger.graph.error(`${operation} failed: ${String(error)}`, EDITOR_OPERATIONS_LOG_SOURCE);
+}
+
+function isAppliedMutation(
+  outcome: GraphMutationCommandResult | null,
+): outcome is Extract<GraphMutationCommandResult, { status: 'applied' }> {
+  return outcome !== null && outcome !== false && outcome.status === 'applied';
+}
+
+function mutationOutcomeStatus(outcome: GraphMutationCommandResult | null): string {
+  return outcome !== null && outcome !== false ? outcome.status : 'command unavailable';
+}
 
 /**
  * Editor Operations Hook
  * Handles clipboard operations, history, and node operations
  */
 export function useEditorOperations() {
-  const setClipboard = useClipboardStore((s) => s.setClipboard);
-
   const {
     activeTabId,
     groupId,
@@ -79,30 +140,54 @@ export function useEditorOperations() {
   }, []);
 
   // ===== Clipboard =====
-  const copy = useCallback(() => {
-    const sIds = new Set(selectedNodeIdsRef.current);
-    if (sIds.size === 0) return;
-    const tid = activeTabIdRef.current;
-    if (!tid) return;
-
-    const dataStore = useGraphDataStore.getState();
-    const graphNodeIds = dataStore.getGraphNodeIds(tid);
-    const selectedNodeIdList = graphNodeIds.filter((nid) => sIds.has(nid));
-    const snapshot = buildClipboardSnapshot(selectedNodeIdList, tid);
-    if (snapshot) setClipboard(snapshot);
-  }, [setClipboard]);
-
-  const copyNodes = useCallback((nodeIds: string[]) => {
-    const tid = activeTabIdRef.current;
-    if (!tid) return;
-    const snapshot = buildClipboardSnapshot(nodeIds, tid);
-    if (snapshot) setClipboard(snapshot);
-  }, [setClipboard]);
-
-  const duplicateNodes = useCallback(async (_nodeIds: string[], _offset = { x: 40, y: 40 }) => {
-    notifyNodeCreationUnavailable();
-    return false;
+  const copyNodes = useCallback(async (nodeIds: string[]) => {
+    try {
+      const context = captureEditorOperationContext(activeGroupIdRef.current);
+      if (!context || nodeIds.length === 0) return false;
+      if (!nodeIds.every((nodeId) => canCopyNode(context.graphPath, nodeId))) return false;
+      const snapshot = await exportEditorSubgraph({
+        graphPath: context.graphPath,
+        nodeIds: [...nodeIds],
+      });
+      await writeGraphClipboard(snapshot);
+      return true;
+    } catch (error) {
+      logEditorOperationError('Copy subgraph', error);
+      return false;
+    }
   }, []);
+
+  const copy = useCallback(async () => {
+    return copyNodes(selectedNodeIdsRef.current);
+  }, [copyNodes]);
+
+  const duplicateNodes = useCallback(async (
+    nodeIds: string[],
+    offset = DUPLICATE_SUBGRAPH_OFFSET,
+  ) => {
+    try {
+      const context = captureSelectionAwareEditorOperationContext(activeGroupIdRef.current);
+      if (!context || nodeIds.length === 0) return false;
+      if (!nodeIds.every((nodeId) => canCopyNode(context.graphPath, nodeId))) return false;
+      const outcome = await executeCommandWithResult(context.graphPath, 'DuplicateSubgraph', {
+        nodeIds: [...nodeIds],
+        offset: { ...offset },
+      });
+      if (!isAppliedMutation(outcome)) {
+        logEditorOperationError('Duplicate subgraph', mutationOutcomeStatus(outcome));
+        return false;
+      }
+      if (!isEditorOperationContextCurrent(context)) return false;
+      const insertedNodeIds = insertedNodeIdsFromDelta(outcome.result.delta);
+      if (insertedNodeIds.length > 0 && isCapturedNodeSelectionCurrent(context)) {
+        setSelectedNodeIds(insertedNodeIds, context.groupId);
+      }
+      return true;
+    } catch (error) {
+      logEditorOperationError('Duplicate subgraph', error);
+      return false;
+    }
+  }, [setSelectedNodeIds]);
 
   const deleteNodesById = useCallback(async (nodeIds: string[]) => {
     const tid = activeTabIdRef.current;
@@ -157,10 +242,31 @@ export function useEditorOperations() {
     return applied;
   }, []);
 
-  const paste = useCallback(async (_pos?: { x: number; y: number }) => {
-    notifyNodeCreationUnavailable();
-    return false;
-  }, []);
+  const paste = useCallback(async (pos = { x: 0, y: 0 }) => {
+    try {
+      const context = captureSelectionAwareEditorOperationContext(activeGroupIdRef.current);
+      if (!context) return false;
+      const snapshot = await readGraphClipboard();
+      if (!isEditorOperationContextCurrent(context)) return false;
+      const outcome = await executeCommandWithResult(context.graphPath, 'InsertSubgraph', {
+        snapshotJson: JSON.stringify(snapshot),
+        anchor: { ...pos },
+      });
+      if (!isAppliedMutation(outcome)) {
+        logEditorOperationError('Paste subgraph', mutationOutcomeStatus(outcome));
+        return false;
+      }
+      if (!isEditorOperationContextCurrent(context)) return false;
+      const insertedNodeIds = insertedNodeIdsFromDelta(outcome.result.delta);
+      if (insertedNodeIds.length > 0 && isCapturedNodeSelectionCurrent(context)) {
+        setSelectedNodeIds(insertedNodeIds, context.groupId);
+      }
+      return true;
+    } catch (error) {
+      logEditorOperationError('Paste subgraph', error);
+      return false;
+    }
+  }, [setSelectedNodeIds]);
 
   const breakConnectionsById = useCallback(async (
     connectionIds: string[],
@@ -230,25 +336,35 @@ export function useEditorOperations() {
   }, [setSelectedConnectionIds, setSelectedNodeIds]);
 
   const cutNodes = useCallback(async (nodeIds: string[]) => {
-    const tid = activeTabIdRef.current;
-    if (!tid) return;
-    const cuttableIds = nodeIds.filter((nodeId) => canCutNode(tid, nodeId));
-    if (cuttableIds.length === 0) return;
-
-    copyNodes(cuttableIds);
-    const deleted = await deleteNodesById(cuttableIds);
-    if (deleted) setSelectedNodeIds([]);
-  }, [copyNodes, deleteNodesById, setSelectedNodeIds]);
+    try {
+      const context = captureSelectionAwareEditorOperationContext(activeGroupIdRef.current);
+      if (!context || nodeIds.length === 0) return false;
+      if (!nodeIds.every((nodeId) => canCutNode(context.graphPath, nodeId))) return false;
+      const snapshot = await exportEditorSubgraph({
+        graphPath: context.graphPath,
+        nodeIds: [...nodeIds],
+      });
+      await writeGraphClipboard(snapshot);
+      if (!isEditorOperationContextCurrent(context)) return false;
+      const outcome = await executeCommandWithResult(context.graphPath, 'DeleteNodes', {
+        nodeIds: [...nodeIds],
+      });
+      if (!isAppliedMutation(outcome)) {
+        logEditorOperationError('Cut subgraph deletion', mutationOutcomeStatus(outcome));
+        return false;
+      }
+      if (isEditorOperationContextCurrent(context) && isCapturedNodeSelectionCurrent(context)) {
+        setSelectedNodeIds([], context.groupId);
+      }
+      return true;
+    } catch (error) {
+      logEditorOperationError('Cut subgraph', error);
+      return false;
+    }
+  }, [setSelectedNodeIds]);
 
   const cut = useCallback(async () => {
-    const tid = activeTabIdRef.current;
-    if (!tid) return;
-    const selected = new Set(selectedNodeIdsRef.current);
-    const nodeIds = useGraphDataStore
-      .getState()
-      .getGraphNodeIds(tid)
-      .filter((nodeId) => selected.has(nodeId));
-    await cutNodes(nodeIds);
+    return cutNodes(selectedNodeIdsRef.current);
   }, [cutNodes]);
 
   const duplicateSelected = useCallback(async () => {

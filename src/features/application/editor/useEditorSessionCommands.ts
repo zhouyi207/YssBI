@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useActiveEditorGroup, useEditorActions } from '@/features/core/editor';
 import { useEditorOperations } from './useEditorOperations';
+import { useGraphCanvasCommands } from './useGraphCanvasCommands';
 import { useTabManagement } from './useTabManagement';
 import { useOpenWorksheet, useWorksheetManagement } from './useWorksheetManagement';
 import { useProjectOperations } from './useProjectOperations';
@@ -29,6 +30,7 @@ export function useEditorSessionCommands(): EditorSessionCommands {
   const actions = useEditorActions(active);
 
   const editorOps = useEditorOperations();
+  const canvasCommands = useGraphCanvasCommands();
   const tabMgmt = useTabManagement();
   const openWorksheet = useOpenWorksheet();
   const worksheetMgmt = useWorksheetManagement(openWorksheet);
@@ -50,6 +52,7 @@ export function useEditorSessionCommands(): EditorSessionCommands {
   return patchEditorSessionCommands(containerRef.current, {
     ...layoutBindings,
     ...editorOps,
+    ...canvasCommands,
     ...tabMgmt,
     openWorksheet,
     ...worksheetMgmt,

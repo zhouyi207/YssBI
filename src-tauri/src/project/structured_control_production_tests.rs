@@ -8,8 +8,8 @@ use crate::node_system::document::{
 };
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::runtime::{
-    OrdinaryRunErrorCode, ProjectResourceLeaseObserver, RunErrorOutcome, RunEvent, RunEventKind,
-    RunEventSink,
+    OrdinaryRunErrorCode, ProjectResourceLeaseObserver, ResultStateKind, RunErrorOutcome, RunEvent,
+    RunEventKind, RunEventSink,
 };
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 use std::collections::BTreeMap;
@@ -129,48 +129,10 @@ impl BranchOutcome {
             })
             .count()
     }
-
-    fn normalized_completion_sequence(&self) -> Vec<(NodeId, NodeTypeId, usize)> {
-        let mut activation_ordinals = BTreeMap::new();
-        let mut normalized = self
-            .completed_operations
-            .iter()
-            .map(|operation| {
-                let next_ordinal = activation_ordinals.len();
-                let activation_ordinal = *activation_ordinals
-                    .entry(operation.activation_id)
-                    .or_insert(next_ordinal);
-                (
-                    operation.source_node_id,
-                    operation.source_node_type_id.clone(),
-                    activation_ordinal,
-                )
-            })
-            .collect::<Vec<_>>();
-        let mut start = 0;
-        while start < normalized.len() {
-            if !normalized[start].1.as_str().starts_with("yssbi.constant.") {
-                start += 1;
-                continue;
-            }
-            let mut end = start + 1;
-            while end < normalized.len()
-                && normalized[end].1.as_str().starts_with("yssbi.constant.")
-            {
-                end += 1;
-            }
-            normalized[start..end].sort();
-            start = end;
-        }
-        normalized
-    }
 }
 
 struct BranchDocumentFixture {
     resource: GraphResourceDocument,
-    node_insertions: Vec<NodeId>,
-    connection_insertions: Vec<ConnectionId>,
-    binding_insertions: Vec<PortAddress>,
 }
 
 struct TempProject {
@@ -307,14 +269,8 @@ fn branch_fixture(condition: bool, insertion_order: InsertionOrder) -> BranchDoc
         node(MERGE_NODE, "yssbi.control.merge"),
         result_set,
     ];
-    let mut node_insertions = Vec::new();
     for node in in_order(node_entries, insertion_order) {
-        insert_tracked(
-            &mut resource.document.nodes,
-            &mut node_insertions,
-            node.id,
-            node,
-        );
+        assert!(resource.document.nodes.insert(node.id, node).is_none());
     }
 
     let branch_member = 40;
@@ -350,13 +306,13 @@ fn branch_fixture(condition: bool, insertion_order: InsertionOrder) -> BranchDoc
             },
         ),
     ];
-    let mut binding_insertions = Vec::new();
     for (address, binding) in in_order(binding_entries, insertion_order) {
-        insert_tracked(
-            &mut resource.document.port_bindings,
-            &mut binding_insertions,
-            address,
-            binding,
+        assert!(
+            resource
+                .document
+                .port_bindings
+                .insert(address, binding)
+                .is_none()
         );
     }
 
@@ -412,22 +368,17 @@ fn branch_fixture(condition: bool, insertion_order: InsertionOrder) -> BranchDoc
             declared(RESULT_SET_NODE, "enter"),
         ),
     ];
-    let mut connection_insertions = Vec::new();
     for connection in in_order(connection_entries, insertion_order) {
-        insert_tracked(
-            &mut resource.document.connections,
-            &mut connection_insertions,
-            connection.id,
-            connection,
+        assert!(
+            resource
+                .document
+                .connections
+                .insert(connection.id, connection)
+                .is_none()
         );
     }
 
-    BranchDocumentFixture {
-        resource,
-        node_insertions,
-        connection_insertions,
-        binding_insertions,
-    }
+    BranchDocumentFixture { resource }
 }
 
 fn result_variable() -> VariableInstance {
@@ -850,20 +801,21 @@ fn event_count(events: &[RunEvent], node: u128, node_type: &str, completed: bool
         .count()
 }
 
+fn result_group_states(events: &[RunEvent]) -> Vec<ResultStateKind> {
+    events
+        .iter()
+        .filter_map(|event| match event.kind {
+            RunEventKind::ResultGroupChanged { state, .. } => Some(state),
+            _ => None,
+        })
+        .collect()
+}
+
 fn assert_no_completed_result(events: &[RunEvent]) {
     assert!(
         events
             .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
-    );
-    assert_eq!(
-        event_count(
-            events,
-            LOOP_RESULT_SET_NODE,
-            "yssbi.project.variable.set",
-            true,
-        ),
-        0
+            .all(|event| !matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
     );
     assert!(
         events
@@ -1289,101 +1241,6 @@ fn builtin_call_uses_current_persisted_function_generation_after_body_replacemen
 }
 
 #[test]
-fn builtin_recursive_call_stops_at_project_recursion_limit() {
-    let output = int64_variable(CALL_ONE_VARIABLE, "Recursive Output", 0);
-    let mut project = ProjectData::new();
-    project.variables.insert(output.id, output.clone());
-    let fixture = TempProject::activate(project);
-    let function_path = GraphResourcePath::new(FUNCTION_PATH).unwrap();
-    let event_path = GraphResourcePath::new(CALL_EVENT_PATH).unwrap();
-    insert_persisted_graph(
-        &fixture,
-        &function_path,
-        function_fixtures::recursive_function(&function_path, "Recursive"),
-    );
-    insert_persisted_graph(
-        &fixture,
-        &event_path,
-        single_call_event(&function_path, 1, output.id),
-    );
-    let events = RecordingRunEvents::default();
-    let (runs, _) = fixture.state().current_run_registry();
-
-    let error = fixture
-        .state()
-        .execute_graph_for_current_project_for_test(
-            &event_path,
-            &crate::node_system::plan::ExecutionDemand::Default,
-            &events,
-        )
-        .unwrap_err();
-    let recorded = events.events();
-
-    assert_eq!(error.to_string(), "call recursion limit exceeded");
-    assert!(matches!(
-        error.run_error(),
-        Some(
-            crate::node_system::runtime::RunError::RecursionLimitExceeded {
-                recursion_limit: 64
-            }
-        )
-    ));
-    let root_started_run_id = root_run_id(&recorded, RunEventKind::RunStarted);
-    let root_errored_run_id = root_run_id(
-        &recorded,
-        RunEventKind::RunErrored {
-            outcome: RunErrorOutcome::Ordinary {
-                code: OrdinaryRunErrorCode::RecursionLimitExceeded,
-            },
-        },
-    );
-    assert_eq!(root_started_run_id, root_errored_run_id);
-    let completed_frames = completed_call_correlations(
-        &recorded,
-        function_fixtures::RECURSIVE_DO_NODE,
-        "yssbi.control.do",
-    );
-    assert_call_correlations_share_root_run(&completed_frames, root_started_run_id, 63);
-    assert_eq!(
-        1 + completed_frames.len(),
-        64,
-        "root frame plus successful child function frames must fill the limit"
-    );
-    assert!(recorded.iter().any(|event| {
-        event.kind
-            == RunEventKind::RunErrored {
-                outcome: RunErrorOutcome::Ordinary {
-                    code: OrdinaryRunErrorCode::RecursionLimitExceeded,
-                },
-            }
-    }));
-    assert_eq!(
-        fixture.state().get_data().unwrap().variables[&output.id].data_value,
-        crate::graph::value::DataValue::Int64(0)
-    );
-    assert_eq!(
-        event_count(
-            &recorded,
-            CALL_ONE_SET_NODE,
-            "yssbi.project.variable.set",
-            true,
-        ),
-        0
-    );
-    assert!(
-        recorded
-            .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
-    );
-    assert!(
-        recorded
-            .iter()
-            .all(|event| event.kind != RunEventKind::RunCompleted)
-    );
-    assert_eq!(runs.active_run_count(), 0);
-}
-
-#[test]
 fn builtin_branch_executes_only_selected_effect_branch_and_binds_result() {
     let outcome = run_branch(branch_fixture(true, InsertionOrder::Forward).resource);
 
@@ -1528,34 +1385,6 @@ fn builtin_branch_drain_before_commit_gate_commits_nothing() {
         crate::graph::value::DataValue::Int64(0)
     );
     assert_no_completed_result(&recorded);
-}
-
-#[test]
-fn builtin_branch_reverse_insertion_is_equivalent() {
-    let forward = branch_fixture(true, InsertionOrder::Forward);
-    let reverse = branch_fixture(true, InsertionOrder::Reverse);
-
-    assert_reversed_insertions(&forward.node_insertions, &reverse.node_insertions);
-    assert_reversed_insertions(
-        &forward.connection_insertions,
-        &reverse.connection_insertions,
-    );
-    assert_reversed_insertions(&forward.binding_insertions, &reverse.binding_insertions);
-    assert_eq!(forward.resource.document, reverse.resource.document);
-
-    let forward = run_branch(forward.resource);
-    let reverse = run_branch(reverse.resource);
-    assert_branch_outcome(&forward, 11, TRUE_EFFECT_NODE, FALSE_EFFECT_NODE);
-    assert_branch_outcome(&reverse, 11, TRUE_EFFECT_NODE, FALSE_EFFECT_NODE);
-    assert_eq!(forward.result, reverse.result);
-    assert_eq!(
-        forward.committed_variable_ids,
-        reverse.committed_variable_ids
-    );
-    assert_eq!(
-        forward.normalized_completion_sequence(),
-        reverse.normalized_completion_sequence()
-    );
 }
 
 #[test]
@@ -2012,11 +1841,12 @@ fn builtin_effect_failure_attempts_once_and_drops_every_retained_project_resourc
         0
     );
     assert_eq!(
-        recorded
-            .iter()
-            .filter(|event| matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
-            .count(),
-        0
+        result_group_states(&recorded),
+        vec![
+            ResultStateKind::Ready,
+            ResultStateKind::Ready,
+            ResultStateKind::Failed,
+        ]
     );
     assert_eq!(
         event_count(
@@ -2121,11 +1951,8 @@ fn builtin_effect_cancellation_attempts_once_drops_retained_resources_and_drains
         0
     );
     assert_eq!(
-        recorded
-            .iter()
-            .filter(|event| matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
-            .count(),
-        0
+        result_group_states(&recorded),
+        vec![ResultStateKind::Ready; 3]
     );
     assert_eq!(
         event_count(

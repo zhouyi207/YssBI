@@ -75,9 +75,7 @@ pub use parameters::{
 };
 pub use production_relational::ProductionRelationalBackend;
 #[cfg(test)]
-pub(crate) use production_relational::{
-    ProductionRelationalCheckpoint, ProductionRelationalObserver,
-};
+pub(crate) use production_relational::ProductionRelationalObserver;
 #[cfg(test)]
 pub(crate) use project_resource::ProjectResourceLeaseObserver;
 pub use project_resource::{

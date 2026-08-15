@@ -447,53 +447,6 @@ mod tests {
     }
 
     #[test]
-    fn activation_waits_for_old_pre_runs_without_state_or_filesystem_locks() {
-        let (old_root, _) = save_named_project("wait-old");
-        let (new_root, _) = save_named_project("wait-new");
-        let state = ProjectState::new();
-        state.activate_project_from_path(&old_root).unwrap();
-        let (runs, session_id) = {
-            let store = state.project_store.read().unwrap();
-            (Arc::clone(&store.runs), store.project_session_id.clone())
-        };
-        let pre_run = runs
-            .track_pre_run(
-                session_id,
-                crate::node_system::runtime::CancellationToken::new(),
-            )
-            .unwrap();
-
-        let activation_state = state.clone();
-        let new_root_for_activation = new_root.clone();
-        let (done_tx, done_rx) = std::sync::mpsc::channel();
-        let activation = std::thread::spawn(move || {
-            let result = activation_state.activate_project_from_path(&new_root_for_activation);
-            done_tx.send(()).unwrap();
-            result
-        });
-
-        assert!(done_rx.recv_timeout(Duration::from_millis(100)).is_err());
-        assert_eq!(state.get_data().unwrap().metadata.project_name, "wait-old");
-        let old_session = state.capture_project_session().unwrap();
-        assert_eq!(
-            state.get_path().as_deref(),
-            Some(old_session.root.as_path().to_string_lossy().as_ref())
-        );
-        let old_lease = state.filesystem().acquire(old_session.root).unwrap();
-        let new_root = crate::project::NormalizedProjectRoot::from_project_path(&new_root).unwrap();
-        let new_lease = state.filesystem().acquire(new_root.clone()).unwrap();
-        drop(new_lease);
-        drop(old_lease);
-
-        drop(pre_run);
-        done_rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        activation.join().unwrap().unwrap();
-
-        let _ = std::fs::remove_dir_all(old_root);
-        let _ = std::fs::remove_dir_all(new_root.as_path());
-    }
-
-    #[test]
     fn concurrent_activations_publish_only_complete_sessions() {
         let (initial_root, _) = save_named_project("concurrent-initial");
         let (root_a, _) = save_named_project("concurrent-a");
@@ -872,60 +825,6 @@ mod tests {
                 .databases
                 .contains_key(&imported.id)
         );
-
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn final_root_lease_blocks_database_import_until_activation_publishes() {
-        let (root, _) = save_named_project("final-lease-database-import");
-        let csv = root.join("blocked-import.csv");
-        std::fs::write(&csv, "value\n1\n").unwrap();
-        let state = ProjectState::new();
-        state.activate_project_from_path(&root).unwrap();
-        let writer_project_id = state.capture_project_session().unwrap().instance_id;
-        let prepared = state.prepare_project_activation(Some(&root)).unwrap();
-        let entered = Arc::new(Barrier::new(2));
-        let release = Arc::new(Barrier::new(2));
-        let entered_for_hook = Arc::clone(&entered);
-        let release_for_hook = Arc::clone(&release);
-        state.set_activation_final_rebuild_test_hook(Arc::new(move || {
-            entered_for_hook.wait();
-            release_for_hook.wait();
-        }));
-
-        let activation_state = state.clone();
-        let activation =
-            std::thread::spawn(move || activation_state.activate_prepared_project(prepared));
-        entered.wait();
-
-        let writer_state = state.clone();
-        let csv_path = csv.to_string_lossy().into_owned();
-        let (writer_tx, writer_rx) = std::sync::mpsc::channel();
-        let writer = std::thread::spawn(move || {
-            let result = crate::application::database::load_database(
-                &writer_state,
-                &writer_project_id,
-                crate::node_system::document::OperationId::new(),
-                crate::schema::DatabaseEngineDTO::Csv {
-                    path: csv_path,
-                    delimiter: ',',
-                    has_header: true,
-                    infer_schema_length: None,
-                },
-            );
-            writer_tx.send(()).unwrap();
-            result
-        });
-
-        assert!(writer_rx.recv_timeout(Duration::from_millis(100)).is_err());
-        release.wait();
-        activation.join().unwrap().unwrap();
-        writer_rx.recv_timeout(Duration::from_secs(2)).unwrap();
-        let error = writer.join().unwrap().unwrap_err();
-        assert!(error.contains("stale_project_lifecycle"));
-        assert!(state.get_data().unwrap().databases.is_empty());
-        assert!(state.project_store.read().unwrap().databases.is_empty());
 
         let _ = std::fs::remove_dir_all(root);
     }

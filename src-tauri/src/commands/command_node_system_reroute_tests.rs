@@ -161,12 +161,15 @@ impl Fixture {
 
 fn base_document() -> GraphDocument {
     let mut document = GraphDocument::default();
-    for (id, x) in [(SOURCE_ID, 0.0), (TARGET_ID, 240.0)] {
+    for (id, node_type, x) in [
+        (SOURCE_ID, "yssbi.constant.int64", 0.0),
+        (TARGET_ID, "yssbi.debug.view", 240.0),
+    ] {
         document.nodes.insert(
             node_id(id),
             DocumentNode {
                 id: node_id(id),
-                node_type: NodeTypeId::new("yssbi.debug.view").unwrap(),
+                node_type: NodeTypeId::new(node_type).unwrap(),
                 position: NodePosition { x, y: 0.0 },
                 parameters: ParameterValues::new(),
                 user_label: None,
@@ -175,7 +178,7 @@ fn base_document() -> GraphDocument {
     }
     let connection = DocumentConnection {
         id: connection_id(ORIGINAL_ID),
-        output: declared(node_id(SOURCE_ID), "snapshot"),
+        output: declared(node_id(SOURCE_ID), "value"),
         input: declared(node_id(TARGET_ID), "data"),
         order: Some(OrderKey("original-order".into())),
     };

@@ -1,9 +1,20 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from 'vitest';
+import { unionSelectionIds } from './selectionSession';
 import { collectSelectionHitTargets, hitTestSelection } from './selectionHitTargets';
 import type { SelectionHitTarget } from './selectionHitTargets';
 
+
+describe('unionSelectionIds', () => {
+  it('keeps base order and appends unseen hits in hit-test order', () => {
+    expect(unionSelectionIds(['a', 'b'], ['b', 'c'])).toEqual(['a', 'b', 'c']);
+  });
+
+  it('deduplicates repeated hit IDs', () => {
+    expect(unionSelectionIds(['a'], ['b', 'b', 'a', 'c', 'c'])).toEqual(['a', 'b', 'c']);
+  });
+});
 
 describe('hitTestSelection', () => {
   const targets: SelectionHitTarget[] = [

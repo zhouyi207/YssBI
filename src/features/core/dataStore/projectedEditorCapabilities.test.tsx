@@ -3,10 +3,9 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
-import { buildClipboardSnapshot } from '@/features/core/editor/clipboardSnapshot';
 import { useRepeatablePinRemovable } from '@/features/core/pin/useRepeatablePinRemovable';
 import { useGraphDataStore } from './graphDataStore';
-import { canDeleteNode } from './graphNodeSelectors';
+import { canCopyNode, canDeleteNode } from './graphNodeSelectors';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -59,7 +58,7 @@ describe('projected active-editor capabilities', () => {
   it('does not copy a node whose Rust projection disables copying', () => {
     installProjectedCapabilities();
 
-    expect(buildClipboardSnapshot([nodeId], graphPath)).toBeNull();
+    expect(canCopyNode(graphPath, nodeId)).toBe(false);
   });
 
   it.each([
@@ -68,13 +67,13 @@ describe('projected active-editor capabilities', () => {
   ])('gives managed capability precedence when a node $label', ({ canCopy }) => {
     installClipboardNode(canCopy, true);
 
-    expect(buildClipboardSnapshot([nodeId], graphPath)).toBeNull();
+    expect(canCopyNode(graphPath, nodeId)).toBe(false);
   });
 
-  it('still copies an ordinary projected node', () => {
+  it('allows copying an ordinary projected node', () => {
     installClipboardNode(true, false);
 
-    expect(buildClipboardSnapshot([nodeId], graphPath)?.entries).toHaveLength(1);
+    expect(canCopyNode(graphPath, nodeId)).toBe(true);
   });
 
   it('uses the projected port removal capability without a frontend node definition', async () => {

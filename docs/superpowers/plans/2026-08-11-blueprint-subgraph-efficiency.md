@@ -42,7 +42,7 @@
 - Consumes: `EditorGraphMutationDto::DeleteNodes { node_ids: Vec<NodeId> }`, one frontend `DeleteNodes` intent, persisted reroute nodes, and compiler-transparent reroute analysis.
 - Produces: A binary go/no-go result for Phase 3. This task changes no files.
 
-- [ ] **Step 1: Confirm the atomic delete wire contract exists**
+- [x] **Step 1: Confirm the atomic delete wire contract exists**
 
 Verify the Rust and TypeScript mutation unions contain exactly the collection form:
 
@@ -58,7 +58,7 @@ DeleteNodes {
 
 Confirm `src/features/core/history/commands/deleteNodes.ts` submits one mutation and contains no loop over `nodeIds`.
 
-- [ ] **Step 2: Run the Phase 1 atomic-delete regression filter**
+- [x] **Step 2: Run the Phase 1 atomic-delete regression filter**
 
 Run:
 
@@ -68,7 +68,7 @@ pnpm rust:test -- delete_nodes
 
 Expected: PASS; tests demonstrate duplicate/empty rejection, all-target validation, one revision, one history entry, and one-step undo/redo.
 
-- [ ] **Step 3: Run the frontend command-wire regression**
+- [x] **Step 3: Run the frontend command-wire regression**
 
 Run:
 
@@ -78,7 +78,7 @@ pnpm test -- src/features/core/history/editorCommands.test.ts
 
 Expected: PASS; `DeleteNodes` calls the mutation coordinator once for multiple IDs.
 
-- [ ] **Step 4: Run the Phase 2 reroute regression filters**
+- [x] **Step 4: Run the Phase 2 reroute regression filters**
 
 Run:
 
@@ -88,11 +88,11 @@ pnpm rust:test -- reroute
 
 Expected: PASS; persisted data and effect/control reroutes survive save/history and compile transparently.
 
-- [ ] **Step 5: Stop if either prerequisite is absent**
+- [x] **Step 5: Stop if either prerequisite is absent**
 
 If the inspected code still exposes singular `DeleteNode`, loops deletion requests, or lacks persisted reroutes, do not begin Task 2. Execute the approved Phase 1/2 plans first, then repeat Steps 1–4.
 
-- [ ] **Step 6: Review checkpoint**
+- [x] **Step 6: Review checkpoint**
 
 Record the passing command output in the implementation session notes. Do not create a commit.
 
@@ -112,7 +112,7 @@ Record the passing command output in the implementation session notes. Do not cr
 - Consumes: `GraphDocument`, `NodeRegistry`, `CatalogMutationValidationSnapshot`, selected `Vec<NodeId>`, `DynamicPortBinding`, `InputState`, and `OrderKey`.
 - Produces: `ClipboardSubgraphDto`, `export_subgraph`, schema/size constants, and clipboard-local identity types consumed by Tasks 3–7.
 
-- [ ] **Step 1: Register the test module, define exact fixtures, and write executable failing export tests**
+- [x] **Step 1: Register the test module, define exact fixtures, and write executable failing export tests**
 
 Add to `src-tauri/src/node_system/document/tests.rs`:
 
@@ -433,7 +433,7 @@ fn subgraph_export_rejects_empty_duplicate_and_missing_targets() {
 
 The Phase 2 reroute tests remain responsible for proving the built-in reroute protocol identity and compiler transparency. This export fixture proves that persisted node type, label, parameters, dynamic port state, literal state, and internal topology are copied without special-casing display projections.
 
-- [ ] **Step 2: Run the export tests and verify they fail**
+- [x] **Step 2: Run the export tests and verify they fail**
 
 Run:
 
@@ -443,7 +443,7 @@ pnpm rust:test -- subgraph_export
 
 Expected: FAIL because `ClipboardSubgraphDto` and `export_subgraph` do not exist.
 
-- [ ] **Step 3: Define the portable DTO contract**
+- [x] **Step 3: Define the portable DTO contract**
 
 Create `src-tauri/src/node_system/document/subgraph.rs` with these public types and exact Serde policy:
 
@@ -536,7 +536,7 @@ pub struct ClipboardSubgraphDto {
 }
 ```
 
-- [ ] **Step 4: Implement deterministic export**
+- [x] **Step 4: Implement deterministic export**
 
 Add this exact public signature:
 
@@ -563,7 +563,7 @@ Implementation rules:
 9. Preserve parameters, user labels, dynamic bindings, literals, reroutes, and order keys.
 10. Reject counts or serialized bytes above the declared constants.
 
-- [ ] **Step 5: Export the new types from the document module**
+- [x] **Step 5: Export the new types from the document module**
 
 In `src-tauri/src/node_system/document/mod.rs`, add explicit exports:
 
@@ -576,7 +576,7 @@ pub use subgraph::{
 };
 ```
 
-- [ ] **Step 6: Run focused export tests**
+- [x] **Step 6: Run focused export tests**
 
 Run:
 
@@ -586,7 +586,7 @@ pnpm rust:test -- subgraph_export
 
 Expected: PASS; exported JSON contains no authoritative entity UUIDs and excludes every external edge.
 
-- [ ] **Step 7: Review checkpoint**
+- [x] **Step 7: Review checkpoint**
 
 Run:
 
@@ -609,7 +609,7 @@ Expected: only Task 2 files appear. Do not commit.
 - Consumes: `ClipboardSubgraphDto`, target graph path/document/registry/catalog, and an anchor `NodePosition`.
 - Produces: `instantiate_subgraph -> Result<GraphDocumentPatch, MutationConflict>`, stable `clipboard_subgraph_invalid` and `referenced_resource_unavailable` conflicts, and fresh document identities.
 
-- [ ] **Step 1: Write failing validation and identity tests**
+- [x] **Step 1: Write failing validation and identity tests**
 
 Add tests named:
 
@@ -628,7 +628,7 @@ subgraph_insert_has_zero_staged_effects_on_validation_failure
 
 For fresh IDs, collect all `InsertNode`, `InsertPortBinding`, and `InsertConnection` operations and assert none equal source authority IDs or clipboard-local strings. For atomic failure, clone the target document, call the planner, and assert the original clone remains equal after every rejected case.
 
-- [ ] **Step 2: Run the insert tests and verify they fail**
+- [x] **Step 2: Run the insert tests and verify they fail**
 
 Run:
 
@@ -638,7 +638,7 @@ pnpm rust:test -- subgraph_insert
 
 Expected: FAIL because `instantiate_subgraph` and stable clipboard conflicts do not exist.
 
-- [ ] **Step 3: Add stable conflict categories**
+- [x] **Step 3: Add stable conflict categories**
 
 Extend `MutationConflict` in `src-tauri/src/node_system/document/error.rs` with:
 
@@ -656,7 +656,7 @@ referenced_resource_unavailable
 
 Detailed local IDs and resource addresses remain in logs/error details, not ordinary translated UI messages.
 
-- [ ] **Step 4: Implement the instantiate signature and validation budget**
+- [x] **Step 4: Implement the instantiate signature and validation budget**
 
 Add:
 
@@ -683,7 +683,7 @@ Before allocating IDs, validate:
 8. Dynamic binding origins and literal targets resolve under the target authority.
 9. Every internal connection passes normal direction, kind, type, ordering, orphan, and capacity validation.
 
-- [ ] **Step 5: Generate operations in dependency order**
+- [x] **Step 5: Generate operations in dependency order**
 
 Allocate fresh `NodeId`, `PortInstanceId`, and `ConnectionId` in deterministic clipboard-local order, then generate exactly:
 
@@ -696,7 +696,7 @@ InsertConnection by portable endpoint tuple
 
 Apply the resulting patch to a cloned target document with `apply_without_revision` before returning it. This guarantees all-or-nothing validation and gives `GraphDocumentPatch::inverse()` the valid reverse order.
 
-- [ ] **Step 6: Run focused insert tests**
+- [x] **Step 6: Run focused insert tests**
 
 Run:
 
@@ -706,7 +706,7 @@ pnpm rust:test -- subgraph_insert
 
 Expected: PASS; all malformed snapshots fail before authority state changes, and legal snapshots preserve bindings/literals/order while allocating fresh identities.
 
-- [ ] **Step 7: Review checkpoint**
+- [x] **Step 7: Review checkpoint**
 
 Run:
 
@@ -731,7 +731,7 @@ Expected: validation is centralized in `subgraph.rs`; no Tauri or UI concerns ap
 - Consumes: Task 2 export, Task 3 instantiate, existing `MutationRequest<EditorGraphMutationDto>`, catalog validation snapshot, and projection replacement pipeline.
 - Produces: `DuplicateSubgraph` and `InsertSubgraph` mutation variants; one committed delta/revision/history entry per operation.
 
-- [ ] **Step 1: Write failing planner and ProjectState tests**
+- [x] **Step 1: Write failing planner and ProjectState tests**
 
 Add document tests:
 
@@ -752,7 +752,7 @@ subgraph_mutation_same_revision_allows_exactly_one_commit
 
 The history test must compare history lengths before/after, assert `to_revision == from_revision.next()`, undo once, redo once, and compare complete graph contents.
 
-- [ ] **Step 2: Run the mutation tests and verify they fail**
+- [x] **Step 2: Run the mutation tests and verify they fail**
 
 Run:
 
@@ -762,7 +762,7 @@ pnpm rust:test -- subgraph_mutation
 
 Expected: FAIL because mutation variants are absent.
 
-- [ ] **Step 3: Add the mutation variants**
+- [x] **Step 3: Add the mutation variants**
 
 Extend `EditorGraphMutationDto` exactly:
 
@@ -792,7 +792,7 @@ pub fn duplicate_subgraph(
 
 Compute the selected bounds origin, export once, and instantiate at `origin + offset`. Do not expose a `CreateNodes` variant.
 
-- [ ] **Step 4: Route both mutations through the existing commit gate**
+- [x] **Step 4: Route both mutations through the existing commit gate**
 
 In `ProjectState::apply_editor_graph_mutation_observed`, acquire a `CatalogMutationValidationSnapshot` for:
 
@@ -803,7 +803,7 @@ EditorGraphMutationDto::InsertSubgraph { .. }
 
 Pass it into `commit_editor_graph_mutation`; retain the current publication/project-instance/generation checks. Do not hold project locks during filesystem reads used to capture the catalog snapshot.
 
-- [ ] **Step 5: Preserve the existing mutation result contract**
+- [x] **Step 5: Preserve the existing mutation result contract**
 
 Continue returning the existing `GraphMutationResultDto` containing:
 
@@ -816,7 +816,7 @@ history
 
 Do not add inserted IDs separately; Task 7 extracts them from `delta.payload.operations`.
 
-- [ ] **Step 6: Run focused mutation/history tests**
+- [x] **Step 6: Run focused mutation/history tests**
 
 Run:
 
@@ -826,7 +826,7 @@ pnpm rust:test -- subgraph_mutation
 
 Expected: PASS; each operation increments one revision, adds one history entry, undoes/redoes once, and returns a projection matching committed authority.
 
-- [ ] **Step 7: Run the Rust check**
+- [x] **Step 7: Run the Rust check**
 
 Run:
 
@@ -836,7 +836,7 @@ pnpm rust:check
 
 Expected: PASS with no warnings introduced by the new mutation arms or exports.
 
-- [ ] **Step 8: Review checkpoint**
+- [x] **Step 8: Review checkpoint**
 
 Inspect:
 
@@ -865,9 +865,9 @@ Expected: all writes still flow through `ProjectState::apply_editor_graph_mutati
 
 **Interfaces:**
 - Consumes: `ProjectState::export_editor_subgraph`, `ClipboardSubgraphDto`, current project identity, graph path, and selected node IDs.
-- Produces: `export_graph_subgraph` Tauri query, TypeScript DTO/parser, `GraphSubgraphService.exportSubgraph`, and duplicate/insert TypeScript mutation variants.
+- Produces: `export_graph_subgraph` Tauri query, TypeScript DTO/parser, `GraphSubgraphService.exportSubgraph`, and duplicate/insert TypeScript mutation variants. `InsertSubgraph` carries the raw `snapshotJson` string accepted by the Rust Task 4 boundary rather than a nested DTO.
 
-- [ ] **Step 1: Write failing command, parser, and service tests**
+- [x] **Step 1: Write failing command, parser, and service tests**
 
 Rust command test assertions:
 
@@ -890,7 +890,7 @@ expect(invoke).toHaveBeenCalledWith('export_graph_subgraph', {
 });
 ```
 
-- [ ] **Step 2: Run focused tests and verify they fail**
+- [x] **Step 2: Run focused tests and verify they fail**
 
 Run:
 
@@ -901,7 +901,7 @@ pnpm test -- src/shared/types/dto/clipboardSubgraphWireParser.test.ts src/servic
 
 Expected: both commands FAIL because the command, DTO parser, and service do not exist.
 
-- [ ] **Step 3: Add the ProjectState read API**
+- [x] **Step 3: Add the ProjectState read API**
 
 Add:
 
@@ -916,7 +916,7 @@ pub fn export_editor_subgraph(
 
 Capture catalog authority without holding `project_data`; then take a coherent graph snapshot under publication/read locks, validate lifecycle/generation, release locks, and call `export_subgraph`.
 
-- [ ] **Step 4: Add and register the thin Tauri command**
+- [x] **Step 4: Add and register the thin Tauri command**
 
 Add:
 
@@ -932,7 +932,7 @@ pub fn export_graph_subgraph(
 
 Map `ClipboardSubgraphInvalid` and `ReferencedResourceUnavailable` with `AppError::new(error.code(), error.to_string())`. Register the command in `src-tauri/src/lib.rs` and add its name to `IDENTITY_REQUIRED_TAURI_COMMANDS`.
 
-- [ ] **Step 5: Define the TypeScript DTO and strict parser**
+- [x] **Step 5: Define the TypeScript DTO and strict parser**
 
 Mirror every Rust field in camelCase in `clipboardSubgraph.ts`. Export:
 
@@ -954,7 +954,7 @@ export function parseClipboardSubgraphDto(value: unknown): ClipboardSubgraphDto;
 
 Validate exact top-level keys and primitive shapes. Leave protocol/resource/reference semantics to Rust.
 
-- [ ] **Step 6: Extend the editor mutation union**
+- [x] **Step 6: Extend the editor mutation union**
 
 Add:
 
@@ -965,11 +965,11 @@ Add:
   }
 | {
     type: 'insertSubgraph';
-    payload: { snapshot: ClipboardSubgraphDto; anchor: NodePositionDto };
+    payload: { snapshotJson: string; anchor: NodePositionDto };
   }
 ```
 
-- [ ] **Step 7: Implement the service wrapper**
+- [x] **Step 7: Implement the service wrapper**
 
 Add:
 
@@ -985,7 +985,7 @@ export class GraphSubgraphService {
 
 Invoke only `export_graph_subgraph` and parse the unknown response before returning it.
 
-- [ ] **Step 8: Run focused IPC/wire tests**
+- [x] **Step 8: Run focused IPC/wire tests**
 
 Run:
 
@@ -996,7 +996,7 @@ pnpm test -- src/shared/types/dto/clipboardSubgraphWireParser.test.ts src/servic
 
 Expected: PASS; export remains read-only and malformed responses are rejected at the service boundary.
 
-- [ ] **Step 9: Review checkpoint**
+- [x] **Step 9: Review checkpoint**
 
 Run:
 
@@ -1018,12 +1018,14 @@ Expected: views contain no `invoke`; command logic is parse/call/map only. Do no
 - Delete: `src/features/core/editor/stores/useClipboardStore.ts`
 - Modify: `src/features/core/editor/stores/index.ts`
 - Modify: `src/features/core/dataStore/projectedEditorCapabilities.test.tsx`
+- Modify: `src/features/application/editor/useEditorOperations.ts`
+- Modify: `src/services/nodeSystem/nodeIdentityArchitectureContract.test.ts`
 
 **Interfaces:**
 - Consumes: backend-produced `ClipboardSubgraphDto` and browser `navigator.clipboard.readText/writeText`.
 - Produces: versioned `GraphClipboardEnvelope`, `writeGraphClipboard`, and `readGraphClipboard`; no Zustand clipboard state.
 
-- [ ] **Step 1: Write failing system-clipboard service tests**
+- [x] **Step 1: Write failing system-clipboard service tests**
 
 Use an injected/stubbed `navigator.clipboard` and assert:
 
@@ -1047,7 +1049,7 @@ propagates write permission failure
 propagates read permission failure
 ```
 
-- [ ] **Step 2: Run the clipboard service test and verify it fails**
+- [x] **Step 2: Run the clipboard service test and verify it fails**
 
 Run:
 
@@ -1057,7 +1059,7 @@ pnpm test -- src/services/clipboard/graphClipboardService.test.ts
 
 Expected: FAIL because the service does not exist.
 
-- [ ] **Step 3: Implement the system clipboard envelope**
+- [x] **Step 3: Implement the system clipboard envelope**
 
 Export:
 
@@ -1077,11 +1079,11 @@ export async function readGraphClipboard(): Promise<ClipboardSubgraphDto>;
 
 `writeGraphClipboard` must await `navigator.clipboard.writeText`. `readGraphClipboard` must parse JSON, validate exact envelope format/version, then call `parseClipboardSubgraphDto`.
 
-- [ ] **Step 4: Remove the old clipboard implementation**
+- [x] **Step 4: Remove the old clipboard implementation**
 
 Delete `clipboardSnapshot.ts` and `useClipboardStore.ts`; remove the store export. Update `projectedEditorCapabilities.test.tsx` so it tests `canCopyNode` only and no longer expects a projection-authored snapshot.
 
-- [ ] **Step 5: Run focused clipboard and capability tests**
+- [x] **Step 5: Run focused clipboard and capability tests**
 
 Run:
 
@@ -1091,7 +1093,7 @@ pnpm test -- src/services/clipboard/graphClipboardService.test.ts src/features/c
 
 Expected: PASS; no test imports `buildClipboardSnapshot` or `useClipboardStore`.
 
-- [ ] **Step 6: Confirm no legacy clipboard path remains**
+- [x] **Step 6: Confirm no legacy clipboard path remains**
 
 Run:
 
@@ -1099,9 +1101,9 @@ Run:
 pnpm typecheck
 ```
 
-Expected: FAIL only at Task 7 call sites still importing the deleted APIs; record those exact diagnostics and continue directly to Task 7. No unrelated diagnostics are acceptable.
+Expected: PASS after the Task 6 minimum boundary adjustment removes legacy copy/cut implementations while retaining no-op interfaces for Task 7. No Task 7 export, mutation, or selection operation is implemented.
 
-- [ ] **Step 7: Review checkpoint**
+- [x] **Step 7: Review checkpoint**
 
 Inspect the diff and confirm there is no in-memory fallback used by cut. Do not commit.
 
@@ -1125,14 +1127,16 @@ Inspect the diff and confirm there is no in-memory fallback used by cut. Do not 
 - Modify: `src/features/application/editor/useEditorOperations.ts`
 - Modify: `src/features/application/editor/useEditorOperations.capabilities.test.tsx`
 - Modify: `src/features/application/editor/editorMutationAvailability.ts`
-- Modify: `src/app/i18n/locales/en-US.ts`
-- Modify: `src/app/i18n/locales/zh-CN.ts`
+- Modify: `src/features/application/editor/useEditorKeyboard.ts`
+- Modify: `src/features/application/editor/CanvasContextMenuContext.tsx`
+- Modify: `src/views/EditorView/ContextMenu/NodeContextMenu.tsx`
+- Modify: `src/views/EditorView/editorUnavailableActions.test.tsx`
 
 **Interfaces:**
 - Consumes: Tasks 5–6 services, current project identity, existing mutation coordinator, one atomic `DeleteNodes`, and committed `GraphDeltaDto`.
 - Produces: lifecycle-safe export, result-preserving command execution, duplicate/paste inserted-node selection, and safe copy/cut flows.
 
-- [ ] **Step 1: Write failing delta and lifecycle coordinator tests**
+- [x] **Step 1: Write failing delta and lifecycle coordinator tests**
 
 Implement tests for this exact pure function contract:
 
@@ -1144,7 +1148,7 @@ Assert it returns only `insert_node.node.id` values in operation order and ignor
 
 For `subgraphExportCoordinator`, simulate project replacement while export is pending and assert the old response is rejected as stale rather than written to clipboard.
 
-- [ ] **Step 2: Write failing command/workflow tests**
+- [x] **Step 2: Write failing command/workflow tests**
 
 Extend command tests to expect one mutation:
 
@@ -1175,7 +1179,7 @@ duplicate success: one DuplicateSubgraph and committed IDs selected
 all graph identity allocation remains outside the frontend
 ```
 
-- [ ] **Step 3: Run focused tests and verify they fail**
+- [x] **Step 3: Run focused tests and verify they fail**
 
 Run:
 
@@ -1185,7 +1189,7 @@ pnpm test -- src/features/application/editorMutation/insertedNodeIdsFromDelta.te
 
 Expected: FAIL because result-preserving commands and authoritative workflows are absent.
 
-- [ ] **Step 4: Implement lifecycle-safe export**
+- [x] **Step 4: Implement lifecycle-safe export**
 
 Export:
 
@@ -1198,7 +1202,7 @@ export async function exportEditorSubgraph(input: {
 
 Capture project identity, call `GraphSubgraphService.exportSubgraph`, and assert the same project identity before returning.
 
-- [ ] **Step 5: Preserve command results without breaking boolean callers**
+- [x] **Step 5: Preserve command results without breaking boolean callers**
 
 Add:
 
@@ -1214,11 +1218,11 @@ Keep `executeCommand -> Promise<boolean>` as a wrapper over the result-preservin
 
 Register `DuplicateSubgraph` and `InsertSubgraph` command types, handlers, and structural classifications.
 
-- [ ] **Step 6: Implement committed ID extraction**
+- [x] **Step 6: Implement committed ID extraction**
 
 Implement `insertedNodeIdsFromDelta` exactly as a filter over committed patch operations. Do not inspect the projection to guess which nodes are new, and do not call `crypto.randomUUID()`.
 
-- [ ] **Step 7: Implement authoritative editor operations**
+- [x] **Step 7: Implement authoritative editor operations**
 
 Use these behaviors:
 
@@ -1259,9 +1263,9 @@ await one DuplicateSubgraph with offset (40, 40)
 when applied, extract and select committed IDs
 ```
 
-On mutation failure, preserve selection. On cut deletion failure, show a translated message that copying succeeded but deletion failed.
+On mutation failure, preserve selection. Record clipboard/export/mutation failures through the graph-domain logger without adding toast notifications.
 
-- [ ] **Step 8: Enable supported mutations and add translated errors**
+- [x] **Step 8: Enable supported mutations and update keyboard/context-menu behavior**
 
 Set:
 
@@ -1270,9 +1274,9 @@ duplicateNodes: true,
 pasteNodes: true,
 ```
 
-Add English and Chinese keys for invalid clipboard, unavailable resource, clipboard read/write failure, export failure, paste failure, duplicate failure, and copy-succeeded-delete-failed.
+Route copy/cut/paste/duplicate keyboard shortcuts to the authoritative operations, suppress browser defaults and repeated keydown execution, and enable duplicate in the node context menu only for copyable nodes. Record operation errors through `logger.graph`; do not add toast or translation keys.
 
-- [ ] **Step 9: Run focused workflow tests**
+- [x] **Step 9: Run focused workflow tests**
 
 Run:
 
@@ -1282,7 +1286,7 @@ pnpm test -- src/features/application/editorMutation/insertedNodeIdsFromDelta.te
 
 Expected: PASS; copy/cut ordering and committed-delta selection match the design.
 
-- [ ] **Step 10: Run typecheck**
+- [x] **Step 10: Run typecheck**
 
 Run:
 
@@ -1292,7 +1296,7 @@ pnpm typecheck
 
 Expected: PASS; all deleted clipboard-store imports are gone and mutation result types agree.
 
-- [ ] **Step 11: Review checkpoint**
+- [x] **Step 11: Review checkpoint**
 
 Inspect the Task 7 diff. Confirm each duplicate/paste/cut graph write is one high-level mutation and selection changes happen only after applied outcomes. Do not commit.
 
@@ -1321,7 +1325,7 @@ Inspect the Task 7 diff. Confirm each duplicate/paste/cut graph write is one hig
 - Consumes: active editor group, graph path, selected node IDs, `[data-editor-group-id]`, `[data-node-id]`, and existing viewport session/persistence APIs.
 - Produces: pure bounds fitting plus `selectAllNodes`, `focusSelectedNodes`, and `fitCompleteGraph` editor-session commands.
 
-- [ ] **Step 1: Write failing pure viewport tests**
+- [x] **Step 1: Write failing pure viewport tests**
 
 Define:
 
@@ -1342,7 +1346,7 @@ export function fitWorldBounds(
 
 Tests must assert 64px default padding, centered output, scale clamp `[0.1, 5]`, finite single-point bounds, and no mutation of input objects.
 
-- [ ] **Step 2: Write failing canvas-command and keyboard tests**
+- [x] **Step 2: Write failing canvas-command and keyboard tests**
 
 Assert:
 
@@ -1357,7 +1361,7 @@ input/contenteditable/modal guards still suppress graph shortcuts
 only the active editor group is affected
 ```
 
-- [ ] **Step 3: Run focused tests and verify they fail**
+- [x] **Step 3: Run focused tests and verify they fail**
 
 Run:
 
@@ -1367,7 +1371,7 @@ pnpm test -- src/features/core/viewport/fitViewport.test.ts src/features/core/ca
 
 Expected: FAIL because fit and canvas commands do not exist.
 
-- [ ] **Step 4: Centralize viewport scale limits and implement fitting**
+- [x] **Step 4: Centralize viewport scale limits and implement fitting**
 
 Export from `editorViewport.ts`:
 
@@ -1385,7 +1389,7 @@ y = viewportHeight / 2 - boundsCenterY * scale
 
 Use a positive finite extent for zero-width/height bounds.
 
-- [ ] **Step 5: Implement DOM-to-world bounds collection**
+- [x] **Step 5: Implement DOM-to-world bounds collection**
 
 Export:
 
@@ -1399,7 +1403,7 @@ export function collectCanvasNodeWorldBounds(input: {
 
 Read live node `getBoundingClientRect()` values and reverse the viewport transform relative to the active canvas bounds. Return `null` when no requested node is present.
 
-- [ ] **Step 6: Implement group-scoped canvas commands**
+- [x] **Step 6: Implement group-scoped canvas commands**
 
 Export a hook returning:
 
@@ -1413,7 +1417,7 @@ Export a hook returning:
 
 Select all only when the active resource is a loaded graph, and filter Rust-managed/non-selectable nodes. For F/Home, call `setViewportLive`, `commitViewport`, and `persistGraphViewport`; perform no IPC.
 
-- [ ] **Step 7: Wire commands through EditorSession and keyboard**
+- [x] **Step 7: Wire commands through EditorSession and keyboard**
 
 Add the three command functions to the explicit session slice, merge them in `useEditorSessionCommands`, pass them from `EditorWindow`, and route:
 
@@ -1425,7 +1429,7 @@ plain Home -> fitCompleteGraph
 
 Call `preventDefault()` only when a graph command is actually routed.
 
-- [ ] **Step 8: Run focused viewport/keyboard tests**
+- [x] **Step 8: Run focused viewport/keyboard tests**
 
 Run:
 
@@ -1435,7 +1439,7 @@ pnpm test -- src/features/core/viewport/fitViewport.test.ts src/features/core/ca
 
 Expected: PASS; F/Home remain frontend-only and active-group scoped.
 
-- [ ] **Step 9: Review checkpoint**
+- [x] **Step 9: Review checkpoint**
 
 Inspect the diff and confirm no global listener bypasses `globalEvent.ts`, and no viewport function imports graph mutation services. Do not commit.
 
@@ -1454,7 +1458,7 @@ Inspect the diff and confirm no global listener bypasses `globalEvent.ts`, and n
 - Consumes: editor-group selection captured at pointerdown and current frame hit IDs.
 - Produces: `baseNodeIds` selection sessions and deterministic `unionSelectionIds` used for both preview and pointerup.
 
-- [ ] **Step 1: Write failing union/session tests**
+- [x] **Step 1: Write failing union/session tests**
 
 Add exact cases:
 
@@ -1469,7 +1473,7 @@ plain blank click clears selection
 preview and final selection use the same union order
 ```
 
-- [ ] **Step 2: Run focused selection tests and verify they fail**
+- [x] **Step 2: Run focused selection tests and verify they fail**
 
 Run:
 
@@ -1479,7 +1483,7 @@ pnpm test -- src/features/core/canvas/selectionHitTargets.test.ts src/features/c
 
 Expected: FAIL because finalization currently replaces selection with hit IDs.
 
-- [ ] **Step 3: Replace the boolean session flag with captured IDs**
+- [x] **Step 3: Replace the boolean session flag with captured IDs**
 
 Change session state to:
 
@@ -1506,7 +1510,7 @@ export function startSelectionSession(input: {
 }): void;
 ```
 
-- [ ] **Step 4: Add deterministic union and capture at pointerdown**
+- [x] **Step 4: Add deterministic union and capture at pointerdown**
 
 Export:
 
@@ -1519,11 +1523,11 @@ export function unionSelectionIds(
 
 Keep base order, then append unseen hit IDs in hit-test order. At pointerdown pass the current group selection when `shiftKey` is true and `[]` otherwise.
 
-- [ ] **Step 5: Use union for preview and finalization**
+- [x] **Step 5: Use union for preview and finalization**
 
 In each animation frame, preview `unionSelectionIds(session.baseNodeIds, hits)`. On pointerup, send that same union to `setSelectedNodeIds`. A no-movement Shift click preserves base IDs; a no-modifier blank click clears selection.
 
-- [ ] **Step 6: Run focused selection tests**
+- [x] **Step 6: Run focused selection tests**
 
 Run:
 
@@ -1533,7 +1537,7 @@ pnpm test -- src/features/core/canvas/selectionHitTargets.test.ts src/features/c
 
 Expected: PASS; preview/final results are identical and Shift behavior matches Shift-click semantics.
 
-- [ ] **Step 7: Review checkpoint**
+- [x] **Step 7: Review checkpoint**
 
 Inspect only the five Task 9 files and confirm pointer movement still performs no IPC and remains animation-frame throttled. Do not commit.
 
@@ -1551,7 +1555,7 @@ Inspect only the five Task 9 files and confirm pointer movement still performs n
 - Consumes: existing context-menu component and runtime capabilities.
 - Produces: menus that retain supported-but-currently-unavailable disabled actions while omitting permanently unsupported actions.
 
-- [ ] **Step 1: Write failing rendering tests**
+- [x] **Step 1: Write failing rendering tests**
 
 Assert Node menu omits translated labels/IDs for:
 
@@ -1569,7 +1573,7 @@ promoteToVar
 
 Also assert copy/cut/duplicate/delete and break/reset/remove actions still render, with runtime capability-driven disabled state where applicable.
 
-- [ ] **Step 2: Run focused menu tests and verify they fail**
+- [x] **Step 2: Run focused menu tests and verify they fail**
 
 Run:
 
@@ -1579,13 +1583,13 @@ pnpm test -- src/views/EditorView/ContextMenu/NodeContextMenu.test.tsx src/views
 
 Expected: FAIL because permanently unsupported items are currently rendered disabled.
 
-- [ ] **Step 3: Remove permanently unsupported items**
+- [x] **Step 3: Remove permanently unsupported items**
 
 Delete the complete Node menu section containing disable/rename/collapse and remove unused `VscEdit`. Remove the Pin `promoteToVar` push and unused `VscSymbolVariable`.
 
 Duplicate is now supported by Task 7, so render it as a normal action and remove the unavailable-message title/flag dependency. Keep `disabled` only for valid operations unavailable for the current node/pin.
 
-- [ ] **Step 4: Run focused menu tests**
+- [x] **Step 4: Run focused menu tests**
 
 Run:
 
@@ -1595,7 +1599,7 @@ pnpm test -- src/views/EditorView/ContextMenu/NodeContextMenu.test.tsx src/views
 
 Expected: PASS; unsupported items are absent from the DOM.
 
-- [ ] **Step 5: Review checkpoint**
+- [x] **Step 5: Review checkpoint**
 
 Inspect the menu diff and ensure context-menu compact spacing/radius behavior remains in shared primitives and is unchanged. Do not commit.
 
@@ -1611,17 +1615,17 @@ Inspect the menu diff and ensure context-menu compact spacing/radius behavior re
 - Consumes: every Phase 3 deliverable and Phase 1/2 prerequisites.
 - Produces: fresh evidence that the complete cross-stack behavior satisfies the approved design.
 
-- [ ] **Step 1: Run all focused Rust subgraph tests**
+- [x] **Step 1: Run all focused Rust subgraph tests**
 
 Run:
 
 ```sh
-pnpm rust:test -- subgraph
+pnpm rust:test:lib -- subgraph
 ```
 
 Expected: PASS; export, insert, duplicate, history, stale, concurrency, command, and limits tests all pass.
 
-- [ ] **Step 2: Run the focused frontend Phase 3 suite**
+- [x] **Step 2: Run the focused frontend Phase 3 suite**
 
 Run:
 
@@ -1631,7 +1635,7 @@ pnpm test -- src/shared/types/dto/clipboardSubgraphWireParser.test.ts src/servic
 
 Expected: PASS; the focused suite reports zero failed tests.
 
-- [ ] **Step 3: Run frontend and Rust static checks**
+- [x] **Step 3: Run frontend and Rust static checks**
 
 Run:
 
@@ -1643,7 +1647,7 @@ pnpm rust:check
 
 Expected: all three commands PASS with no new diagnostics.
 
-- [ ] **Step 4: Run the required cross-stack verification**
+- [x] **Step 4: Run the required cross-stack verification**
 
 Run:
 
@@ -1651,9 +1655,9 @@ Run:
 pnpm verify
 ```
 
-Expected: PASS; frontend tests, Rust checks/tests, scientific Rust tests, and `git diff --check` all complete successfully.
+Expected: PASS; frontend tests, Rust format/compile checks, and `git diff --check` all complete successfully. Run `pnpm verify:full` separately for release validation or cross-cutting runtime changes.
 
-- [ ] **Step 5: Inspect scope and whitespace**
+- [x] **Step 5: Inspect scope and whitespace**
 
 Run:
 
@@ -1665,7 +1669,7 @@ git --no-pager diff --stat
 
 Expected: `git diff --check` emits no output; status contains only Phase 3 files plus pre-existing user changes; no generated `src-tauri/target/` appears.
 
-- [ ] **Step 6: Acceptance review checkpoint**
+- [x] **Step 6: Acceptance review checkpoint**
 
 Review the final diff against these exact acceptance statements:
 

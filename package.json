@@ -14,13 +14,16 @@
         "tauri:build": "tauri build",
         "rust:fmt:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
         "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml",
-        "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml -p yssbi",
-        "rust:test:sci": "cargo test --manifest-path src-tauri/Cargo.toml -p yss-sci",
+        "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml -p yssbi --jobs 1",
+        "rust:test:lib": "cargo test --manifest-path src-tauri/Cargo.toml -p yssbi --lib --jobs 1",
+        "rust:test:sci": "cargo test --manifest-path src-tauri/Cargo.toml -p yss-sci --jobs 1",
         "rust:bench:column-analytics": "cargo bench --manifest-path src-tauri/Cargo.toml -p yss-sci --bench column_analytics_wide",
         "rust:clean": "cargo clean --manifest-path src-tauri/Cargo.toml",
         "verify:frontend": "pnpm typecheck && pnpm test",
-        "verify:rust": "pnpm rust:fmt:check && pnpm rust:check && pnpm rust:test && pnpm rust:test:sci",
-        "verify": "pnpm verify:frontend && pnpm verify:rust && git diff --check"
+        "verify:rust": "pnpm rust:fmt:check && pnpm rust:check",
+        "verify:rust:full": "pnpm verify:rust && pnpm rust:test && pnpm rust:test:sci",
+        "verify": "pnpm verify:frontend && pnpm verify:rust && git diff --check",
+        "verify:full": "pnpm verify:frontend && pnpm verify:rust:full && git diff --check"
     },
     "dependencies": {
         "@dnd-kit/core": "^6.3.1",
@@ -30,6 +33,7 @@
         "@tailwindcss/vite": "^4.2.4",
         "@tanstack/react-virtual": "^3.13.18",
         "@tauri-apps/api": "^2.11.0",
+        "@tauri-apps/plugin-clipboard-manager": "^2.3.2",
         "@tauri-apps/plugin-dialog": "^2.7.1",
         "@tauri-apps/plugin-log": "^2.9.0",
         "@tauri-apps/plugin-opener": "^2",

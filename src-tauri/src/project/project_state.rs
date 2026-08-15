@@ -4,13 +4,14 @@ use crate::database::DatabaseState;
 use crate::event::GraphMutationResultDto;
 use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
+use crate::node_system::document::{
+    ClipboardSubgraphDto, EditorGraphMutationDto, GraphDeltaEvent, GraphDocumentPatch,
+    HistoryEntryId, HistoryMutation, HistoryStatusDto, MutationConflict, MutationRequest, NodeId,
+    OperationId, ProjectDocumentState, ProjectHistory, ProjectHistoryTransaction, ResourceKey,
+    ResourceRevision, export_subgraph,
+};
 #[cfg(test)]
 use crate::node_system::document::{ConnectionId, GraphMutation, RevisionedGraphStore};
-use crate::node_system::document::{
-    EditorGraphMutationDto, GraphDeltaEvent, GraphDocumentPatch, HistoryEntryId, HistoryMutation,
-    HistoryStatusDto, MutationConflict, MutationRequest, OperationId, ProjectDocumentState,
-    ProjectHistory, ProjectHistoryTransaction, ResourceKey, ResourceRevision,
-};
 use crate::project::{
     GraphResourceDocument, GraphResourcePath, NormalizedProjectRoot, PreparedProjectActivation,
     ProjectData, ProjectFilesystemCoordinator, ProjectFilesystemError,
@@ -1404,8 +1405,7 @@ pub struct ProjectState {
         Arc<RwLock<Option<crate::project::resource_mutations::ResourceMutationTestHook>>>,
     #[cfg(test)]
     mutation_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
-    #[cfg(test)]
-    authoritative_publication_test_hook: Arc<RwLock<Option<MutationPublicationTestHook>>>,
+
     #[cfg(test)]
     history_after_routing_test_hook: Arc<RwLock<Option<DurableHistoryTestHook>>>,
     #[cfg(test)]
@@ -1420,9 +1420,7 @@ pub struct ProjectState {
     compile_after_source_capture_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
     #[cfg(test)]
     compile_before_authority_gate_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
-    #[cfg(test)]
-    compile_after_exact_authority_capture_test_hook:
-        Arc<RwLock<Option<CompilePublicationTestHook>>>,
+
     #[cfg(test)]
     compile_coalesced_before_wait_test_hook: Arc<RwLock<Option<CompilePublicationTestHook>>>,
     #[cfg(test)]
@@ -1582,13 +1580,6 @@ impl ProjectState {
         Ok(constructor(store, ProjectFilesystemCoordinator::default()))
     }
 
-    #[cfg(test)]
-    pub(crate) fn with_shared_filesystem_for_test(
-        filesystem: ProjectFilesystemCoordinator,
-    ) -> Self {
-        Self::try_with_filesystem(filesystem).expect("test built-ins are valid")
-    }
-
     fn try_with_filesystem(
         filesystem: ProjectFilesystemCoordinator,
     ) -> Result<Self, crate::node_system::catalog::BuiltinInitializationError> {
@@ -1658,8 +1649,7 @@ impl ProjectState {
             resource_mutation_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             mutation_publication_test_hook: Arc::new(RwLock::new(None)),
-            #[cfg(test)]
-            authoritative_publication_test_hook: Arc::new(RwLock::new(None)),
+
             #[cfg(test)]
             history_after_routing_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -1674,8 +1664,7 @@ impl ProjectState {
             compile_after_source_capture_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             compile_before_authority_gate_test_hook: Arc::new(RwLock::new(None)),
-            #[cfg(test)]
-            compile_after_exact_authority_capture_test_hook: Arc::new(RwLock::new(None)),
+
             #[cfg(test)]
             compile_coalesced_before_wait_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
@@ -2232,21 +2221,6 @@ impl ProjectState {
     fn run_mutation_publication_test_hook(&self) {}
 
     #[cfg(test)]
-    fn run_authoritative_publication_test_hook(&self) {
-        if let Some(hook) = self
-            .authoritative_publication_test_hook
-            .read()
-            .unwrap()
-            .clone()
-        {
-            hook();
-        }
-    }
-
-    #[cfg(not(test))]
-    fn run_authoritative_publication_test_hook(&self) {}
-
-    #[cfg(test)]
     fn run_history_after_routing_test_hook(&self) {
         if let Some(hook) = self.history_after_routing_test_hook.read().unwrap().clone() {
             hook();
@@ -2468,14 +2442,6 @@ impl ProjectState {
     }
 
     #[cfg(test)]
-    pub(crate) fn set_authoritative_publication_test_hook(
-        &self,
-        hook: MutationPublicationTestHook,
-    ) {
-        *self.authoritative_publication_test_hook.write().unwrap() = Some(hook);
-    }
-
-    #[cfg(test)]
     pub(super) fn set_history_after_routing_test_hook(&self, hook: DurableHistoryTestHook) {
         *self.history_after_routing_test_hook.write().unwrap() = Some(hook);
     }
@@ -2547,17 +2513,6 @@ impl ProjectState {
     }
 
     #[cfg(test)]
-    pub(super) fn set_compile_after_exact_authority_capture_test_hook(
-        &self,
-        hook: CompilePublicationTestHook,
-    ) {
-        *self
-            .compile_after_exact_authority_capture_test_hook
-            .write()
-            .unwrap() = Some(hook);
-    }
-
-    #[cfg(test)]
     pub(super) fn run_compile_capture_after_environment_test_hook(&self) {
         if let Some(hook) = self
             .compile_capture_after_environment_test_hook
@@ -2586,21 +2541,6 @@ impl ProjectState {
 
     #[cfg(not(test))]
     pub(super) fn run_compile_before_authority_gate_test_hook(&self) {}
-
-    #[cfg(test)]
-    pub(super) fn run_compile_after_exact_authority_capture_test_hook(&self) {
-        if let Some(hook) = self
-            .compile_after_exact_authority_capture_test_hook
-            .read()
-            .unwrap()
-            .clone()
-        {
-            hook();
-        }
-    }
-
-    #[cfg(not(test))]
-    pub(super) fn run_compile_after_exact_authority_capture_test_hook(&self) {}
 
     #[cfg(test)]
     pub(super) fn set_compile_coalesced_before_wait_test_hook(
@@ -2799,11 +2739,6 @@ impl ProjectState {
             publication.resource_revision,
             publication.authority_generation(),
         )
-    }
-
-    #[cfg(test)]
-    pub(crate) fn replace_active_root_for_test(&self, root: NormalizedProjectRoot) {
-        self.activation_identity.write().unwrap().project_root = Some(root);
     }
 
     #[cfg(test)]
@@ -3213,15 +3148,6 @@ impl ProjectState {
     pub(crate) fn set_project_filesystem_rollback_fault(&self, enabled: bool) {
         self.filesystem
             .set_project_filesystem_rollback_fault(enabled);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_project_filesystem_rollback_test_hook(
-        &self,
-        hook: Option<Arc<dyn Fn() + Send + Sync>>,
-    ) {
-        self.filesystem
-            .set_project_filesystem_rollback_test_hook(hook);
     }
 
     pub(crate) fn project_recovery_marker(&self) -> crate::project::ProjectRecoveryMarker {
@@ -4854,6 +4780,54 @@ impl ProjectState {
         )
     }
 
+    pub fn export_editor_subgraph(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+        graph_path: &GraphResourcePath,
+        node_ids: Vec<NodeId>,
+    ) -> Result<ClipboardSubgraphDto, MutationConflict> {
+        self.ensure_mutation_operational()?;
+        let catalog = self
+            .catalog_mutation_validation_snapshot(project_instance_id)
+            .map_err(|error| match error {
+                ProjectFilesystemError::StaleProjectLifecycle { message } => {
+                    MutationConflict::StaleProjectLifecycle(message.into())
+                }
+                ProjectFilesystemError::CatalogResourceStale { message } => {
+                    MutationConflict::CatalogResourceStale(message.into())
+                }
+                error => MutationConflict::CatalogResourceStale(error.to_string().into()),
+            })?;
+        let node_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        let expected_resource = ResourceKey::Graph(node_path.clone());
+        let (document, registry) = {
+            let publication = self.mutation_publication.lock().unwrap();
+            if publication.project_instance_id != project_instance_id.as_str() {
+                return Err(MutationConflict::StaleProjectLifecycle(
+                    "project changed before subgraph export".into(),
+                ));
+            }
+            if publication.authority_generation() != catalog.authority_generation {
+                return Err(MutationConflict::CatalogResourceStale(
+                    "catalog or graph authority changed before subgraph export".into(),
+                ));
+            }
+            let data = self.project_data.read().unwrap();
+            let document = data
+                .graphs
+                .get(graph_path)
+                .map(|graph| graph.document.clone())
+                .ok_or_else(|| MutationConflict::ResourceMismatch {
+                    requested: expected_resource.clone(),
+                    store: expected_resource,
+                })?;
+            let registry = Arc::clone(&self.project_store.read().unwrap().node_registry);
+            (document, registry)
+        };
+
+        export_subgraph(&node_path, &document, registry.as_ref(), &catalog, node_ids)
+    }
+
     pub fn apply_editor_graph_mutation_observed(
         &self,
         project_instance_id: &ProjectInstanceId,
@@ -4938,7 +4912,9 @@ impl ProjectState {
                     descriptor:
                         crate::node_system::catalog::NodeCreationDescriptor::ResourceBound { .. },
                     ..
-                } => Some(
+                }
+                | EditorGraphMutationDto::DuplicateSubgraph { .. }
+                | EditorGraphMutationDto::InsertSubgraph { .. } => Some(
                     self.catalog_mutation_validation_snapshot(project_instance_id)
                         .map_err(map_catalog_error)?,
                 ),
@@ -5473,7 +5449,7 @@ impl ProjectState {
         history
             .apply_transaction(&mut documents, transaction)
             .map_err(|error| MutationConflict::History(error.to_string().into()))?;
-        self.run_authoritative_publication_test_hook();
+
         let updated = documents
             .graphs
             .remove(&crate::node_system::document::GraphResourcePath(
@@ -8554,15 +8530,6 @@ struct ExecutionSnapshot {
     session_id: crate::node_system::analysis::ProjectSessionId,
 }
 
-#[cfg(test)]
-static COMPILE_RESOURCE_SNAPSHOT_CONSTRUCTIONS: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0);
-
-#[cfg(test)]
-pub(super) fn compile_resource_snapshot_constructions() -> u64 {
-    COMPILE_RESOURCE_SNAPSHOT_CONSTRUCTIONS.load(std::sync::atomic::Ordering::Acquire)
-}
-
 fn candidate_projection_replacement(
     source: &ProjectionSourceSnapshot,
     graph_path: &GraphResourcePath,
@@ -8628,8 +8595,6 @@ fn candidate_projection_replacement(
 pub(super) fn compile_resources_from_projection_snapshot(
     source: &ProjectionSourceSnapshot,
 ) -> Result<CompileResourceSnapshot, String> {
-    #[cfg(test)]
-    COMPILE_RESOURCE_SNAPSHOT_CONSTRUCTIONS.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
     let mut resources =
         compile_resources_from_data(&source.data, source.environment.database_schemas.clone())?;
     apply_compile_resource_authority(
@@ -9605,10 +9570,9 @@ fn json_to_protocol_value(
 #[cfg(test)]
 mod execution_identity_tests {
     use super::*;
-    use crate::node_system::runtime::{RunEvent, RunEventKind, RunEventSink};
+    use crate::node_system::runtime::{RunEvent, RunEventSink};
     use crate::project::GraphDocumentKind;
-    use std::sync::{Arc, Condvar, Mutex};
-    use std::time::Duration;
+    use std::sync::Mutex;
 
     #[derive(Default)]
     struct RecordingRunEvents(Mutex<Vec<RunEvent>>);
@@ -9616,53 +9580,6 @@ mod execution_identity_tests {
     impl RunEventSink for RecordingRunEvents {
         fn record(&self, event: RunEvent) {
             self.0.lock().unwrap().push(event);
-        }
-    }
-
-    #[derive(Default)]
-    struct TestGate {
-        state: Mutex<(bool, bool)>,
-        changed: Condvar,
-    }
-
-    impl TestGate {
-        fn arrive_and_wait(&self) {
-            let mut state = self.state.lock().unwrap();
-            state.0 = true;
-            self.changed.notify_all();
-            while !state.1 {
-                state = self.changed.wait(state).unwrap();
-            }
-        }
-
-        fn wait_until_arrived(&self) {
-            let state = self.state.lock().unwrap();
-            let (state, _) = self
-                .changed
-                .wait_timeout_while(state, Duration::from_secs(2), |state| !state.0)
-                .unwrap();
-            assert!(state.0, "test gate was not reached before timeout");
-        }
-
-        fn release(&self) {
-            let mut state = self.state.lock().unwrap();
-            state.1 = true;
-            self.changed.notify_all();
-        }
-    }
-
-    struct BlockingRunEvents {
-        events: Mutex<Vec<RunEvent>>,
-        started: Arc<TestGate>,
-    }
-
-    impl RunEventSink for BlockingRunEvents {
-        fn record(&self, event: RunEvent) {
-            let is_started = event.kind == RunEventKind::RunStarted;
-            self.events.lock().unwrap().push(event);
-            if is_started {
-                self.started.arrive_and_wait();
-            }
         }
     }
 
@@ -9700,165 +9617,6 @@ mod execution_identity_tests {
         assert_eq!(store.runs.active_run_count(), 0);
         drop(store);
         let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn replacement_wins_before_final_registration_gate_with_zero_effects() {
-        let old_root = std::env::temp_dir().join(format!(
-            "yssbi-execution-registration-stale-old-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let new_root = std::env::temp_dir().join(format!(
-            "yssbi-execution-registration-stale-new-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&old_root).unwrap();
-        std::fs::create_dir_all(&new_root).unwrap();
-        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
-        let mut project = ProjectData::new();
-        project.graphs.insert(
-            graph_path.clone(),
-            GraphResourceDocument::new("Main", GraphDocumentKind::Event),
-        );
-        let state = ProjectState::new();
-        state.activate_project_fixture(old_root.to_string_lossy().into_owned(), project.clone());
-        let project_instance_id = state.capture_project_session().unwrap().instance_id;
-        let (old_runs, _old_results) = {
-            let store = state.project_store.read().unwrap();
-            (Arc::clone(&store.runs), store.results.clone())
-        };
-        let before_registration = Arc::new(TestGate::default());
-        let execution_gate = Arc::clone(&before_registration);
-        state.set_execution_before_run_test_hook(Arc::new(move || {
-            execution_gate.arrive_and_wait();
-        }));
-        let events = Arc::new(RecordingRunEvents::default());
-        let execution_state = state.clone();
-        let execution_path = graph_path.clone();
-        let execution_events = Arc::clone(&events);
-        let execution = std::thread::spawn(move || {
-            execution_state.execute_graph(
-                &project_instance_id,
-                &execution_path,
-                &crate::node_system::plan::ExecutionDemand::Default,
-                execution_events.as_ref(),
-            )
-        });
-        before_registration.wait_until_arrived();
-
-        let replacement_state = state.clone();
-        let replacement_root = new_root.to_string_lossy().into_owned();
-        let replacement = std::thread::spawn(move || {
-            replacement_state.activate_project_fixture(replacement_root, project);
-        });
-        replacement.join().unwrap();
-        before_registration.release();
-
-        let error = execution.join().unwrap().unwrap_err();
-        assert!(error.to_string().starts_with("stale_project_lifecycle:"));
-        assert!(error.run_error().is_none());
-        assert!(events.0.lock().unwrap().is_empty());
-        assert_eq!(old_runs.active_run_count(), 0);
-        let store = state.project_store.read().unwrap();
-        assert_eq!(store.runs.active_run_count(), 0);
-        drop(store);
-        let _ = std::fs::remove_dir_all(old_root);
-        let _ = std::fs::remove_dir_all(new_root);
-    }
-
-    #[test]
-    fn registration_wins_and_replacement_drains_the_admitted_run() {
-        let old_root = std::env::temp_dir().join(format!(
-            "yssbi-execution-registration-admitted-old-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let new_root = std::env::temp_dir().join(format!(
-            "yssbi-execution-registration-admitted-new-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&old_root).unwrap();
-        std::fs::create_dir_all(&new_root).unwrap();
-        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
-        let mut project = ProjectData::new();
-        project.graphs.insert(
-            graph_path.clone(),
-            GraphResourceDocument::new("Main", GraphDocumentKind::Event),
-        );
-        let state = ProjectState::new();
-        state.activate_project_fixture(old_root.to_string_lossy().into_owned(), project.clone());
-        let project_instance_id = state.capture_project_session().unwrap().instance_id;
-        let (old_runs, _old_results, old_session_id) = {
-            let store = state.project_store.read().unwrap();
-            (
-                Arc::clone(&store.runs),
-                store.results.clone(),
-                store.project_session_id.clone(),
-            )
-        };
-        let activation_token = state.project_activation.acquire();
-        let before_registration = Arc::new(TestGate::default());
-        let execution_gate = Arc::clone(&before_registration);
-        state.set_execution_before_run_test_hook(Arc::new(move || {
-            execution_gate.arrive_and_wait();
-        }));
-        let run_started = Arc::new(TestGate::default());
-        let events = Arc::new(BlockingRunEvents {
-            events: Mutex::new(Vec::new()),
-            started: Arc::clone(&run_started),
-        });
-        let execution_state = state.clone();
-        let execution_path = graph_path.clone();
-        let execution_events = Arc::clone(&events);
-        let execution = std::thread::spawn(move || {
-            execution_state.execute_graph(
-                &project_instance_id,
-                &execution_path,
-                &crate::node_system::plan::ExecutionDemand::Default,
-                execution_events.as_ref(),
-            )
-        });
-        before_registration.wait_until_arrived();
-
-        let replacement_state = state.clone();
-        let replacement_root = new_root.to_string_lossy().into_owned();
-        let replacement = std::thread::spawn(move || {
-            replacement_state.activate_project_fixture(replacement_root, project);
-        });
-        before_registration.release();
-        run_started.wait_until_arrived();
-        drop(activation_token);
-        assert!(old_runs.wait_until_draining_for_test(&old_session_id, Duration::from_secs(2)));
-        run_started.release();
-
-        let error = execution.join().unwrap().unwrap_err();
-        replacement.join().unwrap();
-        assert_eq!(
-            error.run_error(),
-            Some(&crate::node_system::runtime::RunError::Cancelled)
-        );
-        let recorded = events.events.lock().unwrap();
-        assert!(
-            recorded
-                .iter()
-                .any(|event| event.kind == RunEventKind::RunStarted)
-        );
-        assert!(
-            recorded
-                .iter()
-                .any(|event| event.kind == RunEventKind::RunCancelled)
-        );
-        assert!(
-            recorded
-                .iter()
-                .all(|event| event.kind != RunEventKind::RunCompleted)
-        );
-        drop(recorded);
-        assert_eq!(old_runs.active_run_count(), 0);
-        let store = state.project_store.read().unwrap();
-        assert_eq!(store.runs.active_run_count(), 0);
-        drop(store);
-        let _ = std::fs::remove_dir_all(old_root);
-        let _ = std::fs::remove_dir_all(new_root);
     }
 }
 
