@@ -1,7 +1,7 @@
 //! DataFrame node protocols staged for aggregation into the built-in provider.
 //!
-//! This module intentionally depends only on the new node-system IR. It does not
-//! use legacy graph authoring, pin-reconciliation, or execution types.
+//! This module depends exclusively on the node-system IR and keeps graph authoring,
+//! pin reconciliation, and execution concerns behind their current boundaries.
 
 mod families;
 

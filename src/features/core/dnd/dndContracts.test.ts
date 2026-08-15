@@ -66,7 +66,7 @@ describe('parseCanvasDragPayload', () => {
       type: 'node-template',
       template: {
         descriptor: { kind: 'static', nodeTypeId: 'math.add' },
-        nodeType: 'legacy.add',
+        nodeType: 'obsolete.add',
       },
     })).toBeNull();
     expect(parseCanvasDragPayload(null)).toBeNull();

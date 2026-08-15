@@ -3,7 +3,7 @@ import type { PanelSelectionTest } from '@/shared/types/report';
 
 function DecisionBadge({ decision }: { decision: string }) {
   if (decision === 'significant') {
-    return <span className="text-[10px] px-2 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-amber-300">Significant</span>;
+    return <span className="text-[10px] px-2 py-0.5 rounded border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">Significant</span>;
   }
   if (decision === 'not_significant') {
     return <span className="text-[10px] px-2 py-0.5 rounded border border-border bg-muted text-foreground">Not Significant</span>;

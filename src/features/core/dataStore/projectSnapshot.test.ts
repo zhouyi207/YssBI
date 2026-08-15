@@ -63,7 +63,7 @@ describe('buildGraphSnapshot', () => {
     expect(snapshot['graph-1'].nodes).toHaveLength(1);
     expect(snapshot['graph-1'].pins).toHaveLength(2);
     expect(snapshot['graph-1'].connections).toEqual([
-      { id: 'pin-out->pin-in', from: 'pin-out', to: 'pin-in' },
+      { from: 'pin-out', to: 'pin-in' },
     ]);
   });
 

@@ -661,7 +661,7 @@ fn unrelated_custom_types_preserve_permissive_parameter_behavior() {
     assert_eq!(
         registry.validate_nominal_parameter(
             &id("acme.unvalidated"),
-            &serde_json::json!({"legacy": ["shape"]}),
+            &serde_json::json!({"unsupported": ["shape"]}),
         ),
         None
     );

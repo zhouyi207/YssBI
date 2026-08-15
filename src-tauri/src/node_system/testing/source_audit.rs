@@ -2777,7 +2777,7 @@ fn display_name_pin_audit_distinguishes_pin_identity_from_other_definitions() {
     write_fixture(
         &root,
         "pin_identity.rs",
-        "fn legacy(pin: Pin) { let _ = pin.definition.name; }",
+        "fn unsupported(pin: Pin) { let _ = pin.definition.name; }",
     );
     write_fixture(
         &root,

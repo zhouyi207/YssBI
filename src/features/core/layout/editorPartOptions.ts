@@ -3,9 +3,6 @@ import type { EditorSettings } from '@/shared/types/settings';
 
 export type OpenSideBySideDirection = NonNullable<EditorSettings['openSideBySideDirection']>;
 export type EditorSplitSizingMode = NonNullable<EditorSettings['splitSizing']>;
-export type DoubleClickTabToToggleEditorGroupSizes = NonNullable<
-  EditorSettings['doubleClickTabToToggleEditorGroupSizes']
->;
 
 /** VS Code `IEditorPartOptions` subset used by editor groups. */
 export interface EditorPartOptions {
@@ -14,7 +11,6 @@ export interface EditorPartOptions {
   alwaysShowEditorActions: boolean;
   closeEmptyGroups: boolean;
   splitSizing: EditorSplitSizingMode;
-  doubleClickTabToToggleEditorGroupSizes: DoubleClickTabToToggleEditorGroupSizes;
   dragToOpenWindow: boolean;
 }
 
@@ -24,7 +20,6 @@ export const DEFAULT_EDITOR_PART_OPTIONS: EditorPartOptions = {
   alwaysShowEditorActions: false,
   closeEmptyGroups: true,
   splitSizing: 'auto',
-  doubleClickTabToToggleEditorGroupSizes: 'maximize',
   dragToOpenWindow: true,
 };
 
@@ -36,9 +31,6 @@ export function readEditorPartOptions(): EditorPartOptions {
     alwaysShowEditorActions: editor.alwaysShowEditorActions ?? DEFAULT_EDITOR_PART_OPTIONS.alwaysShowEditorActions,
     closeEmptyGroups: editor.closeEmptyGroups ?? DEFAULT_EDITOR_PART_OPTIONS.closeEmptyGroups,
     splitSizing: editor.splitSizing ?? DEFAULT_EDITOR_PART_OPTIONS.splitSizing,
-    doubleClickTabToToggleEditorGroupSizes:
-      editor.doubleClickTabToToggleEditorGroupSizes
-      ?? DEFAULT_EDITOR_PART_OPTIONS.doubleClickTabToToggleEditorGroupSizes,
     dragToOpenWindow: editor.dragToOpenWindow ?? DEFAULT_EDITOR_PART_OPTIONS.dragToOpenWindow,
   };
 }

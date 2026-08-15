@@ -1555,7 +1555,7 @@ mod tests {
     }
 
     #[test]
-    fn function_data_types_reject_legacy_aliases() {
+    fn function_data_types_reject_noncanonical_aliases() {
         for type_name in [
             "bool",
             "boolean",
@@ -1575,7 +1575,7 @@ mod tests {
         ] {
             assert!(
                 resolve_function_data_type(type_name).is_err(),
-                "legacy function data type alias {type_name:?} was accepted"
+                "noncanonical function data type alias {type_name:?} was accepted"
             );
         }
     }

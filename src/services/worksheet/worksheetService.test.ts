@@ -107,7 +107,7 @@ describe('WorksheetService authoritative mutation contract', () => {
     });
   });
 
-  it('invokes remove instead of the legacy delete command', async () => {
+  it('invokes remove instead of the obsolete delete command', async () => {
     vi.mocked(invoke).mockResolvedValue(mutationResult());
 
     await WorksheetService.removeWorksheet(projectInstanceId, operationId, worksheetPath, 3);

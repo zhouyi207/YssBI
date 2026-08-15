@@ -1,6 +1,10 @@
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
-import * as ts from 'typescript';
+import * as ts from 'typescript/unstable/ast';
+import {
+  withIsolatedTypeScriptProject,
+  withProductionTypeScriptProject,
+} from './typescriptAudit';
 
 export interface ArchitectureSource {
   path: string;
@@ -30,18 +34,17 @@ export interface ModuleDependency {
   location: ModuleDependencyLocation;
 }
 
-function scriptKind(path: string): ts.ScriptKind {
-  return path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-}
 
 function literalText(node: ts.Expression | undefined): string | null {
-  return node && ts.isStringLiteralLike(node) ? node.text : null;
+  return node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+    ? node.text
+    : null;
 }
 
 function importMode(node: ts.ImportDeclaration): ModuleDependencyMode {
   const clause = node.importClause;
   if (!clause) return 'runtime';
-  if (clause.isTypeOnly) return 'type-only';
+  if (clause.phaseModifier === ts.SyntaxKind.TypeKeyword) return 'type-only';
   if (clause.name || !clause.namedBindings || ts.isNamespaceImport(clause.namedBindings)) {
     return 'runtime';
   }
@@ -79,75 +82,87 @@ function moduleCallSpecifier(node: ts.Expression): {
   };
 }
 
-export function moduleDependencies(path: string, source: string): ModuleDependency[] {
-  const sourceFile = ts.createSourceFile(
-    path,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    scriptKind(path),
+function withAuditSourceFile<T>(
+  path: string,
+  source: string,
+  callback: (sourceFile: ts.SourceFile) => T,
+): T {
+  const absolutePath = resolve(path);
+  if (existsSync(absolutePath)
+    && statSync(absolutePath).isFile()
+    && readFileSync(absolutePath, 'utf8') === source) {
+    return withProductionTypeScriptProject(({ sourceFile }) => callback(sourceFile(path)));
+  }
+  return withIsolatedTypeScriptProject(
+    { [path]: source },
+    ({ sourceFile }) => callback(sourceFile(path)),
   );
-  const dependencies: ModuleDependency[] = [];
-  const location = (node: ts.Node): ModuleDependencyLocation => {
-    const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
-    return { line: position.line + 1, column: position.character + 1 };
-  };
-  const add = (
-    kind: ModuleDependencyKind,
-    mode: ModuleDependencyMode,
-    specifier: string | null,
-    node: ts.Node,
-  ): void => {
-    if (specifier !== null || mode === 'runtime') {
-      dependencies.push({ kind, mode, specifier, location: location(node) });
-    }
-  };
+}
 
-  const visit = (node: ts.Node): void => {
-    if (ts.isImportDeclaration(node)) {
-      add(
-        node.importClause ? 'static-import' : 'side-effect-import',
-        importMode(node),
-        literalText(node.moduleSpecifier),
-        node,
-      );
-      return;
-    }
-    if (ts.isExportDeclaration(node)) {
-      if (node.moduleSpecifier) {
-        add('re-export', exportMode(node), literalText(node.moduleSpecifier), node);
+export function moduleDependencies(path: string, source: string): ModuleDependency[] {
+  return withAuditSourceFile(path, source, (sourceFile) => {
+    const dependencies: ModuleDependency[] = [];
+    const location = (node: ts.Node): ModuleDependencyLocation => {
+      const position = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
+      return { line: position.line + 1, column: position.character + 1 };
+    };
+    const add = (
+      kind: ModuleDependencyKind,
+      mode: ModuleDependencyMode,
+      specifier: string | null,
+      node: ts.Node,
+    ): void => {
+      if (specifier !== null || mode === 'runtime') {
+        dependencies.push({ kind, mode, specifier, location: location(node) });
       }
-      return;
-    }
-    if (ts.isImportEqualsDeclaration(node)
-      && ts.isExternalModuleReference(node.moduleReference)) {
-      add(
-        'import-equals',
-        node.isTypeOnly ? 'type-only' : 'runtime',
-        literalText(node.moduleReference.expression),
-        node,
-      );
-      return;
-    }
-    if (ts.isExportAssignment(node)) {
-      const dependency = moduleCallSpecifier(node.expression);
-      if (dependency) {
-        add('export-assignment', 'runtime', dependency.specifier, node);
+    };
+
+    const visit = (node: ts.Node): void => {
+      if (ts.isImportDeclaration(node)) {
+        add(
+          node.importClause ? 'static-import' : 'side-effect-import',
+          importMode(node),
+          literalText(node.moduleSpecifier),
+          node,
+        );
         return;
       }
-    }
-    if (ts.isCallExpression(node)) {
-      const dependency = moduleCallSpecifier(node);
-      if (dependency) {
-        add(dependency.kind, 'runtime', dependency.specifier, node);
+      if (ts.isExportDeclaration(node)) {
+        if (node.moduleSpecifier) {
+          add('re-export', exportMode(node), literalText(node.moduleSpecifier), node);
+        }
         return;
       }
-    }
-    ts.forEachChild(node, visit);
-  };
+      if (ts.isImportEqualsDeclaration(node)
+        && ts.isExternalModuleReference(node.moduleReference)) {
+        add(
+          'import-equals',
+          node.isTypeOnly ? 'type-only' : 'runtime',
+          literalText(node.moduleReference.expression),
+          node,
+        );
+        return;
+      }
+      if (ts.isExportAssignment(node)) {
+        const dependency = moduleCallSpecifier(node.expression);
+        if (dependency) {
+          add('export-assignment', 'runtime', dependency.specifier, node);
+          return;
+        }
+      }
+      if (ts.isCallExpression(node)) {
+        const dependency = moduleCallSpecifier(node);
+        if (dependency) {
+          add(dependency.kind, 'runtime', dependency.specifier, node);
+          return;
+        }
+      }
+      node.forEachChild(visit);
+    };
 
-  visit(sourceFile);
-  return dependencies;
+    visit(sourceFile);
+    return dependencies;
+  });
 }
 
 export function unresolvedRuntimeDependencies(

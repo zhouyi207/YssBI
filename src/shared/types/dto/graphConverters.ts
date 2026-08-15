@@ -6,22 +6,17 @@ import type { ConnectionItemDTO } from './graph';
 import type { ConnectionData } from '../store/graph';
 import type { ProjectData } from '../domain';
 
-/** 将 ConnectionItemDTO 转为 Store 的 ConnectionData */
-export function connectionItemToConnectionData(
-  item: ConnectionItemDTO
-): ConnectionData {
-  const from = item.fromPin;
-  const to = item.toPin;
-  return { id: `${from}->${to}`, from, to };
-}
-
 /** 将 ConnectionData 转为 ConnectionItemDTO */
-export function connectionDataToItem(conn: ConnectionData): ConnectionItemDTO {
+export function connectionDataToItem(
+  conn: Pick<ConnectionData, 'from' | 'to'>,
+): ConnectionItemDTO {
   return { fromPin: conn.from, toPin: conn.to };
 }
 
 /** 将 ConnectionData 列表转为 ConnectionItemDTO */
-export function connectionDataToItems(conns: ConnectionData[]): ConnectionItemDTO[] {
+export function connectionDataToItems(
+  conns: ReadonlyArray<Pick<ConnectionData, 'from' | 'to'>>,
+): ConnectionItemDTO[] {
   return conns.map(connectionDataToItem);
 }
 

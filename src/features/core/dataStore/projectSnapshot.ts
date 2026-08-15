@@ -1,5 +1,5 @@
 import type { FunctionSignaturePin } from '@/shared/types/domain/graph';
-import type { GraphData } from '@/shared/types/store/graph';
+import type { GraphData, GraphSnapshotData } from '@/shared/types/store/graph';
 import type { ProjectResourceMeta } from '@/features/core/resource/resourceTypes';
 
 export type FunctionSignatureSnapshot = {
@@ -23,8 +23,8 @@ export interface GraphSnapshotAccess {
   ): { from: string; to: string } | null;
 }
 
-/** 从 store 状态导出图快照（store 内 `ConnectionData[]`；持久化经 `graphDataToDomainGraph` 包装） */
-export function buildGraphSnapshot(access: GraphSnapshotAccess): Record<string, GraphData> {
+/** 从 store 状态导出图快照；连接只保留 domain 序列化所需的端点。 */
+export function buildGraphSnapshot(access: GraphSnapshotAccess): Record<string, GraphSnapshotData> {
   return Object.fromEntries(
     access.graphOrder
       .map((graphPath) => {
@@ -49,14 +49,9 @@ export function buildGraphSnapshot(access: GraphSnapshotAccess): Record<string, 
         }
         const connections = Array.from(connectionIds)
           .map((connectionId) => access.getGraphConnection(graphPath, connectionId))
-          .filter((connection): connection is NonNullable<typeof connection> => connection != null)
-          .map((connection) => ({
-            id: `${connection.from}->${connection.to}`,
-            from: connection.from,
-            to: connection.to,
-          }));
+          .filter((connection): connection is NonNullable<typeof connection> => connection != null);
 
-        const graph: GraphData = {
+        const graph: GraphSnapshotData = {
           path: graphPath,
           name: meta.name,
           type: meta.kind === 'function' ? 'function' : 'event',

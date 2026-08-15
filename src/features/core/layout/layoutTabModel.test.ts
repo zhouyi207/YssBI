@@ -1,24 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import type { LayoutTabInput } from './layoutTabModel';
 import {
   buildGraphLayoutTab,
   buildWorksheetLayoutTab,
   isGraphLayoutTab,
   isPreviewLayoutTab,
-  normalizeLayoutTab,
   splitComponentForTab,
 } from './layoutTabModel';
 
 describe('layoutTabModel', () => {
-  it('normalizeLayoutTab fills missing graph tab type', () => {
-    const legacy: LayoutTabInput = { id: 'g1', title: 'G', component: 'GraphEditor' };
-    expect(normalizeLayoutTab(legacy)).toEqual({
-      id: 'g1',
-      component: 'GraphEditor',
-      type: 'event',
-    });
-  });
 
   it('buildGraphLayoutTab and buildWorksheetLayoutTab produce typed tabs', () => {
     expect(buildGraphLayoutTab('events/Main.yssbi-event', 'event')).toMatchObject({

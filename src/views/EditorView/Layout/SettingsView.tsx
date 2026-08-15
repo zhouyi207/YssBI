@@ -123,12 +123,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
         { label: t("settings.options.splitSizingSplit"), value: "split" },
     ];
 
-    const doubleClickTabOptions = [
-        { label: t("settings.options.doubleClickTabMaximize"), value: "maximize" },
-        { label: t("settings.options.doubleClickTabExpand"), value: "expand" },
-        { label: t("settings.options.doubleClickTabOff"), value: "off" },
-    ];
-
     const handleResetAll = async () => {
         const confirmed = await uiStore.confirm({
             title: t("settings.confirmResetAllTitle"),
@@ -284,16 +278,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                                     options={splitSizingOptions}
                                     value={editor.splitSizing ?? "auto"}
                                     onChange={(val) => updateEditor({ splitSizing: val as "auto" | "distribute" | "split" })}
-                                />
-                                <SettingItem
-                                    label={t("settings.labels.doubleClickTabToToggleEditorGroupSizes")}
-                                    description={t("settings.descriptions.doubleClickTabToToggleEditorGroupSizes")}
-                                    type="select"
-                                    options={doubleClickTabOptions}
-                                    value={editor.doubleClickTabToToggleEditorGroupSizes ?? "maximize"}
-                                    onChange={(val) => updateEditor({
-                                        doubleClickTabToToggleEditorGroupSizes: val as "maximize" | "expand" | "off",
-                                    })}
                                 />
                             </div>
                         </div>

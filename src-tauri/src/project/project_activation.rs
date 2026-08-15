@@ -1001,7 +1001,7 @@ mod tests {
     }
 
     #[test]
-    fn central_authority_generation_tracks_global_database_and_legacy_commits() {
+    fn central_authority_generation_tracks_global_graph_and_database_commits() {
         let (root, _) = save_named_project("central-authority-generation");
         let state = ProjectState::new();
         state.activate_project_from_path(&root).unwrap();
@@ -1030,8 +1030,8 @@ mod tests {
                 crate::project::GraphResourceDocument::new("Generation", GraphDocumentKind::Event),
             )
             .unwrap();
-        let after_legacy = state.authority_generation_for_test();
-        assert!(after_legacy > after_global);
+        let after_graph = state.authority_generation_for_test();
+        assert!(after_graph > after_global);
 
         let database_id = "generation-db".to_string();
         let (database_session, _lease) = state.acquire_database_write_lease().unwrap();
@@ -1056,7 +1056,7 @@ mod tests {
                 },
             )
             .unwrap();
-        assert!(state.authority_generation_for_test() > after_legacy);
+        assert!(state.authority_generation_for_test() > after_graph);
 
         let _ = std::fs::remove_dir_all(root);
     }

@@ -249,14 +249,14 @@ describe('TraceService', () => {
     ['unknown field', { ...traceSpan, status: 'succeeded' }],
     ['negative timestamp', { ...traceSpan, startedAt: '-1' }],
     ['finish before start', { ...traceSpan, finishedAt: '1' }],
-    ['legacy status record', {
+    ['obsolete status record', {
       sequence: '1',
       kind: 'run',
       status: 'started',
       correlation: traceSpan.correlation,
       fields: {},
     }],
-    ['legacy start/finish pair', [
+    ['obsolete start/finish pair', [
       { spanId: '1', phase: 'start', timestamp: '2' },
       { spanId: '1', phase: 'finish', timestamp: '3' },
     ]],

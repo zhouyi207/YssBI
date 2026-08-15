@@ -83,19 +83,6 @@ export async function pinTab(groupId: string, tabId: string): Promise<void> {
   if (panel) await editorDockviewPort.activate(panel.panelInstanceId);
 }
 
-/** Sticky ordering belonged to the removed custom TabBar and is intentionally unsupported. */
-export async function setTabSticky(groupId: string, _tabId: string, _sticky: boolean): Promise<void> {
-  await activateDockviewGroup(groupId);
-}
-
-/** Group locking belonged to the removed custom editor grid. */
-export function toggleEditorGroupLocked(_groupId: string): void {}
-
-/** Dockview owns group sizing; the legacy maximize command is retained as a compatibility no-op. */
-export async function toggleMaximizeEditorGroup(groupId: string): Promise<void> {
-  await activateDockviewGroup(groupId);
-}
-
 export function locateTab(tabId: string, groupId?: string) {
   return locateLayoutTab(tabId, groupId);
 }

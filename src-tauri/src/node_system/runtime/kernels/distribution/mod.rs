@@ -4,9 +4,7 @@ use crate::node_system::runtime::{
     ArtifactKind, DataSeriesBuilder, DataSeriesElementType, Kernel, KernelContext, KernelError,
     RuntimeValue,
 };
-use rand::SeedableRng;
-use rand::distributions::Distribution;
-use rand::rngs::StdRng;
+use rand::distr::Distribution;
 
 #[derive(Clone, Copy)]
 enum DistributionKind {
@@ -158,7 +156,7 @@ impl Kernel for DistributionKernel {
             .cancellation
             .check()
             .map_err(|error| KernelError::cancelled(error.to_string()))?;
-        let mut rng = StdRng::from_entropy();
+        let mut rng = rand::rng();
         let output = match self.kind {
             DistributionKind::Normal => sample_float(inputs, 3, "normal", |count| {
                 let distribution = statrs::distribution::Normal::new(
@@ -289,7 +287,7 @@ impl Kernel for DistributionKernel {
                 let distribution = statrs::distribution::Bernoulli::new(float_input(inputs, 0)?)
                     .map_err(|error| invalid("Bernoulli", error))?;
                 Ok((0..count)
-                    .map(|_| distribution.sample(&mut rng) as i64)
+                    .map(|_| Distribution::<bool>::sample(&distribution, &mut rng) as i64)
                     .collect())
             })?,
             DistributionKind::Binomial => sample_integer(inputs, 3, "binomial", |count| {
@@ -317,11 +315,7 @@ impl Kernel for DistributionKernel {
                         float_input(inputs, 1)?,
                     )
                     .map_err(|error| invalid("NegativeBinomial", error))?;
-                    unsigned_samples(
-                        count,
-                        || distribution.sample(&mut rng) as f64,
-                        "NegativeBinomial",
-                    )
+                    unsigned_samples(count, || distribution.sample(&mut rng), "NegativeBinomial")
                 })?
             }
             DistributionKind::DiscreteUniform => {
@@ -331,7 +325,7 @@ impl Kernel for DistributionKernel {
                         integer_input(inputs, 1)?,
                     )
                     .map_err(|error| invalid("DiscreteUniform", error))?;
-                    sampled_integers(count, || distribution.sample(&mut rng), "DiscreteUniform")
+                    Ok((0..count).map(|_| distribution.sample(&mut rng)).collect())
                 })?
             }
             DistributionKind::Hypergeometric => {
@@ -399,31 +393,14 @@ fn build_series(
 
 fn unsigned_samples(
     count: usize,
-    sample: impl FnMut() -> f64,
-    distribution: &str,
-) -> Result<Vec<i64>, KernelError> {
-    sampled_integers(count, sample, distribution)
-}
-
-fn sampled_integers(
-    count: usize,
-    mut sample: impl FnMut() -> f64,
+    mut sample: impl FnMut() -> u64,
     distribution: &str,
 ) -> Result<Vec<i64>, KernelError> {
     (0..count)
         .map(|_| {
-            let value = sample();
-            if value.is_finite()
-                && value.fract() == 0.0
-                && value >= i64::MIN as f64
-                && value <= i64::MAX as f64
-            {
-                Ok(value as i64)
-            } else {
-                Err(KernelError::new(format!(
-                    "{distribution}: sampled value is outside int64"
-                )))
-            }
+            i64::try_from(sample()).map_err(|_| {
+                KernelError::new(format!("{distribution}: sampled value is outside int64"))
+            })
         })
         .collect()
 }

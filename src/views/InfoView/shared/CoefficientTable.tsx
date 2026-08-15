@@ -88,7 +88,7 @@ export function CoefficientTable({
               {hasCategorical && (
                 <TableCell className={infoStatsCellCompactClass}>
                   {coeff.category != null ? (
-                    <span className="inline-flex items-center rounded border border-indigo-500/25 bg-indigo-500/15 px-2 py-0.5 text-[11px] font-mono text-indigo-300">
+                    <span className="inline-flex items-center rounded border border-indigo-500/25 bg-indigo-500/15 px-2 py-0.5 text-[11px] font-mono text-indigo-700 dark:text-indigo-300">
                       {coeff.category}
                     </span>
                   ) : (
@@ -98,7 +98,7 @@ export function CoefficientTable({
               )}
               <TableCell className={`${infoStatsCellRightClass} text-foreground`}>{formatNum(coeff.coef)}</TableCell>
               {oddsTooltip != null && (
-                <TableCell className={`${infoStatsCellRightClass} text-amber-300/90`}>
+                <TableCell className={`${infoStatsCellRightClass} text-amber-700/90 dark:text-amber-300/90`}>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="cursor-help">{formatNum(Math.exp(coeff.coef))}</span>

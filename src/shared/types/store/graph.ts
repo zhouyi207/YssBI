@@ -91,11 +91,13 @@ export type PinView = PinData & {
 };
 
 // ==================== ConnectionData ====================
-/** 连接数据（Store 格式，含派生 id） */
+/** Editor projection connection keyed by its backend-authored stable identity. */
 export interface ConnectionData {
-  id: string;   // Legacy: "fromPinId->toPinId"; projection: stable connection id
-  from: string; // Local PortAddressKey / legacy PinId
-  to: string;   // Local PortAddressKey / legacy PinId
+  id: string;
+  /** Local key derived from the output port's structured address. */
+  from: string;
+  /** Local key derived from the input port's structured address. */
+  to: string;
   output?: PortAddressDto;
   input?: PortAddressDto;
   order?: string | null;
@@ -114,3 +116,8 @@ export interface GraphData {
   pins: PinData[];
   connections: ConnectionData[];
 }
+
+/** Export snapshot shape; domain serialization needs endpoint pairs, not runtime connection identity. */
+export type GraphSnapshotData = Omit<GraphData, 'connections'> & {
+  connections: Array<Pick<ConnectionData, 'from' | 'to'>>;
+};

@@ -31,7 +31,7 @@ export function VifTable({ rows }: { rows: VifEntry[] }) {
             {hasCategory && (
               <TableCell className={infoStatsCellClass}>
                 {row.category != null ? (
-                  <span className="inline-flex items-center rounded border border-indigo-500/25 bg-indigo-500/15 px-2 py-0.5 text-[11px] font-mono text-indigo-300">
+                  <span className="inline-flex items-center rounded border border-indigo-500/25 bg-indigo-500/15 px-2 py-0.5 text-[11px] font-mono text-indigo-700 dark:text-indigo-300">
                     {row.category}
                   </span>
                 ) : (

@@ -306,12 +306,12 @@ mod tests {
     }
 
     #[test]
-    fn worksheet_document_rejects_legacy_identity_fields() {
+    fn worksheet_document_rejects_embedded_identity_fields() {
         for field in ["id", "name"] {
             let mut value = serde_json::to_value(document(0)).unwrap();
             value.as_object_mut().unwrap().insert(
                 field.into(),
-                serde_json::Value::String("legacy-identity".into()),
+                serde_json::Value::String("embedded-identity".into()),
             );
 
             assert!(serde_json::from_value::<WorksheetDocument>(value).is_err());

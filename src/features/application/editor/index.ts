@@ -1,6 +1,5 @@
 export {
   EditorSessionProvider,
-  useEditorSession,
   useEditorSessionCommandsContext,
   useEditorSessionSharedContext,
 } from './EditorSessionContext';

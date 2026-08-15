@@ -140,14 +140,14 @@ describe('project event wire parser', () => {
   it('rejects extra and unknown outer or inner project event envelope fields', () => {
     const valid = projectEvents.events[0];
     expect(() => parseProjectMutationEvent({ ...valid, extra: true })).toThrow();
-    expect(() => parseProjectMutationEvent({ ...valid, type: 'Legacy' })).toThrow();
+    expect(() => parseProjectMutationEvent({ ...valid, type: 'Unsupported' })).toThrow();
     expect(() => parseProjectMutationEvent({
       ...valid,
       payload: { ...valid.payload, extra: true },
     })).toThrow();
     expect(() => parseProjectMutationEvent({
       ...valid,
-      payload: { ...valid.payload, type: 'Legacy' },
+      payload: { ...valid.payload, type: 'Unsupported' },
     })).toThrow();
   });
 
@@ -419,7 +419,7 @@ describe('project event wire parser', () => {
     expect(() => parseResourceMutationCommittedPayload({
       result: {
         ...resourceResult,
-        projectionStatus: { status: 'legacy', expectedGraphPaths: [] },
+        projectionStatus: { status: 'unsupported', expectedGraphPaths: [] },
       },
     })).toThrow();
     expect(() => parseResourceMutationCommittedPayload({
@@ -430,7 +430,7 @@ describe('project event wire parser', () => {
           fromRevision: 1,
           toRevision: 2,
           causedBy: null,
-          payload: { kind: 'legacy', patch: {} },
+          payload: { kind: 'unsupported', patch: {} },
         }],
       },
     })).toThrow();

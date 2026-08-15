@@ -36,7 +36,7 @@
     "absolute": 1e-9
   },
   "goldenSource": {
-    "tool": "scipy + legacy yss-sci formula",
+    "tool": "scipy + yss-sci serial-correlation equations",
     "notes": "Computed with the current Durbin-Watson, Ljung-Box, and Breusch-Godfrey equations used by yss_sci::ts::serial_correlation."
   }
 }

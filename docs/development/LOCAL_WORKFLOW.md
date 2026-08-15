@@ -3,6 +3,18 @@
 本项目不依赖 CI 作为开发期验证入口。所有命令都从仓库根目录
 `D:\Desktop\YssBI` 运行，并通过 `package.json` 脚本统一调用。
 
+## 开发环境
+
+- Node.js `22.22.0` 或更高版本
+- pnpm `11.20.0`
+- Rust `1.94.0` 或更高版本（Rust 2024 edition）
+
+Node.js 最低版本与 React Router 8 的运行时要求保持一致。
+
+应用类型检查和架构审计都使用 TypeScript 7。架构审计通过
+`typescript/unstable/sync` 启动 tsgo 项目快照，并使用
+`typescript/unstable/ast` 遍历 AST；相关生命周期集中在测试 helper 中管理。
+
 ## Cargo 产物目录
 
 根目录 `.cargo/config.toml` 固定 Rust workspace 的产物目录为：

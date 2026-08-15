@@ -1,7 +1,6 @@
 import type {
   LayoutTab,
   LayoutTabComponent,
-  LayoutTabType,
 } from '@/shared/types';
 import {
   isValidGraphResourceTabId,
@@ -12,28 +11,6 @@ import { resourceRefFromLayoutTab, type ResourceRef } from '@/features/core/reso
 /** Map a layout tab to its canonical resource reference (null for chrome-only tabs). */
 export function layoutTabResourceRef(tab: LayoutTab): ResourceRef | null {
   return resourceRefFromLayoutTab(tab);
-}
-
-/** hydrate 入站：本地 memento 可能来自旧会话，缺 type / component，或携带已废弃的 title 快照。 */
-export type LayoutTabInput = Omit<LayoutTab, 'type' | 'component'> & {
-  title?: string;
-  type?: LayoutTabType;
-  component?: LayoutTabComponent | string;
-};
-
-/** 从持久化 memento 规范化 Tab；仅用于本地布局恢复边界。 */
-export function normalizeLayoutTab(tab: LayoutTabInput): LayoutTab {
-  const { title: _title, ...rest } = tab;
-  const type: LayoutTabType =
-    tab.type ??
-    (tab.component === 'WorksheetEditor' ? 'worksheet' : 'event');
-  const component: LayoutTabComponent =
-    type === 'worksheet' ? 'WorksheetEditor' : 'GraphEditor';
-  return { ...rest, type, component };
-}
-
-export function normalizeLayoutTabs(tabs: readonly LayoutTabInput[]): LayoutTab[] {
-  return tabs.map(normalizeLayoutTab);
 }
 
 /** Preview tabs use `pinned: false`; omitted or `true` means pinned. */

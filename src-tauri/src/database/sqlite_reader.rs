@@ -2,7 +2,7 @@
 
 use polars::prelude::*;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
-use sqlx::{Column as SqlxColumn, ConnectOptions, Row, Value, ValueRef};
+use sqlx::{AssertSqlSafe, Column as SqlxColumn, ConnectOptions, Row, Value, ValueRef};
 
 /// 构建 SQLite 连接 URL（只读）
 fn sqlite_url(db_path: &str) -> String {
@@ -88,18 +88,17 @@ pub fn read_table_to_dataframe(db_path: &str, table: &str) -> Result<DataFrame, 
         let escaped_table = format!("\"{}\"", table.replace('"', "\"\""));
         let sql = format!("SELECT * FROM {}", escaped_table);
 
-        let rows: Vec<SqliteRow> = sqlx::query(&sql)
+        let rows: Vec<SqliteRow> = sqlx::query(AssertSqlSafe(sql))
             .fetch_all(&mut conn)
             .await
             .map_err(|e| format!("Failed to execute query: {}", e))?;
 
         if rows.is_empty() {
             let pragma_sql = format!("PRAGMA table_info({})", escaped_table);
-            let pragma_rows: Vec<SqliteRow> =
-                sqlx::query(&pragma_sql)
-                    .fetch_all(&mut conn)
-                    .await
-                    .map_err(|e| format!("Failed to get table info: {}", e))?;
+            let pragma_rows: Vec<SqliteRow> = sqlx::query(AssertSqlSafe(pragma_sql))
+                .fetch_all(&mut conn)
+                .await
+                .map_err(|e| format!("Failed to get table info: {}", e))?;
             let column_names: Vec<String> = pragma_rows
                 .iter()
                 .filter_map(|r| r.try_get::<String, _>(1).ok())

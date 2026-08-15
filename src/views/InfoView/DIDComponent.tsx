@@ -48,7 +48,7 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
   if (error) {
     return (
       <ReportLayout title={title}>
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-200">{error}</div>
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-700 dark:text-red-200">{error}</div>
       </ReportLayout>
     );
   }
@@ -79,7 +79,7 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
       }
     >
       <div className="mb-6 rounded-lg border border-indigo-500/25 bg-indigo-500/5 p-4 text-sm leading-relaxed text-foreground">
-        <div className="mb-1 font-medium text-indigo-300">单期 DID（2×2）</div>
+        <div className="mb-1 font-medium text-indigo-700 dark:text-indigo-300">单期 DID（2×2）</div>
         <p>
           回归在 Y 上对可选控制变量与交互项 <code className="text-emerald-400/90">{didLabel}</code> 做双向固定效应（与 Stata{' '}
           <code className="text-muted-foreground">reghdfe Y X i.treat#i.post, absorb(id t)</code> 同类）。Treat/Post
@@ -118,7 +118,7 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
 
       {parallel_trends ? (
         <div className="mb-6 rounded-lg border border-cyan-500/25 bg-cyan-500/5 p-4 text-sm text-foreground">
-          <div className="mb-2 font-medium text-cyan-300">平行趋势检验（事件研究 / Wald）</div>
+          <div className="mb-2 font-medium text-cyan-700 dark:text-cyan-300">平行趋势检验（事件研究 / Wald）</div>
           {parallel_trends.available &&
           parallel_trends.chi2 != null &&
           parallel_trends.df != null &&
@@ -140,7 +140,7 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
               <p className="text-xs leading-relaxed text-muted-foreground">{parallel_trends.method_note}</p>
             </div>
           ) : (
-            <p className="text-xs leading-relaxed text-amber-200/90">{parallel_trends.method_note}</p>
+            <p className="text-xs leading-relaxed text-amber-700/90 dark:text-amber-200/90">{parallel_trends.method_note}</p>
           )}
           {(parallel_trends.event_study?.length ?? 0) > 0 ? (
             <>
@@ -153,7 +153,7 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
 
       {placebo ? (
         <div className="mb-6 rounded-lg border border-violet-500/25 bg-violet-500/5 p-4 text-sm text-foreground">
-          <div className="mb-2 font-medium text-violet-300">安慰剂 ① 虚构政策时点（政策前 H 期 × 真实处理组）</div>
+          <div className="mb-2 font-medium text-violet-700 dark:text-violet-300">安慰剂 ① 虚构政策时点（政策前 H 期 × 真实处理组）</div>
           {placebo.available &&
           placebo.coef != null &&
           placebo.p_value != null &&
@@ -173,14 +173,14 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
               <p className="text-xs leading-relaxed text-muted-foreground">{placebo.method_note}</p>
             </div>
           ) : (
-            <p className="text-xs leading-relaxed text-amber-200/90">{placebo.method_note}</p>
+            <p className="text-xs leading-relaxed text-amber-700/90 dark:text-amber-200/90">{placebo.method_note}</p>
           )}
         </div>
       ) : null}
 
       {fake_group_engine || fakeGroup.display ? (
         <div className="mb-6 rounded-lg border border-fuchsia-500/25 bg-fuchsia-500/5 p-4 text-sm text-foreground">
-          <div className="mb-2 font-medium text-fuchsia-300">安慰剂 ② 虚构处理组（实体级随机置换）</div>
+          <div className="mb-2 font-medium text-fuchsia-700 dark:text-fuchsia-300">安慰剂 ② 虚构处理组（实体级随机置换）</div>
           {fake_group_engine ? (
             <div className="mb-4 flex flex-wrap items-end gap-3 text-xs">
               <div className="flex flex-col gap-1.5">
@@ -222,7 +222,7 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
             </div>
           ) : null}
           {fakeGroup.error ? (
-            <p className="mb-2 text-xs leading-relaxed text-red-300/90">{fakeGroup.error}</p>
+            <p className="mb-2 text-xs leading-relaxed text-red-700/90 dark:text-red-300/90">{fakeGroup.error}</p>
           ) : null}
           {fakeGroup.display ? (
             fakeGroup.display.available &&
@@ -252,7 +252,7 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
                 <p className="text-xs leading-relaxed text-muted-foreground">{fakeGroup.display.method_note}</p>
               </div>
             ) : (
-              <p className="text-xs leading-relaxed text-amber-200/90">{fakeGroup.display.method_note}</p>
+              <p className="text-xs leading-relaxed text-amber-700/90 dark:text-amber-200/90">{fakeGroup.display.method_note}</p>
             )
           ) : fake_group_engine ? (
             <p className="text-xs leading-relaxed text-muted-foreground">

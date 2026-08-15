@@ -47,7 +47,7 @@ describe('normalizeDatabases', () => {
     const existing: Record<string, DatabaseRecord> = {
       'df-1': {
         id: 'df-1',
-        name: 'Legacy',
+        name: 'Previous Name',
         rowCount: 10,
         columns: [{ name: 'x', type: 'Utf8' }],
       },

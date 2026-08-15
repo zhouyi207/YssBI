@@ -2,7 +2,7 @@
 //! SQLite 仍由 sqlite_reader 处理
 
 use polars::prelude::*;
-use sqlx::{Column as SqlxColumn, ConnectOptions, Row, Value, ValueRef};
+use sqlx::{AssertSqlSafe, Column as SqlxColumn, ConnectOptions, Row, Value, ValueRef};
 
 use super::DatabaseEngineSql;
 
@@ -149,7 +149,7 @@ pub fn read_postgres_table_to_dataframe(
         let quoted = quote_pg_identifier(table);
         let sql = format!("SELECT * FROM {}", quoted);
 
-        let rows: Vec<sqlx::postgres::PgRow> = sqlx::query(&sql)
+        let rows: Vec<sqlx::postgres::PgRow> = sqlx::query(AssertSqlSafe(sql))
             .fetch_all(&mut conn)
             .await
             .map_err(|e| format!("Failed to execute query: {}", e))?;
@@ -175,7 +175,7 @@ pub fn read_mysql_table_to_dataframe(
         let quoted = quote_mysql_identifier(table);
         let sql = format!("SELECT * FROM {}", quoted);
 
-        let rows: Vec<sqlx::mysql::MySqlRow> = sqlx::query(&sql)
+        let rows: Vec<sqlx::mysql::MySqlRow> = sqlx::query(AssertSqlSafe(sql))
             .fetch_all(&mut conn)
             .await
             .map_err(|e| format!("Failed to execute query: {}", e))?;

@@ -92,11 +92,11 @@ describe('ProjectService computation settings', () => {
   });
 
   it.each([
-    ['unknown top-level key', () => computationSettingsResult({ legacy: true })],
+    ['unknown top-level key', () => computationSettingsResult({ unexpected: true })],
     ['unsafe revision', () => computationSettingsResult({ settingsRevision: Number.MAX_SAFE_INTEGER + 1 })],
     ['unknown settings key', () => {
       const value = computationSettingsResult();
-      (value.settings as Record<string, unknown>).legacy = true;
+      (value.settings as Record<string, unknown>).unexpected = true;
       return value;
     }],
     ['non-finite tolerance', () => {
@@ -235,7 +235,7 @@ describe('ProjectService.getProjectIndex function editor projection parser', () 
     const index = projectIndex();
     const projection = functionRow(index).functionEditorProjection as Record<string, unknown>;
     const input = (projection.inputs as Array<Record<string, unknown>>)[0];
-    input.dataType = { kind: 'DataSeries', inner: { kind: 'UnknownLegacyType' } };
+    input.dataType = { kind: 'DataSeries', inner: { kind: 'UnsupportedInnerType' } };
     ipc.response = index;
 
     await expect(ProjectService.getProjectIndex('project-a')).rejects.toThrow(
@@ -293,7 +293,7 @@ describe('ProjectService.getProjectIndex function editor projection parser', () 
     ['whitespace-only Rust-provided name', (row: Record<string, unknown>) => {
       row.name = '   ';
     }],
-    ['legacy id', (row: Record<string, unknown>) => {
+    ['obsolete id', (row: Record<string, unknown>) => {
       row.id = row.worksheetPath;
       delete row.worksheetPath;
     }],
@@ -301,7 +301,7 @@ describe('ProjectService.getProjectIndex function editor projection parser', () 
       delete row.revision;
     }],
     ['unknown field', (row: Record<string, unknown>) => {
-      row.legacyName = 'inferred';
+      row.unexpectedName = 'inferred';
     }],
     ['unsupported chart type', (row: Record<string, unknown>) => {
       row.chartType = 'pie';

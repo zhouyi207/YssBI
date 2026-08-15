@@ -10,12 +10,12 @@ import { reconcileProjectPath } from './projectSession';
 import { captureProjectLifecycleState } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { ProjectService } from '@/services/project/projectService';
 import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
-import type { GraphData } from '@/shared/types/store/graph';
+import type { GraphSnapshotData } from '@/shared/types/store/graph';
 
 /**
  * 从三 store 组装指定 graph 的完整数据（ResourceStore + graphMetaStore + GraphDataStore）。
  */
-export function getGraphByPath(graphPath: string): GraphData | null {
+export function getGraphByPath(graphPath: string): GraphSnapshotData | null {
   return buildGraphSnapshotFromStores()[graphPath] ?? null;
 }
 

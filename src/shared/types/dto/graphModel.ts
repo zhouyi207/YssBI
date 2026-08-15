@@ -6,7 +6,7 @@
 import type { Graph } from '../domain/graph';
 import type { Pin } from '../domain/pin';
 import { connectionDataToItems } from './graphConverters';
-import type { GraphData, NodeData, PinData } from '../store/graph';
+import type { GraphSnapshotData, NodeData, PinData } from '../store/graph';
 
 function pinDataToDomainPin(pin: PinData): Pin {
   return {
@@ -43,7 +43,7 @@ function resolveDomainNodes(nodes: NodeData[], pinMap: Map<string, Pin>): Graph[
 }
 
 /** Store 图 → domain Graph（ProjectData 快照） */
-export function graphDataToDomainGraph(data: GraphData): Graph {
+export function graphDataToDomainGraph(data: GraphSnapshotData): Graph {
   const domainPins = data.pins.map(pinDataToDomainPin);
   const pinMap = new Map(domainPins.map((pin) => [pin.id, pin]));
 
@@ -60,7 +60,7 @@ export function graphDataToDomainGraph(data: GraphData): Graph {
 }
 
 export function graphDataRecordToDomainGraphs(
-  graphs: Record<string, GraphData>,
+  graphs: Record<string, GraphSnapshotData>,
 ): Record<string, Graph> {
   return Object.fromEntries(
     Object.entries(graphs).map(([id, graph]) => [id, graphDataToDomainGraph(graph)]),

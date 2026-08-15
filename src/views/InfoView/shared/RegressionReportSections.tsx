@@ -48,7 +48,7 @@ export function OmittedVariablesAlert({ diag }: { diag: DiagnosticInfo }) {
               <li key={i} className="text-muted-foreground">
                 {o.variable}
                 {o.category != null ? (
-                  <span className="ml-1 rounded border border-indigo-500/25 px-1.5 py-0.5 text-indigo-300">
+                  <span className="ml-1 rounded border border-indigo-500/25 px-1.5 py-0.5 text-indigo-700 dark:text-indigo-300">
                     {o.category}
                   </span>
                 ) : null}

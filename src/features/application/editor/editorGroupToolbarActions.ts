@@ -3,8 +3,7 @@ export type EditorGroupToolbarActionId =
   | 'split-pointer'
   | 'split-right'
   | 'split-down'
-  | 'close-group'
-  | 'toggle-lock';
+  | 'close-group';
 
 export interface PreparedEditorGroupToolbar {
   primary: EditorGroupToolbarActionId[];
@@ -14,26 +13,18 @@ export interface PreparedEditorGroupToolbar {
 export function prepareEditorGroupToolbarActions(options: {
   isGroupActive: boolean;
   alwaysShowEditorActions: boolean;
-  locked: boolean;
 }): PreparedEditorGroupToolbar {
-  const { isGroupActive, alwaysShowEditorActions, locked } = options;
+  const { isGroupActive, alwaysShowEditorActions } = options;
 
   if (isGroupActive || alwaysShowEditorActions) {
     return {
       primary: ['split-pointer', 'close-group'],
-      secondary: ['toggle-lock'],
-    };
-  }
-
-  if (locked) {
-    return {
-      primary: ['toggle-lock'],
-      secondary: ['split-right', 'split-down', 'close-group'],
+      secondary: [],
     };
   }
 
   return {
     primary: [],
-    secondary: ['split-right', 'split-down', 'toggle-lock', 'close-group'],
+    secondary: ['split-right', 'split-down', 'close-group'],
   };
 }

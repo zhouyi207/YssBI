@@ -1,7 +1,7 @@
 //! Stable application-facing API surface.
 //!
-//! Existing module paths remain available for compatibility. New app code should
-//! prefer these curated re-exports over reaching into implementation modules.
+//! Application code should prefer these curated re-exports, while the public
+//! implementation modules support lower-level crate use.
 
 pub mod regression {
     pub use crate::regression::covariance::CovParams;

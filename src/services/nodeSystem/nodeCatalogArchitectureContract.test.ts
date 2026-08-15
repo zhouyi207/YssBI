@@ -1,7 +1,11 @@
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
-import * as ts from 'typescript';
+import * as ts from 'typescript/unstable/ast';
 import { describe, expect, it } from 'vitest';
+import {
+  withIsolatedTypeScriptProject,
+  withProductionTypeScriptProject,
+} from '@/tests/helpers/typescriptAudit';
 
 const scopedDirectories = [
   'src/features/application/nodeCatalog',
@@ -106,8 +110,7 @@ type DescriptorAliasScope = Map<string, DescriptorAliasKind | null>;
 
 function unwrapExpression(node: ts.Expression): ts.Expression {
   if (ts.isParenthesizedExpression(node)
-    || ts.isAsExpression(node)
-    || ts.isTypeAssertionExpression(node)
+    || ts.isAssertionExpression(node)
     || ts.isNonNullExpression(node)
     || ts.isSatisfiesExpression(node)) {
     return unwrapExpression(node.expression);
@@ -165,7 +168,7 @@ function descriptorAliasOffenders(path: string, sourceFile: ts.SourceFile): stri
   }
 
   function visit(node: ts.Node): void {
-    if (ts.isFunctionLike(node)) {
+    if (ts.isFunctionLikeDeclaration(node)) {
       withScope(() => {
         for (const parameter of node.parameters) {
           if (ts.isIdentifier(parameter.name)) scopes[scopes.length - 1].set(parameter.name.text, null);
@@ -185,25 +188,14 @@ function descriptorAliasOffenders(path: string, sourceFile: ts.SourceFile): stri
       return;
     }
     if (ts.isObjectLiteralExpression(node)) inspectSpreadReconstruction(node);
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   }
 
   visit(sourceFile);
   return [...offenders];
 }
 
-function parseSource(path: string, source = readFileSync(resolve(path), 'utf8')): ts.SourceFile {
-  return ts.createSourceFile(
-    path,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
-}
-
-function sourceOffendersFromSource(path: string, source: string): string[] {
-  const sourceFile = parseSource(path, source);
+function sourceOffenders(path: string, sourceFile: ts.SourceFile): string[] {
   const offenders = new Set<string>();
 
   function visit(node: ts.Node): void {
@@ -227,7 +219,7 @@ function sourceOffendersFromSource(path: string, source: string): string[] {
       const reason = descriptorSynthesisReason(node);
       if (reason) offenders.add(`${path}: synthesized creation descriptor (${reason})`);
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   }
 
   visit(sourceFile);
@@ -235,16 +227,14 @@ function sourceOffendersFromSource(path: string, source: string): string[] {
   return [...offenders];
 }
 
-function sourceOffenders(path: string): string[] {
-  return sourceOffendersFromSource(path, readFileSync(resolve(path), 'utf8'));
-}
-
 function fixtureOffenders(source: string): string[] {
-  return sourceOffendersFromSource('fixture.ts', source);
+  return withIsolatedTypeScriptProject({ 'fixture.ts': source }, ({ sourceFile }) => (
+    sourceOffenders('fixture.ts', sourceFile('fixture.ts'))
+  ));
 }
 
 
-function containsCreateNodeMutation(path: string): boolean {
+function containsCreateNodeMutation(sourceFile: ts.SourceFile): boolean {
   let found = false;
   function visit(node: ts.Node): void {
     if (ts.isPropertyAssignment(node)
@@ -253,9 +243,9 @@ function containsCreateNodeMutation(path: string): boolean {
       && node.initializer.text === 'createNode') {
       found = true;
     }
-    if (!found) ts.forEachChild(node, visit);
+    if (!found) node.forEachChild(visit);
   }
-  visit(parseSource(path));
+  visit(sourceFile);
   return found;
 }
 
@@ -307,7 +297,9 @@ describe('scoped node Catalog architecture audit', () => {
       .flatMap(productionFiles)
       .map((path) => relative(resolve('.'), resolve(path)).replace(/\\/g, '/'));
     const uniqueAuditedFiles = [...new Set(auditedFiles)].sort();
-    const offenders = uniqueAuditedFiles.flatMap(sourceOffenders);
+    const offenders = withProductionTypeScriptProject(({ sourceFile }) => (
+      uniqueAuditedFiles.flatMap((path) => sourceOffenders(path, sourceFile(path)))
+    ));
 
     expect(uniqueAuditedFiles.length).toBeGreaterThan(0);
     expect(offenders).toEqual([]);
@@ -317,7 +309,10 @@ describe('scoped node Catalog architecture audit', () => {
     const auditedFiles = scopedDirectories
       .flatMap(productionFiles)
       .map((path) => relative(resolve('.'), resolve(path)).replace(/\\/g, '/'));
-    const mutationSites = [...new Set(auditedFiles)].filter(containsCreateNodeMutation);
+    const uniqueAuditedFiles = [...new Set(auditedFiles)];
+    const mutationSites = withProductionTypeScriptProject(({ sourceFile }) => (
+      uniqueAuditedFiles.filter((path) => containsCreateNodeMutation(sourceFile(path)))
+    ));
 
     expect(mutationSites).toHaveLength(1);
   });

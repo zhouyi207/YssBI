@@ -2,6 +2,7 @@
 name = "yss-sci"
 version = "0.1.0"
 edition = "2024"
+rust-version.workspace = true
 
 [dependencies]
 chrono.workspace = true
@@ -10,7 +11,6 @@ ndarray.workspace = true
 num-traits.workspace = true
 polars.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 statrs.workspace = true
 
 [dev-dependencies]

@@ -236,7 +236,7 @@ mod tests {
         let tree = TestTree::new("nested-directory");
         let nested = tree.root.join("events/Nested");
         std::fs::create_dir_all(&nested).unwrap();
-        std::fs::write(nested.join("Legacy.yssbi-event"), b"{}").unwrap();
+        std::fs::write(nested.join("InvalidNestedGraph.yssbi-event"), b"{}").unwrap();
 
         let error = scan_graph_resource_index(&tree.root).unwrap_err();
 

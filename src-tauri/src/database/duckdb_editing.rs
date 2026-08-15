@@ -201,13 +201,9 @@ fn try_delete_row_id(conn: &Connection, table: &str, row_id: i64) -> Result<bool
     Ok(changed > 0)
 }
 
-pub fn sql_add_row(conn: &Connection, table: &str, index: Option<usize>) -> Result<i64, String> {
+pub fn sql_add_row(conn: &Connection, table: &str) -> Result<i64, String> {
     let table_sql = duckdb_table_sql(table);
     let user_cols = user_column_names(conn, table)?;
-    if let Some(idx) = index {
-        // DuckDB 无原生行序 insert；新行追加。index 仅作兼容记录。
-        let _ = idx;
-    }
     let insert_sql = if user_cols.is_empty() {
         format!("INSERT INTO {table_sql} DEFAULT VALUES")
     } else {
@@ -329,8 +325,8 @@ pub fn apply_edit_on_duckdb(
             *row_id = Some(rid);
             sql_delete_rows(&conn, table, &[rid])
         }
-        EditOperation::AddRow { row_id, index, .. } => {
-            let new_id = sql_add_row(&conn, table, Some(*index))?;
+        EditOperation::AddRow { row_id, .. } => {
+            let new_id = sql_add_row(&conn, table)?;
             *row_id = Some(new_id);
             Ok(())
         }
@@ -411,7 +407,7 @@ pub fn reverse_edit_on_duckdb(
             data,
             ..
         } => {
-            let new_id = sql_add_row(&conn, table, None)?;
+            let new_id = sql_add_row(&conn, table)?;
             *row_id = Some(new_id);
             let cols = user_column_names(&conn, table)?;
             for (col_idx, val) in data.iter().enumerate() {

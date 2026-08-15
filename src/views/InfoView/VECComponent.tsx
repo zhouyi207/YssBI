@@ -261,7 +261,7 @@ export const VECComponent: React.FC<{ data: VECSummaryResultData }> = ({ data })
       )}
 
       {equations.length === 0 && coefficients.length === 0 && beta.length === 0 && (
-        <div className="mb-6 rounded-lg border border-amber-800/50 bg-amber-900/10 px-4 py-3 text-sm text-amber-200/80">
+        <div className="mb-6 rounded-lg border border-amber-800/50 bg-amber-900/10 px-4 py-3 text-sm text-amber-700/80 dark:text-amber-200/80">
           VEC 协整估计尚未实现，当前为占位结果。待实现 Johansen  procedure 后显示完整输出。
         </div>
       )}

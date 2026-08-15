@@ -1,7 +1,5 @@
 export type OpenSideBySideDirection = 'right' | 'down';
 export type EditorSplitSizingMode = 'auto' | 'distribute' | 'split';
-/** VS Code `workbench.editor.doubleClickTabToToggleEditorGroupSizes` */
-export type DoubleClickTabToToggleEditorGroupSizes = 'maximize' | 'expand' | 'off';
 
 export interface EditorSettings {
     showGrid: boolean;
@@ -18,7 +16,6 @@ export interface EditorSettings {
     closeEmptyGroups?: boolean;
     /** VS Code `workbench.editor.splitSizing` */
     splitSizing?: EditorSplitSizingMode;
-    doubleClickTabToToggleEditorGroupSizes?: DoubleClickTabToToggleEditorGroupSizes;
     /** VS Code `workbench.editor.dragToOpenWindow` */
     dragToOpenWindow?: boolean;
 }

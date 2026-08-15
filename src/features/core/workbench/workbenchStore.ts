@@ -6,7 +6,7 @@ import type {
   WorkbenchUIState,
 } from './workbenchTypes';
 
-/** Matches the legacy workbench chrome defaults without copying layout data. */
+/** Default non-layout workbench UI state; Dockview remains authoritative for placement. */
 export const DEFAULT_WORKBENCH_UI_STATE: Readonly<WorkbenchUIState> = {
   sidebarCurrentTab: 'graphs',
   sidebarUserHidden: false,

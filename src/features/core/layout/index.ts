@@ -51,11 +51,8 @@ export {
   isPreviewLayoutTab,
   isWorksheetLayoutTab,
   layoutTabResourceRef,
-  normalizeLayoutTab,
-  normalizeLayoutTabs,
   splitComponentForTab,
 } from './layoutTabModel';
-export type { LayoutTabInput } from './layoutTabModel';
 export {
   readEditorPartOptions,
   preferSplitVerticallyFromDirection,

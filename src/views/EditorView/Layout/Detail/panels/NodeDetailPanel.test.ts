@@ -43,7 +43,7 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
           supportsInlineLiterals: false,
         },
         diagnostics: [],
-        subGraphPath: 'legacy/must-not-be-read',
+        subGraphPath: 'unexpected/must-not-be-read',
       },
     },
     pins: {},

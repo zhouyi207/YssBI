@@ -1,11 +1,7 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import type { EditorSession } from './editorSessionTypes';
+import { createContext, useContext, type ReactNode } from 'react';
 import type { EditorSessionCommands } from './editorSessionCommands';
 import { useEditorSessionCommands } from './useEditorSessionCommands';
 import { useEditorSessionShared, type EditorSessionShared } from './useEditorSessionShared';
-import { useEditorGroupWorkspace } from '@/features/core/editor/hooks/useEditorGroupWorkspace';
-import { useEditorSessionUi } from './useEditorSessionUi';
-import { useEditorHistoryAvailability } from './useEditorHistoryAvailability';
 
 const EditorSessionCommandsContext = createContext<EditorSessionCommands | null>(null);
 const EditorSessionSharedContext = createContext<EditorSessionShared | null>(null);
@@ -37,32 +33,6 @@ export function useEditorSessionSharedContext(): EditorSessionShared {
     throw new Error('useEditorSessionSharedContext must be used within EditorSessionProvider');
   }
   return shared;
-}
-
-/**
- * Full session for focused editor group — use sparingly (sync, legacy callers).
- * Prefer useEditorSessionCommandsContext / useEditorSessionSharedContext / useEditorGroup.
- */
-export function useEditorSession(): EditorSession {
-  const commands = useEditorSessionCommandsContext();
-  const shared = useEditorSessionSharedContext();
-  const workspace = useEditorGroupWorkspace();
-  const ui = useEditorSessionUi();
-  const { canUndo, canRedo, pending } = useEditorHistoryAvailability();
-
-  return useMemo(
-    (): EditorSession => ({
-      ...shared,
-      ...commands,
-      ...ui,
-      ...workspace,
-      activeEditorGroupId: workspace.groupId,
-      canUndo,
-      canRedo,
-      pending,
-    }),
-    [commands, shared, workspace, ui, canUndo, canRedo, pending],
-  );
 }
 
 export type { EditorSession } from './editorSessionTypes';

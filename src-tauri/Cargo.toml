@@ -4,6 +4,7 @@ version = "0.2.7"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
+rust-version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -11,17 +12,20 @@ edition = "2024"
 resolver = "3"
 members = [".", "sci"]
 
+[workspace.package]
+rust-version = "1.94"
+
 [workspace.dependencies]
 chrono = "0.4.41"
 faer = "0.24.0"
-ndarray = { version = "0.17.2", features = ["serde"] }
+ndarray = "0.17.2"
 num-traits = "0.2.19"
 polars = { version = "0.53.0", default-features = false, features = ["lazy", "csv", "ipc", "parquet", "strings", "dtype-categorical", "dtype-date", "dtype-datetime", "dtype-duration", "dtype-time", "dtype-decimal", "dtype-i8", "dtype-i16", "dtype-u8", "dtype-u16"] }
 polars-arrow = { version = "0.53.0", default-features = false }
 polars-dtype = { version = "0.53.0", features = ["dtype-categorical"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-statrs = "0.17"
+statrs = { version = "0.19", default-features = false, features = ["std", "rand"] }
 
 
 [lib]
@@ -53,25 +57,23 @@ polars-dtype.workspace = true
 statrs.workspace = true
 chrono.workspace = true
 num-traits.workspace = true
-faer.workspace = true
 
 
 uuid = { version = "1.20.0", features = ["v4", "serde"] }
 thiserror = "2.0.18"
 regex = "1"
 mathlex = "=0.4.2"
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "macros", "sqlite", "postgres", "mysql"] }
-calamine = "0.26"
-rand = "0.8"
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "macros", "sqlite", "postgres", "mysql"] }
+calamine = "0.36"
+rand = "0.10"
 duckdb = { version = "1.10504.0", default-features = false, features = ["bundled", "appender-arrow"] }
-trash = "5.2"
 notify = "8.2.0"
 unicode-normalization = "0.1.24"
 unicode-casefold = "0.2.0"
 
 [dev-dependencies]
 proc-macro2 = "1"
-syn = { version = "2", features = ["full", "visit"] }
+syn = { version = "3", features = ["full", "visit"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Storage_FileSystem"] }

@@ -1,12 +1,21 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
-import ts from 'typescript';
+import * as ts from 'typescript/unstable/ast';
+import type {
+  Checker,
+  Project,
+  Symbol as TypeScriptSymbol,
+} from 'typescript/unstable/sync';
 import { describe, expect, it } from 'vitest';
 import {
   moduleDependencies,
   resolveSourceSpecifier,
   type ArchitectureSource,
 } from '@/tests/helpers/moduleDependencyAudit';
+import {
+  withIsolatedTypeScriptProject,
+  withProductionTypeScriptProject,
+} from '@/tests/helpers/typescriptAudit';
 
 const sourceRoot = resolve('src');
 
@@ -232,12 +241,20 @@ interface ServiceInvoke {
   payloadFields: string[] | null;
 }
 
+function isStringLiteralLike(
+  node: ts.Node,
+): node is ts.StringLiteral | ts.NoSubstitutionTemplateLiteral {
+  return ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node);
+}
+
 function objectLiteralFields(node: ts.Expression | undefined): string[] | null {
   if (!node || !ts.isObjectLiteralExpression(node)) return null;
   return node.properties.flatMap((property) => {
-    if (ts.isShorthandPropertyAssignment(property)) return [property.name.text];
+    if (ts.isShorthandPropertyAssignment(property) && ts.isIdentifier(property.name)) {
+      return [property.name.text];
+    }
     if (!ts.isPropertyAssignment(property)) return [];
-    return ts.isIdentifier(property.name) || ts.isStringLiteralLike(property.name)
+    return ts.isIdentifier(property.name) || isStringLiteralLike(property.name)
       ? [property.name.text]
       : [];
   });
@@ -264,81 +281,90 @@ function isTauriCoreImport(
     && declaration.moduleSpecifier.text === '@tauri-apps/api/core';
 }
 
-function symbolHasTauriInvokeImport(symbol: ts.Symbol | undefined): boolean {
-  return symbol?.declarations?.some((declaration) =>
-    ts.isImportSpecifier(declaration)
-    && (declaration.propertyName ?? declaration.name).text === 'invoke'
-    && isTauriCoreImport(declaration)) ?? false;
+function symbolHasTauriInvokeImport(
+  symbol: TypeScriptSymbol | undefined,
+  project: Project,
+): boolean {
+  return symbol?.declarations.some((handle) => {
+    const declaration = handle.resolve(project);
+    return declaration !== undefined
+      && ts.isImportSpecifier(declaration)
+      && (declaration.propertyName ?? declaration.name).text === 'invoke'
+      && isTauriCoreImport(declaration);
+  }) ?? false;
 }
 
-function symbolHasTauriNamespaceImport(symbol: ts.Symbol | undefined): boolean {
-  return symbol?.declarations?.some((declaration) =>
-    ts.isNamespaceImport(declaration) && isTauriCoreImport(declaration)) ?? false;
+function symbolHasTauriNamespaceImport(
+  symbol: TypeScriptSymbol | undefined,
+  project: Project,
+): boolean {
+  return symbol?.declarations.some((handle) => {
+    const declaration = handle.resolve(project);
+    return declaration !== undefined
+      && ts.isNamespaceImport(declaration)
+      && isTauriCoreImport(declaration);
+  }) ?? false;
 }
 
 function isTauriInvokeCall(
-  expression: ts.LeftHandSideExpression,
-  checker: ts.TypeChecker,
+  expression: ts.Expression,
+  checker: Checker,
+  project: Project,
 ): boolean {
   if (ts.isIdentifier(expression)) {
-    return symbolHasTauriInvokeImport(checker.getSymbolAtLocation(expression));
+    return symbolHasTauriInvokeImport(checker.getSymbolAtLocation(expression), project);
   }
   return ts.isPropertyAccessExpression(expression)
     && expression.name.text === 'invoke'
-    && symbolHasTauriNamespaceImport(checker.getSymbolAtLocation(expression.expression));
+    && symbolHasTauriNamespaceImport(
+      checker.getSymbolAtLocation(expression.expression),
+      project,
+    );
+}
+
+function sourceFileInvokes(
+  path: string,
+  sourceFile: ts.SourceFile,
+  project: Project,
+): ServiceInvoke[] {
+  const invokes: ServiceInvoke[] = [];
+  const checker = project.checker;
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)
+      && isTauriInvokeCall(node.expression, checker, project)
+      && node.arguments.length > 0
+      && isStringLiteralLike(node.arguments[0])) {
+      invokes.push({
+        command: node.arguments[0].text,
+        path,
+        payloadFields: objectLiteralFields(node.arguments[1]),
+      });
+    }
+    node.forEachChild(visit);
+  };
+  visit(sourceFile);
+  return invokes;
 }
 
 function serviceInvokes(sources: readonly ArchitectureSource[]): ServiceInvoke[] {
-  const options: ts.CompilerOptions = {
-    jsx: ts.JsxEmit.ReactJSX,
-    noResolve: true,
-    target: ts.ScriptTarget.Latest,
-  };
-  const host = ts.createCompilerHost(options, true);
-  const virtualSources = new Map(sources.map(({ path, source }) => [
-    resolve(path).replace(/\\/g, '/'),
-    { path, source },
-  ]));
-  const defaultGetSourceFile = host.getSourceFile.bind(host);
-  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const fixture = virtualSources.get(resolve(fileName).replace(/\\/g, '/'));
-    if (!fixture) {
-      return defaultGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
-    }
-    const scriptKind = fixture.path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
-    return ts.createSourceFile(fileName, fixture.source, languageVersion, true, scriptKind);
-  };
-  host.fileExists = (fileName) => virtualSources.has(resolve(fileName).replace(/\\/g, '/'))
-    || ts.sys.fileExists(fileName);
-  host.readFile = (fileName) => virtualSources.get(resolve(fileName).replace(/\\/g, '/'))?.source
-    ?? ts.sys.readFile(fileName);
+  const sourceMap = new Map(sources.map(({ path, source }) => [path, source]));
+  return withIsolatedTypeScriptProject(sourceMap, (context) => (
+    sources.flatMap(({ path }) => sourceFileInvokes(
+      path,
+      context.sourceFile(path),
+      context.project,
+    ))
+  ));
+}
 
-  const program = ts.createProgram({
-    rootNames: [...virtualSources.keys()],
-    options,
-    host,
-  });
-  const checker = program.getTypeChecker();
-  return program.getSourceFiles().flatMap((sourceFile) => {
-    const fixture = virtualSources.get(resolve(sourceFile.fileName).replace(/\\/g, '/'));
-    if (!fixture) return [];
-    const invokes: ServiceInvoke[] = [];
-    const visit = (node: ts.Node): void => {
-      if (ts.isCallExpression(node)
-        && isTauriInvokeCall(node.expression, checker)
-        && node.arguments.length > 0
-        && ts.isStringLiteralLike(node.arguments[0])) {
-        invokes.push({
-          command: node.arguments[0].text,
-          path: fixture.path,
-          payloadFields: objectLiteralFields(node.arguments[1]),
-        });
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(sourceFile);
-    return invokes;
-  });
+function productionServiceInvokes(sources: readonly ArchitectureSource[]): ServiceInvoke[] {
+  return withProductionTypeScriptProject((context) => (
+    sources.flatMap(({ path }) => sourceFileInvokes(
+      path,
+      context.sourceFile(path),
+      context.project,
+    ))
+  ));
 }
 
 function commandClassificationViolations(
@@ -437,12 +463,12 @@ function isForbiddenHandlerEffect(node: ts.CallExpression): boolean {
 function containsForbiddenHandlerEffect(statement: ts.Statement): boolean {
   let forbidden = false;
   const visit = (node: ts.Node): void => {
-    if (forbidden || (node !== statement && ts.isFunctionLike(node))) return;
+    if (forbidden || (node !== statement && ts.isFunctionLikeDeclaration(node))) return;
     if (ts.isCallExpression(node) && isForbiddenHandlerEffect(node)) {
       forbidden = true;
       return;
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(statement);
   return forbidden;
@@ -458,8 +484,10 @@ function handleHasIdentityGuardBeforeEffects(body: ts.Block): boolean {
   return false;
 }
 
-function eventHandlerIdentityGuardViolations(path: string, source: string): string[] {
-  const sourceFile = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
+function sourceFileEventHandlerIdentityGuardViolations(
+  path: string,
+  sourceFile: ts.SourceFile,
+): string[] {
   const violations: string[] = [];
   sourceFile.forEachChild((node) => {
     if (!ts.isClassDeclaration(node) || !node.name) return;
@@ -472,6 +500,12 @@ function eventHandlerIdentityGuardViolations(path: string, source: string): stri
     }
   });
   return violations;
+}
+
+function eventHandlerIdentityGuardViolations(path: string, source: string): string[] {
+  return withIsolatedTypeScriptProject({ [path]: source }, (context) => (
+    sourceFileEventHandlerIdentityGuardViolations(path, context.sourceFile(path))
+  ));
 }
 
 const workflowFiles = [
@@ -816,7 +850,7 @@ describe('projectFilesystemContract', () => {
   });
 
   it('sends the required identity field in every active-project service invoke', () => {
-    const invokes = serviceInvokes(productionSources(resolve('src/services')));
+    const invokes = productionServiceInvokes(productionSources(resolve('src/services')));
 
     expect(activeProjectInvokeIdentityViolations(invokes)).toEqual([]);
   });
@@ -955,9 +989,11 @@ describe('projectFilesystemContract', () => {
       'src/features/core/sync/handlers/ResourceEventHandler.ts',
       'src/features/core/sync/handlers/ProjectMutationEventHandler.ts',
     ];
-    const offenders = eventFiles.flatMap((path) => eventHandlerIdentityGuardViolations(
-      path,
-      readFileSync(resolve(path), 'utf8'),
+    const offenders = withProductionTypeScriptProject((context) => (
+      eventFiles.flatMap((path) => sourceFileEventHandlerIdentityGuardViolations(
+        path,
+        context.sourceFile(path),
+      ))
     ));
 
     expect(offenders).toEqual([]);

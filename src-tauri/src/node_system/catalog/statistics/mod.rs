@@ -1,7 +1,7 @@
 //! Statistical node protocols staged for aggregation into the built-in provider.
 //!
-//! Algorithms are lowered to runtime kernel handles and remain independent of
-//! legacy graph/executor state. Runtime adapters consume the `sci` and `tabular`
+//! Algorithms are lowered to runtime kernel handles and depend on the current
+//! node-system contracts. Runtime adapters consume the `sci` and `tabular`
 //! application boundaries.
 
 mod families;
@@ -713,12 +713,12 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
         (
             "en-US",
             documentation,
-            Text("Lowered to the scientific runtime API without legacy graph state."),
+            Text("Lowered through the scientific runtime API and node-system contracts."),
         ),
         (
             "zh-CN",
             documentation,
-            Text("降低到科学计算运行时 API，不依赖旧图状态。"),
+            Text("通过科学计算运行时 API 和节点系统契约执行。"),
         ),
         ("en-US", aliases, Aliases(spec.aliases)),
         ("zh-CN", aliases, Aliases(spec.zh_aliases)),

@@ -203,7 +203,8 @@ mod tests {
 
     #[test]
     fn rejects_nested_graph_resource_path() {
-        let error = GraphResourcePath::new("events/Nested/Legacy.yssbi-event").unwrap_err();
+        let error =
+            GraphResourcePath::new("events/Nested/InvalidNestedGraph.yssbi-event").unwrap_err();
 
         assert!(matches!(
             error,

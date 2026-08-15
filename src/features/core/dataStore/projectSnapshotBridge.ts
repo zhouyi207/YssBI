@@ -3,12 +3,12 @@
  * 跨 store 读取集中于此，避免 projectIOStore 隐式依赖未 import 的 hook。
  */
 import { resourceKey, useResourceStore } from '@/features/core/resource';
-import type { GraphData } from '@/shared/types/store/graph';
+import type { GraphSnapshotData } from '@/shared/types/store/graph';
 import { useGraphDataStore } from './graphDataStore';
 import { useGraphMetaStore } from './graphMetaStore';
 import { buildGraphSnapshot } from './projectSnapshot';
 
-export function buildGraphSnapshotFromStores(): Record<string, GraphData> {
+export function buildGraphSnapshotFromStores(): Record<string, GraphSnapshotData> {
   const resourceStore = useResourceStore.getState();
   const dataStore = useGraphDataStore.getState();
   const metaStore = useGraphMetaStore.getState();

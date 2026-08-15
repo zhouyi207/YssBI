@@ -64,12 +64,12 @@ describe('callFunctionDiagnostics', () => {
           inputs: [],
           outputs: [],
         },
-        'legacy-call': {
-          id: 'legacy-call',
+        'noncanonical-call': {
+          id: 'noncanonical-call',
           graphPath,
           nodeType: 'Functions:Call Function',
           subGraphPath: 'functions/Gone.yssbi-function',
-          title: 'Legacy call label',
+          title: 'Noncanonical call label',
           category: [],
           position: { x: 0, y: 0 },
           inputs: [],
@@ -89,7 +89,7 @@ describe('callFunctionDiagnostics', () => {
       },
       pins: {},
       connections: {},
-      graphNodes: ['call-empty', 'call-missing', 'legacy-call', 'call-ok'],
+      graphNodes: ['call-empty', 'call-missing', 'noncanonical-call', 'call-ok'],
       nodePins: {},
       pinConnections: {},
     } satisfies GraphEntityBucket;
@@ -101,7 +101,7 @@ describe('callFunctionDiagnostics', () => {
       'missing_target',
     );
     expect(getCallFunctionIssueForNode('events/Main.yssbi-event', bucket.nodes['call-ok'], resources)).toBeNull();
-    expect(getCallFunctionIssueForNode('events/Main.yssbi-event', bucket.nodes['legacy-call'], resources)).toBeNull();
+    expect(getCallFunctionIssueForNode('events/Main.yssbi-event', bucket.nodes['noncanonical-call'], resources)).toBeNull();
 
     expect(collectCallFunctionIssuesForBucket('events/Main.yssbi-event', bucket, resources)).toHaveLength(2);
   });

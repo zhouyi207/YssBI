@@ -127,7 +127,7 @@ function Iv2slsOveridSection({ diag }: { diag: DiagnosticInfo }) {
           </>
         ) : (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-            <p className="text-sm text-amber-200">
+            <p className="text-sm text-amber-700 dark:text-amber-200">
               Model is exactly identified (k_iv = {diag.iv2sls_overid_dims.k_iv}, k_endog ={' '}
               {diag.iv2sls_overid_dims.k_endog}).
             </p>
@@ -223,7 +223,7 @@ function IvLimlOveridSection({ diag }: { diag: DiagnosticInfo }) {
           </>
         ) : (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-            <p className="text-sm text-amber-200">
+            <p className="text-sm text-amber-700 dark:text-amber-200">
               Model is{' '}
               {diag.iv2sls_overid_dims.k_iv > diag.iv2sls_overid_dims.k_endog ? 'overidentified' : 'exactly identified'}{' '}
               (k_iv = {diag.iv2sls_overid_dims.k_iv}, k_endog = {diag.iv2sls_overid_dims.k_endog}).

@@ -48,7 +48,9 @@ pub fn white_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<BreuschPag
         ));
     }
     if k < 2 {
-        return Err("white_test: need at least 2 columns in X (constant + 1 regressor)".to_string());
+        return Err(
+            "white_test: need at least 2 columns in X (constant + 1 regressor)".to_string(),
+        );
     }
 
     let u_sq: Array1<f64> = residuals.mapv(|u| u * u);
@@ -59,8 +61,7 @@ pub fn white_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<BreuschPag
     if n <= n_cols {
         return Err(format!(
             "white_test: insufficient observations (n={}, need > {})",
-            n,
-            n_cols
+            n, n_cols
         ));
     }
 
@@ -120,8 +121,7 @@ pub fn white_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<BreuschPag
     let r2 = if tss > 0.0 { 1.0 - rss / tss } else { 0.0 };
     let lm_stat = n as f64 * r2;
 
-    let chi2 = ChiSquared::new(df as f64)
-        .map_err(|e| format!("white_test: ChiSquared: {}", e))?;
+    let chi2 = ChiSquared::new(df as f64).map_err(|e| format!("white_test: ChiSquared: {}", e))?;
     let p_value = 1.0 - chi2.cdf(lm_stat);
 
     Ok(BreuschPaganResult {
@@ -129,16 +129,6 @@ pub fn white_test(x: &Array2<f64>, residuals: &Array1<f64>) -> Result<BreuschPag
         df,
         p_value,
     })
-}
-
-/// Breusch-Pagan 检验（向后兼容别名）
-/// 等价于 `breusch_pagan_stata_rhs`，对应 Stata `estat hettest, rhs`
-#[inline(always)]
-pub fn breusch_pagan(
-    x: &Array2<f64>,
-    residuals: &Array1<f64>,
-) -> Result<BreuschPaganResult, String> {
-    breusch_pagan_stata_rhs(x, residuals)
 }
 
 /// White 异方差检验（加权版，WLS / aweight）
@@ -157,7 +147,10 @@ pub fn white_test_weighted(
         return Err("white_test_weighted: length mismatch".to_string());
     }
     if k < 2 {
-        return Err("white_test_weighted: need at least 2 columns in X (constant + 1 regressor)".to_string());
+        return Err(
+            "white_test_weighted: need at least 2 columns in X (constant + 1 regressor)"
+                .to_string(),
+        );
     }
     if weights.iter().any(|&w| w < 0.0) {
         return Err("white_test_weighted: weights must be non-negative".to_string());
@@ -172,8 +165,7 @@ pub fn white_test_weighted(
     if n <= n_cols {
         return Err(format!(
             "white_test_weighted: insufficient observations (n={}, need > {})",
-            n,
-            n_cols
+            n, n_cols
         ));
     }
 
@@ -221,7 +213,11 @@ pub fn white_test_weighted(
 
     let y_mean = y.iter().sum::<f64>() / n as f64;
     let tss: f64 = y.iter().map(|v| (v - y_mean).powi(2)).sum();
-    let rss: f64 = y.iter().zip(y_hat_nd.iter()).map(|(a, b)| (a - b).powi(2)).sum();
+    let rss: f64 = y
+        .iter()
+        .zip(y_hat_nd.iter())
+        .map(|(a, b)| (a - b).powi(2))
+        .sum();
 
     let r2 = if tss > 0.0 { 1.0 - rss / tss } else { 0.0 };
     let lm_stat = n as f64 * r2;
@@ -236,4 +232,3 @@ pub fn white_test_weighted(
         p_value,
     })
 }
-

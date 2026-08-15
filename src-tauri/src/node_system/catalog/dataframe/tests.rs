@@ -713,7 +713,7 @@ fn dataframe_decompose_preserves_exact_dynamic_field_identity() {
             scalar_type: RelationalScalarType::Int64,
             lineage: Some(SchemaFieldLineage {
                 source: "databases/archive".into(),
-                field: "legacy_customer_id".into(),
+                field: "archived_customer_id".into(),
             }),
         }]
         .into_boxed_slice(),

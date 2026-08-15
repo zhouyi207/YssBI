@@ -1,7 +1,19 @@
-import { readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
-import * as ts from 'typescript';
+import * as ts from 'typescript/unstable/ast';
+import {
+  SymbolFlags,
+  type Checker,
+  type NodeHandle,
+  type Project,
+  type Symbol as TypeScriptSymbol,
+  type Type,
+} from 'typescript/unstable/sync';
 import { describe, expect, it } from 'vitest';
+import {
+  withIsolatedTypeScriptProject,
+  withProductionTypeScriptProject,
+} from '@/tests/helpers/typescriptAudit';
 
 const sourceRoot = resolve('src');
 const auditPath = 'src/services/nodeSystem/nodeIdentityArchitectureContract.test.ts';
@@ -11,10 +23,35 @@ const functionSignatureDtoSource = 'src/shared/types/dto/editorMutation.ts';
 const graphDataStoreSource = 'src/features/core/dataStore/graphDataStore.ts';
 const nodeDetailPanelSource = 'src/views/EditorView/Layout/Detail/panels/NodeDetailPanel.tsx';
 
-const configPath = resolve('tsconfig.json');
-const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
-if (configFile.error) throw new Error(ts.flattenDiagnosticMessageText(configFile.error.messageText, '\n'));
-const parsedConfig = ts.parseJsonConfigFileContent(configFile.config, ts.sys, resolve('.'));
+const fixtureSupportSources = {
+  [functionPinSource]: readFileSync(resolve(functionPinSource), 'utf8'),
+  [dataTypeSource]: readFileSync(resolve(dataTypeSource), 'utf8'),
+  [functionSignatureDtoSource]: readFileSync(resolve(functionSignatureDtoSource), 'utf8'),
+  [graphDataStoreSource]: readFileSync(resolve(graphDataStoreSource), 'utf8'),
+} as const;
+
+interface SemanticContext {
+  checker: Checker;
+  project: Project;
+}
+
+function resolveNode(handle: NodeHandle | undefined, project: Project): ts.Node | undefined {
+  return handle?.resolve(project);
+}
+
+function symbolDeclarations(symbol: TypeScriptSymbol, project: Project): ts.Node[] {
+  return symbol.declarations.flatMap((handle) => {
+    const declaration = resolveNode(handle, project);
+    return declaration ? [declaration] : [];
+  });
+}
+
+function symbolValueDeclaration(
+  symbol: TypeScriptSymbol,
+  project: Project,
+): ts.Node | undefined {
+  return resolveNode(symbol.valueDeclaration, project);
+}
 
 function isFixtureDirectory(projectRelativeToSource: string): boolean {
   return projectRelativeToSource === 'tests/fixtures'
@@ -38,8 +75,7 @@ function productionFiles(directory = sourceRoot): string[] {
 
 function unwrapExpression(node: ts.Expression): ts.Expression {
   if (ts.isParenthesizedExpression(node)
-    || ts.isAsExpression(node)
-    || ts.isTypeAssertionExpression(node)
+    || ts.isAssertionExpression(node)
     || ts.isSatisfiesExpression(node)) {
     return unwrapExpression(node.expression);
   }
@@ -48,63 +84,8 @@ function unwrapExpression(node: ts.Expression): ts.Expression {
 
 type StaticValue = string | readonly string[];
 
-function createInMemoryProgram(path: string, source: string): {
-  checker: ts.TypeChecker;
-  sourceFile: ts.SourceFile;
-} {
-  const options: ts.CompilerOptions = {
-    jsx: ts.JsxEmit.ReactJSX,
-    module: ts.ModuleKind.ESNext,
-    noLib: true,
-    noResolve: true,
-    target: ts.ScriptTarget.Latest,
-  };
-  const host: ts.CompilerHost = {
-    fileExists: (fileName) => fileName === path,
-    getCanonicalFileName: (fileName) => fileName,
-    getCurrentDirectory: () => '',
-    getDefaultLibFileName: () => 'lib.d.ts',
-    getNewLine: () => '\n',
-    getSourceFile: (fileName, languageVersion) => fileName === path
-      ? ts.createSourceFile(
-          fileName,
-          source,
-          languageVersion,
-          true,
-          path.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-        )
-      : undefined,
-    readFile: (fileName) => fileName === path ? source : undefined,
-    useCaseSensitiveFileNames: () => true,
-    writeFile: () => undefined,
-  };
-  const program = ts.createProgram([path], options, host);
-  const sourceFile = program.getSourceFile(path);
-  if (!sourceFile) throw new Error(`audit source '${path}' was not created`);
-  return { checker: program.getTypeChecker(), sourceFile };
-}
-
-function createFixtureProgram(sources: Record<string, string>): ts.Program {
-  const virtualSources = new Map(Object.entries(sources).map(([path, source]) => [
-    resolve(path),
-    source,
-  ]));
-  const host = ts.createCompilerHost(parsedConfig.options, true);
-  const baseFileExists = host.fileExists.bind(host);
-  const baseReadFile = host.readFile.bind(host);
-  const baseGetSourceFile = host.getSourceFile.bind(host);
-  host.fileExists = (fileName) => virtualSources.has(resolve(fileName)) || baseFileExists(fileName);
-  host.readFile = (fileName) => virtualSources.get(resolve(fileName)) ?? baseReadFile(fileName);
-  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
-    const source = virtualSources.get(resolve(fileName));
-    return source === undefined
-      ? baseGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile)
-      : ts.createSourceFile(fileName, source, languageVersion, true, ts.ScriptKind.TS);
-  };
-  return ts.createProgram([...virtualSources.keys()], parsedConfig.options, host);
-}
-
-function createStaticEvaluator(sourceFile: ts.SourceFile, checker: ts.TypeChecker) {
+function createStaticEvaluator(sourceFile: ts.SourceFile, context: SemanticContext) {
+  const { checker, project } = context;
   const evaluate = (
     node: ts.Expression,
     visiting: ReadonlySet<ts.VariableDeclaration> = new Set(),
@@ -112,11 +93,11 @@ function createStaticEvaluator(sourceFile: ts.SourceFile, checker: ts.TypeChecke
   ): StaticValue | null => {
     if (depth > 32) return null;
     const expression = unwrapExpression(node);
-    if (ts.isStringLiteralLike(expression)) return expression.text;
+    if (ts.isStringLiteralLikeNode(expression)) return expression.text;
     if (ts.isIdentifier(expression)) {
       const symbol = checker.getSymbolAtLocation(expression);
-      if (!symbol || (symbol.flags & ts.SymbolFlags.Alias) !== 0) return null;
-      const declaration = symbol.valueDeclaration;
+      if (!symbol || (symbol.flags & SymbolFlags.Alias) !== 0) return null;
+      const declaration = symbolValueDeclaration(symbol, project);
       if (!declaration
         || !ts.isVariableDeclaration(declaration)
         || declaration.getSourceFile() !== sourceFile
@@ -172,9 +153,10 @@ function createStaticEvaluator(sourceFile: ts.SourceFile, checker: ts.TypeChecke
 }
 
 function propertyName(property: ts.ObjectLiteralElementLike): string | null {
+  if (ts.isSpreadAssignment(property)) return null;
   const name = property.name;
   if (!name) return null;
-  if (ts.isIdentifier(name) || ts.isStringLiteralLike(name)) return name.text;
+  if (ts.isIdentifier(name) || ts.isStringLiteralLikeNode(name)) return name.text;
   return null;
 }
 
@@ -186,8 +168,8 @@ function calledIdentifier(node: ts.CallExpression): string | null {
 
 function symbolAtExpression(
   expression: ts.Expression,
-  checker: ts.TypeChecker,
-): ts.Symbol | undefined {
+  checker: Checker,
+): TypeScriptSymbol | undefined {
   const callable = unwrapExpression(expression);
   const location = ts.isPropertyAccessExpression(callable) ? callable.name : callable;
   return checker.getSymbolAtLocation(location);
@@ -196,40 +178,43 @@ function symbolAtExpression(
 function moduleExport(
   moduleSpecifier: ts.Expression,
   exportName: string,
-  checker: ts.TypeChecker,
-): ts.Symbol | undefined {
+  checker: Checker,
+): TypeScriptSymbol | undefined {
   const moduleSymbol = checker.getSymbolAtLocation(moduleSpecifier);
   return moduleSymbol
-    ? checker.getExportsOfModule(moduleSymbol).find((symbol) => symbol.getName() === exportName)
+    ? checker.getExportsOfModule(moduleSymbol).find((symbol) => symbol.name === exportName)
     : undefined;
 }
 
 function symbolTargetsCanonical(
-  symbol: ts.Symbol | undefined,
-  checker: ts.TypeChecker,
+  symbol: TypeScriptSymbol | undefined,
+  context: SemanticContext,
   sourcePath: string,
   exportName: string,
-  visiting: ReadonlySet<ts.Symbol> = new Set(),
+  visiting: ReadonlySet<number> = new Set(),
 ): boolean {
-  if (!symbol || visiting.has(symbol)) return false;
-  const nextVisiting = new Set([...visiting, symbol]);
-  if (symbol.getName() === exportName
-    && (symbol.declarations ?? []).some((declaration) =>
+  if (!symbol || visiting.has(symbol.id)) return false;
+  const { checker, project } = context;
+  const nextVisiting = new Set([...visiting, symbol.id]);
+  const declarations = symbolDeclarations(symbol, project);
+  if (symbol.name === exportName
+    && declarations.some((declaration) =>
       declaration.getSourceFile().fileName.replace(/\\/g, '/').endsWith(sourcePath))) {
     return true;
   }
-  if ((symbol.flags & ts.SymbolFlags.Alias) !== 0) {
+  if ((symbol.flags & SymbolFlags.Alias) !== 0) {
     const target = checker.getAliasedSymbol(symbol);
-    if (target !== symbol
-      && symbolTargetsCanonical(target, checker, sourcePath, exportName, nextVisiting)) {
+    if (target.id !== symbol.id
+      && !checker.isUnknownSymbol(target)
+      && symbolTargetsCanonical(target, context, sourcePath, exportName, nextVisiting)) {
       return true;
     }
   }
-  return (symbol.declarations ?? []).some((declaration) => {
+  return declarations.some((declaration) => {
     if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
       return symbolTargetsCanonical(
         symbolAtExpression(declaration.initializer, checker),
-        checker,
+        context,
         sourcePath,
         exportName,
         nextVisiting,
@@ -241,7 +226,7 @@ function symbolTargetsCanonical(
       const importedName = (declaration.propertyName ?? declaration.name).text;
       return symbolTargetsCanonical(
         moduleExport(importDeclaration.moduleSpecifier, importedName, checker),
-        checker,
+        context,
         sourcePath,
         exportName,
         nextVisiting,
@@ -255,7 +240,7 @@ function symbolTargetsCanonical(
       const importedName = (declaration.propertyName ?? declaration.name).text;
       return symbolTargetsCanonical(
         moduleExport(exportDeclaration.moduleSpecifier, importedName, checker),
-        checker,
+        context,
         sourcePath,
         exportName,
         nextVisiting,
@@ -267,11 +252,11 @@ function symbolTargetsCanonical(
 
 function expressionTargetsGraphDataStore(
   expression: ts.Expression,
-  checker: ts.TypeChecker,
+  context: SemanticContext,
 ): boolean {
   return symbolTargetsCanonical(
-    symbolAtExpression(expression, checker),
-    checker,
+    symbolAtExpression(expression, context.checker),
+    context,
     graphDataStoreSource,
     'useGraphDataStore',
   );
@@ -279,95 +264,100 @@ function expressionTargetsGraphDataStore(
 
 function callTargets(
   node: ts.CallExpression,
-  checker: ts.TypeChecker,
+  context: SemanticContext,
   sourcePath: string,
   exportName: string,
 ): boolean {
+  const { checker, project } = context;
   const symbol = symbolAtExpression(node.expression, checker);
-  if (symbolTargetsCanonical(symbol, checker, sourcePath, exportName)) return true;
-  const signatureDeclaration = checker.getResolvedSignature(node)?.declaration;
+  if (symbolTargetsCanonical(symbol, context, sourcePath, exportName)) return true;
+  const signatureDeclaration = resolveNode(
+    checker.getResolvedSignature(node)?.declaration,
+    project,
+  );
   if (signatureDeclaration
     && signatureDeclaration.getSourceFile().fileName.replace(/\\/g, '/').endsWith(sourcePath)
-    && 'name' in signatureDeclaration
-    && signatureDeclaration.name
-    && ts.isIdentifier(signatureDeclaration.name)
-    && signatureDeclaration.name.text === exportName) return true;
-  return !symbol?.declarations?.length && calledIdentifier(node) === exportName;
+    && ts.isFunctionDeclaration(signatureDeclaration)
+    && signatureDeclaration.name?.text === exportName) return true;
+  return (!symbol || checker.isUnknownSymbol(symbol) || symbol.declarations.length === 0)
+    && calledIdentifier(node) === exportName;
 }
 
 function callReturnsFunctionSignaturePin(
   node: ts.CallExpression,
-  checker: ts.TypeChecker,
+  checker: Checker,
 ): boolean {
   const type = checker.getTypeAtLocation(node);
-  return [type.aliasSymbol, type.getSymbol()]
-    .filter((symbol): symbol is ts.Symbol => symbol != null)
-    .some((symbol) => symbol.getName() === 'FunctionSignaturePin');
+  if (!type) return false;
+  return [type.getAliasSymbol(), type.getSymbol()]
+    .filter((symbol): symbol is TypeScriptSymbol => symbol != null)
+    .some((symbol) => symbol.name === 'FunctionSignaturePin');
 }
 
 function objectLiteralKind(node: ts.Expression): string | null {
   const expression = unwrapExpression(node);
   if (!ts.isObjectLiteralExpression(expression)) return null;
   const kind = expression.properties.find((property) => propertyName(property) === 'kind');
-  return kind && ts.isPropertyAssignment(kind) && ts.isStringLiteralLike(kind.initializer)
+  return kind && ts.isPropertyAssignment(kind) && ts.isStringLiteralLikeNode(kind.initializer)
     ? kind.initializer.text
     : null;
 }
 
 function typeContainsFunctionSignatureDto(
-  type: ts.Type,
-  checker: ts.TypeChecker,
-  visiting: ReadonlySet<ts.Type> = new Set(),
+  type: Type | undefined,
+  context: SemanticContext,
+  visiting: ReadonlySet<number> = new Set(),
 ): boolean {
-  if (visiting.has(type)) return false;
-  const nextVisiting = new Set([...visiting, type]);
-  const symbols = [type.aliasSymbol, type.getSymbol()].filter(
-    (symbol): symbol is ts.Symbol => symbol != null,
+  if (!type || visiting.has(type.id)) return false;
+  const { checker, project } = context;
+  const nextVisiting = new Set([...visiting, type.id]);
+  const symbols = [type.getAliasSymbol(), type.getSymbol()].filter(
+    (symbol): symbol is TypeScriptSymbol => symbol != null,
   );
   if (symbols.some((symbol) =>
-    (symbol.getName() === 'FunctionSignatureDto' || symbol.getName() === 'FunctionParameterDto')
-    && (symbol.declarations ?? []).some((candidate) =>
+    (symbol.name === 'FunctionSignatureDto' || symbol.name === 'FunctionParameterDto')
+    && symbolDeclarations(symbol, project).some((candidate) =>
       candidate.getSourceFile().fileName.replace(/\\/g, '/').endsWith(functionSignatureDtoSource)))) {
     return true;
   }
-  if (type.isUnionOrIntersection()) {
-    return type.types.some((member) =>
-      typeContainsFunctionSignatureDto(member, checker, nextVisiting));
+  if (type.isUnionType() || type.isIntersectionType()) {
+    return type.getTypes().some((member) =>
+      typeContainsFunctionSignatureDto(member, context, nextVisiting));
   }
-  if ((type.flags & ts.TypeFlags.Object) !== 0
-    && ((type as ts.ObjectType).objectFlags & ts.ObjectFlags.Reference) !== 0
-    && symbols.some((symbol) => symbol.getName() === 'Array' || symbol.getName() === 'ReadonlyArray')) {
-    return checker.getTypeArguments(type as ts.TypeReference).some((argument) =>
-      typeContainsFunctionSignatureDto(argument, checker, nextVisiting));
+  if (type.isTypeReference()
+    && symbols.some((symbol) => symbol.name === 'Array' || symbol.name === 'ReadonlyArray')) {
+    return checker.getTypeArguments(type).some((argument) =>
+      typeContainsFunctionSignatureDto(argument, context, nextVisiting));
   }
   return false;
 }
 
-function createRawSignatureTaint(checker: ts.TypeChecker) {
+function createRawSignatureTaint(context: SemanticContext) {
+  const { checker, project } = context;
   const isRawExpression = (
     node: ts.Expression,
-    visiting: ReadonlySet<ts.Symbol> = new Set(),
+    visiting: ReadonlySet<number> = new Set(),
   ): boolean => {
     const expression = unwrapExpression(node);
     if (ts.isPropertyAccessExpression(expression)) {
       const owner = unwrapExpression(expression.expression);
       return isRawExpression(owner, visiting)
-        || typeContainsFunctionSignatureDto(checker.getTypeAtLocation(owner), checker)
-        || typeContainsFunctionSignatureDto(checker.getTypeAtLocation(expression), checker);
+        || typeContainsFunctionSignatureDto(checker.getTypeAtLocation(owner), context)
+        || typeContainsFunctionSignatureDto(checker.getTypeAtLocation(expression), context);
     }
     if (ts.isIdentifier(expression)) {
       const symbol = checker.getSymbolAtLocation(expression);
-      if (!symbol || visiting.has(symbol)) {
-        return typeContainsFunctionSignatureDto(checker.getTypeAtLocation(expression), checker);
+      if (!symbol || visiting.has(symbol.id)) {
+        return typeContainsFunctionSignatureDto(checker.getTypeAtLocation(expression), context);
       }
-      const nextVisiting = new Set([...visiting, symbol]);
-      const declaration = symbol.valueDeclaration;
+      const nextVisiting = new Set([...visiting, symbol.id]);
+      const declaration = symbolValueDeclaration(symbol, project);
       if (declaration && ts.isVariableDeclaration(declaration) && declaration.initializer
         && isRawExpression(declaration.initializer, nextVisiting)) return true;
-      if (typeContainsFunctionSignatureDto(checker.getTypeAtLocation(expression), checker)) {
+      if (typeContainsFunctionSignatureDto(checker.getTypeAtLocation(expression), context)) {
         return true;
       }
-      if (declaration && ts.isParameter(declaration)) {
+      if (declaration && ts.isParameterDeclaration(declaration)) {
         const callback = declaration.parent;
         const call = callback.parent;
         if ((ts.isArrowFunction(callback) || ts.isFunctionExpression(callback))
@@ -382,7 +372,7 @@ function createRawSignatureTaint(checker: ts.TypeChecker) {
       return false;
     }
     if (ts.isCallExpression(expression)) {
-      return callTargets(expression, checker, dataTypeSource, 'dataTypeFromDisplayString')
+      return callTargets(expression, context, dataTypeSource, 'dataTypeFromDisplayString')
         && expression.arguments.some((argument) => isRawExpression(argument, visiting));
     }
     if (ts.isBinaryExpression(expression)
@@ -457,24 +447,25 @@ function expressionPropertyName(
 
 function readsGraphEntities(
   node: ts.Expression,
-  checker: ts.TypeChecker,
+  context: SemanticContext,
   staticString: (node: ts.Expression) => string | null,
-  visiting: ReadonlySet<ts.Symbol> = new Set(),
+  visiting: ReadonlySet<number> = new Set(),
 ): boolean {
+  const { checker, project } = context;
   const expression = unwrapExpression(node);
   if (expressionPropertyName(expression, staticString) === 'graphEntities') return true;
   if (!ts.isIdentifier(expression)) return false;
 
   const symbol = checker.getSymbolAtLocation(expression);
-  if (!symbol || visiting.has(symbol)) return expression.text === 'graphEntities';
-  const nextVisiting = new Set([...visiting, symbol]);
-  return (symbol.declarations ?? []).some((declaration) => {
+  if (!symbol || visiting.has(symbol.id)) return expression.text === 'graphEntities';
+  const nextVisiting = new Set([...visiting, symbol.id]);
+  return symbolDeclarations(symbol, project).some((declaration) => {
     if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
-      return readsGraphEntities(declaration.initializer, checker, staticString, nextVisiting);
+      return readsGraphEntities(declaration.initializer, context, staticString, nextVisiting);
     }
     if (ts.isBindingElement(declaration)) {
       const name = declaration.propertyName ?? declaration.name;
-      return ts.isIdentifier(name) && name.text === 'graphEntities';
+      return name !== undefined && ts.isIdentifier(name) && name.text === 'graphEntities';
     }
     return false;
   });
@@ -482,12 +473,12 @@ function readsGraphEntities(
 
 function nodeDetailScopedLookupFinding(
   node: ts.Node,
-  checker: ts.TypeChecker,
+  context: SemanticContext,
   staticString: (node: ts.Expression) => string | null,
 ): string | null {
 
   if ((ts.isForInStatement(node) || ts.isForOfStatement(node))
-    && readsGraphEntities(node.expression, checker, staticString)) {
+    && readsGraphEntities(node.expression, context, staticString)) {
     return 'node detail lookup is not graphPath and nodeId scoped';
   }
   if (ts.isCallExpression(node)) {
@@ -501,7 +492,7 @@ function nodeDetailScopedLookupFinding(
         && ['entries', 'values', 'keys', 'getOwnPropertyNames', 'getOwnPropertySymbols'].includes(method ?? ''))
         || (owner.text === 'Reflect' && method === 'ownKeys'));
     if (isObjectEnumeration
-      && node.arguments.some((argument) => readsGraphEntities(argument, checker, staticString))) {
+      && node.arguments.some((argument) => readsGraphEntities(argument, context, staticString))) {
       return 'node detail lookup is not graphPath and nodeId scoped';
     }
   }
@@ -512,10 +503,11 @@ function nodeDetailScopedLookupFinding(
 function sourceOffendersFromSourceFile(
   path: string,
   sourceFile: ts.SourceFile,
-  checker: ts.TypeChecker,
+  context: SemanticContext,
 ): string[] {
-  const staticString = createStaticEvaluator(sourceFile, checker);
-  const isRawExpression = createRawSignatureTaint(checker);
+  const { checker } = context;
+  const staticString = createStaticEvaluator(sourceFile, context);
+  const isRawExpression = createRawSignatureTaint(context);
   const offenders: string[] = [];
   const report = (node: ts.Node, finding: string) => {
     const line = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
@@ -526,14 +518,14 @@ function sourceOffendersFromSourceFile(
   const auditsNodeDetailPanel = path.replace(/\\/g, '/').endsWith(nodeDetailPanelSource);
   const visit = (node: ts.Node): void => {
     if (auditsNodeDetailPanel) {
-      const finding = nodeDetailScopedLookupFinding(node, checker, staticString);
+      const finding = nodeDetailScopedLookupFinding(node, context, staticString);
       if (finding) report(node, finding);
     }
     if (auditsGraphMutationBoundary && ts.isCallExpression(node)) {
       const expression = unwrapExpression(node.expression);
       if (ts.isPropertyAccessExpression(expression)
         && expression.name.text === 'setState'
-        && expressionTargetsGraphDataStore(expression.expression, checker)) {
+        && expressionTargetsGraphDataStore(expression.expression, context)) {
         report(node, 'graph mutation bypasses the application boundary');
       }
     }
@@ -543,14 +535,14 @@ function sourceOffendersFromSourceFile(
         isRawExpression(argument));
       if (path !== functionPinSource
         && projectsRawSignature
-        && (callTargets(node, checker, functionPinSource, 'createDataSignaturePin')
+        && (callTargets(node, context, functionPinSource, 'createDataSignaturePin')
           || callReturnsFunctionSignaturePin(node, checker))) {
         report(node, 'function signature-to-pin mapping');
         if (node.arguments.some((argument) => staticString(argument) === 'Result')) {
           report(node, 'fixed function output Result');
         }
       }
-      if (callTargets(node, checker, dataTypeSource, 'dataTypeFromDisplayString')
+      if (callTargets(node, context, dataTypeSource, 'dataTypeFromDisplayString')
         && projectsRawSignature) {
         report(node, 'function signature display-type parsing');
       }
@@ -585,35 +577,40 @@ function sourceOffendersFromSourceFile(
     if (ts.isTemplateExpression(node) && node.head.text === 'variables/') {
       report(node, 'variable resource path synthesis');
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(sourceFile);
   return [...new Set(offenders)];
 }
 
 function sourceOffendersFromSource(path: string, source: string): string[] {
-  const { checker, sourceFile } = createInMemoryProgram(path, source);
-  return sourceOffendersFromSourceFile(path, sourceFile, checker);
+  return withIsolatedTypeScriptProject({ [path]: source }, ({ project, sourceFile }) => (
+    sourceOffendersFromSourceFile(path, sourceFile(path), {
+      checker: project.checker,
+      project,
+    })
+  ));
 }
 
 function sourceOffendersFromFixture(sources: Record<string, string>): string[] {
-  const program = createFixtureProgram(sources);
-  const checker = program.getTypeChecker();
-  return Object.keys(sources).flatMap((path) => {
-    const sourceFile = program.getSourceFile(resolve(path));
-    if (!sourceFile) throw new Error(`fixture source '${path}' was not created`);
-    return sourceOffendersFromSourceFile(path, sourceFile, checker);
-  });
+  return withIsolatedTypeScriptProject(
+    { ...fixtureSupportSources, ...sources },
+    ({ project, sourceFile }) => Object.keys(sources).flatMap((path) => (
+      sourceOffendersFromSourceFile(path, sourceFile(path), {
+        checker: project.checker,
+        project,
+      })
+    )),
+  );
 }
 
 function productionSourceOffenders(paths: string[]): string[] {
-  const program = ts.createProgram(paths.map((path) => resolve(path)), parsedConfig.options);
-  const checker = program.getTypeChecker();
-  return paths.flatMap((path) => {
-    const sourceFile = program.getSourceFile(resolve(path));
-    if (!sourceFile) throw new Error(`production source '${path}' was not created`);
-    return sourceOffendersFromSourceFile(path, sourceFile, checker);
-  });
+  return withProductionTypeScriptProject(({ project, sourceFile }) => (
+    paths.flatMap((path) => sourceOffendersFromSourceFile(path, sourceFile(path), {
+      checker: project.checker,
+      project,
+    }))
+  ));
 }
 
 describe('frontend stable node identity architecture audit behavior', () => {
@@ -902,5 +899,5 @@ describe('frontend stable node identity architecture audit behavior', () => {
 describe('frontend stable node identity architecture', () => {
   it('keeps production identity, descriptor, and mutation boundaries intact', () => {
     expect(productionSourceOffenders(productionFiles())).toEqual([]);
-  }, 15_000);
+  }, 30_000);
 });

@@ -153,7 +153,7 @@ describe('Rust-generated node-system golden contracts', () => {
       expect(isLocalizedCatalogDto(missing)).toBe(false);
 
       const wrong = clone(localizedCatalog) as unknown as LocalizedCatalogDto;
-      (wrong.items[index].creation as { kind: string }).kind = 'legacy';
+      (wrong.items[index].creation as { kind: string }).kind = 'unsupported';
       expect(isLocalizedCatalogDto(wrong)).toBe(false);
     },
   );
@@ -237,7 +237,7 @@ describe('Rust-generated node-system golden contracts', () => {
       deleteKey(value, 'compatibility');
       deleteKey(value, missing);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
-      value.kind = 'legacy';
+      value.kind = 'unsupported';
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
     }
   });
@@ -270,7 +270,7 @@ describe('Rust-generated node-system golden contracts', () => {
       deleteKey(value, 'compatibility');
       deleteKey(value, missing);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
-      value.kind = 'legacy';
+      value.kind = 'unsupported';
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
     }
   });
@@ -311,7 +311,7 @@ describe('Rust-generated node-system golden contracts', () => {
       deleteKey(value, missing);
       expect(isSchemaAwareParameterEditorDto(value)).toBe(false);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
-      value.kind = 'legacy';
+      value.kind = 'unsupported';
       expect(isSchemaAwareParameterEditorDto(value)).toBe(false);
       expect(isEditorGraphProjectionDto(projection)).toBe(false);
     }
@@ -335,7 +335,7 @@ describe('Rust-generated node-system golden contracts', () => {
     }],
     ['unknown node key', (projection: Record<string, unknown>) => {
       const nodes = projection.nodes as Array<Record<string, unknown>>;
-      nodes[0].legacy = true;
+      nodes[0].unexpected = true;
     }],
     ['missing port key', (projection: Record<string, unknown>) => {
       const node = (projection.nodes as Array<Record<string, unknown>>)[0];
@@ -344,18 +344,18 @@ describe('Rust-generated node-system golden contracts', () => {
     ['wrong address discriminant', (projection: Record<string, unknown>) => {
       const node = (projection.nodes as Array<Record<string, unknown>>)[0];
       const port = (node.ports as Array<Record<string, unknown>>)[0];
-      (port.address as Record<string, unknown>).kind = 'legacy';
+      (port.address as Record<string, unknown>).kind = 'unsupported';
     }],
     ['wrong diagnostic location discriminant', (projection: Record<string, unknown>) => {
       projection.diagnostics = [{
         code: 'contract.invalid', message: 'invalid', severity: 'error', blocking: true,
-        location: { kind: 'legacy' }, related: [],
+        location: { kind: 'unsupported' }, related: [],
       }];
     }],
     ['wrong configuration discriminant', (projection: Record<string, unknown>) => {
       const node = (projection.nodes as Array<Record<string, unknown>>)[0];
       const editor = (node.parameterEditors as Array<Record<string, unknown>>)[0];
-      editor.configuration = { kind: 'legacy' };
+      editor.configuration = { kind: 'unsupported' };
     }],
   ])('rejects editor projection %s before coherence validation', (_label, mutate) => {
     const projection = clone(editorProjection) as unknown as Record<string, unknown>;

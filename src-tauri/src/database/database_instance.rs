@@ -311,7 +311,7 @@ impl DatabaseInstance {
             let table_name = table.clone();
             let conn = duckdb::Connection::open(&path).map_err(|e| e.to_string())?;
             let idx = index.unwrap_or(*row_count);
-            let new_id = sql_add_row(&conn, &table_name, Some(idx))?;
+            let new_id = sql_add_row(&conn, &table_name)?;
             drop(conn);
             let op = EditOperation::AddRow {
                 index: idx,

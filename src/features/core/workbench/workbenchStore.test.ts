@@ -33,7 +33,7 @@ describe('workbenchStore', () => {
     useWorkbenchStore.getState().resetWorkbenchUIState();
   });
 
-  it('starts from the legacy non-layout workbench defaults', () => {
+  it('starts from the non-layout workbench defaults', () => {
     expect(uiState()).toEqual(DEFAULT_WORKBENCH_UI_STATE);
     expect(uiState()).not.toHaveProperty('pixelSize');
     expect(uiState()).not.toHaveProperty('nodes');
