@@ -331,6 +331,10 @@ src/app/appConfig/appLinks.ts
 - [x] 修复 worksheet 需要两次 ctrl + s 才能保存的 bug
 - [x] 在这里 activitybar 为 图时 sidebar 中的函数列表中的item，activitybar 为节点时的 sidebar 中的节点 item，还有 acitvitity 为变量的局部和全局 item 还有数据中的数据 item 应该都是可以拖动的，可以拖动到 graph 中并创建相关的节点；而且在这里拖动的鼠标样式不需要巴掌，只需要移动到 sidebar 中的折叠按钮的样式就好了
 
+## 2026.08.16
+
+- [ ] 重构日志和错误管理
+
 
 
 - [ ] 在更改 graph 的时候 tabbar 中的样式并没有其他变化，如果在更改后不保存关闭，那么下次打开打开的时候还是更改前的状态，这里明显是不符合逻辑的，除此之外还有其他的需要检查；同时磁盘上以及更新的符号和标签我感觉可以去掉，可以学习 vscode 的 tabbar 处理

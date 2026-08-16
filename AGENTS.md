@@ -30,12 +30,37 @@ the architecture changes.
   `src/services/`; views must not call `invoke` directly.
 - Use commands for request/response operations, events for low-rate state
   changes, and channels/workers for ordered or high-frequency streams.
+- Command failures use the exact `{ code, details, incidentId }` wire owned by
+  Rust `CommandError`; never add backend user-facing `message` fields or parse
+  string prefixes. Successful response and asynchronous status DTOs must not
+  smuggle backend prose through nested `message`, `detail`, or `hint` fields;
+  use stable codes, safe structured fields, and incident IDs. Frontend services
+  route ordinary invokes through `src/services/ipc/invokeCommand.ts`.
 - Do not hold global locks during I/O, sleeps, model loading, or long-running
   inference. Take short lock snapshots and perform work outside the lock.
 - Graph resources are identified by `events/...` and `functions/...` paths;
   UUIDs identify nodes, pins, connections, and UUID-backed variable resources.
   Variable resources serialize as `variables/{VariableId}` and database resources as
   `databases/{database-id}`; frontend code treats every resource path as opaque.
+
+## Diagnostics, errors, traces, and output
+
+- Rust `tracing` is the single diagnostic pipeline. Diagnostic storage and
+  delivery are bounded, lossy, sanitized, and non-authoritative; logs never
+  drive domain state, workflows, or user feedback.
+- React owns localization and presentation. Map stable error codes and safe
+  details to page/section `Alert`, inline field errors, or a normal
+  single-button `Dialog`; reserve `AlertDialog` for destructive confirmation.
+- Do not add toaster/Sonner, `logger.notify`, browser dialogs, native message
+  dialogs, disk log pagination commands, or compatibility logging paths.
+- Execution Trace remains runtime-authoritative and separate from diagnostics.
+  Retain and evict complete run/compilation bundles; expose truncation and drop
+  counts explicitly and never repair hierarchy silently during queries.
+- User-controlled Print/stdout/stderr uses the ordered bounded Run Output
+  channel and Output panel, never diagnostic logs. Preserve opaque source graph
+  and node identities on every output event.
+- The detailed contract and capacities live in
+  `docs/architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md`.
 
 ## React organization
 
@@ -58,9 +83,11 @@ the architecture changes.
 - Use shadcn/ui primitives for ordinary interactive controls. Dockview is the
   specialized workbench/editor docking infrastructure; do not introduce another
   general-purpose UI component library.
-- Use the shared toast system in the bottom-right for ordinary messages.
-  Never use browser `alert`, `prompt`, `confirm`, or native message dialogs;
-  path selection dialogs are the only exception.
+- Use persistent shadcn `Alert` surfaces for page/section errors, inline
+  feedback for field errors, and the application `MessageDialog` for blocking
+  acknowledgement. Never use toaster/Sonner, browser `alert`, `prompt`,
+  `confirm`, or native message dialogs; path selection dialogs are the only
+  exception.
 - User-facing scrolling uses `src/components/ui/scroll-area.tsx`; preserve the
   surrounding `flex`, `min-h-0`, and `flex-1` layout contract.
 - Context menus use compact spacing (`py-0`, no separator margins) and small
