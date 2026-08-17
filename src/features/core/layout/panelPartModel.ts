@@ -1,5 +1,6 @@
-/** VS Code-style bottom panel views. Only `implemented` views appear in the tab strip. */
-export type PanelViewId = 'logs' | 'output' | 'terminal';
+/** Supported workbench panel views. Unsupported placeholders are not part of the model. */
+export const PANEL_VIEW_IDS = ['logs', 'output'] as const;
+export type PanelViewId = (typeof PANEL_VIEW_IDS)[number];
 
 export interface PanelViewDescriptor {
   id: PanelViewId;
@@ -10,21 +11,17 @@ export interface PanelViewDescriptor {
 export interface PanelViewSpec {
   component: string;
   labelKey: string;
-  /** When false, omitted from DEFAULT_PANEL_VIEWS until backend/UI exists. */
-  implemented: boolean;
 }
 
 export const PANEL_VIEW_SPECS: Record<PanelViewId, PanelViewSpec> = {
-  logs: { component: 'LogPanel', labelKey: 'panel.logs', implemented: true },
-  output: { component: 'OutputPanel', labelKey: 'panel.output', implemented: false },
-  terminal: { component: 'TerminalPanel', labelKey: 'panel.terminal', implemented: false },
+  logs: { component: 'LogPanel', labelKey: 'panel.logs' },
+  output: { component: 'OutputPanel', labelKey: 'panel.output' },
 };
 
-export const DEFAULT_PANEL_VIEWS: PanelViewDescriptor[] = (
-  Object.entries(PANEL_VIEW_SPECS) as [PanelViewId, PanelViewSpec][]
-)
-  .filter(([, spec]) => spec.implemented)
-  .map(([id, spec]) => ({ id, component: spec.component }));
+export const DEFAULT_PANEL_VIEWS: PanelViewDescriptor[] = PANEL_VIEW_IDS.map((id) => ({
+  id,
+  component: PANEL_VIEW_SPECS[id].component,
+}));
 
 export function getPanelViewLabelKey(viewId: PanelViewId): string {
   return PANEL_VIEW_SPECS[viewId]?.labelKey ?? viewId;
@@ -37,9 +34,6 @@ export function resolvePanelViewComponent(
   const list = views?.length ? views : DEFAULT_PANEL_VIEWS;
   const active = list.find((view) => view.id === activeViewId);
   if (active) return active.component;
-
-  const spec = PANEL_VIEW_SPECS[activeViewId as PanelViewId];
-  if (spec?.implemented) return spec.component;
 
   return list[0]?.component ?? PANEL_VIEW_SPECS.logs.component;
 }

@@ -1,3 +1,6 @@
+export { PANEL_VIEW_IDS } from '@/features/core/layout/panelPartModel';
+export type { PanelViewId } from '@/features/core/layout/panelPartModel';
+
 export const SIDEBAR_TAB_IDS = [
   'graphs',
   'nodes',
@@ -9,21 +12,17 @@ export const SIDEBAR_TAB_IDS = [
 
 export type SidebarTabId = (typeof SIDEBAR_TAB_IDS)[number];
 
-export const PANEL_VIEW_IDS = ['logs', 'output', 'terminal'] as const;
-
-export type PanelViewId = (typeof PANEL_VIEW_IDS)[number];
 
 /**
  * Non-layout-authoritative workbench UI state.
  *
  * Effective visibility and all geometry/topology remain owned by the layout
- * domain. The `userHidden` fields capture only the user's visibility intent.
+ * domain. This state captures only sidebar/detail visibility and panel collapse intent.
  */
 export interface WorkbenchUIState {
   sidebarCurrentTab: SidebarTabId;
   sidebarUserHidden: boolean;
-  panelActiveView: PanelViewId;
-  panelUserHidden: boolean;
+  panelCollapsed: boolean;
   detailUserHidden: boolean;
   isSettingsOpen: boolean;
   isNodeDocumentationOpen: boolean;
@@ -37,9 +36,8 @@ export interface WorkbenchUICommands {
   setSidebarUserHidden(hidden: boolean): void;
   toggleSidebarVisibilityPreference(): void;
 
-  setPanelActiveView(view: PanelViewId): void;
-  setPanelUserHidden(hidden: boolean): void;
-  togglePanelVisibilityPreference(): void;
+  setPanelCollapsed(collapsed: boolean): void;
+  togglePanelCollapsed(): void;
 
   setDetailUserHidden(hidden: boolean): void;
   toggleDetailVisibilityPreference(): void;

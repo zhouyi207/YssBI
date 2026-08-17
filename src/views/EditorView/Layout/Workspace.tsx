@@ -32,15 +32,14 @@ import { useModifierKeyStore } from '@/features/core/keyboard';
 import { useSidebarDragStore } from '@/features/core/sidebarDrag';
 import {
   DEFAULT_WORKBENCH_DETAIL_WIDTH,
-  DEFAULT_WORKBENCH_PANEL_SIZE,
   DEFAULT_WORKBENCH_SIDEBAR_WIDTH,
   WORKBENCH_DETAIL_PART_ID,
   WORKBENCH_EDITOR_PART_ID,
-  WORKBENCH_PANEL_PART_ID,
   WORKBENCH_SIDEBAR_PART_ID,
   useWorkbenchStore,
   workbenchGridPort,
 } from '@/features/core/workbench';
+
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import type { LayoutTab } from '@/shared/types';
 import { Detail } from './Detail/Detail';
@@ -51,9 +50,22 @@ import { WatermarkView } from '../Canvas/overlays/WatermarkView';
 import { viewRegistry } from '../Renderer/viewRegistry';
 
 
-function DockviewEditorPanel(props: IDockviewPanelProps<DockviewPanelParams>) {
+function useDockviewPanelGroupId(api: IDockviewPanelProps<DockviewPanelParams>['api']): string {
+  const [groupId, setGroupId] = useState(() => api.group.id);
+
+  useEffect(() => {
+    const updateGroupId = () => setGroupId(api.group.id);
+    const disposable = api.onDidGroupChange(updateGroupId);
+    updateGroupId();
+    return () => disposable.dispose();
+  }, [api]);
+
+  return groupId;
+}
+
+export function DockviewEditorPanel(props: IDockviewPanelProps<DockviewPanelParams>) {
   const Component = viewRegistry.get(props.api.component);
-  const groupId = props.api.group.id;
+  const groupId = useDockviewPanelGroupId(props.api);
 
   return (
     <GroupContext.Provider value={groupId}>
@@ -112,10 +124,13 @@ function EditorDock() {
   );
 }
 
+function WorkbenchCenter() {
+  return <PanelPart editorComponent={EditorDock} />;
+}
+
 const workbenchComponents = {
   sidebar: Sidebar,
-  editor: EditorDock,
-  panel: PanelPart,
+  editor: WorkbenchCenter,
   detail: Detail,
 };
 
@@ -133,22 +148,14 @@ function initializeWorkbench(api: GridviewApi): void {
     minimumWidth: 240,
     position: { direction: 'right', referencePanel: editor.id },
   });
-  const panel = api.addPanel({
-    id: WORKBENCH_PANEL_PART_ID,
-    component: 'panel',
-    minimumHeight: 80,
-    position: { direction: 'below', referencePanel: editor.id },
-  });
   sidebar.api.setSize({ width: DEFAULT_WORKBENCH_SIDEBAR_WIDTH });
   detail.api.setSize({ width: DEFAULT_WORKBENCH_DETAIL_WIDTH });
-  panel.api.setSize({ height: DEFAULT_WORKBENCH_PANEL_SIZE });
 }
 
 function WorkbenchGrid() {
   const [api, setApi] = useState<GridviewApi | null>(null);
   const gridviewApiRef = useRef<GridviewApi | null>(null);
   const sidebarHidden = useWorkbenchStore((state) => state.sidebarUserHidden || state.zenMode);
-  const panelHidden = useWorkbenchStore((state) => state.panelUserHidden || state.zenMode);
   const detailHidden = useWorkbenchStore((state) => state.detailUserHidden || state.zenMode);
 
   const onReady = useCallback((event: GridviewReadyEvent) => {
@@ -168,14 +175,13 @@ function WorkbenchGrid() {
     if (!api) return;
     const visibility = [
       [WORKBENCH_SIDEBAR_PART_ID, !sidebarHidden],
-      [WORKBENCH_PANEL_PART_ID, !panelHidden],
       [WORKBENCH_DETAIL_PART_ID, !detailHidden],
     ] as const;
     for (const [id, visible] of visibility) {
       const panel = api.getPanel(id);
       panel?.api.setVisible(visible);
     }
-  }, [api, detailHidden, panelHidden, sidebarHidden]);
+  }, [api, detailHidden, sidebarHidden]);
 
   return (
     <GridviewReact

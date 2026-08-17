@@ -1,16 +1,35 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  editorUnbind: vi.fn(),
+  editorWhenReady: vi.fn(),
   editorReset: vi.fn(),
+  panelUnbind: vi.fn(),
+  panelWhenReady: vi.fn(),
+  panelSetCollapsed: vi.fn(),
+  panelSetPosition: vi.fn(),
   invalidateHydration: vi.fn(),
   persist: vi.fn(),
+  setPanelCollapsed: vi.fn(),
   resetUI: vi.fn(),
   resetGrid: vi.fn(),
-  movePart: vi.fn(),
+  setPartSize: vi.fn(),
 }));
 
 vi.mock('@/features/core/dockview', () => ({
-  editorDockviewPort: { reset: mocks.editorReset },
+  editorDockviewPort: {
+    unbind: mocks.editorUnbind,
+    whenReady: mocks.editorWhenReady,
+    reset: mocks.editorReset,
+  },
+  panelDockviewPort: {
+    unbind: mocks.panelUnbind,
+    whenReady: mocks.panelWhenReady,
+    setCollapsed: mocks.panelSetCollapsed,
+    setPosition: mocks.panelSetPosition,
+    getPosition: vi.fn(() => 'bottom'),
+    activate: vi.fn(),
+  },
   invalidateDockviewLayoutHydration: mocks.invalidateHydration,
   persistDockviewLayoutDebounced: mocks.persist,
   persistDockviewLayoutNow: vi.fn(),
@@ -18,50 +37,58 @@ vi.mock('@/features/core/dockview', () => ({
 
 vi.mock('@/features/core/workbench', () => ({
   DEFAULT_WORKBENCH_PANEL_SIZE: 200,
-  WORKBENCH_EDITOR_PART_ID: 'editor',
   WORKBENCH_PANEL_PART_ID: 'panel',
   useWorkbenchStore: {
-    getState: () => ({ resetWorkbenchUIState: mocks.resetUI }),
+    getState: () => ({
+      zenMode: false,
+      panelCollapsed: false,
+      setPanelCollapsed: mocks.setPanelCollapsed,
+      resetWorkbenchUIState: mocks.resetUI,
+    }),
   },
   workbenchGridPort: {
     resetToDefault: mocks.resetGrid,
-    movePart: mocks.movePart,
+    setPartSize: mocks.setPartSize,
   },
 }));
 
-import { resetWorkbenchLayout } from './workbenchLayoutService';
+import {
+  resetWorkbenchLayout,
+  setPanelCollapsed,
+} from './workbenchLayoutService';
 
-describe('resetWorkbenchLayout', () => {
+describe('workbench bottom panel layout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.panelWhenReady.mockResolvedValue(undefined);
+    mocks.editorWhenReady.mockResolvedValue(undefined);
+    mocks.editorReset.mockResolvedValue(undefined);
+    mocks.panelSetPosition.mockResolvedValue(true);
+    mocks.panelSetCollapsed.mockResolvedValue(true);
   });
 
-  it('waits for the editor reset before restoring and positioning the workbench grid', async () => {
-    let finishEditorReset: (() => void) | undefined;
-    mocks.editorReset.mockReturnValue(new Promise<void>((resolve) => {
-      finishEditorReset = resolve;
-    }));
+  it('collapses through the Dockview edge group without resizing the workbench leaf', () => {
+    setPanelCollapsed(true);
 
-    const reset = resetWorkbenchLayout('right');
-
-    expect(mocks.invalidateHydration).toHaveBeenCalledOnce();
-    expect(mocks.resetUI).toHaveBeenCalledOnce();
-    expect(mocks.resetGrid).not.toHaveBeenCalled();
-
-    finishEditorReset?.();
-    await reset;
-
-    expect(mocks.resetGrid).toHaveBeenCalledOnce();
-    expect(mocks.movePart).toHaveBeenCalledWith('panel', 'right', 'editor', 200);
+    expect(mocks.setPanelCollapsed).toHaveBeenCalledWith(true);
+    expect(mocks.panelSetCollapsed).toHaveBeenCalledWith(true);
+    expect(mocks.setPartSize).not.toHaveBeenCalled();
     expect(mocks.persist).toHaveBeenCalledOnce();
   });
 
-  it('keeps the canonical bottom placement without an extra move', async () => {
-    mocks.editorReset.mockResolvedValue(undefined);
+  it('rebuilds the shell before resetting the nested editor layout', async () => {
+    await resetWorkbenchLayout('right');
 
-    await resetWorkbenchLayout('bottom');
-
+    expect(mocks.invalidateHydration).toHaveBeenCalledOnce();
+    expect(mocks.resetUI).toHaveBeenCalledOnce();
+    expect(mocks.panelUnbind).toHaveBeenCalledOnce();
+    expect(mocks.editorUnbind).toHaveBeenCalledOnce();
     expect(mocks.resetGrid).toHaveBeenCalledOnce();
-    expect(mocks.movePart).not.toHaveBeenCalled();
+    expect(mocks.panelWhenReady).toHaveBeenCalledOnce();
+    expect(mocks.editorWhenReady).toHaveBeenCalledOnce();
+    expect(mocks.editorReset).toHaveBeenCalledOnce();
+    expect(mocks.panelSetPosition).toHaveBeenCalledWith('right');
+    expect(mocks.panelSetCollapsed).toHaveBeenCalledWith(false);
+    expect(mocks.persist).toHaveBeenCalledOnce();
   });
 });

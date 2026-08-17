@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   editorDockviewPort,
+  panelDockviewPort,
   hydrateDockviewLayout,
   persistDockviewLayoutDebounced,
   setDockviewLayoutWindowScope,
@@ -9,7 +10,7 @@ import {
 import { workbenchGridPort, useWorkbenchStore } from '@/features/core/workbench';
 import { bootstrapEditorGraphSession } from '@/features/application/editor/bootstrapEditorGraphSession';
 
-/** Restore and persist the single Dockview-owned workbench/editor layout. */
+/** Restore and persist the outer workbench, shell Dockview, and nested editor layout. */
 export function useWorkbenchLayout(): void {
   useEffect(() => {
     setDockviewLayoutWindowScope(getCurrentWindow().label);
@@ -22,11 +23,13 @@ export function useWorkbenchLayout(): void {
 
     const persist = () => persistDockviewLayoutDebounced();
     const unsubscribeEditor = editorDockviewPort.subscribe(persist);
+    const unsubscribePanel = panelDockviewPort.subscribe(persist);
     const unsubscribeWorkbench = workbenchGridPort.subscribe(persist);
     const unsubscribePreferences = useWorkbenchStore.subscribe(persist);
     return () => {
       disposed = true;
       unsubscribeEditor();
+      unsubscribePanel();
       unsubscribeWorkbench();
       unsubscribePreferences();
     };

@@ -55,28 +55,7 @@ export class WorkbenchGridPort {
     else this.pendingAction = { type: 'reset' };
   }
   setPartVisible(id: string, visible: boolean): void { this.api?.getPanel(id)?.api.setVisible(visible); }
-  setPartSize(id: string, size: number): void {
-    const panel = this.api?.getPanel(id);
-    if (!panel) return;
-    panel.api.setSize(id === 'panel' ? { height: size } : { width: size });
-  }
-  movePart(
-    id: string,
-    direction: 'left' | 'right' | 'above' | 'below',
-    referenceId: string,
-    size?: number,
-  ): void {
-    const panel = this.api?.getPanel(id);
-    const reference = this.api?.getPanel(referenceId);
-    if (!panel || !reference) return;
-    this.api?.movePanel(panel, { direction, reference: referenceId, size });
-  }
   getPartVisible(id: string): boolean { return this.api?.getPanel(id)?.api.isVisible ?? false; }
-  getPartSize(id: string): number | undefined {
-    const panel = this.api?.getPanel(id);
-    if (!panel) return undefined;
-    return id === 'panel' ? panel.api.height : panel.api.width;
-  }
 
   private emit(): void { this.listeners.forEach((listener) => listener()); }
 }

@@ -31,6 +31,7 @@ export interface DockviewEditorPort {
   bind(api: DockviewApi): void;
   unbind(api?: DockviewApi): void;
   readonly isReady: boolean;
+  whenReady(): Promise<void>;
   subscribe(listener: () => void): () => void;
   getSnapshot(): DockviewPortSnapshot;
   getActiveGroupId(): string | undefined;
@@ -146,6 +147,17 @@ export function createDockviewEditorPort(): DockviewEditorPort {
 
     get isReady() {
       return api !== undefined;
+    },
+
+    whenReady() {
+      if (api) return Promise.resolve();
+      return new Promise<void>((resolve) => {
+        const unsubscribe = port.subscribe(() => {
+          if (!port.isReady) return;
+          unsubscribe();
+          resolve();
+        });
+      });
     },
 
     subscribe(listener) {

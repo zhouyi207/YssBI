@@ -1,19 +1,18 @@
 export {
-  getPartSize,
-  resizePart,
   togglePart,
   persistWorkbenchLayoutNow,
   collapseEditorGroupsForProjectSwitch,
   applyPanelPosition,
   applyPanelPositionFromSetting,
   resetWorkbenchLayout,
+  setPanelCollapsed,
   setWorkbenchPartVisible,
+  showPanelView,
   showSidebarTab,
   toggleDetailVisibility,
-  togglePanelVisibility,
+  togglePanelCollapsed,
   toggleSidebarTab,
   toggleSidebarVisibility,
-  setPanelActiveView,
 } from './workbenchLayoutService';
 export { enterZenMode, exitZenMode, isZenModeActive, toggleZenMode } from './workbenchZenMode';
 

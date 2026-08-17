@@ -2,10 +2,10 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { editorDockviewPort } from '@/features/core/dockview';
-import { togglePanelVisibility, setPanelActiveView } from '@/features/core/layout/workbenchLayoutService';
+import { showPanelView } from '@/features/core/layout/workbenchLayoutService';
 import { setViewportLive, editorViewportScope } from '@/features/core/viewport';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
-import { useWorkbenchStore } from '@/features/core/workbench';
+
 import { syncColorThemePreset } from '@/features/application/settings/appearanceRuntime';
 import { getNextColorThemePreset, getThemeModeForPreset } from '@/features/application/settings/colorThemePresets';
 
@@ -26,10 +26,7 @@ export function useStatusBarActions() {
   }, [updateTheme]);
 
   const openLogsPanel = useCallback(() => {
-    if (useWorkbenchStore.getState().panelUserHidden) {
-      togglePanelVisibility();
-    }
-    setPanelActiveView('logs');
+    showPanelView('logs');
   }, []);
 
   const resetCanvasViewport = useCallback(() => {

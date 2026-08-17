@@ -5,7 +5,7 @@ import { useWorkbenchStore } from '@/features/core/workbench';
 import {
   resetWorkbenchLayout,
   toggleDetailVisibility,
-  togglePanelVisibility,
+  togglePanelCollapsed,
   toggleSidebarVisibility,
 } from "@/features/core/layout/workbenchLayoutService";
 import { normalizePanelPosition } from "@/features/core/layout/panelPartLayout";
@@ -34,7 +34,7 @@ import { logger } from '@/utils/appLogger';
 export function useMenubar() {
   const openSettings = useWorkbenchStore((state) => state.openSettings);
   const isDetailVisible = useWorkbenchStore((state) => !state.detailUserHidden);
-  const isLogPanelVisible = useWorkbenchStore((state) => !state.panelUserHidden);
+  const isLogPanelVisible = useWorkbenchStore((state) => !state.panelCollapsed);
   const isSidebarVisible = useWorkbenchStore((state) => !state.sidebarUserHidden);
   useDockviewPortSnapshot(editorDockviewPort);
   const activeEditorGroupId = editorDockviewPort.getActiveGroupId() ?? null;
@@ -146,7 +146,7 @@ export function useMenubar() {
     handleOpenLogs,
     handleOpenBayes,
     toggleDetail: toggleDetailVisibility,
-    toggleLogPanel: togglePanelVisibility,
+    toggleLogPanel: togglePanelCollapsed,
     toggleSidebar: toggleSidebarVisibility,
     handleResetLayout,
   };

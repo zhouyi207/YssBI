@@ -43,7 +43,7 @@ export function buildViewMenuItems(
       onClick: actions.toggleDetail,
     },
     {
-      label: state.isLogPanelVisible ? t('menubar.hidePanel') : t('menubar.showPanel'),
+      label: state.isLogPanelVisible ? t('menubar.collapsePanel') : t('menubar.expandPanel'),
       shortcut: 'Ctrl+`',
       onClick: actions.toggleLogPanel,
     },

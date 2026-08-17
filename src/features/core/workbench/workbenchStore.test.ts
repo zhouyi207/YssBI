@@ -8,8 +8,7 @@ function uiState() {
   const {
     sidebarCurrentTab,
     sidebarUserHidden,
-    panelActiveView,
-    panelUserHidden,
+    panelCollapsed,
     detailUserHidden,
     isSettingsOpen,
     isNodeDocumentationOpen,
@@ -19,8 +18,7 @@ function uiState() {
   return {
     sidebarCurrentTab,
     sidebarUserHidden,
-    panelActiveView,
-    panelUserHidden,
+    panelCollapsed,
     detailUserHidden,
     isSettingsOpen,
     isNodeDocumentationOpen,
@@ -67,8 +65,7 @@ describe('workbenchStore', () => {
   it('updates panel, detail, modal, and zen UI state independently', () => {
     const commands = useWorkbenchStore.getState();
 
-    commands.setPanelActiveView('terminal');
-    commands.togglePanelVisibilityPreference();
+    commands.togglePanelCollapsed();
     commands.toggleDetailVisibilityPreference();
     commands.openSettings();
     commands.setNodeDocumentationOpen(true);
@@ -76,8 +73,7 @@ describe('workbenchStore', () => {
 
     expect(uiState()).toEqual({
       ...DEFAULT_WORKBENCH_UI_STATE,
-      panelActiveView: 'terminal',
-      panelUserHidden: true,
+      panelCollapsed: true,
       detailUserHidden: true,
       isSettingsOpen: true,
       isNodeDocumentationOpen: true,
@@ -86,7 +82,7 @@ describe('workbenchStore', () => {
 
     commands.exitZenMode();
     expect(uiState()).toMatchObject({
-      panelUserHidden: true,
+      panelCollapsed: true,
       detailUserHidden: true,
       zenMode: false,
     });
@@ -95,7 +91,7 @@ describe('workbenchStore', () => {
   it('resets only the workbench UI projection', () => {
     const commands = useWorkbenchStore.getState();
     commands.showSidebarTab('variables');
-    commands.setPanelUserHidden(true);
+    commands.setPanelCollapsed(true);
     commands.setDetailUserHidden(true);
     commands.setSettingsOpen(true);
     commands.setNodeDocumentationOpen(true);
