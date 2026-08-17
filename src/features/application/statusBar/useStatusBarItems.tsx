@@ -3,6 +3,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
 import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
+import type { ErrorReference } from "@/services/ipc";
 import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
 import {
   editorDockviewPort,
@@ -30,12 +31,19 @@ function fileNameFromPath(path: string | null) {
   return displayPath.replace(/\\/g, "/").split("/").pop() || displayPath;
 }
 
-function projectStatusLabel(
+export function projectStatusLabel(
   status: LoadStatus,
-  error: string | null,
+  error: ErrorReference | null,
   t: StatusBarRenderContext["t"],
 ) {
-  if (status === LoadStatus.Error) return error ? `${t("common.error")}: ${error}` : t("bottomBar.projectError");
+  if (status === LoadStatus.Error) {
+    const genericText = t("bottomBar.projectError");
+    if (!error) return genericText;
+    const codeText = `[${error.code}]`;
+    return error.incidentId
+      ? `${genericText} ${codeText} · ${t("common.incidentId")}: ${error.incidentId}`
+      : `${genericText} ${codeText}`;
+  }
   if (status === LoadStatus.Loading) return t("bottomBar.loadingProject");
   if (status === LoadStatus.Ready) return t("common.ready");
   return t("common.idle");

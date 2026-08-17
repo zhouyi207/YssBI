@@ -1,12 +1,12 @@
-import { logger } from "@/utils/appLogger";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { loadActivatedProject, useProjectIOStore } from "@/features/core/dataStore";
 import {
   applyCleanupProgressEvent,
   applyScanProgressEvent,
   markProjectPickerProgressDone,
+  projectPickerProgressInitial,
+  projectPickerScanFolderTitle,
   runWithProjectPickerProgress,
   updateOpenProjectProgressStage,
 } from "@/features/application/project/projectPickerProgress";
@@ -15,8 +15,16 @@ import {
   isPickerTaskCancelledError,
 } from "@/services/project/projectService";
 import type { ProjectRecordRow } from "@/shared/types/dto/project";
-import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { formatDisplayPath, pathsEqualForCompare } from "@/shared/utils/formatDisplayPath";
+import {
+  ProjectPickerOperationError,
+  isProjectPickerStaleError,
+  projectPickerErrorPresentation,
+  projectPickerRecoveryPresentation,
+  type ProjectPickerLifecycleActionOutcome,
+  type ProjectPickerPageActionOutcome,
+  type ProjectPickerPageIssue,
+} from "./projectPickerOutcomes";
 
 import {
   ProjectLifecycleProtocolError,
@@ -38,6 +46,8 @@ export interface ManagedProject {
 }
 
 type BusyState = "idle" | "new" | "open" | "scan" | "import" | "cleanup";
+
+class ProjectPickerTaskCancelled extends Error {}
 
 function pathFileName(path: string): string {
   const normalized = path.replace(/\\/g, "/");
@@ -76,19 +86,35 @@ function managedProjectsFromSettlement(
 
 export function useProjectPicker() {
   const navigate = useNavigate();
-  const { t } = useTranslation();
-
   const currentPath = useProjectIOStore((state) => state.currentPath);
   const [projects, setProjects] = useState<ManagedProject[]>([]);
   const [busy, setBusy] = useState<BusyState>("idle");
+  const [pageIssue, setPageIssue] = useState<ProjectPickerPageIssue | null>(null);
 
-  const refresh = useCallback(async () => {
+  const publishPageIssue = useCallback((
+    issue: ProjectPickerPageIssue,
+  ): ProjectPickerPageActionOutcome => {
+    setPageIssue(issue);
+    return { status: 'issue', issue };
+  }, []);
+
+  const dismissPageIssue = useCallback(() => {
+    setPageIssue(null);
+  }, []);
+
+  const refresh = useCallback(async (): Promise<ProjectPickerPageActionOutcome> => {
+    setPageIssue(null);
     try {
       setProjects(await listManagedProjects());
+      return { status: 'completed' };
     } catch (error) {
-      logger.notify.error(formatErrorMessage(error), "UI");
+      return publishPageIssue({
+        kind: 'failure',
+        operation: 'refresh',
+        error: projectPickerErrorPresentation(error),
+      });
     }
-  }, []);
+  }, [publishPageIssue]);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,119 +148,149 @@ export function useProjectPicker() {
     [currentPath, projects],
   );
 
-  const handlePickerTaskCancelled = useCallback(async (messageKey: "scanCancelled" | "cleanupCancelled") => {
-    setProjects(await listManagedProjects());
-    logger.notify.info(t(`projectPicker.${messageKey}`), "UI");
-  }, [t]);
-
-  const scanProjectsFromFolder = useCallback(async () => {
-    const directory = await ProjectService.pickProjectScanDirectory(
-      t("projectPicker.scanFolderTitle"),
-    );
-    if (!directory) return;
-
-    setBusy("scan");
+  const handlePickerTaskCancelled = useCallback(async (): Promise<ProjectPickerPageActionOutcome> => {
     try {
+      setProjects(await listManagedProjects());
+      return { status: 'cancelled' };
+    } catch (error) {
+      return publishPageIssue({
+        kind: 'failure',
+        operation: 'refresh',
+        error: projectPickerErrorPresentation(error),
+      });
+    }
+  }, [publishPageIssue]);
+
+  const scanProjectsFromFolder = useCallback(async (): Promise<ProjectPickerPageActionOutcome> => {
+    setPageIssue(null);
+    try {
+      const directory = await ProjectService.pickProjectScanDirectory(
+        projectPickerScanFolderTitle(),
+      );
+      if (!directory) return { status: 'cancelled' };
+
+      setBusy("scan");
       const { result, cancelled } = await runWithProjectPickerProgress(
         {
-          initial: {
-            stage: t("projectPicker.loading.scanning"),
-            detail: t("projectPicker.loading.scanningFolder"),
-            cancelable: true,
-          },
+          initial: projectPickerProgressInitial('scan'),
           onCancel: () => {
             void ProjectService.cancelProjectPickerTask();
           },
         },
         async ({ update, isCancelled }) => {
-          const scanResult = await ProjectService.scanProjectsInDirectory(directory, (event) => {
-            if (isCancelled()) return;
-            applyScanProgressEvent(t, event, update);
-          });
-          if (!isCancelled()) {
-            markProjectPickerProgressDone(t, update);
+          try {
+            const scanResult = await ProjectService.scanProjectsInDirectory(directory, (event) => {
+              if (isCancelled()) return;
+              applyScanProgressEvent(event, update);
+            });
+            if (!isCancelled()) {
+              markProjectPickerProgressDone(update);
+            }
+            return scanResult;
+          } catch (error) {
+            if (isCancelled() || isPickerTaskCancelledError(error)) {
+              throw new ProjectPickerTaskCancelled();
+            }
+            throw error;
           }
-          return scanResult;
         },
       );
 
-      if (cancelled) {
-        await handlePickerTaskCancelled("scanCancelled");
-        return;
-      }
+      if (cancelled) return await handlePickerTaskCancelled();
 
       setProjects(await listManagedProjects());
-
       if (result.discovered === 0) {
-        logger.notify.info(t("projectPicker.scanNoneFound"), "UI");
-      } else if (result.newlyRegistered > 0) {
-        logger.notify.info(t("projectPicker.scanSuccess", {
-            added: result.newlyRegistered,
-            found: result.discovered,
-          }), "UI");
-      } else {
-        logger.notify.info(t("projectPicker.scanAlreadyRegistered", { found: result.discovered }), "UI");
+        return publishPageIssue({
+          kind: 'empty',
+          operation: 'scan',
+          reason: 'noneFound',
+          found: 0,
+        });
       }
+      if (result.newlyRegistered === 0) {
+        return publishPageIssue({
+          kind: 'empty',
+          operation: 'scan',
+          reason: 'alreadyRegistered',
+          found: result.discovered,
+        });
+      }
+      return { status: 'completed' };
     } catch (error) {
-      if (isPickerTaskCancelledError(error)) {
-        await handlePickerTaskCancelled("scanCancelled");
-        return;
+      if (error instanceof ProjectPickerTaskCancelled || isPickerTaskCancelledError(error)) {
+        return await handlePickerTaskCancelled();
       }
-      logger.notify.error(formatErrorMessage(error), "UI");
+      if (isProjectPickerStaleError(error)) return { status: 'stale' };
+      return publishPageIssue({
+        kind: 'failure',
+        operation: 'scan',
+        error: projectPickerErrorPresentation(error),
+      });
     } finally {
       setBusy("idle");
     }
-  }, [handlePickerTaskCancelled, t]);
+  }, [handlePickerTaskCancelled, publishPageIssue]);
 
-  const cleanupInvalidProjects = useCallback(async () => {
+  const cleanupInvalidProjects = useCallback(async (): Promise<ProjectPickerPageActionOutcome> => {
+    setPageIssue(null);
     setBusy("cleanup");
     try {
       const { result, cancelled } = await runWithProjectPickerProgress(
         {
-          initial: {
-            stage: t("projectPicker.loading.cleanup"),
-            cancelable: true,
-          },
+          initial: projectPickerProgressInitial('cleanup'),
           onCancel: () => {
             void ProjectService.cancelProjectPickerTask();
           },
         },
         async ({ update, isCancelled }) => {
-          const cleanupResult = await ProjectService.cleanupInvalidRegisteredProjects((event) => {
-            if (isCancelled()) return;
-            applyCleanupProgressEvent(t, event, update);
-          });
-          if (!isCancelled()) {
-            markProjectPickerProgressDone(t, update);
+          try {
+            const cleanupResult = await ProjectService.cleanupInvalidRegisteredProjects((event) => {
+              if (isCancelled()) return;
+              applyCleanupProgressEvent(event, update);
+            });
+            if (!isCancelled()) {
+              markProjectPickerProgressDone(update);
+            }
+            return cleanupResult;
+          } catch (error) {
+            if (isCancelled() || isPickerTaskCancelledError(error)) {
+              throw new ProjectPickerTaskCancelled();
+            }
+            throw error;
           }
-          return cleanupResult;
         },
       );
 
-      if (cancelled) {
-        await handlePickerTaskCancelled("cleanupCancelled");
-        return;
-      }
+      if (cancelled) return await handlePickerTaskCancelled();
 
       setProjects(await listManagedProjects());
-
       if (result.removed === 0) {
-        logger.notify.info(t("projectPicker.cleanupNone"), "UI");
-      } else {
-        logger.notify.info(t("projectPicker.cleanupSuccess", { count: result.removed }), "UI");
+        return publishPageIssue({
+          kind: 'empty',
+          operation: 'cleanup',
+          reason: 'noneFound',
+        });
       }
+      return { status: 'completed' };
     } catch (error) {
-      if (isPickerTaskCancelledError(error)) {
-        await handlePickerTaskCancelled("cleanupCancelled");
-        return;
+      if (error instanceof ProjectPickerTaskCancelled || isPickerTaskCancelledError(error)) {
+        return await handlePickerTaskCancelled();
       }
-      logger.notify.error(formatErrorMessage(error), "UI");
+      if (isProjectPickerStaleError(error)) return { status: 'stale' };
+      return publishPageIssue({
+        kind: 'failure',
+        operation: 'cleanup',
+        error: projectPickerErrorPresentation(error),
+      });
     } finally {
       setBusy("idle");
     }
-  }, [handlePickerTaskCancelled, t]);
+  }, [handlePickerTaskCancelled, publishPageIssue]);
 
-  const createProject = useCallback(async (name: string, path: string) => {
+  const createProject = useCallback(async (
+    name: string,
+    path: string,
+  ): Promise<ProjectPickerLifecycleActionOutcome> => {
     let pending: PendingProjectLifecycleOperation | undefined;
     try {
       pending = registerPendingProjectLifecycleOperation({
@@ -242,18 +298,15 @@ export function useProjectPicker() {
         expectsActiveProject: false,
       });
       setBusy("new");
-      await runWithProjectPickerProgress(
+      const progress = await runWithProjectPickerProgress(
         {
-          initial: {
-            stage: t("projectPicker.loading.creating"),
-            percent: 0.2,
-          },
+          initial: projectPickerProgressInitial('create'),
         },
-        async ({ update }) => {
+        async ({ update }): Promise<ProjectPickerLifecycleActionOutcome> => {
           let settlement: ProjectLifecycleReceiptSettlement;
           try {
             const result = await ProjectService.createProject(name, path, pending!.operationId);
-            if (!pending!.isCurrent()) return;
+            if (!pending!.isCurrent()) return { status: 'stale' };
             settlement = await applyProjectLifecycleReceipt(
               result,
               'direct',
@@ -265,177 +318,229 @@ export function useProjectPicker() {
             if (!recovered) throw error;
             settlement = recovered;
           }
-          if (settlement.status === 'stale' || !pending!.isCurrent()) return;
-          const claimed = claimProjectLifecycleInitiatorSettlement(pending!.operationId);
-          if (!claimed) return;
-          setProjects(managedProjectsFromSettlement(claimed));
-          markProjectPickerProgressDone(t, update);
-          const result = claimed.result;
-          if (result.outcome === 'committed' && result.record) {
-            logger.notify.info(t("projectPicker.createSuccess", { name: result.record.name }), "UI");
-          } else {
-            logger.notify.warn(`${t("projectPicker.createSuccess", { name })}: ${result.recovery?.action ?? result.outcome}`, "UI");
+          if (settlement.status === 'stale' || !pending!.isCurrent()) {
+            return { status: 'stale' };
           }
+          const claimed = claimProjectLifecycleInitiatorSettlement(pending!.operationId);
+          if (!claimed) return { status: 'stale' };
+          setProjects(managedProjectsFromSettlement(claimed));
+          markProjectPickerProgressDone(update);
+          if (claimed.result.outcome === 'committed' && claimed.result.record) {
+            return { status: 'committed' };
+          }
+          return {
+            status: 'recovery',
+            recovery: projectPickerRecoveryPresentation(claimed.result),
+          };
         },
       );
+      return progress.result;
     } catch (error) {
-      if (error instanceof ProjectLifecycleProtocolError && error.zeroEffects) return;
-      if (!pending || pending.isCurrent()) logger.notify.error(formatErrorMessage(error), "UI");
+      if ((error instanceof ProjectLifecycleProtocolError && error.zeroEffects)
+        || (pending && !pending.isCurrent())
+        || isProjectPickerStaleError(error)) {
+        return { status: 'stale' };
+      }
+      return {
+        status: 'failed',
+        error: projectPickerErrorPresentation(error),
+      };
     } finally {
-      if (!pending || pending.isCurrent()) setBusy("idle");
+      setBusy("idle");
     }
-  }, [t]);
+  }, []);
 
-  const openProjectAtPath = useCallback(async (path: string) => {
+  const openProjectAtPath = useCallback(async (
+    path: string,
+  ): Promise<ProjectPickerPageActionOutcome> => {
+    setPageIssue(null);
     setBusy("open");
     try {
-      await runWithProjectPickerProgress(
+      const progress = await runWithProjectPickerProgress(
         {
-          initial: {
-            stage: t("projectPicker.loading.opening"),
-            detail: t("projectPicker.loading.readingFile"),
-            percent: 0.1,
-          },
+          initial: projectPickerProgressInitial('open'),
         },
-        async ({ update }) => {
+        async ({ update }): Promise<ProjectPickerPageActionOutcome> => {
           const result = await ProjectService.loadProjectToState(path);
-          updateOpenProjectProgressStage(t, update, "loadingData");
+          updateOpenProjectProgressStage(update, "loadingData");
           const row = await ProjectService.registerProject(pathFileName(result.path), result.path);
           const projectData = await loadActivatedProject(result);
           if (!projectData) {
-            const loadError = useProjectIOStore.getState().error;
-            throw new Error(formatErrorMessage(loadError, "加载项目数据失败"));
+            if (!useProjectIOStore.getState().error) return { status: 'stale' };
+            throw new ProjectPickerOperationError('project_activation_failed');
           }
-          updateOpenProjectProgressStage(t, update, "preparingEditor");
+          updateOpenProjectProgressStage(update, "preparingEditor");
           setProjects((previous) => [
             rowToManagedProject(row),
             ...previous.filter((project) => project.id !== row.id),
           ]);
-          markProjectPickerProgressDone(t, update);
+          markProjectPickerProgressDone(update);
           navigate("/editor");
+          return { status: 'completed' };
         },
       );
+      return progress.result;
     } catch (error) {
-      logger.notify.error(formatErrorMessage(error), "UI");
+      if (isProjectPickerStaleError(error)) return { status: 'stale' };
+      return publishPageIssue({
+        kind: 'failure',
+        operation: 'open',
+        projectPath: path,
+        error: projectPickerErrorPresentation(error),
+      });
     } finally {
       setBusy("idle");
     }
-  }, [navigate, t]);
+  }, [navigate, publishPageIssue]);
 
-  const importProjectFromDisk = useCallback(async () => {
-    const path = await ProjectService.pickProjectMetadataFile();
-    if (!path) return;
-
-    setBusy("import");
+  const importProjectFromDisk = useCallback(async (): Promise<ProjectPickerPageActionOutcome> => {
+    setPageIssue(null);
     try {
+      const path = await ProjectService.pickProjectMetadataFile();
+      if (!path) return { status: 'cancelled' };
+
+      setBusy("import");
       const row = await ProjectService.registerProject(pathFileName(path), path);
       setProjects((previous) => [
         rowToManagedProject(row),
         ...previous.filter((project) => project.id !== row.id),
       ]);
-      logger.notify.info(t("projectPicker.importSuccess", { name: row.name }), "UI");
+      return { status: 'completed' };
     } catch (error) {
-      logger.notify.error(formatErrorMessage(error), "UI");
+      if (isProjectPickerStaleError(error)) return { status: 'stale' };
+      return publishPageIssue({
+        kind: 'failure',
+        operation: 'import',
+        error: projectPickerErrorPresentation(error),
+      });
     } finally {
       setBusy("idle");
     }
-  }, [t]);
+  }, [publishPageIssue]);
 
   const openRecentProject = useCallback(
     (path: string) => openProjectAtPath(path),
     [openProjectAtPath],
   );
 
-  const removeProject = useCallback((id: string) => {
-    void (async () => {
-      try {
-        await ProjectService.removeRegisteredProject(id);
-        setProjects((previous) => previous.filter((project) => project.id !== id));
-      } catch (error) {
-        logger.notify.error(formatErrorMessage(error), "UI");
-      }
-    })();
-  }, []);
+  const removeProject = useCallback(async (
+    id: string,
+  ): Promise<ProjectPickerPageActionOutcome> => {
+    setPageIssue(null);
+    try {
+      await ProjectService.removeRegisteredProject(id);
+      setProjects((previous) => previous.filter((project) => project.id !== id));
+      return { status: 'completed' };
+    } catch (error) {
+      if (isProjectPickerStaleError(error)) return { status: 'stale' };
+      return publishPageIssue({
+        kind: 'failure',
+        operation: 'remove',
+        projectId: id,
+        error: projectPickerErrorPresentation(error),
+      });
+    }
+  }, [publishPageIssue]);
 
-  const deleteProjectFiles = useCallback((id: string) => {
-    return (async () => {
-      let pending: PendingProjectLifecycleOperation | undefined;
+  const deleteProjectFiles = useCallback(async (
+    id: string,
+  ): Promise<ProjectPickerLifecycleActionOutcome> => {
+    let pending: PendingProjectLifecycleOperation | undefined;
+    try {
+      const active = id === currentProjectId;
+      pending = registerPendingProjectLifecycleOperation({
+        kind: 'delete',
+        expectsActiveProject: active,
+      });
+      let settlement: ProjectLifecycleReceiptSettlement;
       try {
-        const active = id === currentProjectId;
-        pending = registerPendingProjectLifecycleOperation({
-          kind: 'delete',
-          expectsActiveProject: active,
-        });
-        let settlement: ProjectLifecycleReceiptSettlement;
-        try {
-          const result = await ProjectService.deleteRegisteredProjectFiles(
-            id,
-            active ? pending.projectInstanceId : null,
-            pending.operationId,
-          );
-          if (!pending.isCurrent()) return;
-          settlement = await applyProjectLifecycleReceipt(
-            result,
-            'direct',
-            createProjectLifecycleReceiptDependencies(),
-          );
-        } catch (error) {
-          if (error instanceof ProjectLifecycleProtocolError && error.zeroEffects) throw error;
-          const recovered = await recoverProjectLifecycleDirectFailure(pending.operationId);
-          if (!recovered) throw error;
-          settlement = recovered;
-        }
-        if (settlement.status === 'stale' || !pending.isCurrent()) return;
-        const claimed = claimProjectLifecycleInitiatorSettlement(pending.operationId);
-        if (!claimed) return;
-        setProjects(managedProjectsFromSettlement(claimed));
-        const result = claimed.result;
-        if (active
-          && result.kind === 'registryCleanup'
-          && result.outcome === 'registryFailed') {
-          logger.notify.error(`${t("projectPicker.deleteProjectConfirm.failed")}: ${result.recovery?.action ?? result.outcome}`, "UI");
-          return;
-        }
-        const requiresRecovery = result.outcome !== 'committed';
-        const message = requiresRecovery
-          ? `${t("projectPicker.deleteProjectConfirm.success")} (${result.recovery?.action ?? result.outcome})`
-          : t("projectPicker.deleteProjectConfirm.success");
-        if (requiresRecovery) {
-          logger.notify.warn(message, "UI");
-        } else {
-          logger.notify.info(message, "UI");
-        }
-      } catch (error) {
-        if (error instanceof ProjectLifecycleProtocolError && error.zeroEffects) return;
-        if (pending && !pending.isCurrent()) return;
-        logger.notify.error(
-          `${t("projectPicker.deleteProjectConfirm.failed")}: ${formatErrorMessage(error)}`,
-          "UI",
+        const result = await ProjectService.deleteRegisteredProjectFiles(
+          id,
+          active ? pending.projectInstanceId : null,
+          pending.operationId,
         );
-        throw error;
-      }
-    })();
-  }, [currentProjectId, t]);
-
-  const toggleFavorite = useCallback((id: string) => {
-    void (async () => {
-      try {
-        const isFavorite = await ProjectService.toggleRegisteredProjectFavorite(id);
-        setProjects((previous) =>
-          previous.map((project) =>
-            project.id === id ? { ...project, isFavorite } : project,
-          ),
+        if (!pending.isCurrent()) return { status: 'stale' };
+        settlement = await applyProjectLifecycleReceipt(
+          result,
+          'direct',
+          createProjectLifecycleReceiptDependencies(),
         );
       } catch (error) {
-        logger.notify.error(formatErrorMessage(error), "UI");
+        if (error instanceof ProjectLifecycleProtocolError && error.zeroEffects) throw error;
+        const recovered = await recoverProjectLifecycleDirectFailure(pending.operationId);
+        if (!recovered) throw error;
+        settlement = recovered;
       }
-    })();
-  }, []);
+      if (settlement.status === 'stale' || !pending.isCurrent()) {
+        return { status: 'stale' };
+      }
+      const claimed = claimProjectLifecycleInitiatorSettlement(pending.operationId);
+      if (!claimed) return { status: 'stale' };
+      setProjects(managedProjectsFromSettlement(claimed));
+      if (claimed.result.outcome === 'committed') return { status: 'committed' };
+      return {
+        status: 'recovery',
+        recovery: projectPickerRecoveryPresentation(claimed.result),
+      };
+    } catch (error) {
+      if ((error instanceof ProjectLifecycleProtocolError && error.zeroEffects)
+        || (pending && !pending.isCurrent())
+        || isProjectPickerStaleError(error)) {
+        return { status: 'stale' };
+      }
+      return {
+        status: 'failed',
+        error: projectPickerErrorPresentation(error),
+      };
+    }
+  }, [currentProjectId]);
+
+  const toggleFavorite = useCallback(async (
+    id: string,
+  ): Promise<ProjectPickerPageActionOutcome> => {
+    setPageIssue(null);
+    try {
+      const isFavorite = await ProjectService.toggleRegisteredProjectFavorite(id);
+      setProjects((previous) =>
+        previous.map((project) =>
+          project.id === id ? { ...project, isFavorite } : project,
+        ),
+      );
+      return { status: 'completed' };
+    } catch (error) {
+      if (isProjectPickerStaleError(error)) return { status: 'stale' };
+      return publishPageIssue({
+        kind: 'failure',
+        operation: 'favorite',
+        projectId: id,
+        error: projectPickerErrorPresentation(error),
+      });
+    }
+  }, [publishPageIssue]);
+
+  const revealProjectInExplorer = useCallback(async (
+    projectPath: string,
+  ): Promise<ProjectPickerPageActionOutcome> => {
+    setPageIssue(null);
+    try {
+      await ProjectService.revealProjectPath(projectPath);
+      return { status: 'completed' };
+    } catch (error) {
+      return publishPageIssue({
+        kind: 'failure',
+        operation: 'reveal',
+        projectPath,
+        error: projectPickerErrorPresentation(error),
+      });
+    }
+  }, [publishPageIssue]);
 
   return {
     busy,
     currentProjectId,
     projects,
+    pageIssue,
+    dismissPageIssue,
     createProject,
     importProjectFromDisk,
     openRecentProject,
@@ -445,5 +550,6 @@ export function useProjectPicker() {
     removeProject,
     deleteProjectFiles,
     toggleFavorite,
+    revealProjectInExplorer,
   };
 }

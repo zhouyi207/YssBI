@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { InitializationState } from './appInitialization.type';
 import { LoadStatus } from '@/shared/types/ui';
 import { initProjectSync } from '@/features/core/dataStore';
 import { logger } from '@/utils/appLogger';
+import { formatInlineUserError } from '@/features/application/userErrorSummary';
 
 export function useAppInitialization(): InitializationState {
+    const { t } = useTranslation();
     const [state, setState] = useState<InitializationState>({
         status: LoadStatus.Idle,
         error: null,
@@ -26,7 +29,7 @@ export function useAppInitialization(): InitializationState {
                 logger.sys.error('Failed to sync project: ' + errorMessage, 'AppInit');
                 setState({
                     status: LoadStatus.Error,
-                    error: `Project sync: ${errorMessage}`,
+                    error: formatInlineUserError(error, t),
                 });
             }
         };
@@ -36,7 +39,7 @@ export function useAppInitialization(): InitializationState {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [t]);
 
     return state;
 }

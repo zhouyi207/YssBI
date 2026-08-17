@@ -1,4 +1,4 @@
-import { logger } from "@/utils/appLogger";
+
 import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { activateCurrentEditorTab } from './switchEditorTab';
 
@@ -33,6 +33,5 @@ export async function bootstrapEditorGraphSession(
     }
   }
 
-  logger.notify.warn('当前编辑器图未能加载，请重新点击标签页或画布', "UI");
   return false;
 }

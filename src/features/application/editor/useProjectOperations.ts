@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+
 import {
   loadActivatedProject,
   resolveActiveProjectPath,
@@ -17,7 +18,11 @@ import { ProjectService, isExecutionCancelledError } from '@/services/project/pr
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { cancelActiveGraphRun } from './cancelActiveGraphRun';
-import { observeGraphRunEvent, type GraphRunOutcomeState } from './observeGraphRunEvent';
+import {
+  observeGraphRunEvent,
+  observeGraphRunOutput,
+  type GraphRunOutcomeState,
+} from './observeGraphRunEvent';
 import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
 import { resultRef } from '@/features/core/resultSource';
 import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
@@ -47,14 +52,7 @@ import {
   type PendingProjectLifecycleOperation,
 } from '@/features/application/projectLifecycleReceipt';
 import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
-
-function notifySaveAsSettlement(result: import('@/shared/types/dto/project').LifecycleMutationResultDto): void {
-  if (result.outcome !== 'committed' || !result.record) {
-    logger.notify.warn(`另存为需要恢复：${result.recovery?.action ?? result.outcome}`, "UI");
-    return;
-  }
-  logger.notify.info(`项目已另存为：${result.record.name}`, "UI");
-}
+import { showBlockingIpcError, showBlockingMessage } from './blockingErrorDialog';
 
 /**
  * Project Operations Hook
@@ -74,7 +72,7 @@ export function useProjectOperations() {
       }
       if (!projectPath) {
         cancelPendingProjectLifecycleOperation(pending.operationId);
-        logger.notify.warn("项目尚未加载", "UI");
+        showBlockingMessage(t('notifications.project.notLoaded'));
         return;
       }
       const dirtySaved = await saveAllDirtyGraphs();
@@ -102,54 +100,58 @@ export function useProjectOperations() {
         createProjectLifecycleReceiptDependencies(),
       );
       if (settlement.status === 'stale' || !pending.isCurrent()) return;
-      const claimed = claimProjectLifecycleInitiatorSettlement(pending.operationId);
-      if (claimed) notifySaveAsSettlement(claimed.result);
+      claimProjectLifecycleInitiatorSettlement(pending.operationId);
     } catch (e) {
       if (e instanceof ProjectLifecycleProtocolError && e.zeroEffects) return;
       if (pending) {
         const recovered = await recoverProjectLifecycleDirectFailure(pending.operationId);
         if (recovered && pending.isCurrent()) {
-          const claimed = claimProjectLifecycleInitiatorSettlement(pending.operationId);
-          if (claimed) notifySaveAsSettlement(claimed.result);
+          claimProjectLifecycleInitiatorSettlement(pending.operationId);
           return;
         }
         if (!pending.isCurrent()) return;
       }
       logger.app.error(String(e), 'ProjectOperations');
-      logger.notify.error(`另存为失败：${formatErrorMessage(e)}`, "UI");
+      showBlockingIpcError(e, 'save_project_as', (code) =>
+        t('notifications.project.saveAsFailed', { error: code }));
     }
-  }, []);
+  }, [t]);
 
   const saveGraph = useCallback(async () => {
     let context: GraphSaveCommandContext | undefined;
-    const projectPath = await resolveActiveProjectPath();
-    if (!projectPath) {
-      logger.notify.warn("项目尚未加载", "UI");
-      return;
-    }
     try {
+      const projectPath = await resolveActiveProjectPath();
+      if (!projectPath) {
+        showBlockingMessage(t('notifications.project.notLoaded'));
+        return;
+      }
+
       const editorGroupId = resolveEditorGroupId();
       if (!editorGroupId) {
-        logger.notify.warn("请先打开一个图或工作表", "UI");
+        showBlockingMessage(t('notifications.project.openResourceBeforeSaving'));
         return;
       }
 
       const active = getActiveLayoutTab(editorGroupId);
       const activeTabId = active?.activeTabId;
       if (!activeTabId) {
-        logger.notify.warn("请先打开一个图或工作表", "UI");
+        showBlockingMessage(t('notifications.project.openResourceBeforeSaving'));
         return;
       }
 
       const activeTab = active?.tab;
       if (activeTab?.type === 'worksheet') {
         const saved = await useWorksheetStore.getState().saveDocument(activeTabId);
-        if (saved) logger.notify.info(t('worksheet.saved'), "UI");
+        if (!saved) {
+          showBlockingMessage(t('notifications.project.saveFailed', {
+            error: 'worksheet_save_not_committed',
+          }));
+        }
         return;
       }
 
       if (activeTab?.type !== 'event' && activeTab?.type !== 'function') {
-        logger.notify.warn("请先打开一个图或工作表", "UI");
+        showBlockingMessage(t('notifications.project.openResourceBeforeSaving'));
         return;
       }
 
@@ -164,11 +166,11 @@ export function useProjectOperations() {
       );
       if (!isGraphSaveCommandRevisionCurrent(context, activeTabId)) return;
       markResourceDirty({ id: activeTabId, kind: activeTab.type }, false);
-      logger.notify.info("图已保存", "UI");
     } catch (e) {
       if (context && !context.isCurrent()) return;
       logger.app.error(String(e), 'ProjectOperations');
-      logger.notify.error(`保存失败：${formatErrorMessage(e)}`, "UI");
+      showBlockingIpcError(e, 'save_project_graph', (code) =>
+        t('notifications.project.saveFailed', { error: code }));
     }
   }, [t]);
 
@@ -181,19 +183,18 @@ export function useProjectOperations() {
 
       const projectData = await loadActivatedProject(activation);
       if (!projectData) {
-        logger.notify.error("加载项目失败", "UI");
+        showBlockingMessage(t('notifications.project.loadFailed'));
         return;
       }
 
       // 清空 Dockview 中的当前编辑器面板，用户从侧栏自行打开资源。
       await editorDockviewPort.reset();
-
-      logger.notify.info("项目已加载", "UI");
     } catch (e) {
       logger.app.error(String(e), 'ProjectOperations');
-      logger.notify.error("加载项目失败", "UI");
+      showBlockingIpcError(e, 'load_project_to_state', (code) =>
+        `${t('notifications.project.loadFailed')} (${code})`);
     }
-  }, []);
+  }, [t]);
 
   const finalizeExecutionRun = useCallback((
     graphPath: string,
@@ -218,16 +219,10 @@ export function useProjectOperations() {
 
   const executeGraph = useCallback(async (targetGraphPath?: string) => {
     const graphPath = resolveExecutionGraphPath(targetGraphPath);
-    if (!graphPath) {
-      logger.notify.warn("请先打开一个 Event 才能执行", "UI");
-      return;
-    }
+    if (!graphPath) return;
 
     const target = getExecutionEventGraph(graphPath);
-    if (!target) {
-      logger.notify.warn("只能执行 Event，当前打开的不是 Event", "UI");
-      return;
-    }
+    if (!target) return;
 
     const { graph: currentGraph } = target;
     let project: ProjectIdentitySnapshot;
@@ -255,31 +250,25 @@ export function useProjectOperations() {
             void openInspectableResult(resultRef(event.kind.resultId), t);
           }
         },
+        (event) => {
+          if (!isCurrentProjectIdentity(project)) return;
+          observeGraphRunOutput(graphPath, event);
+        },
       );
 
       if (!isCurrentProjectIdentity(project)) return;
       finalizeExecutionRun(graphPath, recording, runState.outcome);
       logger.exec.debug(`执行 runId: ${result.runId}`);
-
-      if (runState.outcome === 'cancelled') {
-        logger.notify.warn(t('canvas.executionCancelled'), "UI");
-      } else if (runState.outcome === 'error') {
-        logger.notify.error(`执行失败: ${currentGraph.name}`, "UI");
-      } else {
-        logger.notify.info(`执行完成: ${currentGraph.name}`, "UI");
-      }
     } catch (e) {
       if (!isCurrentProjectIdentity(project)) return;
       if (isExecutionCancelledError(e)) {
         logger.exec.info(`执行已中断: ${currentGraph.name} (${graphPath})`);
         finalizeExecutionRun(graphPath, [], 'cancelled');
-        logger.notify.warn(t('canvas.executionCancelled'), "UI");
         return;
       }
 
       logger.exec.error(`执行失败: ${e instanceof Error ? e.message : String(e)}`);
       finalizeExecutionRun(graphPath, [], 'error');
-      logger.notify.error(`执行失败: ${formatErrorMessage(e)}`, "UI");
     }
   }, [finalizeExecutionRun, t]);
 
@@ -290,16 +279,12 @@ export function useProjectOperations() {
       await cancelActiveGraphRun(graphPath);
     } catch (e) {
       logger.exec.error(`中断执行失败: ${formatErrorMessage(e)}`);
-      logger.notify.error(`中断执行失败: ${formatErrorMessage(e)}`, "UI");
     }
   }, []);
 
   const clearGraphArtifacts = useCallback(async (targetGraphPath?: string) => {
     const graphPath = resolveExecutionGraphPath(targetGraphPath);
-    if (!graphPath) {
-      logger.notify.warn("请先打开一个 Event", "UI");
-      return;
-    }
+    if (!graphPath) return;
 
     const store = useExecutionStore.getState();
     const graphState = store.getGraph(graphPath);
@@ -311,8 +296,7 @@ export function useProjectOperations() {
     }
 
     store.clearGraphRunProjections(graphPath);
-    logger.notify.info(t("canvas.executionArtifactsCleared"), "UI");
-  }, [t]);
+  }, []);
 
   return {
     saveGraph,

@@ -5,6 +5,7 @@ import {
   ProjectService,
   type ProjectActivationResult,
 } from '@/services/project/projectService';
+import { toErrorReference, type ErrorReference } from '@/services/ipc';
 import { normalizeVariableFromBackend } from '@/shared/types/dto/variable';
 import { logger } from '@/utils/appLogger';
 
@@ -22,7 +23,6 @@ import {
   applySnapshotDocumentPatches,
   reconcileResourceSnapshot,
 } from '@/features/core/resource/resourceSnapshotReconcile';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { formatDisplayPath } from '@/shared/utils/formatDisplayPath';
 import {
   applyVariableCatalogFromIndex,
@@ -65,9 +65,28 @@ import { isGraphCachedInMemory } from './graphDocumentLoadPolicy';
 
 export type GraphLoadStatus = 'loading' | 'ready' | 'error';
 
+export const PROJECT_LOAD_CONTRACT_ERROR_CODE = 'project_load_contract_error';
+export const PROJECT_RESOURCE_INDEX_CONTRACT_ERROR_CODE = 'project_resource_index_contract_error';
+export const GRAPH_PROJECTION_CONTRACT_ERROR_CODE = 'graph_projection_contract_error';
+const PROJECT_LOAD_COMMIT_ERROR_CODE = 'project_load_commit_error';
+
+function errorReferenceForLog(reference: ErrorReference): string {
+  return reference.incidentId
+    ? `[${reference.code}] incidentId=${reference.incidentId}`
+    : `[${reference.code}]`;
+}
+
+function logProjectIOError(context: string, reference: ErrorReference): void {
+  try {
+    logger.sys.error(`${context} ${errorReferenceForLog(reference)}`, 'ProjectIOStore');
+  } catch {
+    // Diagnostics must not control project state transitions.
+  }
+}
+
 interface ProjectIOStore {
   status: LoadStatus;
-  error: string | null;
+  error: ErrorReference | null;
   graphLoadStatus: Record<string, GraphLoadStatus>;
 
   currentPath: string | null;
@@ -225,9 +244,9 @@ async function refreshProjectResourceIndexOnce(): Promise<boolean> {
     return true;
   } catch (err) {
     if (!isCurrentProjectIdentity(identity)) return false;
-    const errorMessage = formatErrorMessage(err, 'Failed to refresh resource index');
-    logger.sys.error('Failed to refresh resource index: ' + errorMessage, 'ProjectIOStore');
-    useProjectIOStore.setState({ error: errorMessage });
+    const error = toErrorReference(err, PROJECT_RESOURCE_INDEX_CONTRACT_ERROR_CODE);
+    useProjectIOStore.setState({ error });
+    logProjectIOError('Failed to refresh resource index', error);
     return false;
   }
 }
@@ -272,14 +291,10 @@ function commitProjectLoadStep(label: string, assignment: () => void): void {
   try {
     assignment();
   } catch (error) {
-    try {
-      logger.sys.error(
-        `Project load commit listener failed at '${label}': ${formatErrorMessage(error)}`,
-        'ProjectIOStore',
-      );
-    } catch {
-      // Commit completion must not depend on diagnostics infrastructure.
-    }
+    logProjectIOError(
+      `Project load commit listener failed at '${label}'`,
+      toErrorReference(error, PROJECT_LOAD_COMMIT_ERROR_CODE),
+    );
   }
 }
 
@@ -373,9 +388,9 @@ async function loadProjectForIdentity(
       return commitPreparedAuthoritativeProjectLoad(prepared);
     } catch (err) {
       if (!isCurrentProjectIdentity(identity)) return null;
-      const errorMessage = formatErrorMessage(err, 'Failed to load project');
-      useProjectIOStore.setState({ status: LoadStatus.Error, error: errorMessage });
-      logger.sys.error('Failed to load project: ' + errorMessage, 'ProjectIOStore');
+      const error = toErrorReference(err, PROJECT_LOAD_CONTRACT_ERROR_CODE);
+      useProjectIOStore.setState({ status: LoadStatus.Error, error });
+      logProjectIOError('Failed to load project', error);
       return null;
     } finally {
       if (loadProjectInFlight === entry) loadProjectInFlight = null;
@@ -467,9 +482,9 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
     const lifecycleToken = projectIOApplicationPort().beginGraphLoad(graphPath);
     const pending = projectIOApplicationPort().loadGraphProjection(graphPath, lifecycleToken)
       .catch((err) => {
-        const errorMessage = formatErrorMessage(err, 'Failed to load graph projection');
-        logger.sys.error('Failed to load graph projection: ' + errorMessage, 'ProjectIOStore');
-        set({ error: errorMessage });
+        const error = toErrorReference(err, GRAPH_PROJECTION_CONTRACT_ERROR_CODE);
+        set({ error });
+        logProjectIOError('Failed to load graph projection', error);
         return false;
       })
       .then((loaded) => {

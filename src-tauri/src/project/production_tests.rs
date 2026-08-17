@@ -1715,7 +1715,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
         "project_recovery_required"
     );
     assert_eq!(observed, 0);
-    assert!(
+    assert_eq!(
         state
             .execute_graph_for_current_project_for_test(
                 &event,
@@ -1723,9 +1723,10 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
                 &NOOP_RUN_EVENT_SINK
             )
             .unwrap_err()
-            .contains("project_recovery_required")
+            .kind(),
+        crate::project::ProjectExecutionErrorKind::RecoveryRequired
     );
-    assert!(
+    assert_eq!(
         state
             .with_database_mut(
                 &crate::project::ProjectInstanceId::from_existing("blocked".into()),
@@ -1735,7 +1736,8 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
                 |_| Ok(()),
             )
             .unwrap_err()
-            .contains("project_recovery_required")
+            .command_code(),
+        Some("project_recovery_required")
     );
 
     assert!(
@@ -8597,7 +8599,10 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
             &NOOP_RUN_EVENT_SINK,
         )
         .unwrap_err();
-    assert!(invalid.starts_with("invalid_execution_demand:"));
+    assert_eq!(
+        invalid.kind(),
+        crate::project::ProjectExecutionErrorKind::InvalidDemand
+    );
     assert_eq!(observer.acquired(), 0);
 
     let demand = crate::node_system::plan::ExecutionDemand::Outputs {
@@ -11234,8 +11239,9 @@ fn execution_rejects_exact_dependency_change_after_plan_before_run() {
         )
         .unwrap_err();
 
-    assert!(
-        error.to_string().contains("stale"),
+    assert_eq!(
+        error.kind(),
+        crate::project::ProjectExecutionErrorKind::StaleProjectLifecycle,
         "unexpected error: {error}"
     );
     assert!(!run_entered.load(std::sync::atomic::Ordering::Acquire));
@@ -12043,7 +12049,11 @@ fn production_observability_execute_graph_records_compile_and_run_for_current_se
         )
         .unwrap();
 
-    let spans = trace_sink.spans();
+    let bundles = trace_sink.bundles();
+    let spans = bundles
+        .iter()
+        .flat_map(crate::node_system::analysis::TraceBundle::spans)
+        .collect::<Vec<_>>();
     assert!(!spans.is_empty());
     assert!(spans.iter().all(|span| {
         span.correlation.project_session_id == session_id
@@ -12102,7 +12112,7 @@ fn production_observability_project_replacement_installs_empty_distinct_sink() {
             &NOOP_RUN_EVENT_SINK,
         )
         .unwrap();
-    assert!(!old_sink.spans().is_empty());
+    assert!(!old_sink.bundles().is_empty());
 
     state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
 
@@ -12111,8 +12121,8 @@ fn production_observability_project_replacement_installs_empty_distinct_sink() {
         std::sync::Arc::clone(&store.trace_sink)
     };
     assert!(!std::sync::Arc::ptr_eq(&old_sink, &new_sink));
-    assert!(new_sink.spans().is_empty());
-    assert!(!old_sink.spans().is_empty());
+    assert!(new_sink.bundles().is_empty());
+    assert!(!old_sink.bundles().is_empty());
 
     std::fs::remove_dir_all(root).unwrap();
 }

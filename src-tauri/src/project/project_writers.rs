@@ -2603,7 +2603,7 @@ mod tests {
             |event| events.push(event),
         )
         .unwrap_err();
-        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_project_lifecycle");
         assert!(events.is_empty());
     }
 }

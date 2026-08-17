@@ -61,11 +61,27 @@ pub struct CleanupInvalidProjectsResult {
     pub removed: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectPathValidation {
-    pub ok: bool,
-    pub message: Option<String>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectPathValidationError {
+    Empty,
+    NotDirectory,
+    AlreadyContainsProject,
+    NotEmpty,
+    InvalidParent,
+    ParentUnavailable,
+}
+
+impl ProjectPathValidationError {
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Empty => "project_path_empty",
+            Self::NotDirectory => "project_path_not_directory",
+            Self::AlreadyContainsProject => "project_path_already_contains_project",
+            Self::NotEmpty => "project_path_not_empty",
+            Self::InvalidParent => "project_parent_path_invalid",
+            Self::ParentUnavailable => "project_parent_unavailable",
+        }
+    }
 }
 
 #[derive(Debug, FromRow)]
@@ -496,53 +512,39 @@ pub fn default_project_parent_directory() -> Result<String, String> {
     }
 }
 
-pub fn validate_new_project_path(path: &str) -> ProjectPathValidation {
+pub fn validate_new_project_path(path: &str) -> Result<(), ProjectPathValidationError> {
     let path = path.trim();
     if path.is_empty() {
-        return invalid("路径不能为空");
+        return Err(ProjectPathValidationError::Empty);
     }
 
     let pb = PathBuf::from(path);
     if pb.exists() {
         if pb.is_file() {
-            return invalid("项目路径必须是文件夹");
+            return Err(ProjectPathValidationError::NotDirectory);
         }
-        let metadata_path = pb.join(PROJECT_METADATA_FILE);
-        if metadata_path.exists() {
-            return invalid("该项目文件夹已包含 metadata.yssbi，请更换名称或路径");
+        if pb.join(PROJECT_METADATA_FILE).exists() {
+            return Err(ProjectPathValidationError::AlreadyContainsProject);
         }
         if directory_has_entries(&pb) {
-            return invalid("项目文件夹必须为空或不存在");
+            return Err(ProjectPathValidationError::NotEmpty);
         }
-        return ProjectPathValidation {
-            ok: true,
-            message: None,
-        };
+        return Ok(());
     }
-    let Some(parent) = pb.parent().filter(|p| !p.as_os_str().is_empty()) else {
-        return invalid("无效的父路径");
+    let Some(parent) = pb.parent().filter(|parent| !parent.as_os_str().is_empty()) else {
+        return Err(ProjectPathValidationError::InvalidParent);
     };
     if !parent.exists() || !parent.is_dir() {
-        return invalid("父目录不存在或不是文件夹");
+        return Err(ProjectPathValidationError::ParentUnavailable);
     }
 
-    ProjectPathValidation {
-        ok: true,
-        message: None,
-    }
+    Ok(())
 }
 
 fn directory_has_entries(path: &Path) -> bool {
     std::fs::read_dir(path)
         .map(|mut entries| entries.next().is_some())
         .unwrap_or(true)
-}
-
-fn invalid(message: &str) -> ProjectPathValidation {
-    ProjectPathValidation {
-        ok: false,
-        message: Some(message.into()),
-    }
 }
 
 pub fn normalize_project_name(name: &str) -> String {

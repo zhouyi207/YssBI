@@ -1,4 +1,5 @@
-import { logger } from "@/utils/appLogger";
+import i18n from 'i18next';
+
 import { editorDockviewPort } from '@/features/core/dockview';
 import { isResourceDocumentDirty } from '@/features/core/resource';
 import { uiStore } from '@/features/core/ui/UIStore';
@@ -13,6 +14,7 @@ import {
 import { closeGraphTab } from './closeGraphTab';
 import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
 import { resolveTabDisplayName } from './resolveTabDisplayName';
+import { showBlockingIpcError, showBlockingMessage } from './blockingErrorDialog';
 
 export async function closeWorksheetTab(
   worksheetPath: string,
@@ -38,10 +40,17 @@ export async function closeWorksheetTab(
     if (shouldSave) {
       try {
         const saved = await useWorksheetStore.getState().saveDocument(worksheetPath);
-        if (!saved || !context.isCurrent()) return false;
+        if (!context.isCurrent()) return false;
+        if (!saved) {
+          showBlockingMessage(i18n.t('notifications.editor.worksheetSaveFailed', {
+            error: 'worksheet_save_not_committed',
+          }));
+          return false;
+        }
       } catch (error) {
         if (!context.isCurrent()) return false;
-        logger.notify.error(`保存失败：${error instanceof Error ? error.message : String(error)}`, "UI");
+        showBlockingIpcError(error, 'save_worksheet', (code) =>
+          i18n.t('notifications.editor.worksheetSaveFailed', { error: code }));
         return false;
       }
     }
@@ -101,7 +110,8 @@ export async function deleteWorksheetWithConfirm(worksheetPath: string): Promise
     return await performWorksheetDelete(worksheetPath, context);
   } catch (error) {
     if (!context.isCurrent()) return false;
-    logger.notify.error(`删除失败：${error instanceof Error ? error.message : String(error)}`, "UI");
+    showBlockingIpcError(error, 'remove_worksheet', (code) =>
+      i18n.t('notifications.editor.worksheetDeleteFailed', { error: code }));
     return false;
   }
 }

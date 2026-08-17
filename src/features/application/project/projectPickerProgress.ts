@@ -1,4 +1,4 @@
-import type { TFunction } from "i18next";
+import { i18n } from "@/app/i18n";
 import { uiStore } from "@/features/core/ui/UIStore";
 import type { ProgressState } from "@/shared/types/ui";
 import type {
@@ -20,6 +20,41 @@ export interface RunProjectPickerProgressOptions {
 export interface ProjectPickerProgressRun<T> {
   result: T;
   cancelled: boolean;
+}
+
+export type ProjectPickerProgressTask = 'scan' | 'cleanup' | 'create' | 'open';
+
+export function projectPickerProgressInitial(
+  task: ProjectPickerProgressTask,
+): RunProjectPickerProgressOptions['initial'] {
+  switch (task) {
+    case 'scan':
+      return {
+        stage: i18n.t('projectPicker.loading.scanning'),
+        detail: i18n.t('projectPicker.loading.scanningFolder'),
+        cancelable: true,
+      };
+    case 'cleanup':
+      return {
+        stage: i18n.t('projectPicker.loading.cleanup'),
+        cancelable: true,
+      };
+    case 'create':
+      return {
+        stage: i18n.t('projectPicker.loading.creating'),
+        percent: 0.2,
+      };
+    case 'open':
+      return {
+        stage: i18n.t('projectPicker.loading.opening'),
+        detail: i18n.t('projectPicker.loading.readingFile'),
+        percent: 0.1,
+      };
+  }
+}
+
+export function projectPickerScanFolderTitle(): string {
+  return i18n.t('projectPicker.scanFolderTitle');
 }
 
 /** 统一项目选择页进度蒙层生命周期（start → update → finish）。 */
@@ -74,31 +109,29 @@ const OPEN_PROJECT_STAGE_PERCENT = {
 type OpenProjectStage = keyof typeof OPEN_PROJECT_STAGE_PERCENT;
 
 export function updateOpenProjectProgressStage(
-  t: TFunction,
   update: ProjectPickerProgressHandle["update"],
   stage: OpenProjectStage,
 ) {
   update({
-    detail: t(`projectPicker.loading.${stage}`),
+    detail: i18n.t(`projectPicker.loading.${stage}`),
     percent: OPEN_PROJECT_STAGE_PERCENT[stage],
   });
 }
 
 export function applyScanProgressEvent(
-  t: TFunction,
   event: ProjectScanProgressEvent,
   update: ProjectPickerProgressHandle["update"],
 ) {
   if (event.kind === "scanning") {
     update({
-      stage: t("projectPicker.loading.scanning"),
-      detail: t("projectPicker.loading.scanningFolder"),
+      stage: i18n.t("projectPicker.loading.scanning"),
+      detail: i18n.t("projectPicker.loading.scanningFolder"),
     });
     return;
   }
   if (event.kind === "discovered") {
     update({
-      detail: t("projectPicker.loading.scanFoundProjects", { count: event.count }),
+      detail: i18n.t("projectPicker.loading.scanFoundProjects", { count: event.count }),
       percent: event.count > 0 ? 0.5 : 0.9,
     });
     return;
@@ -106,7 +139,7 @@ export function applyScanProgressEvent(
   if (event.kind === "registering") {
     const fraction = event.total > 0 ? event.current / event.total : 1;
     update({
-      detail: t("projectPicker.loading.scanRegistering", {
+      detail: i18n.t("projectPicker.loading.scanRegistering", {
         current: event.current,
         total: event.total,
       }),
@@ -116,15 +149,14 @@ export function applyScanProgressEvent(
 }
 
 export function applyCleanupProgressEvent(
-  t: TFunction,
   event: ProjectCleanupProgressEvent,
   update: ProjectPickerProgressHandle["update"],
 ) {
   if (event.kind === "checking") {
     const fraction = event.total > 0 ? event.current / event.total : 1;
     update({
-      stage: t("projectPicker.loading.cleanup"),
-      detail: t("projectPicker.loading.cleanupChecking", {
+      stage: i18n.t("projectPicker.loading.cleanup"),
+      detail: i18n.t("projectPicker.loading.cleanupChecking", {
         current: event.current,
         total: event.total,
       }),
@@ -134,15 +166,15 @@ export function applyCleanupProgressEvent(
   }
   if (event.kind === "removing") {
     update({
-      detail: t("projectPicker.loading.cleanupRemoving", { removed: event.removed }),
+      detail: i18n.t("projectPicker.loading.cleanupRemoving", { removed: event.removed }),
       percent: 0.85 + 0.1 * Math.min(event.removed, event.total) / Math.max(event.total, 1),
     });
   }
 }
 
-export function markProjectPickerProgressDone(t: TFunction, update: ProjectPickerProgressHandle["update"]) {
+export function markProjectPickerProgressDone(update: ProjectPickerProgressHandle["update"]) {
   update({
-    detail: t("projectPicker.loading.done"),
+    detail: i18n.t("projectPicker.loading.done"),
     percent: 1,
   });
 }

@@ -63,10 +63,6 @@ export interface CleanupInvalidProjectsResult {
   removed: number;
 }
 
-export interface ProjectPathValidation {
-  ok: boolean;
-  message: string | null;
-}
 
 export interface ProjectSaveResultDto {
   projectInstanceId: string;

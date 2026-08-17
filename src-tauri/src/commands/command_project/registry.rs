@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::error::CommandError;
 use crate::event::{
     LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationOutcomeDto,
     LifecycleMutationPhaseDto, LifecycleMutationResultDto, LifecycleRecoveryDto,
@@ -31,8 +31,11 @@ where
 #[tauri::command]
 pub async fn list_registered_projects(
     registry: State<'_, ProjectRegistry>,
-) -> Result<Vec<ProjectRecord>, AppError> {
-    registry.list_projects().await.map_err(AppError::internal)
+) -> Result<Vec<ProjectRecord>, CommandError> {
+    registry
+        .list_projects()
+        .await
+        .map_err(CommandError::internal)
 }
 
 #[tauri::command]
@@ -41,13 +44,13 @@ pub async fn scan_projects_in_directory(
     task_cancel: State<'_, ProjectPickerTaskCancelRegistry>,
     directory: String,
     on_progress: Channel<crate::project::ProjectScanProgressEvent>,
-) -> Result<ScanProjectsResult, AppError> {
+) -> Result<ScanProjectsResult, CommandError> {
     let cancel = task_cancel.begin();
     let result = registry
         .scan_directory(&directory, Some(on_progress), cancel.clone())
         .await;
     task_cancel.end(&cancel);
-    result.map_err(AppError::internal)
+    result.map_err(CommandError::internal)
 }
 
 #[tauri::command]
@@ -60,13 +63,13 @@ pub async fn cleanup_invalid_registered_projects(
     registry: State<'_, ProjectRegistry>,
     task_cancel: State<'_, ProjectPickerTaskCancelRegistry>,
     on_progress: Channel<crate::project::ProjectCleanupProgressEvent>,
-) -> Result<CleanupInvalidProjectsResult, AppError> {
+) -> Result<CleanupInvalidProjectsResult, CommandError> {
     let cancel = task_cancel.begin();
     let result = registry
         .cleanup_invalid_projects(Some(on_progress), cancel.clone())
         .await;
     task_cancel.end(&cancel);
-    result.map_err(AppError::internal)
+    result.map_err(CommandError::internal)
 }
 
 #[tauri::command]
@@ -74,22 +77,22 @@ pub async fn register_project(
     registry: State<'_, ProjectRegistry>,
     name: String,
     path: String,
-) -> Result<ProjectRecord, AppError> {
+) -> Result<ProjectRecord, CommandError> {
     registry
         .register_project(&name, &path)
         .await
-        .map_err(AppError::internal)
+        .map_err(CommandError::internal)
 }
 
 #[tauri::command]
 pub async fn remove_registered_project(
     registry: State<'_, ProjectRegistry>,
     id: String,
-) -> Result<(), AppError> {
+) -> Result<(), CommandError> {
     registry
         .remove_project(&id)
         .await
-        .map_err(AppError::internal)
+        .map_err(CommandError::internal)
 }
 
 async fn delete_registered_project_workflow<Remove, RemoveFuture, Emit>(
@@ -99,7 +102,7 @@ async fn delete_registered_project_workflow<Remove, RemoveFuture, Emit>(
     operation_id: OperationId,
     remove: Remove,
     emit: Emit,
-) -> Result<LifecycleMutationResultDto, AppError>
+) -> Result<LifecycleMutationResultDto, CommandError>
 where
     Remove: FnOnce() -> RemoveFuture,
     RemoveFuture: Future<Output = Result<(), String>>,
@@ -206,12 +209,12 @@ pub async fn delete_registered_project_files(
     id: String,
     expected_active_instance_id: Option<ProjectInstanceId>,
     operation_id: OperationId,
-) -> Result<LifecycleMutationResultDto, AppError> {
+) -> Result<LifecycleMutationResultDto, CommandError> {
     let record = registry
         .fetch_by_id(&id)
         .await
-        .map_err(AppError::internal)?
-        .ok_or_else(|| AppError::new("project_not_found", "项目不存在"))?;
+        .map_err(CommandError::internal)?
+        .ok_or_else(|| CommandError::expected("project_not_found"))?;
 
     delete_registered_project_workflow(
         state.inner(),
@@ -228,11 +231,11 @@ pub async fn delete_registered_project_files(
 pub async fn toggle_registered_project_favorite(
     registry: State<'_, ProjectRegistry>,
     id: String,
-) -> Result<bool, AppError> {
+) -> Result<bool, CommandError> {
     registry
         .toggle_favorite(&id)
         .await
-        .map_err(AppError::internal)
+        .map_err(CommandError::internal)
 }
 
 #[tauri::command]

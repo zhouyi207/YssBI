@@ -12,6 +12,7 @@ import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { ProjectLifecycleCommittedHandler } from '@/features/core/sync/handlers/ProjectEventHandler';
 import { ProjectService } from '@/services/project/projectService';
+import { normalizeIpcError } from '@/services/ipc';
 import type {
   LifecycleMutationOutcome,
   LifecycleMutationResultDto,
@@ -255,11 +256,44 @@ describe('project lifecycle initiating operations', () => {
     }
     const create = vi.spyOn(ProjectService, 'createProject');
 
+    let outcome!: Awaited<ReturnType<typeof picker.createProject>>;
     await act(async () => {
-      await picker.createProject('Blocked', 'C:/blocked');
+      outcome = await picker.createProject('Blocked', 'C:/blocked');
     });
 
     expect(create).not.toHaveBeenCalled();
+    expect(outcome).toMatchObject({
+      status: 'failed',
+      error: { code: 'project_lifecycle_protocol_error' },
+    });
+  });
+
+  it('exposes refresh IPC failures as typed page issues', async () => {
+    vi.mocked(ProjectService.listRegisteredProjects).mockRejectedValueOnce(
+      normalizeIpcError('list_registered_projects', {
+        code: 'internal_error',
+        details: null,
+        incidentId: 'incident-refresh',
+      }),
+    );
+
+    let outcome!: Awaited<ReturnType<typeof picker.refresh>>;
+    await act(async () => {
+      outcome = await picker.refresh();
+    });
+
+    expect(outcome).toMatchObject({
+      status: 'issue',
+      issue: {
+        kind: 'failure',
+        operation: 'refresh',
+        error: {
+          code: 'internal_error',
+          incidentId: 'incident-refresh',
+        },
+      },
+    });
+    expect(picker.pageIssue).toEqual(outcome.status === 'issue' ? outcome.issue : null);
   });
 
   it('keeps lifecycle state unchanged after a current direct transport failure', async () => {
@@ -284,7 +318,7 @@ describe('project lifecycle initiating operations', () => {
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([created]);
     const progress = vi.spyOn(uiStore, 'updateProgress');
 
-    let completion!: Promise<void>;
+    let completion!: ReturnType<typeof picker.createProject>;
     await act(async () => {
       completion = picker.createProject('Created', 'C:/created');
       await Promise.resolve();
@@ -303,6 +337,7 @@ describe('project lifecycle initiating operations', () => {
       await completion;
     });
 
+    expect(await completion).toEqual({ status: 'committed' });
     expect(picker.projects.map((project) => project.id)).toContain('created');
     expect(progress).toHaveBeenCalledWith(expect.objectContaining({ percent: 1 }));
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
@@ -313,7 +348,7 @@ describe('project lifecycle initiating operations', () => {
     const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([]);
 
-    let completion!: Promise<void>;
+    let completion!: ReturnType<typeof picker.deleteProjectFiles>;
     await act(async () => {
       completion = picker.deleteProjectFiles('inactive-record');
       await Promise.resolve();
@@ -335,6 +370,10 @@ describe('project lifecycle initiating operations', () => {
       await completion;
     });
 
+    expect(await completion).toMatchObject({
+      status: 'recovery',
+      recovery: { action: 'cleanupTombstone' },
+    });
     expect(picker.projects).toEqual([]);
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
   });
@@ -353,7 +392,7 @@ describe('project lifecycle initiating operations', () => {
       const hydrate = vi.spyOn(ProjectService, 'getProjectIndex');
       const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
-      let completion!: Promise<void>;
+      let completion!: ReturnType<typeof picker.deleteProjectFiles>;
       await act(async () => {
         completion = picker.deleteProjectFiles('active-record');
         await Promise.resolve();
@@ -383,6 +422,10 @@ describe('project lifecycle initiating operations', () => {
         projectInstanceId: 'project-a',
       });
       expect(projectPublicationCoordinator.getSnapshotForTests().projectInstanceId).toBe('project-a');
+      expect(await completion).toMatchObject({
+        status: 'recovery',
+        recovery: { action: 'cleanupRegistry' },
+      });
       expect(picker.projects).toEqual([expect.objectContaining({ id: 'active-record' })]);
       expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
       expect(hydrate).not.toHaveBeenCalled();
@@ -405,7 +448,7 @@ describe('project lifecycle initiating operations', () => {
     const request = deferred<LifecycleMutationResultDto>();
     const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
 
-    let completion!: Promise<void>;
+    let completion!: ReturnType<typeof picker.deleteProjectFiles>;
     await act(async () => {
       completion = picker.deleteProjectFiles('active-record');
       await Promise.resolve();
@@ -429,6 +472,10 @@ describe('project lifecycle initiating operations', () => {
       await completion;
     });
 
+    expect(await completion).toMatchObject({
+      status: 'recovery',
+      recovery: { action: 'removeRegistryRecord' },
+    });
     expect(useProjectIOStore.getState().projectInstanceId).toBeNull();
     expect(picker.projects).toEqual([]);
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
@@ -444,7 +491,7 @@ describe('project lifecycle initiating operations', () => {
     const progress = vi.spyOn(uiStore, 'updateProgress');
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
-    let completion!: Promise<void>;
+    let completion!: ReturnType<typeof picker.createProject>;
     await act(async () => {
       completion = picker.createProject('Created', 'C:/created');
       await Promise.resolve();
@@ -467,6 +514,7 @@ describe('project lifecycle initiating operations', () => {
       await completion;
     });
 
+    expect(await completion).toEqual({ status: 'stale' });
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
     expect(progress).not.toHaveBeenCalledWith(expect.objectContaining({ percent: 1 }));
   });
@@ -476,7 +524,7 @@ describe('project lifecycle initiating operations', () => {
     const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
 
-    let completion!: Promise<void>;
+    let completion!: ReturnType<typeof picker.deleteProjectFiles>;
     await act(async () => {
       completion = picker.deleteProjectFiles('inactive-record');
       await Promise.resolve();
@@ -500,6 +548,7 @@ describe('project lifecycle initiating operations', () => {
       await completion;
     });
 
+    expect(await completion).toEqual({ status: 'stale' });
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
   });
 });

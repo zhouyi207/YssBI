@@ -1,8 +1,6 @@
 use crate::application::database_schema::enriched_database_dtos;
-use crate::error::AppError;
+use crate::error::CommandError;
 use crate::event::ProjectActivationResultDto;
-use crate::log::LogLevel;
-use crate::log_app;
 use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::project::{
     ProjectIndex, ProjectState, RevealProjectResourceRequest, format_path_for_user_path,
@@ -15,12 +13,14 @@ use tauri::State;
 #[tauri::command]
 pub fn get_project_databases_variables(
     state: State<ProjectState>,
-) -> Result<DatabasesVariablesDTO, AppError> {
-    let data = state.get_data().map_err(AppError::from)?;
+) -> Result<DatabasesVariablesDTO, CommandError> {
+    let data = state.get_data().map_err(CommandError::from)?;
 
-    log_app!(
-        LogLevel::Info,
-        "[command.get_project_databases_variables] Loading databases + variables"
+    tracing::info!(
+        target: "yssbi::commands::project",
+        diagnostic_domain = "data",
+        diagnostic_event = "getProjectDataResources",
+        "Loading project databases and variables"
     );
 
     let store = state.project_store.read().unwrap();
@@ -39,20 +39,19 @@ pub fn get_project_databases_variables(
 
 fn current_project_activation(
     state: &ProjectState,
-) -> Result<ProjectActivationResultDto, AppError> {
+) -> Result<ProjectActivationResultDto, CommandError> {
     let activation_revision = state.activation_revision();
-    let session = state.capture_project_session().map_err(AppError::from)?;
+    let session = state
+        .capture_project_session()
+        .map_err(CommandError::from)?;
     let path = state
         .get_path()
-        .ok_or_else(|| AppError::new("stale_project_lifecycle", "No project is active"))?;
+        .ok_or_else(|| CommandError::expected("stale_project_lifecycle"))?;
     state
         .validate_project_session(&session)
-        .map_err(AppError::from)?;
+        .map_err(CommandError::from)?;
     if state.activation_revision() != activation_revision {
-        return Err(AppError::new(
-            "stale_project_lifecycle",
-            "Project changed during activation capture",
-        ));
+        return Err(CommandError::expected("stale_project_lifecycle"));
     }
     Ok(ProjectActivationResultDto {
         path: normalize_existing_path(&path).unwrap_or(path),
@@ -65,20 +64,24 @@ fn current_project_activation(
 #[tauri::command]
 pub fn get_current_project_activation(
     state: State<ProjectState>,
-) -> Result<ProjectActivationResultDto, AppError> {
+) -> Result<ProjectActivationResultDto, CommandError> {
     current_project_activation(state.inner())
 }
 
 /// 获取当前项目路径
 #[tauri::command]
-pub fn get_project_path(state: State<ProjectState>) -> Result<Option<String>, AppError> {
-    state.ensure_project_operational().map_err(AppError::from)?;
+pub fn get_project_path(state: State<ProjectState>) -> Result<Option<String>, CommandError> {
+    state
+        .ensure_project_operational()
+        .map_err(CommandError::from)?;
     let path = state.get_path();
 
-    log_app!(
-        LogLevel::Info,
-        "[command.get_project_path] Path: {:?}",
-        path
+    tracing::info!(
+        target: "yssbi::commands::project",
+        diagnostic_domain = "application",
+        diagnostic_event = "getProjectPath",
+        path = ?path,
+        "Read project path"
     );
 
     Ok(path.map(|path| normalize_existing_path(&path).unwrap_or(path)))
@@ -88,11 +91,11 @@ pub fn get_project_path(state: State<ProjectState>) -> Result<Option<String>, Ap
 pub fn get_project_index(
     state: State<ProjectState>,
     project_instance_id: String,
-) -> Result<ProjectIndex, AppError> {
+) -> Result<ProjectIndex, CommandError> {
     let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
     state
         .read_project_index(&project_instance_id)
-        .map_err(AppError::from)
+        .map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -102,9 +105,10 @@ pub fn load_project_graph(
     graph_path: String,
     locale: Option<String>,
     lifecycle_token: u64,
-) -> Result<EditorGraphProjectionDto, AppError> {
+) -> Result<EditorGraphProjectionDto, CommandError> {
     let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
-    let graph_path = crate::project::GraphResourcePath::new(graph_path).map_err(AppError::from)?;
+    let graph_path =
+        crate::project::GraphResourcePath::new(graph_path).map_err(CommandError::from)?;
     state
         .load_graph_projection(
             &project_instance_id,
@@ -112,7 +116,7 @@ pub fn load_project_graph(
             lifecycle_token,
             locale.as_deref().unwrap_or("en-US"),
         )
-        .map_err(AppError::from)
+        .map_err(CommandError::from)
 }
 
 /// Resolve the on-disk path for a project resource (graph / database / worksheet).
@@ -121,14 +125,12 @@ pub fn get_project_resource_path(
     state: State<ProjectState>,
     kind: String,
     resource_id: String,
-) -> Result<String, AppError> {
-    let request = RevealProjectResourceRequest::from_parts(&kind, resource_id)?;
-    let path = resolve_reveal_path(&state, request).map_err(|e| e.to_string())?;
+) -> Result<String, CommandError> {
+    let request = RevealProjectResourceRequest::from_parts(&kind, resource_id)
+        .map_err(|_| CommandError::expected("invalid_resource_reference"))?;
+    let path = resolve_reveal_path(&state, request).map_err(CommandError::from)?;
     if !path.exists() {
-        return Err(AppError::new(
-            "resource_not_found",
-            format!("File not found: {}", path.display()),
-        ));
+        return Err(CommandError::expected("resource_not_found"));
     }
     Ok(format_path_for_user_path(&path))
 }

@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::error::CommandError;
 use crate::event::{
     Event, EventProject, LifecycleInvalidationDto, LifecycleMutationKindDto,
     LifecycleMutationOutcomeDto, LifecycleMutationPhaseDto, LifecycleMutationResultDto,
@@ -6,9 +6,6 @@ use crate::event::{
     emit_project_event_result,
 };
 
-use crate::frontend::FrontendError;
-use crate::log::LogLevel;
-use crate::log_app;
 use crate::node_system::document::OperationId;
 use crate::project::project_writers::ProjectSaveResultDto;
 use crate::project::{
@@ -25,7 +22,12 @@ fn emit_project_loaded(app: &AppHandle, result: ProjectActivationResultDto) {
 
 fn start_project_watcher(app: &AppHandle, watcher: &ProjectWatcherState, path: &str) {
     if let Err(error) = watcher.watch_project(app.clone(), path) {
-        tauri_plugin_log::log::warn!("Failed to start project watcher: {}", error);
+        tracing::warn!(
+            target: "yssbi::project::watcher",
+            diagnostic_domain = "system",
+            error = %error,
+            "Failed to start project watcher"
+        );
     }
 }
 
@@ -36,33 +38,31 @@ pub fn load_project(
     state: State<ProjectState>,
     watcher: State<ProjectWatcherState>,
     path: String,
-) -> Result<ProjectActivationResultDto, FrontendError> {
-    log_app!(
-        LogLevel::Info,
-        "[command.load_project] Loading project from: {}",
-        path
+) -> Result<ProjectActivationResultDto, CommandError> {
+    tracing::info!(
+        target: "yssbi::commands::project",
+        diagnostic_domain = "application",
+        diagnostic_event = "loadProject",
+        path = path.as_str(),
+        "Loading project"
     );
 
-    let path = normalize_existing_path(&path).map_err(|message| FrontendError {
-        code: "INVALID_PATH".into(),
-        message,
-    })?;
+    let path =
+        normalize_existing_path(&path).map_err(|_| CommandError::expected("invalid_path"))?;
 
     let session = state
         .activate_project_from_path(std::path::Path::new(&path))
-        .map_err(|error| FrontendError {
-            code: "LOAD_PROJECT_FAILED".into(),
-            message: error.to_string(),
-        })?;
-    let project_data = state.get_data().map_err(|error| FrontendError {
-        code: "LOAD_PROJECT_FAILED".into(),
-        message: error.to_string(),
-    })?;
+        .map_err(|error| CommandError::diagnosed("load_project_failed", error))?;
+    let project_data = state
+        .get_data()
+        .map_err(|error| CommandError::diagnosed("load_project_failed", error))?;
 
-    log_app!(
-        LogLevel::Info,
-        "[command.load_project] Project loaded: {}",
-        project_data.info()
+    tracing::info!(
+        target: "yssbi::commands::project",
+        diagnostic_domain = "application",
+        diagnostic_event = "projectLoaded",
+        project = %project_data.info(),
+        "Project loaded"
     );
 
     start_project_watcher(&app, &watcher, &path);
@@ -83,7 +83,7 @@ async fn save_project_as_workflow<Register, RegisterFuture, Activate, Emit>(
     register: Register,
     activate: Activate,
     emit: Emit,
-) -> Result<LifecycleMutationResultDto, AppError>
+) -> Result<LifecycleMutationResultDto, CommandError>
 where
     Register: FnOnce(String, String) -> RegisterFuture,
     RegisterFuture: Future<Output = Result<ProjectRecord, String>>,
@@ -167,11 +167,13 @@ pub async fn save_project_as(
     path: String,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
-) -> Result<LifecycleMutationResultDto, AppError> {
-    log_app!(
-        LogLevel::Info,
-        "[command.save_project_as] Saving project copy to: {}",
-        path
+) -> Result<LifecycleMutationResultDto, CommandError> {
+    tracing::info!(
+        target: "yssbi::commands::project",
+        diagnostic_domain = "application",
+        diagnostic_event = "saveProjectAs",
+        path = path.as_str(),
+        "Saving project copy"
     );
 
     let result = save_project_as_workflow(
@@ -200,7 +202,7 @@ pub async fn create_project(
     name: String,
     path: String,
     operation_id: OperationId,
-) -> Result<LifecycleMutationResultDto, AppError> {
+) -> Result<LifecycleMutationResultDto, CommandError> {
     let created =
         state.create_project_transaction(&name, std::path::Path::new(&path), operation_id)?;
     let metadata_path = created.metadata_path.to_string_lossy().into_owned();
@@ -288,7 +290,13 @@ pub(crate) fn publish_lifecycle_result(
 ) -> LifecycleMutationResultDto {
     publish_lifecycle_result_with(result, |event| {
         emit_project_event_result(app, event).inspect_err(|error| {
-            tauri_plugin_log::log::error!("Failed to emit project lifecycle event: {error}");
+            tracing::error!(
+                target: "yssbi::project::events",
+                diagnostic_domain = "application",
+                diagnostic_event = "lifecycleEventEmitFailed",
+                error = %error,
+                "Failed to emit project lifecycle event"
+            );
         })
     })
 }
@@ -298,10 +306,10 @@ pub(crate) fn flush_project_with_emitter(
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     mut emit: impl FnMut(Event),
-) -> Result<ProjectSaveResultDto, AppError> {
+) -> Result<ProjectSaveResultDto, CommandError> {
     let result = state
         .flush_project_documents(&project_instance_id, operation_id)
-        .map_err(AppError::from)?;
+        .map_err(CommandError::from)?;
     emit(Event::Project(EventProject::ProjectSaved {
         result: result.clone(),
     }));
@@ -314,8 +322,13 @@ pub fn flush_project(
     state: State<ProjectState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
-) -> Result<ProjectSaveResultDto, AppError> {
-    log_app!(LogLevel::Info, "[command.flush_project] Flushing project");
+) -> Result<ProjectSaveResultDto, CommandError> {
+    tracing::info!(
+        target: "yssbi::commands::project",
+        diagnostic_domain = "application",
+        diagnostic_event = "flushProject",
+        "Flushing project"
+    );
     flush_project_with_emitter(state.inner(), project_instance_id, operation_id, |event| {
         emit_project_event(&app, event)
     })
@@ -323,8 +336,13 @@ pub fn flush_project(
 
 /// 新建项目（清空当前状态）
 #[tauri::command]
-pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), AppError> {
-    log_app!(LogLevel::Info, "[command.new_project] Creating new project");
+pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), CommandError> {
+    tracing::info!(
+        target: "yssbi::commands::project",
+        diagnostic_domain = "application",
+        diagnostic_event = "newProject",
+        "Creating new project"
+    );
 
     state.clear_project()?;
     emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
@@ -608,7 +626,7 @@ mod tests {
                 events.push(event)
             })
             .unwrap_err();
-        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_project_lifecycle");
         assert_eq!(events.len(), 1);
         let _ = std::fs::remove_dir_all(root);
     }

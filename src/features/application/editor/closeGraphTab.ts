@@ -1,3 +1,4 @@
+import i18n from 'i18next';
 import type { LayoutTab } from '@/shared/types';
 import { editorDockviewPort } from '@/features/core/dockview';
 import { uiStore } from '@/features/core/ui/UIStore';
@@ -14,6 +15,7 @@ import { releaseEditorViewport } from '@/features/core/viewport';
 import { editorViewportScope } from '@/features/core/viewport/viewportScope';
 import { switchEditorTab } from './switchEditorTab';
 import { deactivateGraphTab } from './activateGraphTab';
+import { showBlockingIpcError } from './blockingErrorDialog';
 import {
   captureSettledGraphSaveCommandContext,
   isGraphSaveCommandRevisionCurrent,
@@ -54,7 +56,8 @@ export async function closeGraphTab(graphPath: string, groupId?: string, skipDir
         markResourceDirty({ id: graphPath, kind: tab.type }, false);
       } catch (error) {
         if (context && !context.isCurrent()) return false;
-        logger.notify.error(`保存失败：${error instanceof Error ? error.message : String(error)}`, 'UI');
+        showBlockingIpcError(error, 'save_project_graph', (code) =>
+          i18n.t('notifications.editor.graphSaveFailed', { error: code }));
         return false;
       }
     }

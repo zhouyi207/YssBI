@@ -1,3 +1,4 @@
+import i18n from 'i18next';
 import { GraphService } from '@/services/graph/graphService';
 import { editorDockviewPort } from '@/features/core/dockview';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
@@ -11,6 +12,7 @@ import {
 } from '@/features/application/projectCommandContext';
 import { layoutTabFromDockviewPanel } from './dockviewTabProjection';
 import { resolveTabDisplayName } from './resolveTabDisplayName';
+import { showBlockingIpcError, showBlockingMessage } from './blockingErrorDialog';
 
 interface DirtyEditorDocument {
   graphPath: string;
@@ -45,7 +47,13 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
     try {
       if (tab.type === 'worksheet') {
         const saved = await useWorksheetStore.getState().saveDocument(tab.graphPath);
-        if (!saved) return false;
+        if (!saved) {
+          showBlockingMessage(i18n.t('notifications.editor.documentSaveFailed', {
+            title: tab.title,
+            error: 'worksheet_save_not_committed',
+          }));
+          return false;
+        }
         continue;
       }
 
@@ -66,7 +74,14 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
         `Failed to save graph '${tab.title}' (${tab.graphPath}): ${message}`,
         'saveAllDirtyGraphs',
       );
-      logger.notify.error(`保存「${tab.title}」失败：${message}`, 'UI');
+      showBlockingIpcError(
+        error,
+        tab.type === 'worksheet' ? 'save_worksheet' : 'save_project_graph',
+        (code) => i18n.t('notifications.editor.documentSaveFailed', {
+          title: tab.title,
+          error: code,
+        }),
+      );
       return false;
     }
   }

@@ -57,20 +57,63 @@ type LifecycleLockTestHook = Arc<dyn Fn() + Send + Sync>;
 type ComputationSettingsPublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 type ActivationPanicPayload = Box<dyn std::any::Any + Send + 'static>;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProjectExecutionErrorKind {
+    Internal,
+    StaleProjectLifecycle,
+    RecoveryRequired,
+    InvalidDemand,
+    Run,
+    InternalCompilation,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectExecutionError {
-    message: Box<str>,
+    kind: ProjectExecutionErrorKind,
+    diagnostic: Box<str>,
     run_error: Option<crate::node_system::runtime::RunError>,
     internal_compilation_failure: Option<crate::node_system::compiler::InternalCompilationFailure>,
 }
 
 impl ProjectExecutionError {
-    pub fn message(message: impl Into<Box<str>>) -> Self {
+    pub fn internal(diagnostic: impl Into<Box<str>>) -> Self {
         Self {
-            message: message.into(),
+            kind: ProjectExecutionErrorKind::Internal,
+            diagnostic: diagnostic.into(),
             run_error: None,
             internal_compilation_failure: None,
         }
+    }
+
+    pub fn stale_project_lifecycle(diagnostic: impl Into<Box<str>>) -> Self {
+        Self {
+            kind: ProjectExecutionErrorKind::StaleProjectLifecycle,
+            diagnostic: diagnostic.into(),
+            run_error: None,
+            internal_compilation_failure: None,
+        }
+    }
+
+    pub fn recovery_required(diagnostic: impl Into<Box<str>>) -> Self {
+        Self {
+            kind: ProjectExecutionErrorKind::RecoveryRequired,
+            diagnostic: diagnostic.into(),
+            run_error: None,
+            internal_compilation_failure: None,
+        }
+    }
+
+    pub fn invalid_demand(diagnostic: impl Into<Box<str>>) -> Self {
+        Self {
+            kind: ProjectExecutionErrorKind::InvalidDemand,
+            diagnostic: diagnostic.into(),
+            run_error: None,
+            internal_compilation_failure: None,
+        }
+    }
+
+    pub const fn kind(&self) -> ProjectExecutionErrorKind {
+        self.kind
     }
 
     pub fn internal_compilation(
@@ -81,7 +124,8 @@ impl ProjectExecutionError {
             .map(|node_id| format!(" (node {node_id})"))
             .unwrap_or_default();
         Self {
-            message: format!(
+            kind: ProjectExecutionErrorKind::InternalCompilation,
+            diagnostic: format!(
                 "internal compilation failure at {:?}: {}{node_context}",
                 failure.stage, failure.code
             )
@@ -102,17 +146,13 @@ impl ProjectExecutionError {
     }
 
     pub fn contains(&self, pattern: &str) -> bool {
-        self.message.contains(pattern)
-    }
-
-    pub fn starts_with(&self, pattern: &str) -> bool {
-        self.message.starts_with(pattern)
+        self.diagnostic.contains(pattern)
     }
 }
 
 impl PartialEq<&str> for ProjectExecutionError {
     fn eq(&self, other: &&str) -> bool {
-        self.message.as_ref() == *other
+        self.diagnostic.as_ref() == *other
     }
 }
 
@@ -127,7 +167,8 @@ impl From<crate::node_system::runtime::RunError> for ProjectExecutionError {
             }
         };
         Self {
-            message: message.into(),
+            kind: ProjectExecutionErrorKind::Run,
+            diagnostic: message.into(),
             run_error: Some(error),
             internal_compilation_failure: None,
         }
@@ -135,20 +176,32 @@ impl From<crate::node_system::runtime::RunError> for ProjectExecutionError {
 }
 
 impl From<String> for ProjectExecutionError {
-    fn from(message: String) -> Self {
-        Self::message(message)
+    fn from(diagnostic: String) -> Self {
+        Self::internal(diagnostic)
     }
 }
 
 impl From<&str> for ProjectExecutionError {
-    fn from(message: &str) -> Self {
-        Self::message(message)
+    fn from(diagnostic: &str) -> Self {
+        Self::internal(diagnostic)
+    }
+}
+
+impl From<ProjectFilesystemError> for ProjectExecutionError {
+    fn from(error: ProjectFilesystemError) -> Self {
+        if error.recovery_required() {
+            Self::recovery_required(error.to_string())
+        } else if matches!(error, ProjectFilesystemError::StaleProjectLifecycle { .. }) {
+            Self::stale_project_lifecycle(error.to_string())
+        } else {
+            Self::internal(error.to_string())
+        }
     }
 }
 
 impl std::fmt::Display for ProjectExecutionError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(&self.message)
+        formatter.write_str(&self.diagnostic)
     }
 }
 
@@ -1538,8 +1591,12 @@ impl CommittedResourceMutation {
                 history,
             },
             Err(error) => {
-                tauri_plugin_log::log::error!(
-                    "committed resource mutation projection completion failed: {error}"
+                tracing::error!(
+                    target: "yssbi::project::projection",
+                    diagnostic_domain = "graph",
+                    diagnostic_event = "projectionCompletionFailed",
+                    error = %error,
+                    "Committed resource mutation projection completion failed"
                 );
                 crate::event::ResourceMutationResultDto {
                     operation_id,
@@ -7138,14 +7195,14 @@ impl ProjectState {
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
         compilation: &super::compile_publication::CurrentCompilation,
-    ) -> Result<ExecutionSnapshot, String> {
+    ) -> Result<ExecutionSnapshot, ProjectExecutionError> {
         let publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != expected_project_instance_id.as_str()
             || publication.project_instance_id != compilation.authority.project_instance_id
         {
-            return Err(
-                "stale_project_lifecycle: execution authority changed before snapshot".into(),
-            );
+            return Err(ProjectExecutionError::stale_project_lifecycle(
+                "execution authority changed before snapshot",
+            ));
         }
         let data = self.project_data.read().unwrap().clone();
         let graph_revisions = self.graph_revisions.read().unwrap().clone();
@@ -7165,15 +7222,17 @@ impl ProjectState {
         if !self.execution_authority_matches(&publication, &compilation.authority)
             || session_id != compilation.authority.project_session_id
         {
-            return Err(
-                "stale_project_lifecycle: execution authority changed before snapshot".into(),
-            );
+            return Err(ProjectExecutionError::stale_project_lifecycle(
+                "execution authority changed before snapshot",
+            ));
         }
         let document = data
             .graphs
             .get(graph_path)
             .map(|graph| graph.document.clone())
-            .ok_or_else(|| format!("graph '{}' not loaded", graph_path))?;
+            .ok_or_else(|| {
+                ProjectExecutionError::internal(format!("graph '{}' not loaded", graph_path))
+            })?;
         Ok(ExecutionSnapshot {
             document,
             data,
@@ -7197,12 +7256,14 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         authority: &super::compile_publication::ExecutionAuthorityToken,
-    ) -> Result<(), String> {
+    ) -> Result<(), ProjectExecutionError> {
         let publication = self.mutation_publication.lock().unwrap();
         (publication.project_instance_id == expected_project_instance_id.as_str()
             && self.execution_authority_matches(&publication, authority))
         .then_some(())
-        .ok_or_else(|| "stale_project_lifecycle: execution authority changed before run".into())
+        .ok_or_else(|| {
+            ProjectExecutionError::stale_project_lifecycle("execution authority changed before run")
+        })
     }
 
     #[cfg(test)]
@@ -7214,7 +7275,7 @@ impl ProjectState {
     ) -> Result<crate::node_system::runtime::RunResult, ProjectExecutionError> {
         let project_instance_id = self
             .capture_project_session()
-            .map_err(|error| format!("{}: {error}", error.code()))?
+            .map_err(ProjectExecutionError::from)?
             .instance_id;
         self.execute_graph(&project_instance_id, graph_path, demand, events)
     }
@@ -7227,19 +7288,21 @@ impl ProjectState {
         events: &dyn crate::node_system::runtime::RunEventSink,
     ) -> Result<crate::node_system::runtime::RunResult, ProjectExecutionError> {
         self.ensure_project_operational()
-            .map_err(|error| format!("{}: {error}", error.code()))?;
+            .map_err(ProjectExecutionError::from)?;
         let session = self
             .capture_project_session()
-            .map_err(|error| format!("{}: {error}", error.code()))?;
+            .map_err(ProjectExecutionError::from)?;
         if &session.instance_id != expected_project_instance_id {
-            return Err("stale_project_lifecycle: execution caller project is stale".into());
+            return Err(ProjectExecutionError::stale_project_lifecycle(
+                "execution caller project is stale",
+            ));
         }
         let cancellation = crate::node_system::runtime::CancellationToken::new();
         let publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != expected_project_instance_id.as_str() {
-            return Err(
-                "stale_project_lifecycle: execution authority changed before preparation".into(),
-            );
+            return Err(ProjectExecutionError::stale_project_lifecycle(
+                "execution authority changed before preparation",
+            ));
         }
         let store = self.project_store.read().unwrap();
         let session_id = store.project_session_id.clone();
@@ -7289,7 +7352,7 @@ impl ProjectState {
         };
         let selected = product
             .select(demand)
-            .map_err(|error| format!("invalid_execution_demand: {error}"))?;
+            .map_err(|error| ProjectExecutionError::invalid_demand(error.to_string()))?;
         let plan = selected.plan;
         cancellation.check().map_err(|error| error.to_string())?;
         let execution = self.capture_execution_snapshot(
@@ -7313,7 +7376,9 @@ impl ProjectState {
             .iter()
             .all(|(key, expected)| compile_resources.versions.get(key) == Some(expected));
         if !resource_basis_matches {
-            return Err("stale_project_lifecycle: execution resource basis changed".into());
+            return Err(ProjectExecutionError::stale_project_lifecycle(
+                "execution resource basis changed",
+            ));
         }
         let resource_snapshot = snapshot_execution_resources(&execution, compile_resources)?;
         let compile_cancellation =
@@ -7397,19 +7462,17 @@ impl ProjectState {
             if publication.project_instance_id != expected_project_instance_id.as_str()
                 || !self.execution_authority_matches(&publication, &compilation.authority)
             {
-                return Err(
-                    "stale_project_lifecycle: execution authority changed before run registration"
-                        .into(),
-                );
+                return Err(ProjectExecutionError::stale_project_lifecycle(
+                    "execution authority changed before run registration",
+                ));
             }
             let store = self.project_store.read().unwrap();
             if store.project_session_id != execution.session_id
                 || !Arc::ptr_eq(&runs, &execution.runs)
             {
-                return Err(
-                    "stale_project_lifecycle: execution session changed before run registration"
-                        .into(),
-                );
+                return Err(ProjectExecutionError::stale_project_lifecycle(
+                    "execution session changed before run registration",
+                ));
             }
             execution
                 .runs
@@ -9308,7 +9371,7 @@ pub(super) fn publish_function_plans(
             resources.versions(),
             entries,
         )
-        .map_err(|error| ProjectExecutionError::message(error.to_string()))
+        .map_err(|error| ProjectExecutionError::internal(error.to_string()))
 }
 
 fn build_run_parameters(
@@ -9611,7 +9674,10 @@ mod execution_identity_tests {
             )
             .unwrap_err();
 
-        assert!(error.to_string().contains("stale_project_lifecycle"));
+        assert_eq!(
+            error.kind(),
+            ProjectExecutionErrorKind::StaleProjectLifecycle
+        );
         assert!(events.0.lock().unwrap().is_empty());
         let store = state.project_store.read().unwrap();
         assert_eq!(store.runs.active_run_count(), 0);

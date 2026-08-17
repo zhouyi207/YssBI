@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import {
   captureProjectIdentity,
@@ -6,6 +7,7 @@ import {
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { ProjectService } from '@/services/project/projectService';
 import { uiStore } from '@/features/core/ui/UIStore';
+import { formatInlineUserError } from '@/features/application/userErrorSummary';
 import {
   RECOMMENDED_PROJECT_COMPUTATION_SETTINGS,
   type ComputationSettingsMutationReceiptDto,
@@ -69,6 +71,7 @@ function settingsEqual(
 }
 
 export function useProjectComputationSettings() {
+  const { t } = useTranslation();
   const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
   const [confirmed, setConfirmed] = useState<ComputationSettingsSnapshotDto | null>(null);
   const [draft, replaceDraft] = useState<ProjectComputationSettingsDraft>(() => toDraft(
@@ -156,7 +159,9 @@ export function useProjectComputationSettings() {
         setConfirmed(snapshot);
         replaceDraft(toDraft(snapshot.settings));
       } catch (loadError) {
-        if (!disposed && isCurrentProjectIdentity(identity)) setError(String(loadError));
+        if (!disposed && isCurrentProjectIdentity(identity)) {
+          setError(formatInlineUserError(loadError, t));
+        }
       } finally {
         if (!disposed && isCurrentProjectIdentity(identity)) setIsLoading(false);
       }
@@ -164,7 +169,7 @@ export function useProjectComputationSettings() {
 
     void load();
     return () => { disposed = true; };
-  }, [projectInstanceId]);
+  }, [projectInstanceId, t]);
 
   const setDraft = useCallback((patch: Partial<ProjectComputationSettingsDraft>) => {
     replaceDraft((current) => ({ ...current, ...patch }));
@@ -197,12 +202,14 @@ export function useProjectComputationSettings() {
       setConfirmed(receipt);
       replaceDraft(toDraft(receipt.settings));
     } catch (applyError) {
-      if (isCurrentProjectIdentity(identity)) setError(String(applyError));
+      if (isCurrentProjectIdentity(identity)) {
+        setError(formatInlineUserError(applyError, t));
+      }
       throw applyError;
     } finally {
       if (isCurrentProjectIdentity(identity)) setIsApplying(false);
     }
-  }, [confirmed, parsedDraft, projectInstanceId, validationError]);
+  }, [confirmed, parsedDraft, projectInstanceId, t, validationError]);
 
   const restoreRecommended = useCallback(() => {
     replaceDraft(toDraft(RECOMMENDED_PROJECT_COMPUTATION_SETTINGS));

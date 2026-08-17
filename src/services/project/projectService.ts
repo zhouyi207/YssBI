@@ -1,9 +1,13 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { invoke, Channel } from "@tauri-apps/api/core";
-import type { ExecuteGraphResultDto, RunEvent } from "@/shared/types/dto/runEvent";
+import { Channel } from "@tauri-apps/api/core";
+import type {
+    ExecuteGraphResultDto,
+    RunEvent,
+    RunOutputChannelEvent,
+} from "@/shared/types/dto/runEvent";
 import type { ExecutionDemandDto } from "@/shared/types/dto/executionDemand";
-import { parseInternalCompilationAppError } from "@/shared/types/dto/executionError";
+import { parseInternalCompilationErrorDetails } from "@/shared/types/dto/executionError";
 import {
     parseExecuteGraphResultDto,
     parseExecutionDemandDto,
@@ -20,7 +24,7 @@ import {
   isFunctionEditorProjectionDto,
   isGraphResourcePath,
 } from '@/shared/types/dto/editorProjectionGuards';
-import type { CleanupInvalidProjectsResult, LifecycleMutationResultDto, ProjectPathValidation, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
+import type { CleanupInvalidProjectsResult, LifecycleMutationResultDto, ProjectRecordRow, ScanProjectsResult } from "@/shared/types/dto/project";
 import {
   parseComputationSettingsMutationReceipt,
   parseComputationSettingsSnapshot,
@@ -29,9 +33,8 @@ import {
   type ComputationSettingsSnapshotDto,
 } from '@/shared/types/dto/projectComputationSettings';
 
-import { logger } from '@/utils/appLogger';
-import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { trackChannel, untrackChannel } from "@/services/devHmrIpc";
+import { IpcError, invokeCommand, isIpcErrorCode } from '@/services/ipc';
 import { bindExecutionEventChannel } from "./executionChannelDrain";
 
 export type ProjectScanProgressEvent =
@@ -43,28 +46,19 @@ export type ProjectCleanupProgressEvent =
     | { kind: "checking"; current: number; total: number }
     | { kind: "removing"; removed: number; total: number };
 
-export const PICKER_TASK_CANCELLED = "PICKER_TASK_CANCELLED";
+export const PICKER_TASK_CANCELLED = "picker_task_cancelled";
 
 export function isPickerTaskCancelledError(error: unknown): boolean {
-    return formatErrorMessage(error, "") === PICKER_TASK_CANCELLED;
+    return isIpcErrorCode(error, PICKER_TASK_CANCELLED);
 }
 
 export function isExecutionCancelledError(error: unknown): boolean {
-    return Boolean(
-        error
-        && typeof error === "object"
-        && (error as { code?: unknown }).code === "run_cancelled",
-    );
+    return isIpcErrorCode(error, "run_cancelled");
 }
 
 function commandSentTerminalRunEvent(error: unknown): boolean {
-    if (!error || typeof error !== "object") return false;
-    const details = (error as { details?: unknown }).details;
-    return Boolean(
-        details
-        && typeof details === "object"
-        && (details as { terminalRunEventSent?: unknown }).terminalRunEventSent === true,
-    );
+    return error instanceof IpcError
+        && error.details?.terminalRunEventSent === true;
 }
 
 interface ProjectGraphIndexRowBase {
@@ -340,7 +334,7 @@ export class ProjectService {
 
     /** 获取当前后端项目 activation，供后创建的独立 WebView 建立 lifecycle identity。 */
     static async getProjectActivation(): Promise<ProjectActivationResult> {
-        return await invoke("get_current_project_activation");
+        return await invokeCommand("get_current_project_activation");
     }
 
     /**
@@ -350,7 +344,7 @@ export class ProjectService {
         databases: Record<string, unknown>;
         variables: Record<string, unknown>;
     }> {
-        const data = await invoke<{ databases: Record<string, unknown>; variables: Record<string, unknown> }>(
+        const data = await invokeCommand<{ databases: Record<string, unknown>; variables: Record<string, unknown> }>(
             "get_project_databases_variables",
             { projectInstanceId },
         );
@@ -361,25 +355,25 @@ export class ProjectService {
      * 获取当前项目路径
      */
     static async getProjectPath(projectInstanceId: string): Promise<string | null> {
-        return await invoke("get_project_path", { projectInstanceId });
+        return await invokeCommand("get_project_path", { projectInstanceId });
     }
 
     static async getProjectIndex(projectInstanceId: string): Promise<ProjectIndexRow> {
-        const value = await invoke<unknown>("get_project_index", { projectInstanceId });
+        const value = await invokeCommand<unknown>("get_project_index", { projectInstanceId });
         return parseProjectIndexRow(value);
     }
 
     static async getProjectComputationSettings(
       projectInstanceId: string,
     ): Promise<ComputationSettingsSnapshotDto> {
-      const value = await invoke<unknown>('get_project_computation_settings', { projectInstanceId });
+      const value = await invokeCommand<unknown>('get_project_computation_settings', { projectInstanceId });
       return parseComputationSettingsSnapshot(value);
     }
 
     static async updateProjectComputationSettings(
       request: ComputationSettingsMutationRequestDto,
     ): Promise<ComputationSettingsMutationReceiptDto> {
-      const value = await invoke<unknown>('update_project_computation_settings', { request });
+      const value = await invokeCommand<unknown>('update_project_computation_settings', { request });
       return parseComputationSettingsMutationReceipt(value);
     }
 
@@ -387,15 +381,15 @@ export class ProjectService {
      * 新建项目（清空当前状态）
      */
     static async newProject(): Promise<void> {
-        await invoke("new_project");
+        await invokeCommand("new_project");
     }
 
     static async defaultProjectParentDirectory(): Promise<string> {
-        return await invoke("default_project_parent_directory");
+        return await invokeCommand("default_project_parent_directory");
     }
 
-    static async validateNewProjectPath(path: string): Promise<ProjectPathValidation> {
-        return await invoke("validate_new_project_path", { path });
+    static async validateNewProjectPath(path: string): Promise<void> {
+        await invokeCommand("validate_new_project_path", { path });
     }
 
     static async createProject(
@@ -403,11 +397,11 @@ export class ProjectService {
         path: string,
         operationId: string,
     ): Promise<LifecycleMutationResultDto> {
-        return await invoke("create_project", { name, path, operationId });
+        return await invokeCommand("create_project", { name, path, operationId });
     }
 
     static async listRegisteredProjects(): Promise<ProjectRecordRow[]> {
-        return await invoke("list_registered_projects");
+        return await invokeCommand("list_registered_projects");
     }
 
     static async pickProjectScanDirectory(title?: string): Promise<string | null> {
@@ -421,7 +415,7 @@ export class ProjectService {
     }
 
     static async cancelProjectPickerTask(): Promise<void> {
-        await invoke("cancel_project_picker_task");
+        await invokeCommand("cancel_project_picker_task");
     }
 
     static async cleanupInvalidRegisteredProjects(
@@ -432,7 +426,7 @@ export class ProjectService {
             onProgress?.(event);
         };
         try {
-            return await invoke("cleanup_invalid_registered_projects", {
+            return await invokeCommand("cleanup_invalid_registered_projects", {
                 onProgress: channel,
             });
         } finally {
@@ -449,7 +443,7 @@ export class ProjectService {
             onProgress?.(event);
         };
         try {
-            return await invoke("scan_projects_in_directory", {
+            return await invokeCommand("scan_projects_in_directory", {
                 directory,
                 onProgress: channel,
             });
@@ -459,11 +453,11 @@ export class ProjectService {
     }
 
     static async registerProject(name: string, path: string): Promise<ProjectRecordRow> {
-        return await invoke("register_project", { name, path });
+        return await invokeCommand("register_project", { name, path });
     }
 
     static async removeRegisteredProject(id: string): Promise<void> {
-        await invoke("remove_registered_project", { id });
+        await invokeCommand("remove_registered_project", { id });
     }
 
     static async deleteRegisteredProjectFiles(
@@ -471,7 +465,7 @@ export class ProjectService {
         expectedActiveProjectInstanceId: string | null,
         operationId: string,
     ): Promise<LifecycleMutationResultDto> {
-        return await invoke("delete_registered_project_files", {
+        return await invokeCommand("delete_registered_project_files", {
             id,
             expectedActiveProjectInstanceId,
             operationId,
@@ -479,7 +473,7 @@ export class ProjectService {
     }
 
     static async toggleRegisteredProjectFavorite(id: string): Promise<boolean> {
-        return await invoke("toggle_registered_project_favorite", { id });
+        return await invokeCommand("toggle_registered_project_favorite", { id });
     }
 
     /**
@@ -499,7 +493,7 @@ export class ProjectService {
      * 前端只传路径，后端负责加载；加载完成后会发出 ProjectLoaded 事件，前端通过 loadProject 刷新 store
      */
     static async loadProjectToState(path: string): Promise<ProjectActivationResult> {
-        return await invoke("load_project", { path });
+        return await invokeCommand("load_project", { path });
     }
 
     /**
@@ -509,12 +503,7 @@ export class ProjectService {
         projectInstanceId: string,
         operationId: string,
     ): Promise<import('@/shared/types/dto').ProjectSaveResultDto> {
-        try {
-            return await invoke("flush_project", { projectInstanceId, operationId });
-        } catch (e) {
-            logger.app.error(`Failed to flush project: ${e instanceof Error ? e.message : String(e)}`, 'ProjectService');
-            throw e;
-        }
+        return await invokeCommand("flush_project", { projectInstanceId, operationId });
     }
 
     /** 项目根目录的父路径（用于另存为默认目录） */
@@ -532,34 +521,26 @@ export class ProjectService {
         projectInstanceId: string,
         operationId: string,
     ): Promise<LifecycleMutationResultDto | null> {
-        try {
-            const currentPath = await this.getProjectPath(projectInstanceId);
-            if (!currentPath) {
-                throw new Error("项目尚未加载");
-            }
-
-            const selected = await open({
-                directory: true,
-                multiple: false,
-                title: "项目另存为",
-                defaultPath: this.projectParentDirectory(currentPath) || undefined,
-            });
-            if (!selected || Array.isArray(selected)) return null;
-
-            const validation = await this.validateNewProjectPath(selected);
-            if (!validation.ok) {
-                throw new Error(validation.message ?? "项目路径无效");
-            }
-
-            return await invoke<LifecycleMutationResultDto>("save_project_as", {
-                path: selected,
-                projectInstanceId,
-                operationId,
-            });
-        } catch (e) {
-            logger.app.error(`Failed to save project as: ${e instanceof Error ? e.message : String(e)}`, 'ProjectService');
-            throw e;
+        const currentPath = await this.getProjectPath(projectInstanceId);
+        if (!currentPath) {
+            throw new Error("项目尚未加载");
         }
+
+        const selected = await open({
+            directory: true,
+            multiple: false,
+            title: "项目另存为",
+            defaultPath: this.projectParentDirectory(currentPath) || undefined,
+        });
+        if (!selected || Array.isArray(selected)) return null;
+
+        await this.validateNewProjectPath(selected);
+
+        return await invokeCommand<LifecycleMutationResultDto>("save_project_as", {
+            path: selected,
+            projectInstanceId,
+            operationId,
+        });
     }
     /** Execute one graph document and drain its streamed run events. */
     static async executeGraphDocument(
@@ -567,20 +548,23 @@ export class ProjectService {
         graphPath: string,
         demand: ExecutionDemandDto,
         onEvent?: (event: RunEvent) => void,
+        onOutput?: (event: RunOutputChannelEvent) => void,
     ): Promise<ExecuteGraphResultDto> {
         const parsedDemand = parseExecutionDemandDto(demand);
-        const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent);
+        const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent, onOutput);
         try {
             let result: ExecuteGraphResultDto;
             try {
-                const rawResult = await invoke<unknown>(
+                const rawResult = await invokeCommand<unknown>(
                     "execute_graph_document",
                     { projectInstanceId, graphPath, demand: parsedDemand, onEvent: channel },
                 );
                 result = parseExecuteGraphResultDto(rawResult);
             } catch (error) {
-                const internalCompilationError = parseInternalCompilationAppError(error);
-                if (internalCompilationError) throw internalCompilationError;
+                if (isIpcErrorCode(error, 'internal_compilation_failure')) {
+                    parseInternalCompilationErrorDetails(error.details);
+                    throw error;
+                }
                 if (commandSentTerminalRunEvent(error)) {
                     try {
                         await waitForStreamEnd();
@@ -598,7 +582,7 @@ export class ProjectService {
     }
 
     static async cancelGraphRun(runId: string): Promise<boolean> {
-        return invoke<boolean>("cancel_graph_run", { runId });
+        return invokeCommand<boolean>("cancel_graph_run", { runId });
     }
 
 
@@ -606,7 +590,7 @@ export class ProjectService {
         projectInstanceId: string,
         request: RevealProjectResourceRequest,
     ): Promise<void> {
-        const path = await invoke<string>("get_project_resource_path", {
+        const path = await invokeCommand<string>("get_project_resource_path", {
             projectInstanceId,
             kind: request.kind,
             resourceId: request.resourceId,

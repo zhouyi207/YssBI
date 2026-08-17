@@ -186,10 +186,9 @@ const globalCommandExemptions = [
   'get_julia_runtime_status',
   'get_julia_worker_status',
   'install_julia_runtime',
-  'frontend_log',
-  'get_logs',
-  'get_log_file_path',
-  'get_log_count',
+  'submit_frontend_diagnostics',
+  'subscribe_diagnostics',
+  'unsubscribe_diagnostics',
 ] as const;
 
 const processGlobalAllocatorCommandExemptions = [
@@ -203,8 +202,8 @@ const capabilityCommandExemptions = [
   'get_result_value',
   'get_result_page',
   'get_pin_result_history',
-  'list_graph_traces',
-  'get_run_trace',
+  'list_graph_trace_bundles',
+  'get_run_trace_bundle',
 
   'submit_bayes_inference',
   'get_bayes_inference_status',
@@ -272,13 +271,23 @@ function importDeclarationOf(
     : null;
 }
 
+function importModuleSpecifier(
+  binding: ts.ImportSpecifier | ts.NamespaceImport,
+): string | null {
+  const declaration = importDeclarationOf(binding);
+  return declaration !== null && ts.isStringLiteral(declaration.moduleSpecifier)
+    ? declaration.moduleSpecifier.text
+    : null;
+}
+
 function isTauriCoreImport(
   binding: ts.ImportSpecifier | ts.NamespaceImport,
 ): boolean {
-  const declaration = importDeclarationOf(binding);
-  return declaration !== null
-    && ts.isStringLiteral(declaration.moduleSpecifier)
-    && declaration.moduleSpecifier.text === '@tauri-apps/api/core';
+  return importModuleSpecifier(binding) === '@tauri-apps/api/core';
+}
+
+function isIpcHelperImport(binding: ts.ImportSpecifier): boolean {
+  return importModuleSpecifier(binding) === '@/services/ipc';
 }
 
 function symbolHasTauriInvokeImport(
@@ -291,6 +300,19 @@ function symbolHasTauriInvokeImport(
       && ts.isImportSpecifier(declaration)
       && (declaration.propertyName ?? declaration.name).text === 'invoke'
       && isTauriCoreImport(declaration);
+  }) ?? false;
+}
+
+function symbolHasInvokeCommandImport(
+  symbol: TypeScriptSymbol | undefined,
+  project: Project,
+): boolean {
+  return symbol?.declarations.some((handle) => {
+    const declaration = handle.resolve(project);
+    return declaration !== undefined
+      && ts.isImportSpecifier(declaration)
+      && (declaration.propertyName ?? declaration.name).text === 'invokeCommand'
+      && isIpcHelperImport(declaration);
   }) ?? false;
 }
 
@@ -322,6 +344,16 @@ function isTauriInvokeCall(
     );
 }
 
+function isServiceCommandInvokeCall(
+  expression: ts.Expression,
+  checker: Checker,
+  project: Project,
+): boolean {
+  return isTauriInvokeCall(expression, checker, project)
+    || (ts.isIdentifier(expression)
+      && symbolHasInvokeCommandImport(checker.getSymbolAtLocation(expression), project));
+}
+
 function sourceFileInvokes(
   path: string,
   sourceFile: ts.SourceFile,
@@ -331,7 +363,7 @@ function sourceFileInvokes(
   const checker = project.checker;
   const visit = (node: ts.Node): void => {
     if (ts.isCallExpression(node)
-      && isTauriInvokeCall(node.expression, checker, project)
+      && isServiceCommandInvokeCall(node.expression, checker, project)
       && node.arguments.length > 0
       && isStringLiteralLike(node.arguments[0])) {
       invokes.push({
@@ -365,6 +397,39 @@ function productionServiceInvokes(sources: readonly ArchitectureSource[]): Servi
       context.project,
     ))
   ));
+}
+
+function sourceFileRawTauriInvokePaths(
+  path: string,
+  sourceFile: ts.SourceFile,
+  project: Project,
+): string[] {
+  let found = false;
+  const checker = project.checker;
+  const visit = (node: ts.Node): void => {
+    if (found) return;
+    if (ts.isCallExpression(node) && isTauriInvokeCall(node.expression, checker, project)) {
+      found = true;
+      return;
+    }
+    node.forEachChild(visit);
+  };
+  visit(sourceFile);
+  return found ? [path] : [];
+}
+
+function productionRawTauriInvokePaths(sources: readonly ArchitectureSource[]): string[] {
+  const candidates = sources.filter(({ source }) => source.includes('@tauri-apps/api/core'));
+  if (candidates.length === 0) return [];
+
+  return withIsolatedTypeScriptProject(
+    new Map(candidates.map(({ path, source }) => [path, source])),
+    (context) => candidates.flatMap(({ path }) => sourceFileRawTauriInvokePaths(
+      path,
+      context.sourceFile(path),
+      context.project,
+    )),
+  );
 }
 
 function commandClassificationViolations(
@@ -628,6 +693,14 @@ describe('projectFilesystemContract', () => {
     expect(serviceBoundaryViolations(serviceSources)).toEqual([]);
   });
 
+  it('keeps raw production Tauri invoke calls inside the IPC boundary', () => {
+    const allowedPath = 'src/services/ipc/invokeCommand.ts';
+    const offenders = productionRawTauriInvokePaths(productionSources())
+      .filter((path) => path !== allowedPath);
+
+    expect(offenders).toEqual([]);
+  });
+
   it.each([
     ['publication reverse import', {
       path: 'src/features/application/editorProjection/importReverseEdgeFixture.ts',
@@ -703,6 +776,20 @@ describe('projectFilesystemContract', () => {
     })).toEqual([
       `${path}: get_database_rows missing projectInstanceId`,
       `${path}: edit_cell missing projectInstanceId`,
+    ]);
+  });
+
+  it('recognizes aliased invokeCommand service bindings', () => {
+    const path = 'src/services/project/helperInvokeFixture.ts';
+    const invokes = serviceInvokes([{ path, source: `
+      import { invokeCommand as callBackend } from '@/services/ipc';
+      callBackend('get_database_rows', { id, offset, limit });
+    ` }]);
+
+    expect(activeProjectInvokeIdentityViolations(invokes, {
+      get_database_rows: 'projectInstanceId',
+    })).toEqual([
+      `${path}: get_database_rows missing projectInstanceId`,
     ]);
   });
 
