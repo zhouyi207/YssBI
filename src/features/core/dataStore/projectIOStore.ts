@@ -11,7 +11,6 @@ import { logger } from '@/utils/appLogger';
 
 import type { DatabaseRecord } from '@/shared/types/dto/database';
 import { normalizeDatabases } from '@/shared/types/dto/database';
-import { graphDataRecordToDomainGraphs } from '@/shared/types/dto/graphModel';
 import { useVariableStore } from './variableStore';
 import { useDatabaseStore } from './databaseStore';
 import { useGraphDataStore } from './graphDataStore';
@@ -59,7 +58,6 @@ import {
   type ProjectIdentitySnapshot,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { useHistoryStore } from '@/features/core/history';
-import { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 import { isGraphCachedInMemory } from './graphDocumentLoadPolicy';
 
 
@@ -99,7 +97,6 @@ interface ProjectIOStore {
   refreshResourceIndex(): Promise<boolean>;
   loadProjectFromData(project: ProjectData, path: string | null): void;
   loadGraph(graphPath: string): Promise<boolean>;
-  exportSnapshot(): ProjectData;
 }
 
 /** 将后端变量 DTO 规范化为前端 Variable */
@@ -510,12 +507,4 @@ export const useProjectIOStore = create<ProjectIOStore>((set, _get) => ({
     return pending;
   },
 
-  exportSnapshot: (): ProjectData => ({
-    variables: useVariableStore.getState().variables,
-    databases: useDatabaseStore.getState().databases,
-    graphs: graphDataRecordToDomainGraphs(buildGraphSnapshotFromStores()),
-    metadata: {
-      exportTime: new Date().toISOString(),
-    },
-  }),
 }));

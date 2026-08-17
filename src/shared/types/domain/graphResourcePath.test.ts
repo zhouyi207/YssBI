@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   decodeGraphResourceKey,
   encodeGraphResourceKey,
-  graphPathFromResourceUri,
-  graphResourceUriFromPath,
   parseGraphResourceUri,
   inferGraphResourceKind,
   isValidGraphResourceTabId,
@@ -23,15 +21,10 @@ describe('graphResourcePath', () => {
       kind: 'function',
       path: 'functions/My Fn',
     });
-    expect(graphPathFromResourceUri(uri)).toBe('functions/My Fn');
-    expect(graphResourceUriFromPath('event', 'events/Main')).toBe(
-      'yssbi://graph/event/events::Main',
-    );
   });
 
   it('rejects non-graph URIs', () => {
     expect(parseGraphResourceUri('file:///tmp/x')).toBeNull();
-    expect(graphPathFromResourceUri('yssbi://graph/worksheet/x')).toBeNull();
   });
 
   it('infers graph kind from persisted paths', () => {

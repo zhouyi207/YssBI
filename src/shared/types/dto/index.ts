@@ -18,8 +18,6 @@ export * from './trace';
 export type * from './diagnostics';
 export type { IpcErrorDto } from './ipcError';
 
-
-export * from './converters';
 export * from './dataType';
 export * from './dataValue';
 export * from './variable';

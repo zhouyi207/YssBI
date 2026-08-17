@@ -3,9 +3,6 @@ import { describe, expect, it } from 'vitest';
 import {
   buildGraphLayoutTab,
   buildWorksheetLayoutTab,
-  isGraphLayoutTab,
-  isPreviewLayoutTab,
-  splitComponentForTab,
 } from './layoutTabModel';
 
 describe('layoutTabModel', () => {
@@ -26,15 +23,5 @@ describe('layoutTabModel', () => {
       type: 'worksheet',
       component: 'WorksheetEditor',
     });
-  });
-
-
-  it('isGraphLayoutTab and splitComponentForTab', () => {
-    const graphTab = buildGraphLayoutTab('events/G.yssbi-event', 'event');
-    expect(isGraphLayoutTab(graphTab)).toBe(true);
-    expect(isPreviewLayoutTab(graphTab)).toBe(false);
-    expect(isPreviewLayoutTab(buildGraphLayoutTab('events/P.yssbi-event', 'event', { pinned: false }))).toBe(true);
-    expect(splitComponentForTab(graphTab)).toBe('GraphEditor');
-    expect(splitComponentForTab(null)).toBe('GraphEditor');
   });
 });

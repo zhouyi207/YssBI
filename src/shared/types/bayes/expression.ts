@@ -20,8 +20,6 @@ export type ExpressionDTO =
   | { type: 'binary'; op: BinaryOpDTO; left: ExpressionDTO; right: ExpressionDTO }
   | { type: 'call'; function: MathFunctionDTO; args: ExpressionDTO[] };
 
-export const MATH_FUNCTIONS: readonly MathFunctionDTO[] = ['exp', 'ln', 'sqrt', 'abs', 'sin', 'cos', 'min', 'max'];
-
 export const BINARY_OPERATOR_LABELS: Record<BinaryOpDTO, string> = {
   add: '+',
   sub: '-',

@@ -3,7 +3,6 @@ import {
   clearResourceDocumentState,
   markResourceDirty,
   markResourceLoaded,
-  migrateDocumentStatePath,
   useDocumentStateStore,
   useResourceStore,
   buildGraphResourceMeta,
@@ -43,22 +42,6 @@ describe('document state queries', () => {
     expect(
       useDocumentStateStore.getState().documents[resourceKey({ id: meta.id, kind: 'event' })],
     ).toBeUndefined();
-  });
-
-  it('migrates document state when graph path changes', () => {
-    const from = 'events/Old.yssbi-event';
-    const to = 'events/New.yssbi-event';
-    useResourceStore.getState().upsertResource(buildGraphResourceMeta('event', from, 'Old'));
-    markResourceLoaded({ id: from, kind: 'event' });
-    markResourceDirty({ id: from, kind: 'event' }, true);
-
-    migrateDocumentStatePath(from, to, 'event');
-
-    expect(useDocumentStateStore.getState().documents[resourceKey({ id: from, kind: 'event' })]).toBeUndefined();
-    expect(useDocumentStateStore.getState().documents[resourceKey({ id: to, kind: 'event' })]).toMatchObject({
-      dirty: true,
-      loaded: true,
-    });
   });
 });
 

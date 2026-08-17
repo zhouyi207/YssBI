@@ -44,13 +44,3 @@ export function buildFunctionResourceCatalog(
   }
   return result;
 }
-
-export function selectFunctionResourceView(
-  functionPath: string,
-  resources: GraphResourceRecord,
-  metaGraphs: Record<string, GraphMeta>,
-): FunctionResourceView | null {
-  const resource = resources[functionPath];
-  if (!resource) return null;
-  return buildFunctionResourceView(functionPath, resource, metaGraphs[functionPath]);
-}

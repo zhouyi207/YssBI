@@ -1,6 +1,6 @@
 /**
- * 从多个 store 组装图导出快照（exportSnapshot 专用）。
- * 跨 store 读取集中于此，避免 projectIOStore 隐式依赖未 import 的 hook。
+ * 从多个 store 组装当前图快照。
+ * 跨 store 读取集中于此，供需要 GraphSnapshotData 的应用辅助函数复用。
  */
 import { resourceKey, useResourceStore } from '@/features/core/resource';
 import type { GraphSnapshotData } from '@/shared/types/store/graph';

@@ -77,13 +77,6 @@ export function dataTypeToThemePinType(dt: DataType): string {
   }
 }
 
-/** Theme color lookup key — display only, not for type compatibility. */
-export function pinThemeTypeKey(pin: PinSemanticsFields): string {
-  if (isExecPin(pin)) return 'exec';
-  if (pin.dataType) return dataTypeToThemePinType(pin.dataType);
-  return pin.type;
-}
-
 /** Scalar pin input widget key, or null when the pin is not an editable scalar. */
 export function scalarPinInputKey(dataType: DataType | undefined): string | null {
   if (!dataType) return null;

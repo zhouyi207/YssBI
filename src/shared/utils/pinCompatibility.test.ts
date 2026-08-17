@@ -7,7 +7,6 @@ import {
   buildPinDataType,
   pinAcceptsType,
   isPinCompatible,
-  canConnectPins,
   resolveConnectionCompatibility,
   findAutoConnectPinIndex,
   getDataTypeCompatibility,
@@ -363,23 +362,5 @@ describe('resolveConnectionCompatibility', () => {
       kind: 'invalid',
       reason: 'typeMismatch',
     });
-  });
-
-  it('keeps canConnectPins as a boolean wrapper over the resolver', () => {
-    const cases = [
-      [output, input],
-      [output, output],
-      [output, pin({ ...input, dataType: STRING })],
-      [output, pin({
-        ...input,
-        connections: { ...appendCapability, canAppend: false, canReplace: true },
-      })],
-    ] as const;
-
-    for (const [source, target] of cases) {
-      expect(canConnectPins(source, target)).toBe(
-        resolveConnectionCompatibility(source, target).kind !== 'invalid',
-      );
-    }
   });
 });

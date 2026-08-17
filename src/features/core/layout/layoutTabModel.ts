@@ -1,7 +1,4 @@
-import type {
-  LayoutTab,
-  LayoutTabComponent,
-} from '@/shared/types';
+import type { LayoutTab } from '@/shared/types';
 import {
   isValidGraphResourceTabId,
   type GraphResourceKind,
@@ -11,11 +8,6 @@ import { resourceRefFromLayoutTab, type ResourceRef } from '@/features/core/reso
 /** Map a layout tab to its canonical resource reference (null for chrome-only tabs). */
 export function layoutTabResourceRef(tab: LayoutTab): ResourceRef | null {
   return resourceRefFromLayoutTab(tab);
-}
-
-/** Preview tabs use `pinned: false`; omitted or `true` means pinned. */
-export function isPreviewLayoutTab(tab: LayoutTab | null | undefined): boolean {
-  return tab?.pinned === false;
 }
 
 export function applyTabPinState(tab: LayoutTab, pinned: boolean): LayoutTab {
@@ -51,19 +43,8 @@ export function buildWorksheetLayoutTab(
   };
 }
 
-export function isGraphLayoutTab(
-  tab: LayoutTab | null | undefined,
-): tab is LayoutTab & { type: 'event' | 'function'; component: 'GraphEditor' } {
-  return tab?.type === 'event' || tab?.type === 'function';
-}
-
 export function isWorksheetLayoutTab(
   tab: LayoutTab | null | undefined,
 ): tab is LayoutTab & { type: 'worksheet'; component: 'WorksheetEditor' } {
   return tab?.type === 'worksheet';
-}
-
-/** Editor group split: choose the component for the current tab. */
-export function splitComponentForTab(tab: LayoutTab | null | undefined): LayoutTabComponent {
-  return tab?.component ?? 'GraphEditor';
 }

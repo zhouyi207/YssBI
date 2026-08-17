@@ -23,5 +23,3 @@ export const EXECUTION_DEMAND_TYPES = {
   outputs: true,
   pinPreview: true,
 } as const satisfies Record<ExecutionDemandDto['type'], true>;
-
-export const DEFAULT_EXECUTION_DEMAND: ExecutionDemandDto = { type: 'default' };

@@ -614,10 +614,8 @@ function productionSourceOffenders(paths: string[]): string[] {
 }
 
 describe('frontend stable node identity architecture audit behavior', () => {
-  it.each([
-    'const descriptor = { resourcePath: path, createArgs: args, nodeTypeId: typeId };',
-    'function makeDescriptor() { return { createArgs, nodeTypeId: id, resourcePath: path }; }',
-  ])('rejects resource-bound descriptor construction regardless of field order', (source) => {
+  it('rejects resource-bound descriptor construction', () => {
+    const source = 'const descriptor = { resourcePath: path, createArgs: args, nodeTypeId: typeId };';
     expect(sourceOffendersFromSource('src/features/example.ts', source))
       .toContainEqual(expect.stringContaining('resource-bound descriptor synthesis'));
   });

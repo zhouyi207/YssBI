@@ -3,7 +3,6 @@ import {
   isExecPin,
   pinFlowKind,
   pinTypeLabel,
-  pinThemeTypeKey,
   dataTypeToThemePinType,
   scalarPinInputKey,
 } from './pinSemantics';
@@ -30,21 +29,7 @@ describe('pinSemantics', () => {
     expect(pinTypeLabel({ type: 'exec' })).toBe('exec');
   });
 
-  it('derives theme keys from inner scalar for container types', () => {
-    expect(
-      pinThemeTypeKey({
-        type: 'number',
-        dataType: { kind: 'DataSeries', inner: { kind: 'Float64' } },
-      }),
-    ).toBe('Float64');
-
-    expect(
-      pinThemeTypeKey({
-        type: 'string',
-        dataType: { kind: 'Array', inner: { kind: 'String' } },
-      }),
-    ).toBe('string');
-
+  it('maps structured data types to theme keys', () => {
     expect(
       dataTypeToThemePinType({ kind: 'DataFrame' }),
     ).toBe('dataframe');

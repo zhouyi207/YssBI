@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultBayesDraft, createEmptyBayesDraft } from '@/features/domain/bayes';
 import { composeLikelihoodLatex, currentResponseExpression, latexSymbol } from './BayesPanels';
-import { essRating, filterAutocorrelationSeries, filterDensitySeries, filterTraceSeries, posteriorPredictiveChartData, rhatRating, traceChains } from './BayesResultPanels';
+import { essRating, filterDensitySeries, filterTraceSeries, posteriorPredictiveChartData, rhatRating, traceChains } from './BayesResultPanels';
 
 describe('parameter diagnostic ratings', () => {
   it('rates R-hat and ESS at user-facing severity boundaries', () => {
@@ -50,26 +50,17 @@ describe('posterior trace chain selection', () => {
   });
 });
 
-describe('posterior density and autocorrelation chain selection', () => {
+describe('posterior density chain selection', () => {
   const density = [
     { parameter: 'a', chain: null, points: [{ x: 0, density: 0.5 }] },
     { parameter: 'a', chain: 1, points: [{ x: 0, density: 0.4 }] },
     { parameter: 'a', chain: 2, points: [{ x: 0, density: 0.6 }] },
-  ];
-  const autocorrelation = [
-    { parameter: 'a', chain: 1, points: [{ lag: 0, autocorrelation: 1 }] },
-    { parameter: 'a', chain: 2, points: [{ lag: 0, autocorrelation: 1 }] },
   ];
 
   it('keeps pooled density separate from all-chain overlays', () => {
     expect(filterDensitySeries(density, '__pooled__')).toEqual([density[0]]);
     expect(filterDensitySeries(density, '__all__')).toEqual([density[1], density[2]]);
     expect(filterDensitySeries(density, '2')).toEqual([density[2]]);
-  });
-
-  it('filters autocorrelation without pooling chains', () => {
-    expect(filterAutocorrelationSeries(autocorrelation, '__all__')).toEqual(autocorrelation);
-    expect(filterAutocorrelationSeries(autocorrelation, '1')).toEqual([autocorrelation[0]]);
   });
 });
 

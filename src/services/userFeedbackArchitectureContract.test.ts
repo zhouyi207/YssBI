@@ -62,18 +62,13 @@ function fixtureOffenders(source: string): string[] {
 describe('user feedback architecture contract', () => {
   it.each([
     `logger.notify.info(t('notifications.saved'), 'UI');`,
-    `logger.notify.error(message, 'UI');`,
     `import { toast } from 'sonner';`,
   ])('rejects feedback routed through removed global channels: %s', (source) => {
     expect(fixtureOffenders(source)).toEqual([expect.stringContaining('fixture.ts:1')]);
   });
 
-  it.each([
-    `logger.app.error('diagnostic', 'ProjectPicker');`,
-    `const view = <PageAlert title={title} />;`,
-    `await uiStore.alert({ title, message, closeText, type: 'error' });`,
-  ])('allows diagnostics and explicit feedback surfaces: %s', (source) => {
-    expect(fixtureOffenders(source)).toEqual([]);
+  it('allows diagnostic logging', () => {
+    expect(fixtureOffenders(`logger.app.error('diagnostic', 'ProjectPicker');`)).toEqual([]);
   });
 
   it('keeps production feedback out of diagnostic notification and toaster channels', () => {

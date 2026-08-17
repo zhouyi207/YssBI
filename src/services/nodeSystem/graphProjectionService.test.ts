@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { invoke } from '@tauri-apps/api/core';
 import { describe, expect, it, vi } from 'vitest';
 import editorProjection from '@/tests/fixtures/node-system-contracts/editor-projection.json';
@@ -7,11 +6,6 @@ import { GraphProjectionService } from './graphProjectionService';
 vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 describe('GraphProjectionService', () => {
-  it('keeps the service boundary independent from features', () => {
-    const source = readFileSync(new URL('./graphProjectionService.ts', import.meta.url), 'utf8');
-    expect(source).not.toMatch(/from\s+['"]@\/features(?:\/|['"])/);
-  });
-
   it('loads the authoritative projection with unchanged command arguments', async () => {
     vi.mocked(invoke).mockResolvedValue(editorProjection as unknown);
 

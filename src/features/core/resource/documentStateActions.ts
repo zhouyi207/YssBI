@@ -1,6 +1,6 @@
 import { useDocumentStateStore, type DocumentState } from './documentStateStore';
 import { useResourceStore } from './resourceStore';
-import type { ResourceKind, ResourceRef } from './resourceTypes';
+import type { ResourceRef } from './resourceTypes';
 import { resourceKey, type ResourceKey } from './resourceTypes';
 
 function emptyDocumentState(key: ResourceKey): DocumentState {
@@ -72,28 +72,5 @@ export function clearResourceDocumentState(ref: ResourceRef): void {
     hasDirtyDocument: false,
     hasStaleDocument: false,
     hasConflictDocument: false,
-  });
-}
-
-/** Move document state when a graph resource path changes on disk. */
-export function migrateDocumentStatePath(
-  from: string,
-  to: string,
-  kind: Extract<ResourceKind, 'event' | 'function'>,
-): void {
-  const fromKey = resourceKey({ id: from, kind });
-  const toKey = resourceKey({ id: to, kind });
-  const store = useDocumentStateStore.getState();
-  const previous = store.documents[fromKey];
-  if (!previous) return;
-
-  store.removeDocument(fromKey);
-  store.upsertDocument({ ...previous, resourceKey: toKey });
-  useResourceStore.getState().patchResource({ id: to, kind }, {
-    loaded: previous.loaded,
-    exists: !previous.missing,
-    hasDirtyDocument: previous.dirty,
-    hasStaleDocument: previous.stale,
-    hasConflictDocument: previous.conflict,
   });
 }

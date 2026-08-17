@@ -43,10 +43,6 @@ export function isExecSignaturePin(pin: { dataType?: DataType }): boolean {
   return pin.dataType == null;
 }
 
-export function signaturePinDataType(pin: { dataType?: DataType }): DataType | undefined {
-  return pin.dataType;
-}
-
 export function signatureContainerOverlay(
   dataType: DataType | undefined,
 ): SignatureContainerOverlay | undefined {

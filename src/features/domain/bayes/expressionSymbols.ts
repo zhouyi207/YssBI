@@ -1,10 +1,5 @@
 import type { BayesSymbolRoleDTO, ExpressionDTO, RawExpressionDTO, SymbolDraftDTO } from '@/shared/types/bayes';
 
-export interface ExpressionSymbols {
-  dataVariables: string[];
-  parameters: string[];
-}
-
 const COMMON_DEPENDENT_SYMBOLS = new Set(['y']);
 const COMMON_INDEPENDENT_SYMBOLS = new Set(['x', 't', 'time']);
 
@@ -29,16 +24,6 @@ export function createSymbolDrafts(
       const inferredRole = inferSymbolRole(name, columnNames);
       return { name, role: inferredRole, inferredRole, userEdited: false };
     });
-}
-
-export function collectExpressionSymbols(expression: ExpressionDTO | null): ExpressionSymbols {
-  const dataVariables = new Set<string>();
-  const parameters = new Set<string>();
-  visitBoundExpression(expression, dataVariables, parameters);
-  return {
-    dataVariables: Array.from(dataVariables).sort(),
-    parameters: Array.from(parameters).sort(),
-  };
 }
 
 export function bindRawExpression(
@@ -114,31 +99,6 @@ function visitRawExpression(expression: RawExpressionDTO | null, symbols: Set<st
       return;
     case 'call':
       expression.args.forEach(arg => visitRawExpression(arg, symbols));
-      return;
-    case 'number':
-      return;
-  }
-}
-
-function visitBoundExpression(expression: ExpressionDTO | null, dataVariables: Set<string>, parameters: Set<string>): void {
-  if (!expression) return;
-  switch (expression.type) {
-    case 'column':
-    case 'data_variable':
-      dataVariables.add(expression.name);
-      return;
-    case 'parameter':
-      parameters.add(expression.name);
-      return;
-    case 'unary':
-      visitBoundExpression(expression.arg, dataVariables, parameters);
-      return;
-    case 'binary':
-      visitBoundExpression(expression.left, dataVariables, parameters);
-      visitBoundExpression(expression.right, dataVariables, parameters);
-      return;
-    case 'call':
-      expression.args.forEach(arg => visitBoundExpression(arg, dataVariables, parameters));
       return;
     case 'number':
       return;

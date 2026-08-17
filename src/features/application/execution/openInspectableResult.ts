@@ -2,14 +2,11 @@ import type { TFunction } from 'i18next';
 import {
   resolveInspectableResult,
   resolveInspectableResultRef,
-  resultRef,
   type InspectableResultRef,
-  type Presentation,
   type ResultDescriptor,
 } from '@/features/core/resultSource';
 import {
   openPresentationWindow,
-  presentationWindowPayload,
   presentationWindowPayloadFromDescriptor,
 } from '@/features/application/window';
 import {
@@ -72,21 +69,4 @@ export async function openPinInspectableView(
   }
 
   return false;
-}
-
-/** Open an exact result requested by an execution window event. */
-export async function openWindowInspectableResult(
-  resultId: string,
-  event: { presentation: Presentation; windowTitle: string },
-): Promise<void> {
-  const descriptor = await resolveInspectableResult(resultRef(resultId));
-  if (descriptor) {
-    await launchInspectablePresentation(descriptor, event.windowTitle);
-    return;
-  }
-
-  await openPresentationWindow(
-    resultId,
-    presentationWindowPayload(event.presentation, event.windowTitle),
-  );
 }

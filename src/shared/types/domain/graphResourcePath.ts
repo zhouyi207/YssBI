@@ -67,13 +67,3 @@ export function parseGraphResourceUri(
   if (!encoded) return null;
   return { kind, path: decodeGraphResourceKey(encoded) };
 }
-
-/** Map a persisted graph resource path to its logical URI (kind required). */
-export function graphResourceUriFromPath(kind: GraphResourceKind, path: string): GraphResourceUri {
-  return toGraphResourceUri(kind, normalizeGraphResourcePath(path));
-}
-
-/** Extract graph path from URI; returns null if not a graph resource URI. */
-export function graphPathFromResourceUri(uri: string): string | null {
-  return parseGraphResourceUri(uri)?.path ?? null;
-}

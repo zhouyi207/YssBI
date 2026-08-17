@@ -3,12 +3,11 @@
  *
  * 分层：
  * - *Store：Zustand 状态
- * - projectSnapshot / projectSnapshotBridge：图导出纯函数与跨 store 桥接
+ * - projectSnapshot / projectSnapshotBridge：图快照纯函数与跨 store 桥接
  * - projectHelpers：initProjectSync / getGraphByPath 等应用辅助
- * - projectIOStore：load / export / loadGraph 编排
+ * - projectIOStore：load / refreshResourceIndex / loadGraph 编排
  *
- * 跨 store 依赖须集中在 projectSnapshotBridge / projectClientReset / projectIOStore，
- * 并由 projectStoreDeps.audit 单测校验显式 import。
+ * 跨 store 依赖须集中在 projectSnapshotBridge / projectClientReset / projectIOStore。
  */
 
 export * from './databaseStore';
@@ -17,7 +16,6 @@ export * from './columnDistributionStore';
 export * from './datasetOverviewStore';
 export * from './editStateStore';
 export * from './graphMetaStore';
-export * from './graphRuntimeStore';
 export * from './projectIOStore';
 export * from './projectHelpers';
 export * from './variableStore';

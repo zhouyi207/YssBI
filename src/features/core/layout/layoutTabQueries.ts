@@ -27,10 +27,6 @@ export function resolveEditorTargetGroupId(explicitGroupId?: string | null): str
   return groups[0]?.groupId ?? DEFAULT_EDITOR_GROUP_ID;
 }
 
-export function getLayoutTabById(tabId: string): LocatedLayoutTab | null {
-  return locateLayoutTab(tabId);
-}
-
 export function locateLayoutTab(tabId: string, nodeId?: string): LocatedLayoutTab | null {
   const panel = editorDockviewPort
     .findPanelsByResource(tabId)

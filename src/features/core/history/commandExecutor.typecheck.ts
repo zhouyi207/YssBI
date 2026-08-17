@@ -1,4 +1,4 @@
-import { expectTypeOf, it } from 'vitest';
+
 import {
   executeCommand,
   executeCommandOutcome,
@@ -48,12 +48,3 @@ function assertCommandCallTypes(): void {
 }
 
 void assertCommandCallTypes;
-
-it('keeps command invocation unions compatible with the registry', () => {
-  const invocation: GraphMutationCommandInvocation = [
-    'InsertReroute',
-    { connectionId: 'edge-1', position: { x: 1, y: 2 } },
-  ];
-
-  expectTypeOf(invocation).toMatchTypeOf<CommandInvocation>();
-});

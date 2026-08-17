@@ -5,7 +5,6 @@ import type {
   StatusBarItemsSnapshot,
   StatusBarRenderContext,
 } from "./statusBarItemTypes";
-import { getRegisteredStatusBarItems } from "./statusBarRegistry";
 
 function resolveClassName(
   item: StatusBarItemRegistration,
@@ -38,7 +37,7 @@ export function buildStatusBarItems(
   ctx: StatusBarRenderContext,
   builtIn: StatusBarItemRegistration[],
 ): StatusBarItemsSnapshot {
-  const all = [...builtIn, ...getRegisteredStatusBarItems()]
+  const all = builtIn
     .filter((item) => item.visible?.(ctx) ?? true)
     .map((item) => toViewModel(item, ctx));
 

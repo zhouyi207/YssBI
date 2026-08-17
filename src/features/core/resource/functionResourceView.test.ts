@@ -3,7 +3,6 @@ import { createDataSignaturePin } from '@/shared/types/domain/functionSignatureP
 import {
   buildFunctionResourceCatalog,
   buildFunctionResourceView,
-  selectFunctionResourceView,
 } from './functionResourceView';
 
 describe('functionResourceView', () => {
@@ -25,7 +24,7 @@ describe('functionResourceView', () => {
     });
   });
 
-  it('builds catalog and selects by path', () => {
+  it('builds catalog by path', () => {
     const resources = { 'fn-1': { id: 'fn-1', name: 'Add' } };
     const metaGraphs = {
       'fn-1': {
@@ -45,8 +44,5 @@ describe('functionResourceView', () => {
         functionOutputs: [],
       },
     });
-
-    expect(selectFunctionResourceView('fn-1', resources, metaGraphs)?.name).toBe('Add');
-    expect(selectFunctionResourceView('missing', resources, metaGraphs)).toBeNull();
   });
 });

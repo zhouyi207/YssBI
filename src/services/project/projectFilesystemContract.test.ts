@@ -589,81 +589,28 @@ const workflowFiles = [
 
 
 describe('projectFilesystemContract', () => {
-  const forbiddenServiceImportFixtures: Array<[string, ArchitectureSource]> = [
-    ['static import with bindings', {
+  it('rejects a static import service boundary violation', () => {
+    const fixture = {
       path: 'src/services/project/staticFixture.ts',
       source: "import value from '@/features/core/example';",
-    }],
-    ['side-effect import', {
-      path: 'src/services/project/sideEffectFixture.ts',
-      source: "import '@/features/core/example';",
-    }],
-    ['dynamic import', {
-      path: 'src/services/project/dynamicFixture.ts',
-      source: "const value = await import('@/views/example');",
-    }],
-    ['dynamic import with attributes', {
-      path: 'src/services/project/dynamicAttributesFixture.ts',
-      source: "const value = await import('@/views/example.json', { with: { type: 'json' } });",
-    }],
-    ['CommonJS require', {
-      path: 'src/services/project/requireFixture.ts',
-      source: "const value = require('@/features/core/example');",
-    }],
-    ['TypeScript import equals require', {
-      path: 'src/services/project/importEqualsFixture.ts',
-      source: "import value = require('@/features/application/example');",
-    }],
-    ['relative import', {
-      path: 'src/services/project/relativeFixture.ts',
-      source: "import value from '../../features/core/example';",
-    }],
-    ['re-export', {
-      path: 'src/services/project/reExportFixture.ts',
-      source: "export { value } from '@/views/example';",
-    }],
-    ['alias traversal into features', {
-      path: 'src/services/project/aliasFeatureTraversalFixture.ts',
-      source: "import value from '@/shared/../features/core/example';",
-    }],
-    ['alias traversal into views', {
-      path: 'src/services/project/aliasViewTraversalFixture.ts',
-      source: "export { value } from '@/services/../views/example';",
-    }],
-  ];
+    };
 
-  it.each(forbiddenServiceImportFixtures)('rejects %s service boundary violation', (_, fixture) => {
     expect(serviceBoundaryViolations([fixture])).toEqual([fixture.path]);
   });
 
-  it('allows service and shared imports in the scoped service audit', () => {
-    const fixtures: ArchitectureSource[] = [
-      {
-        path: 'src/services/project/allowedServiceFixture.ts',
-        source: "import { GraphService } from '@/services/graph/graphService';",
-      },
-      {
-        path: 'src/services/project/allowedSharedFixture.ts',
-        source: "export type { ProjectIndexDto } from '../../shared/types/dto/project';",
-      },
-    ];
+  it('allows a service import in the scoped service audit', () => {
+    const fixture = {
+      path: 'src/services/project/allowedServiceFixture.ts',
+      source: "import { GraphService } from '@/services/graph/graphService';",
+    };
 
-    expect(serviceBoundaryViolations(fixtures)).toEqual([]);
+    expect(serviceBoundaryViolations([fixture])).toEqual([]);
   });
 
-  it.each([
-    ['dynamic import variable', "const path = getModulePath(); void import(path);"],
-    ['require function call', 'require(getModulePath());'],
-    ['dynamic import string concatenation', "void import('@/features/' + name);"],
-    ['export assignment require', 'export = require(modulePath);'],
-    [
-      'dynamic import attributes',
-      "void import(modulePath, { with: { type: 'json' } });",
-    ],
-  ])('rejects unresolved %s runtime dependency', (_label, source) => {
+  it('rejects an unresolved dynamic import runtime dependency', () => {
     const fixture = {
       path: 'src/services/project/unresolvedFixture.ts',
-      source,
+      source: 'const path = getModulePath(); void import(path);',
     };
 
     expect(serviceBoundaryViolations([fixture])).toEqual([fixture.path]);

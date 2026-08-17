@@ -3,7 +3,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { save } from '@tauri-apps/plugin-dialog';
 import { VscCloudDownload, VscFolderOpened } from 'react-icons/vsc';
-import type { AutocorrelationSeriesDTO, DensitySeriesDTO, InferenceResultDTO, PosteriorPredictiveRowDTO, TraceSeriesDTO } from '@/shared/types/bayes';
+import type { DensitySeriesDTO, InferenceResultDTO, PosteriorPredictiveRowDTO, TraceSeriesDTO } from '@/shared/types/bayes';
 import { MultiLineChart, PredictiveIntervalChart } from '@/shared/charts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -661,13 +661,6 @@ export function filterDensitySeries(
   if (selectedChain === '__all__') return series.filter(item => item.chain != null);
   const chain = Number(selectedChain);
   return series.filter(item => item.chain === chain);
-}
-
-export function filterAutocorrelationSeries(
-  series: readonly AutocorrelationSeriesDTO[],
-  selectedChain: string,
-): AutocorrelationSeriesDTO[] {
-  return filterChainSeries(series, selectedChain);
 }
 
 function filterChainSeries<T extends { chain: number }>(series: readonly T[], selectedChain: string): T[] {

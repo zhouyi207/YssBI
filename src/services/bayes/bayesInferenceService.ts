@@ -42,12 +42,6 @@ export async function exportBayesArtifactCsv(
   await invokeCommand('export_bayes_artifact_csv', { taskId, kind, destination });
 }
 
-export async function clearBayesInferenceTask(taskId: string): Promise<void> {
-  await invokeCommand('clear_bayes_inference_task', { taskId });
-}
-
-
-
 export async function readBayesTracePlotData(
   taskId: string,
   parameter?: string,

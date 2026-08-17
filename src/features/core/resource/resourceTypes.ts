@@ -84,17 +84,9 @@ export function buildGraphResourceMeta(
   };
 }
 
-export function graphResourceRef(id: string, kind: 'event' | 'function'): ResourceRef {
-  return { id, kind };
-}
-
 export function resourceRefFromLayoutTab(tab: LayoutTab): ResourceRef | null {
   if (tab.type === 'event' || tab.type === 'function' || tab.type === 'worksheet') {
     return { id: tab.id, kind: tab.type };
   }
   return null;
-}
-
-export function normalizeBackendResourceMeta(meta: BackendProjectResourceMeta): ProjectResourceMeta {
-  return { ...meta };
 }

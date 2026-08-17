@@ -14,9 +14,3 @@ export interface BayesValidationStateDTO {
   draftHash: string;
   report: ValidationReportDTO | null;
 }
-
-export const EMPTY_VALIDATION_REPORT: ValidationReportDTO = {
-  ok: true,
-  errors: [],
-  warnings: [],
-};

@@ -4,8 +4,6 @@ import { isExecPin } from '@/shared/types/domain/pinSemantics';
 import { EMPTY_TYPE_SYSTEM, type TypeSystemSnapshot } from '@/shared/types/domain/typeSystem';
 import type {
   PinDataTypeDefinition,
-  PinTypeCapability,
-  NodeDefinition,
   PinSlot,
   PinDefinitionDTO,
 } from '@/shared/types/domain/node';
@@ -186,58 +184,11 @@ export function resolveConnectionCompatibility(
     : { kind: 'append' };
 }
 
-export function canConnectPins(
-  a: ConnectionCandidatePin,
-  b: ConnectionCandidatePin,
-  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
-): boolean {
-  return resolveConnectionCompatibility(a, b, typeSystem).kind !== 'invalid';
-}
-
 function extractConcreteType(pdt: PinDataTypeDefinition): DataType | null {
   if (pdt === 'Unknown') return null;
   if ('Concrete' in pdt) return pdt.Concrete;
   if ('TypeVar' in pdt) return null;
   return null;
-}
-
-/**
- * Check if a PinTypeCapability is compatible with a dragged Pin.
- * TypeVar / Unknown capabilities are treated as wildcard (always compatible).
- */
-function isCapabilityCompatible(
-  cap: PinTypeCapability,
-  draggedPin: Pin,
-  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
-): boolean {
-  const neededDir: PinDirection = draggedPin.direction === 'input' ? 'output' : 'input';
-  if (cap.direction !== neededDir) return false;
-
-  const draggedIsExec = isExecPin(draggedPin);
-  if (draggedIsExec) return cap.kind === 'Exec';
-  if (cap.kind === 'Exec') return false;
-
-  const concreteType = extractConcreteType(cap.dataType);
-  if (!concreteType) return true; // TypeVar / Unknown -> wildcard
-
-  const draggedDataType = buildPinDataType(draggedPin);
-  if (draggedPin.direction === 'input') {
-    return canAcceptDataType(draggedDataType, concreteType, typeSystem);
-  }
-  return canAcceptDataType(concreteType, draggedDataType, typeSystem);
-}
-
-/**
- * Check if a NodeDefinition has at least one pin capability
- * compatible with the dragged pin.
- */
-export function isNodeCompatibleWithPin(
-  def: NodeDefinition,
-  draggedPin: Pin,
-  typeSystem: TypeSystemSnapshot = EMPTY_TYPE_SYSTEM,
-): boolean {
-  if (!def.typeCapabilities || def.typeCapabilities.length === 0) return true;
-  return def.typeCapabilities.some((cap) => isCapabilityCompatible(cap, draggedPin, typeSystem));
 }
 
 // ─── Utilities for auto-connect pin matching ────
