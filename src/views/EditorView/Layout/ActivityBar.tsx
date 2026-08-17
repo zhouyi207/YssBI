@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { PiGraph } from "react-icons/pi";
 import { HiVariable } from "react-icons/hi2";
@@ -7,8 +7,18 @@ import { useWorkbenchStore, type SidebarTabId } from '@/features/core/workbench'
 import { toggleSidebarTab as persistToggleSidebarTab } from "@/features/core/layout/workbenchLayoutService";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
-const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolean; onClick: () => void; children: React.ReactNode; title: string; id: string }) => (
+interface ActivityIconProps {
+  active: boolean;
+  onClick: () => void;
+  children: ReactNode;
+  title: string;
+  id: string;
+  side: 'left' | 'right';
+}
+
+const ActivityIcon = ({ active, onClick, children, title, id, side }: ActivityIconProps) => (
   <Tooltip>
     <TooltipTrigger asChild>
       <Button
@@ -16,12 +26,28 @@ const ActivityIcon = ({ active, onClick, children, title, id }: { active: boolea
         variant="ghost"
         onClick={onClick}
         data-tab-id={id}
-        className={`relative h-12 w-full rounded-none ${active ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+        aria-label={title}
+        aria-pressed={active}
+        className={cn(
+          "relative size-10 rounded-md border border-transparent transition-[color,background-color,border-color]",
+          active
+            ? "border-[var(--accent-color)]/15 bg-[var(--accent-color)]/12 text-[var(--accent-color)] shadow-sm"
+            : "text-muted-foreground hover:bg-[var(--interactive-hover)] hover:text-foreground",
+        )}
       >
         {children}
+        {active ? (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "absolute top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[var(--accent-color)]",
+              side === 'left' ? "-left-1" : "-right-1",
+            )}
+          />
+        ) : null}
       </Button>
     </TooltipTrigger>
-    <TooltipContent side="right">{title}</TooltipContent>
+    <TooltipContent side={side === 'left' ? 'right' : 'left'}>{title}</TooltipContent>
   </Tooltip>
 );
 
@@ -30,64 +56,42 @@ export function ActivityBar({ side = 'left' }: { side?: 'left' | 'right' }) {
   const sidebarCurrentTab = useWorkbenchStore((state) => state.sidebarCurrentTab);
   const sidebarHidden = useWorkbenchStore((state) => state.sidebarUserHidden);
   const activeTab = sidebarHidden ? null : sidebarCurrentTab;
-
-  const activityBarRef = useRef<HTMLDivElement>(null);
-  const [indicatorTop, setIndicatorTop] = useState({ top: 0, opacity: 0 });
-
-  useEffect(() => {
-    const bar = activityBarRef.current;
-    if (!bar || !activeTab) {
-      setIndicatorTop((prev) => ({ ...prev, opacity: 0 }));
-      return;
-    }
-
-    const activeEl = bar.querySelector(`[data-tab-id="${activeTab}"]`) as HTMLElement;
-    if (activeEl) {
-      setIndicatorTop({
-        top: activeEl.offsetTop,
-        opacity: 1,
-      });
-    } else {
-      setIndicatorTop((prev) => ({ ...prev, opacity: 0 }));
-    }
-  }, [activeTab]);
-
   const toggleTab = (tab: SidebarTabId) => persistToggleSidebarTab(tab);
+  const iconProps = (id: SidebarTabId, title: string) => ({
+    id,
+    title,
+    side,
+    active: activeTab === id,
+    onClick: () => toggleTab(id),
+  });
 
   return (
-    <div
-      ref={activityBarRef}
-
-      className={`w-12 h-full bg-[var(--sidebar-bg)] flex flex-col items-center py-2 shrink-0 relative ${
-        side === 'right' ? 'border-l border-border' : 'border-r border-border'
-      }`}
+    <nav
+      aria-label={t("activityBar.ariaLabel", { defaultValue: "Workbench" })}
+      className={cn(
+        "relative flex h-full w-11 shrink-0 flex-col items-center gap-0.5 bg-[var(--sidebar-bg)] py-2",
+        side === 'right' ? 'border-l border-[var(--strong-border)]' : 'border-r border-[var(--strong-border)]',
+      )}
     >
-      <div
-        className="absolute left-0 top-0 w-0.5 h-12 bg-[var(--accent-color)] transition-all duration-300 ease-in-out z-10 pointer-events-none"
-        style={{
-          transform: `translateY(${indicatorTop.top}px)`,
-          opacity: indicatorTop.opacity,
-        }}
-      />
-
-      <ActivityIcon id="graphs" active={activeTab === "graphs"} onClick={() => toggleTab("graphs")} title={t("activityBar.graphs")}>
-        <PiGraph size={24} />
+      <ActivityIcon {...iconProps("graphs", t("activityBar.graphs"))}>
+        <PiGraph size={20} />
       </ActivityIcon>
-      <ActivityIcon id="nodes" active={activeTab === "nodes"} onClick={() => toggleTab("nodes")} title={t("activityBar.nodes")}>
-        <VscLibrary size={24} />
+      <ActivityIcon {...iconProps("nodes", t("activityBar.nodes"))}>
+        <VscLibrary size={20} />
       </ActivityIcon>
-      <ActivityIcon id="variables" active={activeTab === "variables"} onClick={() => toggleTab("variables")} title={t("activityBar.variables")}>
-        <HiVariable size={24} />
+      <ActivityIcon {...iconProps("variables", t("activityBar.variables"))}>
+        <HiVariable size={20} />
       </ActivityIcon>
-      <ActivityIcon id="data" active={activeTab === "data"} onClick={() => toggleTab("data")} title={t("activityBar.data")}>
-        <VscDatabase size={24} />
+      <ActivityIcon {...iconProps("data", t("activityBar.data"))}>
+        <VscDatabase size={20} />
       </ActivityIcon>
-      <ActivityIcon id="charts" active={activeTab === "charts"} onClick={() => toggleTab("charts")} title={t("activityBar.charts")}>
-        <VscGraphLine size={24} />
+      <ActivityIcon {...iconProps("charts", t("activityBar.charts"))}>
+        <VscGraphLine size={20} />
       </ActivityIcon>
-      <ActivityIcon id="commands" active={activeTab === "commands"} onClick={() => toggleTab("commands")} title={t("activityBar.commands")}>
-        <VscTerminal size={24} />
+      <div className="my-1 h-px w-6 bg-[var(--strong-border)]" />
+      <ActivityIcon {...iconProps("commands", t("activityBar.commands"))}>
+        <VscTerminal size={20} />
       </ActivityIcon>
-    </div>
+    </nav>
   );
 }

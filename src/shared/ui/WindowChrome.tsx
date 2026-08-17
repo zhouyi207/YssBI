@@ -69,7 +69,7 @@ export function WindowMenuBar({ toolbar, windowActions, className, children, ...
     return (
         <div
             className={cn(
-                "menubar-container flex h-10 shrink-0 items-stretch border-b border-border bg-[var(--workbench-bg)] shadow-xl select-none",
+                "menubar-container flex h-10 shrink-0 items-stretch border-b border-[var(--strong-border)] bg-[var(--panel-header-bg)] shadow-[0_1px_0_rgb(0_0_0/0.08)] select-none",
                 className,
             )}
             {...props}

@@ -73,17 +73,17 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
     <>
       {/* Header */}
       <div
-        className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm font-semibold rounded-t border-b border-[var(--node-border)] bg-[var(--node-header-bg)] text-[var(--node-header-fg)]"
+        className="flex items-center justify-between gap-3 rounded-t-[5px] border-b border-[var(--node-border)] bg-[var(--node-header-bg)] px-2.5 py-1.5 font-heading text-[12px] font-semibold text-[var(--node-header-fg)]"
       >
-        <div className="flex items-center gap-2">
-          <span>{node.title}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate tracking-[-0.015em]">{node.title}</span>
           {node.display?.userLabel ? (
             <span className="text-[10px] font-normal opacity-70">
               {node.display.userLabel}
             </span>
           ) : null}
         </div>
-        <div className="text-[10px] opacity-40 font-mono uppercase tracking-tighter">
+        <div className="shrink-0 font-mono text-[8px] font-medium uppercase tracking-[0.08em] opacity-45">
           {node.category}
         </div>
       </div>

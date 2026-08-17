@@ -67,30 +67,36 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         const isDark = theme.mode !== "light";
         const surface = isDark
             ? {
-                workbenchForeground: "#f8fafc",
+                workbenchForeground: "#e7ebf3",
                 panelBackground: theme.sidebarBackground,
-                panelForeground: "#f8fafc",
-                mutedForeground: "#a1a1aa",
-                border: "rgba(255, 255, 255, 0.10)",
-                hoverBackground: "rgba(255, 255, 255, 0.05)",
+                panelForeground: "#e7ebf3",
+                mutedForeground: "#929db0",
+                border: "rgba(148, 163, 184, 0.16)",
+                hoverBackground: "color-mix(in srgb, var(--accent-color) 11%, transparent)",
+                raisedBackground: `color-mix(in srgb, ${theme.sidebarBackground} 98%, white)`,
+                sunkenBackground: `color-mix(in srgb, ${theme.workbenchBackground} 92%, black)`,
+                panelHeaderBackground: theme.sidebarBackground,
                 nodeBase: theme.nodeBase,
-                nodeBorder: "rgba(255, 255, 255, 0.12)",
-                nodeHeaderBackground: "rgba(255, 255, 255, 0.05)",
-                nodeHeaderForeground: "#d4d4d8",
-                nodeShadow: "0 18px 40px rgb(0 0 0 / 0.35)",
+                nodeBorder: "rgba(148, 163, 184, 0.22)",
+                nodeHeaderBackground: "rgba(255, 255, 255, 0.035)",
+                nodeHeaderForeground: "#e7ebf3",
+                nodeShadow: "0 10px 28px rgb(2 6 23 / 0.32), 0 1px 2px rgb(2 6 23 / 0.42)",
             }
             : {
-                workbenchForeground: "#111827",
-                panelBackground: "#ffffff",
-                panelForeground: "#111827",
-                mutedForeground: "#64748b",
-                border: "#e5e7eb",
-                hoverBackground: "rgba(15, 23, 42, 0.06)",
-                nodeBase: theme.nodeBase === theme.workbenchBackground ? "#f8fafc" : theme.nodeBase,
-                nodeBorder: "#cbd5e1",
-                nodeHeaderBackground: "#eef2ff",
-                nodeHeaderForeground: "#1e293b",
-                nodeShadow: "0 16px 32px rgb(15 23 42 / 0.12)",
+                workbenchForeground: "#202938",
+                panelBackground: theme.sidebarBackground,
+                panelForeground: "#202938",
+                mutedForeground: "#596579",
+                border: "#d7dee9",
+                hoverBackground: "color-mix(in srgb, var(--accent-color) 9%, transparent)",
+                raisedBackground: `color-mix(in srgb, ${theme.workbenchBackground} 35%, white)`,
+                sunkenBackground: `color-mix(in srgb, ${theme.sidebarBackground} 82%, ${theme.workbenchBackground})`,
+                panelHeaderBackground: theme.sidebarBackground,
+                nodeBase: theme.nodeBase === theme.workbenchBackground ? "#ffffff" : theme.nodeBase,
+                nodeBorder: "#cbd4e1",
+                nodeHeaderBackground: "#f4f6f9",
+                nodeHeaderForeground: "#293241",
+                nodeShadow: "0 9px 24px rgb(15 23 42 / 0.10), 0 1px 2px rgb(15 23 42 / 0.08)",
             };
 
         root.classList.toggle("dark", isDark);
@@ -102,6 +108,9 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         root.style.setProperty("--workbench-fg", surface.workbenchForeground);
         root.style.setProperty("--panel-bg", surface.panelBackground);
         root.style.setProperty("--panel-fg", surface.panelForeground);
+        root.style.setProperty("--surface-raised", surface.raisedBackground);
+        root.style.setProperty("--surface-sunken", surface.sunkenBackground);
+        root.style.setProperty("--panel-header-bg", surface.panelHeaderBackground);
         root.style.setProperty("--strong-border", surface.border);
         root.style.setProperty("--accent-color", theme.accentColor);
         root.style.setProperty("--grid-lines", theme.gridLines);
@@ -139,7 +148,11 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         root.style.setProperty("--hover-bg", surface.hoverBackground);
 
         // 计算派生颜色
-        root.style.setProperty("--accent-color-hover", theme.accentColor + "cc");
+        root.style.setProperty(
+            "--accent-color-hover",
+            `color-mix(in srgb, ${theme.accentColor} 84%, ${isDark ? "white" : "black"})`,
+        );
+        root.style.setProperty("--accent-color-soft", `color-mix(in srgb, ${theme.accentColor} 12%, transparent)`);
 
     }, [theme]);
 

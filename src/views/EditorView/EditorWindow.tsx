@@ -70,9 +70,9 @@ function EditorWindowReady() {
   const activityBarOnRight = activityBar.side === "right";
 
   return (
-    <div className="flex flex-col w-full h-screen" data-yssbi-workbench>
+    <div className="flex h-screen w-full flex-col bg-[var(--workbench-bg)] text-foreground" data-yssbi-workbench>
       {!zenMode ? <Menubar /> : null}
-      <div className="flex flex-1 overflow-hidden isolate">
+      <div className="isolate flex min-h-0 flex-1 overflow-hidden">
         {showActivityBar && !activityBarOnRight ? <ActivityBar side="left" /> : null}
         <Workspace />
         {showActivityBar && activityBarOnRight ? <ActivityBar side="right" /> : null}
@@ -109,8 +109,11 @@ export const EditorWindow = () => {
 
   if (status !== LoadStatus.Ready) {
     return (
-      <div className="flex items-center justify-center w-full h-screen">
-        {error ? t("editor.initializationFailed", { error }) : t("common.loading")}
+      <div className="flex h-screen w-full items-center justify-center bg-[var(--workbench-bg)] text-sm text-muted-foreground">
+        <div className="flex items-center gap-3 rounded-lg border border-[var(--strong-border)] bg-[var(--surface-raised)] px-4 py-3 shadow-lg">
+          {!error ? <span className="size-2 animate-pulse rounded-full bg-[var(--accent-color)]" /> : null}
+          {error ? t("editor.initializationFailed", { error }) : t("common.loading")}
+        </div>
       </div>
     );
   }

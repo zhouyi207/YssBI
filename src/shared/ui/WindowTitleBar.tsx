@@ -45,7 +45,7 @@ export function WindowTitleBar({
       data-tauri-drag-region
       onMouseDownCapture={handleMouseDownCapture}
       className={cn(
-        'flex h-10 shrink-0 items-stretch border-b border-border bg-[var(--workbench-bg)] shadow-xl select-none',
+        'flex h-10 shrink-0 items-stretch border-b border-[var(--strong-border)] bg-[var(--panel-header-bg)] text-foreground shadow-[0_1px_0_rgb(0_0_0/0.08)] select-none',
         childWindow && 'z-50',
         elevated ? 'relative z-[100]' : 'relative',
         className,

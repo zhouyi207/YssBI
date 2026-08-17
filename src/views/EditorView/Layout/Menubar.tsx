@@ -22,11 +22,11 @@ import {
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { getRememberedColorTheme } from "@/features/application/settings/colorThemePresets";
 import { cn } from "@/lib/utils";
-import { useWindowMaximized } from "@/features/application/window";
+import { openExternalUrlWithDialog, useWindowMaximized } from "@/features/application/window";
 import { WindowChromeControls } from "@/shared/ui/WindowChromeControls";
 import { ToolbarIconButton } from "@/shared/ui/ToolbarIconButton";
 import { WindowMenuBar } from "@/shared/ui/WindowChrome";
-import { openExternalUrl } from "@/shared/utils/openExternalUrl";
+import { BrandLockup } from "@/shared/ui/BrandMark";
 import { AboutModal } from "./AboutModal";
 import { EDITOR_MUTATION_CAPABILITIES } from '@/features/application/editor/editorMutationAvailability';
 import { JuliaMenuButton } from "./JuliaMenuButton";
@@ -77,7 +77,7 @@ const MenuButton = ({ label, items }: MenuButtonProps) => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-7 px-3 text-sm text-muted-foreground hover:text-foreground">
+        <Button variant="ghost" size="sm" className="h-7 px-2.5 text-[12px] font-normal text-muted-foreground hover:text-foreground">
           {label}
         </Button>
       </DropdownMenuTrigger>
@@ -221,11 +221,11 @@ export function Menubar() {
   ];
 
   const helpItems: MenuItem[] = [
-    { label: t("menubar.documentation"), onClick: () => void openExternalUrl(APP_LINKS.documentation) },
+    { label: t("menubar.documentation"), onClick: () => void openExternalUrlWithDialog(APP_LINKS.documentation, t) },
     { label: "-" },
-    { label: t("menubar.releaseNotes"), onClick: () => void openExternalUrl(APP_LINKS.releaseNotes) },
-    { label: t("menubar.githubRepository"), onClick: () => void openExternalUrl(APP_LINKS.repository) },
-    { label: t("menubar.reportIssue"), onClick: () => void openExternalUrl(APP_LINKS.reportIssue) },
+    { label: t("menubar.releaseNotes"), onClick: () => void openExternalUrlWithDialog(APP_LINKS.releaseNotes, t) },
+    { label: t("menubar.githubRepository"), onClick: () => void openExternalUrlWithDialog(APP_LINKS.repository, t) },
+    { label: t("menubar.reportIssue"), onClick: () => void openExternalUrlWithDialog(APP_LINKS.reportIssue, t) },
     { label: "-" },
     { label: t("menubar.about"), onClick: () => setAboutOpen(true) },
   ];
@@ -280,18 +280,9 @@ export function Menubar() {
       }
       windowActions={<WindowChromeControls isMaximized={isMaximized} />}
     >
-      {/* Left: Icon & Brand */}
-      <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
-        <div className="w-5 h-5 bg-[var(--accent-color)] rounded flex items-center justify-center">
-          <span className="text-white font-black text-xs">Y</span>
-        </div>
-        <div className="text-foreground font-bold text-sm tracking-tight">
-          Yss<span className="text-[var(--accent-color)]">BI</span>
-        </div>
-      </div>
+      <BrandLockup className="pointer-events-none self-center px-4" />
 
-      {/* Center Left: Menus */}
-      <div className="flex items-center gap-1 self-center">
+      <div className="my-2 flex items-center gap-0.5 self-center border-l border-[var(--strong-border)] pl-2">
         <MenuButton id="file" label={t("menubar.file")} items={fileItems} />
         <MenuButton id="edit" label={t("menubar.edit")} items={editItems} />
         <MenuButton id="data" label={t("menubar.data")} items={dataItems} />

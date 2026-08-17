@@ -1,7 +1,7 @@
-import { logger } from "@/utils/appLogger";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { VscError, VscWarning } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,13 +10,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import {
+  projectPickerErrorPresentation,
+  type ProjectPickerErrorPresentation,
+  type ProjectPickerLifecycleActionOutcome,
+  type ProjectPickerRecoveryPresentation,
+} from "@/features/application/project";
 import { DEFAULT_PROJECT_NAME } from "@/shared/constants/defaultResourceNames";
 import { ProjectService } from "@/services/project/projectService";
-import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
 import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
+import {
+  ProjectPickerErrorDetails,
+  ProjectPickerRecoveryDetails,
+  ProjectPickerStaleDetails,
+} from "./ProjectPickerFeedbackDetails";
 
 function joinPath(parent: string, child: string) {
   const base = parent.replace(/[/\\]+$/, "");
@@ -49,7 +60,7 @@ function lastPathSegment(path: string) {
 interface NewProjectModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (name: string, path: string) => Promise<void>;
+  onCreate: (name: string, path: string) => Promise<ProjectPickerLifecycleActionOutcome>;
 }
 
 type FieldErrors = {
@@ -57,7 +68,73 @@ type FieldErrors = {
   name: boolean;
 };
 
+type NewProjectIssue =
+  | {
+      kind: 'failure';
+      operation: 'defaultPath' | 'browse' | 'create';
+      error: ProjectPickerErrorPresentation;
+    }
+  | { kind: 'recovery'; recovery: ProjectPickerRecoveryPresentation }
+  | { kind: 'stale' };
+
 const emptyFieldErrors = (): FieldErrors => ({ path: false, name: false });
+
+const FAILURE_TITLE_KEYS: Record<
+  Extract<NewProjectIssue, { kind: 'failure' }>['operation'],
+  string
+> = {
+  defaultPath: 'notifications.newProject.defaultPathFailed',
+  browse: 'notifications.newProject.browseFailed',
+  create: 'notifications.newProject.createFailed',
+};
+
+function NewProjectIssueAlert({ issue, name }: { issue: NewProjectIssue; name: string }) {
+  const { t } = useTranslation();
+
+  if (issue.kind === 'failure') {
+    const errorMessage = t(issue.error.messageKey, {
+      defaultValue: t(issue.error.fallbackMessageKey),
+    });
+    return (
+      <Alert variant="destructive">
+        <VscError aria-hidden="true" />
+        <AlertTitle>{t(FAILURE_TITLE_KEYS[issue.operation], { error: errorMessage })}</AlertTitle>
+        <AlertDescription>
+          <ProjectPickerErrorDetails error={issue.error} />
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (issue.kind === 'recovery') {
+    return (
+      <Alert variant="warning">
+        <VscWarning aria-hidden="true" />
+        <AlertTitle>
+          {t('notifications.projectPicker.createRecovery', {
+            name,
+            outcome: issue.recovery.action,
+          })}
+        </AlertTitle>
+        <AlertDescription>
+          <ProjectPickerRecoveryDetails recovery={issue.recovery} />
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <Alert variant="warning">
+      <VscWarning aria-hidden="true" />
+      <AlertTitle>
+        {t('projectPicker.issues.staleTitle', { defaultValue: t('common.error') })}
+      </AlertTitle>
+      <AlertDescription>
+        <ProjectPickerStaleDetails />
+      </AlertDescription>
+    </Alert>
+  );
+}
 
 export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewProjectModalProps) {
   const { t } = useTranslation();
@@ -66,6 +143,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
   const [path, setPath] = useState("");
   const [pathAuto, setPathAuto] = useState(true);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>(emptyFieldErrors);
+  const [issue, setIssue] = useState<NewProjectIssue | null>(null);
   const [busy, setBusy] = useState(false);
 
   function clearFieldErrors() {
@@ -76,6 +154,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
     if (!isOpen) return;
     let cancelled = false;
     clearFieldErrors();
+    setIssue(null);
     setName(DEFAULT_PROJECT_NAME);
     setPath("");
     setParentBase("");
@@ -92,7 +171,11 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
       } catch (error) {
         if (cancelled) return;
         setPathAuto(false);
-        logger.notify.error(formatErrorMessage(error), "UI");
+        setIssue({
+          kind: 'failure',
+          operation: 'defaultPath',
+          error: projectPickerErrorPresentation(error),
+        });
       }
     })();
 
@@ -104,12 +187,14 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
   function updateName(nextName: string) {
     setName(nextName);
     clearFieldErrors();
+    setIssue(null);
     if (!pathAuto) return;
     setPath(joinPath(parentBase, sanitizeDirSegment(nextName)));
   }
 
   async function browseParentDirectory() {
     clearFieldErrors();
+    setIssue(null);
     try {
       const selected = await open({
         directory: true,
@@ -123,19 +208,37 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
       setPathAuto(true);
       setPath(joinPath(parent, sanitizeDirSegment(name)));
     } catch (error) {
-      logger.notify.error(formatErrorMessage(error), "UI");
+      setIssue({
+        kind: 'failure',
+        operation: 'browse',
+        error: projectPickerErrorPresentation(error),
+      });
     }
   }
 
   async function handleCreate() {
     clearFieldErrors();
+    setIssue(null);
     setBusy(true);
     try {
-      await onCreate(name.trim(), path.trim());
-      onOpenChange(false);
+      const outcome = await onCreate(name.trim(), path.trim());
+      if (outcome.status === 'committed') {
+        onOpenChange(false);
+      } else if (outcome.status === 'failed') {
+        setFieldErrors({ path: true, name: true });
+        setIssue({ kind: 'failure', operation: 'create', error: outcome.error });
+      } else if (outcome.status === 'recovery') {
+        setIssue({ kind: 'recovery', recovery: outcome.recovery });
+      } else {
+        setIssue({ kind: 'stale' });
+      }
     } catch (error) {
       setFieldErrors({ path: true, name: true });
-      logger.notify.error(formatErrorMessage(error), "UI");
+      setIssue({
+        kind: 'failure',
+        operation: 'create',
+        error: projectPickerErrorPresentation(error),
+      });
     } finally {
       setBusy(false);
     }
@@ -162,6 +265,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
         </DialogHeader>
 
         <div className="space-y-4 px-6 pb-5">
+          {issue ? <NewProjectIssueAlert issue={issue} name={name.trim()} /> : null}
           <div className="space-y-1">
             <Label htmlFor="new-project-path" className="text-[12px] text-muted-foreground">
               {t("projectPicker.newProjectModal.pathLabel")}
@@ -174,6 +278,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
                 onChange={(event) => {
                   const nextPath = event.target.value;
                   clearFieldErrors();
+                  setIssue(null);
                   setPathAuto(false);
                   setPath(nextPath);
                   const nextName = lastPathSegment(nextPath);
@@ -190,6 +295,7 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
               <Button
                 type="button"
                 variant="outline"
+                disabled={busy}
                 onClick={() => void browseParentDirectory()}
                 className="h-9 shrink-0 border-border bg-muted px-3 text-[12px] text-foreground hover:bg-muted/80"
               >
@@ -220,7 +326,11 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             {t("common.cancel")}
           </Button>
-          <Button type="button" onClick={() => void handleCreate()} disabled={busy}>
+          <Button
+            type="button"
+            onClick={() => void handleCreate()}
+            disabled={busy || issue?.kind === 'recovery'}
+          >
             {busy ? t("projectPicker.creating") : t("projectPicker.newProjectModal.create")}
           </Button>
         </DialogFooter>

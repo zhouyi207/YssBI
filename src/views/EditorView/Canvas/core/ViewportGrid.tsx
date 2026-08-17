@@ -26,10 +26,8 @@ export const ViewportGrid = ({ viewportScope }: { viewportScope: ViewportScope |
       ref={gridRef}
       className="absolute inset-0 pointer-events-none"
       style={{
-        backgroundImage: `
-          linear-gradient(var(--grid-lines) 1px, transparent 1px),
-          linear-gradient(90deg, var(--grid-lines) 1px, transparent 1px)
-        `,
+        backgroundImage: `radial-gradient(circle at 1px 1px, var(--grid-lines) 1px, transparent 1.25px)`,
+        backgroundRepeat: 'repeat',
         ...viewportGridStyle(initial, GRID),
       }}
     />

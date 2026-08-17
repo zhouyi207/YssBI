@@ -69,6 +69,7 @@ function Sidebar() {
         deleteVariable: actions.deleteVariableItem,
         promoteVariable: actions.promoteVariable,
         demoteVariable: actions.demoteVariable,
+        canDemoteVariable: actions.canDemoteVariable,
         openDatabase: actions.openDatabaseEditorWindow,
         renameDatabaseItem: actions.renameDatabaseItem,
         deleteDatabaseItem: actions.deleteDatabaseItem,
