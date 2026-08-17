@@ -8,8 +8,28 @@ import { useEditorKeyboard } from './useEditorKeyboard';
 
 const mocks = vi.hoisted(() => ({
   modalOpen: false,
+  history: { canUndo: false, canRedo: false, pending: false },
   setModifierKeys: vi.fn(),
   resetModifierKeys: vi.fn(),
+  commands: {
+    deleteSelected: vi.fn(),
+    undo: vi.fn(),
+    redo: vi.fn(),
+    copy: vi.fn(),
+    cut: vi.fn(),
+    paste: vi.fn(),
+    duplicateSelected: vi.fn(),
+    saveGraph: vi.fn(),
+    saveGraphAs: vi.fn(),
+    importGraph: vi.fn(),
+    addEvent: vi.fn(),
+    closeTab: vi.fn(),
+    setActiveTabId: vi.fn(),
+    splitEditorRight: vi.fn(),
+    selectAllNodes: vi.fn(() => true),
+    focusSelectedNodes: vi.fn(() => true),
+    fitCompleteGraph: vi.fn(() => true),
+  },
 }));
 
 vi.mock('@/features/core/keyboard', () => ({
@@ -20,8 +40,10 @@ vi.mock('@/features/core/keyboard', () => ({
   }) },
 }));
 vi.mock('@/features/core/history', () => ({
-  useHistoryStore: (selector: (state: { canUndo: boolean; canRedo: boolean; pending: boolean }) => unknown) =>
-    selector({ canUndo: false, canRedo: false, pending: false }),
+  useHistoryStore: Object.assign(
+    (selector: (state: typeof mocks.history) => unknown) => selector(mocks.history),
+    { getState: () => mocks.history },
+  ),
 }));
 vi.mock('@/features/core/dockview', () => ({
   editorDockviewPort: {
@@ -42,6 +64,12 @@ vi.mock('@/features/core/viewport', () => ({
 vi.mock('@/features/core/layout/workbenchZenMode', () => ({
   exitZenMode: vi.fn(),
   isZenModeActive: () => false,
+  toggleZenMode: vi.fn(),
+}));
+vi.mock('@/features/core/layout/workbenchLayoutService', () => ({
+  toggleDetailVisibility: vi.fn(),
+  togglePanelCollapsed: vi.fn(),
+  toggleSidebarVisibility: vi.fn(),
 }));
 vi.mock('@/features/core/workbench', () => ({
   useWorkbenchStore: { getState: () => ({ setNodeDocumentationOpen: vi.fn() }) },
@@ -55,18 +83,16 @@ vi.mock('@/features/core/editor', () => ({
   useEditorStore: { getState: () => ({ setContextMenu: vi.fn() }) },
 }));
 vi.mock('./dockviewTabProjection', () => ({ listDockviewGroupTabs: () => [] }));
+vi.mock('./EditorSessionContext', () => ({
+  useEditorSessionCommandsContext: () => mocks.commands,
+}));
 
-const callbacks = {
-  deleteSelected: vi.fn(), undo: vi.fn(), redo: vi.fn(), copy: vi.fn(), cut: vi.fn(), paste: vi.fn(),
-  duplicateSelected: vi.fn(), saveGraph: vi.fn(), saveGraphAs: vi.fn(), importGraph: vi.fn(), addEvent: vi.fn(),
-  closeTab: vi.fn(), setActiveTabId: vi.fn(), splitEditorRight: vi.fn(), selectAllNodes: vi.fn(() => true),
-  focusSelectedNodes: vi.fn(() => true), fitCompleteGraph: vi.fn(() => true),
-};
+const callbacks = mocks.commands;
 
 let root: Root;
 
 function Harness() {
-  useEditorKeyboard(callbacks);
+  useEditorKeyboard();
   return null;
 }
 

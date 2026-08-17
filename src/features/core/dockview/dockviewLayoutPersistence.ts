@@ -29,7 +29,6 @@ function preferences(): WorkbenchUIState {
   return {
     sidebarCurrentTab: state.sidebarCurrentTab,
     sidebarUserHidden: state.sidebarUserHidden,
-    panelCollapsed: state.panelCollapsed,
     detailUserHidden: state.detailUserHidden,
     isSettingsOpen: false,
     isNodeDocumentationOpen: false,
@@ -85,10 +84,15 @@ export async function hydrateDockviewLayout(): Promise<boolean> {
     if (generation !== hydrationGeneration) return false;
 
     if (value.preferences) {
-      const panelCollapsed = panelDockviewPort.isCollapsed();
+      const current = useWorkbenchStore.getState();
       useWorkbenchStore.setState({
-        ...value.preferences,
-        ...(panelCollapsed === undefined ? {} : { panelCollapsed }),
+        sidebarCurrentTab: value.preferences.sidebarCurrentTab ?? current.sidebarCurrentTab,
+        sidebarUserHidden: value.preferences.sidebarUserHidden ?? current.sidebarUserHidden,
+        detailUserHidden: value.preferences.detailUserHidden ?? current.detailUserHidden,
+        isSettingsOpen: value.preferences.isSettingsOpen ?? current.isSettingsOpen,
+        isNodeDocumentationOpen:
+          value.preferences.isNodeDocumentationOpen ?? current.isNodeDocumentationOpen,
+        zenMode: value.preferences.zenMode ?? current.zenMode,
       });
     }
     return true;

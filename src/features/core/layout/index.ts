@@ -1,6 +1,5 @@
 export {
   togglePart,
-  persistWorkbenchLayoutNow,
   collapseEditorGroupsForProjectSwitch,
   applyPanelPosition,
   applyPanelPositionFromSetting,
@@ -23,7 +22,6 @@ export {
 export type { WorkbenchPartId } from './workbenchLayoutDefaults';
 export { collectDirtyGraphTabs } from './tabDirty';
 export {
-  getLayoutTabById,
   locateLayoutTab,
   getActiveLayoutTab,
   resolveEditorGroupId,
@@ -36,7 +34,6 @@ export {
 } from './layoutTabQueries';
 export type { GraphSelection, LocatedLayoutTab, LayoutGroupContext } from './layoutTabQueries';
 export type { PanelViewId } from './panelPartModel';
-export { DEFAULT_PANEL_VIEWS } from './panelPartModel';
 export {
   normalizePanelPosition,
   panelPositionToSetting,
@@ -46,11 +43,8 @@ export {
   buildGraphLayoutTab,
   buildWorksheetLayoutTab,
   findPreviewTabInTabs,
-  isGraphLayoutTab,
-  isPreviewLayoutTab,
   isWorksheetLayoutTab,
   layoutTabResourceRef,
-  splitComponentForTab,
 } from './layoutTabModel';
 export {
   readEditorPartOptions,
@@ -58,10 +52,4 @@ export {
   DEFAULT_EDITOR_PART_OPTIONS,
 } from './editorPartOptions';
 export type { EditorPartOptions, OpenSideBySideDirection, EditorSplitSizingMode } from './editorPartOptions';
-export type { EditorSplitEdge } from './editorSplitLayout';
-export {
-  isEditorDragCopyOperation,
-  isEditorDragToggleSplitOperation,
-  resolveEnableSplittingOnDrag,
-} from './editorDragModifiers';
 export { isGraphOpenInAnyTab } from './graphTabQueries';

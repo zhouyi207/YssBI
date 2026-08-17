@@ -5,7 +5,7 @@ import type {
 
 import { WORKBENCH_PANEL_COLLAPSED_HEIGHT } from '@/features/core/workbench';
 import { sanitizeDockviewLayout } from './sanitizeDockviewLayout';
-import type { DockviewLayout } from './types';
+import type { DockviewLayout, DockviewPortSnapshot } from './types';
 
 interface Disposable {
   dispose(): void;
@@ -17,6 +17,10 @@ interface PendingCommand {
 
 export type PanelDockPosition = 'bottom' | 'left' | 'right';
 
+export interface PanelDockviewPortSnapshot extends DockviewPortSnapshot {
+  readonly collapsed: boolean | undefined;
+}
+
 const PANEL_EDGE_POSITIONS: readonly PanelDockPosition[] = ['bottom', 'left', 'right'];
 const PANEL_EDGE_GROUP_ID_PREFIX = 'workbench-panel';
 
@@ -26,9 +30,9 @@ export interface PanelDockviewPort {
   readonly isReady: boolean;
   whenReady(): Promise<void>;
   subscribe(listener: () => void): () => void;
+  getSnapshot(): PanelDockviewPortSnapshot;
   activate(panelId: string): Promise<boolean>;
   getPosition(): PanelDockPosition | undefined;
-  isCollapsed(): boolean | undefined;
   setCollapsed(collapsed: boolean): Promise<boolean>;
   setPosition(position: PanelDockPosition): Promise<boolean>;
   serialize(): Promise<DockviewLayout>;
@@ -100,12 +104,24 @@ function moveEdgeGroup(api: DockviewApi, position: PanelDockPosition): boolean {
 export function createPanelDockviewPort(): PanelDockviewPort {
   let api: DockviewApi | undefined;
   let defaultLayout: DockviewLayout | undefined;
+  let revision = 0;
+  let snapshot: PanelDockviewPortSnapshot = Object.freeze({
+    revision,
+    ready: false,
+    collapsed: undefined,
+  });
   let eventDisposables: Disposable[] = [];
   let collapsedDisposable: Disposable | undefined;
   const listeners = new Set<() => void>();
   const pending: PendingCommand[] = [];
 
   const publish = (): void => {
+    revision += 1;
+    snapshot = Object.freeze({
+      revision,
+      ready: api !== undefined,
+      collapsed: api ? edgeGroup(api)?.isCollapsed() : undefined,
+    });
     listeners.forEach((listener) => listener());
   };
 
@@ -190,6 +206,10 @@ export function createPanelDockviewPort(): PanelDockviewPort {
       return () => listeners.delete(listener);
     },
 
+    getSnapshot() {
+      return snapshot;
+    },
+
     activate(panelId) {
       return execute((boundApi) => {
         const panel = boundApi.getPanel(panelId);
@@ -202,10 +222,6 @@ export function createPanelDockviewPort(): PanelDockviewPort {
       return api ? edgePosition(api) : undefined;
     },
 
-    isCollapsed() {
-      return api ? edgeGroup(api)?.isCollapsed() : undefined;
-    },
-
     setCollapsed(collapsed) {
       return execute((boundApi) => {
         const group = edgeGroup(boundApi);
@@ -215,7 +231,6 @@ export function createPanelDockviewPort(): PanelDockviewPort {
         return true;
       });
     },
-
 
     setPosition(position) {
       return execute((boundApi) => {

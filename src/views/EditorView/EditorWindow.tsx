@@ -10,12 +10,9 @@ import { LoadStatus } from "@/shared/types/ui";
 import { useProjectSync } from "@/features/application/initialization";
 import {
   EditorSessionProvider,
-  useEditorGroup,
   useEditorKeyboard,
+  useEditorWindowCloseGuard,
 } from "@/features/application/editor";
-import { useMenubar } from "@/features/application/menubar";
-import { toggleSidebarVisibility } from "@/features/core/layout/workbenchLayoutService";
-import { toggleZenMode } from "@/features/core/layout/workbenchZenMode";
 import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
 import { useEditorWorkbenchAppearance } from "@/features/application/settings/useEditorWorkbenchAppearance";
 import { useActivityBarLayout } from "@/features/application/settings/useActivityBarLayout";
@@ -40,31 +37,7 @@ function EditorWindowReady() {
   useProjectSync();
   useProjectionLocaleSync();
 
-  const editor = useEditorGroup();
-  const { toggleLogPanel, toggleDetail } = useMenubar();
-  useEditorKeyboard({
-    deleteSelected: editor.deleteSelected,
-    undo: editor.undo,
-    redo: editor.redo,
-    copy: editor.copy,
-    cut: editor.cut,
-    paste: editor.paste,
-    duplicateSelected: editor.duplicateSelected,
-    selectAllNodes: editor.selectAllNodes,
-    focusSelectedNodes: editor.focusSelectedNodes,
-    fitCompleteGraph: editor.fitCompleteGraph,
-    saveGraph: editor.saveGraph,
-    saveGraphAs: editor.saveGraphAs,
-    importGraph: editor.importGraph,
-    addEvent: editor.addEvent,
-    closeTab: editor.closeTab,
-    setActiveTabId: editor.setActiveTabId,
-    splitEditorRight: editor.splitEditorRight,
-    toggleLogPanel,
-    toggleSidebar: toggleSidebarVisibility,
-    toggleDetail,
-    toggleZenMode,
-  });
+  useEditorKeyboard();
 
   const showActivityBar = activityBar.visible;
   const activityBarOnRight = activityBar.side === "right";
@@ -106,6 +79,7 @@ export const EditorWindow = () => {
   const { status, error } = useAppInitialization();
 
   useEditorWindowGeometryPersistence();
+  useEditorWindowCloseGuard();
 
   if (status !== LoadStatus.Ready) {
     return (

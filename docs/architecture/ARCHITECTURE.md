@@ -131,20 +131,23 @@ index.html
 ```text
 EditorWindow
 ├─ Menubar
-└─ horizontal shell
-   ├─ ActivityBar
-   └─ Workspace
-      └─ LayoutNodeRenderer
-         ├─ GraphEditor
-         ├─ SettingsView
-         ├─ Sidebar
-         ├─ Detail
-         └─ LogPanel
+├─ horizontal body
+│  ├─ ActivityBar
+│  └─ Workspace
+│     └─ GridviewReact (outer workbench)
+│        ├─ Sidebar
+│        ├─ editor shell
+│        │  └─ DockviewReact (shell)
+│        │     ├─ EditorHost
+│        │     │  └─ DockviewReact (editor groups and panels)
+│        │     └─ edge group: Logs / Output
+│        └─ Detail
+└─ BottomBar
 ```
 
-布局树由 `src/features/core/layout/layoutStore.ts` 管理，使用 Zustand + Immer 表示 VS Code 风格的区域树；Tab 顺序、激活态和选择态由独立的 `editorTabStore.ts` 管理。`viewRegistry.tsx` 将字符串 view id 映射到实际 React 组件，使布局节点和渲染组件解耦。
+外层 `GridviewReact` 是 sidebar、editor shell 与 detail 拓扑和尺寸的 authority；shell `DockviewReact` 是中心 editor host、Logs/Output edge group、panel 位置与折叠状态的 authority；嵌套 editor `DockviewReact` 是编辑器 group、panel、tab 顺序和激活态的 authority。应用代码分别通过 `workbenchGridPort`、`panelDockviewPort` 和 `editorDockviewPort` 读取或发出操作，不在 Zustand 中复制这些布局状态。
 
-`Workspace` 负责布局渲染、拖拽上下文和视图渲染。图编辑器、侧边栏、详情面板和日志面板都作为布局节点出现，而不是通过页面级条件渲染硬切换。
+`Workspace` 负责挂载三层布局 authority 与工作区拖拽上下文。`viewRegistry.tsx` 只将 editor panel 的 component id 映射到 React 视图；menubar、activity bar、status bar 和 modal 均位于 Dockview 工作区之外。
 
 ### 4.4 前端分层
 
@@ -169,20 +172,22 @@ components/ui and shared/ui → reusable UI
 
 ### 4.5 状态管理
 
-前端状态主要由 Zustand store 承载：
+前端业务状态与非布局 UI 状态主要由 Zustand store 承载：
 
 - 项目/数据：`features/core/dataStore/`
-- 布局：`features/core/layout/layoutStore.ts`
-- 编辑器 core 状态：`features/core/editor/`（detail focus、clipboard 等）；Tab 运行态位于 `features/core/layout/editorTabStore.ts`
-- 编辑器 application 编排：`features/application/editor/`（`EditorSessionProvider`、`useEditorSession`、`useEditorGroup`）
+- 非 placement 的 workbench UI 偏好与临时状态：`features/core/workbench/workbenchStore.ts`
+- 布局 authority adapter：`features/core/workbench/workbenchGridPort.ts` 与 `features/core/dockview/`；拓扑、尺寸、panel 折叠、tab 顺序和激活态直接来自 Gridview/Dockview
+- 编辑器 pane-local 状态：`features/core/dockview/editorPaneStateStore.ts`；按 `panelInstanceId` 保存选择等投影，不承担资源或布局 authority
+- 编辑器 core 状态：`features/core/editor/`（detail focus、clipboard 等）
+- 编辑器 application 编排：`features/application/editor/`（稳定命令 context、窄 caller hooks、`useEditorCanvas`）
 - Schema / Node Registry：`features/core/schema`、`features/core/nodeRegister`
 - 历史：`features/core/history`
 - 阻断式 MessageDialog：`features/core/ui/UIStore.ts`；页面/字段错误由所属 view 的 `Alert` 或 inline state 持有
-- 视口、选择、手势、侧边栏、日志、执行状态等：分别由多个 core store 管理
+- 视口、手势、侧边栏、日志、执行状态等：分别由多个 core store 管理
 
 项目初始化由 `useAppInitialization` 驱动：先等待 schema store 从后端同步节点定义，再调用 `initProjectSync` 同步项目数据。
 
-Editor 窗口在 `EditorWindow` 根节点挂载 `EditorSessionProvider`，全窗口共享一份 editor session（tab/命令/资源操作）。Canvas pointer loop 仅由 `useEditorGroup({ withCanvasInteraction: true })` 在 `Canvas.tsx` 中启用一次；Sidebar、Menubar、Overlays 等通过 `useEditorGroup()` 或 `useEditorSession()` 消费同一 session，不再重复实例化完整 editor 组合链。
+Editor 窗口在 `EditorWindow` 根节点挂载 `EditorSessionProvider`，只提供稳定命令。资源 consumer 在真实使用位置通过 `useEditorSessionResources()` 直接订阅 `useEditorCollections()`。`Canvas.tsx` 是 `useEditorCanvas({ mode })` 的唯一 caller：preview 只保留首次 pointerdown 激活顺序，interactive 才挂载 pointer loop、drop 与 overlays。Canvas 直接使用 variables/functions 的现有窄 hooks，不订阅 events、dataframes 或 groups；Dockview 仍是 group/tab topology 的唯一 authority。
 
 ### 4.6 前端 IPC 边界
 
@@ -681,7 +686,7 @@ App mount
 1. 在 `src/views/<FeatureView>/` 创建窗口或页面组件。
 2. 在 `src/app/App.tsx` 增加 route。
 3. 如需独立 Tauri window，通过 window service 或 Tauri WebviewWindow 打开对应 hash route。
-4. 普通业务提示使用统一 Toast，不使用原生 `alert/confirm/prompt`。
+4. 页面或区段错误使用持久 `Alert`，阻断式确认使用 `MessageDialog`；不使用 Toast 或原生 `alert/confirm/prompt`。
 5. 用户可滚动区域使用 `components/ui/scroll-area.tsx` 提供的 `ScrollArea`。
 
 ## 15. 已知架构风险
@@ -692,7 +697,7 @@ App mount
 
 - Zustand store 不带 selector 会导致过度重渲染。
 - 全局事件监听器较多，捕获阶段监听器可能影响 React 事件链。
-- ~~`useEditorGroup` 链路较重，非 Canvas 组件可能被迫实例化 Canvas 交互逻辑。~~ 已通过 `EditorSessionProvider` + 仅 Canvas 启用 `withCanvasInteraction` 缓解（2026.07）。
+
 - DnD context 存在嵌套和潜在冲突。
 - store 粒度不统一，存在全局变量/手动 Map 等绕开 React 数据流的状态。
 

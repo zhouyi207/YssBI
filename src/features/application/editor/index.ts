@@ -1,12 +1,10 @@
 export {
   EditorSessionProvider,
   useEditorSessionCommandsContext,
-  useEditorSessionSharedContext,
 } from './EditorSessionContext';
 export type {
-  EditorSession,
-  EditorGroupSession,
-  PickEditorSession,
+  EditorCanvasMode,
+  EditorCanvasSession,
   EditorSessionResourcesSlice,
   EditorSessionDetailActionsSlice,
 } from './editorSessionTypes';
@@ -21,6 +19,7 @@ export {
   insertRerouteAtConnection,
 } from './edgeOperations';
 export { useEditorKeyboard } from './useEditorKeyboard';
+export { useEditorWindowCloseGuard } from './useEditorWindowCloseGuard';
 export { useTabManagement } from './useTabManagement';
 export {
   switchEditorTab,
@@ -47,7 +46,7 @@ export {
 export { resolveTabDisplayName } from './resolveTabDisplayName';
 export { reconcileOpenLayoutTabsWithResources } from './reconcileOpenLayoutTabs';
 export { useProjectOperations } from './useProjectOperations';
-export { useEditorGroup } from './useEditorGroup';
+export { useEditorCanvas } from './useEditorCanvas';
 export { useIsActiveEditorGroup } from './useIsActiveEditorGroup';
 export { CanvasContextMenuProvider, useCanvasContextMenuActions, useCanvasContextMenuActionsOptional } from './CanvasContextMenuContext';
 export type { CanvasContextMenuActions } from './CanvasContextMenuContext';

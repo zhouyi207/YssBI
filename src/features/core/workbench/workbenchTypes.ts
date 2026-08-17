@@ -17,12 +17,11 @@ export type SidebarTabId = (typeof SIDEBAR_TAB_IDS)[number];
  * Non-layout-authoritative workbench UI state.
  *
  * Effective visibility and all geometry/topology remain owned by the layout
- * domain. This state captures only sidebar/detail visibility and panel collapse intent.
+ * domain. This state captures sidebar/detail visibility and transient workbench UI state.
  */
 export interface WorkbenchUIState {
   sidebarCurrentTab: SidebarTabId;
   sidebarUserHidden: boolean;
-  panelCollapsed: boolean;
   detailUserHidden: boolean;
   isSettingsOpen: boolean;
   isNodeDocumentationOpen: boolean;
@@ -35,9 +34,6 @@ export interface WorkbenchUICommands {
   toggleSidebarTab(tab: SidebarTabId): void;
   setSidebarUserHidden(hidden: boolean): void;
   toggleSidebarVisibilityPreference(): void;
-
-  setPanelCollapsed(collapsed: boolean): void;
-  togglePanelCollapsed(): void;
 
   setDetailUserHidden(hidden: boolean): void;
   toggleDetailVisibilityPreference(): void;

@@ -61,15 +61,21 @@ describe('panelDockviewPort', () => {
       onDidLayoutFromJSON: () => disposable(),
     } as unknown as DockviewApi;
     const port = createPanelDockviewPort();
+    const unboundSnapshot = port.getSnapshot();
     port.bind(api);
+
+    expect(unboundSnapshot).toMatchObject({ ready: false, collapsed: undefined });
+    expect(port.getSnapshot()).toMatchObject({ ready: true, collapsed: false });
 
     for (let iteration = 0; iteration < 5; iteration += 1) {
       await port.setCollapsed(true);
+      expect(port.getSnapshot().collapsed).toBe(true);
       await port.activate(iteration % 2 === 0 ? 'logs' : 'output');
       await port.setCollapsed(false);
+      expect(port.getSnapshot().collapsed).toBe(false);
     }
 
-    expect(port.isCollapsed()).toBe(false);
+    expect(port.getSnapshot().collapsed).toBe(false);
     expect((await port.serialize()).edgeGroups?.bottom?.size).toBe(320);
     expect(activePanels).toEqual(['logs', 'output', 'logs', 'output', 'logs']);
   });

@@ -3,7 +3,6 @@ import {
   panelDockviewPort,
   invalidateDockviewLayoutHydration,
   persistDockviewLayoutDebounced,
-  persistDockviewLayoutNow,
 } from '@/features/core/dockview';
 import {
   WORKBENCH_PANEL_PART_ID,
@@ -20,24 +19,21 @@ export function setPanelCollapsed(
   collapsed: boolean,
   options?: { persist?: boolean },
 ): void {
-  const state = useWorkbenchStore.getState();
-  if (state.zenMode) return;
+  if (useWorkbenchStore.getState().zenMode) return;
 
-  state.setPanelCollapsed(collapsed);
   void panelDockviewPort.setCollapsed(collapsed);
   if (options?.persist !== false) persistDockviewLayoutDebounced();
 }
 
 export function togglePanelCollapsed(): void {
-  setPanelCollapsed(!useWorkbenchStore.getState().panelCollapsed);
+  const collapsed = panelDockviewPort.getSnapshot().collapsed ?? false;
+  setPanelCollapsed(!collapsed);
 }
 
 export function showPanelView(viewId: PanelViewId): void {
   void panelDockviewPort.activate(viewId);
-  if (useWorkbenchStore.getState().panelCollapsed) setPanelCollapsed(false);
+  if (panelDockviewPort.getSnapshot().collapsed) setPanelCollapsed(false);
 }
-
-export function persistWorkbenchLayoutNow(): void { void persistDockviewLayoutNow(); }
 
 export function collapseEditorGroupsForProjectSwitch(): void {
   void editorDockviewPort.reset();

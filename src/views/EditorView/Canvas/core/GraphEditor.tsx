@@ -15,6 +15,7 @@ import { resourceKey, useDocumentStateStore } from '@/features/core/resource';
 export const GraphEditor = memo(function GraphEditor() {
     const nodeId = useContext(GroupContext) as string | null;
     const isActiveGroup = useIsActiveEditorGroup(nodeId);
+    const mode = isActiveGroup ? 'interactive' : 'preview';
     const { activeTabId, tabs } = useEditorGroupWorkspace();
 
     const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
@@ -46,10 +47,13 @@ export const GraphEditor = memo(function GraphEditor() {
     return (
         <div className="flex flex-col w-full h-full min-h-0 min-w-0 overflow-hidden">
             <div className="flex-1 relative min-h-0 min-w-0 overflow-hidden">
-                <CanvasDropZone groupId={nodeId ?? DEFAULT_EDITOR_GROUP_ID} interactive={isActiveGroup}>
+                <CanvasDropZone
+                    groupId={nodeId ?? DEFAULT_EDITOR_GROUP_ID}
+                    mode={mode}
+                >
                     {resolvedTabId ? (
                         graphReady
-                            ? <Canvas interactive={isActiveGroup} />
+                            ? <Canvas mode={mode} />
                             : graphUnavailable
                                 ? <div className="absolute inset-0" role="alert" data-graph-load-error />
                                 : <div className="absolute inset-0" aria-busy="true" data-graph-loading />

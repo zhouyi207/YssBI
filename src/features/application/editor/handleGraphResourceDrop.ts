@@ -1,6 +1,5 @@
 import type { GraphResourceDragData } from '@/features/core/dnd';
-import { editorDockviewPort } from '@/features/core/dockview';
-import type { EditorSplitDirection } from '@/features/core/layout/editorSplitHitTest';
+import { editorDockviewPort, type SplitDirection } from '@/features/core/dockview';
 import { getActiveLayoutTab, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
 import { openGraphInEditor } from './openGraphInEditor';
 import { switchEditorTab } from './switchEditorTab';
@@ -10,7 +9,7 @@ export async function handleGraphResourceDrop(
   resource: GraphResourceDragData,
   targetGroupId: string,
   options?: {
-    edge?: EditorSplitDirection;
+    edge?: SplitDirection;
     insertIndex?: number;
   },
 ): Promise<void> {

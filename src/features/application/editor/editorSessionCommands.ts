@@ -1,24 +1,27 @@
-import type { EditorSession } from './editorSessionTypes';
+import type {
+  EditorSessionCanvasActions,
+  EditorSessionDataframeActions,
+  EditorSessionGraphActions,
+  EditorSessionHistoryActions,
+  EditorSessionLayoutBindings,
+  EditorSessionNodeActions,
+  EditorSessionProjectActions,
+  EditorSessionTabActions,
+  EditorSessionVariableActions,
+  EditorSessionWorksheetActions,
+} from './editorSessionTypes';
 
-/** Command surface merged into EditorSession / EditorGroupSession (excludes volatile history flags). */
-export type EditorSessionCommands = Omit<
-  EditorSession,
-  | 'activeEditorGroupId'
-  | 'activeTabId'
-  | 'groupId'
-  | 'tabs'
-  | 'selectedNodeIds'
-  | 'events'
-  | 'functions'
-  | 'variables'
-  | 'dataframes'
-  | 'groups'
-  | 'contextMenu'
-  | 'detailFocus'
-  | 'canUndo'
-  | 'canRedo'
-  | 'pending'
->;
+/** Stable command-only surface assembled by EditorSessionProvider. */
+export type EditorSessionCommands = EditorSessionLayoutBindings
+  & EditorSessionHistoryActions
+  & EditorSessionCanvasActions
+  & EditorSessionTabActions
+  & EditorSessionWorksheetActions
+  & EditorSessionProjectActions
+  & EditorSessionGraphActions
+  & EditorSessionVariableActions
+  & EditorSessionDataframeActions
+  & EditorSessionNodeActions;
 
 /** Stable identity container — Provider mutates fields in place so preview canvases avoid context churn. */
 export function createEditorSessionCommandsContainer(): EditorSessionCommands {

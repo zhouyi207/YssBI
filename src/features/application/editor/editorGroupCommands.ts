@@ -1,5 +1,8 @@
-import type { EditorSplitEdge } from '@/features/core/layout/editorSplitLayout';
-import { editorDockviewPort, type SplitDirection } from '@/features/core/dockview';
+import {
+  editorDockviewPort,
+  type EditorSplitEdge,
+  type SplitDirection,
+} from '@/features/core/dockview';
 import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { switchEditorTab } from './switchEditorTab';
 import {

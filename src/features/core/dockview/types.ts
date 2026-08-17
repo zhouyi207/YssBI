@@ -3,6 +3,8 @@ import type { SerializedDockview } from 'dockview-react';
 export type PanelInstanceId = string;
 export type ResourceRef = string;
 export type SplitDirection = 'top' | 'bottom' | 'left' | 'right';
+/** Editor drop edge; `center` is a merge target rather than a split direction. */
+export type EditorSplitEdge = SplitDirection | 'center';
 
 /** Serializable editor identity carried by a Dockview panel, not by its id. */
 export interface LayoutTabMetadata {

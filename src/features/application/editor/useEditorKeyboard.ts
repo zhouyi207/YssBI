@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { editorDockviewPort } from '@/features/core/dockview';
 import {
   clearEditorGroupGraphSelection,
@@ -9,7 +9,16 @@ import {
 import { getViewport, editorViewportScope } from '@/features/core/viewport';
 import { isAppModalOpen, useModifierKeyStore } from '@/features/core/keyboard';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
-import { exitZenMode, isZenModeActive } from '@/features/core/layout/workbenchZenMode';
+import {
+  exitZenMode,
+  isZenModeActive,
+  toggleZenMode,
+} from '@/features/core/layout/workbenchZenMode';
+import {
+  toggleDetailVisibility,
+  togglePanelCollapsed,
+  toggleSidebarVisibility,
+} from '@/features/core/layout/workbenchLayoutService';
 import { useWorkbenchStore } from '@/features/core/workbench';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { useHistoryStore } from '@/features/core/history';
@@ -18,76 +27,29 @@ import { cancelCanvasInteraction } from '@/features/core/canvas/canvasInteractio
 import { useEditorStore } from '@/features/core/editor';
 import { EDITOR_MUTATION_CAPABILITIES } from './editorMutationAvailability';
 import { listDockviewGroupTabs } from './dockviewTabProjection';
+import { useEditorSessionCommandsContext } from './EditorSessionContext';
 
-interface UseEditorKeyboardProps {
-  deleteSelected: () => void;
-  undo: () => void;
-  redo: () => void;
-  copy: () => void;
-  cut: () => void;
-  paste: (pos?: { x: number; y: number }) => void;
-  duplicateSelected?: () => void;
-  selectAllNodes: () => boolean;
-  focusSelectedNodes: () => boolean;
-  fitCompleteGraph: () => boolean;
-  saveGraph: () => void;
-  saveGraphAs: () => void;
-  importGraph: () => void;
-  addEvent: (name?: string, options?: { openAfterCreate?: boolean }) => void;
-  closeTab: (id: string) => void;
-  setActiveTabId: (id: string | null, targetGroupId?: string) => void;
-  splitEditorRight: (groupId: string) => void;
-  toggleLogPanel?: () => void;
-  toggleSidebar?: () => void;
-  toggleDetail?: () => void;
-  toggleZenMode?: () => void;
+function getActiveCanvasLocalPoint(clientX: number, clientY: number) {
+  const groupId = resolveEditorTargetGroupId();
+  const element = document.querySelector(`[data-editor-group-id="${groupId}"]`);
+  if (!(element instanceof HTMLElement)) return { x: 0, y: 0 };
+  const rect = element.getBoundingClientRect();
+  const graphPath = getActiveLayoutTab(groupId)?.activeTabId;
+  const viewport = graphPath
+    ? getViewport(editorViewportScope(groupId, graphPath))
+    : DEFAULT_VIEWPORT;
+  return {
+    x: (clientX - rect.left - viewport.x) / viewport.scale,
+    y: (clientY - rect.top - viewport.y) / viewport.scale,
+  };
 }
 
-/**
- * Editor Keyboard Hook
- * Handles all keyboard shortcuts for the editor
- */
-export function useEditorKeyboard({
-  deleteSelected,
-  undo,
-  redo,
-  copy,
-  cut,
-  paste,
-  duplicateSelected,
-  selectAllNodes,
-  focusSelectedNodes,
-  fitCompleteGraph,
-  saveGraph,
-  saveGraphAs,
-  importGraph,
-  addEvent,
-  closeTab,
-  setActiveTabId,
-  splitEditorRight,
-  toggleLogPanel,
-  toggleSidebar,
-  toggleDetail,
-  toggleZenMode,
-}: UseEditorKeyboardProps) {
-  const canUndo = useHistoryStore((state) => state.canUndo && !state.pending);
-  const canRedo = useHistoryStore((state) => state.canRedo && !state.pending);
+/** Mounts the editor window's single ordered global keyboard shortcut listener set. */
+export function useEditorKeyboard(): void {
+  const commands = useEditorSessionCommandsContext();
   const lastMousePosRef = useRef({ x: 0, y: 0 });
   const pendingCtrlKRef = useRef(false);
   const pendingCtrlKTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const getActiveCanvasLocalPoint = useCallback((clientX: number, clientY: number) => {
-    const gid = resolveEditorTargetGroupId();
-    const el = document.querySelector(`[data-editor-group-id="${gid}"]`);
-    if (!(el instanceof HTMLElement)) return { x: 0, y: 0 };
-    const rect = el.getBoundingClientRect();
-    const graphPath = getActiveLayoutTab(gid)?.activeTabId;
-    const currentCanvas = graphPath ? getViewport(editorViewportScope(gid, graphPath)) : DEFAULT_VIEWPORT;
-    return {
-      x: (clientX - rect.left - currentCanvas.x) / currentCanvas.scale,
-      y: (clientY - rect.top - currentCanvas.y) / currentCanvas.scale,
-    };
-  }, []);
 
   useEffect(() => {
     const setModifierKeys = useModifierKeyStore.getState().setModifierKeys;
@@ -157,49 +119,51 @@ export function useEditorKeyboard({
 
       // Keyboard shortcuts
       if (!e.repeat && isControlKey && e.key.toLowerCase() === 'a') {
-        if (selectAllNodes()) e.preventDefault();
+        if (commands.selectAllNodes()) e.preventDefault();
       } else if (
         !e.repeat && !isControlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f'
       ) {
-        if (focusSelectedNodes()) e.preventDefault();
+        if (commands.focusSelectedNodes()) e.preventDefault();
       } else if (!e.repeat && !isControlKey && !e.altKey && !e.shiftKey && e.key === 'Home') {
-        if (fitCompleteGraph()) e.preventDefault();
+        if (commands.fitCompleteGraph()) e.preventDefault();
       } else if (e.key === "Delete" || e.key === "Backspace") {
-        deleteSelected();
+        commands.deleteSelected();
       } else if (isControlKey && e.key.toLowerCase() === "z") {
+        const { canUndo, canRedo, pending } = useHistoryStore.getState();
         if (e.shiftKey) {
-          if (canRedo) redo();
-        } else if (canUndo) undo();
+          if (canRedo && !pending) commands.redo();
+        } else if (canUndo && !pending) commands.undo();
       } else if (isControlKey && e.key.toLowerCase() === "y") {
-        if (canRedo) redo();
+        const { canRedo, pending } = useHistoryStore.getState();
+        if (canRedo && !pending) commands.redo();
       } else if (isControlKey && e.key.toLowerCase() === "c") {
         e.preventDefault();
-        if (!e.repeat) copy();
+        if (!e.repeat) commands.copy();
       } else if (isControlKey && e.key.toLowerCase() === "x") {
         e.preventDefault();
-        if (!e.repeat) cut();
+        if (!e.repeat) commands.cut();
       } else if (isControlKey && e.key.toLowerCase() === "v") {
         e.preventDefault();
         if (!e.repeat && EDITOR_MUTATION_CAPABILITIES.pasteNodes) {
-          paste(getActiveCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y));
+          commands.paste(getActiveCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y));
         }
       } else if (isControlKey && e.key.toLowerCase() === "d") {
         e.preventDefault();
-        if (!e.repeat && EDITOR_MUTATION_CAPABILITIES.duplicateNodes) duplicateSelected?.();
+        if (!e.repeat && EDITOR_MUTATION_CAPABILITIES.duplicateNodes) commands.duplicateSelected();
       } else if (isControlKey && e.key.toLowerCase() === "s") {
         e.preventDefault();
-        if (e.shiftKey) saveGraphAs();
-        else saveGraph();
+        if (e.shiftKey) commands.saveGraphAs();
+        else commands.saveGraph();
       } else if (isControlKey && e.key.toLowerCase() === "o") {
         e.preventDefault();
-        importGraph();
+        commands.importGraph();
       } else if (isControlKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
-        addEvent(undefined, { openAfterCreate: true });
+        commands.addEvent(undefined, { openAfterCreate: true });
       } else if (isControlKey && e.key.toLowerCase() === "w") {
         e.preventDefault();
         const activeTabId = editorDockviewPort.getActivePanel()?.tab?.resourceRef;
-        if (activeTabId) closeTab(activeTabId);
+        if (activeTabId) commands.closeTab(activeTabId);
       } else if (isControlKey && e.key === "Tab") {
         e.preventDefault();
         const gid = editorDockviewPort.getActiveGroupId();
@@ -211,22 +175,22 @@ export function useEditorKeyboard({
             const nextIndex = e.shiftKey
               ? (currentIndex - 1 + tabs.length) % tabs.length
               : (currentIndex + 1) % tabs.length;
-            setActiveTabId(tabs[nextIndex].id);
+            commands.setActiveTabId(tabs[nextIndex].id);
           }
         }
       } else if (isControlKey && e.key === "\\") {
         e.preventDefault();
         const gid = editorDockviewPort.getActiveGroupId();
-        if (gid) splitEditorRight(gid);
+        if (gid) commands.splitEditorRight(gid);
       } else if (isControlKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();
-        toggleSidebar?.();
+        toggleSidebarVisibility();
       } else if (isControlKey && e.key.toLowerCase() === 'i') {
         e.preventDefault();
-        toggleDetail?.();
+        toggleDetailVisibility();
       } else if (isControlKey && e.key === "`") {
         e.preventDefault();
-        toggleLogPanel?.();
+        togglePanelCollapsed();
       } else if (isControlKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         pendingCtrlKRef.current = true;
@@ -242,7 +206,7 @@ export function useEditorKeyboard({
           clearTimeout(pendingCtrlKTimerRef.current);
           pendingCtrlKTimerRef.current = null;
         }
-        toggleZenMode?.();
+        toggleZenMode();
       }
     };
 
@@ -266,29 +230,5 @@ export function useEditorKeyboard({
       cleanupBlur();
       if (pendingCtrlKTimerRef.current) clearTimeout(pendingCtrlKTimerRef.current);
     };
-  }, [
-    deleteSelected,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    copy,
-    cut,
-    paste,
-    duplicateSelected,
-    selectAllNodes,
-    focusSelectedNodes,
-    fitCompleteGraph,
-    saveGraph,
-    saveGraphAs,
-    importGraph,
-    addEvent,
-    closeTab,
-    setActiveTabId,
-    splitEditorRight,
-    toggleLogPanel,
-    toggleSidebar,
-    toggleDetail,
-    toggleZenMode,
-  ]);
+  }, [commands]);
 }

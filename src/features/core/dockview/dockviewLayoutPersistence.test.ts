@@ -4,20 +4,24 @@ const mocks = vi.hoisted(() => ({
   editorUnbind: vi.fn(),
   editorWhenReady: vi.fn(),
   editorRestore: vi.fn(),
+  editorSerialize: vi.fn(),
   panelUnbind: vi.fn(),
   panelWhenReady: vi.fn(),
   panelRestore: vi.fn(),
+  panelSerialize: vi.fn(),
   workbenchRestore: vi.fn(),
+  workbenchSerialize: vi.fn(),
+  getWorkbenchState: vi.fn(),
   setWorkbenchState: vi.fn(),
 }));
 
 vi.mock('@/features/core/workbench', () => ({
   workbenchGridPort: {
     restore: mocks.workbenchRestore,
-    serialize: vi.fn(),
+    serialize: mocks.workbenchSerialize,
   },
   useWorkbenchStore: {
-    getState: vi.fn(() => ({})),
+    getState: mocks.getWorkbenchState,
     setState: mocks.setWorkbenchState,
   },
 }));
@@ -27,7 +31,7 @@ vi.mock('./dockviewEditorPort', () => ({
     unbind: mocks.editorUnbind,
     whenReady: mocks.editorWhenReady,
     restore: mocks.editorRestore,
-    serialize: vi.fn(),
+    serialize: mocks.editorSerialize,
     isReady: true,
   },
 }));
@@ -37,8 +41,7 @@ vi.mock('./panelDockviewPort', () => ({
     unbind: mocks.panelUnbind,
     whenReady: mocks.panelWhenReady,
     restore: mocks.panelRestore,
-    serialize: vi.fn(),
-    isCollapsed: vi.fn(() => false),
+    serialize: mocks.panelSerialize,
     isReady: true,
   },
 }));
@@ -47,6 +50,7 @@ import {
   dockviewLayoutStorageKey,
   hydrateDockviewLayout,
   invalidateDockviewLayoutHydration,
+  persistDockviewLayoutNow,
 } from './dockviewLayoutPersistence';
 
 describe('dockview layout hydration', () => {
@@ -55,6 +59,15 @@ describe('dockview layout hydration', () => {
     mocks.panelWhenReady.mockResolvedValue(undefined);
     mocks.panelRestore.mockResolvedValue(undefined);
     mocks.editorWhenReady.mockResolvedValue(undefined);
+    mocks.getWorkbenchState.mockReturnValue({
+      sidebarCurrentTab: 'graphs',
+      sidebarUserHidden: true,
+      panelCollapsed: true,
+      detailUserHidden: false,
+      isSettingsOpen: true,
+      isNodeDocumentationOpen: true,
+      zenMode: true,
+    });
     const values = new Map<string, string>();
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => values.get(key) ?? null,
@@ -64,9 +77,36 @@ describe('dockview layout hydration', () => {
     localStorage.setItem(dockviewLayoutStorageKey(), JSON.stringify({
       workbench: { grid: {} },
       editor: { grid: {}, panels: {} },
-      shell: { grid: {}, panels: {} },
+      shell: {
+        grid: {},
+        panels: {},
+        edgeGroups: {
+          bottom: { size: 320, visible: true, collapsed: true },
+        },
+      },
       preferences: { sidebarUserHidden: true },
     }));
+  });
+
+  it('persists edge-group collapse in the shell layout, not preferences', async () => {
+    const workbench = { grid: { root: { type: 'branch', data: [] } } };
+    const editor = { grid: {}, panels: {} };
+    const shell = {
+      grid: {},
+      panels: {},
+      edgeGroups: {
+        bottom: { size: 320, visible: true, collapsed: true },
+      },
+    };
+    mocks.workbenchSerialize.mockReturnValue(workbench);
+    mocks.editorSerialize.mockResolvedValue(editor);
+    mocks.panelSerialize.mockResolvedValue(shell);
+
+    await persistDockviewLayoutNow();
+
+    const persisted = JSON.parse(localStorage.getItem(dockviewLayoutStorageKey()) ?? '{}');
+    expect(persisted.shell).toEqual(shell);
+    expect(persisted.preferences).not.toHaveProperty('panelCollapsed');
   });
 
   it('does not apply stale preferences after reset invalidates hydration', async () => {
@@ -81,7 +121,11 @@ describe('dockview layout hydration', () => {
 
     await expect(hydration).resolves.toBe(false);
     expect(mocks.workbenchRestore).toHaveBeenCalledOnce();
-    expect(mocks.panelRestore).toHaveBeenCalledOnce();
+    expect(mocks.panelRestore).toHaveBeenCalledWith(expect.objectContaining({
+      edgeGroups: {
+        bottom: { size: 320, visible: true, collapsed: true },
+      },
+    }));
     expect(mocks.setWorkbenchState).not.toHaveBeenCalled();
   });
 });

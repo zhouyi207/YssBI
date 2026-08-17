@@ -1,18 +1,14 @@
 import { useMemo } from 'react';
-import { useEditorSessionSharedContext, useEditorSessionCommandsContext } from './EditorSessionContext';
+import { useEditorCollections } from '@/features/core/editor';
+import { useEditorSessionCommandsContext } from './EditorSessionContext';
 import type {
   EditorSessionDetailActionsSlice,
   EditorSessionResourcesSlice,
 } from './editorSessionTypes';
-import { pickEditorSessionResources } from './editorSessionTypes';
 
-/** Detail / 侧栏资源列表：仅暴露 collections 四表 */
+/** Resource consumers subscribe where the collections are actually used. */
 export function useEditorSessionResources(): EditorSessionResourcesSlice {
-  const shared = useEditorSessionSharedContext();
-  return useMemo(
-    () => pickEditorSessionResources(shared as Parameters<typeof pickEditorSessionResources>[0]),
-    [shared.events, shared.functions, shared.variables, shared.dataframes],
-  );
+  return useEditorCollections();
 }
 
 /** Detail 面板：变量 / DataFrame 更新 */

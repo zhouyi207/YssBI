@@ -1,13 +1,12 @@
 /**
- * EditorSession 显式契约 — 按职责切片，避免 `ReturnType<typeof useEditorSessionValue>` 推断链。
- * 新 hook 应依赖命名切片或 `PickEditorSession<…>`，禁止 `...session` 透传未知字段。
+ * EditorSession 显式契约 — 按职责切片，避免从组合 hook 建立推断链。
+ * 新 hook 应依赖命名切片，禁止 `...session` 透传未知字段。
  */
 
 import type { RefObject } from 'react';
 import type { buildEditorState } from '@/features/core/editor/hooks/useEditorState';
 import type { useEditorActions } from '@/features/core/editor/hooks/useEditorActions';
 import type { EditorViewport } from '@/features/core/viewport';
-import type { LayoutTab } from '@/shared/types/layout/layout';
 import type { GraphSelection } from '@/features/core/layout';
 import type { CanvasMutationOutcome } from '@/features/core/canvas';
 import type { Pin } from '@/shared/types/domain/pin';
@@ -65,56 +64,65 @@ export type EditorSessionNodeActions = Pick<
   'createNode' | 'deleteNode' | 'deleteNodes'
 >;
 
-/** 全窗口 EditorSessionProvider 契约 */
-export type EditorSession = EditorSessionState &
-  EditorSessionLayoutBindings &
-  EditorSessionHistoryActions &
-  EditorSessionCanvasActions &
-  EditorSessionHistoryAvailability &
-  EditorSessionTabActions &
-  EditorSessionWorksheetActions &
-  EditorSessionProjectActions &
-  EditorSessionGraphActions &
-  EditorSessionVariableActions &
-  EditorSessionDataframeActions &
-  EditorSessionNodeActions;
+// ─── Consumer-owned slices ────────────────────────────────────────────────
 
-// ─── 常用 Pick 切片（Canvas / Detail / Sidebar 按需依赖）────────────────
-
-export type PickEditorSession<K extends keyof EditorSession> = Pick<EditorSession, K>;
-
-/** 资源集合：variables / events / functions / dataframes */
-export type EditorSessionResourcesSlice = PickEditorSession<
+/** Resource collections used by Detail and sidebar consumers. */
+export type EditorSessionResourcesSlice = Pick<
+  EditorSessionState,
   'events' | 'functions' | 'variables' | 'dataframes'
 >;
 
-/** Detail 面板资源编辑 */
-export type EditorSessionDetailActionsSlice = PickEditorSession<
-  'updateVariable' | 'updateDataFrame'
->;
+/** Detail mutations come directly from their owning command slices. */
+export type EditorSessionDetailActionsSlice = Pick<
+  EditorSessionVariableActions,
+  'updateVariable'
+> & Pick<EditorSessionDataframeActions, 'updateDataFrame'>;
 
-// ─── EditorGroup 叠加层 ───────────────────────────────────────────────────
+// ─── Canvas caller-shaped slices ──────────────────────────────────────────
 
-export interface EditorGroupWorkspaceSlice {
+export type EditorCanvasMode = 'interactive' | 'preview';
+
+export type EditorCanvasCommandsSlice = Pick<
+  EditorSessionHistoryActions,
+  | 'copyNodes'
+  | 'cutNodes'
+  | 'duplicateNodes'
+  | 'deleteNodesById'
+  | 'breakAllNodeLinks'
+  | 'breakConnectionsById'
+  | 'selectLinkedNodes'
+  | 'disconnectPinById'
+  | 'resetPinValue'
+  | 'setSelectedNodeIds'
+  | 'setSelectedConnectionIds'
+> & Pick<
+  EditorSessionProjectActions,
+  'executeGraph' | 'cancelGraphExecution' | 'clearGraphArtifacts'
+> & Pick<EditorSessionNodeActions, 'createNode'>;
+
+export interface EditorCanvasWorkspaceSlice {
   groupId: string;
-  tabs: LayoutTab[];
-  activeTabId: string | null;
+  activeGraph: {
+    graphPath: string;
+    kind: 'event' | 'function';
+  } | null;
   selectedNodeIds: string[];
   selectedConnectionIds: string[];
-  selection: GraphSelection;
 }
 
-export type ConnectPinsHandler = (
-  groupId: string,
-  pinA: string,
-  pinB: string,
-) => Promise<void>;
+export type EditorCanvasResourcesSlice = Pick<
+  EditorSessionResourcesSlice,
+  'variables' | 'functions'
+>;
 
-export interface EditorGroupInteractionSlice {
-  onCanvasPointerDown: (e: React.PointerEvent) => void;
-  onNodePointerDown: (nodeId: string, e: React.PointerEvent) => void;
-  onPinPointerDown: (pin: Pin, e: React.PointerEvent) => void;
-  connectPins: ConnectPinsHandler;
+export interface EditorCanvasInteractionSlice {
+  contextMenu: EditorSessionState['contextMenu'];
+  setContextMenu: EditorSessionLayoutBindings['setContextMenu'];
+  pendingConnection: Pin | null;
+  setPendingConnection: (pin: Pin | null) => void;
+  onCanvasPointerDown: (event: React.PointerEvent) => void;
+  onNodePointerDown: (nodeId: string, event: React.PointerEvent) => void;
+  onPinPointerDown: (pin: Pin, event: React.PointerEvent) => void;
   insertRerouteAtConnection: (
     connectionId: string,
     position: Readonly<{ x: number; y: number }>,
@@ -125,56 +133,16 @@ export interface EditorGroupInteractionSlice {
       temporary: GraphSelection;
     },
   ) => Promise<CanvasMutationOutcome | false>;
-  setCanvas: (
-    updater: EditorViewport | ((prev: EditorViewport) => EditorViewport),
-    targetGraphPath?: string,
-  ) => void;
 }
 
-/** useEditorGroup 返回值：commands + shared + group workspace + 可选 canvas 交互 */
-export type EditorGroupSession = EditorSessionResourcesSlice & {
-  groups: EditorSession['groups'];
-} & ReturnType<typeof import('./useEditorSessionUi').useEditorSessionUi> &
-  Pick<
-    EditorSession,
-    | keyof EditorSessionLayoutBindings
-    | keyof EditorSessionHistoryActions
-    | keyof EditorSessionCanvasActions
-    | keyof EditorSessionTabActions
-    | keyof EditorSessionWorksheetActions
-    | keyof EditorSessionProjectActions
-    | keyof EditorSessionGraphActions
-    | keyof EditorSessionVariableActions
-    | keyof EditorSessionDataframeActions
-    | keyof EditorSessionNodeActions
-  > &
-  EditorGroupWorkspaceSlice &
-  EditorGroupInteractionSlice;
-
-/** 唯一允许的 session 合并点（useEditorGroup） */
-export function composeEditorGroupSession(
-  shared: EditorSessionResourcesSlice & { groups: EditorSession['groups'] },
-  ui: ReturnType<typeof import('./useEditorSessionUi').useEditorSessionUi>,
-  commands: Pick<
-    EditorSession,
-    | keyof EditorSessionLayoutBindings
-    | keyof EditorSessionHistoryActions
-    | keyof EditorSessionCanvasActions
-  > &
-    EditorSessionTabActions &
-    EditorSessionWorksheetActions &
-    EditorSessionProjectActions &
-    EditorSessionGraphActions &
-    EditorSessionVariableActions &
-    EditorSessionDataframeActions &
-    EditorSessionNodeActions,
-  workspace: EditorGroupWorkspaceSlice,
-  interaction: EditorGroupInteractionSlice,
-): EditorGroupSession {
-  return Object.assign({}, shared, ui, commands, workspace, interaction);
+export interface EditorCanvasSession {
+  commands: EditorCanvasCommandsSlice;
+  workspace: EditorCanvasWorkspaceSlice;
+  resources: EditorCanvasResourcesSlice;
+  interaction: EditorCanvasInteractionSlice;
 }
 
-/** useEditorSessionValue 组装时的 layout 字段提取 */
+/** EditorSessionProvider 组装命令容器时的 layout 字段提取 */
 export function pickEditorSessionLayoutBindings(actions: EditorActions): EditorSessionLayoutBindings {
   return {
     setCanvas: actions.setCanvas,
@@ -194,21 +162,5 @@ export function pickEditorSessionNodeActions(
     createNode: nodeMgmt.createNode,
     deleteNode: nodeMgmt.deleteNode,
     deleteNodes: nodeMgmt.deleteNodes,
-  };
-}
-
-export const EDITOR_SESSION_RESOURCE_KEYS = [
-  'events',
-  'functions',
-  'variables',
-  'dataframes',
-] as const satisfies readonly (keyof EditorSessionResourcesSlice)[];
-
-export function pickEditorSessionResources(session: EditorSession): EditorSessionResourcesSlice {
-  return {
-    events: session.events,
-    functions: session.functions,
-    variables: session.variables,
-    dataframes: session.dataframes,
   };
 }

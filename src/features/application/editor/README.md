@@ -6,18 +6,19 @@ Editor UI orchestration lives under `features/application/editor/`. Core editor 
 
 ```
 features/application/editor/
-├── EditorSessionContext.tsx  # Single EditorSessionProvider per Editor window
-├── editorSessionTypes.ts     # 显式 EditorSession / EditorGroupSession 切片契约
-├── useEditorSessionSlices.ts # useEditorSessionResources / DetailActions 等窄接口
-├── useEditorSessionValue.ts  # 组装 session（无 pointer loop）
-├── useEditorGroup.ts         # Group-scoped wrapper; optional canvas pointer loop
-├── useEditorOperations.ts    # Clipboard, history, node ops
-├── useTabManagement.ts       # Tab open/close/switch
+├── EditorSessionContext.tsx   # Stable command provider per Editor window
+├── editorSessionCommands.ts   # Explicit intersection of stable command slices
+├── editorSessionTypes.ts      # Named caller-shaped contracts
+├── useEditorSessionCommands.ts
+├── useEditorSessionSlices.ts  # Direct resource subscriptions and detail actions
+├── useEditorCanvas.ts         # Canvas-only commands/workspace/resources/interaction
+├── useEditorOperations.ts     # Clipboard, history, node ops
+├── useTabManagement.ts        # Tab open/close/switch
 └── index.ts
 
 features/core/editor/
-├── hooks/                    # useEditorState, useEditorActions, …
-├── context/GroupContext.ts   # Layout group scope for canvas
+├── hooks/                     # Group workspace and narrow collection hooks
+├── context/GroupContext.ts    # Dockview group scope for Canvas
 └── index.ts
 ```
 
@@ -33,40 +34,46 @@ import { EditorSessionProvider } from '@/features/application/editor';
 </EditorSessionProvider>
 ```
 
-### Canvas (only place that mounts the pointer loop)
+### Canvas
+
+`Canvas.tsx` is the sole caller of the caller-shaped hook:
 
 ```tsx
-const editor = useEditorGroup({ withCanvasInteraction: true });
+const canvas = useEditorCanvas({ mode: 'interactive' });
 ```
 
-### Chrome / overlays / sidebar (shared session, no pointer loop)
+Use `mode: 'preview'` for an inactive Dockview group. Preview keeps the
+pointerdown activation ordering but does not mount the global pointer loop,
+drop handling, or `CanvasOverlays`.
+
+`CanvasOverlays` receives a discriminated `graph` / `palette` / `variable` /
+`execution` model from Canvas and must not call editor session hooks.
+
+### Other consumers
+
+Use the narrow interface matching the caller:
 
 ```tsx
-const editor = useEditorGroup();
-// or
-const editor = useEditorSession();
+const resources = useEditorSessionResources();
+const detailActions = useEditorSessionDetailActions();
+const commands = useEditorSessionCommandsContext();
 ```
 
-### Project sync / auto-open hooks
+## Interface rules
 
-```tsx
-const editor = useEditorSession();
-```
+| Hook | Interface | Mount/caller |
+|------|-----------|--------------|
+| `EditorSessionProvider` | Stable command context | `EditorWindow` root |
+| `useEditorSessionCommandsContext()` | Explicit command-slice intersection | Application consumers that need commands |
+| `useEditorSessionResources()` | Direct `useEditorCollections()` subscription for `events` / `functions` / `variables` / `dataframes` | Detail and resource lists |
+| `useEditorSessionDetailActions()` | Variable/DataFrame update commands | Detail panels |
+| `useEditorCanvas({ mode })` | Canvas-only `commands` / `workspace` / `resources` / `interaction` | **Only** `Canvas.tsx` |
 
-## API 约定
+Do not rebuild a broad editor/group aggregate, spread unrelated values through
+a subtree, or mirror Dockview topology in a store. Add or reuse a named slice
+at the caller seam instead.
 
-| Hook | 用途 | 挂载位置 |
-|------|------|----------|
-| `EditorSessionProvider` | 全窗口单例 session | `EditorWindow` 根节点 |
-| `useEditorSession()` | 读共享 session（命令、tab、资源） | Provider 内任意 hook/组件 |
-| `useEditorSessionResources()` | 仅 events/functions/variables/dataframes | Detail、侧栏资源列表 |
-| `useEditorGroup()` | group 工作区 + 可选 canvas 交互 + 完整 session | Workspace / Canvas / Menubar |
-| `useEditorGroup()` | 组级 scope + 可选 pointer 包装 | Sidebar、Menubar、Overlays 等 |
-| `useEditorGroup({ withCanvasInteraction: true })` | 启用 canvas pointer loop | **仅** `Canvas.tsx` |
-
-> `useEditor()` 已删除。Provider 外不应再构建独立 editor session。新 hook **禁止** `...session` 透传；使用 `editorSessionTypes` 中的 `PickEditorSession` / 切片 hook / `composeEditorGroupSession`。
-
-设计约定详见 [DESIGN_RULE.md §2.12](../../../docs/DESIGN_RULE.md#212-editorsession-显式契约)。
+See [DESIGN_RULE.md §2.12](../../../../docs/architecture/DESIGN_RULE.md#212-editor-caller-shaped-显式契约).
 
 ## Related modules
 

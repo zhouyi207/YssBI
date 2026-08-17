@@ -7,13 +7,14 @@ import { DROP_TYPES, getCanvasDropZoneId } from "@/features/core/dnd";
  */
 export function CanvasDropZone({
   groupId,
-  interactive = true,
+  mode,
   children,
 }: {
   groupId: string;
-  interactive?: boolean;
+  mode: 'interactive' | 'preview';
   children: React.ReactNode;
 }) {
+  const interactive = mode === 'interactive';
   const { setNodeRef } = useDroppable({
     id: getCanvasDropZoneId(groupId),
     data: { dropType: DROP_TYPES.CANVAS, groupId },

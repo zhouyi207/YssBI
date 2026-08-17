@@ -8,7 +8,6 @@ function uiState() {
   const {
     sidebarCurrentTab,
     sidebarUserHidden,
-    panelCollapsed,
     detailUserHidden,
     isSettingsOpen,
     isNodeDocumentationOpen,
@@ -18,7 +17,6 @@ function uiState() {
   return {
     sidebarCurrentTab,
     sidebarUserHidden,
-    panelCollapsed,
     detailUserHidden,
     isSettingsOpen,
     isNodeDocumentationOpen,
@@ -33,6 +31,7 @@ describe('workbenchStore', () => {
 
   it('starts from the non-layout workbench defaults', () => {
     expect(uiState()).toEqual(DEFAULT_WORKBENCH_UI_STATE);
+    expect(useWorkbenchStore.getState()).not.toHaveProperty('panelCollapsed');
     expect(uiState()).not.toHaveProperty('pixelSize');
     expect(uiState()).not.toHaveProperty('nodes');
     expect(uiState()).not.toHaveProperty('activeEditorGroupId');
@@ -62,10 +61,9 @@ describe('workbenchStore', () => {
     });
   });
 
-  it('updates panel, detail, modal, and zen UI state independently', () => {
+  it('updates detail, modal, and zen UI state independently', () => {
     const commands = useWorkbenchStore.getState();
 
-    commands.togglePanelCollapsed();
     commands.toggleDetailVisibilityPreference();
     commands.openSettings();
     commands.setNodeDocumentationOpen(true);
@@ -73,7 +71,6 @@ describe('workbenchStore', () => {
 
     expect(uiState()).toEqual({
       ...DEFAULT_WORKBENCH_UI_STATE,
-      panelCollapsed: true,
       detailUserHidden: true,
       isSettingsOpen: true,
       isNodeDocumentationOpen: true,
@@ -82,7 +79,6 @@ describe('workbenchStore', () => {
 
     commands.exitZenMode();
     expect(uiState()).toMatchObject({
-      panelCollapsed: true,
       detailUserHidden: true,
       zenMode: false,
     });
@@ -91,7 +87,6 @@ describe('workbenchStore', () => {
   it('resets only the workbench UI projection', () => {
     const commands = useWorkbenchStore.getState();
     commands.showSidebarTab('variables');
-    commands.setPanelCollapsed(true);
     commands.setDetailUserHidden(true);
     commands.setSettingsOpen(true);
     commands.setNodeDocumentationOpen(true);

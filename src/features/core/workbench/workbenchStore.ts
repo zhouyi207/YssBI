@@ -9,7 +9,6 @@ import type {
 export const DEFAULT_WORKBENCH_UI_STATE: Readonly<WorkbenchUIState> = {
   sidebarCurrentTab: 'graphs',
   sidebarUserHidden: false,
-  panelCollapsed: false,
   detailUserHidden: false,
   isSettingsOpen: false,
   isNodeDocumentationOpen: false,
@@ -32,10 +31,6 @@ export const useWorkbenchStore = create<WorkbenchStore>((set) => ({
   setSidebarUserHidden: (sidebarUserHidden: boolean) => set({ sidebarUserHidden }),
   toggleSidebarVisibilityPreference: () =>
     set((state) => ({ sidebarUserHidden: !state.sidebarUserHidden })),
-
-  setPanelCollapsed: (panelCollapsed: boolean) => set({ panelCollapsed }),
-  togglePanelCollapsed: () =>
-    set((state) => ({ panelCollapsed: !state.panelCollapsed })),
 
   setDetailUserHidden: (detailUserHidden: boolean) => set({ detailUserHidden }),
   toggleDetailVisibilityPreference: () =>

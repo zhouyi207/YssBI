@@ -1,116 +1,106 @@
-# Editor Grid Architecture (GridWidget Evaluation)
+# Editor Workbench Layout Architecture
 
-## Conclusion
+## Authority model
 
-**No separate imperative `GridWidget` class is required.**
+YssBI uses the live Gridview/Dockview instances as the only layout authority. There is no parallel application-owned topology model.
 
-YssBI already implements the VS Code editor-part grid model with equivalent capabilities:
+| Layer | React host | Owns | Application adapter |
+|---|---|---|---|
+| Outer workbench | `GridviewReact` in `Workspace.tsx` | Sidebar, editor shell, and detail topology, visibility, and splitter sizes | `workbenchGridPort` |
+| Shell dock | `DockviewReact` in `PanelPart.tsx` | Center editor host plus the Logs/Output edge group, including edge position, splitter size, active panel, and collapsed state | `panelDockviewPort` |
+| Editor dock | Nested `DockviewReact` in `Workspace.tsx` | Editor groups, panels, tab order, active group/panel, and editor split topology | `editorDockviewPort` |
 
-| VS Code | YssBI |
-|---------|--------|
-| `GridWidget` (row/col tree) | `layoutStore.nodes` under `editor_area` |
-| `GridWidget.addView` | `splitEditorGroupInTree` |
-| `GridWidget.removeView` | `removeEditorGroupFromTree` |
-| `GridWidget.resizeView` | `sashResizeLogic` + `commitFlexSplitResize` |
-| `SerializableGrid` | `editorGridMemento` |
-| `IEditorGroupsService` | `EditorGroupsService` |
-| DOM imperative render | `LayoutNodeRenderer` (React + flex) |
+`useWorkbenchStore` contains only non-placement UI preferences and temporary state such as the selected sidebar tab, user visibility intent, modal state, and Zen mode. It must not mirror Gridview/Dockview topology, sizes, active state, or edge-group collapse.
 
-VS Code uses imperative DOM because the workbench is not React. YssBI’s React tree + zustand store achieves the same semantics without duplicating a second layout engine.
+## Rendered hierarchy
 
-## When to revisit
-
-Introduce a dedicated imperative grid only if:
-
-- Nested row/col bugs become frequent and hard to test
-- We need grid operations outside React (e.g. headless layout service)
-- Performance profiling shows React reconciliation on grid structure changes is a bottleneck
-
-Until then, extend **`editorGridLayout.ts`** (pure tree ops) and **`editorGridMemento.ts`** (persistence).
-
-## Module boundaries
-
-```
-editorGridLayout.ts   — grid tree queries + mutations (GridWidget equivalent)
-editorGridMemento.ts  — serialize / hydrate editor_area subtree
-editorSplitLayout.ts  — edge → row/col placement
-EditorGroupsService   — thin command facade for UI
-layoutStore.ts        — zustand shell; delegates grid ops to editorGridLayout
-LayoutNodeRenderer    — recursive row/col + Sash render
-sashResizeLogic.ts    — imperative sash preview + commit
-splitViewSizing.ts    — flex pair math (shared with workbench chrome)
+```text
+EditorWindow
+├─ Menubar
+├─ horizontal body
+│  ├─ ActivityBar
+│  └─ Workspace
+│     └─ GridviewReact
+│        ├─ Sidebar
+│        ├─ editor shell
+│        │  └─ DockviewReact
+│        │     ├─ center EditorHost
+│        │     │  └─ DockviewReact
+│        │     │     └─ editor groups and panels
+│        │     └─ edge group
+│        │        ├─ Logs
+│        │        └─ Output
+│        └─ Detail
+└─ BottomBar
 ```
 
-## Persistence (Workbench vs Editor Grid)
+Menubar, activity bar, status bar, dialogs, and modal overlays remain outside the Gridview/Dockview workspace. Floating groups and browser popouts are disabled; restored Dockview layouts are sanitized before application.
 
-Editor grid and workbench chrome share one localStorage key scoped by **Tauri window label** (`yssbi-workbench-layout:<label>`; main window uses the default scope). Logical slices stay decoupled:
+## Module seams
 
-| Slice | Schema field | Hydrate | Persist |
-|-------|--------------|---------|---------|
-| Chrome (sidebar/panel/detail) | `parts` | `hydrateWorkbenchChrome()` | `persistWorkbenchLayoutDebounced()` — snapshots chrome at schedule time; merges `parts` only |
-| Editor grid | `editorGrid` | `hydrateEditorGrid()` | `persistEditorGridDebounced()` — merges `editorGrid` only |
-| Full reset | chrome only | n/a | `resetWorkbenchLayout()` → `persistWorkbenchLayoutNow()` |
+- `src/features/core/workbench/workbenchGridPort.ts` adapts the outer `GridviewApi`. It exposes serialization, restoration, reset, and part visibility without copying the topology.
+- `src/features/core/dockview/panelDockviewPort.ts` adapts the shell `DockviewApi`. It owns panel activation, edge-group placement, collapse/expand, restoration, and serialization.
+- `src/features/core/dockview/dockviewEditorPort.ts` adapts the nested editor `DockviewApi`. It owns open, activate, update, close, move, split, resource remap, restoration, and serialization operations.
+- `src/features/core/dockview/types.ts` is the shared serializable interface for editor panel identity, resource metadata, and split requests.
+- `src/features/core/dockview/editorPaneStateStore.ts` stores pane-local projections keyed by `panelInstanceId`; it does not own panel placement or resource state.
+- `src/features/application/editor/` coordinates dirty/save confirmation, graph session lifecycle, and calls into the Dockview seam.
 
-`mergeWorkbenchLayoutMemento()` in `workbenchLayoutPersistence.ts` uses a slice-aware pending queue: parts and editorGrid scheduled in the same debounce window are merged, not overwritten.
+Views do not maintain a second group tree. Application code observes layout changes through the ports and sends mutations through their focused interfaces.
 
-**Reset Layout semantics:** `resetWorkbenchLayout()` restores default chrome visibility, sizes, panel position, and maximize state only. It does **not** collapse editor groups, close tabs, or change `activeEditorGroupId`.
+## Identity and editor state
 
-**Zen mode:** chrome toggles and chrome persistence are no-ops while Zen is active; viewport reclamp may still update in-memory panel size but does not schedule chrome writes.
+Three identities remain distinct:
 
-**Project switch:** `collapseEditorGroupsForProjectSwitch()` collapses the in-memory grid and immediately persists a single-group `editorGrid` memento so refresh does not restore a stale split layout.
+- `resourceRef` is the opaque backend resource path, for example `events/...` or `functions/...`.
+- `panelInstanceId` identifies one Dockview panel instance. Multiple panels may show the same resource.
+- `groupId` is owned by Dockview and identifies the current editor group.
 
-## Drag & drop (VS Code `editorDropTarget`)
+Panel metadata carries the resource reference. Code must not derive a resource path from a panel or group id, and frontend graph projections must not be treated as proof that a backend graph session is loaded.
 
-Tab / sidebar graph / **entire editor group** drag uses **pointer position** inside `data-editor-content`:
+Dockview owns active group/panel and tab ordering. A Dockview activation is projected into the editor application flow, while application-initiated activation goes through `editorDockviewPort`. Panel close requests first pass through application dirty/save confirmation and only then call the Dockview close path.
 
-- Center dead zone (10% inset) → merge into group
-- Edge bands → directional split via `editorSplitHitTest.ts` (33% zones; 30% when dragging a group)
-- **Alt** (Win/Linux) / **Shift** (macOS) toggles `splitOnDragAndDrop` for the session
-- **Ctrl** (Win/Linux) / **Alt** (macOS) → copy instead of move
-- `openSideBySideDirection` biases split zones via `editorPartOptions.ts`
-- Self-drop guard: same group + single tab hides split overlay
+## Splitting and drag/drop
 
-**Group drag:** tab-strip trailing `data-group-drag-fill` filler (VS Code empty `tabsContainer` gap).
+Editor splits use Dockview directions (`top`, `bottom`, `left`, `right`) and `editorDockviewPort.split()`. Programmatic moves use `editorDockviewPort.move()`; native Dockview tab drag/drop remains authoritative for topology changes it performs.
 
-**Drop surface:** `readEditorGroupDropBounds` — content below tab bar when tabs exist; full shell when empty (`getOverlayOffsetHeight`).
+Sidebar graph-resource drops route through the application editor workflow and then request a Dockview split when a direction is present. Workspace drag payloads and guards stay centralized under `src/features/core/dnd/`.
 
-**Drag hover:** 1500ms over tab opens it (`tabBarDragHoverOpen.ts`, VS Code `DRAG_OVER_OPEN_TAB_THRESHOLD`).
+The editor and shell docks disable floating groups. Tauri, not Dockview, owns application windows.
 
-**Close last tab:** `prepareActiveGroupBeforeLastTabClose` pre-activates MRU group before grid removal.
+## Shell edge group
 
-**Pointer resolve:** unified in `editorDropTarget.ts` (removed duplicates from drag monitor + tabBarInsertPreview).
+Logs and Output live in one native Dockview edge group. That edge group owns:
 
-TabBar chrome (VS Code `prepareEditorActions`):
+- bottom/left/right placement;
+- splitter and expanded size;
+- active Logs/Output tab;
+- collapsed state and collapsed header height.
 
-- **Active** group (or `alwaysShowEditorActions`): split + close inline
-- **Inactive** group: `…` overflow menu
-- `pointerdown` on group shell / tab strip activates group before drag
+Collapsing the panel collapses only edge-group content and retains its tab bar. The outer Gridview editor leaf is not resized to emulate a collapsed panel. `panelDockviewPort` exposes the live collapsed snapshot and preserves the expanded size when moving or repeatedly collapsing the edge group; Zustand does not mirror that state.
 
-Settings: `openSideBySideDirection`, `splitOnDragAndDrop`, `alwaysShowEditorActions`, `closeEmptyGroups`, `splitSizing` in `EditorSettings`.
+## Persistence and restoration
 
-Group ops: `mergeEditorGroup`, `splitEditorGroupWithGroup`, copy variants in `editorGroupCommands.ts`; MRU in `recentEditorGroupIds`.
+`src/features/core/dockview/dockviewLayoutPersistence.ts` stores one window-scoped value under `yssbi-dockview-layout:<window-label>`:
 
+```text
+{
+  workbench: SerializedGridviewComponent,
+  shell: SerializedDockview,
+  editor: SerializedDockview,
+  preferences: non-placement workbench UI preferences
+}
+```
 
-Workbench chrome sashes and editor-grid sashes share `splitViewSizing.ts` / `sashResizeLogic.ts`, but commits are separate:
+Persistence serializes each live authority directly. Edge-group collapse is serialized only in the shell Dockview layout, never in `preferences`. Hydration restores the outer Gridview first, waits for the shell Dockview, restores the shell, waits for the nested editor Dockview, and finally restores the editor layout. A hydration generation guard prevents stale asynchronous restoration from applying preferences after reset.
 
-- **Chrome sash:** `resizePart` + `persistWorkbenchLayoutDebounced()`.
-- **Grid sash:** adjacent editor-group pair resize + `persistEditorGridDebounced()`.
+There is no alternate topology schema or compatibility reconstruction path. Reset restores the authorities' captured defaults and resets only the related non-layout UI preferences.
 
-**VS Code–aligned split/close pipeline** (single sizing model under `editorGridSizing.ts`):
+## Public-seam verification
 
-| Operation | Tree (`editorGridLayout`) | Sizing (`editorGridSizing`) |
-|-----------|---------------------------|-----------------------------|
-| `addView` / tab split | `splitEditorGroupInTree` | `applyEditorGridAddViewSizing` → halve target, then `commitEditorGridLayoutState` |
-| `removeView` / close empty group | `removeEditorGroupFromTree` | `applyEditorGridRemoveViewSizing` (merge reference or distribute) → `commitEditorGridLayoutState` |
-| Sash drag | — | `commitSplitPairSizes` (ratio `size` only) |
-| Chrome/viewport change | — | `commitEditorGridLayoutState` |
+Layout behavior is verified through the interfaces used by production callers:
 
-`applyEditorGridAddViewSizing` mirrors VS Code `SplitView.addView` auto/split/distribute. **`auto`** checks only **siblings in the same row/col parent** (`areViewsDistributed`: max − min ≤ **2%** on `size` weights). Inserting a view **halves the target allocation** instead of inserting a default `size: 1`.
-
-**`editorGridMemento` persists ratio weights only** — `computeEditorGridMementoSizes` derives weights from the live tree; hydrate restores viewport-independent flex ratios.
-
-## Deferred (not grid replacement)
-
-- P2: drag tab to group edge merge (center drop)
-- P2: auto-collapse empty group on last tab drag (partial — `removeEditorGroupFromTree` exists)
-- P3: tab overflow menu
+- `workbenchGridPort.test.ts` covers the outer Gridview adapter.
+- `dockviewEditorPort.test.ts` covers panel/resource identity, queued operations, events, restore sanitization, and close behavior.
+- `panelDockviewPort.test.ts` covers shell edge-group placement and collapse behavior.
+- `dockviewLayoutPersistence.test.ts` covers coordinated restoration and stale-hydration invalidation.
+- application Dockview tests cover synchronization at editor workflows rather than private layout helpers.

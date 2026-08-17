@@ -6,11 +6,11 @@ const mocks = vi.hoisted(() => ({
   editorReset: vi.fn(),
   panelUnbind: vi.fn(),
   panelWhenReady: vi.fn(),
+  panelGetSnapshot: vi.fn(),
   panelSetCollapsed: vi.fn(),
   panelSetPosition: vi.fn(),
   invalidateHydration: vi.fn(),
   persist: vi.fn(),
-  setPanelCollapsed: vi.fn(),
   resetUI: vi.fn(),
   resetGrid: vi.fn(),
   setPartSize: vi.fn(),
@@ -25,6 +25,7 @@ vi.mock('@/features/core/dockview', () => ({
   panelDockviewPort: {
     unbind: mocks.panelUnbind,
     whenReady: mocks.panelWhenReady,
+    getSnapshot: mocks.panelGetSnapshot,
     setCollapsed: mocks.panelSetCollapsed,
     setPosition: mocks.panelSetPosition,
     getPosition: vi.fn(() => 'bottom'),
@@ -32,7 +33,6 @@ vi.mock('@/features/core/dockview', () => ({
   },
   invalidateDockviewLayoutHydration: mocks.invalidateHydration,
   persistDockviewLayoutDebounced: mocks.persist,
-  persistDockviewLayoutNow: vi.fn(),
 }));
 
 vi.mock('@/features/core/workbench', () => ({
@@ -41,8 +41,6 @@ vi.mock('@/features/core/workbench', () => ({
   useWorkbenchStore: {
     getState: () => ({
       zenMode: false,
-      panelCollapsed: false,
-      setPanelCollapsed: mocks.setPanelCollapsed,
       resetWorkbenchUIState: mocks.resetUI,
     }),
   },
@@ -54,7 +52,7 @@ vi.mock('@/features/core/workbench', () => ({
 
 import {
   resetWorkbenchLayout,
-  setPanelCollapsed,
+  togglePanelCollapsed,
 } from './workbenchLayoutService';
 
 describe('workbench bottom panel layout', () => {
@@ -63,14 +61,19 @@ describe('workbench bottom panel layout', () => {
     mocks.panelWhenReady.mockResolvedValue(undefined);
     mocks.editorWhenReady.mockResolvedValue(undefined);
     mocks.editorReset.mockResolvedValue(undefined);
+    mocks.panelGetSnapshot.mockReturnValue({
+      revision: 1,
+      ready: true,
+      collapsed: false,
+    });
     mocks.panelSetPosition.mockResolvedValue(true);
     mocks.panelSetCollapsed.mockResolvedValue(true);
   });
 
   it('collapses through the Dockview edge group without resizing the workbench leaf', () => {
-    setPanelCollapsed(true);
+    togglePanelCollapsed();
 
-    expect(mocks.setPanelCollapsed).toHaveBeenCalledWith(true);
+    expect(mocks.panelGetSnapshot).toHaveBeenCalledOnce();
     expect(mocks.panelSetCollapsed).toHaveBeenCalledWith(true);
     expect(mocks.setPartSize).not.toHaveBeenCalled();
     expect(mocks.persist).toHaveBeenCalledOnce();

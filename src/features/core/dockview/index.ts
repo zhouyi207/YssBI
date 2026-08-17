@@ -21,6 +21,7 @@ export type {
   DockviewPanelInfo,
   DockviewPanelParams,
   DockviewPortSnapshot,
+  EditorSplitEdge,
   LayoutTabMetadata,
   MovePanelRequest,
   OpenPanelRequest,

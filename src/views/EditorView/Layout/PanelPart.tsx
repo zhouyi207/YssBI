@@ -18,7 +18,10 @@ import {
   type IDockviewPanelProps,
 } from 'dockview-react';
 
-import { panelDockviewPort } from '@/features/core/dockview';
+import {
+  panelDockviewPort,
+  useDockviewPortSnapshot,
+} from '@/features/core/dockview';
 import {
   getPanelViewLabelKey,
   PANEL_VIEW_IDS,
@@ -29,7 +32,6 @@ import { togglePanelCollapsed } from '@/features/core/layout/workbenchLayoutServ
 import {
   DEFAULT_WORKBENCH_PANEL_SIZE,
   WORKBENCH_PANEL_COLLAPSED_HEIGHT,
-  useWorkbenchStore,
 } from '@/features/core/workbench';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { LogPanelProvider } from '@/views/LogView/logPanelContext';
@@ -69,7 +71,7 @@ function PanelDockviewTab(props: IDockviewPanelHeaderProps) {
 
 function PanelDockviewActions(_: IDockviewHeaderActionsProps) {
   const { t } = useTranslation();
-  const panelCollapsed = useWorkbenchStore((state) => state.panelCollapsed);
+  const panelCollapsed = useDockviewPortSnapshot(panelDockviewPort).collapsed ?? false;
 
   return (
     <div className="flex h-full items-center px-1">
@@ -93,7 +95,6 @@ function PanelDockviewActions(_: IDockviewHeaderActionsProps) {
 function initializePanelDock(
   api: DockviewApi,
   titleFor: (viewId: PanelViewId) => string,
-  collapsed: boolean,
 ): void {
   const editorHost = api.addPanel({
     id: WORKBENCH_EDITOR_HOST_PANEL_ID,
@@ -107,7 +108,7 @@ function initializePanelDock(
     initialSize: DEFAULT_WORKBENCH_PANEL_SIZE,
     minimumSize: WORKBENCH_PANEL_COLLAPSED_HEIGHT,
     collapsedSize: WORKBENCH_PANEL_COLLAPSED_HEIGHT,
-    collapsed,
+    collapsed: false,
   });
   const logs = api.addPanel({
     id: 'logs',
@@ -123,14 +124,6 @@ function initializePanelDock(
     position: { referencePanel: logs.id, direction: 'within' },
   });
   editorHost.api.setActive();
-  if (collapsed) panelGroup.collapse();
-}
-
-function syncPanelCollapsedProjection(): void {
-  const collapsed = panelDockviewPort.isCollapsed();
-  if (collapsed === undefined) return;
-  const state = useWorkbenchStore.getState();
-  if (state.panelCollapsed !== collapsed) state.setPanelCollapsed(collapsed);
 }
 
 function preventFixedPanelClose(event: KeyboardEvent<HTMLDivElement>): void {
@@ -156,13 +149,9 @@ export function PanelPart({ editorComponent: EditorComponent }: PanelPartProps) 
     initializePanelDock(
       event.api,
       (viewId) => t(getPanelViewLabelKey(viewId)),
-      useWorkbenchStore.getState().panelCollapsed,
     );
     panelDockviewPort.bind(event.api);
-    syncPanelCollapsedProjection();
   }, [t]);
-
-  useEffect(() => panelDockviewPort.subscribe(syncPanelCollapsedProjection), []);
 
   useEffect(() => () => {
     const boundApi = apiRef.current;

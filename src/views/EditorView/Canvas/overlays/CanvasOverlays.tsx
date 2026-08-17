@@ -1,130 +1,122 @@
-import React from "react";
-import { createPortal } from "react-dom";
-import { useTranslation } from "react-i18next";
-import type { LayoutTab } from "@/shared/types";
-import { useEditorGroup } from "@/features/application/editor";
-import { useGraphDataStore } from '@/features/core/dataStore';
-import { getOverlayPortalRoot } from "@/shared/ui/overlayPortalRoot";
-
-import { useCanvasOverlayHandlers, type VariableDropMenu } from "@/features/application/editor";
-import { ContextMenu } from "@/shared/ui/contextMenu";
-import { NodePalette } from "../../Layout/NodePalette";
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
-import { PinResultSearch } from "./PinResultSearchPalette";
-import { CanvasExecutionToolbar } from "./CanvasExecutionToolbar";
+import { getOverlayPortalRoot } from '@/shared/ui/overlayPortalRoot';
+import { ContextMenu } from '@/shared/ui/contextMenu';
+import { NodePalette } from '../../Layout/NodePalette';
+import { PinResultSearch } from './PinResultSearchPalette';
+import { CanvasExecutionToolbar } from './CanvasExecutionToolbar';
 
-export default function CanvasOverlays({
-    canvasElementRef,
-    variableDropMenu,
-    setVariableDropMenu,
-    onVariableDropGet,
-    onVariableDropSet,
-}: {
-    canvasElementRef: React.RefObject<HTMLDivElement | null>;
-    variableDropMenu: VariableDropMenu | null;
-    setVariableDropMenu: (val: VariableDropMenu | null) => void;
-    onVariableDropGet: (menu: VariableDropMenu) => void | Promise<void>;
-    onVariableDropSet: (menu: VariableDropMenu) => void | Promise<void>;
-}) {
-    const { t } = useTranslation();
-    const {
-        contextMenu,
-        setContextMenu,
-        setPendingConnection,
-        pendingConnection,
-        tabs,
-        activeTabId,
-        groupId,
-        executeGraph,
-        cancelGraphExecution,
-        clearGraphArtifacts,
-    } = useEditorGroup({ withCanvasUi: true });
+export type CanvasOverlayGraphModel =
+  | { kind: 'event'; graphPath: string }
+  | { kind: 'function'; graphPath: string }
+  | { kind: 'unavailable' };
 
-    const {
-        handleNodePaletteSelect,
-    } = useCanvasOverlayHandlers({
-        canvasElementRef,
-        groupId,
-        activeTabId,
-        pendingConnection,
-        setContextMenu,
-        setPendingConnection,
-    });
-
-    const tabId = activeTabId ?? "";
-    const graphRevision = useGraphDataStore((state) => activeTabId
-        ? state.graphEntities[activeTabId]?.sourceRevision ?? null
-        : null);
-    const sourcePort = pendingConnection && 'address' in pendingConnection
-        ? (pendingConnection as typeof pendingConnection & { address?: PortAddressDto }).address ?? null
-        : null;
-    const onPaletteSelect = (descriptor: NodeCreationDescriptor, locale: string) => {
-        if (contextMenu) void handleNodePaletteSelect(descriptor, locale, contextMenu);
+export type CanvasPaletteOverlayModel =
+  | { kind: 'hidden' }
+  | {
+      kind: 'visible';
+      x: number;
+      y: number;
+      graphPath: string | null;
+      graphRevision: number | null;
+      sourcePort: PortAddressDto | null;
+      onSelect: (descriptor: NodeCreationDescriptor, locale: string) => void;
     };
 
-    const activeTabType = tabs.find((t: LayoutTab) => t.id === activeTabId)?.type;
-    const isEventTab = activeTabType === "event";
+export type CanvasVariableOverlayModel =
+  | { kind: 'hidden' }
+  | {
+      kind: 'visible';
+      x: number;
+      y: number;
+      variableName: string;
+      onGet: () => void;
+      onSet: () => void;
+      onClose: () => void;
+    };
 
-    return (
-        <>
-            {isEventTab && (
-                <div className="absolute left-3 top-3 z-40">
-                    <PinResultSearch graphPath={tabId} />
-                </div>
-            )}
+export type CanvasExecutionOverlayModel =
+  | { kind: 'hidden' }
+  | {
+      kind: 'event';
+      graphPath: string;
+      onExecute: () => void;
+      onCancelExecution: () => void;
+      onClearArtifacts: () => void;
+    };
 
-            {isEventTab && (
-                <CanvasExecutionToolbar
-                    graphPath={tabId}
-                    onExecute={() => executeGraph(tabId)}
-                    onCancelExecution={() => void cancelGraphExecution(tabId)}
-                    onClearArtifacts={() => void clearGraphArtifacts(tabId)}
-                />
-            )}
+export interface CanvasOverlaysModel {
+  graph: CanvasOverlayGraphModel;
+  palette: CanvasPaletteOverlayModel;
+  variable: CanvasVariableOverlayModel;
+  execution: CanvasExecutionOverlayModel;
+}
 
-            {/* ================= Node Palette ================= */}
-            {contextMenu?.visible && createPortal(
-                <div className="menu-container">
-                    <NodePalette
-                        x={contextMenu.x}
-                        y={contextMenu.y}
-                        graphPath={activeTabId}
-                        graphRevision={graphRevision}
-                        sourcePort={sourcePort}
-                        onSelect={onPaletteSelect}
-                    />
-                </div>,
-                getOverlayPortalRoot(),
-            )}
+export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }) {
+  const { t } = useTranslation();
+  const { graph, palette, variable, execution } = model;
 
-            {/* ================= Variable Drop Menu ================= */}
-            {variableDropMenu && (
-                <ContextMenu
-                    position={{ x: variableDropMenu.x, y: variableDropMenu.y }}
-                    sections={[
-                        {
-                            items: [
-                                {
-                                    id: "get-variable",
-                                    label: t("canvas.getVariable", { name: variableDropMenu.variableName }),
-                                    onClick: () => void onVariableDropGet(variableDropMenu),
-                                },
-                            ],
-                        },
-                        {
-                            items: [
-                                {
-                                    id: "set-variable",
-                                    label: t("canvas.setVariable", { name: variableDropMenu.variableName }),
-                                    onClick: () => void onVariableDropSet(variableDropMenu),
-                                },
-                            ],
-                        },
-                    ]}
-                    onClose={() => setVariableDropMenu(null)}
-                />
-            )}
-        </>
-    );
+  return (
+    <>
+      {graph.kind === 'event' ? (
+        <div className="absolute left-3 top-3 z-40">
+          <PinResultSearch graphPath={graph.graphPath} />
+        </div>
+      ) : null}
+
+      {execution.kind === 'event' ? (
+        <CanvasExecutionToolbar
+          graphPath={execution.graphPath}
+          onExecute={execution.onExecute}
+          onCancelExecution={execution.onCancelExecution}
+          onClearArtifacts={execution.onClearArtifacts}
+        />
+      ) : null}
+
+      {palette.kind === 'visible'
+        ? createPortal(
+            <div className="menu-container">
+              <NodePalette
+                x={palette.x}
+                y={palette.y}
+                graphPath={palette.graphPath}
+                graphRevision={palette.graphRevision}
+                sourcePort={palette.sourcePort}
+                onSelect={palette.onSelect}
+              />
+            </div>,
+            getOverlayPortalRoot(),
+          )
+        : null}
+
+      {variable.kind === 'visible' ? (
+        <ContextMenu
+          position={{ x: variable.x, y: variable.y }}
+          sections={[
+            {
+              items: [
+                {
+                  id: 'get-variable',
+                  label: t('canvas.getVariable', { name: variable.variableName }),
+                  onClick: variable.onGet,
+                },
+              ],
+            },
+            {
+              items: [
+                {
+                  id: 'set-variable',
+                  label: t('canvas.setVariable', { name: variable.variableName }),
+                  onClick: variable.onSet,
+                },
+              ],
+            },
+          ]}
+          onClose={variable.onClose}
+        />
+      ) : null}
+    </>
+  );
 }

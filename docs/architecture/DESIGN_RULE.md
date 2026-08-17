@@ -54,7 +54,7 @@ src/
 │   │   └─ variable/    # 变量纯逻辑
 │   │
 │   ├─ application/     # 应用层：用例编排与 Hook 协调
-│   │   ├─ editor/      # 编辑器用例（EditorSessionProvider、useEditorSession、useEditorGroup、keyboard）
+│   │   ├─ editor/      # 编辑器用例（EditorSessionProvider、useEditorCanvas、keyboard）
 │   │   ├─ project/     # 项目用例（save/load/execute、useProjectSync）
 │   │   ├─ menubar/     # 菜单栏用例
 │   │   └─ initialization/ # 应用初始化
@@ -102,7 +102,7 @@ src/
 |------|-----------|------|
 | 视图组件 | `PascalCase.tsx` | `Canvas.tsx`、`NodeContainer.tsx`、`PinInput.tsx` |
 | 视图目录 | `PascalCase/` | `EditorView/`、`Canvas/`、`Nodes/` |
-| Hook | `useXxx.ts`（camelCase） | `useEditorSession.ts`、`useEditorGroup.ts` |
+| Hook | `useXxx.ts`（camelCase） | `useEditorCanvas.ts`、`useCanvasViewport.ts` |
 | Store | `xxxStore.ts`（camelCase） | `graphDataStore.ts`、`variableStore.ts` |
 | Service | `xxxService.ts`（camelCase） | `connectionService.ts`、`graphService.ts` |
 | 类型文件 | `camelCase.ts` | `graph.ts`、`node.ts`、`editor.ts` |
@@ -113,7 +113,7 @@ src/
 | 分类 | 命名约定 | 示例 |
 |------|---------|------|
 | React 组件 | `PascalCase` | `Canvas`、`NodeContainer`、`EditorWindow` |
-| 自定义 Hook | `use` + `PascalCase` | `useEditorSession`、`useEditorGroup`、`useCanvasViewport`、`useEditorOperations` |
+| 自定义 Hook | `use` + `PascalCase` | `useEditorCanvas`、`useCanvasViewport`、`useEditorOperations` |
 | Zustand Store | `use` + `PascalCase` + `Store` | `useGraphDataStore`、`useEditorStore`、`useVariableStore` |
 | Store 接口 | `PascalCase` + `Store` | `GraphDataStore`、`EditorStore`、`VariableStore` |
 | Service 类 | `PascalCase` + `Service` | `ConnectionService`、`GraphService`、`NodeService` |
@@ -185,7 +185,7 @@ src/
 | InfoView 统计数值展示 | [§2.9](#29-infoview-统计数值展示) |
 | PlotView D3 / 按列 scale | [§2.10](#210-plotview-d3-工具层) |
 | Tauri / WebView 平台 glue | [§2.11](#211-tauri--webview-平台类型) |
-| EditorSession 显式契约 | [§2.12](#212-editorsession-显式契约) |
+| Editor caller-shaped 契约 | [§2.12](#212-editor-caller-shaped-显式契约) |
 | Info 报告 IPC 与类型分层 | [§2.13](#213-info-报告-ipc-边界与类型分层) |
 | Graph store hydrate | [§2.14](#214-graph-store-hydrate) |
 | 节点实例参数 / 结构性 Undo | [§3.8](#38-节点实例参数与结构性-undo-dto) |
@@ -233,60 +233,60 @@ src/
 - `devHmrIpc` 用 `Set<object>` 登记 Channel，dispose 时经 `clearChannelMessageHandler` 单点拆除，**禁止**在 `trackChannel` 路径使用 `as unknown as`。
 - `data-tauri-drag-region` 为 Tauri 约定属性，继续用 HTML `data-*` 即可，无需 cast。
 
-### 2.12 EditorSession 显式契约
+### 2.12 Editor caller-shaped 显式契约
 
-`useEditorSessionValue` 组装多路 application hook，若继续用 `ReturnType<typeof useEditorSessionValue>` 或在新 hook 中 `...session` 透传，Canvas / Detail / Sidebar 会隐式依赖整包 session，字段增删无法编译期约束。
+`EditorSessionProvider` 只提供稳定命令。资源 consumer 在真实使用位置通过 `useEditorSessionResources()` 直接订阅 `useEditorCollections()`；Canvas 则在自己的 caller seam 使用 `useEditorCanvas({ mode })` 获取实际需要的四个窄切片，避免资源或命令新增时扩大订阅面。
 
 #### 2.12.1 类型分层
 
 | 类型 | 文件 | 职责 |
 | --- | --- | --- |
-| `EditorSession` | `editorSessionTypes.ts` | Provider 全窗口契约（state + layout bindings + 各 command slice 交集） |
-| `EditorGroupSession` | 同上 | `EditorSession` + 当前 group 工作区 + 可选 canvas 交互 |
-| `PickEditorSession<K>` | 同上 | 按需 `Pick` 工具类型 |
-| 命名切片 | 同上 | `EditorSessionResourcesSlice`、`EditorSessionDetailActionsSlice`、`EditorSessionSyncCallbacksSlice` 等 |
+| `EditorSessionCommands` | `editorSessionCommands.ts` | layout/history/canvas/tab/worksheet/project/resource/node command slice 的显式交集 |
+| `EditorCanvasSession` | `editorSessionTypes.ts` | 仅 Canvas 使用的 `commands` / `workspace` / `resources` / `interaction` |
+| 命名切片 | 同上 | `EditorSessionResourcesSlice`、`EditorSessionDetailActionsSlice`、`EditorCanvas*Slice` 等 |
 
-Command slice 与各 application hook **1:1**（如 `EditorSessionTabActions` ↔ `useTabManagement`），禁止在 `editorSessionTypes` 外再定义平行 session 类型。
+Command slice 与各 application hook **1:1**（如 `EditorSessionTabActions` ↔ `useTabManagement`）。`EditorSessionCommands` 必须使用正向交集，禁止从宽 state 类型排除字段来猜测“剩余命令”。
 
 #### 2.12.2 Hook 与挂载约定
 
 | Hook | 暴露范围 | 挂载位置 |
 | --- | --- | --- |
-| `EditorSessionProvider` | 单例 session 上下文 | `EditorWindow` 根 |
-| `useEditorSession()` | 完整 `EditorSession` | Provider 内任意 hook / 组件 |
-| `useEditorSessionResources()` | `events` / `functions` / `variables` / `dataframes` | Detail、侧栏资源列表 |
+| `EditorSessionProvider` | 稳定 command context | `EditorWindow` 根 |
+| `useEditorSessionCommandsContext()` | 显式 command slice 交集 | 需要窗口命令的 application caller |
+| `useEditorSessionResources()` | 在 consumer 处直接订阅 `events` / `functions` / `variables` / `dataframes` | Detail、侧栏资源列表 |
 | `useEditorSessionDetailActions()` | `updateVariable` / `updateDataFrame` | Detail 面板 |
-| `pickEditorSessionSyncCallbacks(session)` | ProjectSync 事件回调子集 | `useProjectSync` 等 |
-| `useEditorGroup()` | `EditorGroupSession`（默认无 pointer loop） | Workspace、Sidebar、Menubar、Overlays |
-| `useEditorGroup({ withCanvasInteraction: true })` | 含 canvas pointer loop | **仅** `Canvas.tsx` |
+| `useEditorCanvas({ mode })` | Canvas 四个 caller-shaped 切片 | **仅** `Canvas.tsx` |
 
-- `useEditor()` 已删除；Provider 外**禁止**再构建独立 editor session。
-- `composeEditorGroupSession` 是 **唯一** 允许的 session 合并点（`useEditorGroup` 内部使用 `Object.assign`，禁止在其他 hook 重复 spread 合并）。
+- `mode: 'preview'` 保留首次 pointerdown 的同步 group activation 顺序，但不挂载全局 pointer loop、drop handler 或 `CanvasOverlays`；只有 `mode: 'interactive'` 挂载这些交互。
+- `CanvasOverlays` 只接收 Canvas 构造的 `graph` / `palette` / `variable` / `execution` 判别模型，不调用任何 editor session hook。
+- Group 拓扑、激活态与 tab placement 继续直接来自 Dockview；caller-shaped hook 不引入 topology store、port、intent bus 或镜像状态。
 
 #### 2.12.3 新 hook 依赖规则
 
-- **必须**：声明参数/返回为命名切片类型，或调用 `useEditorSessionResources` 等窄接口 hook。
-- **禁止**：`return { ...session, extra }` 向子树透传未声明字段。
-- **禁止**：`Pick` 整个 `EditorSession` 再解构——应使用已定义的 slice 类型或新增 slice。
-- Canvas 交互类型（`ConnectPinsHandler` 三参数、`activeGroupIdRef` 等）以 `editorSessionTypes.ts` 为准，避免各组件自行 widen。
+- **必须**：声明参数/返回为命名切片类型，或调用与 caller 匹配的窄 hook。
+- Canvas 的 `variables` / `functions` 分别使用现有 variable store selector 与 `useFunctionCatalog`；不得为了 Canvas 订阅 `events`、`dataframes` 或 `groups`。
+- Canvas 返回值保持 `commands` / `workspace` / `resources` / `interaction` 分组，禁止 spread 宽聚合对象。
+- 交互/展示组合使用显式 `mode` 判别联合；禁止 `interactive: boolean` 加一组可选 callback 表达非法状态。
 
 #### 2.12.4 反模式
 
 | 反模式 | 原因 |
 | --- | --- |
-| `type EditorSession = ReturnType<typeof useEditorSessionValue>` | 推断链过长，切片无法复用 |
-| 新 hook `...session` 透传 | 隐式依赖全量 API，重构无编译保护 |
-| 非 Canvas 路径 `withCanvasInteraction: true` | pointer loop 重复挂载、手势冲突 |
-| Provider 外 `useEditorGroup` / 自建 session | 破坏单例与 tab/group 一致性 |
+| broad group/session 聚合 hook | caller 被迫学习并订阅无关字段 |
+| 从宽 state 类型排除字段来定义 commands | 新增 state 字段可能静默进入命令接口 |
+| `CanvasOverlays` 再调用 session hook | 重复订阅并破坏 Canvas 单一组装点 |
+| `interactive?: boolean` + optional callbacks | 类型允许 preview 携带命令或 interactive 缺少命令 |
+| 在 Zustand 镜像 group/tab topology | 与 Dockview authority 形成双源 |
 
 #### 2.12.5 相关实现位置
 
 | 职责 | 模块 |
 | --- | --- |
 | 类型契约 | `features/application/editor/editorSessionTypes.ts` |
-| 窄接口 hook | `features/application/editor/useEditorSessionSlices.ts` |
-| Session 组装 | `features/application/editor/useEditorSessionValue.ts` |
-| Group 包装 | `features/application/editor/useEditorGroup.ts` |
+| Command 交集 | `features/application/editor/editorSessionCommands.ts` |
+| 窄 session hook | `features/application/editor/useEditorSessionSlices.ts` |
+| Canvas caller seam | `features/application/editor/useEditorCanvas.ts` |
+| Overlay 判别模型 | `views/EditorView/Canvas/overlays/CanvasOverlays.tsx` |
 | 使用说明 | `features/application/editor/README.md` |
 
 ### 2.13 Info 报告 IPC 边界与类型分层
