@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/services/ipc";
 import type {
     ColumnDistribution,
     ColumnStats,
@@ -34,21 +34,21 @@ export class DatabaseService {
         operationId: string,
         engine: LoadDatabaseEngineSpec,
     ): Promise<DatabaseMutationCommandResult<LoadDatabaseResult>> {
-        return await invoke("load_database", { projectInstanceId, operationId, engine });
+        return await invokeCommand("load_database", { projectInstanceId, operationId, engine });
     }
 
     /**
      * 获取数据库元数据（name, columns, rowCount, columnCount）
      */
     static async getDatabaseMeta(projectInstanceId: string, id: string): Promise<LoadDatabaseResult> {
-        return await invoke("get_database_meta", { projectInstanceId, id });
+        return await invokeCommand("get_database_meta", { projectInstanceId, id });
     }
 
     /**
      * 列出 SQLite 数据库中的表
      */
     static async listSqliteTables(dbPath: string): Promise<string[]> {
-        return await invoke("list_sqlite_tables", { dbPath });
+        return await invokeCommand("list_sqlite_tables", { dbPath });
     }
 
     /**
@@ -57,14 +57,14 @@ export class DatabaseService {
      * @param connectionString 连接字符串，如 postgres://user:pass@host:5432/db 或 mysql://...
      */
     static async listSqlTables(engine: string, connectionString: string): Promise<string[]> {
-        return await invoke("list_sql_tables", { engine, connectionString });
+        return await invokeCommand("list_sql_tables", { engine, connectionString });
     }
 
     /**
      * 列出 Excel 文件中的 Sheet
      */
     static async listExcelSheets(filePath: string): Promise<string[]> {
-        return await invoke("list_excel_sheets", { filePath });
+        return await invokeCommand("list_excel_sheets", { filePath });
     }
 
     /**
@@ -76,7 +76,7 @@ export class DatabaseService {
         expectedRevision: number,
         id: string,
     ): Promise<DatabaseMutationCommandResult<null>> {
-        return await invoke("delete_database", {
+        return await invokeCommand("delete_database", {
             projectInstanceId, operationId, expectedRevision, id,
         });
     }
@@ -91,7 +91,7 @@ export class DatabaseService {
         id: string,
         name: string,
     ): Promise<DatabaseMutationCommandResult<null>> {
-        return await invoke("rename_database", {
+        return await invokeCommand("rename_database", {
             projectInstanceId, operationId, expectedRevision, id, name,
         });
     }
@@ -105,7 +105,7 @@ export class DatabaseService {
         offset: number,
         limit: number,
     ): Promise<DatabaseRowsResult> {
-        const payload = await invoke<{ rows?: DatabaseRow[]; rowIds?: number[] } | DatabaseRow[]>(
+        const payload = await invokeCommand<{ rows?: DatabaseRow[]; rowIds?: number[] } | DatabaseRow[]>(
             "get_database_rows",
             { projectInstanceId, id, offset, limit },
         );
@@ -122,7 +122,7 @@ export class DatabaseService {
      * 获取数据库所有列的统计信息
      */
     static async getColumnStats(projectInstanceId: string, id: string): Promise<ColumnStats[]> {
-        return await invoke("get_column_stats", { projectInstanceId, id });
+        return await invokeCommand("get_column_stats", { projectInstanceId, id });
     }
 
     /**
@@ -132,11 +132,11 @@ export class DatabaseService {
         projectInstanceId: string,
         id: string,
     ): Promise<ColumnDistribution[]> {
-        return await invoke("get_column_distribution", { projectInstanceId, id });
+        return await invokeCommand("get_column_distribution", { projectInstanceId, id });
     }
 
     static async getDatasetOverview(projectInstanceId: string, id: string): Promise<DatasetOverview> {
-        return await invoke("get_dataset_overview", { projectInstanceId, id });
+        return await invokeCommand("get_dataset_overview", { projectInstanceId, id });
     }
 
     static async editCell(
@@ -149,7 +149,7 @@ export class DatabaseService {
         value: unknown,
         rowId?: number | null,
     ): Promise<DatabaseMutationCommandResult<EditState>> {
-        return await invoke("edit_cell", {
+        return await invokeCommand("edit_cell", {
             projectInstanceId, operationId, expectedRevision, id, row, colName, value,
             rowId: rowId ?? null,
         });
@@ -162,7 +162,7 @@ export class DatabaseService {
         id: string,
         index?: number,
     ): Promise<DatabaseMutationCommandResult<EditState>> {
-        return await invoke("add_row", {
+        return await invokeCommand("add_row", {
             projectInstanceId, operationId, expectedRevision, id, index: index ?? null,
         });
     }
@@ -175,7 +175,7 @@ export class DatabaseService {
         indices: number[],
         rowIds?: number[],
     ): Promise<DatabaseMutationCommandResult<EditState>> {
-        return await invoke("delete_rows", {
+        return await invokeCommand("delete_rows", {
             projectInstanceId, operationId, expectedRevision, id, indices,
             rowIds: rowIds && rowIds.length > 0 ? rowIds : null,
         });
@@ -189,7 +189,7 @@ export class DatabaseService {
         name: string,
         dtype: string,
     ): Promise<DatabaseMutationCommandResult<EditState>> {
-        return await invoke("add_column", {
+        return await invokeCommand("add_column", {
             projectInstanceId, operationId, expectedRevision, id, name, dtype,
         });
     }
@@ -201,7 +201,7 @@ export class DatabaseService {
         id: string,
         name: string,
     ): Promise<DatabaseMutationCommandResult<EditState>> {
-        return await invoke("delete_column", {
+        return await invokeCommand("delete_column", {
             projectInstanceId, operationId, expectedRevision, id, name,
         });
     }
@@ -215,7 +215,7 @@ export class DatabaseService {
         newDtype: string,
         force = false,
     ): Promise<DatabaseMutationCommandResult<EditState>> {
-        return await invoke("cast_column", {
+        return await invokeCommand("cast_column", {
             projectInstanceId, operationId, expectedRevision, id, colName, newDtype, force,
         });
     }
@@ -228,7 +228,7 @@ export class DatabaseService {
         oldName: string,
         newName: string,
     ): Promise<DatabaseMutationCommandResult<EditState>> {
-        return await invoke("rename_column", {
+        return await invokeCommand("rename_column", {
             projectInstanceId, operationId, expectedRevision, id, oldName, newName,
         });
     }
@@ -239,7 +239,7 @@ export class DatabaseService {
         expectedRevision: number,
         id: string,
     ): Promise<DatabaseMutationCommandResult<EditState>> {
-        return await invoke("undo_edit", { projectInstanceId, operationId, expectedRevision, id });
+        return await invokeCommand("undo_edit", { projectInstanceId, operationId, expectedRevision, id });
     }
 
     static async redoEdit(
@@ -248,7 +248,7 @@ export class DatabaseService {
         expectedRevision: number,
         id: string,
     ): Promise<DatabaseMutationCommandResult<EditState>> {
-        return await invoke("redo_edit", { projectInstanceId, operationId, expectedRevision, id });
+        return await invokeCommand("redo_edit", { projectInstanceId, operationId, expectedRevision, id });
     }
 
     static async saveDatabaseChanges(
@@ -257,7 +257,7 @@ export class DatabaseService {
         expectedRevision: number,
         id: string,
     ): Promise<DatabaseMutationCommandResult<EditState>> {
-        return await invoke("save_database_changes", {
+        return await invokeCommand("save_database_changes", {
             projectInstanceId, operationId, expectedRevision, id,
         });
     }
@@ -268,10 +268,10 @@ export class DatabaseService {
         path: string,
         format: string,
     ): Promise<void> {
-        await invoke("export_database", { projectInstanceId, id, path, format });
+        await invokeCommand("export_database", { projectInstanceId, id, path, format });
     }
 
     static async getEditState(projectInstanceId: string, id: string): Promise<EditState> {
-        return await invoke("get_edit_state", { projectInstanceId, id });
+        return await invokeCommand("get_edit_state", { projectInstanceId, id });
     }
 }

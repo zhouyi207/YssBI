@@ -1,9 +1,7 @@
 export interface ValidationIssueDTO {
   code: string;
   severity: 'error' | 'warning';
-  message: string;
-  path?: string;
-  hint?: string;
+  path: string;
 }
 
 export interface ValidationReportDTO {

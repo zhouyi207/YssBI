@@ -5,6 +5,7 @@ import { save } from '@tauri-apps/plugin-dialog';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { DatabaseService } from '@/services/database/databaseService';
+import { normalizeIpcError } from '@/services/ipc';
 import { logger } from '@/utils/appLogger';
 import { useDatabaseStore } from '@/features/core/dataStore';
 import { useEditActions } from './useEditActions';
@@ -46,7 +47,11 @@ describe('useEditActions project lifecycle ownership', () => {
     root = createRoot(host);
     function Harness() {
       actions = useEditActions({
-        selectedDfId: 'sales', columns: [], loadedRows: [], loadedRowIds: [], rowOffset: 0,
+        selectedDfId: 'sales',
+        columns: [{ name: 'amount', type: 'Int64' }],
+        loadedRows: [[1]],
+        loadedRowIds: [11],
+        rowOffset: 0,
         reloadAllData,
       });
       return null;
@@ -57,6 +62,28 @@ describe('useEditActions project lifecycle ownership', () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+  });
+
+  it('returns a typed cell failure without exposing backend details', async () => {
+    vi.spyOn(DatabaseService, 'editCell').mockRejectedValue(normalizeIpcError(
+      'edit_database_cell',
+      {
+        code: 'database_cell_value_invalid',
+        details: { debug: 'sensitive database detail' },
+        incidentId: 'incident-cell-42',
+      },
+    ));
+
+    const outcome = await actions.commitCellValueOutcome(0, 0, 2);
+
+    expect(outcome).toEqual({
+      status: 'failed',
+      error: {
+        code: 'database_cell_value_invalid',
+        incidentId: 'incident-cell-42',
+      },
+    });
+    expect(JSON.stringify(outcome)).not.toContain('sensitive database detail');
   });
 
   it('does not report a delayed export completion to a replacement project', async () => {

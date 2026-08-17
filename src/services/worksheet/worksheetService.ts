@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '@/services/ipc';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import type { PlotColumnPairPayload } from '@/shared/types/domain/worksheet';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
@@ -12,7 +12,7 @@ export class WorksheetService {
     name: string,
     databaseId?: string,
   ): Promise<ResourceMutationResultDto> {
-    return parseResourceMutationResultDto(await invoke<unknown>('create_worksheet', {
+    return parseResourceMutationResultDto(await invokeCommand<unknown>('create_worksheet', {
       projectInstanceId,
       operationId,
       name,
@@ -26,7 +26,7 @@ export class WorksheetService {
     worksheetPath: string,
     expectedRevision: number,
   ): Promise<ResourceMutationResultDto> {
-    return parseResourceMutationResultDto(await invoke<unknown>('duplicate_worksheet', {
+    return parseResourceMutationResultDto(await invokeCommand<unknown>('duplicate_worksheet', {
       projectInstanceId,
       operationId,
       worksheetPath,
@@ -38,7 +38,7 @@ export class WorksheetService {
     projectInstanceId: string,
     worksheetPath: string,
   ): Promise<WorksheetDocument> {
-    return await invoke('load_worksheet', { projectInstanceId, worksheetPath });
+    return await invokeCommand('load_worksheet', { projectInstanceId, worksheetPath });
   }
 
   static async saveWorksheet(
@@ -48,7 +48,7 @@ export class WorksheetService {
     expectedRevision: number,
     document: WorksheetDocument,
   ): Promise<ResourceMutationResultDto> {
-    return parseResourceMutationResultDto(await invoke<unknown>('save_worksheet', {
+    return parseResourceMutationResultDto(await invokeCommand<unknown>('save_worksheet', {
       projectInstanceId,
       operationId,
       worksheetPath,
@@ -65,7 +65,7 @@ export class WorksheetService {
     newName: string,
     lifecycleToken: number,
   ): Promise<ResourceMutationResultDto> {
-    return parseResourceMutationResultDto(await invoke<unknown>('rename_worksheet_resource', {
+    return parseResourceMutationResultDto(await invokeCommand<unknown>('rename_worksheet_resource', {
       projectInstanceId,
       operationId,
       worksheetPath,
@@ -81,7 +81,7 @@ export class WorksheetService {
     worksheetPath: string,
     expectedRevision: number,
   ): Promise<ResourceMutationResultDto> {
-    return parseResourceMutationResultDto(await invoke<unknown>('remove_worksheet', {
+    return parseResourceMutationResultDto(await invokeCommand<unknown>('remove_worksheet', {
       projectInstanceId,
       operationId,
       worksheetPath,
@@ -96,7 +96,7 @@ export class WorksheetService {
     yCol: string,
     maxPoints?: number,
   ): Promise<PlotColumnPairPayload> {
-    return await invoke('get_plot_column_pair', {
+    return await invokeCommand('get_plot_column_pair', {
       projectInstanceId,
       databaseId,
       xCol,

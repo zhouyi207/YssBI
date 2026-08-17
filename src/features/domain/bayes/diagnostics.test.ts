@@ -66,21 +66,43 @@ describe('Bayesian diagnostics assessment', () => {
   it('reports unavailable treedepth diagnostics as unknown instead of zero', () => {
     const assessment = evaluateInferenceDiagnostics(result([summary()], { maxTreedepthHits: null }));
     expect(assessment.metrics.find(metric => metric.key === 'max_treedepth_hits')).toMatchObject({
-      label: 'Max treedepth hits: unavailable',
       severity: 'unknown',
     });
   });
 
-  it('treats and describes every backend warning in the domain assessment', () => {
-    const warnings = [{ code: 'BACKEND_SPECIFIC', message: 'check this result' }];
-    const assessment = evaluateInferenceDiagnostics(result([summary()], { warnings }));
-    expect(assessment.severity).toBe('warning');
-    expect(assessment.warnings).toMatchObject([{ code: 'BACKEND_SPECIFIC', explanation: 'check this result' }]);
+  it('returns stable suggestion codes instead of presentation prose', () => {
+    expect(evaluateInferenceDiagnostics(result([summary({ essBulk: 50 })])).suggestions)
+      .toEqual(['increase_sampling', 'inspect_plots']);
+    expect(evaluateInferenceDiagnostics(result([summary({ rhat: null })])).suggestions)
+      .toEqual(['check_metrics', 'save_samples']);
   });
 
-  it('describes stable backend warning codes', () => {
-    const description = describeDiagnosticWarning({ code: 'RHAT_TOO_HIGH', message: 'raw', parameter: 'a' });
-    expect(description.title).toContain('a');
-    expect(description.suggestion).toContain('warmup');
+  it('treats unknown structured backend warnings without relying on backend prose', () => {
+    const warnings = [{
+      code: 'backend_specific',
+      metric: 'ess_bulk' as const,
+      value: 12,
+      threshold: 100,
+      parameter: 'beta',
+    }];
+    const assessment = evaluateInferenceDiagnostics(result([summary()], { warnings }));
+    expect(assessment.severity).toBe('warning');
+    expect(assessment.warnings).toMatchObject([{
+      code: 'backend_specific',
+      metric: 'ess_bulk',
+      value: 12,
+      threshold: 100,
+    }]);
+  });
+
+  it('describes stable lower-snake-case warning codes', () => {
+    const description = describeDiagnosticWarning({
+      code: 'rhat_too_high',
+      metric: 'rhat',
+      value: 1.2,
+      threshold: 1.01,
+      parameter: 'a',
+    });
+    expect(description).toMatchObject({ code: 'rhat_too_high', parameter: 'a', metric: 'rhat' });
   });
 });

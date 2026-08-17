@@ -3,7 +3,7 @@
 use crate::application::hypothesis::{
     HypothesisTestInput, HypothesisTestOutput, run_hypothesis_test,
 };
-use crate::error::AppError;
+use crate::error::CommandError;
 use serde::{Deserialize, Serialize};
 
 /// 假设检验请求
@@ -69,8 +69,8 @@ impl From<HypothesisTestOutput> for HypothesisTestResponse {
 
 /// Tauri 命令：假设检验
 #[tauri::command]
-pub fn hypothesis_test(req: HypothesisTestRequest) -> Result<HypothesisTestResponse, AppError> {
+pub fn hypothesis_test(req: HypothesisTestRequest) -> Result<HypothesisTestResponse, CommandError> {
     run_hypothesis_test(req.into())
         .map(Into::into)
-        .map_err(AppError::from)
+        .map_err(CommandError::internal)
 }

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { computeAcfPacf } from '@/features/application/stats/statsActions';
+import { formatInlineUserError } from '@/features/application/userErrorSummary';
 import type { AcfPacfResponse } from '@/features/application/stats/statsActions';
 import { acfSeriesToBars, pacfSeriesToBars } from '@/shared/types/report';
 import { useChartSeriesColors } from '@/shared/theme/chartTheme';
@@ -12,6 +14,7 @@ import { InfoAccentButton } from './InfoViewControls';
 const CorrelogramChart = React.lazy(() => import('@/views/PlotView/CorrelogramChart'));
 
 export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[]; residualLabel?: string }) {
+  const { t } = useTranslation();
   const [lag, setLag] = useState(20);
   const [result, setResult] = useState<AcfPacfResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +32,7 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
       const res = await computeAcfPacf({ residuals, max_lag: lag });
       setResult(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatInlineUserError(e, t));
     } finally {
       setLoading(false);
     }

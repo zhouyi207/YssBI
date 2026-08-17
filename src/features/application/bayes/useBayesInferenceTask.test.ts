@@ -2,10 +2,21 @@ import { describe, expect, it } from 'vitest';
 import type { BayesInferenceTaskDTO, InferenceResultDTO } from '@/shared/types/bayes';
 import { bayesInferenceReducer, initialBayesInferenceState } from './useBayesInferenceTask';
 
-const task = (taskId: string, status: BayesInferenceTaskDTO['status'], error?: BayesInferenceTaskDTO['error']): BayesInferenceTaskDTO => ({ taskId, status, error });
+const task = (
+  taskId: string,
+  status: BayesInferenceTaskDTO['status'],
+  error: BayesInferenceTaskDTO['error'] = null,
+): BayesInferenceTaskDTO => ({ taskId, status, progress: null, error });
 const result = (taskId: string): InferenceResultDTO => ({
   summaries: [],
-  diagnostics: { chains: 2, drawsPerChain: 10, warmup: 5, warnings: [] },
+  diagnostics: {
+    chains: 2,
+    drawsPerChain: 10,
+    warmup: 5,
+    divergences: null,
+    maxTreedepthHits: null,
+    warnings: [],
+  },
   artifactManifest: { taskId, artifacts: [] },
 });
 
@@ -36,19 +47,30 @@ describe('bayes inference task state machine', () => {
     const failedTask = bayesInferenceReducer(submitting, {
       type: 'task_received',
       runId: 1,
-      task: task('task-1', 'failed', { code: 'SAMPLER', message: 'Sampling failed', detail: 'bad initial value' }),
+      task: task('task-1', 'failed', {
+        code: 'julia_bayes_sampling_failed',
+        details: null,
+        incidentId: 'incident-task-42',
+      }),
     });
     expect(failedTask).toMatchObject({
       phase: 'failed',
-      error: { code: 'SAMPLER', message: 'Sampling failed', detail: 'bad initial value' },
+      error: {
+        code: 'julia_bayes_sampling_failed',
+        details: null,
+        incidentId: 'incident-task-42',
+      },
     });
 
     const invokeFailure = bayesInferenceReducer(submitting, {
       type: 'request_failed',
       runId: 1,
-      error: { code: 'IPC', message: 'IPC unavailable' },
+      error: { code: 'bayes_request_failed', details: null, incidentId: null },
     });
-    expect(invokeFailure).toMatchObject({ phase: 'failed', error: { code: 'IPC', message: 'IPC unavailable' } });
+    expect(invokeFailure).toMatchObject({
+      phase: 'failed',
+      error: { code: 'bayes_request_failed', details: null, incidentId: null },
+    });
   });
 
   it('rejects a result whose manifest belongs to another task', () => {

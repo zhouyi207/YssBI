@@ -5,12 +5,9 @@ import type {
   ParseExpressionRequestDTO,
 } from '@/shared/types/bayes';
 import { likelihoodParameterNames } from '@/features/domain/bayes';
+import { normalizeBayesApplicationError, type BayesApplicationError } from './bayesError';
 
-export interface FormulaParseError {
-  code: string;
-  message: string;
-  detail?: string;
-}
+export type FormulaParseError = BayesApplicationError;
 
 
 
@@ -36,19 +33,5 @@ export function buildFormulaParseRequest(
 
 
 export function formatFormulaParseError(caught: unknown): FormulaParseError {
-  if (typeof caught === 'object' && caught !== null) {
-    const error = caught as { code?: unknown; message?: unknown; detail?: unknown; details?: unknown };
-    const detail = typeof error.detail === 'string'
-      ? error.detail
-      : typeof error.details === 'string' ? error.details : undefined;
-    return {
-      code: typeof error.code === 'string' ? error.code : 'FORMULA_PARSE_FAILED',
-      message: typeof error.message === 'string' ? error.message : 'Unable to parse the model formula',
-      detail,
-    };
-  }
-  return {
-    code: 'FORMULA_PARSE_FAILED',
-    message: typeof caught === 'string' ? caught : 'Unable to parse the model formula',
-  };
+  return normalizeBayesApplicationError(caught, 'bayes_expression_parse_failed');
 }

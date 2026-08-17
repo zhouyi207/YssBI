@@ -1,20 +1,20 @@
 //! Panel DID 结果页按需调用：虚构处理组置换检验
 
-use crate::error::AppError;
+use crate::error::CommandError;
 use crate::sci::models::panel_did::{
     ComputeDidFakeGroupRequest, DidPlaceboFakeGroupBlock, compute_fake_group_ri,
 };
 
 fn compute_panel_did_fake_group_ri_request(
     req: ComputeDidFakeGroupRequest,
-) -> Result<DidPlaceboFakeGroupBlock, AppError> {
-    compute_fake_group_ri(&req.payload, req.n_perm, req.rng_seed).map_err(AppError::from)
+) -> Result<DidPlaceboFakeGroupBlock, CommandError> {
+    compute_fake_group_ri(&req.payload, req.n_perm, req.rng_seed).map_err(CommandError::internal)
 }
 
 #[tauri::command]
 pub fn compute_panel_did_fake_group_ri(
     req: ComputeDidFakeGroupRequest,
-) -> Result<DidPlaceboFakeGroupBlock, AppError> {
+) -> Result<DidPlaceboFakeGroupBlock, CommandError> {
     compute_panel_did_fake_group_ri_request(req)
 }
 
@@ -48,11 +48,16 @@ mod tests {
     }
 
     #[test]
-    fn pure_command_boundary_maps_engine_errors_to_app_error() {
+    fn pure_command_boundary_maps_engine_errors_to_command_error() {
         let error = compute_panel_did_fake_group_ri_request(malformed_request()).unwrap_err();
 
-        assert_eq!(error.code, "internal_error");
-        assert_eq!(error.message, "exog_row_major len 0 != n*ncols (1*1)");
-        assert_eq!(error.details, None);
+        assert_eq!(error.code(), "internal_error");
+        assert!(error.details().is_none());
+        assert!(error.incident_id().is_some());
+
+        let wire = serde_json::to_value(error).unwrap();
+        assert_eq!(wire["code"], "internal_error");
+        assert!(wire["incidentId"].is_string());
+        assert!(wire.get("message").is_none());
     }
 }

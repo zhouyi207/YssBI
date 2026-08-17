@@ -86,7 +86,7 @@ describe('getWorksheetPreview', () => {
     });
     const second = await getWorksheetPreview(PROJECT_A, DOCUMENT, async () => {
       calls += 1;
-      return { kind: 'error', message: 'should not run' };
+      return { kind: 'error', code: 'should_not_run', incidentId: null };
     });
 
     expect(first).toBe(preview);
@@ -116,7 +116,7 @@ describe('getWorksheetPreview', () => {
       }),
       getWorksheetPreview(PROJECT_A, DOCUMENT, async () => {
         calls += 1;
-        return { kind: 'error', message: 'should not run' };
+        return { kind: 'error', code: 'should_not_run', incidentId: null };
       }),
     ]);
 

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/services/ipc";
 
 /** 假设检验请求（与后端 HypothesisTestRequest 对应） */
 export interface HypothesisTestRequest {
@@ -30,5 +30,5 @@ export interface HypothesisTestResponse {
  * @returns 检验结果
  */
 export async function hypothesisTest(req: HypothesisTestRequest): Promise<HypothesisTestResponse> {
-  return await invoke<HypothesisTestResponse>("hypothesis_test", { req: req });
+  return await invokeCommand<HypothesisTestResponse>("hypothesis_test", { req: req });
 }

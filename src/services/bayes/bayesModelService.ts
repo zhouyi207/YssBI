@@ -1,4 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '@/services/ipc';
+import { parseValidationReportDTO } from '@/shared/types/bayes/wireParser';
 import type {
   ParseExpressionRequestDTO,
   ParseExpressionResponseDTO,
@@ -7,9 +8,9 @@ import type {
 } from '@/shared/types/bayes';
 
 export async function parseBayesExpression(input: ParseExpressionRequestDTO): Promise<ParseExpressionResponseDTO> {
-  return invoke<ParseExpressionResponseDTO>('parse_bayes_expression', { input });
+  return invokeCommand<ParseExpressionResponseDTO>('parse_bayes_expression', { input });
 }
 
 export async function validateBayesModel(input: BayesModelDraftDTO): Promise<ValidationReportDTO> {
-  return invoke<ValidationReportDTO>('validate_bayes_model', { input });
+  return parseValidationReportDTO(await invokeCommand<unknown>('validate_bayes_model', { input }));
 }

@@ -4,7 +4,7 @@ import type { InferenceResultDTO } from '@/shared/types/bayes';
 interface AsyncDataState<T> {
   data: T | null;
   loading: boolean;
-  error: string | null;
+  error: unknown | null;
 }
 
 export function useBayesPlotData<T>(
@@ -36,7 +36,7 @@ function useAsyncData<T>(key: string | null, load: () => Promise<T>): AsyncDataS
     void loadRef.current()
       .then(data => { if (!stale) setState({ data, loading: false, error: null }); })
       .catch((caught: unknown) => {
-        if (!stale) setState({ data: null, loading: false, error: caught instanceof Error ? caught.message : String(caught) });
+        if (!stale) setState({ data: null, loading: false, error: caught });
       });
     return () => { stale = true; };
   }, [key]);

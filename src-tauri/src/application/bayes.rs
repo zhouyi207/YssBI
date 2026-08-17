@@ -7,8 +7,10 @@ use std::fs;
 use std::path::Path;
 
 use polars::prelude::{DataFrame, Float64Chunked};
+use serde::Serialize;
+use uuid::Uuid;
 
-use crate::error::AppError;
+use crate::error::CommandError;
 use crate::project::ProjectState;
 use crate::sci::api::bayes::{
     AutocorrelationPlotData, AutocorrelationPoint, AutocorrelationSeries, BayesBackend,
@@ -59,7 +61,7 @@ impl BayesInferenceService {
         }
     }
 
-    pub fn submit(&self, draft: BayesModelDraft) -> Result<BayesInferenceTask, AppError> {
+    pub fn submit(&self, draft: BayesModelDraft) -> Result<BayesInferenceTask, CommandError> {
         self.submit_with_input_table(draft, None)
     }
 
@@ -67,10 +69,10 @@ impl BayesInferenceService {
         &self,
         draft: BayesModelDraft,
         project_state: &ProjectState,
-    ) -> Result<BayesInferenceTask, AppError> {
+    ) -> Result<BayesInferenceTask, CommandError> {
         let spec = validated_spec(draft)?;
         let input_table = materialize_input_table(&spec, project_state)?;
-        validate_bayes_input_table(&spec, &input_table).map_err(input_validation_app_error)?;
+        validate_bayes_input_table(&spec, &input_table).map_err(input_validation_command_error)?;
         self.submit_spec(spec, Some(input_table))
     }
 
@@ -78,10 +80,10 @@ impl BayesInferenceService {
         &self,
         draft: BayesModelDraft,
         input_table: Option<DataFrame>,
-    ) -> Result<BayesInferenceTask, AppError> {
+    ) -> Result<BayesInferenceTask, CommandError> {
         let spec = validated_spec(draft)?;
         if let Some(table) = &input_table {
-            validate_bayes_input_table(&spec, table).map_err(input_validation_app_error)?;
+            validate_bayes_input_table(&spec, table).map_err(input_validation_command_error)?;
         }
         self.submit_spec(spec, input_table)
     }
@@ -90,7 +92,7 @@ impl BayesInferenceService {
         &self,
         spec: BayesModelSpec,
         input_table: Option<DataFrame>,
-    ) -> Result<BayesInferenceTask, AppError> {
+    ) -> Result<BayesInferenceTask, CommandError> {
         let task_id = new_task_id();
         let task = queued_task(task_id.clone());
         let should_start_runner = {
@@ -118,25 +120,22 @@ impl BayesInferenceService {
         Ok(task)
     }
 
-    pub fn status(&self, task_id: &str) -> Result<BayesInferenceTask, AppError> {
+    pub fn status(&self, task_id: &str) -> Result<BayesInferenceTask, CommandError> {
         let state = self.lock_state()?;
-        state.tasks.get(task_id).cloned().ok_or_else(|| {
-            AppError::new(
-                "bayes_task_not_found",
-                format!("Bayesian inference task {task_id} was not found"),
-            )
-        })
+        state
+            .tasks
+            .get(task_id)
+            .cloned()
+            .ok_or_else(|| CommandError::expected("bayes_task_not_found"))
     }
 
-    pub fn cancel(&self, task_id: &str) -> Result<(), AppError> {
+    pub fn cancel(&self, task_id: &str) -> Result<(), CommandError> {
         let should_cancel_backend = {
             let mut state = self.lock_state()?;
-            let task = state.tasks.get_mut(task_id).ok_or_else(|| {
-                AppError::new(
-                    "bayes_task_not_found",
-                    format!("Bayesian inference task {task_id} was not found"),
-                )
-            })?;
+            let task = state
+                .tasks
+                .get_mut(task_id)
+                .ok_or_else(|| CommandError::expected("bayes_task_not_found"))?;
             match task.status {
                 TaskStatus::Queued => {
                     *task = cancelled_task(task_id.to_string());
@@ -157,39 +156,32 @@ impl BayesInferenceService {
         };
         if should_cancel_backend {
             self.backend.cancel(task_id).map_err(|error| {
-                AppError::new(
+                CommandError::diagnosed(
                     "bayes_cancel_failed",
-                    format!("Failed to cancel Bayesian inference task {task_id}: {error}"),
+                    format!("failed to cancel Bayesian inference task {task_id}: {error}"),
                 )
             })?;
         }
         Ok(())
     }
 
-    pub fn result(&self, task_id: &str) -> Result<InferenceResult, AppError> {
+    pub fn result(&self, task_id: &str) -> Result<InferenceResult, CommandError> {
         let state = self.lock_state()?;
         result_from_state(&state, task_id)
     }
 
-    pub fn clear_task(&self, task_id: &str) -> Result<(), AppError> {
+    pub fn clear_task(&self, task_id: &str) -> Result<(), CommandError> {
         let result = {
             let mut state = self.lock_state()?;
-            let task = state.tasks.get(task_id).ok_or_else(|| {
-                AppError::new(
-                    "bayes_task_not_found",
-                    format!("Bayesian inference task {task_id} was not found"),
-                )
-            })?;
+            let task = state
+                .tasks
+                .get(task_id)
+                .ok_or_else(|| CommandError::expected("bayes_task_not_found"))?;
             if matches!(
                 task.status,
                 TaskStatus::Queued | TaskStatus::Running | TaskStatus::Cancelling
             ) {
-                return Err(AppError::new(
-                    "bayes_task_active",
-                    format!(
-                        "Bayesian inference task {task_id} is still active and cannot be cleared"
-                    ),
-                ));
+                return Err(CommandError::expected("bayes_task_active"));
             }
             state.tasks.remove(task_id);
             state.results.remove(task_id)
@@ -205,29 +197,22 @@ impl BayesInferenceService {
         task_id: &str,
         kind: ResultArtifactKind,
         destination: &str,
-    ) -> Result<(), AppError> {
+    ) -> Result<(), CommandError> {
         if !matches!(
             kind,
             ResultArtifactKind::PosteriorSamples | ResultArtifactKind::PosteriorPredictive
         ) {
-            return Err(AppError::new(
-                "bayes_artifact_export_unsupported",
-                "Only posterior samples and posterior predictive artifacts can be exported as CSV",
-            ));
+            return Err(CommandError::expected("bayes_artifact_export_unsupported"));
         }
         let result = {
             let state = self.lock_state()?;
             result_from_state(&state, task_id)?
         };
-        let source = artifact_path(&result, kind).ok_or_else(|| {
-            AppError::new(
-                "bayes_artifact_not_found",
-                format!("Bayesian artifact for task {task_id} was not found"),
-            )
-        })?;
+        let source = artifact_path(&result, kind)
+            .ok_or_else(|| CommandError::expected("bayes_artifact_not_found"))?;
         let mut dataframe = read_bayes_artifact_dataframe(&source, "Bayesian artifact")?;
         write_csv_dataframe(Path::new(destination), &mut dataframe)
-            .map_err(|error| AppError::new("bayes_artifact_export_failed", error))
+            .map_err(|error| CommandError::diagnosed("bayes_artifact_export_failed", error))
     }
 
     pub fn sample_page(
@@ -236,7 +221,7 @@ impl BayesInferenceService {
         offset: usize,
         limit: usize,
         parameter: Option<&str>,
-    ) -> Result<PosteriorSamplePage, AppError> {
+    ) -> Result<PosteriorSamplePage, CommandError> {
         let dataframe = self.samples_dataframe(task_id)?;
         posterior_sample_page_from_dataframe(&dataframe, offset, limit, parameter)
     }
@@ -246,7 +231,7 @@ impl BayesInferenceService {
         task_id: &str,
         parameter: Option<&str>,
         max_points_per_chain: usize,
-    ) -> Result<TracePlotData, AppError> {
+    ) -> Result<TracePlotData, CommandError> {
         let dataframe = self.samples_dataframe(task_id)?;
         trace_plot_data_from_dataframe(&dataframe, parameter, max_points_per_chain.max(1))
     }
@@ -256,7 +241,7 @@ impl BayesInferenceService {
         task_id: &str,
         parameter: Option<&str>,
         grid_points: usize,
-    ) -> Result<DensityPlotData, AppError> {
+    ) -> Result<DensityPlotData, CommandError> {
         let dataframe = self.samples_dataframe(task_id)?;
         density_plot_data_from_dataframe(&dataframe, parameter, grid_points.clamp(8, 256))
     }
@@ -266,7 +251,7 @@ impl BayesInferenceService {
         task_id: &str,
         parameter: Option<&str>,
         max_lag: usize,
-    ) -> Result<AutocorrelationPlotData, AppError> {
+    ) -> Result<AutocorrelationPlotData, CommandError> {
         let dataframe = self.samples_dataframe(task_id)?;
         autocorrelation_plot_data_from_dataframe(&dataframe, parameter, max_lag.clamp(1, 512))
     }
@@ -276,41 +261,31 @@ impl BayesInferenceService {
         task_id: &str,
         offset: usize,
         limit: usize,
-    ) -> Result<PosteriorPredictivePage, AppError> {
+    ) -> Result<PosteriorPredictivePage, CommandError> {
         let result = {
             let state = self.lock_state()?;
             result_from_state(&state, task_id)?
         };
-        let ppc_path =
-            artifact_path(&result, ResultArtifactKind::PosteriorPredictive).ok_or_else(|| {
-                AppError::new(
-                    "bayes_posterior_predictive_not_found",
-                    format!("Bayesian posterior predictive data for task {task_id} was not found"),
-                )
-            })?;
+        let ppc_path = artifact_path(&result, ResultArtifactKind::PosteriorPredictive)
+            .ok_or_else(|| CommandError::expected("bayes_posterior_predictive_not_found"))?;
         let dataframe =
             read_bayes_artifact_dataframe(&ppc_path, "Bayesian posterior predictive data")?;
         posterior_predictive_page_from_dataframe(&dataframe, offset, limit)
     }
 
-    fn samples_dataframe(&self, task_id: &str) -> Result<DataFrame, AppError> {
+    fn samples_dataframe(&self, task_id: &str) -> Result<DataFrame, CommandError> {
         let result = {
             let state = self.lock_state()?;
             result_from_state(&state, task_id)?
         };
         let samples_path = artifact_path(&result, ResultArtifactKind::PosteriorSamples)
-            .ok_or_else(|| {
-                AppError::new(
-                    "bayes_samples_not_found",
-                    format!("Bayesian inference samples for task {task_id} were not found"),
-                )
-            })?;
+            .ok_or_else(|| CommandError::expected("bayes_samples_not_found"))?;
         read_bayes_artifact_dataframe(&samples_path, "Bayesian posterior samples")
     }
 
-    fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, BayesInferenceState>, AppError> {
+    fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, BayesInferenceState>, CommandError> {
         self.inner.lock().map_err(|_| {
-            AppError::new(
+            CommandError::diagnosed(
                 "bayes_service_lock_poisoned",
                 "Bayesian inference service state lock was poisoned",
             )
@@ -453,26 +428,22 @@ fn artifact_path(result: &InferenceResult, kind: ResultArtifactKind) -> Option<S
 fn result_from_state(
     state: &BayesInferenceState,
     task_id: &str,
-) -> Result<InferenceResult, AppError> {
+) -> Result<InferenceResult, CommandError> {
     if !state.tasks.contains_key(task_id) {
-        return Err(AppError::new(
-            "bayes_task_not_found",
-            format!("Bayesian inference task {task_id} was not found"),
-        ));
+        return Err(CommandError::expected("bayes_task_not_found"));
     }
-    state.results.get(task_id).cloned().ok_or_else(|| {
-        AppError::new(
-            "bayes_result_not_found",
-            format!("Bayesian inference result for task {task_id} was not found"),
-        )
-    })
+    state
+        .results
+        .get(task_id)
+        .cloned()
+        .ok_or_else(|| CommandError::expected("bayes_result_not_found"))
 }
 
-fn read_bayes_artifact_dataframe(path: &str, label: &str) -> Result<DataFrame, AppError> {
+fn read_bayes_artifact_dataframe(path: &str, label: &str) -> Result<DataFrame, CommandError> {
     read_ipc_dataframe(Path::new(path)).map_err(|error| {
-        AppError::new(
+        CommandError::diagnosed(
             "bayes_result_artifact_read_failed",
-            format!("Failed to read {label}: {error}"),
+            format!("failed to read {label}: {error}"),
         )
     })
 }
@@ -482,23 +453,23 @@ fn posterior_sample_page_from_dataframe(
     offset: usize,
     limit: usize,
     parameter: Option<&str>,
-) -> Result<PosteriorSamplePage, AppError> {
+) -> Result<PosteriorSamplePage, CommandError> {
     let parameters = dataframe
         .column("parameter")
         .and_then(|column| column.str())
-        .map_err(|error| AppError::new("bayes_samples_invalid", error.to_string()))?;
+        .map_err(|error| CommandError::diagnosed("bayes_samples_invalid", error))?;
     let chains = dataframe
         .column("chain")
         .and_then(|column| column.i64())
-        .map_err(|error| AppError::new("bayes_samples_invalid", error.to_string()))?;
+        .map_err(|error| CommandError::diagnosed("bayes_samples_invalid", error))?;
     let draws = dataframe
         .column("draw")
         .and_then(|column| column.i64())
-        .map_err(|error| AppError::new("bayes_samples_invalid", error.to_string()))?;
+        .map_err(|error| CommandError::diagnosed("bayes_samples_invalid", error))?;
     let values = dataframe
         .column("value")
         .and_then(|column| column.f64())
-        .map_err(|error| AppError::new("bayes_samples_invalid", error.to_string()))?;
+        .map_err(|error| CommandError::diagnosed("bayes_samples_invalid", error))?;
 
     let mut matching_indices = Vec::new();
     for index in 0..dataframe.height() {
@@ -537,24 +508,24 @@ fn posterior_predictive_page_from_dataframe(
     dataframe: &DataFrame,
     offset: usize,
     limit: usize,
-) -> Result<PosteriorPredictivePage, AppError> {
+) -> Result<PosteriorPredictivePage, CommandError> {
     let observations = dataframe
         .column("observation")
         .and_then(|column| column.i64())
-        .map_err(|error| AppError::new("bayes_posterior_predictive_invalid", error.to_string()))?;
+        .map_err(|error| CommandError::diagnosed("bayes_posterior_predictive_invalid", error))?;
     let transforms = dataframe
         .column("response_transform")
         .and_then(|column| column.str())
-        .map_err(|error| AppError::new("bayes_posterior_predictive_invalid", error.to_string()))?;
+        .map_err(|error| CommandError::diagnosed("bayes_posterior_predictive_invalid", error))?;
     let response_transform = transforms.get(0).unwrap_or("identity").to_string();
     if transforms
         .into_iter()
         .flatten()
         .any(|value| value != response_transform)
     {
-        return Err(AppError::new(
+        return Err(CommandError::diagnosed(
             "bayes_posterior_predictive_invalid",
-            "Posterior predictive rows contain inconsistent response transforms",
+            "posterior predictive rows contain inconsistent response transforms",
         ));
     }
     let observed_model = predictive_f64_column(dataframe, "observed_model")?;
@@ -599,18 +570,18 @@ fn posterior_predictive_page_from_dataframe(
 fn predictive_f64_column<'a>(
     dataframe: &'a DataFrame,
     name: &str,
-) -> Result<&'a Float64Chunked, AppError> {
+) -> Result<&'a Float64Chunked, CommandError> {
     dataframe
         .column(name)
         .and_then(|column| column.f64())
-        .map_err(|error| AppError::new("bayes_posterior_predictive_invalid", error.to_string()))
+        .map_err(|error| CommandError::diagnosed("bayes_posterior_predictive_invalid", error))
 }
 
 fn trace_plot_data_from_dataframe(
     dataframe: &DataFrame,
     parameter: Option<&str>,
     max_points_per_chain: usize,
-) -> Result<TracePlotData, AppError> {
+) -> Result<TracePlotData, CommandError> {
     let rows = sample_rows_from_dataframe(dataframe, parameter)?;
     let mut grouped: BTreeMap<(String, usize), Vec<TracePoint>> = BTreeMap::new();
     for row in rows {
@@ -654,7 +625,7 @@ fn density_plot_data_from_dataframe(
     dataframe: &DataFrame,
     parameter: Option<&str>,
     grid_points: usize,
-) -> Result<DensityPlotData, AppError> {
+) -> Result<DensityPlotData, CommandError> {
     let rows = sample_rows_from_dataframe(dataframe, parameter)?;
     let mut grouped: BTreeMap<String, BTreeMap<usize, Vec<f64>>> = BTreeMap::new();
     for row in rows {
@@ -706,7 +677,7 @@ fn autocorrelation_plot_data_from_dataframe(
     dataframe: &DataFrame,
     parameter: Option<&str>,
     max_lag: usize,
-) -> Result<AutocorrelationPlotData, AppError> {
+) -> Result<AutocorrelationPlotData, CommandError> {
     let rows = sample_rows_from_dataframe(dataframe, parameter)?;
     let mut grouped: BTreeMap<(String, usize), Vec<PosteriorSampleRow>> = BTreeMap::new();
     for row in rows {
@@ -774,50 +745,42 @@ fn autocorrelation_points(values: &[f64], max_lag: usize) -> Vec<Autocorrelation
 fn sample_rows_from_dataframe(
     dataframe: &DataFrame,
     parameter: Option<&str>,
-) -> Result<Vec<PosteriorSampleRow>, AppError> {
+) -> Result<Vec<PosteriorSampleRow>, CommandError> {
     let page = posterior_sample_page_from_dataframe(dataframe, 0, usize::MAX, parameter)?;
     Ok(page.rows)
 }
 
-fn validated_spec(draft: BayesModelDraft) -> Result<BayesModelSpec, AppError> {
+fn validated_spec(draft: BayesModelDraft) -> Result<BayesModelSpec, CommandError> {
     let report = validate_draft(&draft);
     if !report.ok {
-        return Err(AppError::new(
-            "bayes_validation_failed",
-            "Bayesian model validation failed",
-        ));
+        return Err(CommandError::expected("bayes_validation_failed"));
     }
 
-    draft_to_model_spec(draft).map_err(|_| {
-        AppError::new(
-            "bayes_validation_failed",
-            "Bayesian model validation failed",
-        )
-    })
+    draft_to_model_spec(draft).map_err(|_| CommandError::expected("bayes_validation_failed"))
 }
 
-fn input_validation_app_error(
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BayesInputValidationDetails {
+    column: Option<String>,
+    row: Option<usize>,
+}
+
+fn input_validation_command_error(
     error: crate::sci::api::bayes::BayesInputValidationError,
-) -> AppError {
-    AppError {
-        code: error.code.to_string(),
-        message: error.message,
-        details: Some(serde_json::json!({
-            "column": error.column,
-            "row": error.row,
-        })),
-    }
+) -> CommandError {
+    CommandError::expected(error.code).with_details(BayesInputValidationDetails {
+        column: error.column,
+        row: error.row,
+    })
 }
 
 fn materialize_input_table(
     spec: &BayesModelSpec,
     project_state: &ProjectState,
-) -> Result<DataFrame, AppError> {
+) -> Result<DataFrame, CommandError> {
     if spec.dataset.source_type != DatasetSourceType::Table {
-        return Err(AppError::new(
-            "bayes_dataset_source_unsupported",
-            "Bayesian inference currently supports project database tables only.",
-        ));
+        return Err(CommandError::expected("bayes_dataset_source_unsupported"));
     }
 
     let columns = required_input_columns(spec);
@@ -828,7 +791,7 @@ fn materialize_input_table(
                 .load_columns(&column_refs)
                 .map_err(|error| error.to_string())
         })
-        .map_err(|message| AppError::new("bayes_dataset_load_failed", message))
+        .map_err(|error| CommandError::diagnosed("bayes_dataset_load_failed", error))
 }
 
 fn required_input_columns(spec: &BayesModelSpec) -> Vec<String> {
@@ -870,24 +833,34 @@ fn cancelled_task(task_id: String) -> BayesInferenceTask {
         task_id,
         status: TaskStatus::Cancelled,
         progress: None,
-        error: Some(TaskError {
-            code: "BAYES_TASK_CANCELLED".to_string(),
-            message: "Bayesian inference task was cancelled.".to_string(),
-            detail: None,
-        }),
+        error: None,
     }
 }
 
 fn failed_task(task_id: String, error: BayesBackendError) -> BayesInferenceTask {
+    let incident_id = Uuid::new_v4().to_string();
+    tracing::error!(
+        target: "yssbi::bayes",
+        diagnostic_domain = "application",
+        diagnostic_event = "bayesInferenceFailed",
+        task_id = task_id.as_str(),
+        error_code = error.code.as_str(),
+        incident_id = incident_id.as_str(),
+        backend_message = error.message.as_str(),
+        backend_detail = error.detail.as_deref().unwrap_or_default(),
+        "Bayesian inference task failed"
+    );
+
+    let task_error = TaskError {
+        code: error.code,
+        details: error.details,
+        incident_id: Some(incident_id),
+    };
     BayesInferenceTask {
         task_id,
         status: TaskStatus::Failed,
         progress: None,
-        error: Some(TaskError {
-            code: error.code,
-            message: error.message,
-            detail: error.detail,
-        }),
+        error: Some(task_error),
     }
 }
 
@@ -908,21 +881,26 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use polars::prelude::{Column, DataFrame};
+    use tracing_subscriber::layer::SubscriberExt;
+    use uuid::Uuid;
+
+    use crate::diagnostics::dispatcher::DiagnosticsHub;
+    use crate::diagnostics::recent_layer::RecentDiagnosticsLayer;
 
     use crate::sci::api::bayes::{
         BayesBackend, BayesBackendError, BayesBackendRequest, BayesModelDraft, BinaryOp,
-        ColumnDType, ColumnMeta, DatasetSelection, DatasetSourceType, DiagnosticWarning,
-        Expression, InferenceConfig, InferenceDiagnostics, InferenceResult, LikelihoodSpec,
-        ParameterConstraint, ParameterRef, ParameterSpec, PredictorSource, PredictorSourceKind,
-        PriorSpec, ResponseBinding, ResultArtifactManifest, SamplerAlgorithm, SymbolDraft,
-        SymbolRole,
+        ColumnDType, ColumnMeta, DatasetSelection, DatasetSourceType, DiagnosticMetric,
+        DiagnosticWarning, Expression, InferenceConfig, InferenceDiagnostics, InferenceResult,
+        LikelihoodSpec, ParameterConstraint, ParameterRef, ParameterSpec, PredictorSource,
+        PredictorSourceKind, PriorSpec, ResponseBinding, ResultArtifactManifest, SamplerAlgorithm,
+        SymbolDraft, SymbolRole, TaskErrorDetails,
     };
 
     use super::{
-        BayesInferenceService, autocorrelation_plot_data_from_dataframe, completed_task,
-        density_plot_data_from_dataframe, posterior_predictive_page_from_dataframe,
-        posterior_sample_page_from_dataframe, required_input_columns,
-        trace_plot_data_from_dataframe, validated_spec,
+        BayesInferenceService, autocorrelation_plot_data_from_dataframe, cancelled_task,
+        completed_task, density_plot_data_from_dataframe, failed_task,
+        posterior_predictive_page_from_dataframe, posterior_sample_page_from_dataframe,
+        required_input_columns, trace_plot_data_from_dataframe, validated_spec,
     };
 
     struct CountingBackend {
@@ -947,9 +925,11 @@ mod tests {
                     divergences: Some(0),
                     max_treedepth_hits: Some(0),
                     warnings: vec![DiagnosticWarning {
-                        code: "TEST_BACKEND".to_string(),
-                        message: "test".to_string(),
-                        parameter: None,
+                        code: "test_backend".to_string(),
+                        metric: DiagnosticMetric::Rhat,
+                        value: 1.02,
+                        threshold: 1.01,
+                        parameter: "a".to_string(),
                     }],
                 },
                 artifact_manifest: ResultArtifactManifest {
@@ -964,9 +944,10 @@ mod tests {
 
     impl BayesBackend for FailingBackend {
         fn fit(&self, _request: BayesBackendRequest) -> Result<InferenceResult, BayesBackendError> {
-            Err(BayesBackendError::new(
-                "TEST_BACKEND_FAILED",
-                "backend failed",
+            Err(BayesBackendError::with_detail(
+                "test_backend_failed",
+                "private asynchronous backend message",
+                "private asynchronous backend detail",
             ))
         }
     }
@@ -1209,12 +1190,92 @@ mod tests {
     }
 
     #[test]
+    fn cancelled_task_has_no_error_payload() {
+        let task = cancelled_task("task".to_string());
+
+        assert_eq!(task.status, crate::sci::api::bayes::TaskStatus::Cancelled);
+        assert!(task.error.is_none());
+    }
+
+    #[test]
+    fn failed_task_logs_internal_diagnostics_and_returns_safe_error() {
+        let (hub, _guard) = DiagnosticsHub::start();
+        let subscriber =
+            tracing_subscriber::registry().with(RecentDiagnosticsLayer::new(hub.clone()));
+        let task = tracing::subscriber::with_default(subscriber, || {
+            failed_task(
+                "task-1".to_string(),
+                BayesBackendError::with_detail(
+                    "test_backend_failed",
+                    "private backend message",
+                    "private backend detail",
+                )
+                .with_safe_details(TaskErrorDetails {
+                    column: Some("predictor_x".to_string()),
+                    row: Some(7),
+                    parameter: Some("beta".to_string()),
+                    path: Some("parameters.beta".to_string()),
+                }),
+            )
+        });
+
+        let error = task.error.as_ref().expect("failed task error");
+        assert_eq!(error.code, "test_backend_failed");
+        assert_eq!(
+            error
+                .details
+                .as_ref()
+                .and_then(|details| details.column.as_deref()),
+            Some("predictor_x")
+        );
+        assert_eq!(
+            error.details.as_ref().and_then(|details| details.row),
+            Some(7)
+        );
+        assert_eq!(
+            error
+                .details
+                .as_ref()
+                .and_then(|details| details.parameter.as_deref()),
+            Some("beta")
+        );
+        let incident_id = error.incident_id.as_deref().expect("failure incident ID");
+        assert!(Uuid::parse_str(incident_id).is_ok());
+
+        let wire = serde_json::to_value(&task).expect("serialize failed task");
+        assert_eq!(wire["error"]["incidentId"], incident_id);
+        assert_eq!(wire["error"]["details"]["column"], "predictor_x");
+        assert_eq!(wire["error"]["details"]["row"], 7);
+        assert_eq!(
+            wire["error"].as_object().expect("task error object").len(),
+            3
+        );
+        assert!(wire["error"].get("message").is_none());
+        assert!(wire["error"].get("detail").is_none());
+        assert!(!wire.to_string().contains("private backend message"));
+        assert!(!wire.to_string().contains("private backend detail"));
+
+        let subscription = hub.subscribe(|_| true).expect("diagnostic subscription");
+        let record = subscription
+            .entries
+            .iter()
+            .find(|entry| entry.event.as_deref() == Some("bayesInferenceFailed"))
+            .expect("Bayes failure diagnostic");
+        assert_eq!(record.fields["error_code"], "test_backend_failed");
+        assert_eq!(record.fields["incident_id"], incident_id);
+        assert_eq!(record.fields["backend_message"], "private backend message");
+        assert_eq!(record.fields["backend_detail"], "private backend detail");
+        hub.unsubscribe(subscription.subscription_id)
+            .expect("unsubscribe diagnostics");
+    }
+
+    #[test]
     fn submit_rejects_invalid_draft() {
         let service = BayesInferenceService::new();
         let mut draft = valid_draft();
         draft.dataset = None;
         let error = service.submit(draft).expect_err("invalid draft rejected");
-        assert_eq!(error.code, "bayes_validation_failed");
+        assert_eq!(error.code(), "bayes_validation_failed");
     }
 
     #[test]
@@ -1231,7 +1292,7 @@ mod tests {
         );
         let result = service.result(&task.task_id).expect("stored result");
         assert_eq!(*calls.lock().expect("calls lock"), 1);
-        assert_eq!(result.diagnostics.warnings[0].code, "TEST_BACKEND");
+        assert_eq!(result.diagnostics.warnings[0].code, "test_backend");
     }
 
     #[test]
@@ -1240,10 +1301,15 @@ mod tests {
         let task = service.submit(valid_draft()).expect("failed task returned");
         let failed = wait_for_terminal_task(&service, &task.task_id);
         assert_eq!(failed.status, crate::sci::api::bayes::TaskStatus::Failed);
-        assert_eq!(
-            failed.error.as_ref().map(|error| error.code.as_str()),
-            Some("TEST_BACKEND_FAILED")
+        let error = failed.error.as_ref().expect("failed task error");
+        assert_eq!(error.code, "test_backend_failed");
+        assert!(error.details.is_none());
+        assert!(
+            Uuid::parse_str(error.incident_id.as_deref().expect("failure incident ID")).is_ok()
         );
+        let wire = serde_json::to_string(&failed).expect("serialize asynchronous failure");
+        assert!(!wire.contains("private asynchronous backend message"));
+        assert!(!wire.contains("private asynchronous backend detail"));
         assert!(service.result(&task.task_id).is_err());
     }
 
@@ -1253,6 +1319,6 @@ mod tests {
         let error = service
             .status("missing")
             .expect_err("missing task rejected");
-        assert_eq!(error.code, "bayes_task_not_found");
+        assert_eq!(error.code(), "bayes_task_not_found");
     }
 }

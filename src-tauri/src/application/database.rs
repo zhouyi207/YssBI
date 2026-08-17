@@ -10,9 +10,10 @@ use crate::database::{
     ingest_parquet_to_duckdb, read_table_meta, sql_reader, write_display_name,
 };
 use crate::database::{EditHistory, EditState};
-use crate::error::AppError;
+use crate::error::CommandError;
 use crate::project::{
-    ProjectInstanceId, ProjectSession, ProjectState, relative_project_duckdb_path, unique_name,
+    ProjectDatabaseError, ProjectFilesystemError, ProjectInstanceId, ProjectSession, ProjectState,
+    relative_project_duckdb_path, unique_name,
 };
 use crate::schema::{ColumnInfoDTO, DatabaseEngineDTO};
 use serde::Serialize;
@@ -71,7 +72,8 @@ pub fn load_database(
     project_instance_id: &crate::project::ProjectInstanceId,
     operation_id: crate::node_system::document::OperationId,
     engine: DatabaseEngineDTO,
-) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, String> {
+) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, ProjectDatabaseError>
+{
     let request = DatabaseCreateRequest {
         project_instance_id,
         operation_id,
@@ -79,7 +81,10 @@ pub fn load_database(
     let reservation = state.reserve_database_operation(project_instance_id, operation_id)?;
     let (session, _lease) = state.acquire_database_write_lease()?;
     if &session.instance_id != project_instance_id {
-        return Err("stale_project_lifecycle: project instance changed".into());
+        return Err(ProjectFilesystemError::StaleProjectLifecycle {
+            message: "project instance changed".into(),
+        }
+        .into());
     }
     let result = match engine {
         DatabaseEngineDTO::Csv {
@@ -107,8 +112,8 @@ pub fn load_database(
             connection_string,
             table,
         } => {
-            let engine_sql = DatabaseEngineSql::try_from(engine)
-                .map_err(|e| format!("Invalid SQL engine config: {}", e))?;
+            let engine_sql =
+                DatabaseEngineSql::try_from(engine).map_err(ProjectDatabaseError::operation)?;
             load_sql_via_duckdb(
                 state,
                 &session,
@@ -118,13 +123,12 @@ pub fn load_database(
                 table,
             )
         }
-        DatabaseEngineDTO::DuckDb { .. } => Err(
-            "DuckDb datasets are discovered from the project store; reopen the project to refresh"
-                .into(),
-        ),
-        DatabaseEngineDTO::InMemory { .. } => {
-            Err("InMemory datasets cannot be loaded via load_database".into())
-        }
+        DatabaseEngineDTO::DuckDb { .. } => Err(ProjectDatabaseError::operation(
+            "DuckDb datasets are discovered from the project store; reopen the project to refresh",
+        )),
+        DatabaseEngineDTO::InMemory { .. } => Err(ProjectDatabaseError::operation(
+            "InMemory datasets cannot be loaded via load_database",
+        )),
     }?;
     reservation.complete();
     Ok(result)
@@ -138,7 +142,8 @@ fn load_csv_via_duckdb(
     delimiter: char,
     has_header: bool,
     infer_schema_length: Option<usize>,
-) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, String> {
+) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, ProjectDatabaseError>
+{
     let (id, table, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(session)?;
 
     let meta = ingest_csv_to_duckdb(
@@ -148,7 +153,8 @@ fn load_csv_via_duckdb(
         delimiter,
         has_header,
         infer_schema_length,
-    )?;
+    )
+    .map_err(ProjectDatabaseError::operation)?;
 
     register_duckdb_instance(
         state,
@@ -169,7 +175,8 @@ fn load_parquet_via_duckdb(
     request: DatabaseCreateRequest<'_>,
     parquet_path: String,
     columns: Option<Vec<String>>,
-) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, String> {
+) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, ProjectDatabaseError>
+{
     let (id, table, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(session)?;
 
     let meta = ingest_parquet_to_duckdb(
@@ -177,7 +184,8 @@ fn load_parquet_via_duckdb(
         &duckdb_abs,
         &table,
         columns.as_deref(),
-    )?;
+    )
+    .map_err(ProjectDatabaseError::operation)?;
 
     register_duckdb_instance(
         state,
@@ -198,10 +206,12 @@ fn load_excel_via_duckdb(
     request: DatabaseCreateRequest<'_>,
     excel_path: String,
     sheet: String,
-) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, String> {
+) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, ProjectDatabaseError>
+{
     let (id, table, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(session)?;
 
-    let meta = ingest_excel_to_duckdb(Path::new(&excel_path), &sheet, &duckdb_abs, &table)?;
+    let meta = ingest_excel_to_duckdb(Path::new(&excel_path), &sheet, &duckdb_abs, &table)
+        .map_err(ProjectDatabaseError::operation)?;
 
     register_duckdb_instance(
         state,
@@ -218,9 +228,9 @@ fn load_excel_via_duckdb(
 
 fn prepare_duckdb_ingest_paths(
     session: &ProjectSession,
-) -> Result<(String, String, PathBuf, String), String> {
+) -> Result<(String, String, PathBuf, String), ProjectDatabaseError> {
     crate::project::ensure_directory(&session.root.as_path().join(crate::project::DATABASE_DIR))
-        .map_err(|error| error.to_string())?;
+        .map_err(ProjectDatabaseError::operation)?;
 
     let id = format!("db-{}", Uuid::new_v4());
     let table = id.clone();
@@ -239,9 +249,10 @@ fn register_duckdb_instance(
     meta: crate::database::DuckDbTableMeta,
     duckdb_abs: PathBuf,
     relative_path: String,
-) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, String> {
+) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, ProjectDatabaseError>
+{
     let name = unique_database_name(state, &base_name);
-    write_display_name(&duckdb_abs, &table, &name)?;
+    write_display_name(&duckdb_abs, &table, &name).map_err(ProjectDatabaseError::operation)?;
 
     let columns = column_info_from_duckdb(&meta.columns);
     let column_count = columns.len();
@@ -296,10 +307,13 @@ fn load_sql_via_duckdb(
     engine: DatabaseEngineSql,
     connection_string: String,
     table: String,
-) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, String> {
-    let mut df = sql_reader::read_table_to_dataframe(&engine, &connection_string, &table)?;
+) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, ProjectDatabaseError>
+{
+    let mut df = sql_reader::read_table_to_dataframe(&engine, &connection_string, &table)
+        .map_err(ProjectDatabaseError::operation)?;
     let (id, table_id, duckdb_abs, relative_path) = prepare_duckdb_ingest_paths(session)?;
-    let meta = ingest_dataframe_to_duckdb(&mut df, &duckdb_abs, &table_id)?;
+    let meta = ingest_dataframe_to_duckdb(&mut df, &duckdb_abs, &table_id)
+        .map_err(ProjectDatabaseError::operation)?;
     let base_name = table.clone();
     register_duckdb_instance(
         state,
@@ -376,23 +390,17 @@ pub(crate) fn get_database_meta_from_instance(
     }
 }
 
-fn database_project_error(error: crate::project::ProjectFilesystemError) -> AppError {
-    AppError::new(error.code(), error.to_string())
+fn database_project_error(error: crate::project::ProjectFilesystemError) -> CommandError {
+    CommandError::from(error)
 }
 
-fn reserve_export_temporary_file(destination: &Path) -> Result<PathBuf, AppError> {
-    let parent = destination.parent().ok_or_else(|| {
-        AppError::new(
-            "database_export_temp_reservation_failed",
-            "Export path has no parent",
-        )
-    })?;
-    let file_name = destination.file_name().ok_or_else(|| {
-        AppError::new(
-            "database_export_temp_reservation_failed",
-            "Export path has no file name",
-        )
-    })?;
+fn reserve_export_temporary_file(destination: &Path) -> Result<PathBuf, CommandError> {
+    let parent = destination
+        .parent()
+        .ok_or_else(|| CommandError::expected("database_export_temp_reservation_failed"))?;
+    let file_name = destination
+        .file_name()
+        .ok_or_else(|| CommandError::expected("database_export_temp_reservation_failed"))?;
     for _ in 0..8 {
         let temporary = parent.join(format!(
             ".{}.{}.tmp",
@@ -410,44 +418,72 @@ fn reserve_export_temporary_file(destination: &Path) -> Result<PathBuf, AppError
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => {
-                return Err(AppError::new(
+                return Err(CommandError::diagnosed(
                     "database_export_temp_reservation_failed",
-                    error.to_string(),
+                    error,
                 ));
             }
         }
     }
-    Err(AppError::new(
+    Err(CommandError::diagnosed(
         "database_export_temp_reservation_failed",
-        "Unable to reserve a unique sibling export path",
+        "unable to reserve a unique sibling export path",
     ))
 }
 
-pub(crate) fn cleanup_export_temporary_file(temporary: &Path) -> Result<(), AppError> {
+pub(crate) fn cleanup_export_temporary_file(temporary: &Path) -> Result<(), CommandError> {
     match std::fs::remove_file(temporary) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(AppError::new(
+        Err(error) => Err(CommandError::diagnosed(
             "database_export_cleanup_failed",
-            error.to_string(),
+            error,
         )),
     }
 }
 
-fn cleanup_after_export_error(temporary: &Path, mut primary: AppError) -> AppError {
-    let Err(mut cleanup) = cleanup_export_temporary_file(temporary) else {
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommandErrorSummary {
+    code: &'static str,
+    incident_id: Option<String>,
+}
+
+impl CommandErrorSummary {
+    fn from_error(error: &CommandError) -> Self {
+        Self {
+            code: error.code(),
+            incident_id: error.incident_id().map(str::to_owned),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CleanupErrorDetails {
+    cleanup_error: CommandErrorSummary,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PrimaryErrorDetails {
+    primary_error: CommandErrorSummary,
+}
+
+fn cleanup_after_export_error(temporary: &Path, primary: CommandError) -> CommandError {
+    let Err(cleanup) = cleanup_export_temporary_file(temporary) else {
         return primary;
     };
-    if primary.code == "stale_project_lifecycle" {
-        primary.details = Some(serde_json::json!({
-            "cleanupError": { "code": cleanup.code, "message": cleanup.message },
-        }));
-        primary
+    if primary.code() == "stale_project_lifecycle" {
+        let details = CleanupErrorDetails {
+            cleanup_error: CommandErrorSummary::from_error(&cleanup),
+        };
+        primary.with_details(details)
     } else {
-        cleanup.details = Some(serde_json::json!({
-            "primaryError": { "code": primary.code, "message": primary.message },
-        }));
-        cleanup
+        let details = PrimaryErrorDetails {
+            primary_error: CommandErrorSummary::from_error(&primary),
+        };
+        cleanup.with_details(details)
     }
 }
 
@@ -495,7 +531,7 @@ pub(crate) fn export_database_for_project_with_before_publish(
     format: &str,
     before_authority: impl FnOnce(&Path),
     at_final_publication: impl FnOnce(&Path),
-) -> Result<(), AppError> {
+) -> Result<(), CommandError> {
     let mut dataframe = state
         .with_database_snapshot_for_project(project_instance_id, id, |database| {
             database
@@ -503,8 +539,8 @@ pub(crate) fn export_database_for_project_with_before_publish(
                 .map(|view| view.dataframe)
                 .map_err(|error| error.to_string())
         })
-        .map_err(database_project_error)?
-        .map_err(|message| AppError::new("database_computation_failed", message))?;
+        .map_err(CommandError::from)?
+        .map_err(|error| CommandError::diagnosed("database_computation_failed", error))?;
     let destination = Path::new(path);
     let temporary = reserve_export_temporary_file(destination)?;
     let result = (|| {
@@ -513,14 +549,14 @@ pub(crate) fn export_database_for_project_with_before_publish(
             temporary.to_string_lossy().as_ref(),
             format,
         )
-        .map_err(|error| AppError::new("database_export_serialization_failed", error))?;
+        .map_err(|error| CommandError::diagnosed("database_export_serialization_failed", error))?;
         before_authority(&temporary);
         let _authority = state
             .acquire_database_publication_authority(project_instance_id)
             .map_err(database_project_error)?;
         at_final_publication(&temporary);
         atomic_replace_export(&temporary, destination)
-            .map_err(|error| AppError::new("database_export_publication_failed", error.to_string()))
+            .map_err(|error| CommandError::diagnosed("database_export_publication_failed", error))
     })();
     match result {
         Ok(()) => Ok(()),
@@ -534,7 +570,7 @@ pub(crate) fn export_database_for_project(
     id: &str,
     path: &str,
     format: &str,
-) -> Result<(), AppError> {
+) -> Result<(), CommandError> {
     export_database_for_project_with_before_publish(
         state,
         project_instance_id,
@@ -563,25 +599,25 @@ pub fn rename_database(
     expected_revision: crate::node_system::document::ResourceRevision,
     name: &str,
     operation_id: crate::node_system::document::OperationId,
-) -> Result<crate::event::ResourceMutationCommandResultDto<()>, String> {
+) -> Result<crate::event::ResourceMutationCommandResultDto<()>, ProjectDatabaseError> {
     let reservation = state.reserve_database_operation(project_instance_id, operation_id)?;
     let (session, _lease) = state.acquire_database_write_lease()?;
     let name = name.trim();
     if name.is_empty() {
-        return Err("Dataset name cannot be empty".into());
+        return Err(ProjectDatabaseError::InvalidName);
     }
 
     {
         let store = state.project_store.read().unwrap();
         if !store.databases.contains_key(id) {
-            return Err("Database not found".into());
+            return Err(ProjectDatabaseError::DatabaseNotFound);
         }
         let duplicate = store
             .databases
             .iter()
             .any(|(other_id, db)| other_id != id && database_display_name(db) == name);
         if duplicate {
-            return Err(format!("Dataset name '{name}' already exists"));
+            return Err(ProjectDatabaseError::NameConflict);
         }
     }
 
@@ -594,7 +630,7 @@ pub fn rename_database(
     let engine = instance.decl.engine;
     if let Some((relative_path, table)) = engine.duckdb_table() {
         let abs = session.root.as_path().join(relative_path);
-        write_display_name(&abs, table, name)?;
+        write_display_name(&abs, table, name).map_err(ProjectDatabaseError::operation)?;
     }
     run_database_external_io_test_hook();
     let mutation = state.commit_database_name(&session, &token, id, name, operation_id)?;
@@ -624,7 +660,7 @@ pub fn save_database_changes(
     id: &str,
     expected_revision: crate::node_system::document::ResourceRevision,
     operation_id: crate::node_system::document::OperationId,
-) -> Result<crate::event::ResourceMutationCommandResultDto<EditState>, String> {
+) -> Result<crate::event::ResourceMutationCommandResultDto<EditState>, ProjectDatabaseError> {
     state.with_database_writer(
         project_instance_id,
         id,

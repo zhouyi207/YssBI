@@ -20,11 +20,13 @@ import {
   isCurrentProjectIdentity,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FormulaStep, SamplerStep, SymbolRoleStep, type BayesDatasetOption } from './components/BayesPanels';
 import { ResultOverview } from './components/BayesResultPanels';
 import { BayesProgressStatus } from './components/BayesProgressStatus';
+import { bayesInferenceErrorMessage, bayesValidationIssueMessage } from './bayesIssuePresentation';
 
 type DatabaseMetadataUpdater = (
   id: string,
@@ -123,7 +125,7 @@ export function BayesView() {
       .filter(issue => ['data', 'likelihood', 'parameters'].includes(issueTargetStep(issue)));
   const run = async () => {
     const report = await validation.validate();
-    if (!report.ok) return;
+    if (!report?.ok) return;
     await inference.run(modelDraft.draft);
   };
 
@@ -158,7 +160,7 @@ export function BayesView() {
           <main className="p-6">
             <TabsContent value="model">
               <section className="space-y-4">
-                <BayesIssueBanner error={inference.error} validation={null} />
+                <BayesIssueBanner error={inference.error ?? validation.error} validation={null} />
                 <FormulaStep
                   draft={modelDraft.draft}
                   error={modelDraft.formulaError}
@@ -175,7 +177,7 @@ export function BayesView() {
               </section>
             </TabsContent>
             <TabsContent value="results">
-              <BayesIssueBanner error={inference.error} validation={validation.report} />
+              <BayesIssueBanner error={inference.error ?? validation.error} validation={validation.report} />
               <ResultOverview result={inference.result} />
             </TabsContent>
           </main>
@@ -216,23 +218,34 @@ function BayesIssueBanner({
   const issues = validation ? [...validation.errors, ...validation.warnings].slice(0, 4) : [];
   if (!error && issues.length === 0) return null;
 
+  const destructive = Boolean(error || issues.some(issue => issue.severity === 'error'));
   return (
-    <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3 text-sm">
-      {error ? (
-        <p className="text-destructive">
-          <span className="font-mono">[{error.code}]</span> {error.message}
-          {error.detail ? ` (${error.detail})` : ''}
-          {error.column ? ` ${t('bayes.issue.column', { column: error.column })}` : ''}
-          {typeof error.row === 'number' ? ` ${t('bayes.issue.row', { row: error.row + 1 })}` : ''}
-        </p>
-      ) : null}
+    <Alert variant={destructive ? 'destructive' : 'warning'}>
+      <AlertTitle>{error ? t('bayes.errors.title') : t('bayes.validation.title')}</AlertTitle>
+      <AlertDescription>
+        {error ? (
+          <div className="space-y-1">
+            <p>
+              <span className="font-mono">[{error.code}]</span> {bayesInferenceErrorMessage(error, t)}
+            </p>
+            {error.details?.column ? <p>{t('bayes.issue.column', { column: error.details.column })}</p> : null}
+            {typeof error.details?.row === 'number' ? <p>{t('bayes.issue.row', { row: error.details.row + 1 })}</p> : null}
+            {error.details?.parameter ? <p>{t('bayes.issue.parameter', { parameter: error.details.parameter })}</p> : null}
+            {error.details?.path ? <p>{t('bayes.issue.path', { path: error.details.path })}</p> : null}
+            {error.incidentId ? (
+              <p>{t('common.incidentId')}: <span className="font-mono">{error.incidentId}</span></p>
+            ) : null}
+          </div>
+        ) : null}
 
-      {issues.map(issue => (
-        <p key={`${issue.code}-${issue.path ?? ''}`} className={issue.severity === 'error' ? 'text-destructive' : 'text-muted-foreground'}>
-          <span className="font-mono">[{issue.code}]</span> {issue.message}{issue.path ? ` (${issue.path})` : ''}
-        </p>
-      ))}
-    </div>
+        {issues.map(issue => (
+          <p key={`${issue.code}-${issue.path}`}>
+            <span className="font-mono">[{issue.code}]</span> {bayesValidationIssueMessage(issue, t)}{' '}
+            <span className="text-xs">({t('bayes.validation.path', { path: issue.path })})</span>
+          </p>
+        ))}
+      </AlertDescription>
+    </Alert>
   );
 }
 

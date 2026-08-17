@@ -12,6 +12,18 @@ describe('normalizeDatabaseRecord', () => {
       engine: { csv: { path: 'C:/data/sales_report.csv' } },
     });
     expect(record.name).toBe('sales_report');
+    expect(record.loadFailed).toBe(false);
+  });
+
+  it('normalizes machine load state without retaining raw load errors', () => {
+    const record = normalizeDatabaseRecord('df-1', {
+      id: 'df-1',
+      loadFailed: true,
+      loadError: 'sensitive backend failure',
+    });
+
+    expect(record.loadFailed).toBe(true);
+    expect(record).not.toHaveProperty('loadError');
   });
 
   it('preserves rich metadata when incoming only supplies engine', () => {
@@ -21,6 +33,7 @@ describe('normalizeDatabaseRecord', () => {
       columns: [{ name: 'a', type: 'Int64' }],
       rowCount: 42,
       columnCount: 1,
+      loadFailed: true,
     };
     const record = normalizeDatabaseRecord(
       'df-1',
@@ -30,6 +43,7 @@ describe('normalizeDatabaseRecord', () => {
     expect(record.name).toBe('other');
     expect(record.columns).toEqual(existing.columns);
     expect(record.rowCount).toBe(42);
+    expect(record.loadFailed).toBe(true);
   });
 
   it('falls back to existing name when incoming has no name or engine', () => {

@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { hypothesisTest } from '@/features/application/stats/statsActions';
+import { formatInlineUserError } from '@/features/application/userErrorSummary';
 import type { HypothesisTestResponse } from '@/features/application/stats/statsActions';
 import { buildParamNames } from '@/shared/stats/regressionReportUtils';
 import type { RegressionResultData } from '@/shared/types/report';
 
 export function useHypothesisTestBlock(data: RegressionResultData) {
+  const { t } = useTranslation();
   const [hypothesis, setHypothesis] = useState('');
   const [result, setResult] = useState<HypothesisTestResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +35,7 @@ export function useHypothesisTestBlock(data: RegressionResultData) {
       });
       setResult(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatInlineUserError(e, t));
     } finally {
       setLoading(false);
     }

@@ -9,7 +9,7 @@ import { ReportView } from './ReportView';
 const { logError } = vi.hoisted(() => ({ logError: vi.fn() }));
 
 vi.mock('@/utils/appLogger', () => ({
-  logger: { notify: { error: logError } },
+  logger: { data: { error: logError } },
 }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
@@ -100,6 +100,7 @@ describe('ReportView', () => {
     expect(container.textContent).toBe(
       'Unable to render OLS report: coefficients[0].std_err missing required field.',
     );
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
     expect(logError).toHaveBeenCalledTimes(1);
     expect(JSON.parse(logError.mock.calls[0][0])).toEqual({
       resultId: '42',

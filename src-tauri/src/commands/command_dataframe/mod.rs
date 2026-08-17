@@ -2,7 +2,7 @@
 use crate::application::database::{
     cleanup_export_temporary_file, export_database_for_project_with_before_publish,
 };
-use crate::error::AppError;
+use crate::error::CommandError;
 use crate::event::{Event, EventProject, ResourceMutationCommandResultDto, emit_project_event};
 use crate::node_system::document::{OperationId, ResourceRevision};
 use crate::project::{ProjectInstanceId, ProjectState};
@@ -12,20 +12,6 @@ use tauri::{AppHandle, State};
 mod types;
 
 use types::dataframe_to_row_matrix;
-
-fn database_command_error(error: String) -> AppError {
-    let Some((code, message)) = error.split_once(": ") else {
-        return AppError::from(error);
-    };
-    match code {
-        "duplicate_operation"
-        | "stale_project_lifecycle"
-        | "stale_database_revision"
-        | "database_already_exists"
-        | "project_recovery_required" => AppError::new(code, message),
-        _ => AppError::from(error),
-    }
-}
 
 fn emit_database_result<T>(
     result: &ResourceMutationCommandResultDto<T>,
@@ -44,7 +30,7 @@ fn load_database_with_emitter(
     emit: impl FnMut(Event),
 ) -> Result<
     ResourceMutationCommandResultDto<crate::application::database::LoadDatabaseResult>,
-    AppError,
+    CommandError,
 > {
     let result = crate::application::database::load_database(
         state,
@@ -52,7 +38,7 @@ fn load_database_with_emitter(
         operation_id,
         engine,
     )
-    .map_err(database_command_error)?;
+    .map_err(CommandError::from)?;
     emit_database_result(&result, emit);
     Ok(result)
 }
@@ -68,7 +54,7 @@ fn mutate_database_with_emitter<T>(
         &crate::project::ProjectSession,
     ) -> Result<T, String>,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationCommandResultDto<T>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<T>, CommandError> {
     let result = state
         .with_database_writer(
             &project_instance_id,
@@ -77,7 +63,7 @@ fn mutate_database_with_emitter<T>(
             operation_id,
             mutate,
         )
-        .map_err(database_command_error)?;
+        .map_err(CommandError::from)?;
     emit_database_result(&result, emit);
     Ok(result)
 }
@@ -89,7 +75,7 @@ fn save_database_with_emitter(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     let result = crate::application::database::save_database_changes(
         state,
         &project_instance_id,
@@ -97,7 +83,7 @@ fn save_database_with_emitter(
         expected_revision,
         operation_id,
     )
-    .map_err(database_command_error)?;
+    .map_err(CommandError::from)?;
     emit_database_result(&result, emit);
     Ok(result)
 }
@@ -109,22 +95,22 @@ fn delete_database_with_emitter(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationCommandResultDto<()>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<()>, CommandError> {
     let result = state
         .delete_database(&project_instance_id, id, expected_revision, operation_id)
-        .map_err(database_command_error)?;
+        .map_err(CommandError::from)?;
     emit_database_result(&result, emit);
     Ok(result)
 }
 
-async fn run_on_blocking_pool<F, R>(f: F) -> Result<R, AppError>
+async fn run_on_blocking_pool<F, R>(f: F) -> Result<R, CommandError>
 where
-    F: FnOnce() -> Result<R, AppError> + Send + 'static,
+    F: FnOnce() -> Result<R, CommandError> + Send + 'static,
     R: Send + 'static,
 {
     tauri::async_runtime::spawn_blocking(f)
         .await
-        .map_err(AppError::internal)?
+        .map_err(CommandError::internal)?
 }
 
 #[derive(serde::Serialize)]
@@ -134,13 +120,11 @@ struct DatabaseRowsPayload {
     row_ids: Vec<i64>,
 }
 
-fn database_project_error(error: crate::project::ProjectFilesystemError) -> AppError {
-    AppError::new(error.code(), error.to_string())
-}
-
-fn serialize_database_value<T: serde::Serialize>(value: T) -> Result<serde_json::Value, AppError> {
+fn serialize_database_value<T: serde::Serialize>(
+    value: T,
+) -> Result<serde_json::Value, CommandError> {
     serde_json::to_value(value)
-        .map_err(|error| AppError::new("database_serialization_failed", error.to_string()))
+        .map_err(|error| CommandError::diagnosed("database_serialization_failed", error))
 }
 
 fn with_database_read_for_project<R>(
@@ -148,18 +132,18 @@ fn with_database_read_for_project<R>(
     project_instance_id: &ProjectInstanceId,
     id: &str,
     read: impl FnOnce(&mut crate::database::DatabaseInstance) -> Result<R, String>,
-) -> Result<R, AppError> {
+) -> Result<R, CommandError> {
     state
         .with_database_snapshot_for_project(project_instance_id, id, read)
-        .map_err(database_project_error)?
-        .map_err(|message| AppError::new("database_computation_failed", message))
+        .map_err(CommandError::from)?
+        .map_err(|error| CommandError::diagnosed("database_computation_failed", error))
 }
 
 fn get_database_meta_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
     id: &str,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     let result = with_database_read_for_project(state, project_instance_id, id, |database| {
         crate::application::database::get_database_meta_from_instance(id, database)
     })?;
@@ -172,7 +156,7 @@ fn get_database_rows_for_project(
     id: &str,
     offset: usize,
     limit: usize,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     let page = with_database_read_for_project(state, project_instance_id, id, |database| {
         database
             .query_page_with_rowids(offset, limit)
@@ -188,7 +172,7 @@ fn get_column_stats_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
     id: &str,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     let stats = with_database_read_for_project(state, project_instance_id, id, |database| {
         database
             .compute_column_stats()
@@ -201,7 +185,7 @@ fn get_column_distribution_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
     id: &str,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     let distributions =
         with_database_read_for_project(state, project_instance_id, id, |database| {
             database
@@ -215,7 +199,7 @@ fn get_dataset_overview_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
     id: &str,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     let overview = with_database_read_for_project(state, project_instance_id, id, |database| {
         database
             .compute_dataset_overview()
@@ -228,7 +212,7 @@ fn get_edit_state_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
     id: &str,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     let edit_state = with_database_read_for_project(state, project_instance_id, id, |database| {
         Ok(database.edit_state())
     })?;
@@ -244,7 +228,7 @@ pub async fn load_database(
     engine: DatabaseEngineDTO,
 ) -> Result<
     ResourceMutationCommandResultDto<crate::application::database::LoadDatabaseResult>,
-    AppError,
+    CommandError,
 > {
     let state = state.inner().clone();
     run_on_blocking_pool(move || {
@@ -256,13 +240,14 @@ pub async fn load_database(
 }
 
 #[tauri::command]
-pub async fn list_sqlite_tables(db_path: String) -> Result<Vec<String>, AppError> {
+pub async fn list_sqlite_tables(db_path: String) -> Result<Vec<String>, CommandError> {
     run_on_blocking_pool(move || {
         use crate::database::DatabaseEngineSql;
-        Ok(crate::database::sql_reader::list_tables(
+        crate::database::sql_reader::list_tables(
             &DatabaseEngineSql::Sqlite { auto_create: false },
             &db_path,
-        )?)
+        )
+        .map_err(|error| CommandError::diagnosed("database_table_list_failed", error))
     })
     .await
 }
@@ -271,7 +256,7 @@ pub async fn list_sqlite_tables(db_path: String) -> Result<Vec<String>, AppError
 pub async fn list_sql_tables(
     engine: String,
     connection_string: String,
-) -> Result<Vec<String>, AppError> {
+) -> Result<Vec<String>, CommandError> {
     run_on_blocking_pool(move || {
         use crate::database::DatabaseEngineSql;
         let engine_enum = match engine.as_str() {
@@ -279,24 +264,21 @@ pub async fn list_sql_tables(
             "mysql" | "mariadb" => DatabaseEngineSql::Mysql {
                 charset: "utf8mb4".to_string(),
             },
-            _ => {
-                return Err(AppError::new(
-                    "unsupported_sql_engine",
-                    format!("Unsupported SQL engine: {}", engine),
-                ));
-            }
+            _ => return Err(CommandError::expected("unsupported_sql_engine")),
         };
-        Ok(crate::database::sql_reader::list_tables(
-            &engine_enum,
-            &connection_string,
-        )?)
+        crate::database::sql_reader::list_tables(&engine_enum, &connection_string)
+            .map_err(|error| CommandError::diagnosed("database_table_list_failed", error))
     })
     .await
 }
 
 #[tauri::command]
-pub async fn list_excel_sheets(file_path: String) -> Result<Vec<String>, AppError> {
-    run_on_blocking_pool(move || Ok(crate::database::excel_reader::list_sheets(&file_path)?)).await
+pub async fn list_excel_sheets(file_path: String) -> Result<Vec<String>, CommandError> {
+    run_on_blocking_pool(move || {
+        crate::database::excel_reader::list_sheets(&file_path)
+            .map_err(|error| CommandError::diagnosed("database_sheet_list_failed", error))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -304,7 +286,7 @@ pub fn get_database_meta(
     state: State<ProjectState>,
     project_instance_id: ProjectInstanceId,
     id: String,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     get_database_meta_for_project(state.inner(), &project_instance_id, &id)
 }
 
@@ -316,7 +298,7 @@ pub async fn delete_database(
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<ResourceMutationCommandResultDto<()>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<()>, CommandError> {
     let state = state.inner().clone();
     run_on_blocking_pool(move || {
         delete_database_with_emitter(
@@ -339,7 +321,7 @@ fn rename_database_with_emitter(
     name: &str,
     operation_id: OperationId,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationCommandResultDto<()>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<()>, CommandError> {
     let result = crate::application::database::rename_database(
         state,
         &project_instance_id,
@@ -348,7 +330,7 @@ fn rename_database_with_emitter(
         name,
         operation_id,
     )
-    .map_err(database_command_error)?;
+    .map_err(CommandError::from)?;
     emit_database_result(&result, emit);
     Ok(result)
 }
@@ -362,7 +344,7 @@ pub fn rename_database(
     expected_revision: ResourceRevision,
     name: String,
     operation_id: OperationId,
-) -> Result<ResourceMutationCommandResultDto<()>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<()>, CommandError> {
     rename_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -381,7 +363,7 @@ pub fn get_database_rows(
     id: String,
     offset: usize,
     limit: usize,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     get_database_rows_for_project(state.inner(), &project_instance_id, &id, offset, limit)
 }
 
@@ -390,7 +372,7 @@ pub async fn get_column_stats(
     state: State<'_, ProjectState>,
     project_instance_id: ProjectInstanceId,
     id: String,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     let state = state.inner().clone();
     run_on_blocking_pool(move || get_column_stats_for_project(&state, &project_instance_id, &id))
         .await
@@ -401,7 +383,7 @@ pub async fn get_column_distribution(
     state: State<'_, ProjectState>,
     project_instance_id: ProjectInstanceId,
     id: String,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     let state = state.inner().clone();
     run_on_blocking_pool(move || {
         get_column_distribution_for_project(&state, &project_instance_id, &id)
@@ -414,7 +396,7 @@ pub async fn get_dataset_overview(
     state: State<'_, ProjectState>,
     project_instance_id: ProjectInstanceId,
     id: String,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     let state = state.inner().clone();
     run_on_blocking_pool(move || {
         get_dataset_overview_for_project(&state, &project_instance_id, &id)
@@ -436,7 +418,7 @@ pub fn edit_cell(
     col_name: String,
     value: serde_json::Value,
     row_id: Option<i64>,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     mutate_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -457,7 +439,7 @@ pub fn add_row(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     index: Option<usize>,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     mutate_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -479,7 +461,7 @@ pub fn delete_rows(
     operation_id: OperationId,
     indices: Vec<usize>,
     row_ids: Option<Vec<i64>>,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     mutate_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -501,7 +483,7 @@ pub fn add_column(
     operation_id: OperationId,
     name: String,
     dtype: String,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     mutate_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -522,7 +504,7 @@ pub fn delete_column(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     name: String,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     mutate_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -545,7 +527,7 @@ pub fn cast_column(
     col_name: String,
     new_dtype: String,
     force: Option<bool>,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     mutate_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -567,7 +549,7 @@ pub fn rename_column(
     operation_id: OperationId,
     old_name: String,
     new_name: String,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     mutate_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -587,7 +569,7 @@ pub fn undo_edit(
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     mutate_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -607,7 +589,7 @@ pub fn redo_edit(
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     mutate_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -627,7 +609,7 @@ pub fn save_database_changes(
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, AppError> {
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
     save_database_with_emitter(
         state.inner(),
         project_instance_id,
@@ -647,7 +629,7 @@ pub async fn export_database(
     id: String,
     path: String,
     format: String,
-) -> Result<(), AppError> {
+) -> Result<(), CommandError> {
     let state = state.inner().clone();
     run_on_blocking_pool(move || {
         crate::application::database::export_database_for_project(
@@ -666,7 +648,7 @@ pub fn get_edit_state(
     state: State<ProjectState>,
     project_instance_id: ProjectInstanceId,
     id: String,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     get_edit_state_for_project(state.inner(), &project_instance_id, &id)
 }
 
@@ -692,7 +674,7 @@ mod tests {
     #[test]
     fn database_serialization_errors_are_typed() {
         let error = serialize_database_value(FailingSerialize).unwrap_err();
-        assert_eq!(error.code, "database_serialization_failed");
+        assert_eq!(error.code(), "database_serialization_failed");
     }
 
     fn assert_exact_event<T>(
@@ -761,7 +743,7 @@ mod tests {
         ];
 
         for error in errors {
-            assert_eq!(error.code, "stale_project_lifecycle");
+            assert_eq!(error.code(), "stale_project_lifecycle");
         }
     }
 
@@ -787,7 +769,7 @@ mod tests {
             |_| {},
             |_| {},
         );
-        assert_eq!(before_entry.unwrap_err().code, "stale_project_lifecycle");
+        assert_eq!(before_entry.unwrap_err().code(), "stale_project_lifecycle");
         assert_eq!(std::fs::read(&destination).unwrap(), b"sentinel");
         assert_only_destination_exists(&root, &destination);
 
@@ -805,7 +787,7 @@ mod tests {
             |_| {},
         );
         assert_eq!(
-            before_publication.unwrap_err().code,
+            before_publication.unwrap_err().code(),
             "stale_project_lifecycle"
         );
         assert_eq!(std::fs::read(&destination).unwrap(), b"sentinel");
@@ -880,7 +862,7 @@ mod tests {
             |_| {},
         )
         .unwrap_err();
-        assert_eq!(serialization.code, "database_export_serialization_failed");
+        assert_eq!(serialization.code(), "database_export_serialization_failed");
         assert!(std::fs::read_dir(&root).unwrap().next().is_none());
 
         let missing_parent = root.join("missing").join("sales.csv");
@@ -894,7 +876,10 @@ mod tests {
             |_| {},
         )
         .unwrap_err();
-        assert_eq!(reservation.code, "database_export_temp_reservation_failed");
+        assert_eq!(
+            reservation.code(),
+            "database_export_temp_reservation_failed"
+        );
 
         let blocked_destination = root.join("blocked.csv");
         std::fs::create_dir(&blocked_destination).unwrap();
@@ -908,7 +893,7 @@ mod tests {
             |_| {},
         )
         .unwrap_err();
-        assert_eq!(publication.code, "database_export_publication_failed");
+        assert_eq!(publication.code(), "database_export_publication_failed");
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
 
         state
@@ -931,13 +916,13 @@ mod tests {
             |_| {},
         )
         .unwrap_err();
-        assert_eq!(computation.code, "database_computation_failed");
+        assert_eq!(computation.code(), "database_computation_failed");
 
         let cleanup_target = root.join("cleanup-target");
         std::fs::create_dir(&cleanup_target).unwrap();
         std::fs::write(cleanup_target.join("child"), b"keep").unwrap();
         let cleanup = cleanup_export_temporary_file(&cleanup_target).unwrap_err();
-        assert_eq!(cleanup.code, "database_export_cleanup_failed");
+        assert_eq!(cleanup.code(), "database_export_cleanup_failed");
 
         let _ = std::fs::remove_dir_all(root);
     }
@@ -1059,7 +1044,7 @@ mod tests {
             },
             |event| events.push(event),
         );
-        assert_eq!(replay.unwrap_err().code, "duplicate_operation");
+        assert_eq!(replay.unwrap_err().code(), "duplicate_operation");
         assert_eq!(events.len(), 1);
         assert_eq!(state.get_data().unwrap().databases.len(), 1);
 

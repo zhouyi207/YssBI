@@ -36,4 +36,9 @@ export type WorksheetPreviewPayload =
   | { kind: 'histogram'; bins: Array<{ label: string; count: number }>; xLabel?: string; yLabel?: string }
   | { kind: 'scatter' | 'line'; pair: PlotColumnPairPayload }
   | { kind: 'empty' }
-  | { kind: 'error'; message: string };
+  | {
+    kind: 'error';
+    code: string;
+    incidentId: string | null;
+    column?: string;
+  };

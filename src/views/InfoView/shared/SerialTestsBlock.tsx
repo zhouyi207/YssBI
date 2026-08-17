@@ -1,14 +1,17 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { computeSerialTests } from '@/features/application/stats/statsActions';
+import { formatInlineUserError } from '@/features/application/userErrorSummary';
 import type { SerialTestsResponse } from '@/features/application/stats/statsActions';
 import { SectionHeader } from './RegressionShared';
 import { InfoAccentButton } from './InfoViewControls';
 import { formatNum } from './utils';
 
 export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals?: number[]; exog?: number[][]; residualLabel?: string }) {
+  const { t } = useTranslation();
   const [lag, setLag] = useState(20);
   const [bgDropMissing, setBgDropMissing] = useState(false);
   const [result, setResult] = useState<SerialTestsResponse | null>(null);
@@ -31,7 +34,7 @@ export function SerialTestsBlock({ residuals, exog, residualLabel }: { residuals
       });
       setResult(res);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(formatInlineUserError(e, t));
     } finally {
       setLoading(false);
     }

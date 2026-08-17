@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use polars::prelude::DataFrame;
 
-use crate::sci::api::bayes::{BayesModelSpec, InferenceResult, TaskProgress};
+use crate::sci::api::bayes::{BayesModelSpec, InferenceResult, TaskErrorDetails, TaskProgress};
 
 pub type BayesProgressCallback = Arc<dyn Fn(TaskProgress) + Send + Sync>;
 
@@ -50,6 +50,7 @@ pub struct BayesBackendError {
     pub code: String,
     pub message: String,
     pub detail: Option<String>,
+    pub details: Option<TaskErrorDetails>,
 }
 
 impl BayesBackendError {
@@ -58,6 +59,7 @@ impl BayesBackendError {
             code: code.into(),
             message: message.into(),
             detail: None,
+            details: None,
         }
     }
 
@@ -70,7 +72,15 @@ impl BayesBackendError {
             code: code.into(),
             message: message.into(),
             detail: Some(detail.into()),
+            details: None,
         }
+    }
+
+    pub fn with_safe_details(mut self, details: TaskErrorDetails) -> Self {
+        if !details.is_empty() {
+            self.details = Some(details);
+        }
+        self
     }
 }
 
@@ -88,7 +98,7 @@ pub struct PlaceholderBayesBackend;
 impl BayesBackend for PlaceholderBayesBackend {
     fn fit(&self, _request: BayesBackendRequest) -> Result<InferenceResult, BayesBackendError> {
         Err(BayesBackendError::new(
-            "BAYES_BACKEND_NOT_CONFIGURED",
+            "bayes_backend_not_configured",
             "Bayesian inference backend is not configured.",
         ))
     }
@@ -159,6 +169,6 @@ mod tests {
         let error = PlaceholderBayesBackend
             .fit(BayesBackendRequest::new("task-1", spec(), None))
             .expect_err("placeholder backend must fail");
-        assert_eq!(error.code, "BAYES_BACKEND_NOT_CONFIGURED");
+        assert_eq!(error.code, "bayes_backend_not_configured");
     }
 }

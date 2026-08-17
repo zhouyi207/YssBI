@@ -64,8 +64,8 @@ export const SqlConnectionModal = ({
             }
             onConnect(connStr);
             onClose();
-        } catch (e) {
-            setError(String(e));
+        } catch {
+            setError(t("importModal.connectionFieldsInvalid"));
         }
     };
 

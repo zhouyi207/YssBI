@@ -1,6 +1,8 @@
 import { useRef, useCallback } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
+import { i18n } from '@/app/i18n';
 import { DatabaseService } from '@/services/database/databaseService';
+import { normalizeIpcError } from '@/services/ipc';
 import { invalidateWorksheetPreviewCacheForDatabase } from '@/services/worksheet/worksheetPreviewCache';
 import { useDatabaseStore, useEditStateStore } from '@/features/core/dataStore';
 import type { EditState } from '@/features/core/dataStore/editStateStore';
@@ -23,6 +25,32 @@ async function refreshDatabaseColumns(identity: ProjectIdentitySnapshot, databas
     columnCount: meta.columnCount,
   });
 }
+
+function showDatabaseEditorError(
+  error: unknown,
+  command: string,
+  messageForCode: (code: string) => string,
+): void {
+  const ipcError = normalizeIpcError(command, error);
+  void uiStore.alert({
+    title: i18n.t('common.error'),
+    message: messageForCode(ipcError.code),
+    closeText: i18n.t('common.close'),
+    type: 'error',
+    incidentId: ipcError.incidentId,
+    incidentLabel: i18n.t('common.incidentId'),
+  });
+}
+
+export interface DatabaseEditorIpcFailure {
+  code: string;
+  incidentId: string | null;
+}
+
+export type DatabaseFieldMutationOutcome =
+  | { status: 'applied' }
+  | { status: 'noop' }
+  | { status: 'failed'; error: DatabaseEditorIpcFailure };
 
 interface UseEditActionsParams {
   selectedDfId: string | null;
@@ -55,17 +83,20 @@ export function useEditActions({
     await reloadAllData();
   }, [selectedDfId, reloadAllData]);
 
-  const commitCellValue = useCallback(async (row: number, col: number, value: unknown) => {
-    if (!selectedDfId) return;
-    if (commitInFlightRef.current) return;
+  const commitCellValueOutcome = useCallback(async (
+    row: number,
+    col: number,
+    value: unknown,
+  ): Promise<DatabaseFieldMutationOutcome> => {
+    if (!selectedDfId || commitInFlightRef.current) return { status: 'noop' };
     const globalRow = rowOffset + row;
     const colName = columns[col]?.name;
-    if (!colName) return;
+    if (!colName) return { status: 'noop' };
 
     const oldVal = loadedRows[row]?.[col];
     const oldStr = oldVal === null || oldVal === undefined ? '' : String(oldVal);
     const nextStr = value === null || value === undefined ? '' : String(value);
-    if (nextStr === oldStr) return;
+    if (nextStr === oldStr) return { status: 'noop' };
 
     try {
       commitInFlightRef.current = true;
@@ -85,14 +116,25 @@ export function useEditActions({
           rowId,
         ));
       await handleEditResult(es);
-    } catch (e) {
-      const msg = String(e);
-      logger.data.error('editCell failed: ' + msg, 'DatabaseEditorWindow');
-      logger.notify.error(msg, "UI");
+      return { status: 'applied' };
+    } catch (error) {
+      const ipcError = normalizeIpcError('edit_database_cell', error);
+      logger.data.error(
+        `editCell failed code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
+        'DatabaseEditorWindow',
+      );
+      return {
+        status: 'failed',
+        error: { code: ipcError.code, incidentId: ipcError.incidentId },
+      };
     } finally {
       commitInFlightRef.current = false;
     }
   }, [selectedDfId, columns, loadedRows, loadedRowIds, rowOffset, handleEditResult]);
+
+  const commitCellValue = useCallback(async (row: number, col: number, value: unknown) => {
+    await commitCellValueOutcome(row, col, value);
+  }, [commitCellValueOutcome]);
 
   const handleUndo = useCallback(async () => {
     if (!selectedDfId || !currentEditState.canUndo) return;
@@ -133,11 +175,10 @@ export function useEditActions({
           selectedDfId,
         ));
       await handleEditResult(es);
-      logger.notify.info('数据已保存到项目', "UI");
     } catch (e) {
-      const msg = String(e);
-      logger.data.error('save changes failed: ' + msg, 'DatabaseEditorWindow');
-      logger.notify.error(msg, "UI");
+      logger.data.error('save changes failed: ' + String(e), 'DatabaseEditorWindow');
+      showDatabaseEditorError(e, 'save_database_changes', (code) =>
+        i18n.t('notifications.databaseEditor.saveFailed', { error: code }));
     }
   }, [selectedDfId, currentEditState.isModified, handleEditResult]);
 
@@ -316,10 +357,13 @@ export function useEditActions({
       await refreshDatabaseColumns(identity, selectedDfId);
     } catch (e) {
       if (!isCurrentProjectIdentity(identity)) return;
-      const msg = String(e);
+      const ipcError = normalizeIpcError('cast_database_column', e);
+      const reference = ipcError.incidentId
+        ? `${ipcError.code}\n${i18n.t('common.incidentId')}: ${ipcError.incidentId}`
+        : ipcError.code;
       const force = await uiStore.confirm({
         title: '强制转换列类型',
-        message: `${msg}\n\n是否强制转换？无法转换的值将变为 null。`,
+        message: `${reference}\n\n是否强制转换？无法转换的值将变为 null。`,
         type: 'danger',
         confirmText: '强制转换',
       });
@@ -341,9 +385,9 @@ export function useEditActions({
           await refreshDatabaseColumns(identity, selectedDfId);
         } catch (e2) {
           if (isCurrentProjectIdentity(identity)) {
-            const forceError = String(e2);
-            logger.data.error('castColumn force failed: ' + forceError, 'DatabaseEditorWindow');
-            logger.notify.error(forceError, "UI");
+            logger.data.error('castColumn force failed: ' + String(e2), 'DatabaseEditorWindow');
+            showDatabaseEditorError(e2, 'cast_database_column', (code) =>
+              i18n.t('notifications.databaseEditor.forceCastFailed', { error: code }));
           }
         }
       }
@@ -353,6 +397,7 @@ export function useEditActions({
   return {
     currentEditState,
     commitCellValue,
+    commitCellValueOutcome,
     handleUndo,
     handleRedo,
     handleSave,

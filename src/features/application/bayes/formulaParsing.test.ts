@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { BayesModelDraftDTO, LikelihoodSpecDTO } from '@/shared/types/bayes';
 import { createEmptyBayesDraft } from '@/features/domain/bayes';
-import { buildFormulaParseRequest } from './formulaParsing';
+import { normalizeIpcError } from '@/services/ipc';
+import { buildFormulaParseRequest, formatFormulaParseError } from './formulaParsing';
 
 const normalLikelihood: LikelihoodSpecDTO = {
   type: 'normal',
@@ -31,5 +32,37 @@ describe('Bayes formula parsing state', () => {
     });
   });
 
+  it('keeps only normalized code, safe details, and incident ID', () => {
+    const error = normalizeIpcError('parse_bayes_expression', {
+      code: 'bayes_expression_parse_failed',
+      details: { column: 'formula', row: 2, path: 'formulaText' },
+      incidentId: 'incident-formula-42',
+    });
+
+    expect(formatFormulaParseError(error)).toEqual({
+      code: 'bayes_expression_parse_failed',
+      details: { column: 'formula', row: 2, path: 'formulaText' },
+      incidentId: 'incident-formula-42',
+    });
+  });
+
+  it('drops legacy backend prose and never copies a raw Error message', () => {
+    const legacy = normalizeIpcError('parse_bayes_expression', {
+      code: 'bayes_expression_parse_failed',
+      details: { detail: 'private parser prose' },
+      incidentId: null,
+    });
+
+    expect(formatFormulaParseError(legacy)).toEqual({
+      code: 'bayes_expression_parse_failed',
+      details: null,
+      incidentId: null,
+    });
+    expect(formatFormulaParseError(new Error('private transport failure'))).toEqual({
+      code: 'bayes_expression_parse_failed',
+      details: null,
+      incidentId: null,
+    });
+  });
 
 });

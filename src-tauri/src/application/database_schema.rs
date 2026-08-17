@@ -99,10 +99,11 @@ pub fn apply_schema_snapshot(dto: &mut DatabaseDeclDTO, snapshot: DatabaseSchema
             dto.columns = Some(columns);
             dto.row_count = Some(row_count);
             dto.column_count = Some(column_count);
+            dto.load_failed = false;
         }
-        DatabaseSchemaSnapshot::Failed { name, error } => {
+        DatabaseSchemaSnapshot::Failed { name, .. } => {
             dto.name = Some(name);
-            dto.load_error = Some(error);
+            dto.load_failed = true;
         }
     }
 }
@@ -124,4 +125,67 @@ pub fn enriched_database_dtos(
         enriched.insert(id.clone(), db_dto);
     }
     enriched
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::DatabaseEngineDTO;
+
+    fn database_dto() -> DatabaseDeclDTO {
+        DatabaseDeclDTO {
+            id: "database-id".to_string(),
+            engine: DatabaseEngineDTO::InMemory {
+                name: "Database".to_string(),
+            },
+            schema_version: 1,
+            required: true,
+            name: None,
+            columns: None,
+            row_count: None,
+            column_count: None,
+            load_failed: false,
+        }
+    }
+
+    #[test]
+    fn failed_schema_snapshot_exposes_only_machine_state() {
+        let mut dto = database_dto();
+
+        apply_schema_snapshot(
+            &mut dto,
+            DatabaseSchemaSnapshot::Failed {
+                name: "Database".to_string(),
+                error: "sensitive backend failure".to_string(),
+            },
+        );
+
+        let wire = serde_json::to_value(dto).expect("database DTO should serialize");
+        assert_eq!(wire.get("loadFailed"), Some(&serde_json::Value::Bool(true)));
+        assert!(wire.get("loadError").is_none());
+        assert!(!wire.to_string().contains("sensitive backend failure"));
+    }
+
+    #[test]
+    fn ready_schema_snapshot_clears_failed_state() {
+        let mut dto = database_dto();
+        dto.load_failed = true;
+
+        apply_schema_snapshot(
+            &mut dto,
+            DatabaseSchemaSnapshot::Ready {
+                name: "Database".to_string(),
+                columns: vec![ColumnInfoDTO {
+                    name: "value".to_string(),
+                    dtype: "Int64".to_string(),
+                }],
+                row_count: 3,
+                column_count: 1,
+            },
+        );
+
+        assert!(!dto.load_failed);
+        assert_eq!(dto.row_count, Some(3));
+        assert_eq!(dto.column_count, Some(1));
+    }
 }

@@ -26,12 +26,12 @@ struct ValidationContext {
 }
 
 impl ValidationContext {
-    fn error(&mut self, code: &str, message: impl Into<String>, path: impl Into<String>) {
-        self.errors.push(error(code, message, path));
+    fn error(&mut self, code: &str, path: impl Into<String>) {
+        self.errors.push(error(code, path));
     }
 
-    fn warning(&mut self, code: &str, message: impl Into<String>, path: impl Into<String>) {
-        self.warnings.push(warning(code, message, path));
+    fn warning(&mut self, code: &str, path: impl Into<String>) {
+        self.warnings.push(warning(code, path));
     }
 
     fn into_report(self) -> ValidationReport {
@@ -41,18 +41,18 @@ impl ValidationContext {
 
 fn validate_formula(draft: &BayesModelDraft, context: &mut ValidationContext) {
     if draft.formula_text.trim().is_empty() {
-        context.error("FORMULA_REQUIRED", "请输入模型方程。", "formulaText");
+        context.error("formula_required", "formulaText");
     }
 }
 
 fn validate_dataset_and_bindings(draft: &BayesModelDraft, context: &mut ValidationContext) {
     let Some(dataset) = &draft.dataset else {
-        context.error("DATASET_REQUIRED", "请选择数据源。", "dataset");
+        context.error("dataset_required", "dataset");
         return;
     };
 
     if dataset.source_id.trim().is_empty() {
-        context.error("DATASET_REQUIRED", "请选择数据源。", "dataset.sourceId");
+        context.error("dataset_required", "dataset.sourceId");
     }
 
     let columns = column_map(&dataset.columns);
@@ -62,38 +62,22 @@ fn validate_dataset_and_bindings(draft: &BayesModelDraft, context: &mut Validati
         .filter(|symbol| symbol.role == SymbolRole::Dependent)
         .collect();
     if dependent_symbols.len() != 1 {
-        context.error(
-            "DEPENDENT_SYMBOL_REQUIRED",
-            "必须且只能设置一个因变量符号。",
-            "symbols",
-        );
+        context.error("dependent_symbol_required", "symbols");
     }
 
     let Some(response_binding) = &draft.response_binding else {
-        context.error("RESPONSE_REQUIRED", "请选择响应变量列。", "responseBinding");
+        context.error("response_required", "responseBinding");
         return;
     };
 
     if response_binding.symbol.trim().is_empty() {
-        context.error(
-            "RESPONSE_SYMBOL_REQUIRED",
-            "响应表达式必须绑定一个基础数据符号。",
-            "responseBinding.symbol",
-        );
+        context.error("response_symbol_required", "responseBinding.symbol");
     }
 
     if response_binding.column.trim().is_empty() {
-        context.error(
-            "RESPONSE_REQUIRED",
-            "请选择响应变量列。",
-            "responseBinding.column",
-        );
+        context.error("response_required", "responseBinding.column");
     } else if !columns.is_empty() && !columns.contains_key(response_binding.column.as_str()) {
-        context.error(
-            "RESPONSE_COLUMN_UNKNOWN",
-            format!("响应变量列 {} 不存在。", response_binding.column),
-            "responseBinding.column",
-        );
+        context.error("response_column_unknown", "responseBinding.column");
     }
 
     for symbol in draft
@@ -105,15 +89,13 @@ fn validate_dataset_and_bindings(draft: &BayesModelDraft, context: &mut Validati
             Some(column) if !column.trim().is_empty() => {
                 if !columns.is_empty() && !columns.contains_key(column.as_str()) {
                     context.error(
-                        "DATA_COLUMN_UNKNOWN",
-                        format!("自变量 {} 绑定的数据列 {} 不存在。", symbol.name, column),
+                        "data_column_unknown",
                         format!("dataBindings.{}", symbol.name),
                     );
                 }
             }
             _ => context.error(
-                "DATA_BINDING_REQUIRED",
-                format!("自变量 {} 尚未绑定数据库列。", symbol.name),
+                "data_binding_required",
                 format!("dataBindings.{}", symbol.name),
             ),
         }
@@ -122,11 +104,7 @@ fn validate_dataset_and_bindings(draft: &BayesModelDraft, context: &mut Validati
 
 fn validate_response_expression(draft: &BayesModelDraft, context: &mut ValidationContext) {
     let Some(response) = &draft.bound_response else {
-        context.error(
-            "RESPONSE_EXPRESSION_REQUIRED",
-            "响应表达式尚未绑定。",
-            "boundResponse",
-        );
+        context.error("response_expression_required", "boundResponse");
         return;
     };
     validate_expression_node(response, "boundResponse", context);
@@ -135,48 +113,28 @@ fn validate_response_expression(draft: &BayesModelDraft, context: &mut Validatio
     let mut parameters = BTreeSet::new();
     collect_expression_symbols(response, &mut data, &mut parameters);
     if !parameters.is_empty() {
-        context.error(
-            "RESPONSE_PARAMETER_FORBIDDEN",
-            "响应表达式不能引用模型参数。",
-            "boundResponse",
-        );
+        context.error("response_parameter_forbidden", "boundResponse");
     }
     if data.len() != 1 {
-        context.error(
-            "RESPONSE_DATA_SYMBOL_COUNT_INVALID",
-            "响应表达式必须且只能引用一个基础数据符号。",
-            "boundResponse",
-        );
+        context.error("response_data_symbol_count_invalid", "boundResponse");
     }
     if let Some(binding) = &draft.response_binding
         && data.len() == 1
         && !data.contains(&binding.symbol)
     {
-        context.error(
-            "RESPONSE_BINDING_MISMATCH",
-            "响应表达式的数据符号与响应列绑定不一致。",
-            "responseBinding.symbol",
-        );
+        context.error("response_binding_mismatch", "responseBinding.symbol");
     }
 
     if !matches!(draft.likelihood, LikelihoodSpec::Normal { .. })
         && !matches!(response, Expression::DataVariable { name } if draft.response_binding.as_ref().is_some_and(|binding| binding.symbol == *name))
     {
-        context.error(
-            "LIKELIHOOD_RESPONSE_TRANSFORM_UNSUPPORTED",
-            "BernoulliLogit 和 PoissonLog 仅支持未变换的响应符号。",
-            "boundResponse",
-        );
+        context.error("likelihood_response_transform_unsupported", "boundResponse");
     }
 }
 
 fn validate_expression(draft: &BayesModelDraft, context: &mut ValidationContext) {
     let Some(predictor) = &draft.bound_predictor else {
-        context.error(
-            "PREDICTOR_REQUIRED",
-            "预测表达式尚未解析或绑定。",
-            "boundPredictor",
-        );
+        context.error("predictor_required", "boundPredictor");
         return;
     };
 
@@ -199,20 +157,12 @@ fn validate_expression(draft: &BayesModelDraft, context: &mut ValidationContext)
 
     for name in predictor_data {
         if !configured_data.contains(name.as_str()) {
-            context.error(
-                "PREDICTOR_DATA_SYMBOL_UNCONFIGURED",
-                format!("预测表达式中的自变量 {} 尚未配置。", name),
-                "symbols",
-            );
+            context.error("predictor_data_symbol_unconfigured", "symbols");
         }
     }
     for name in predictor_parameters {
         if !configured_parameters.contains(name.as_str()) {
-            context.error(
-                "PREDICTOR_PARAMETER_UNCONFIGURED",
-                format!("预测表达式中的参数 {} 尚未配置。", name),
-                "parameters",
-            );
+            context.error("predictor_parameter_unconfigured", "parameters");
         }
     }
 }
@@ -220,7 +170,7 @@ fn validate_expression(draft: &BayesModelDraft, context: &mut ValidationContext)
 fn validate_expression_node(expression: &Expression, path: &str, context: &mut ValidationContext) {
     match expression {
         Expression::Number { value } if !value.is_finite() => {
-            context.error("EXPRESSION_NUMBER_INVALID", "表达式包含非法数值。", path);
+            context.error("expression_number_invalid", path);
         }
         Expression::Number { .. }
         | Expression::DataVariable { .. }
@@ -256,11 +206,7 @@ fn validate_function_arity(
         MathFunction::Min | MathFunction::Max => count >= 2,
     };
     if !valid {
-        context.error(
-            "EXPRESSION_FUNCTION_ARITY_INVALID",
-            format!("函数 {:?} 的参数数量不合法。", function),
-            path,
-        );
+        context.error("expression_function_arity_invalid", path);
     }
 }
 
@@ -281,8 +227,7 @@ fn validate_likelihood(draft: &BayesModelDraft, context: &mut ValidationContext)
             validate_response_dtype(
                 response_dtype,
                 &[ColumnDType::Number, ColumnDType::Integer],
-                "LIKELIHOOD_RESPONSE_TYPE_INVALID",
-                "Normal likelihood 需要数值型响应变量。",
+                "likelihood_response_type_invalid",
                 context,
             );
             validate_numeric_predictor_columns(draft, &columns, context);
@@ -292,16 +237,8 @@ fn validate_likelihood(draft: &BayesModelDraft, context: &mut ValidationContext)
                 .find(|parameter| parameter.name == sigma.parameter)
             {
                 Some(parameter) if constraint_allows_positive(&parameter.constraint) => {}
-                Some(_) => context.warning(
-                    "LIKELIHOOD_SIGMA_CONSTRAINT_WARNING",
-                    "Normal likelihood 的 sigma 参数建议使用 positive 约束。",
-                    "parameters",
-                ),
-                None => context.error(
-                    "LIKELIHOOD_SIGMA_PARAMETER_REQUIRED",
-                    format!("sigma 参数 {} 不存在。", sigma.parameter),
-                    "likelihood.sigma",
-                ),
+                Some(_) => context.warning("likelihood_sigma_constraint_warning", "parameters"),
+                None => context.error("likelihood_sigma_parameter_required", "likelihood.sigma"),
             }
         }
         LikelihoodSpec::BernoulliLogit { .. } => {
@@ -312,8 +249,7 @@ fn validate_likelihood(draft: &BayesModelDraft, context: &mut ValidationContext)
                     ColumnDType::Integer,
                     ColumnDType::Number,
                 ],
-                "LIKELIHOOD_RESPONSE_TYPE_INVALID",
-                "BernoulliLogit likelihood 需要 boolean 或 0/1 数值响应变量。",
+                "likelihood_response_type_invalid",
                 context,
             );
             validate_numeric_predictor_columns(draft, &columns, context);
@@ -322,14 +258,12 @@ fn validate_likelihood(draft: &BayesModelDraft, context: &mut ValidationContext)
             validate_response_dtype(
                 response_dtype,
                 &[ColumnDType::Integer, ColumnDType::Number],
-                "LIKELIHOOD_RESPONSE_TYPE_INVALID",
-                "PoissonLog likelihood 需要计数型响应变量。",
+                "likelihood_response_type_invalid",
                 context,
             );
             validate_numeric_predictor_columns(draft, &columns, context);
             context.warning(
-                "POISSON_RESPONSE_NON_NEGATIVE_UNCHECKED",
-                "Poisson 响应变量需要非负；当前仅静态校验列类型。",
+                "poisson_response_non_negative_unchecked",
                 "responseBinding.column",
             );
         }
@@ -340,14 +274,13 @@ fn validate_response_dtype(
     dtype: Option<&ColumnDType>,
     allowed: &[ColumnDType],
     code: &str,
-    message: &str,
     context: &mut ValidationContext,
 ) {
     let Some(dtype) = dtype else {
         return;
     };
     if !allowed.contains(dtype) {
-        context.error(code, message, "responseBinding.column");
+        context.error(code, "responseBinding.column");
     }
 }
 
@@ -362,8 +295,7 @@ fn validate_numeric_predictor_columns(
         };
         if !matches!(meta.dtype, ColumnDType::Number | ColumnDType::Integer) {
             context.error(
-                "PREDICTOR_COLUMN_TYPE_INVALID",
-                format!("自变量 {} 绑定的列 {} 不是数值列。", symbol, column),
+                "predictor_column_type_invalid",
                 format!("dataBindings.{}", symbol),
             );
         }
@@ -372,24 +304,16 @@ fn validate_numeric_predictor_columns(
 
 fn validate_parameters(draft: &BayesModelDraft, context: &mut ValidationContext) {
     if draft.parameters.is_empty() {
-        context.warning(
-            "NO_PARAMETERS",
-            "当前模型尚未识别出未知参数。",
-            "parameters",
-        );
+        context.warning("no_parameters", "parameters");
     }
 
     let mut seen = BTreeSet::new();
     for parameter in &draft.parameters {
         if parameter.name.trim().is_empty() {
-            context.error("PARAMETER_NAME_REQUIRED", "参数名不能为空。", "parameters");
+            context.error("parameter_name_required", "parameters");
         }
         if !seen.insert(parameter.name.as_str()) {
-            context.error(
-                "PARAMETER_NAME_DUPLICATED",
-                format!("参数 {} 重复。", parameter.name),
-                "parameters",
-            );
+            context.error("parameter_name_duplicated", "parameters");
         }
         validate_parameter(parameter, context);
     }
@@ -414,8 +338,7 @@ fn validate_constraint(
     if let ParameterConstraint::Bounded { lower, upper, .. } = constraint {
         if !lower.is_finite() || !upper.is_finite() || lower >= upper {
             context.error(
-                "PARAMETER_BOUNDS_INVALID",
-                format!("参数 {} 的下界必须小于上界。", name),
+                "parameter_bounds_invalid",
                 format!("parameters.{}.constraint", name),
             );
         }
@@ -436,8 +359,7 @@ fn validate_prior(name: &str, prior: &PriorSpec, context: &mut ValidationContext
     };
     if invalid {
         context.error(
-            "PARAMETER_PRIOR_ARGS_INVALID",
-            format!("参数 {} 的先验分布参数不合法。", name),
+            "parameter_prior_args_invalid",
             format!("parameters.{}.prior", name),
         );
     }
@@ -473,8 +395,7 @@ fn validate_constraint_prior_compatibility(
     };
     if !compatible {
         context.warning(
-            "PARAMETER_PRIOR_CONSTRAINT_MISMATCH",
-            format!("参数 {} 的先验分布与约束界限可能不匹配。", name),
+            "parameter_prior_constraint_mismatch",
             format!("parameters.{}", name),
         );
     }
@@ -482,34 +403,18 @@ fn validate_constraint_prior_compatibility(
 
 fn validate_sampler(sampler: &InferenceConfig, context: &mut ValidationContext) {
     if sampler.chains == 0 {
-        context.error(
-            "SAMPLER_CHAINS_INVALID",
-            "chains 必须大于 0。",
-            "sampler.chains",
-        );
+        context.error("sampler_chains_invalid", "sampler.chains");
     }
     if sampler.samples == 0 {
-        context.error(
-            "SAMPLER_SAMPLES_INVALID",
-            "samples 必须大于 0。",
-            "sampler.samples",
-        );
+        context.error("sampler_samples_invalid", "sampler.samples");
     }
     if let Some(target_accept) = sampler.target_accept {
         if !(0.0..=1.0).contains(&target_accept) {
-            context.error(
-                "SAMPLER_TARGET_ACCEPT_INVALID",
-                "target accept 必须在 0 到 1 之间。",
-                "sampler.targetAccept",
-            );
+            context.error("sampler_target_accept_invalid", "sampler.targetAccept");
         }
     }
     if matches!(sampler.max_tree_depth, Some(0)) {
-        context.error(
-            "SAMPLER_MAX_TREE_DEPTH_INVALID",
-            "max tree depth 必须大于 0。",
-            "sampler.maxTreeDepth",
-        );
+        context.error("sampler_max_tree_depth_invalid", "sampler.maxTreeDepth");
     }
 }
 

@@ -136,3 +136,31 @@ end
     parameter_chain = Chains(reshape([1.0, 2.0], 2, 1, 1), [:theta])
     @test bayes_max_treedepth_hits(parameter_chain, 7) === nothing
 end
+
+@testset "Bayes diagnostic warnings are structured" begin
+    warnings = bayes_diagnostic_warnings([
+        Dict(
+            "parameter" => "beta",
+            "rhat" => 1.23456789,
+            "essBulk" => 20.12345,
+            "essTail" => 30.67891,
+        ),
+    ], 1_000)
+
+    @test length(warnings) == 3
+    @test Set(warning["metric"] for warning in warnings) == Set(["rhat", "ess_bulk", "ess_tail"])
+    @test all(Set(keys(warning)) == Set(["code", "metric", "value", "threshold", "parameter"]) for warning in warnings)
+    @test all(!haskey(warning, "message") for warning in warnings)
+
+    by_metric = Dict(warning["metric"] => warning for warning in warnings)
+    @test by_metric["rhat"]["code"] == "rhat_too_high"
+    @test by_metric["rhat"]["value"] == 1.23456789
+    @test by_metric["rhat"]["threshold"] == 1.01
+    @test by_metric["ess_bulk"]["code"] == "ess_too_low"
+    @test by_metric["ess_bulk"]["value"] == 20.12345
+    @test by_metric["ess_bulk"]["threshold"] == 100.0
+    @test by_metric["ess_tail"]["code"] == "ess_too_low"
+    @test by_metric["ess_tail"]["value"] == 30.67891
+    @test by_metric["ess_tail"]["threshold"] == 100.0
+    @test all(warning["parameter"] == "beta" for warning in warnings)
+end

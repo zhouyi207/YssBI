@@ -7,6 +7,8 @@ import { useEditorStore } from '@/features/core/editor';
 import { useResourceStore } from '@/features/core/resource';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { DatabaseService } from '@/services/database/databaseService';
+import { normalizeIpcError } from '@/services/ipc';
+import { uiStore } from '@/features/core/ui/UIStore';
 import { useDatabaseManagement } from './useDatabaseManagement';
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
@@ -102,6 +104,27 @@ describe('useDatabaseManagement revision authority', () => {
     );
     expect(useDatabaseStore.getState().revisions.sales).toBe(5);
     expect(useDatabaseStore.getState().databases.sales?.name).toBe('Renamed');
+  });
+
+  it('maps rename failures to IPC code and incident ID without exposing backend details', async () => {
+    const alert = vi.spyOn(uiStore, 'alert').mockResolvedValue();
+    vi.spyOn(DatabaseService, 'renameDatabase').mockRejectedValue(normalizeIpcError(
+      'rename_database',
+      {
+        code: 'database_revision_conflict',
+        details: { debug: 'sensitive backend detail' },
+        incidentId: 'incident-rename-42',
+      },
+    ));
+
+    await act(async () => actions.renameDataFrame('sales', 'Renamed'));
+
+    expect(alert).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.stringContaining('database_revision_conflict'),
+      incidentId: 'incident-rename-42',
+      type: 'error',
+    }));
+    expect(JSON.stringify(alert.mock.calls)).not.toContain('sensitive backend detail');
   });
 
   it('does not perform an independent delete outside canonical publication application', async () => {

@@ -1,6 +1,20 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { PanelDidService } from '@/features/application/stats/statsActions';
-import type { DidPlaceboFakeGroupBlock, PanelDidResultData } from '@/shared/types/report';
+import { toErrorReference, type ErrorReference } from '@/services/ipc';
+import {
+  parseDidPlaceboFakeGroupBlock,
+  type DidPlaceboFakeGroupBlock,
+  type PanelDidResultData,
+} from '@/shared/types/report';
+
+const INVALID_RESPONSE_ERROR: ErrorReference = {
+  code: 'did_fake_group_invalid_response',
+  incidentId: null,
+};
+const INVALID_INITIAL_RESULT_ERROR: ErrorReference = {
+  code: 'did_fake_group_invalid_initial_result',
+  incidentId: null,
+};
 
 export function useDidFakeGroupRi(
   fakeGroupEngine: PanelDidResultData['fake_group_engine'],
@@ -10,27 +24,40 @@ export function useDidFakeGroupRi(
   const [rngSeed, setRngSeed] = useState(42);
   const [result, setResult] = useState<DidPlaceboFakeGroupBlock | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<ErrorReference | null>(null);
 
-  const display = result ?? initialResult ?? null;
+  const parsedInitialResult = useMemo(
+    () => initialResult == null ? null : parseDidPlaceboFakeGroupBlock(initialResult),
+    [initialResult],
+  );
+  const display = result ?? parsedInitialResult;
+  const initialResultError = initialResult != null && parsedInitialResult === null && result === null
+    ? INVALID_INITIAL_RESULT_ERROR
+    : null;
+  const error = requestError ?? initialResultError;
 
   const run = useCallback(async () => {
     if (!fakeGroupEngine) return;
-    setError(null);
+    setRequestError(null);
     setLoading(true);
     try {
       const n_perm = Math.max(1, Math.min(2000, Math.floor(permReps) || 399));
-      const res = await PanelDidService.computeFakeGroupRi<
+      const raw = await PanelDidService.computeFakeGroupRi<
         typeof fakeGroupEngine & { n_perm: number; rng_seed: number },
-        DidPlaceboFakeGroupBlock
+        unknown
       >({
         ...fakeGroupEngine,
         n_perm,
         rng_seed: Number.isFinite(rngSeed) ? Math.max(0, Math.floor(Number(rngSeed))) : 42,
       });
-      setResult(res);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const parsed = parseDidPlaceboFakeGroupBlock(raw);
+      if (!parsed) {
+        setRequestError(INVALID_RESPONSE_ERROR);
+        return;
+      }
+      setResult(parsed);
+    } catch (caught) {
+      setRequestError(toErrorReference(caught, 'did_fake_group_request_failed'));
     } finally {
       setLoading(false);
     }

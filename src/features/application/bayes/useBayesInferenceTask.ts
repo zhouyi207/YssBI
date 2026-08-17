@@ -1,19 +1,16 @@
 import { useEffect, useReducer, useRef } from 'react';
-import type { BayesInferenceTaskDTO, BayesModelDraftDTO, InferenceResultDTO, TaskErrorDTO } from '@/shared/types/bayes';
+import type {
+  BayesInferenceTaskDTO,
+  BayesModelDraftDTO,
+  InferenceResultDTO,
+} from '@/shared/types/bayes';
 import { cancelBayesInference, getBayesInferenceStatus, readBayesInferenceResult, submitBayesInference } from '@/services/bayes';
+import { normalizeBayesApplicationError, type BayesApplicationError } from './bayesError';
 
 const ACTIVE_TASK_STATUSES = new Set<BayesInferenceTaskDTO['status']>(['queued', 'running', 'cancelling']);
 
-interface TauriAppErrorLike {
-  code?: string;
-  message?: string;
-  details?: { column?: string | null; row?: number | null } | null;
-}
 
-export interface BayesInferenceError extends TaskErrorDTO {
-  column?: string;
-  row?: number;
-}
+export type BayesInferenceError = BayesApplicationError;
 
 export interface BayesInferenceState {
   runId: number;
@@ -118,23 +115,13 @@ export function useBayesInferenceTask() {
 }
 
 function defaultInferenceError(): BayesInferenceError {
-  return { code: 'BAYES_INFERENCE_FAILED', message: 'Bayesian inference failed.' };
+  return {
+    code: 'bayes_inference_failed',
+    details: null,
+    incidentId: null,
+  };
 }
 
 function formatBayesError(caught: unknown): BayesInferenceError {
-  if (caught instanceof Error) return { code: 'BAYES_REQUEST_FAILED', message: caught.message };
-  if (isTauriAppErrorLike(caught)) {
-    return {
-      code: caught.code ?? 'BAYES_REQUEST_FAILED',
-      message: caught.message ?? 'Bayesian inference failed.',
-      column: caught.details?.column ?? undefined,
-      row: caught.details?.row ?? undefined,
-    };
-  }
-  if (typeof caught === 'string') return { code: 'BAYES_REQUEST_FAILED', message: caught };
-  return { code: 'BAYES_REQUEST_FAILED', message: String(caught) };
-}
-
-function isTauriAppErrorLike(value: unknown): value is TauriAppErrorLike {
-  return typeof value === 'object' && value !== null && ('message' in value || 'code' in value);
+  return normalizeBayesApplicationError(caught, 'bayes_request_failed');
 }

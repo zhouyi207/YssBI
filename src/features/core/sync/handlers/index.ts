@@ -30,7 +30,6 @@ import {
 import {
     DataFrameCreatedHandler,
     DataFrameDeletedHandler,
-    DataFrameSchemaUpdatedHandler,
 } from './DataFrameEventHandler';
 import {
     ResourceChangedHandler,
@@ -69,7 +68,6 @@ export function createEventHandlers(): Array<EventHandler<unknown>> {
         // DataFrame
         new DataFrameCreatedHandler() as EventHandler<unknown>,
         new DataFrameDeletedHandler() as EventHandler<unknown>,
-        new DataFrameSchemaUpdatedHandler() as EventHandler<unknown>,
 
         // Resource
         new ProjectIndexInvalidatedHandler() as EventHandler<unknown>,

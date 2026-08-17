@@ -47,7 +47,7 @@ fn normal_response_rejects_non_finite_values() {
     .expect("test dataframe");
 
     let error = validate_bayes_input_table(&fixture.model_spec, &table).expect_err("invalid input");
-    assert_eq!(error.code, "BAYES_INPUT_RESPONSE_NON_FINITE");
+    assert_eq!(error.code, "bayes_input_response_non_finite");
     assert_eq!(error.column.as_deref(), Some("y"));
     assert_eq!(error.row, Some(1));
 }
@@ -70,7 +70,7 @@ fn transformed_normal_response_rejects_ln_domain_errors() {
 
     let error =
         validate_bayes_input_table(&fixture.model_spec, &table).expect_err("invalid ln domain");
-    assert_eq!(error.code, "BAYES_INPUT_RESPONSE_LN_DOMAIN");
+    assert_eq!(error.code, "bayes_input_response_ln_domain");
     assert_eq!(error.column.as_deref(), Some("y"));
     assert_eq!(error.row, Some(1));
 }
@@ -88,7 +88,7 @@ fn predictor_rejects_non_finite_values() {
     .expect("test dataframe");
 
     let error = validate_bayes_input_table(&fixture.model_spec, &table).expect_err("invalid input");
-    assert_eq!(error.code, "BAYES_INPUT_PREDICTOR_NON_FINITE");
+    assert_eq!(error.code, "bayes_input_predictor_non_finite");
     assert_eq!(error.column.as_deref(), Some("x"));
     assert_eq!(error.row, Some(1));
 }
@@ -98,7 +98,7 @@ fn bernoulli_response_rejects_values_outside_zero_one() {
     let fixture = fixture(SIMPLE_BERNOULLI_LOGIT);
     let error = validate_bayes_input_table(&fixture.model_spec, &bernoulli_table(&[0.0, 1.0, 2.0]))
         .expect_err("invalid Bernoulli response");
-    assert_eq!(error.code, "BAYES_INPUT_BERNOULLI_RESPONSE_INVALID");
+    assert_eq!(error.code, "bayes_input_bernoulli_response_invalid");
     assert_eq!(error.column.as_deref(), Some("y"));
     assert_eq!(error.row, Some(2));
 }
@@ -108,7 +108,7 @@ fn poisson_response_rejects_negative_counts() {
     let fixture = fixture(SIMPLE_POISSON_LOG);
     let error = validate_bayes_input_table(&fixture.model_spec, &poisson_table(&[1.0, -1.0, 2.0]))
         .expect_err("invalid Poisson response");
-    assert_eq!(error.code, "BAYES_INPUT_POISSON_RESPONSE_NEGATIVE");
+    assert_eq!(error.code, "bayes_input_poisson_response_negative");
     assert_eq!(error.column.as_deref(), Some("y"));
     assert_eq!(error.row, Some(1));
 }
@@ -118,7 +118,7 @@ fn poisson_response_rejects_fractional_counts() {
     let fixture = fixture(SIMPLE_POISSON_LOG);
     let error = validate_bayes_input_table(&fixture.model_spec, &poisson_table(&[1.0, 1.5, 2.0]))
         .expect_err("invalid Poisson response");
-    assert_eq!(error.code, "BAYES_INPUT_POISSON_RESPONSE_NOT_INTEGER");
+    assert_eq!(error.code, "bayes_input_poisson_response_not_integer");
     assert_eq!(error.column.as_deref(), Some("y"));
     assert_eq!(error.row, Some(1));
 }
@@ -131,7 +131,7 @@ fn missing_required_columns_are_reported_before_julia() {
 
     let error =
         validate_bayes_input_table(&fixture.model_spec, &table).expect_err("missing column");
-    assert_eq!(error.code, "BAYES_INPUT_COLUMN_MISSING");
+    assert_eq!(error.code, "bayes_input_column_missing");
     assert_eq!(error.column.as_deref(), Some("x"));
 }
 

@@ -396,7 +396,7 @@ function databaseFromIndex(
   if (current?.columns !== undefined) runtime.columns = structuredClone(current.columns);
   if (current?.rowCount !== undefined) runtime.rowCount = current.rowCount;
   if (current?.columnCount !== undefined) runtime.columnCount = current.columnCount;
-  if (current?.loadError !== undefined) runtime.loadError = current.loadError;
+  runtime.loadFailed = current?.loadFailed === true;
   return {
     ...runtime,
     id: row.id,

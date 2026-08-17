@@ -1,7 +1,7 @@
 //! 解析 margins at() 规格（薄包装，复用假设检验 AST 管线）
 
 use crate::application::hypothesis::parse_at_values as resolve_at_values;
-use crate::error::AppError;
+use crate::error::CommandError;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -16,8 +16,8 @@ pub struct ParseAtResponse {
 }
 
 #[tauri::command]
-pub fn parse_at_values(req: ParseAtRequest) -> Result<ParseAtResponse, AppError> {
+pub fn parse_at_values(req: ParseAtRequest) -> Result<ParseAtResponse, CommandError> {
     let values = resolve_at_values(&req.at_spec, &req.param_names)
-        .map_err(|e| e.replace("解析假设失败", "解析 at() 失败"))?;
+        .map_err(|_| CommandError::expected("invalid_at_spec"))?;
     Ok(ParseAtResponse { values })
 }

@@ -5,12 +5,38 @@ import { useDatabaseStore } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { DatabaseService } from '@/services/database/databaseService';
+import { normalizeIpcError } from '@/services/ipc';
 import type { LoadDatabaseResult } from '@/shared/types/dto/database';
 import { databaseRecordFromLoad } from '@/shared/types/dto/database';
 import type { DatabaseRecord, LoadDatabaseEngineSpec } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';
 import { runWithDataOperationProgress } from './dataOperationProgress';
 import { executeDatabaseCreate, executeDatabaseMutation } from './databaseMutation';
+
+function showDataOperationMessage(message: string, type: 'info' | 'warning' = 'warning'): void {
+  void uiStore.alert({
+    title: i18n.t('importModal.title'),
+    message,
+    closeText: i18n.t('common.close'),
+    type,
+  });
+}
+
+function showDataOperationError(
+  error: unknown,
+  command: string,
+  messageForCode: (code: string) => string,
+): void {
+  const ipcError = normalizeIpcError(command, error);
+  void uiStore.alert({
+    title: i18n.t('common.error'),
+    message: messageForCode(ipcError.code),
+    closeText: i18n.t('common.close'),
+    type: 'error',
+    incidentId: ipcError.incidentId,
+    incidentLabel: i18n.t('common.incidentId'),
+  });
+}
 
 function commitLoadedDatabase(result: LoadDatabaseResult, engine: LoadDatabaseEngineSpec) {
   const store = useDatabaseStore.getState();
@@ -37,7 +63,6 @@ async function loadSqliteTable(dbPath: string, table: string) {
     )),
   );
   commitLoadedDatabase(result, engine);
-  logger.notify.info(i18n.t('dataOperation.importSuccess', { name: table, rows: result.rowCount }), "UI");
 }
 
 type SqlRemoteEngine = 'postgres' | 'mysql' | 'mariadb';
@@ -59,7 +84,6 @@ async function loadSqlRemoteTable(engine: SqlRemoteEngine, connectionString: str
     )),
   );
   commitLoadedDatabase(result, loadEngine);
-  logger.notify.info(i18n.t('dataOperation.importSuccess', { name: table, rows: result.rowCount }), "UI");
 }
 
 async function loadExcelSheet(filePath: string, sheet: string) {
@@ -74,7 +98,6 @@ async function loadExcelSheet(filePath: string, sheet: string) {
     )),
   );
   commitLoadedDatabase(result, engine);
-  logger.notify.info(i18n.t('dataOperation.importSuccess', { name: sheet, rows: result.rowCount }), "UI");
 }
 
 async function loadCsv(path: string) {
@@ -96,7 +119,6 @@ async function loadCsv(path: string) {
     )),
   );
   commitLoadedDatabase(result, engine);
-  logger.notify.info(i18n.t('dataOperation.importSuccess', { name: result.name, rows: result.rowCount }), "UI");
 }
 
 /** 触发导入数据弹窗（与菜单栏 Data > Import Data 相同逻辑） */
@@ -114,7 +136,8 @@ export function triggerImportData() {
           }
         } catch (error) {
           logger.data.error('Failed to import CSV: ' + String(error), 'DatabaseManagement');
-          logger.notify.error(i18n.t('dataOperation.importFailed', { error: String(error) }), "UI");
+          showDataOperationError(error, 'load_database', (code) =>
+            i18n.t('dataOperation.importFailed', { error: code }));
         }
       } else if (type === 'sqlite') {
         try {
@@ -132,7 +155,7 @@ export function triggerImportData() {
               () => DatabaseService.listSqliteTables(selected),
             );
             if (tables.length === 0) {
-              logger.notify.warn(i18n.t('dataOperation.noSqliteTables'), "UI");
+              showDataOperationMessage(i18n.t('dataOperation.noSqliteTables'));
               return;
             }
             if (tables.length === 1) {
@@ -142,9 +165,10 @@ export function triggerImportData() {
                 dbPath: selected,
                 tables,
                 onSelect: (table) => {
-                  loadSqliteTable(selected, table).catch((e) => {
-                    logger.data.error('Failed to load SQLite table: ' + String(e), 'DatabaseManagement');
-                    logger.notify.error(i18n.t('dataOperation.importFailed', { error: String(e) }), "UI");
+                  loadSqliteTable(selected, table).catch((error) => {
+                    logger.data.error('Failed to load SQLite table: ' + String(error), 'DatabaseManagement');
+                    showDataOperationError(error, 'load_database', (code) =>
+                      i18n.t('dataOperation.importFailed', { error: code }));
                   });
                 },
               });
@@ -152,7 +176,8 @@ export function triggerImportData() {
           }
         } catch (error) {
           logger.data.error('Failed to import SQLite: ' + String(error), 'DatabaseManagement');
-          logger.notify.error(i18n.t('dataOperation.importFailed', { error: String(error) }), "UI");
+          showDataOperationError(error, 'list_sqlite_tables', (code) =>
+            i18n.t('dataOperation.importFailed', { error: code }));
         }
       } else if (['postgres', 'mysql', 'mariadb'].includes(type)) {
         const engine = type as SqlRemoteEngine;
@@ -167,7 +192,7 @@ export function triggerImportData() {
                 () => DatabaseService.listSqlTables(engine, connectionString),
               );
               if (tables.length === 0) {
-                logger.notify.warn(i18n.t('dataOperation.noRemoteTables'), "UI");
+                showDataOperationMessage(i18n.t('dataOperation.noRemoteTables'));
                 return;
               }
               if (tables.length === 1) {
@@ -178,16 +203,18 @@ export function triggerImportData() {
                   engine,
                   tables,
                   onSelect: (table) => {
-                    loadSqlRemoteTable(engine, connectionString, table).catch((e) => {
-                      logger.data.error(`Failed to load ${label} table: ${String(e)}`, 'DatabaseManagement');
-                      logger.notify.error(i18n.t('dataOperation.importFailed', { error: String(e) }), "UI");
+                    loadSqlRemoteTable(engine, connectionString, table).catch((error) => {
+                      logger.data.error(`Failed to load ${label} table: ${String(error)}`, 'DatabaseManagement');
+                      showDataOperationError(error, 'load_database', (code) =>
+                        i18n.t('dataOperation.importFailed', { error: code }));
                     });
                   },
                 });
               }
             } catch (error) {
               logger.data.error(`Failed to list ${label} tables: ${String(error)}`, 'DatabaseManagement');
-              logger.notify.error(i18n.t('dataOperation.connectFailed', { label, error: String(error) }), "UI");
+              showDataOperationError(error, 'list_sql_tables', (code) =>
+                i18n.t('dataOperation.connectFailed', { label, error: code }));
             }
           },
         });
@@ -207,7 +234,7 @@ export function triggerImportData() {
               () => DatabaseService.listExcelSheets(selected),
             );
             if (sheets.length === 0) {
-              logger.notify.warn(i18n.t('dataOperation.noExcelSheets'), "UI");
+              showDataOperationMessage(i18n.t('dataOperation.noExcelSheets'));
               return;
             }
             if (sheets.length === 1) {
@@ -217,9 +244,10 @@ export function triggerImportData() {
                 filePath: selected,
                 sheets,
                 onSelect: (sheet) => {
-                  loadExcelSheet(selected, sheet).catch((e) => {
-                    logger.data.error('Failed to load Excel sheet: ' + String(e), 'DatabaseManagement');
-                    logger.notify.error(i18n.t('dataOperation.importFailed', { error: String(e) }), "UI");
+                  loadExcelSheet(selected, sheet).catch((error) => {
+                    logger.data.error('Failed to load Excel sheet: ' + String(error), 'DatabaseManagement');
+                    showDataOperationError(error, 'load_database', (code) =>
+                      i18n.t('dataOperation.importFailed', { error: code }));
                   });
                 },
               });
@@ -227,10 +255,14 @@ export function triggerImportData() {
           }
         } catch (error) {
           logger.data.error('Failed to import Excel: ' + String(error), 'DatabaseManagement');
-          logger.notify.error(i18n.t('dataOperation.importFailed', { error: String(error) }), "UI");
+          showDataOperationError(error, 'list_excel_sheets', (code) =>
+            i18n.t('dataOperation.importFailed', { error: code }));
         }
       } else {
-        logger.notify.warn(i18n.t('dataOperation.comingSoon', { type: String(type).toUpperCase() }), "UI");
+        showDataOperationMessage(
+          i18n.t('dataOperation.comingSoon', { type: String(type).toUpperCase() }),
+          'info',
+        );
       }
     },
   });
@@ -263,10 +295,10 @@ export function useDatabaseManagement() {
       if (detailFocus?.kind === 'data' && detailFocus.id === id) {
         clearDetailFocus();
       }
-      logger.notify.info(i18n.t('dataOperation.deleteSuccess', { name: previous.name }), "UI");
     } catch (e) {
       logger.data.warn('deleteDatabase backend failed: ' + String(e), 'DatabaseManagement');
-      logger.notify.error(i18n.t('dataOperation.deleteFailed', { error: String(e) }), "UI");
+      showDataOperationError(e, 'delete_database', (code) =>
+        i18n.t('dataOperation.deleteFailed', { error: code }));
     }
   }, [detailFocus, clearDetailFocus]);
 
@@ -284,7 +316,8 @@ export function useDatabaseManagement() {
       ));
     } catch (e) {
       logger.data.warn('renameDatabase backend failed: ' + String(e), 'DatabaseManagement');
-      logger.notify.error(i18n.t('dataOperation.renameFailed', { error: String(e) }), "UI");
+      showDataOperationError(e, 'rename_database', (code) =>
+        i18n.t('dataOperation.renameFailed', { error: code }));
     }
   }, []);
 

@@ -203,7 +203,7 @@ fn run_julia_fixture_when_enabled(fixture: BayesGoldenFixture, task_id: &str) {
         }
     }
     assert!(result.diagnostics.warnings.iter().all(|warning| {
-        !warning.code.ends_with("_READY") && !warning.code.contains("TURING_GENERIC")
+        !warning.code.ends_with("_ready") && !warning.code.contains("turing_generic")
     }));
 
     let _ = fs::remove_dir_all(app_data_dir);

@@ -49,7 +49,7 @@ export function isValidEventType(type: string): boolean {
         // Variable
         'VariableCreated', 'VariableUpdated', 'VariableDeleted',
         // DataFrame
-        'DataFrameCreated', 'DataFrameDeleted', 'DataFrameSchemaUpdated',
+        'DataFrameCreated', 'DataFrameDeleted',
         // Resource
         'ResourceChanged', 'ProjectIndexInvalidated',
         // Revisioned project mutations

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select } from '@/shared/ui';
@@ -11,6 +12,7 @@ import {
 import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { buildParamNames } from '@/shared/stats/regressionReportUtils';
 import { parseAtValues } from '@/features/application/stats/statsActions';
+import { formatInlineUserError } from '@/features/application/userErrorSummary';
 import type { OLSResultData } from '@/shared/types/report';
 
 /** Standard normal PDF φ(x) */
@@ -120,6 +122,7 @@ function computeMargins(
 }
 
 export function MarginsBlock({ data }: { data: OLSResultData }) {
+  const { t } = useTranslation();
   const { model_basic_info: info, coefficients, diagnostic_info: diag, betas } = data;
   const paramNames = useMemo(() => buildParamNames(coefficients), [coefficients]);
 
@@ -149,13 +152,13 @@ export function MarginsBlock({ data }: { data: OLSResultData }) {
       .catch((e) => {
         if (!cancelled) {
           setAtOverrides({});
-          setAtParseError(e instanceof Error ? e.message : String(e));
+          setAtParseError(formatInlineUserError(e, t));
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [atSpec, paramNames]);
+  }, [atSpec, paramNames, t]);
 
   const canCompute = useMemo(() => {
     if (!betas || !exog || !exogMeans || exog.length === 0) return false;

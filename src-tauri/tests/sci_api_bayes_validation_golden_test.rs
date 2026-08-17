@@ -31,7 +31,13 @@ struct InvalidValidationFixture {
 #[serde(rename_all = "camelCase")]
 struct ExpectedValidation {
     ok: bool,
-    error_codes: Vec<String>,
+    errors: Vec<ExpectedValidationIssue>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExpectedValidationIssue {
+    code: String,
+    path: String,
 }
 
 #[test]
@@ -46,18 +52,17 @@ fn invalid_bayes_model_fixtures_report_expected_errors() {
             fixture.name
         );
 
-        let actual_codes = report
-            .errors
-            .iter()
-            .map(|issue| issue.code.as_str())
-            .collect::<Vec<_>>();
-        for expected_code in &fixture.expected.error_codes {
+        for expected in &fixture.expected.errors {
             assert!(
-                actual_codes.contains(&expected_code.as_str()),
-                "fixture {} expected error code {}, got {:?}",
+                report
+                    .errors
+                    .iter()
+                    .any(|issue| { issue.code == expected.code && issue.path == expected.path }),
+                "fixture {} expected error {} at {}, got {:?}",
                 fixture.name,
-                expected_code,
-                actual_codes
+                expected.code,
+                expected.path,
+                report.errors
             );
         }
     }
@@ -74,20 +79,34 @@ fn invalid_bayes_model_error_codes_are_stable_and_machine_readable() {
             "fixture {} should fail",
             fixture.name
         );
-        for issue in &report.errors {
+        for issue in report.errors.iter().chain(&report.warnings) {
             assert!(
                 issue
                     .code
-                    .chars()
-                    .all(|character| character.is_ascii_uppercase() || character == '_'),
-                "validation code should be stable SCREAMING_SNAKE_CASE: {}",
+                    .starts_with(|character: char| character.is_ascii_lowercase())
+                    && issue.code.chars().all(|character| {
+                        character.is_ascii_lowercase()
+                            || character.is_ascii_digit()
+                            || character == '_'
+                    })
+                    && !issue.code.ends_with('_')
+                    && !issue.code.contains("__"),
+                "validation code should be stable lower_snake_case: {}",
                 issue.code
             );
-            assert!(issue.path.is_some(), "validation issue should include path");
             assert!(
-                !issue.message.trim().is_empty(),
-                "validation issue should include message"
+                !issue.path.is_empty(),
+                "validation issue should include path"
             );
+            let wire = serde_json::to_value(issue).expect("serialize validation issue");
+            let fields = wire.as_object().expect("validation issue object");
+            assert_eq!(fields.len(), 3);
+            assert!(fields.contains_key("code"));
+            assert!(fields.contains_key("severity"));
+            assert!(fields.contains_key("path"));
+            assert!(wire.get("message").is_none());
+            assert!(wire.get("hint").is_none());
+            assert!(wire.get("details").is_none());
         }
     }
 }

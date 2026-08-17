@@ -2,7 +2,7 @@ use serde::Deserialize;
 use tauri::State;
 
 use crate::application::bayes::BayesInferenceService;
-use crate::error::AppError;
+use crate::error::CommandError;
 use crate::project::ProjectState;
 use crate::sci::api::bayes::{
     AutocorrelationPlotData, BayesInferenceTask, BayesModelDraft, ColumnMeta, DensityPlotData,
@@ -21,7 +21,9 @@ pub struct ParseExpressionRequest {
 }
 
 #[tauri::command]
-pub fn parse_bayes_expression(input: ParseExpressionRequest) -> Result<ParsedExpression, AppError> {
+pub fn parse_bayes_expression(
+    input: ParseExpressionRequest,
+) -> Result<ParsedExpression, CommandError> {
     let mut known_symbols = input.symbols;
     known_symbols.extend(input.columns.into_iter().map(|column| column.name));
     known_symbols.sort();
@@ -32,13 +34,13 @@ pub fn parse_bayes_expression(input: ParseExpressionRequest) -> Result<ParsedExp
         crate::math::ParseOptions::plain(&known_symbols)
     };
     parse_model_expression(&input.formula, options)
-        .map_err(|error| AppError::new("bayes_expression_parse_failed", error.to_string()))
+        .map_err(|_| CommandError::expected("bayes_expression_parse_failed"))
 }
 
 #[tauri::command]
 pub fn validate_bayes_model(
     input: BayesModelDraft,
-) -> Result<crate::sci::api::bayes::ValidationReport, AppError> {
+) -> Result<crate::sci::api::bayes::ValidationReport, CommandError> {
     Ok(validate_draft(&input))
 }
 
@@ -47,7 +49,7 @@ pub fn submit_bayes_inference(
     service: State<'_, BayesInferenceService>,
     project_state: State<'_, ProjectState>,
     input: BayesModelDraft,
-) -> Result<BayesInferenceTask, AppError> {
+) -> Result<BayesInferenceTask, CommandError> {
     service.submit_from_project(input, &project_state)
 }
 
@@ -55,7 +57,7 @@ pub fn submit_bayes_inference(
 pub fn get_bayes_inference_status(
     service: State<'_, BayesInferenceService>,
     task_id: String,
-) -> Result<BayesInferenceTask, AppError> {
+) -> Result<BayesInferenceTask, CommandError> {
     service.status(&task_id)
 }
 
@@ -63,7 +65,7 @@ pub fn get_bayes_inference_status(
 pub fn cancel_bayes_inference(
     service: State<'_, BayesInferenceService>,
     task_id: String,
-) -> Result<(), AppError> {
+) -> Result<(), CommandError> {
     service.cancel(&task_id)
 }
 
@@ -71,7 +73,7 @@ pub fn cancel_bayes_inference(
 pub fn read_bayes_inference_result(
     service: State<'_, BayesInferenceService>,
     task_id: String,
-) -> Result<InferenceResult, AppError> {
+) -> Result<InferenceResult, CommandError> {
     service.result(&task_id)
 }
 
@@ -79,7 +81,7 @@ pub fn read_bayes_inference_result(
 pub fn clear_bayes_inference_task(
     service: State<'_, BayesInferenceService>,
     task_id: String,
-) -> Result<(), AppError> {
+) -> Result<(), CommandError> {
     service.clear_task(&task_id)
 }
 
@@ -89,7 +91,7 @@ pub fn export_bayes_artifact_csv(
     task_id: String,
     kind: ResultArtifactKind,
     destination: String,
-) -> Result<(), AppError> {
+) -> Result<(), CommandError> {
     service.export_artifact_csv(&task_id, kind, &destination)
 }
 
@@ -100,7 +102,7 @@ pub fn read_bayes_posterior_samples(
     offset: usize,
     limit: usize,
     parameter: Option<String>,
-) -> Result<PosteriorSamplePage, AppError> {
+) -> Result<PosteriorSamplePage, CommandError> {
     service.sample_page(&task_id, offset, limit, parameter.as_deref())
 }
 
@@ -110,7 +112,7 @@ pub fn read_bayes_trace_plot_data(
     task_id: String,
     parameter: Option<String>,
     max_points_per_chain: Option<usize>,
-) -> Result<TracePlotData, AppError> {
+) -> Result<TracePlotData, CommandError> {
     service.trace_plot_data(
         &task_id,
         parameter.as_deref(),
@@ -124,7 +126,7 @@ pub fn read_bayes_density_plot_data(
     task_id: String,
     parameter: Option<String>,
     grid_points: Option<usize>,
-) -> Result<DensityPlotData, AppError> {
+) -> Result<DensityPlotData, CommandError> {
     service.density_plot_data(&task_id, parameter.as_deref(), grid_points.unwrap_or(256))
 }
 
@@ -134,7 +136,7 @@ pub fn read_bayes_autocorrelation_data(
     task_id: String,
     parameter: Option<String>,
     max_lag: Option<usize>,
-) -> Result<AutocorrelationPlotData, AppError> {
+) -> Result<AutocorrelationPlotData, CommandError> {
     service.autocorrelation_plot_data(&task_id, parameter.as_deref(), max_lag.unwrap_or(50))
 }
 
@@ -144,7 +146,7 @@ pub fn read_bayes_posterior_predictive(
     task_id: String,
     offset: usize,
     limit: usize,
-) -> Result<PosteriorPredictivePage, AppError> {
+) -> Result<PosteriorPredictivePage, CommandError> {
     service.posterior_predictive_page(&task_id, offset, limit)
 }
 

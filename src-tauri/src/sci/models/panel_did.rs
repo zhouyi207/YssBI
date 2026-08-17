@@ -11,6 +11,33 @@ use yss_sci::regression::panel::fit_panel_fe_twoway;
 const FAKE_GROUP_PERM_CAP: usize = 2000;
 const FAKE_GROUP_PERM_MIN_VALID: usize = 10;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DidFakeGroupUnavailableCode {
+    NoTreatedEntities,
+    AllEntitiesTreated,
+    InsufficientValidPermutations,
+}
+
+enum FakeGroupRiOutcome {
+    Available {
+        n_perm: usize,
+        n_perm_valid: usize,
+        n_entities: usize,
+        n_treated_entities: usize,
+        p_value_ri: f64,
+        perm_coef_mean: f64,
+        perm_coef_std: f64,
+    },
+    Unavailable {
+        code: DidFakeGroupUnavailableCode,
+        n_perm: usize,
+        n_perm_valid: usize,
+        n_entities: usize,
+        n_treated_entities: usize,
+    },
+}
+
 fn labels_after_fe_omit(
     labels: &[(String, Option<String>)],
     omitted: Option<&[usize]>,
@@ -38,7 +65,7 @@ fn run_placebo_fake_treatment_ri(
     observed_coef: f64,
     n_perm: usize,
     rng_seed: u64,
-) -> Result<(usize, usize, f64, f64, f64, String), String> {
+) -> Result<FakeGroupRiOutcome, String> {
     let n = endog.len();
     if exog.nrows() != n
         || entity_id.len() != n
@@ -78,20 +105,26 @@ fn run_placebo_fake_treatment_ri(
         }
     }
     let n_treated_entities = ever_treated.iter().filter(|&&treated| treated).count();
+    let n_rep = n_perm.max(1).min(FAKE_GROUP_PERM_CAP);
     if n_treated_entities == 0 {
-        return Err(
-            "DID fake-group placebo: no entity is ever treated (cannot fix fake treated count)"
-                .to_string(),
-        );
+        return Ok(FakeGroupRiOutcome::Unavailable {
+            code: DidFakeGroupUnavailableCode::NoTreatedEntities,
+            n_perm: n_rep,
+            n_perm_valid: 0,
+            n_entities,
+            n_treated_entities,
+        });
     }
     if n_treated_entities >= n_entities {
-        return Err(
-            "DID fake-group placebo: every entity is treated — no pool to reassign fake treatment"
-                .to_string(),
-        );
+        return Ok(FakeGroupRiOutcome::Unavailable {
+            code: DidFakeGroupUnavailableCode::AllEntitiesTreated,
+            n_perm: n_rep,
+            n_perm_valid: 0,
+            n_entities,
+            n_treated_entities,
+        });
     }
 
-    let n_rep = n_perm.max(1).min(FAKE_GROUP_PERM_CAP);
     let mut rng = StdRng::seed_from_u64(rng_seed);
     let mut pool: Vec<usize> = (0..n_entities).collect();
     let mut permuted_exog = exog.clone();
@@ -109,7 +142,7 @@ fn run_placebo_fake_treatment_ri(
             permuted_exog[[index, last_column]] = treatment * post[index];
         }
 
-        let result = match fit_panel_fe_twoway(
+        let result = fit_panel_fe_twoway(
             endog,
             &permuted_exog,
             entity_id,
@@ -117,24 +150,31 @@ fn run_placebo_fake_treatment_ri(
             constant,
             cov_type,
             None,
-        ) {
-            Ok(result) => result,
-            Err(_) => continue,
-        };
+        )
+        .map_err(|error| format!("DID fake-group placebo: TWFE fit failed: {error}"))?;
         let kept_labels = labels_after_fe_omit(labels, result.omitted_indices.as_deref());
         if let Some(index) = kept_labels.iter().position(|(name, _)| name == did_label) {
-            if let Some(coefficient) = result.betas.get(index).filter(|value| value.is_finite()) {
-                coefficients.push(*coefficient);
+            let coefficient = result.betas.get(index).ok_or_else(|| {
+                "DID fake-group placebo: TWFE coefficient index is out of bounds".to_string()
+            })?;
+            if !coefficient.is_finite() {
+                return Err(
+                    "DID fake-group placebo: TWFE returned a non-finite coefficient".to_string(),
+                );
             }
+            coefficients.push(*coefficient);
         }
     }
 
     let n_valid = coefficients.len();
     if n_valid < FAKE_GROUP_PERM_MIN_VALID {
-        return Err(format!(
-            "DID fake-group placebo: only {} valid permutations (need ≥{}); try fewer collinear X or smaller panel",
-            n_valid, FAKE_GROUP_PERM_MIN_VALID
-        ));
+        return Ok(FakeGroupRiOutcome::Unavailable {
+            code: DidFakeGroupUnavailableCode::InsufficientValidPermutations,
+            n_perm: n_rep,
+            n_perm_valid: n_valid,
+            n_entities,
+            n_treated_entities,
+        });
     }
 
     let count_at_least_observed = coefficients
@@ -149,12 +189,19 @@ fn run_placebo_fake_treatment_ri(
         .sum::<f64>()
         / n_valid as f64;
     let standard_deviation = variance.max(0.0).sqrt();
-    let note = format!(
-        "Entity-level random assignment: {} permutation draws each assign {} fake-treated entities uniformly among {} units (same count as observed ever-treated); regressor = I(fake treated)×post; same TWFE and VCE as main DID. RI two-sided p = (1 + count of |perm coef| ≥ |observed|) / (B+1) with B={} successful fits; observed coef is main Treat×Post.",
-        n_rep, n_treated_entities, n_entities, n_valid
-    );
+    if !p_value.is_finite() || !mean.is_finite() || !standard_deviation.is_finite() {
+        return Err("DID fake-group placebo: non-finite summary statistics".to_string());
+    }
 
-    Ok((n_rep, n_valid, p_value, mean, standard_deviation, note))
+    Ok(FakeGroupRiOutcome::Available {
+        n_perm: n_rep,
+        n_perm_valid: n_valid,
+        n_entities,
+        n_treated_entities,
+        p_value_ri: p_value,
+        perm_coef_mean: mean,
+        perm_coef_std: standard_deviation,
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -181,19 +228,24 @@ pub struct DidFakeGroupEnginePayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DidPlaceboFakeGroupBlock {
     pub available: bool,
+    #[serde(rename = "unavailableCode", skip_serializing_if = "Option::is_none")]
+    pub unavailable_code: Option<DidFakeGroupUnavailableCode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub observed_coef: Option<f64>,
     pub n_perm: usize,
     pub n_perm_valid: usize,
+    pub min_valid_permutations: usize,
+    pub n_entities: usize,
+    pub n_treated_entities: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub p_value_ri: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub perm_coef_mean: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub perm_coef_std: Option<f64>,
-    pub method_note: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,6 +262,9 @@ pub fn compute_fake_group_ri(
     rng_seed: u64,
 ) -> Result<DidPlaceboFakeGroupBlock, String> {
     let n = payload.endog.len();
+    if !payload.observed_coef.is_finite() {
+        return Err("observed_coef must be finite".to_string());
+    }
     if payload.exog_row_major.len() != n.saturating_mul(payload.ncols) {
         return Err(format!(
             "exog_row_major len {} != n*ncols ({}*{})",
@@ -245,28 +300,46 @@ pub fn compute_fake_group_ri(
         payload.observed_coef,
         n_perm_requested,
         rng_seed,
-    ) {
-        Ok((n_rep, n_valid, p_value, mean, standard_deviation, note)) => {
-            Ok(DidPlaceboFakeGroupBlock {
-                available: true,
-                observed_coef: Some(payload.observed_coef),
-                n_perm: n_rep,
-                n_perm_valid: n_valid,
-                p_value_ri: Some(p_value),
-                perm_coef_mean: Some(mean),
-                perm_coef_std: Some(standard_deviation),
-                method_note: note,
-            })
-        }
-        Err(message) => Ok(DidPlaceboFakeGroupBlock {
-            available: false,
+    )? {
+        FakeGroupRiOutcome::Available {
+            n_perm,
+            n_perm_valid,
+            n_entities,
+            n_treated_entities,
+            p_value_ri,
+            perm_coef_mean,
+            perm_coef_std,
+        } => Ok(DidPlaceboFakeGroupBlock {
+            available: true,
+            unavailable_code: None,
             observed_coef: Some(payload.observed_coef),
-            n_perm: n_perm_requested,
-            n_perm_valid: 0,
+            n_perm,
+            n_perm_valid,
+            min_valid_permutations: FAKE_GROUP_PERM_MIN_VALID,
+            n_entities,
+            n_treated_entities,
+            p_value_ri: Some(p_value_ri),
+            perm_coef_mean: Some(perm_coef_mean),
+            perm_coef_std: Some(perm_coef_std),
+        }),
+        FakeGroupRiOutcome::Unavailable {
+            code,
+            n_perm,
+            n_perm_valid,
+            n_entities,
+            n_treated_entities,
+        } => Ok(DidPlaceboFakeGroupBlock {
+            available: false,
+            unavailable_code: Some(code),
+            observed_coef: None,
+            n_perm,
+            n_perm_valid,
+            min_valid_permutations: FAKE_GROUP_PERM_MIN_VALID,
+            n_entities,
+            n_treated_entities,
             p_value_ri: None,
             perm_coef_mean: None,
             perm_coef_std: None,
-            method_note: message,
         }),
     }
 }
@@ -327,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    fn same_seed_is_exactly_deterministic_and_success_reports_complete_statistics() {
+    fn same_seed_is_exactly_deterministic_and_success_reports_structured_statistics() {
         let payload = valid_payload();
         let first = compute_fake_group_ri(&payload, 20, 42).unwrap();
         let second = compute_fake_group_ri(&payload, 20, 42).unwrap();
@@ -337,9 +410,13 @@ mod tests {
             serde_json::to_value(&second).unwrap()
         );
         assert!(first.available);
+        assert_eq!(first.unavailable_code, None);
         assert_eq!(first.observed_coef, Some(1.75));
+        assert_eq!(first.n_entities, 8);
+        assert_eq!(first.n_treated_entities, 3);
         assert_eq!(first.n_perm, 20);
         assert_eq!(first.n_perm_valid, 20);
+        assert_eq!(first.min_valid_permutations, 10);
         assert!(
             first
                 .p_value_ri
@@ -351,7 +428,10 @@ mod tests {
                 .perm_coef_std
                 .is_some_and(|value| value.is_finite() && value >= 0.0)
         );
-        assert!(first.method_note.contains("B=20 successful fits"));
+
+        let wire = serde_json::to_value(first).unwrap();
+        assert!(wire.get("method_note").is_none());
+        assert!(wire.get("unavailableCode").is_none());
     }
 
     #[test]
@@ -364,23 +444,56 @@ mod tests {
     }
 
     #[test]
-    fn fewer_than_ten_valid_permutations_is_unavailable() {
+    fn fewer_than_ten_valid_permutations_has_a_stable_unavailable_code() {
         let result = unavailable(&valid_payload(), 9);
 
         assert!(!result.available);
+        assert_eq!(
+            result.unavailable_code,
+            Some(DidFakeGroupUnavailableCode::InsufficientValidPermutations)
+        );
+        assert_eq!(result.n_entities, 8);
+        assert_eq!(result.n_treated_entities, 3);
         assert_eq!(result.n_perm, 9);
-        assert_eq!(result.n_perm_valid, 0);
+        assert_eq!(result.n_perm_valid, 9);
+        assert_eq!(result.min_valid_permutations, 10);
+        assert_eq!(result.observed_coef, None);
         assert_eq!(result.p_value_ri, None);
         assert_eq!(result.perm_coef_mean, None);
         assert_eq!(result.perm_coef_std, None);
         assert_eq!(
-            result.method_note,
-            "DID fake-group placebo: only 9 valid permutations (need ≥10); try fewer collinear X or smaller panel"
+            serde_json::to_value(result).unwrap()["unavailableCode"],
+            "insufficient_valid_permutations"
         );
     }
 
     #[test]
-    fn malformed_shape_and_label_count_return_exact_errors() {
+    fn treatment_pool_limits_have_stable_unavailable_codes_and_counts() {
+        let mut no_treated = valid_payload();
+        no_treated.treat.fill(0.0);
+        let no_treated_result = unavailable(&no_treated, 10);
+        assert_eq!(
+            no_treated_result.unavailable_code,
+            Some(DidFakeGroupUnavailableCode::NoTreatedEntities)
+        );
+        assert_eq!(no_treated_result.n_entities, 8);
+        assert_eq!(no_treated_result.n_treated_entities, 0);
+        assert_eq!(no_treated_result.n_perm_valid, 0);
+
+        let mut all_treated = valid_payload();
+        all_treated.treat.fill(1.0);
+        let all_treated_result = unavailable(&all_treated, 10);
+        assert_eq!(
+            all_treated_result.unavailable_code,
+            Some(DidFakeGroupUnavailableCode::AllEntitiesTreated)
+        );
+        assert_eq!(all_treated_result.n_entities, 8);
+        assert_eq!(all_treated_result.n_treated_entities, 8);
+        assert_eq!(all_treated_result.n_perm_valid, 0);
+    }
+
+    #[test]
+    fn malformed_structure_returns_diagnostic_errors() {
         let mut bad_shape = valid_payload();
         bad_shape.exog_row_major.pop();
         assert_eq!(
@@ -394,21 +507,18 @@ mod tests {
             compute_fake_group_ri(&bad_labels, 10, 1).unwrap_err(),
             "all_labels len != ncols"
         );
-    }
 
-    #[test]
-    fn panel_validation_failures_are_exact_unavailable_results() {
         let mut length = valid_payload();
         length.time_id.pop();
         assert_eq!(
-            unavailable(&length, 10).method_note,
+            compute_fake_group_ri(&length, 10, 1).unwrap_err(),
             "DID fake-group placebo: length mismatch"
         );
 
         let mut wrong_last = valid_payload();
         wrong_last.all_labels[1].variable = "other".into();
         assert_eq!(
-            unavailable(&wrong_last, 10).method_note,
+            compute_fake_group_ri(&wrong_last, 10, 1).unwrap_err(),
             "DID fake-group placebo: last exog column should be 'Treat×Post', got Some(\"other\")"
         );
 
@@ -420,22 +530,38 @@ mod tests {
         empty.post.clear();
         empty.treat.clear();
         assert_eq!(
-            unavailable(&empty, 10).method_note,
+            compute_fake_group_ri(&empty, 10, 1).unwrap_err(),
             "DID fake-group placebo: empty entity_id"
         );
+    }
 
-        let mut no_treated = valid_payload();
-        no_treated.treat.fill(0.0);
-        assert_eq!(
-            unavailable(&no_treated, 10).method_note,
-            "DID fake-group placebo: no entity is ever treated (cannot fix fake treated count)"
-        );
+    #[test]
+    fn regression_engine_errors_are_not_reported_as_statistical_unavailability() {
+        let mut payload = valid_payload();
+        payload.cov_type = "hac-panel".into();
 
-        let mut all_treated = valid_payload();
-        all_treated.treat.fill(1.0);
-        assert_eq!(
-            unavailable(&all_treated, 10).method_note,
-            "DID fake-group placebo: every entity is treated — no pool to reassign fake treatment"
+        let error = compute_fake_group_ri(&payload, 10, 1).unwrap_err();
+
+        assert!(error.contains("cov_type 'hac-panel' not yet implemented"));
+    }
+
+    #[test]
+    fn deserialization_rejects_legacy_method_note_shapes() {
+        let mut success =
+            serde_json::to_value(compute_fake_group_ri(&valid_payload(), 10, 1).unwrap()).unwrap();
+        success.as_object_mut().unwrap().insert(
+            "method_note".into(),
+            serde_json::json!("legacy backend prose"),
         );
+        assert!(serde_json::from_value::<DidPlaceboFakeGroupBlock>(success).is_err());
+
+        let legacy_unavailable = serde_json::json!({
+            "available": false,
+            "observed_coef": 1.75,
+            "n_perm": 9,
+            "n_perm_valid": 0,
+            "method_note": "legacy failure prose"
+        });
+        assert!(serde_json::from_value::<DidPlaceboFakeGroupBlock>(legacy_unavailable).is_err());
     }
 }

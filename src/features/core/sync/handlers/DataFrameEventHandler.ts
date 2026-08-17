@@ -4,12 +4,10 @@ import { BaseEventHandler } from './BaseEventHandler';
 import {
     DataFrameCreatedPayload,
     DataFrameDeletedPayload,
-    DataFrameSchemaUpdatedPayload,
     EventCallbacks,
 } from '../types';
 import { useDatabaseStore } from '@/features/core/dataStore';
 import { normalizeDatabaseRecord } from '@/shared/types/dto/database';
-import type { DatabaseRecord } from '@/shared/types/dto/database';
 
 export class DataFrameCreatedHandler extends BaseEventHandler<DataFrameCreatedPayload> {
     eventType = 'DataFrameCreated';
@@ -35,29 +33,5 @@ export class DataFrameDeletedHandler extends BaseEventHandler<DataFrameDeletedPa
         useDatabaseStore.getState().deleteDatabase(payload.id);
         
         callbacks?.onDataFrameDeleted?.(payload.id);
-    }
-}
-
-/**
- * DuckDB 数据集 schema 更新（低频事件；项目加载时由 get_project_databases_variables 返回 schema）。
- */
-export class DataFrameSchemaUpdatedHandler extends BaseEventHandler<DataFrameSchemaUpdatedPayload> {
-    eventType = 'DataFrameSchemaUpdated';
-
-    handle(payload: DataFrameSchemaUpdatedPayload): void {
-        this.log('DataFrame schema updated:', payload.id, payload.error ? `error=${payload.error}` : `rows=${payload.rowCount}`);
-
-        const patch: Partial<DatabaseRecord> = {};
-
-        if (payload.error) {
-            patch.loadError = payload.error;
-        } else {
-            patch.columns = payload.columns;
-            patch.rowCount = payload.rowCount;
-            patch.columnCount = payload.columnCount;
-            patch.loadError = undefined;
-        }
-
-        useDatabaseStore.getState().updateDatabase(payload.id, patch);
     }
 }

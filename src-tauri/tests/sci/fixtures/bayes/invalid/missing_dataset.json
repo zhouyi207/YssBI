@@ -126,8 +126,11 @@
   },
   "expected": {
     "ok": false,
-    "errorCodes": [
-      "DATASET_REQUIRED"
+    "errors": [
+      {
+        "code": "dataset_required",
+        "path": "dataset"
+      }
     ]
   }
 }

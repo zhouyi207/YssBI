@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createEventHandlers } from '../handlers';
+import { isValidEventType } from '../utils/eventParser';
 import { EventRegistry } from './EventRegistry';
 
 
@@ -26,10 +27,14 @@ describe('EventRegistry project mutation registrations', () => {
       'ProjectIndexInvalidated',
       'DataFrameCreated',
       'DataFrameDeleted',
-      'DataFrameSchemaUpdated',
       'VariableCreated',
       'VariableUpdated',
       'VariableDeleted',
     ]));
+    expect(registered).not.toContain('DataFrameSchemaUpdated');
+  });
+
+  it('rejects the removed dataframe schema event type', () => {
+    expect(isValidEventType('DataFrameSchemaUpdated')).toBe(false);
   });
 });

@@ -100,21 +100,6 @@ export interface DataFrameDeletedPayload {
     id: string;
 }
 
-/** 后端某个 SQL/Excel 数据源完成异步物化后回填 schema（与后端 `EventDataframe::DataFrameSchemaUpdated` 对齐）。 */
-export interface DataFrameColumnInfo {
-    name: string;
-    /** 后端字段名为 `type`，此处映射后保持一致。 */
-    type: string;
-}
-
-export interface DataFrameSchemaUpdatedPayload {
-    id: string;
-    columns: DataFrameColumnInfo[];
-    rowCount: number;
-    columnCount: number;
-    /** 物化失败时的错误信息；与 columns/rowCount 互斥。 */
-    error?: string;
-}
 
 export interface GraphDeltaEventPayload {
     projectInstanceId: string;
@@ -133,7 +118,7 @@ export type BackendEventType =
     | 'EventUpdated' | 'EventDeleted'
     | 'FunctionUpdated' | 'FunctionDeleted'
     | 'VariableCreated' | 'VariableUpdated' | 'VariableDeleted'
-    | 'DataFrameCreated' | 'DataFrameDeleted' | 'DataFrameSchemaUpdated'
+    | 'DataFrameCreated' | 'DataFrameDeleted'
     | 'ResourceChanged' | 'ProjectIndexInvalidated'
     | 'GraphDelta' | 'ResourceMutationCommitted';
 
@@ -152,7 +137,6 @@ export interface BackendEventPayloadMap {
     VariableDeleted: VariableDeletedPayload;
     DataFrameCreated: DataFrameCreatedPayload;
     DataFrameDeleted: DataFrameDeletedPayload;
-    DataFrameSchemaUpdated: DataFrameSchemaUpdatedPayload;
     ResourceChanged: ResourceChangedPayload;
     ProjectIndexInvalidated: ProjectIndexInvalidatedPayload;
     GraphDelta: GraphDeltaEventPayload;

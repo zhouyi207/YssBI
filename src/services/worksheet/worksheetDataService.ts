@@ -1,4 +1,5 @@
 import { DatabaseService } from '@/services/database/databaseService';
+import { toErrorReference } from '@/services/ipc';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import type {
   ColumnDistribution,
@@ -34,7 +35,12 @@ export async function fetchWorksheetPreview(
       identity.assertCurrent();
       const match = distributions.find((d) => d.columnName === column);
       if (!match) {
-        return { kind: 'error', message: `Column "${column}" not found` };
+        return {
+          kind: 'error',
+          code: 'worksheet_preview_column_not_found',
+          incidentId: null,
+          column,
+        };
       }
       if (match.kind === 'numeric') {
         return {
@@ -74,7 +80,7 @@ export async function fetchWorksheetPreview(
     }
     return {
       kind: 'error',
-      message: error instanceof Error ? error.message : String(error),
+      ...toErrorReference(error, 'worksheet_preview_read_failed'),
     };
   }
 }

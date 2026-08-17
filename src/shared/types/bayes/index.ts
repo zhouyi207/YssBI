@@ -5,3 +5,4 @@ export * from './modelSpec';
 export * from './prior';
 export * from './result';
 export * from './validation';
+export * from './wireParser';

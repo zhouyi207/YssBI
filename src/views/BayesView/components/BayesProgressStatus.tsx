@@ -13,8 +13,8 @@ export function BayesProgressStatus({ task, stageOverride }: { task: BayesInfere
   const smoothedRate = useRef<number | null>(null);
   const progress = task.progress;
   const stage = stageOverride ?? progress?.stage ?? task.status;
-  const completed = progress?.completed;
-  const total = progress?.total;
+  const completed = progress?.completed ?? undefined;
+  const total = progress?.total ?? undefined;
 
   useEffect(() => {
     const timestamp = Date.now();

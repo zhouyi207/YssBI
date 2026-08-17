@@ -33,12 +33,22 @@ pub struct InferenceDiagnostics {
     pub warnings: Vec<DiagnosticWarning>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct DiagnosticWarning {
     pub code: String,
-    pub message: String,
-    pub parameter: Option<String>,
+    pub metric: DiagnosticMetric,
+    pub value: f64,
+    pub threshold: f64,
+    pub parameter: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticMetric {
+    Rhat,
+    EssBulk,
+    EssTail,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -189,7 +199,85 @@ pub struct PosteriorPredictivePage {
 
 #[cfg(test)]
 mod tests {
-    use super::DensityPlotData;
+    use super::{DensityPlotData, DiagnosticWarning, TaskError};
+
+    #[test]
+    fn task_errors_and_diagnostic_warnings_use_safe_structured_wire_shapes() {
+        let task_error: TaskError = serde_json::from_value(serde_json::json!({
+            "code": "julia_bayes_invalid_data",
+            "details": {
+                "column": "predictor_x",
+                "row": 7,
+                "parameter": "beta",
+                "path": "parameters.beta"
+            },
+            "incidentId": null
+        }))
+        .expect("deserialize safe task error");
+        assert_eq!(
+            serde_json::to_value(task_error).expect("serialize safe task error"),
+            serde_json::json!({
+                "code": "julia_bayes_invalid_data",
+                "details": {
+                    "column": "predictor_x",
+                    "row": 7,
+                    "parameter": "beta",
+                    "path": "parameters.beta"
+                },
+                "incidentId": null
+            })
+        );
+        assert!(
+            serde_json::from_value::<TaskError>(serde_json::json!({
+                "code": "julia_bayes_sampling_failed",
+                "details": null,
+                "incidentId": "incident-42",
+                "message": "private backend message"
+            }))
+            .is_err(),
+            "task error must reject legacy display fields"
+        );
+        assert!(
+            serde_json::from_value::<TaskError>(serde_json::json!({
+                "code": "julia_bayes_invalid_data",
+                "details": { "column": "x", "detail": "private backend detail" },
+                "incidentId": null
+            }))
+            .is_err(),
+            "task error details must reject backend prose"
+        );
+
+        let warning: DiagnosticWarning = serde_json::from_value(serde_json::json!({
+            "code": "ess_too_low",
+            "metric": "ess_tail",
+            "value": 42.5,
+            "threshold": 100.0,
+            "parameter": "beta"
+        }))
+        .expect("deserialize structured diagnostic warning");
+        assert_eq!(
+            serde_json::to_value(warning).expect("serialize structured diagnostic warning"),
+            serde_json::json!({
+                "code": "ess_too_low",
+                "metric": "ess_tail",
+                "value": 42.5,
+                "threshold": 100.0,
+                "parameter": "beta"
+            })
+        );
+        assert!(
+            serde_json::from_value::<DiagnosticWarning>(serde_json::json!({
+                "code": "ess_too_low",
+                "metric": "ess_tail",
+                "value": 42.5,
+                "threshold": 100.0,
+                "parameter": "beta",
+                "message": "increase samples"
+            }))
+            .is_err(),
+            "diagnostic warning must reject legacy display fields"
+        );
+    }
 
     #[test]
     fn density_plot_data_uses_grid_points_json_contract() {
@@ -240,9 +328,31 @@ pub struct TaskProgress {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TaskError {
     pub code: String,
-    pub message: String,
-    pub detail: Option<String>,
+    pub details: Option<TaskErrorDetails>,
+    pub incident_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TaskErrorDetails {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub column: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub row: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+impl TaskErrorDetails {
+    pub fn is_empty(&self) -> bool {
+        self.column.is_none()
+            && self.row.is_none()
+            && self.parameter.is_none()
+            && self.path.is_none()
+    }
 }

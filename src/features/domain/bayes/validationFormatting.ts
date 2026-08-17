@@ -5,33 +5,33 @@ export function validateBayesDraftLocally(draft: BayesModelDraftDTO): Validation
   const warnings: ValidationIssueDTO[] = [];
 
   if (!draft.dataset) {
-    errors.push({ code: 'DATASET_REQUIRED', severity: 'error', message: '请选择数据源。', path: 'dataset' });
+    errors.push({ code: 'dataset_required', severity: 'error', path: 'dataset' });
   }
   if (!draft.responseBinding) {
-    errors.push({ code: 'RESPONSE_REQUIRED', severity: 'error', message: '请选择响应变量列。', path: 'responseBinding' });
+    errors.push({ code: 'response_required', severity: 'error', path: 'responseBinding' });
   }
   if (!draft.formulaText.trim()) {
-    errors.push({ code: 'FORMULA_REQUIRED', severity: 'error', message: '请输入模型方程，例如 y = a * x + b。', path: 'formulaText' });
+    errors.push({ code: 'formula_required', severity: 'error', path: 'formulaText' });
   } else if (!draft.rawPredictor) {
-    errors.push({ code: 'FORMULA_NOT_PARSED', severity: 'error', message: '模型方程尚未解析为 raw predictor。', path: 'rawPredictor' });
+    errors.push({ code: 'formula_not_parsed', severity: 'error', path: 'rawPredictor' });
   } else if (!draft.boundPredictor) {
-    errors.push({ code: 'PREDICTOR_NOT_BOUND', severity: 'error', message: '预测项尚未完成符号角色确认。', path: 'boundPredictor' });
+    errors.push({ code: 'predictor_not_bound', severity: 'error', path: 'boundPredictor' });
   }
   for (const symbol of draft.symbols.filter(symbol => symbol.role === 'independent')) {
     if (!draft.dataBindings[symbol.name]) {
-      errors.push({ code: 'DATA_BINDING_REQUIRED', severity: 'error', message: `自变量 ${symbol.name} 尚未绑定数据库列。`, path: `dataBindings.${symbol.name}` });
+      errors.push({ code: 'data_binding_required', severity: 'error', path: `dataBindings.${symbol.name}` });
     }
   }
   for (const symbol of draft.symbols.filter(symbol => symbol.role === 'dependent')) {
     if (draft.responseBinding?.symbol !== symbol.name || !draft.responseBinding.column) {
-      errors.push({ code: 'RESPONSE_BINDING_REQUIRED', severity: 'error', message: `因变量 ${symbol.name} 尚未绑定数据库列。`, path: 'responseBinding' });
+      errors.push({ code: 'response_binding_required', severity: 'error', path: 'responseBinding' });
     }
   }
   if (draft.parameters.length === 0) {
-    warnings.push({ code: 'NO_PARAMETERS', severity: 'warning', message: '当前模型尚未识别出未知参数。', path: 'parameters' });
+    warnings.push({ code: 'no_parameters', severity: 'warning', path: 'parameters' });
   }
   if (draft.sampler.samples < 500) {
-    warnings.push({ code: 'LOW_SAMPLE_COUNT', severity: 'warning', message: '采样数较少，后验诊断可能不稳定。', path: 'sampler.samples' });
+    warnings.push({ code: 'low_sample_count', severity: 'warning', path: 'sampler.samples' });
   }
 
   return { ok: errors.length === 0, errors, warnings };

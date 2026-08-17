@@ -141,8 +141,11 @@
   },
   "expected": {
     "ok": false,
-    "errorCodes": [
-      "PARAMETER_PRIOR_ARGS_INVALID"
+    "errors": [
+      {
+        "code": "parameter_prior_args_invalid",
+        "path": "parameters.a.prior"
+      }
     ]
   }
 }

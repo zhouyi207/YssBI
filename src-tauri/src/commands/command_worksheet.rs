@@ -1,5 +1,5 @@
 use crate::database::DatabaseInstance;
-use crate::error::AppError;
+use crate::error::CommandError;
 use crate::event::{Event, EventProject, ResourceMutationResultDto, emit_project_event};
 use crate::node_system::document::{OperationId, ResourceRevision};
 use crate::project::{
@@ -29,11 +29,11 @@ pub struct PlotColumnPairPayload {
     y_format: String,
 }
 
-fn database_computation_error(error: impl std::fmt::Display) -> AppError {
-    AppError::new("database_computation_failed", error.to_string())
+fn database_computation_error(error: impl std::fmt::Display + std::fmt::Debug) -> CommandError {
+    CommandError::diagnosed("database_computation_failed", error)
 }
 
-fn series_to_plot_f64(s: &Series) -> Result<Series, AppError> {
+fn series_to_plot_f64(s: &Series) -> Result<Series, CommandError> {
     let dt = s.dtype();
     let casted = if matches!(dt, PDataType::Date) {
         s.cast(&PDataType::Int32)
@@ -86,7 +86,7 @@ fn compute_plot_column_pair(
     x_col: &str,
     y_col: &str,
     max_points: Option<usize>,
-) -> Result<PlotColumnPairPayload, AppError> {
+) -> Result<PlotColumnPairPayload, CommandError> {
     let x_series = db
         .load_column_series(x_col)
         .map_err(database_computation_error)?;
@@ -110,10 +110,7 @@ fn compute_plot_column_pair(
         .collect();
 
     if data.is_empty() {
-        return Err(AppError::new(
-            "plot_data_empty",
-            "No valid (x, y) pairs after filtering nulls and non-finite values",
-        ));
+        return Err(CommandError::expected("plot_data_empty"));
     }
 
     let max_points = max_points.unwrap_or(DEFAULT_MAX_PLOT_POINTS);
@@ -149,10 +146,19 @@ fn emit_worksheet_result(
     result
 }
 
-fn worksheet_app_error(
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorksheetErrorDetails<'a> {
+    resource_kind: &'static str,
+    resource_path: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recovery_required: Option<bool>,
+}
+
+fn worksheet_command_error(
     worksheet_path: &WorksheetResourcePath,
     error: ProjectFilesystemError,
-) -> AppError {
+) -> CommandError {
     let code = match &error {
         ProjectFilesystemError::TransactionPrepareFailed { .. } => "filesystem_prepare_failed",
         ProjectFilesystemError::TransactionCommitFailed { .. } => "filesystem_commit_failed",
@@ -160,17 +166,21 @@ fn worksheet_app_error(
         | ProjectFilesystemError::ProjectRecoveryRequired { .. } => "publication_recovery_required",
         _ => error.code(),
     };
-    let recovery_required = error.recovery_required();
-    let mut details = serde_json::json!({
-        "resourceKind": "worksheet",
-        "resourcePath": worksheet_path.as_str(),
-    });
-    if recovery_required {
-        details["recoveryRequired"] = serde_json::Value::Bool(true);
-    }
-    let mut app_error = AppError::new(code, error.to_string());
-    app_error.details = Some(details);
-    app_error
+    let recovery_required = error.recovery_required().then_some(true);
+    let details = WorksheetErrorDetails {
+        resource_kind: "worksheet",
+        resource_path: worksheet_path.as_str(),
+        recovery_required,
+    };
+    let command_error = match error {
+        error @ (ProjectFilesystemError::TransactionPrepareFailed { .. }
+        | ProjectFilesystemError::TransactionCommitFailed { .. }
+        | ProjectFilesystemError::TransactionRollbackFailed { .. }) => {
+            CommandError::diagnosed(code, error)
+        }
+        _ => CommandError::expected(code),
+    };
+    command_error.with_details(details)
 }
 
 fn create_worksheet_with_emitter(
@@ -180,10 +190,10 @@ fn create_worksheet_with_emitter(
     name: String,
     database_id: Option<String>,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     let name = ResourceName::parse(&name)
         .map_err(ProjectFilesystemError::from)
-        .map_err(AppError::from)?;
+        .map_err(CommandError::from)?;
     let requested_path = WorksheetResourcePath::from_name(&name);
     state
         .create_worksheet_resource_transaction(
@@ -193,7 +203,7 @@ fn create_worksheet_with_emitter(
             operation_id,
         )
         .map(|result| emit_worksheet_result(emit, result))
-        .map_err(|error| worksheet_app_error(&requested_path, error))
+        .map_err(|error| worksheet_command_error(&requested_path, error))
 }
 
 #[tauri::command]
@@ -204,7 +214,7 @@ pub fn create_worksheet(
     operation_id: OperationId,
     name: String,
     database_id: Option<String>,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     create_worksheet_with_emitter(
         state.inner(),
         project_instance_id,
@@ -222,7 +232,7 @@ fn duplicate_worksheet_with_emitter(
     worksheet_path: WorksheetResourcePath,
     expected_revision: ResourceRevision,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     state
         .duplicate_worksheet_resource_transaction(
             &project_instance_id,
@@ -231,7 +241,7 @@ fn duplicate_worksheet_with_emitter(
             operation_id,
         )
         .map(|result| emit_worksheet_result(emit, result))
-        .map_err(|error| worksheet_app_error(&worksheet_path, error))
+        .map_err(|error| worksheet_command_error(&worksheet_path, error))
 }
 
 #[tauri::command]
@@ -242,7 +252,7 @@ pub fn duplicate_worksheet(
     operation_id: OperationId,
     worksheet_path: WorksheetResourcePath,
     expected_revision: ResourceRevision,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     duplicate_worksheet_with_emitter(
         state.inner(),
         project_instance_id,
@@ -258,11 +268,11 @@ pub fn load_worksheet(
     state: State<ProjectState>,
     project_instance_id: String,
     worksheet_path: WorksheetResourcePath,
-) -> Result<WorksheetDocument, AppError> {
+) -> Result<WorksheetDocument, CommandError> {
     let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
     state
         .load_worksheet_document(&project_instance_id, &worksheet_path)
-        .map_err(|error| worksheet_app_error(&worksheet_path, error))
+        .map_err(|error| worksheet_command_error(&worksheet_path, error))
 }
 
 fn save_worksheet_with_emitter(
@@ -273,7 +283,7 @@ fn save_worksheet_with_emitter(
     expected_revision: ResourceRevision,
     document: WorksheetDocument,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     state
         .save_worksheet_document(
             &project_instance_id,
@@ -283,7 +293,7 @@ fn save_worksheet_with_emitter(
             document,
         )
         .map(|result| emit_worksheet_result(emit, result))
-        .map_err(|error| worksheet_app_error(&worksheet_path, error))
+        .map_err(|error| worksheet_command_error(&worksheet_path, error))
 }
 
 #[tauri::command]
@@ -295,7 +305,7 @@ pub fn save_worksheet(
     worksheet_path: WorksheetResourcePath,
     expected_revision: ResourceRevision,
     document: WorksheetDocument,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     save_worksheet_with_emitter(
         state.inner(),
         project_instance_id,
@@ -316,10 +326,10 @@ fn rename_worksheet_with_emitter(
     new_name: String,
     lifecycle_token: u64,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     let new_name = ResourceName::parse(&new_name)
         .map_err(ProjectFilesystemError::from)
-        .map_err(AppError::from)?;
+        .map_err(CommandError::from)?;
     state
         .rename_worksheet_resource_transaction(
             &project_instance_id,
@@ -330,7 +340,7 @@ fn rename_worksheet_with_emitter(
             operation_id,
         )
         .map(|result| emit_worksheet_result(emit, result))
-        .map_err(|error| worksheet_app_error(&worksheet_path, error))
+        .map_err(|error| worksheet_command_error(&worksheet_path, error))
 }
 
 #[tauri::command]
@@ -343,7 +353,7 @@ pub fn rename_worksheet_resource(
     expected_revision: ResourceRevision,
     new_name: String,
     lifecycle_token: u64,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     rename_worksheet_with_emitter(
         state.inner(),
         project_instance_id,
@@ -363,7 +373,7 @@ fn remove_worksheet_with_emitter(
     worksheet_path: WorksheetResourcePath,
     expected_revision: ResourceRevision,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     state
         .remove_worksheet_resource_transaction(
             &project_instance_id,
@@ -372,7 +382,7 @@ fn remove_worksheet_with_emitter(
             operation_id,
         )
         .map(|result| emit_worksheet_result(emit, result))
-        .map_err(|error| worksheet_app_error(&worksheet_path, error))
+        .map_err(|error| worksheet_command_error(&worksheet_path, error))
 }
 
 #[tauri::command]
@@ -383,7 +393,7 @@ pub fn remove_worksheet(
     operation_id: OperationId,
     worksheet_path: WorksheetResourcePath,
     expected_revision: ResourceRevision,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     remove_worksheet_with_emitter(
         state.inner(),
         project_instance_id,
@@ -401,12 +411,12 @@ fn get_plot_column_pair_for_project(
     x_col: &str,
     y_col: &str,
     max_points: Option<usize>,
-) -> Result<PlotColumnPairPayload, AppError> {
+) -> Result<PlotColumnPairPayload, CommandError> {
     state
         .with_database_snapshot_for_project(project_instance_id, database_id, |database| {
             compute_plot_column_pair(database, x_col, y_col, max_points)
         })
-        .map_err(AppError::from)?
+        .map_err(CommandError::from)?
 }
 
 #[tauri::command]
@@ -417,7 +427,7 @@ pub fn get_plot_column_pair(
     x_col: String,
     y_col: String,
     max_points: Option<usize>,
-) -> Result<PlotColumnPairPayload, AppError> {
+) -> Result<PlotColumnPairPayload, CommandError> {
     get_plot_column_pair_for_project(
         state.inner(),
         &project_instance_id,
@@ -474,7 +484,7 @@ mod tests {
             get_plot_column_pair_for_project(&state, &stale, "sales", "amount", "cost", None)
                 .unwrap_err();
 
-        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_project_lifecycle");
     }
 
     #[test]
@@ -486,71 +496,90 @@ mod tests {
             get_plot_column_pair_for_project(&state, &current, "sales", "missing", "cost", None)
                 .unwrap_err();
 
-        assert_eq!(error.code, "database_computation_failed");
+        assert_eq!(error.code(), "database_computation_failed");
     }
 
     #[test]
     fn worksheet_ipc_errors_serialize_the_approved_resource_contract() {
         let worksheet_path =
             WorksheetResourcePath::parse("worksheets/Sales Report.yssbi-worksheet").unwrap();
-        for (source, expected_code) in [
+        for (source, expected_code, has_incident) in [
             (
                 ProjectFilesystemError::WorksheetNotFound {
                     path: worksheet_path.clone(),
                 },
                 "resource_not_found",
+                false,
             ),
             (
                 ProjectFilesystemError::ResourceNameConflict {
                     message: "a worksheet named 'Sales Report' already exists".into(),
                 },
                 "resource_name_conflict",
+                false,
             ),
             (
                 ProjectFilesystemError::ResourceRevisionConflict {
                     message: "worksheet revision changed".into(),
                 },
                 "resource_revision_conflict",
+                false,
             ),
             (
                 ProjectFilesystemError::TransactionPrepareFailed {
                     message: "prepare fault".into(),
                 },
                 "filesystem_prepare_failed",
+                true,
             ),
             (
                 ProjectFilesystemError::TransactionCommitFailed {
                     message: "commit fault".into(),
                 },
                 "filesystem_commit_failed",
+                true,
             ),
         ] {
-            let error = worksheet_app_error(&worksheet_path, source);
+            let error = worksheet_command_error(&worksheet_path, source);
             let serialized = serde_json::to_value(error).unwrap();
+            assert_eq!(serialized.as_object().unwrap().len(), 3);
             assert_eq!(serialized["code"], expected_code);
-            assert_eq!(serialized["resourceKind"], "worksheet");
-            assert_eq!(serialized["resourcePath"], worksheet_path.as_str());
-            assert!(serialized.get("details").is_none());
-            assert!(serialized.get("recoveryRequired").is_none());
+            assert_eq!(
+                serialized["details"],
+                serde_json::json!({
+                    "resourceKind": "worksheet",
+                    "resourcePath": worksheet_path.as_str(),
+                })
+            );
+            assert!(serialized.get("message").is_none());
+            if has_incident {
+                assert!(uuid::Uuid::parse_str(serialized["incidentId"].as_str().unwrap()).is_ok());
+            } else {
+                assert!(serialized["incidentId"].is_null());
+            }
         }
 
-        let recovery = worksheet_app_error(
+        let recovery = worksheet_command_error(
             &worksheet_path,
             ProjectFilesystemError::TransactionRollbackFailed {
                 message: "restore fault".into(),
                 recovery_required: true,
             },
         );
+        let serialized = serde_json::to_value(recovery).unwrap();
+        assert_eq!(serialized.as_object().unwrap().len(), 3);
+        assert_eq!(serialized["code"], "publication_recovery_required");
         assert_eq!(
-            serde_json::to_value(recovery).unwrap(),
+            serialized["details"],
             serde_json::json!({
-                "code": "publication_recovery_required",
-                "message": "failed to roll back project filesystem transaction: restore fault",
                 "resourceKind": "worksheet",
                 "resourcePath": worksheet_path.as_str(),
                 "recoveryRequired": true,
             })
         );
+        assert!(uuid::Uuid::parse_str(serialized["incidentId"].as_str().unwrap()).is_ok());
+        assert!(serialized.get("message").is_none());
+        assert!(!serialized.to_string().contains("restore fault"));
     }
 
     #[test]
@@ -655,7 +684,7 @@ mod tests {
             |event| events.push(event),
         )
         .unwrap_err();
-        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_project_lifecycle");
         assert_eq!(events.len(), event_count);
         let _ = std::fs::remove_dir_all(root);
     }

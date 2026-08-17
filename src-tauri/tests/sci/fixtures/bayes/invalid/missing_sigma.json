@@ -129,8 +129,11 @@
   },
   "expected": {
     "ok": false,
-    "errorCodes": [
-      "LIKELIHOOD_SIGMA_PARAMETER_REQUIRED"
+    "errors": [
+      {
+        "code": "likelihood_sigma_parameter_required",
+        "path": "likelihood.sigma"
+      }
     ]
   }
 }

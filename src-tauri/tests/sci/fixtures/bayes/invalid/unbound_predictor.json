@@ -139,8 +139,11 @@
   },
   "expected": {
     "ok": false,
-    "errorCodes": [
-      "DATA_BINDING_REQUIRED"
+    "errors": [
+      {
+        "code": "data_binding_required",
+        "path": "dataBindings.x"
+      }
     ]
   }
 }

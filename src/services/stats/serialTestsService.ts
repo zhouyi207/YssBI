@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/services/ipc";
 import {
   normalizeSerialTestsResponse,
   type SerialTestsRequestDTO,
@@ -16,7 +16,7 @@ export type DurbinWatsonResult = DurbinWatsonResultDTO;
 export async function computeSerialTests(
   req: SerialTestsRequest,
 ): Promise<SerialTestsResponse> {
-  const raw = await invoke<unknown>("compute_serial_tests", { req });
+  const raw = await invokeCommand<unknown>("compute_serial_tests", { req });
   const parsed = normalizeSerialTestsResponse(raw);
   if (!parsed) {
     throw new Error("序列相关检验：响应格式无效");

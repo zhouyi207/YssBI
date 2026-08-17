@@ -32,9 +32,8 @@ pub struct DatabaseDeclDTO {
     pub row_count: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub column_count: Option<usize>,
-    /// 物化失败时的错误信息。
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub load_error: Option<String>,
+    /// 当前数据库是否物化失败；具体错误仅保留在后端。
+    pub load_failed: bool,
 }
 
 impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
@@ -48,7 +47,7 @@ impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
             columns: None,
             row_count: None,
             column_count: None,
-            load_error: None,
+            load_failed: false,
         }
     }
 }

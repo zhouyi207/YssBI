@@ -159,8 +159,10 @@ function bayes_diagnostic_warnings(summaries, total_draws::Int)
         rhat_value = summary["rhat"]
         if rhat_value !== nothing && rhat_value > 1.01
             push!(warnings, Dict(
-                "code" => "RHAT_TOO_HIGH",
-                "message" => "R-hat is $(round(rhat_value; digits = 4)); consider increasing samples or checking model geometry.",
+                "code" => "rhat_too_high",
+                "metric" => "rhat",
+                "value" => rhat_value,
+                "threshold" => 1.01,
                 "parameter" => parameter,
             ))
         end
@@ -168,8 +170,10 @@ function bayes_diagnostic_warnings(summaries, total_draws::Int)
         ess_bulk = summary["essBulk"]
         if ess_bulk !== nothing && ess_bulk < ess_threshold
             push!(warnings, Dict(
-                "code" => "ESS_TOO_LOW",
-                "message" => "Bulk ESS is $(round(ess_bulk; digits = 2)); consider increasing samples.",
+                "code" => "ess_too_low",
+                "metric" => "ess_bulk",
+                "value" => ess_bulk,
+                "threshold" => ess_threshold,
                 "parameter" => parameter,
             ))
         end
@@ -177,8 +181,10 @@ function bayes_diagnostic_warnings(summaries, total_draws::Int)
         ess_tail = summary["essTail"]
         if ess_tail !== nothing && ess_tail < ess_threshold
             push!(warnings, Dict(
-                "code" => "ESS_TOO_LOW",
-                "message" => "Tail ESS is $(round(ess_tail; digits = 2)); credible interval estimates may be unstable.",
+                "code" => "ess_too_low",
+                "metric" => "ess_tail",
+                "value" => ess_tail,
+                "threshold" => ess_threshold,
                 "parameter" => parameter,
             ))
         end

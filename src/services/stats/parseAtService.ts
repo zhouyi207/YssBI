@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/services/ipc";
 
 export interface ParseAtRequest {
   param_names: string[];
@@ -10,5 +10,5 @@ export interface ParseAtResponse {
 }
 
 export async function parseAtValues(req: ParseAtRequest): Promise<ParseAtResponse> {
-  return await invoke<ParseAtResponse>("parse_at_values", { req });
+  return await invokeCommand<ParseAtResponse>("parse_at_values", { req });
 }

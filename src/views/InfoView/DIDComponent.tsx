@@ -1,5 +1,7 @@
 import type { FC } from 'react';
 import { useMemo } from 'react';
+import type { TFunction } from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,9 +18,49 @@ import {
   formatNum,
   formatNullableNum,
 } from './shared';
-import type { PanelDidResultData, OLSResultData } from '@/shared/types/report';
+import type {
+  DidPlaceboFakeGroupUnavailableBlock,
+  PanelDidResultData,
+  OLSResultData,
+} from '@/shared/types/report';
+
+const DID_FAKE_GROUP_ERROR_KEYS: Readonly<Record<string, string>> = {
+  internal_error: 'did.fakeGroup.errors.internal_error',
+  ipc_transport_failure: 'did.fakeGroup.errors.ipc_transport_failure',
+  ipc_malformed_error: 'did.fakeGroup.errors.ipc_malformed_error',
+  did_fake_group_request_failed: 'did.fakeGroup.errors.did_fake_group_request_failed',
+  did_fake_group_invalid_response: 'did.fakeGroup.errors.did_fake_group_invalid_response',
+  did_fake_group_invalid_initial_result: 'did.fakeGroup.errors.did_fake_group_invalid_initial_result',
+};
+
+function didFakeGroupErrorMessage(code: string, t: TFunction): string {
+  const key = DID_FAKE_GROUP_ERROR_KEYS[code];
+  return key ? t(key) : t('did.fakeGroup.errors.unknown', { code });
+}
+
+function didFakeGroupUnavailableMessage(
+  block: DidPlaceboFakeGroupUnavailableBlock,
+  t: TFunction,
+): string {
+  const values = {
+    nPerm: block.n_perm,
+    nPermValid: block.n_perm_valid,
+    minValidPermutations: block.min_valid_permutations,
+    nTreatedEntities: block.n_treated_entities,
+    nEntities: block.n_entities,
+  };
+  switch (block.unavailableCode) {
+    case 'no_treated_entities':
+      return t('did.fakeGroup.unavailable.no_treated_entities', values);
+    case 'all_entities_treated':
+      return t('did.fakeGroup.unavailable.all_entities_treated', values);
+    case 'insufficient_valid_permutations':
+      return t('did.fakeGroup.unavailable.insufficient_valid_permutations', values);
+  }
+}
 
 export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
+  const { t } = useTranslation();
   const {
     title,
     endog_name,
@@ -222,14 +264,20 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
             </div>
           ) : null}
           {fakeGroup.error ? (
-            <p className="mb-2 text-xs leading-relaxed text-red-700/90 dark:text-red-300/90">{fakeGroup.error}</p>
+            <div role="alert" className="mb-2 space-y-1 text-xs leading-relaxed text-red-700/90 dark:text-red-300/90">
+              <p>
+                <span className="font-mono">[{fakeGroup.error.code}]</span>{' '}
+                {didFakeGroupErrorMessage(fakeGroup.error.code, t)}
+              </p>
+              {fakeGroup.error.incidentId ? (
+                <p>
+                  {t('common.incidentId')}: <span className="font-mono">{fakeGroup.error.incidentId}</span>
+                </p>
+              ) : null}
+            </div>
           ) : null}
           {fakeGroup.display ? (
-            fakeGroup.display.available &&
-            fakeGroup.display.p_value_ri != null &&
-            fakeGroup.display.observed_coef != null &&
-            fakeGroup.display.perm_coef_mean != null &&
-            fakeGroup.display.perm_coef_std != null ? (
+            fakeGroup.display.available ? (
               <div className="space-y-2">
                 <p className="tabular-nums">
                   置换次数（成功拟合）{' '}
@@ -249,10 +297,19 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
                   RI p（双侧）={' '}
                   <span className="font-mono text-foreground">{formatNum(fakeGroup.display.p_value_ri)}</span>
                 </p>
-                <p className="text-xs leading-relaxed text-muted-foreground">{fakeGroup.display.method_note}</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t('did.fakeGroup.methodology', {
+                    nPerm: fakeGroup.display.n_perm,
+                    nPermValid: fakeGroup.display.n_perm_valid,
+                    nTreatedEntities: fakeGroup.display.n_treated_entities,
+                    nEntities: fakeGroup.display.n_entities,
+                  })}
+                </p>
               </div>
             ) : (
-              <p className="text-xs leading-relaxed text-amber-700/90 dark:text-amber-200/90">{fakeGroup.display.method_note}</p>
+              <p className="text-xs leading-relaxed text-amber-700/90 dark:text-amber-200/90">
+                {didFakeGroupUnavailableMessage(fakeGroup.display, t)}
+              </p>
             )
           ) : fake_group_engine ? (
             <p className="text-xs leading-relaxed text-muted-foreground">

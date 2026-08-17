@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/services/ipc";
 
 /** ACF/PACF 请求（与后端 AcfPacfRequest 对应） */
 export interface AcfPacfRequest {
@@ -18,5 +18,5 @@ export interface AcfPacfResponse {
 
 /** 计算 ACF 和 PACF */
 export async function computeAcfPacf(req: AcfPacfRequest): Promise<AcfPacfResponse> {
-  return await invoke<AcfPacfResponse>("compute_acf_pacf", { req });
+  return await invokeCommand<AcfPacfResponse>("compute_acf_pacf", { req });
 }

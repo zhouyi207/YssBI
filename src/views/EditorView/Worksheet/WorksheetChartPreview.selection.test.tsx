@@ -9,6 +9,13 @@ import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/
 import { WorksheetChartPreview } from './WorksheetChartPreview';
 
 vi.mock('@/services/worksheet/worksheetDataService', () => ({ fetchWorksheetPreview: vi.fn() }));
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: { column?: unknown }) => options?.column === undefined
+      ? `localized:${key}`
+      : `localized:${key}:${String(options.column)}`,
+  }),
+}));
 vi.mock('@/views/PlotView/Scatter', () => ({ default: () => <div>scatter plot</div> }));
 vi.mock('@/views/PlotView/Line', () => ({ default: () => <div>line plot</div> }));
 vi.mock('@/views/PlotView/Histogram', () => ({ default: () => <div>histogram plot</div> }));
@@ -106,20 +113,60 @@ describe('WorksheetChartPreview selection boundary', () => {
     },
   );
 
-  it('keeps an error result outside the chart region and selectable', async () => {
-    vi.mocked(fetchWorksheetPreview).mockResolvedValue({ kind: 'error', message: 'preview failed' });
+  it('keeps a machine error outside the chart region, selectable, and includes its incident ID', async () => {
+    vi.mocked(fetchWorksheetPreview).mockResolvedValue({
+      kind: 'error',
+      code: 'worksheet_preview_backend_failed',
+      incidentId: 'incident-preview-42',
+    });
 
     act(() => root.render(
       <WorksheetChartPreview worksheetPath="worksheets/Worksheet.yssbi-worksheet" document={worksheet} />,
     ));
     await act(async () => vi.advanceTimersByTimeAsync(300));
 
-    const errorElement = Array.from(host.querySelectorAll('div')).find(
-      (element) => element.childElementCount === 0 && element.textContent === 'preview failed',
-    );
-    expect(errorElement).toBeDefined();
+    const errorElement = host.querySelector('[role="alert"]');
+    expect(errorElement).not.toBeNull();
     expect(errorElement?.closest('[data-worksheet-chart-region]')).toBeNull();
     expect(errorElement?.classList.contains('select-none')).toBe(false);
+    expect(errorElement?.textContent).toContain('localized:worksheet.previewLoadFailed');
+    expect(errorElement?.textContent).toContain('localized:common.errorCode');
+    expect(errorElement?.textContent).toContain('worksheet_preview_backend_failed');
+    expect(errorElement?.textContent).toContain('localized:common.incidentId');
+    expect(errorElement?.textContent).toContain('incident-preview-42');
+  });
+
+  it('localizes safe missing-column context without transport prose', async () => {
+    vi.mocked(fetchWorksheetPreview).mockResolvedValue({
+      kind: 'error',
+      code: 'worksheet_preview_column_not_found',
+      incidentId: null,
+      column: 'amount',
+    });
+
+    act(() => root.render(
+      <WorksheetChartPreview worksheetPath="worksheets/Worksheet.yssbi-worksheet" document={worksheet} />,
+    ));
+    await act(async () => vi.advanceTimersByTimeAsync(300));
+
+    const text = host.querySelector('[role="alert"]')?.textContent;
+    expect(text).toContain('localized:worksheet.previewColumnNotFound:amount');
+    expect(text).toContain('worksheet_preview_column_not_found');
+    expect(text).not.toContain('localized:common.incidentId');
+  });
+
+  it('maps a rejected raw transport error without displaying its text', async () => {
+    vi.mocked(fetchWorksheetPreview).mockRejectedValue(new Error('private worksheet transport failure'));
+
+    act(() => root.render(
+      <WorksheetChartPreview worksheetPath="worksheets/Worksheet.yssbi-worksheet" document={worksheet} />,
+    ));
+    await act(async () => vi.advanceTimersByTimeAsync(300));
+
+    const text = host.querySelector('[role="alert"]')?.textContent;
+    expect(text).toContain('localized:worksheet.previewLoadFailed');
+    expect(text).toContain('worksheet_preview_read_failed');
+    expect(text).not.toContain('private worksheet transport failure');
   });
 
   it('keeps a fetched empty preview outside any chart region', async () => {

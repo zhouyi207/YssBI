@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { defaultPriorForConstraint, formatExpression, formatPrior, formatRawExpressionLatex } from '@/features/domain/bayes';
+import { bayesErrorMessage, bayesValidationIssueMessage } from '../bayesIssuePresentation';
 
 export interface BayesDatasetOption extends BayesDatasetSelectionDTO {
   displayName: string;
@@ -70,12 +71,13 @@ export function FormulaStep({
   return (
     <Card>
       <CardHeader className="flex-row items-start justify-between gap-3">
-        <PanelTitle title={t('bayes.formula.title')} issues={error ? [formulaErrorIssue(error)] : []} />
+        <PanelTitle title={t('bayes.formula.title')} />
         <Button size="sm" variant="outline" onClick={() => setEditing(true)} disabled={editing}>
           {t('bayes.actions.edit')}
         </Button>
       </CardHeader>
       <CardContent className="space-y-3">
+        {error ? <FormulaErrorFeedback error={error} /> : null}
         <div className="space-y-1.5">
           {editing ? (
             <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
@@ -143,6 +145,20 @@ export function FormulaStep({
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function FormulaErrorFeedback({ error }: { error: FormulaParseError }) {
+  const { t } = useTranslation();
+  return (
+    <div role="alert" className="space-y-1 text-xs text-destructive">
+      <p><span className="font-mono">[{error.code}]</span> {bayesErrorMessage(error, t)}</p>
+      {error.details?.column ? <p>{t('bayes.issue.column', { column: error.details.column })}</p> : null}
+      {typeof error.details?.row === 'number' ? <p>{t('bayes.issue.row', { row: error.details.row + 1 })}</p> : null}
+      {error.details?.parameter ? <p>{t('bayes.issue.parameter', { parameter: error.details.parameter })}</p> : null}
+      {error.details?.path ? <p>{t('bayes.issue.path', { path: error.details.path })}</p> : null}
+      {error.incidentId ? <p>{t('common.incidentId')}: <span className="font-mono">{error.incidentId}</span></p> : null}
+    </div>
   );
 }
 
@@ -980,27 +996,20 @@ export function PanelTitle({
   description?: string;
   issues?: ValidationIssueDTO[];
 }) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-1">
       <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
       {issues.map(issue => (
-        <p key={`${issue.code}-${issue.path ?? ''}`} className={issue.severity === 'error' ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
-          <span className="font-mono">[{issue.code}]</span> {issue.message}
+        <p key={`${issue.code}-${issue.path}`} className={issue.severity === 'error' ? 'text-xs text-destructive' : 'text-xs text-muted-foreground'}>
+          <span className="font-mono">[{issue.code}]</span> {bayesValidationIssueMessage(issue, t)}
         </p>
       ))}
     </div>
   );
 }
 
-function formulaErrorIssue(error: FormulaParseError): ValidationIssueDTO {
-  return {
-    code: error.code,
-    severity: 'error',
-    message: `${error.message}${error.detail ? ` (${error.detail})` : ''}`,
-    path: 'formulaText',
-  };
-}
 
 function EditableNumberField({
   label,

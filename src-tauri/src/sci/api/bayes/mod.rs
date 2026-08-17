@@ -153,7 +153,7 @@ mod tests {
             report
                 .errors
                 .iter()
-                .any(|issue| issue.code == "DATASET_REQUIRED")
+                .any(|issue| issue.code == "dataset_required")
         );
     }
 
@@ -197,7 +197,7 @@ mod tests {
             report
                 .errors
                 .iter()
-                .any(|issue| issue.code == "LIKELIHOOD_RESPONSE_TYPE_INVALID")
+                .any(|issue| issue.code == "likelihood_response_type_invalid")
         );
     }
 
@@ -221,7 +221,7 @@ mod tests {
             report
                 .errors
                 .iter()
-                .any(|issue| issue.code == "EXPRESSION_FUNCTION_ARITY_INVALID")
+                .any(|issue| issue.code == "expression_function_arity_invalid")
         );
     }
 
@@ -238,7 +238,7 @@ mod tests {
             report
                 .errors
                 .iter()
-                .any(|issue| { issue.code == "RESPONSE_DATA_SYMBOL_COUNT_INVALID" })
+                .any(|issue| { issue.code == "response_data_symbol_count_invalid" })
         );
     }
 
@@ -258,13 +258,13 @@ mod tests {
             report
                 .errors
                 .iter()
-                .any(|issue| issue.code == "PARAMETER_BOUNDS_INVALID")
+                .any(|issue| issue.code == "parameter_bounds_invalid")
         );
         assert!(
             report
                 .errors
                 .iter()
-                .any(|issue| issue.code == "PARAMETER_PRIOR_ARGS_INVALID")
+                .any(|issue| issue.code == "parameter_prior_args_invalid")
         );
     }
 }

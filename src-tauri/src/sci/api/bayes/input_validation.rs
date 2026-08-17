@@ -42,7 +42,7 @@ pub fn validate_bayes_input_table(
 ) -> Result<(), BayesInputValidationError> {
     if table.height() == 0 {
         return Err(BayesInputValidationError::new(
-            "BAYES_INPUT_EMPTY",
+            "bayes_input_empty",
             "Bayesian inference input table is empty.",
             None,
             None,
@@ -64,8 +64,8 @@ fn validate_response_column(
         validate_finite_numeric_column(
             table,
             column_name,
-            "BAYES_INPUT_RESPONSE_NON_FINITE",
-            "BAYES_INPUT_COLUMN_NOT_NUMERIC",
+            "bayes_input_response_non_finite",
+            "bayes_input_column_not_numeric",
             "response",
         )?;
     }
@@ -80,7 +80,7 @@ fn validate_response_column(
 fn sole_response_column(spec: &BayesModelSpec) -> Result<&str, BayesInputValidationError> {
     if spec.response.data_variables.len() != 1 {
         return Err(BayesInputValidationError::new(
-            "BAYES_INPUT_RESPONSE_BINDING_INVALID",
+            "bayes_input_response_binding_invalid",
             "Bayesian response must bind exactly one data variable.",
             None,
             None,
@@ -123,7 +123,7 @@ fn evaluate_response(
         Expression::DataVariable { name } => {
             let column_name = bindings.get(name).ok_or_else(|| {
                 BayesInputValidationError::new(
-                    "BAYES_INPUT_RESPONSE_BINDING_INVALID",
+                    "bayes_input_response_binding_invalid",
                     format!("Response data variable `{name}` is not bound to a column."),
                     Some(response_column.to_string()),
                     Some(row),
@@ -136,7 +136,7 @@ fn evaluate_response(
                 .map_err(|_| missing_column(column_name))?;
             numeric_value(value).ok_or_else(|| {
                 BayesInputValidationError::new(
-                    "BAYES_INPUT_COLUMN_NOT_NUMERIC",
+                    "bayes_input_column_not_numeric",
                     format!(
                         "Bayesian response column `{column_name}` must contain numeric values."
                     ),
@@ -153,7 +153,7 @@ fn evaluate_response(
                 .map_err(|_| missing_column(name))?;
             numeric_value(value).ok_or_else(|| {
                 BayesInputValidationError::new(
-                    "BAYES_INPUT_COLUMN_NOT_NUMERIC",
+                    "bayes_input_column_not_numeric",
                     format!("Bayesian response column `{name}` must contain numeric values."),
                     Some(name.clone()),
                     Some(row),
@@ -162,7 +162,7 @@ fn evaluate_response(
         }
         Expression::Parameter { .. } => {
             return Err(response_eval_error(
-                "BAYES_INPUT_RESPONSE_PARAMETER_FORBIDDEN",
+                "bayes_input_response_parameter_forbidden",
                 "Response expressions cannot contain parameters.",
                 response_column,
                 row,
@@ -181,7 +181,7 @@ fn evaluate_response(
                 BinaryOp::Mul => left * right,
                 BinaryOp::Div if right == 0.0 => {
                     return Err(response_eval_error(
-                        "BAYES_INPUT_RESPONSE_DIVISION_BY_ZERO",
+                        "bayes_input_response_division_by_zero",
                         "Response expression divided by zero.",
                         response_column,
                         row,
@@ -200,7 +200,7 @@ fn evaluate_response(
                 MathFunction::Exp => values[0].exp(),
                 MathFunction::Ln if values[0] <= 0.0 => {
                     return Err(response_eval_error(
-                        "BAYES_INPUT_RESPONSE_LN_DOMAIN",
+                        "bayes_input_response_ln_domain",
                         "Response ln argument must be greater than zero.",
                         response_column,
                         row,
@@ -209,7 +209,7 @@ fn evaluate_response(
                 MathFunction::Ln => values[0].ln(),
                 MathFunction::Sqrt if values[0] < 0.0 => {
                     return Err(response_eval_error(
-                        "BAYES_INPUT_RESPONSE_SQRT_DOMAIN",
+                        "bayes_input_response_sqrt_domain",
                         "Response sqrt argument must be non-negative.",
                         response_column,
                         row,
@@ -226,7 +226,7 @@ fn evaluate_response(
     };
     if !value.is_finite() {
         return Err(response_eval_error(
-            "BAYES_INPUT_RESPONSE_RESULT_NON_FINITE",
+            "bayes_input_response_result_non_finite",
             "Response expression returned a non-finite value.",
             response_column,
             row,
@@ -256,8 +256,8 @@ fn validate_numeric_predictor_column(
     validate_finite_numeric_column(
         table,
         column_name,
-        "BAYES_INPUT_PREDICTOR_NON_FINITE",
-        "BAYES_INPUT_COLUMN_NOT_NUMERIC",
+        "bayes_input_predictor_non_finite",
+        "bayes_input_column_not_numeric",
         "predictor",
     )
 }
@@ -325,7 +325,7 @@ fn validate_bernoulli_response(
         }
         let Some(value) = numeric_value(value) else {
             return Err(BayesInputValidationError::new(
-                "BAYES_INPUT_BERNOULLI_RESPONSE_INVALID",
+                "bayes_input_bernoulli_response_invalid",
                 format!(
                     "BernoulliLogit response column `{column_name}` must contain boolean or 0/1 values."
                 ),
@@ -335,7 +335,7 @@ fn validate_bernoulli_response(
         };
         if !value.is_finite() || !(value == 0.0 || value == 1.0) {
             return Err(BayesInputValidationError::new(
-                "BAYES_INPUT_BERNOULLI_RESPONSE_INVALID",
+                "bayes_input_bernoulli_response_invalid",
                 format!(
                     "BernoulliLogit response column `{column_name}` contains a value other than 0/1 at row {}.",
                     row + 1
@@ -359,7 +359,7 @@ fn validate_poisson_response(
         let value = column.get(row).map_err(|_| missing_column(column_name))?;
         let Some(value) = numeric_value(value) else {
             return Err(BayesInputValidationError::new(
-                "BAYES_INPUT_COLUMN_NOT_NUMERIC",
+                "bayes_input_column_not_numeric",
                 format!("PoissonLog response column `{column_name}` must contain numeric counts."),
                 Some(column_name.to_string()),
                 Some(row),
@@ -367,7 +367,7 @@ fn validate_poisson_response(
         };
         if !value.is_finite() {
             return Err(BayesInputValidationError::new(
-                "BAYES_INPUT_RESPONSE_NON_FINITE",
+                "bayes_input_response_non_finite",
                 format!(
                     "PoissonLog response column `{column_name}` contains a missing or non-finite value at row {}.",
                     row + 1
@@ -378,7 +378,7 @@ fn validate_poisson_response(
         }
         if value < 0.0 {
             return Err(BayesInputValidationError::new(
-                "BAYES_INPUT_POISSON_RESPONSE_NEGATIVE",
+                "bayes_input_poisson_response_negative",
                 format!(
                     "PoissonLog response column `{column_name}` contains a negative count at row {}.",
                     row + 1
@@ -389,7 +389,7 @@ fn validate_poisson_response(
         }
         if value.fract() != 0.0 {
             return Err(BayesInputValidationError::new(
-                "BAYES_INPUT_POISSON_RESPONSE_NOT_INTEGER",
+                "bayes_input_poisson_response_not_integer",
                 format!(
                     "PoissonLog response column `{column_name}` contains a non-integer count at row {}.",
                     row + 1
@@ -404,7 +404,7 @@ fn validate_poisson_response(
 
 fn missing_column(column_name: &str) -> BayesInputValidationError {
     BayesInputValidationError::new(
-        "BAYES_INPUT_COLUMN_MISSING",
+        "bayes_input_column_missing",
         format!("Bayesian inference input column `{column_name}` is missing."),
         Some(column_name.to_string()),
         None,

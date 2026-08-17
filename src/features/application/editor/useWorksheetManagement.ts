@@ -1,4 +1,4 @@
-import { logger } from "@/utils/appLogger";
+
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_WORKSHEET_NAME } from '@/shared/constants/defaultResourceNames';
@@ -7,12 +7,13 @@ import { commitFileFirstResourceIndex } from '@/features/application/resource/re
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
+
 
 import { useSidebarTab } from './useSidebarTab';
 import { buildWorksheetLayoutTab } from '@/features/core/layout/layoutTabModel';
 import { openEditorTab } from './openEditorTab';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
+import { showBlockingIpcError } from './blockingErrorDialog';
 
 interface StagedWorksheetDocument {
   worksheetPath: string;
@@ -93,11 +94,11 @@ export function useWorksheetManagement(
         switchSidebarTab('charts');
         await openWorksheet(createdState.path, createdState.name);
         if (!context.isCurrent()) return;
-        logger.notify.info(t('worksheet.created'), "UI");
       } catch (error) {
         if (context && !context.isCurrent()) return;
         rollbackStagedWorksheetDocument(stagedDocument);
-        logger.notify.error(`${t('worksheet.createFailed')}: ${formatErrorMessage(error)}`, "UI");
+        showBlockingIpcError(error, 'create_worksheet', (code) =>
+          t('notifications.worksheet.createFailed', { error: code }));
       }
     },
     [openWorksheet, switchSidebarTab, t],
@@ -137,7 +138,8 @@ export function useWorksheetManagement(
     } catch (error) {
       if (context && !context.isCurrent()) return;
       rollbackStagedWorksheetDocument(stagedDocument);
-      logger.notify.error(`${t('worksheet.duplicateFailed')}: ${formatErrorMessage(error)}`, "UI");
+      showBlockingIpcError(error, 'duplicate_worksheet', (code) =>
+        t('notifications.worksheet.duplicateFailed', { error: code }));
     }
   }, [openWorksheet, switchSidebarTab, t]);
 

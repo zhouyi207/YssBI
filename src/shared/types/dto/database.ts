@@ -54,7 +54,7 @@ export type InMemoryEngineConfig = { name: string };
 /** `load_database` IPC 入参（不含 inMemory） */
 export type LoadDatabaseEngineSpec = Exclude<DatabaseEngineDTO, { inMemory: InMemoryEngineConfig }>;
 
-/** 后端 `DatabaseDeclDTO` + 前端 store 富元数据（列统计、加载错误等） */
+/** 后端 `DatabaseDeclDTO` + 前端 store 富元数据（列统计、加载状态等） */
 export interface DatabaseDeclDTO {
   id: string;
   resourcePath?: string;
@@ -65,7 +65,8 @@ export interface DatabaseDeclDTO {
   columns?: ColumnInfo[];
   rowCount?: number;
   columnCount?: number;
-  loadError?: string;
+  /** 具体加载错误仅保留在后端，wire 只传递机器状态。 */
+  loadFailed?: boolean;
 }
 
 /** Canonical `DatabaseDecl` carried by resource mutation patches. */
@@ -161,12 +162,10 @@ export function normalizeDatabaseRecord(
     columns,
     rowCount,
     columnCount,
-    loadError:
-      typeof input.loadError === 'string'
-        ? input.loadError
-        : input.loadError === null
-          ? undefined
-          : existing?.loadError,
+    loadFailed:
+      typeof input.loadFailed === 'boolean'
+        ? input.loadFailed
+        : existing?.loadFailed ?? false,
   };
 }
 

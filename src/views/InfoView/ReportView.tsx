@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from 'react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import type { ReportKind, ResultDescriptor } from '@/features/core/resultSource';
 import { validateReportPayload } from '@/shared/types/report/reportValidation';
 import { logger } from '@/utils/appLogger';
@@ -18,16 +19,18 @@ export function ReportView({ descriptor, report, data }: ReportViewProps) {
 
   useEffect(() => {
     if (!validation.ok) {
-      logger.notify.error(JSON.stringify(validation.diagnostic), 'ReportValidation');
+      logger.data.error(JSON.stringify(validation.diagnostic), 'ReportValidation');
     }
   }, [validation]);
 
   if (!validation.ok) {
     const label = report === 'olsSummary' ? 'OLS report' : 'report';
     return (
-      <p className="px-4 py-6 text-sm text-destructive">
-        Unable to render {label}: {validation.diagnostic.fieldPath} {validation.diagnostic.reason}.
-      </p>
+      <Alert variant="destructive" className="m-4 w-auto">
+        <AlertDescription className="text-destructive">
+          Unable to render {label}: {validation.diagnostic.fieldPath} {validation.diagnostic.reason}.
+        </AlertDescription>
+      </Alert>
     );
   }
 

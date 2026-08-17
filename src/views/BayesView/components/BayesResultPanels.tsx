@@ -1,6 +1,5 @@
-import { logger } from "@/utils/appLogger";
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { save } from '@tauri-apps/plugin-dialog';
 import { VscCloudDownload, VscFolderOpened } from 'react-icons/vsc';
@@ -12,18 +11,40 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { diagnosticSeverityClass, evaluateInferenceDiagnostics, parameterDiagnosticStatus } from '@/features/domain/bayes';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
+import {
+  diagnosticSeverityClass,
+  evaluateInferenceDiagnostics,
+  parameterDiagnosticStatus,
+  type DiagnosticSuggestion,
+} from '@/features/domain/bayes';
 import { exportBayesArtifactCsv, readBayesAutocorrelationData, readBayesDensityPlotData, readBayesPosteriorPredictive, readBayesTracePlotData, revealBayesResultFolder } from '@/services/bayes/bayesInferenceService';
 import { LatexInline, PanelTitle, formatNumber, latexSymbol } from './BayesPanels';
+import { bayesActionErrorMessage, bayesDiagnosticWarningText } from '../bayesIssuePresentation';
 import { useBayesPlotData } from './useBayesPlotData';
 
 type RatingCode = 'unavailable' | 'excellent' | 'recommended' | 'concerning' | 'untrustworthy' | 'notConverged'
   | 'veryGood' | 'good' | 'acceptable' | 'low' | 'unreliable';
 
 type DiagnosticWarningDescription = ReturnType<typeof evaluateInferenceDiagnostics>['warnings'][number];
+type ActionFeedback = { kind: 'error' | 'success'; message: string } | null;
 
-export function rhatRating(value?: number): { code: RatingCode; className: string } {
+
+function BayesActionFeedback({ id, feedback }: { id: string; feedback: ActionFeedback }) {
+  if (!feedback) return null;
+  return (
+    <p
+      id={id}
+      role={feedback.kind === 'error' ? 'alert' : 'status'}
+      className={feedback.kind === 'error'
+        ? 'max-w-72 text-right text-xs text-destructive'
+        : 'max-w-72 text-right text-xs text-emerald-500'}
+    >
+      {feedback.message}
+    </p>
+  );
+}
+
+export function rhatRating(value?: number | null): { code: RatingCode; className: string } {
   if (value == null) return { code: 'unavailable', className: 'text-muted-foreground' };
   if (value > 1.1) return { code: 'notConverged', className: 'text-destructive' };
   if (value > 1.05) return { code: 'untrustworthy', className: 'text-destructive' };
@@ -32,7 +53,7 @@ export function rhatRating(value?: number): { code: RatingCode; className: strin
   return { code: 'excellent', className: 'text-emerald-500' };
 }
 
-export function essRating(value?: number): { code: RatingCode; className: string } {
+export function essRating(value?: number | null): { code: RatingCode; className: string } {
   if (value == null) return { code: 'unavailable', className: 'text-muted-foreground' };
   if (value < 100) return { code: 'unreliable', className: 'text-destructive' };
   if (value < 400) return { code: 'low', className: 'text-amber-500' };
@@ -101,9 +122,16 @@ function ParameterMetricValue({
           {details?.map(detail => <p key={detail}>{detail}</p>)}
           {warnings.map(warning => (
             <div key={`${warning.parameter}-${warning.code}`} className="space-y-1 border-t border-background/20 pt-2">
-              <p className="font-medium">{t(`bayes.results.diagnostics.warnings.${warning.code}.title`, { parameter: warning.parameter })}</p>
-              <p>{t(`bayes.results.diagnostics.warnings.${warning.code}.explanation`)}</p>
-              <p>{t('bayes.results.diagnostics.suggestionPrefix', { suggestion: t(`bayes.results.diagnostics.warnings.${warning.code}.suggestion`) })}</p>
+              <p className="font-medium">{bayesDiagnosticWarningText(warning, 'title', t)}</p>
+              <p>{bayesDiagnosticWarningText(warning, 'explanation', t)}</p>
+              <p>{t('bayes.results.diagnostics.metricValue', {
+                metric: warning.metric,
+                value: formatNumber(warning.value),
+                threshold: formatNumber(warning.threshold),
+              })}</p>
+              <p>{t('bayes.results.diagnostics.suggestionPrefix', {
+                suggestion: bayesDiagnosticWarningText(warning, 'suggestion', t),
+              })}</p>
             </div>
           ))}
         </div>
@@ -197,7 +225,7 @@ function ResultSummaryContent({
                     <ParameterMetricValue
                       value={row.rhat?.toFixed(3) ?? '—'}
                       rating={rhat}
-                      warnings={uniqueParameterWarnings(assessment.warnings, row.parameter, 'RHAT_TOO_HIGH')}
+                      warnings={uniqueParameterWarnings(assessment.warnings, row.parameter, 'rhat_too_high')}
                     />
                   </TableCell>
                   <TableCell>
@@ -208,7 +236,7 @@ function ResultSummaryContent({
                         t('bayes.results.diagnostics.essDetail', { metric: 'Bulk ESS', value: bulkEss, rating: t(`bayes.results.ratings.${essRating(row.essBulk).code}`) }),
                                                 t('bayes.results.diagnostics.essDetail', { metric: 'Tail ESS', value: tailEss, rating: t(`bayes.results.ratings.${essRating(row.essTail).code}`) }),
                       ]}
-                      warnings={uniqueParameterWarnings(assessment.warnings, row.parameter, 'ESS_TOO_LOW')}
+                      warnings={uniqueParameterWarnings(assessment.warnings, row.parameter, 'ess_too_low')}
                     />
                   </TableCell>
                 </TableRow>
@@ -223,7 +251,10 @@ function ResultSummaryContent({
         <div className="space-y-1 rounded-md border border-border bg-muted/10 p-3">
           <p className="text-xs font-medium text-muted-foreground">{t('bayes.results.diagnostics.suggestedNextSteps')}</p>
           <ul className="list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-            {diagnosticSuggestionKeys(assessment.severity).map(key => <li key={key}>{t(key)}</li>)}
+            {assessment.suggestions.map(suggestion => {
+              const key = diagnosticSuggestionKey(suggestion);
+              return <li key={key}>{t(key)}</li>;
+            })}
           </ul>
         </div>
       ) : null}
@@ -231,9 +262,14 @@ function ResultSummaryContent({
   );
 }
 
-function diagnosticSuggestionKeys(severity: ReturnType<typeof evaluateInferenceDiagnostics>['severity']): string[] {
-  if (severity === 'unknown') return ['bayes.results.diagnostics.suggestions.checkMetrics', 'bayes.results.diagnostics.suggestions.saveSamples'];
-  return ['bayes.results.diagnostics.suggestions.increaseSampling', 'bayes.results.diagnostics.suggestions.inspectPlots'];
+function diagnosticSuggestionKey(suggestion: DiagnosticSuggestion): string {
+  const keys: Record<DiagnosticSuggestion, string> = {
+    check_metrics: 'bayes.results.diagnostics.suggestions.checkMetrics',
+    save_samples: 'bayes.results.diagnostics.suggestions.saveSamples',
+    increase_sampling: 'bayes.results.diagnostics.suggestions.increaseSampling',
+    inspect_plots: 'bayes.results.diagnostics.suggestions.inspectPlots',
+  };
+  return keys[suggestion];
 }
 
 function SummaryDiagnosticBadge({ assessment }: { assessment: ReturnType<typeof evaluateInferenceDiagnostics> }) {
@@ -278,20 +314,10 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
     setPredictiveScale('original');
     setResponseTransform('identity');
   }, [result?.artifactManifest.taskId]);
-  const openResultFolder = () => {
-    if (!artifactPath) return;
-    void revealBayesResultFolder(artifactPath).catch(error => {
-          logger.notify.error(t('bayes.results.errors.openFolder', { error: formatErrorMessage(error) }), "UI");
-        });
-  };
-
   return (
     <section className="space-y-4">
       <div className="flex justify-end">
-        <Button size="sm" variant="outline" disabled={!artifactPath} onClick={openResultFolder}>
-          <VscFolderOpened />
-          {t('bayes.results.actions.openFolder')}
-        </Button>
+        <BayesResultFolderButton artifactPath={artifactPath} />
       </div>
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3">
@@ -360,7 +386,46 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
   );
 }
 
-function BayesCsvExportButton({
+export function BayesResultFolderButton({ artifactPath }: { artifactPath?: string }) {
+  const { t } = useTranslation();
+  const feedbackId = useId();
+  const [feedback, setFeedback] = useState<ActionFeedback>(null);
+
+  useEffect(() => setFeedback(null), [artifactPath]);
+
+  const openResultFolder = async () => {
+    if (!artifactPath) return;
+    setFeedback(null);
+    try {
+      await revealBayesResultFolder(artifactPath);
+    } catch (error) {
+      setFeedback({
+        kind: 'error',
+        message: t('bayes.results.errors.openFolder', {
+          error: bayesActionErrorMessage(error, t),
+        }),
+      });
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!artifactPath}
+        aria-describedby={feedback ? feedbackId : undefined}
+        onClick={() => void openResultFolder()}
+      >
+        <VscFolderOpened />
+        {t('bayes.results.actions.openFolder')}
+      </Button>
+      <BayesActionFeedback id={feedbackId} feedback={feedback} />
+    </div>
+  );
+}
+
+export function BayesCsvExportButton({
   result,
   kind,
   fileName,
@@ -372,9 +437,16 @@ function BayesCsvExportButton({
   label?: string;
 }) {
   const { t } = useTranslation();
+  const feedbackId = useId();
+  const [feedback, setFeedback] = useState<ActionFeedback>(null);
   const available = Boolean(result && findArtifact(result, kind));
+  const taskId = result?.artifactManifest.taskId;
+
+  useEffect(() => setFeedback(null), [kind, taskId]);
+
   const exportCsv = async () => {
     if (!result || !available) return;
+    setFeedback(null);
     try {
       const destination = await save({
         title: t('bayes.results.actions.exportCsv'),
@@ -383,17 +455,31 @@ function BayesCsvExportButton({
       });
       if (!destination) return;
       await exportBayesArtifactCsv(result.artifactManifest.taskId, kind, destination);
-      logger.notify.info(t('bayes.results.messages.exportSuccess'), "UI");
-          } catch (error) {
-            logger.notify.error(t('bayes.results.errors.exportCsv', { error: formatErrorMessage(error) }), "UI");
+      setFeedback({ kind: 'success', message: t('bayes.results.messages.exportSuccess') });
+    } catch (error) {
+      setFeedback({
+        kind: 'error',
+        message: t('bayes.results.errors.exportCsv', {
+          error: bayesActionErrorMessage(error, t),
+        }),
+      });
     }
   };
 
   return (
-    <Button size="sm" variant="outline" disabled={!available} onClick={() => void exportCsv()}>
-      <VscCloudDownload />
-      {label ?? t('bayes.results.actions.exportCsv')}
-    </Button>
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!available}
+        aria-describedby={feedback ? feedbackId : undefined}
+        onClick={() => void exportCsv()}
+      >
+        <VscCloudDownload />
+        {label ?? t('bayes.results.actions.exportCsv')}
+      </Button>
+      <BayesActionFeedback id={feedbackId} feedback={feedback} />
+    </div>
   );
 }
 
@@ -652,7 +738,7 @@ function PosteriorPlotFrame({
   parameters: string[];
   selectedParameter?: string;
   loading: boolean;
-  error: string | null;
+  error: unknown | null;
   onParameterChange: (parameter: string) => void;
   secondaryControl?: ReactNode;
   children: ReactNode;
@@ -681,7 +767,9 @@ function PosteriorPlotFrame({
         {secondaryControl}
       </div>
       {loading ? <p className="text-sm text-muted-foreground">{t('bayes.results.loading.plot')}</p> : null}
-            {error ? <p className="text-sm text-destructive">{t('bayes.results.errors.plot', { error })}</p> : null}
+      {error ? <p className="text-sm text-destructive">{t('bayes.results.errors.plot', {
+        error: bayesActionErrorMessage(error, t),
+      })}</p> : null}
       {!loading && !error ? children : null}
     </div>
   );
@@ -718,7 +806,7 @@ function PosteriorPredictivePreview({
 }) {
   const { t } = useTranslation();
   const [plotRows, setPlotRows] = useState<PosteriorPredictiveRowDTO[]>([]);
-  const [plotError, setPlotError] = useState<string | null>(null);
+  const [plotError, setPlotError] = useState<unknown | null>(null);
   const taskId = artifactTaskId(result, 'posterior_predictive');
   const artifactRows = result ? findArtifact(result, 'posterior_predictive')?.rows : undefined;
 
@@ -735,7 +823,7 @@ function PosteriorPredictivePreview({
         onResponseTransform(data.responseTransform);
       })
       .catch((caught: unknown) => {
-        if (!cancelled) setPlotError(caught instanceof Error ? caught.message : String(caught));
+        if (!cancelled) setPlotError(caught);
       });
     return () => { cancelled = true; };
   }, [artifactRows, onResponseTransform, taskId]);
@@ -752,7 +840,9 @@ function PosteriorPredictivePreview({
                     yLabel={scale === 'original' ? t('bayes.results.chart.response') : t('bayes.results.chart.responseModelScale')}
                   />
       ) : null}
-      {plotError ? <p className="text-sm text-destructive">{t('bayes.results.errors.predictivePlot', { error: plotError })}</p> : null}
+      {plotError ? <p className="text-sm text-destructive">{t('bayes.results.errors.predictivePlot', {
+        error: bayesActionErrorMessage(plotError, t),
+      })}</p> : null}
     </div>
   );
 }
@@ -771,9 +861,16 @@ function DiagnosticWarningList({
       <div className="space-y-2">
         {warnings.map((warning, index) => (
           <div key={`${warning.code}-${warning.parameter ?? 'global'}-${index}`} className="space-y-1 border-l-2 border-amber-500 pl-3 text-xs">
-            <p><span className="font-mono text-amber-500">[{warning.code}]</span> <span className="font-medium text-foreground">{t(`bayes.results.diagnostics.warnings.${warning.code}.title`, { parameter: warning.parameter })}</span></p>
-                        <p className="text-muted-foreground">{t(`bayes.results.diagnostics.warnings.${warning.code}.explanation`)}</p>
-                        <p className="text-muted-foreground">{t('bayes.results.diagnostics.suggestionPrefix', { suggestion: t(`bayes.results.diagnostics.warnings.${warning.code}.suggestion`) })}</p>
+            <p><span className="font-mono text-amber-500">[{warning.code}]</span> <span className="font-medium text-foreground">{bayesDiagnosticWarningText(warning, 'title', t)}</span></p>
+            <p className="text-muted-foreground">{bayesDiagnosticWarningText(warning, 'explanation', t)}</p>
+            <p className="text-muted-foreground">{t('bayes.results.diagnostics.metricValue', {
+              metric: warning.metric,
+              value: formatNumber(warning.value),
+              threshold: formatNumber(warning.threshold),
+            })}</p>
+            <p className="text-muted-foreground">{t('bayes.results.diagnostics.suggestionPrefix', {
+              suggestion: bayesDiagnosticWarningText(warning, 'suggestion', t),
+            })}</p>
           </div>
         ))}
       </div>

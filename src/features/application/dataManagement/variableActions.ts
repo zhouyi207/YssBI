@@ -1,11 +1,14 @@
+
 import type { Variable, VariableScope } from '@/shared/types/domain';
 import { DEFAULT_VARIABLE_NAME } from '@/shared/constants/defaultResourceNames';
 import { dataTypeFromKey, getDefaultValue, isVariableDataTypeAllowed } from '@/shared/types/domain/dataType';
 import { dataValueFromRaw } from '@/shared/types/domain/dataValue';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useResourceStore } from '@/features/core/resource';
+import { ProjectLifecycleError } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { variableCatalogToResourceMetas } from '@/features/core/variable/variableCatalog';
 import { VariableService } from '@/services/variable/variableService';
+import { isIpcErrorCode } from '@/services/ipc';
 import { logger } from '@/utils/appLogger';
 import {
   captureRevisionedProjectCommandSnapshot,
@@ -14,10 +17,8 @@ import {
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 
 function isStaleProjectLifecycleError(error: unknown): boolean {
-  return typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && (error as { code?: unknown }).code === 'stale_project_lifecycle';
+  return error instanceof ProjectLifecycleError
+    || isIpcErrorCode(error, 'stale_project_lifecycle');
 }
 
 function buildScope(
@@ -60,10 +61,7 @@ export async function createVariableAction(params: {
   try {
     const baseName = params.name || DEFAULT_VARIABLE_NAME;
     const dataType = dataTypeFromKey(params.type ?? 'Int64');
-    if (!isVariableDataTypeAllowed(dataType)) {
-      logger.notify.error('变量类型不能为 Any', "UI");
-      return null;
-    }
+    if (!isVariableDataTypeAllowed(dataType)) return null;
     const snapshot = captureRevisionedProjectCommandSnapshot(
       (): Omit<Variable, 'id' | 'revision'> => ({
         name: baseName,
@@ -95,7 +93,6 @@ export async function createVariableAction(params: {
   } catch (e) {
     if (isStaleProjectLifecycleError(e) || (context && !context.isCurrent())) return null;
     logger.data.error('Failed to create variable: ' + String(e), 'VariableActions');
-    logger.notify.error(`变量创建失败: ${e}`, "UI");
     return null;
   }
 }
@@ -117,10 +114,7 @@ export async function updateVariableAction(
     const { previous, expectedRevision } = snapshot.authority;
     if (!previous || expectedRevision == null) return null;
 
-    if (data.dataType && !isVariableDataTypeAllowed(data.dataType)) {
-      logger.notify.error('变量类型不能为 Any', "UI");
-      return null;
-    }
+    if (data.dataType && !isVariableDataTypeAllowed(data.dataType)) return null;
 
     const committed = await VariableService.updateVariable(
       context.projectInstanceId,
@@ -141,7 +135,6 @@ export async function updateVariableAction(
   } catch (e) {
     if (isStaleProjectLifecycleError(e) || (context && !context.isCurrent())) return null;
     logger.data.error('Failed to update variable in backend: ' + String(e), 'VariableActions');
-    logger.notify.error(`变量更新失败: ${e}`, "UI");
     return null;
   }
 }
@@ -177,7 +170,6 @@ export async function deleteVariableAction(id: string): Promise<boolean> {
   } catch (e) {
     if (isStaleProjectLifecycleError(e) || (context && !context.isCurrent())) return false;
     logger.data.error('Failed to delete variable in backend: ' + String(e), 'VariableActions');
-    logger.notify.error(`变量删除失败: ${e}`, "UI");
     return false;
   }
 }
