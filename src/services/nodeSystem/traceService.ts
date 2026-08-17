@@ -1,30 +1,32 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '@/services/ipc';
 import {
-  parseTraceSpanList,
+  parseRunTraceBundle,
+  parseTraceBundleList,
+  type RunTraceBundleDto,
+  type TraceBundleDto,
   type TraceDecimalString,
-  type TraceSpanDto,
 } from '@/shared/types/dto/trace';
 
 export class TraceService {
-  static async listGraphTraces(
+  static async listGraphTraceBundles(
     projectInstanceId: string,
     graphPath: string,
-  ): Promise<TraceSpanDto[]> {
-    const response: unknown = await invoke('list_graph_traces', {
+  ): Promise<TraceBundleDto[]> {
+    const response: unknown = await invokeCommand('list_graph_trace_bundles', {
       projectInstanceId,
       graphPath,
     });
-    return parseTraceSpanList(response);
+    return parseTraceBundleList(response);
   }
 
-  static async getRunTrace(
+  static async getRunTraceBundle(
     projectInstanceId: string,
     runId: TraceDecimalString,
-  ): Promise<TraceSpanDto[]> {
-    const response: unknown = await invoke('get_run_trace', {
+  ): Promise<RunTraceBundleDto> {
+    const response: unknown = await invokeCommand('get_run_trace_bundle', {
       projectInstanceId,
       runId,
     });
-    return parseTraceSpanList(response);
+    return parseRunTraceBundle(response);
   }
 }

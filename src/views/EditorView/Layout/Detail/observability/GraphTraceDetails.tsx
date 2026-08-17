@@ -4,7 +4,10 @@ import { VscRefresh } from 'react-icons/vsc';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useGraphTraceDetails } from '@/features/application/observability/useGraphTraceDetails';
-import type { TraceSpanProjection } from '@/features/application/observability/useGraphTraceDetails';
+import type {
+  TraceBundleProjection,
+  TraceSpanProjection,
+} from '@/features/application/observability/useGraphTraceDetails';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
 import { detailEmptyHintClass } from '../shared/detailStyles';
@@ -18,12 +21,14 @@ export function GraphTraceDetails({ graphPath }: GraphTraceDetailsProps) {
   const { t } = useTranslation();
   const trace = useGraphTraceDetails(graphPath);
   const runIds = useMemo(
-    () => Array.from(new Set(trace.graphTraces.flatMap((record) =>
-      record.correlation.runId === null ? [] : [record.correlation.runId],
-    ))),
-    [trace.graphTraces],
+    () => trace.graphBundles.flatMap((bundle) =>
+      bundle.bundleKind === 'run' ? [bundle.runId] : [],
+    ),
+    [trace.graphBundles],
   );
-  const records = trace.selectedRunId === null ? trace.graphTraces : trace.runTrace;
+  const bundles = trace.selectedRunId === null
+    ? trace.graphBundles
+    : trace.runBundle === null ? [] : [trace.runBundle];
   const loading = trace.selectedRunId === null ? trace.graphLoading : trace.runLoading;
   const error = trace.selectedRunId === null ? trace.graphError : trace.runError;
 
@@ -64,7 +69,7 @@ export function GraphTraceDetails({ graphPath }: GraphTraceDetailsProps) {
         </div>
 
         <TraceContent
-          records={records}
+          bundles={bundles}
           loading={loading}
           error={error !== null}
           runSelected={trace.selectedRunId !== null}
@@ -99,13 +104,13 @@ function RunButton({
 }
 
 function TraceContent({
-  records,
+  bundles,
   loading,
   error,
   runSelected,
   runNotFound,
 }: {
-  records: TraceSpanProjection[];
+  bundles: TraceBundleProjection[];
   loading: boolean;
   error: boolean;
   runSelected: boolean;
@@ -122,19 +127,55 @@ function TraceContent({
       </TraceState>
     );
   }
-  if (records.length === 0) return <TraceState>{t('detail.trace.empty')}</TraceState>;
+  if (bundles.length === 0) return <TraceState>{t('detail.trace.empty')}</TraceState>;
 
   return (
     <ScrollArea
       className="max-h-80 rounded-md border border-border/60 bg-background/30"
       orientation="vertical"
     >
-      <div className="space-y-2 p-2">
-        {records.map((span) => (
-          <TraceRecord key={span.spanId} record={span} />
+      <div className="space-y-3 p-2">
+        {bundles.map((bundle) => (
+          <TraceBundleRecord
+            key={`${bundle.bundleKind}:${bundle.bundleKind === 'run' ? bundle.runId : bundle.compileId}`}
+            bundle={bundle}
+          />
         ))}
       </div>
     </ScrollArea>
+  );
+}
+
+function TraceBundleRecord({ bundle }: { bundle: TraceBundleProjection }) {
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 bg-card/40 p-2">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <DetailBadge>{bundle.bundleKind}</DetailBadge>
+        {bundle.bundleKind === 'run' && <DetailBadge>run {bundle.runId}</DetailBadge>}
+        <DetailBadge>compile {bundle.compileId}</DetailBadge>
+        {bundle.metadata.truncated && <DetailBadge>truncated</DetailBadge>}
+      </div>
+      <dl className="space-y-1">
+        <TraceValue label="Graph path" value={bundle.graphPath} />
+        {bundle.bundleKind === 'run' && (
+          <TraceValue label="Incident ID" value={bundle.incidentId} />
+        )}
+        <TraceValue label="Estimated bytes" value={bundle.metadata.estimatedBytes} />
+        <TraceValue label="Dropped spans" value={bundle.metadata.droppedSpanCount} />
+        {bundle.metadata.provenanceScopes.map((scope, index) => (
+          <TraceValue
+            key={`${scope.projectSessionId}:${scope.compileId}:${scope.graphPath}`}
+            label={`Provenance scope ${index + 1}`}
+            value={`${scope.graphPath} · compile ${scope.compileId}`}
+          />
+        ))}
+      </dl>
+      <div className="space-y-2">
+        {bundle.spans.map((span) => (
+          <TraceRecord key={span.spanId} record={span} />
+        ))}
+      </div>
+    </div>
   );
 }
 

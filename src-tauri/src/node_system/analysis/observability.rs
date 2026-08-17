@@ -341,6 +341,85 @@ pub struct TraceSpan {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraceProvenanceScope {
+    pub project_session_id: ProjectSessionId,
+    pub graph_path: GraphResourcePath,
+    pub graph_revision: GraphRevision,
+    pub registry_fingerprint: crate::node_system::registry::RegistryFingerprint,
+    pub resource_versions: super::ResourceVersionSet,
+    pub compile_id: CompileId,
+}
+
+impl From<&CorrelationContext> for TraceProvenanceScope {
+    fn from(correlation: &CorrelationContext) -> Self {
+        Self {
+            project_session_id: correlation.project_session_id.clone(),
+            graph_path: correlation.graph_path.clone(),
+            graph_revision: correlation.graph_revision,
+            registry_fingerprint: correlation.registry_fingerprint.clone(),
+            resource_versions: correlation.resource_versions.clone(),
+            compile_id: correlation.compile_id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraceBundleMetadata {
+    pub provenance_scopes: Box<[TraceProvenanceScope]>,
+    pub truncated: bool,
+    pub dropped_span_count: u64,
+    pub estimated_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunTraceBundle {
+    pub run_id: RunId,
+    pub compile_id: CompileId,
+    pub graph_path: GraphResourcePath,
+    pub selection_digest: Option<Box<str>>,
+    pub incident_id: Option<Box<str>>,
+    pub metadata: TraceBundleMetadata,
+    pub spans: Box<[TraceSpan]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompilationTraceBundle {
+    pub compile_id: CompileId,
+    pub graph_path: GraphResourcePath,
+    pub metadata: TraceBundleMetadata,
+    pub spans: Box<[TraceSpan]>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TraceBundle {
+    Compilation(CompilationTraceBundle),
+    Run(RunTraceBundle),
+}
+
+impl TraceBundle {
+    pub fn metadata(&self) -> &TraceBundleMetadata {
+        match self {
+            Self::Compilation(bundle) => &bundle.metadata,
+            Self::Run(bundle) => &bundle.metadata,
+        }
+    }
+
+    pub fn spans(&self) -> &[TraceSpan] {
+        match self {
+            Self::Compilation(bundle) => &bundle.spans,
+            Self::Run(bundle) => &bundle.spans,
+        }
+    }
+
+    pub fn is_associated_with_graph(&self, graph_path: &GraphResourcePath) -> bool {
+        self.metadata()
+            .provenance_scopes
+            .iter()
+            .any(|scope| scope.graph_path == *graph_path)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpanSpec {
     pub parent_span_id: Option<SpanId>,
     pub run_id: Option<RunId>,
@@ -387,6 +466,14 @@ impl<'a> SpanGuard<'a> {
 
     pub fn finish(&mut self, outcome: SpanOutcome) {
         self.complete(outcome);
+    }
+
+    pub fn replace_correlation(&mut self, correlation: CorrelationContext) {
+        self.pending
+            .as_mut()
+            .expect("finished span guard")
+            .1
+            .correlation = correlation;
     }
 
     fn complete(&mut self, outcome: SpanOutcome) {

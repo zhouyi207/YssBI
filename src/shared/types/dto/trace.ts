@@ -49,6 +49,43 @@ export interface TraceSpanDto {
   correlation: TraceCorrelationDto;
 }
 
+export interface TraceProvenanceScopeDto {
+  projectSessionId: string;
+  graphPath: string;
+  graphRevision: TraceDecimalString;
+  registryFingerprint: string;
+  resourceVersions: Record<string, string>;
+  compileId: TraceDecimalString;
+}
+
+export interface TraceBundleMetadataDto {
+  provenanceScopes: TraceProvenanceScopeDto[];
+  truncated: boolean;
+  droppedSpanCount: TraceDecimalString;
+  estimatedBytes: TraceDecimalString;
+}
+
+export interface CompilationTraceBundleDto {
+  bundleKind: 'compilation';
+  compileId: TraceDecimalString;
+  graphPath: string;
+  metadata: TraceBundleMetadataDto;
+  spans: TraceSpanDto[];
+}
+
+export interface RunTraceBundleDto {
+  bundleKind: 'run';
+  runId: TraceDecimalString;
+  compileId: TraceDecimalString;
+  graphPath: string;
+  selectionDigest: string | null;
+  incidentId: string | null;
+  metadata: TraceBundleMetadataDto;
+  spans: TraceSpanDto[];
+}
+
+export type TraceBundleDto = CompilationTraceBundleDto | RunTraceBundleDto;
+
 const SPAN_KEYS = [
   'spanId', 'parentSpanId', 'runId', 'operationId', 'activationId', 'attemptId',
   'kind', 'startedAt', 'finishedAt', 'outcome', 'correlation',
@@ -58,6 +95,20 @@ const CORRELATION_KEYS = [
   'resourceVersions', 'compileId', 'selectionDigest', 'runId', 'nodeId',
   'nodeTypeId', 'parentCall',
 ] as const;
+const PROVENANCE_SCOPE_KEYS = [
+  'projectSessionId', 'graphPath', 'graphRevision', 'registryFingerprint',
+  'resourceVersions', 'compileId',
+] as const;
+const METADATA_KEYS = [
+  'provenanceScopes', 'truncated', 'droppedSpanCount', 'estimatedBytes',
+] as const;
+const COMPILATION_BUNDLE_KEYS = [
+  'bundleKind', 'compileId', 'graphPath', 'metadata', 'spans',
+] as const;
+const RUN_BUNDLE_KEYS = [
+  'bundleKind', 'runId', 'compileId', 'graphPath', 'selectionDigest',
+  'incidentId', 'metadata', 'spans',
+] as const;
 const TRACE_KINDS = new Set<TraceKindDto>([
   'snapshot', 'analysis', 'lowering', 'run', 'operationAttempt',
   'resourceAcquire', 'adapterIo', 'resultPublication', 'cleanup',
@@ -66,140 +117,110 @@ const SIMPLE_OUTCOMES = new Set([
   'success', 'error', 'cancellation', 'timeout', 'retry', 'notReached', 'internalAborted',
 ]);
 
-export function parseTraceSpanList(value: unknown): TraceSpanDto[] {
+export function parseTraceBundleList(value: unknown): TraceBundleDto[] {
   if (!Array.isArray(value)) throw invalidTrace();
-  const spans = value.map(parseTraceSpan);
-  const spanIds = new Set(spans.map((span) => span.spanId));
-  if (spanIds.size !== spans.length) throw invalidTrace();
-  if (spans.some((span) => span.parentSpanId !== null && !spanIds.has(span.parentSpanId))) {
+  return value.map(parseTraceBundle);
+}
+
+export function parseRunTraceBundle(value: unknown): RunTraceBundleDto {
+  const bundle = parseTraceBundle(value);
+  if (bundle.bundleKind !== 'run') throw invalidTrace();
+  return bundle;
+}
+
+function parseTraceBundle(value: unknown): TraceBundleDto {
+  if (!isRecord(value) || typeof value.bundleKind !== 'string') throw invalidTrace();
+  if (value.bundleKind === 'compilation') return parseCompilationBundle(value);
+  if (value.bundleKind === 'run') return parseRunBundle(value);
+  throw invalidTrace();
+}
+
+function parseCompilationBundle(value: Record<string, unknown>): CompilationTraceBundleDto {
+  if (
+    !hasExactKeys(value, COMPILATION_BUNDLE_KEYS)
+    || !isDecimal(value.compileId)
+    || typeof value.graphPath !== 'string'
+  ) {
     throw invalidTrace();
   }
-  validateTraceHierarchy(spans);
-  return spans;
+  const metadata = parseMetadata(value.metadata);
+  const spans = parseSpans(value.spans);
+  return {
+    bundleKind: 'compilation',
+    compileId: value.compileId,
+    graphPath: value.graphPath,
+    metadata,
+    spans,
+  };
 }
 
-function validateTraceHierarchy(spans: TraceSpanDto[]): void {
-  const indices = new Map(spans.map((span, index) => [span.spanId, index]));
-  const colors = new Uint8Array(spans.length);
-
-  for (let index = 0; index < spans.length; index += 1) {
-    if (colors[index] !== 0) continue;
-    let current: number | undefined = index;
-    const path: number[] = [];
-    while (current !== undefined && colors[current] === 0) {
-      colors[current] = 1;
-      path.push(current);
-      const parentId: TraceDecimalString | null = spans[current].parentSpanId;
-      current = parentId === null ? undefined : indices.get(parentId);
-    }
-    if (current !== undefined && colors[current] === 1) throw invalidTrace();
-    for (const visited of path) colors[visited] = 2;
+function parseRunBundle(value: Record<string, unknown>): RunTraceBundleDto {
+  if (
+    !hasExactKeys(value, RUN_BUNDLE_KEYS)
+    || !isPositiveDecimal(value.runId)
+    || !isDecimal(value.compileId)
+    || typeof value.graphPath !== 'string'
+    || !isNullableString(value.selectionDigest)
+    || !isNullableString(value.incidentId)
+  ) {
+    throw invalidTrace();
   }
+  const metadata = parseMetadata(value.metadata);
+  const spans = parseSpans(value.spans);
+  return {
+    bundleKind: 'run',
+    runId: value.runId,
+    compileId: value.compileId,
+    graphPath: value.graphPath,
+    selectionDigest: value.selectionDigest,
+    incidentId: value.incidentId,
+    metadata,
+    spans,
+  };
+}
 
-  for (const span of spans) {
-    const parent = span.parentSpanId === null
-      ? null
-      : spans[indices.get(span.parentSpanId)!];
-    if (!isCompatibleTraceParent(span, parent)) throw invalidTrace();
+function parseMetadata(value: unknown): TraceBundleMetadataDto {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, METADATA_KEYS)
+    || !Array.isArray(value.provenanceScopes)
+    || typeof value.truncated !== 'boolean'
+    || !isDecimal(value.droppedSpanCount)
+    || !isDecimal(value.estimatedBytes)
+  ) {
+    throw invalidTrace();
   }
+  return {
+    provenanceScopes: value.provenanceScopes.map(parseProvenanceScope),
+    truncated: value.truncated,
+    droppedSpanCount: value.droppedSpanCount,
+    estimatedBytes: value.estimatedBytes,
+  };
 }
 
-function isCompatibleTraceParent(span: TraceSpanDto, parent: TraceSpanDto | null): boolean {
-  if (!hasValidKindSemantics(span)) return false;
-  if (parent !== null && !sameTraceLineage(span, parent)) return false;
-  if (parent !== null && isRuntimeKind(span.kind) && !intervalContains(parent, span)) return false;
-  switch (span.kind) {
-    case 'snapshot':
-      return parent === null;
-    case 'analysis':
-    case 'lowering':
-      return parent?.kind === 'snapshot';
-    case 'run':
-      return parent === null || parent.kind === 'run';
-    case 'resourceAcquire':
-    case 'resultPublication':
-    case 'cleanup':
-    case 'operationAttempt':
-      return parent?.kind === 'run';
-    case 'adapterIo':
-      return parent?.kind === 'operationAttempt'
-        && span.operationId === parent.operationId
-        && span.activationId === parent.activationId
-        && span.attemptId === parent.attemptId;
+function parseProvenanceScope(value: unknown): TraceProvenanceScopeDto {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, PROVENANCE_SCOPE_KEYS)
+    || typeof value.projectSessionId !== 'string'
+    || typeof value.graphPath !== 'string'
+    || !isDecimal(value.graphRevision)
+    || typeof value.registryFingerprint !== 'string'
+    || !isStringRecord(value.resourceVersions)
+    || !isDecimal(value.compileId)
+  ) {
+    throw invalidTrace();
   }
+  return value as unknown as TraceProvenanceScopeDto;
 }
 
-function hasValidKindSemantics(span: TraceSpanDto): boolean {
-  const compiler = span.kind === 'snapshot' || span.kind === 'analysis' || span.kind === 'lowering';
-  if (compiler) {
-    return span.runId === null
-      && hasNoOperationIdentity(span)
-      && isGeneralOutcome(span.outcome);
-  }
-  if (span.runId === null) return false;
-  switch (span.kind) {
-    case 'run':
-      return hasNoOperationIdentity(span) && isGeneralOutcome(span.outcome);
-    case 'resourceAcquire':
-    case 'resultPublication':
-      return hasNoOperationIdentity(span) && isPhaseOutcome(span.outcome);
-    case 'cleanup':
-      return hasNoOperationIdentity(span)
-        && (span.outcome === 'notReached'
-          || span.outcome === 'internalAborted'
-          || isCleanupOutcome(span.outcome));
-    case 'operationAttempt':
-      return hasOperationIdentity(span)
-        && (isGeneralOutcome(span.outcome) || span.outcome === 'retry');
-    case 'adapterIo':
-      return hasOperationIdentity(span) && isGeneralOutcome(span.outcome);
-    default:
-      return false;
-  }
-}
-
-function hasOperationIdentity(span: TraceSpanDto): boolean {
-  return span.operationId !== null && span.activationId !== null && span.attemptId !== null;
-}
-
-function isGeneralOutcome(outcome: TraceOutcomeDto): boolean {
-  return typeof outcome === 'string'
-    && outcome !== 'retry'
-    && outcome !== 'notReached';
-}
-
-function isPhaseOutcome(outcome: TraceOutcomeDto): boolean {
-  return isGeneralOutcome(outcome) || outcome === 'notReached';
-}
-
-function isCleanupOutcome(outcome: TraceOutcomeDto): outcome is Extract<TraceOutcomeDto, object> {
-  return typeof outcome === 'object';
-}
-
-function isRuntimeKind(kind: TraceKindDto): boolean {
-  return kind !== 'snapshot' && kind !== 'analysis' && kind !== 'lowering';
-}
-
-function intervalContains(parent: TraceSpanDto, child: TraceSpanDto): boolean {
-  return BigInt(child.startedAt) >= BigInt(parent.startedAt)
-    && BigInt(child.finishedAt) <= BigInt(parent.finishedAt);
-}
-
-function hasNoOperationIdentity(span: TraceSpanDto): boolean {
-  return span.operationId === null && span.activationId === null && span.attemptId === null;
-}
-
-function sameTraceLineage(span: TraceSpanDto, parent: TraceSpanDto): boolean {
-  return span.runId === parent.runId
-    && span.correlation.projectSessionId === parent.correlation.projectSessionId
-    && span.correlation.graphPath === parent.correlation.graphPath
-    && span.correlation.graphRevision === parent.correlation.graphRevision
-    && span.correlation.registryFingerprint === parent.correlation.registryFingerprint
-    && span.correlation.compileId === parent.correlation.compileId;
+function parseSpans(value: unknown): TraceSpanDto[] {
+  if (!Array.isArray(value)) throw invalidTrace();
+  return value.map(parseTraceSpan);
 }
 
 function parseTraceSpan(value: unknown): TraceSpanDto {
-  if (!isExactRecord(value, SPAN_KEYS)) throw invalidTrace();
+  if (!isRecord(value) || !hasExactKeys(value, SPAN_KEYS)) throw invalidTrace();
   const correlation = parseCorrelation(value.correlation);
   if (
     !isPositiveDecimal(value.spanId)
@@ -212,19 +233,30 @@ function parseTraceSpan(value: unknown): TraceSpanDto {
     || !TRACE_KINDS.has(value.kind as TraceKindDto)
     || !isDecimal(value.startedAt)
     || !isDecimal(value.finishedAt)
-    || BigInt(value.finishedAt) < BigInt(value.startedAt)
     || !isOutcome(value.outcome)
-    || value.runId !== correlation.runId
   ) {
     throw invalidTrace();
   }
-  return value as unknown as TraceSpanDto;
+  return {
+    spanId: value.spanId,
+    parentSpanId: value.parentSpanId,
+    runId: value.runId,
+    operationId: value.operationId,
+    activationId: value.activationId,
+    attemptId: value.attemptId,
+    kind: value.kind as TraceKindDto,
+    startedAt: value.startedAt,
+    finishedAt: value.finishedAt,
+    outcome: value.outcome,
+    correlation,
+  };
 }
 
 function parseCorrelation(value: unknown): TraceCorrelationDto {
-  if (!isExactRecord(value, CORRELATION_KEYS)) throw invalidTrace();
   if (
-    typeof value.projectSessionId !== 'string'
+    !isRecord(value)
+    || !hasExactKeys(value, CORRELATION_KEYS)
+    || typeof value.projectSessionId !== 'string'
     || typeof value.graphPath !== 'string'
     || !isDecimal(value.graphRevision)
     || typeof value.registryFingerprint !== 'string'
@@ -243,8 +275,9 @@ function parseCorrelation(value: unknown): TraceCorrelationDto {
 
 function isOutcome(value: unknown): value is TraceOutcomeDto {
   if (typeof value === 'string') return SIMPLE_OUTCOMES.has(value);
-  if (!isExactRecord(value, ['cleanup'])) return false;
-  return isExactRecord(value.cleanup, ['errorCount', 'panicking'])
+  if (!isRecord(value) || !hasExactKeys(value, ['cleanup'])) return false;
+  return isRecord(value.cleanup)
+    && hasExactKeys(value.cleanup, ['errorCount', 'panicking'])
     && isDecimal(value.cleanup.errorCount)
     && typeof value.cleanup.panicking === 'boolean';
 }
@@ -253,8 +286,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isExactRecord(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
-  if (!isRecord(value)) return false;
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
   return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
@@ -281,5 +313,5 @@ function isNullableString(value: unknown): value is string | null {
 }
 
 function invalidTrace(): Error {
-  return new Error('Invalid trace span response');
+  return new Error('Invalid trace bundle response');
 }

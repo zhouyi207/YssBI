@@ -2,11 +2,31 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { TraceService } from '@/services/nodeSystem/traceService';
-import type { TraceDecimalString, TraceSpanDto } from '@/shared/types/dto/trace';
+import { IpcError } from '@/services/ipc';
+import type {
+  CompilationTraceBundleDto,
+  RunTraceBundleDto,
+  TraceBundleDto,
+  TraceDecimalString,
+  TraceSpanDto,
+} from '@/shared/types/dto/trace';
 
 export interface TraceSpanProjection extends TraceSpanDto {
   durationNanos: bigint;
 }
+
+export interface CompilationTraceBundleProjection
+  extends Omit<CompilationTraceBundleDto, 'spans'> {
+  spans: TraceSpanProjection[];
+}
+
+export interface RunTraceBundleProjection extends Omit<RunTraceBundleDto, 'spans'> {
+  spans: TraceSpanProjection[];
+}
+
+export type TraceBundleProjection =
+  | CompilationTraceBundleProjection
+  | RunTraceBundleProjection;
 
 export interface TraceQueryError {
   code: string;
@@ -14,11 +34,11 @@ export interface TraceQueryError {
 }
 
 export interface GraphTraceDetailsState {
-  graphTraces: TraceSpanProjection[];
+  graphBundles: TraceBundleProjection[];
   graphLoading: boolean;
   graphError: TraceQueryError | null;
   selectedRunId: TraceDecimalString | null;
-  runTrace: TraceSpanProjection[];
+  runBundle: RunTraceBundleProjection | null;
   runLoading: boolean;
   runError: TraceQueryError | null;
   selectedRunNotFound: boolean;
@@ -28,11 +48,11 @@ export interface GraphTraceDetailsState {
 
 export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState {
   const activeProjectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
-  const [graphTraces, setGraphTraces] = useState<TraceSpanProjection[]>([]);
+  const [graphBundles, setGraphBundles] = useState<TraceBundleProjection[]>([]);
   const [graphLoading, setGraphLoading] = useState(false);
   const [graphError, setGraphError] = useState<TraceQueryError | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<TraceDecimalString | null>(null);
-  const [runTrace, setRunTrace] = useState<TraceSpanProjection[]>([]);
+  const [runBundle, setRunBundle] = useState<RunTraceBundleProjection | null>(null);
   const [runLoading, setRunLoading] = useState(false);
   const [runError, setRunError] = useState<TraceQueryError | null>(null);
   const graphRequestGeneration = useRef(0);
@@ -56,7 +76,10 @@ export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState 
     }
 
     try {
-      const traces = await TraceService.listGraphTraces(context.projectInstanceId, graphPath);
+      const bundles = await TraceService.listGraphTraceBundles(
+        context.projectInstanceId,
+        graphPath,
+      );
       const completion = classifyQueryCompletion(
         mounted.current,
         requestGeneration,
@@ -67,7 +90,7 @@ export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState 
         if (completion === 'staleProject') setGraphLoading(false);
         return;
       }
-      setGraphTraces(traces.map(projectTraceSpan));
+      setGraphBundles(bundles.map(projectTraceBundle));
       setGraphLoading(false);
     } catch (caught) {
       const completion = classifyQueryCompletion(
@@ -88,7 +111,7 @@ export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState 
   const selectRun = useCallback(async (runId: TraceDecimalString | null) => {
     const requestGeneration = ++runRequestGeneration.current;
     setSelectedRunId(runId);
-    setRunTrace([]);
+    setRunBundle(null);
     setRunError(null);
 
     if (runId === null) {
@@ -109,7 +132,7 @@ export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState 
     }
 
     try {
-      const traces = await TraceService.getRunTrace(context.projectInstanceId, runId);
+      const bundle = await TraceService.getRunTraceBundle(context.projectInstanceId, runId);
       const completion = classifyQueryCompletion(
         mounted.current,
         requestGeneration,
@@ -120,7 +143,7 @@ export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState 
         if (completion === 'staleProject') setRunLoading(false);
         return;
       }
-      setRunTrace(traces.map(projectTraceSpan));
+      setRunBundle(projectRunTraceBundle(bundle));
       setRunLoading(false);
     } catch (caught) {
       const completion = classifyQueryCompletion(
@@ -140,10 +163,10 @@ export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState 
 
   useEffect(() => {
     ++runRequestGeneration.current;
-    setGraphTraces([]);
+    setGraphBundles([]);
     setGraphError(null);
     setSelectedRunId(null);
-    setRunTrace([]);
+    setRunBundle(null);
     setRunLoading(false);
     setRunError(null);
     void refresh();
@@ -159,11 +182,11 @@ export function useGraphTraceDetails(graphPath: string): GraphTraceDetailsState 
   }, []);
 
   return {
-    graphTraces,
+    graphBundles,
     graphLoading,
     graphError,
     selectedRunId,
-    runTrace,
+    runBundle,
     runLoading,
     runError,
     selectedRunNotFound: runError?.code === 'trace_not_found',
@@ -176,6 +199,21 @@ export function projectTraceSpan(span: TraceSpanDto): TraceSpanProjection {
   return {
     ...span,
     durationNanos: BigInt(span.finishedAt) - BigInt(span.startedAt),
+  };
+}
+
+export function projectTraceBundle(bundle: TraceBundleDto): TraceBundleProjection {
+  if (bundle.bundleKind === 'run') return projectRunTraceBundle(bundle);
+  return {
+    ...bundle,
+    spans: bundle.spans.map(projectTraceSpan),
+  };
+}
+
+function projectRunTraceBundle(bundle: RunTraceBundleDto): RunTraceBundleProjection {
+  return {
+    ...bundle,
+    spans: bundle.spans.map(projectTraceSpan),
   };
 }
 
@@ -192,15 +230,8 @@ function classifyQueryCompletion(
 }
 
 function toTraceQueryError(caught: unknown): TraceQueryError {
-  if (typeof caught === 'object' && caught !== null) {
-    const error = caught as { code?: unknown; message?: unknown };
-    return {
-      code: typeof error.code === 'string' ? error.code : 'trace_query_failed',
-      message: typeof error.message === 'string' ? error.message : 'Unable to load trace details.',
-    };
-  }
-  if (typeof caught === 'string') {
-    return { code: 'trace_query_failed', message: caught };
+  if (caught instanceof IpcError) {
+    return { code: caught.code, message: 'Unable to load trace details.' };
   }
   return { code: 'trace_query_failed', message: 'Unable to load trace details.' };
 }

@@ -1,5 +1,5 @@
 use super::{GraphResourcePath, ProjectInstanceId, ProjectSession, ProjectState};
-use crate::node_system::analysis::{BoundedTraceSink, RunId, TraceSpan};
+use crate::node_system::analysis::{BoundedTraceSink, RunId, RunTraceBundle, TraceBundle};
 use std::fmt;
 use std::sync::Arc;
 
@@ -21,38 +21,43 @@ impl fmt::Display for TraceQueryError {
 impl std::error::Error for TraceQueryError {}
 
 impl ProjectState {
-    pub fn list_graph_traces(
+    pub fn list_graph_trace_bundles(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-    ) -> Result<Vec<TraceSpan>, TraceQueryError> {
+    ) -> Result<Vec<TraceBundle>, TraceQueryError> {
         let document_path =
             crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
         self.query_traces(expected_project_instance_id, |sink| {
-            sink.spans_for_graph(&document_path)
+            sink.bundles_for_graph(&document_path)
         })
     }
 
-    pub fn get_run_trace(
+    pub fn get_run_trace_bundle(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         run_id: RunId,
-    ) -> Result<Vec<TraceSpan>, TraceQueryError> {
-        let records = self.query_traces(expected_project_instance_id, |sink| {
-            sink.spans_for_run(run_id)
-        })?;
-        if records.is_empty() {
-            Err(TraceQueryError::NotFound)
-        } else {
-            Ok(records)
-        }
+    ) -> Result<RunTraceBundle, TraceQueryError> {
+        self.query_traces(expected_project_instance_id, |sink| sink.run_bundle(run_id))?
+            .ok_or(TraceQueryError::NotFound)
     }
 
-    fn query_traces(
+    pub fn associate_run_trace_incident(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
-        snapshot: impl FnOnce(&BoundedTraceSink) -> Vec<TraceSpan>,
-    ) -> Result<Vec<TraceSpan>, TraceQueryError> {
+        run_id: RunId,
+        incident_id: &str,
+    ) -> Result<bool, TraceQueryError> {
+        self.query_traces(expected_project_instance_id, |sink| {
+            sink.associate_run_incident(run_id, incident_id)
+        })
+    }
+
+    fn query_traces<T>(
+        &self,
+        expected_project_instance_id: &ProjectInstanceId,
+        snapshot: impl FnOnce(&BoundedTraceSink) -> T,
+    ) -> Result<T, TraceQueryError> {
         let session = self.expected_trace_session(expected_project_instance_id)?;
         self.validate_trace_session(&session)?;
         let sink = {

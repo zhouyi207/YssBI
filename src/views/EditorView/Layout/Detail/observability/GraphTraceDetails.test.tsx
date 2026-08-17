@@ -3,7 +3,9 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  CompilationTraceBundleProjection,
   GraphTraceDetailsState,
+  RunTraceBundleProjection,
   TraceSpanProjection,
 } from '@/features/application/observability/useGraphTraceDetails';
 import { GraphTraceDetails } from './GraphTraceDetails';
@@ -31,9 +33,6 @@ vi.mock('react-i18next', () => ({
       'detail.trace.runs': 'Runs',
       'detail.trace.allRuns': 'All graph traces',
       'detail.trace.run': 'Run',
-      'detail.trace.sequence': 'Sequence',
-      'detail.trace.kind': 'Kind',
-      'detail.trace.status': 'Status',
       'detail.trace.correlation': 'Correlation',
       'detail.trace.projectSession': 'Project session',
       'detail.trace.graphPath': 'Graph path',
@@ -45,8 +44,6 @@ vi.mock('react-i18next', () => ({
       'detail.trace.nodeId': 'Node ID',
       'detail.trace.nodeTypeId': 'Node type ID',
       'detail.trace.parentCall': 'Parent call',
-      'detail.trace.publicFields': 'Public fields',
-      'detail.trace.redacted': '[redacted]',
       'detail.trace.none': '—',
     } as Record<string, string>)[key] ?? key,
   }),
@@ -84,13 +81,52 @@ function trace(overrides: Partial<TraceSpanProjection> = {}): TraceSpanProjectio
   };
 }
 
+function bundle(
+  overrides: Partial<RunTraceBundleProjection> = {},
+): RunTraceBundleProjection {
+  return {
+    bundleKind: 'run',
+    runId: '41',
+    compileId: '5',
+    graphPath,
+    selectionDigest: 'demand-selection-a',
+    incidentId: 'incident-public',
+    metadata: {
+      provenanceScopes: [{
+        projectSessionId: 'session-public',
+        graphPath,
+        graphRevision: '3',
+        registryFingerprint: 'registry-public',
+        resourceVersions: { inventory: 'version-public' },
+        compileId: '5',
+      }],
+      truncated: false,
+      droppedSpanCount: '0',
+      estimatedBytes: '1024',
+    },
+    spans: [trace()],
+    ...overrides,
+  };
+}
+
+function compilationBundle(): CompilationTraceBundleProjection {
+  const run = bundle();
+  return {
+    bundleKind: 'compilation',
+    compileId: run.compileId,
+    graphPath: run.graphPath,
+    metadata: run.metadata,
+    spans: [],
+  };
+}
+
 function readyState(overrides: Partial<GraphTraceDetailsState> = {}): GraphTraceDetailsState {
   return {
-    graphTraces: [trace()],
+    graphBundles: [bundle()],
     graphLoading: false,
     graphError: null,
     selectedRunId: null,
-    runTrace: [],
+    runBundle: null,
     runLoading: false,
     runError: null,
     selectedRunNotFound: false,
@@ -136,7 +172,7 @@ describe('GraphTraceDetails', () => {
     renderDetails();
 
     expect(host.textContent).toContain('Developer trace');
-    expect(host.textContent).not.toContain('Sequence');
+    expect(host.textContent).not.toContain('incident-public');
     expect(host.querySelector('[aria-expanded="false"]')).not.toBeNull();
   });
 
@@ -155,29 +191,55 @@ describe('GraphTraceDetails', () => {
     expect(host.textContent).toContain('Loading trace…');
   });
 
-  it('renders completed span identity, outcome, duration, and correlation', () => {
+  it('renders authoritative bundle metadata and completed span details', () => {
     renderDetails();
     expand();
 
-    expect(host.textContent).toContain('7');
+    expect(host.textContent).toContain('run 41');
+    expect(host.textContent).toContain('compile 5');
+    expect(host.textContent).toContain('incident-public');
+    expect(host.textContent).toContain('Estimated bytes');
+    expect(host.textContent).toContain('1024');
+    expect(host.textContent).toContain('Provenance scope 1');
     expect(host.textContent).toContain('operationAttempt');
-    expect(host.textContent).toContain('success');
-    expect(host.textContent).toContain('operation-public');
     expect(host.textContent).toContain('125 ns');
     expect(host.textContent).toContain('session-public');
-    expect(host.textContent).toContain(graphPath);
-    expect(host.textContent).toContain('registry-public');
-    expect(host.textContent).toContain('inventory');
-    expect(host.textContent).toContain('version-public');
     expect(host.textContent).toContain('functions/public-node');
   });
 
-  it('selects a retained run and replaces the graph projection with its trace', () => {
+  it('omits the run-only incident row for compilation bundles', () => {
+    hookState.current = readyState({ graphBundles: [compilationBundle()] });
+    renderDetails();
+    expand();
+
+    expect(host.textContent).toContain('compilation');
+    expect(host.textContent).not.toContain('Incident ID');
+  });
+
+  it('makes truncation and dropped span count explicit', () => {
+    hookState.current = readyState({
+      graphBundles: [bundle({
+        metadata: {
+          ...bundle().metadata,
+          truncated: true,
+          droppedSpanCount: '9',
+        },
+      })],
+    });
+    renderDetails();
+    expand();
+
+    expect(host.textContent).toContain('truncated');
+    expect(host.textContent).toContain('Dropped spans');
+    expect(host.textContent).toContain('9');
+  });
+
+  it('selects a retained run and replaces the graph bundle projection', () => {
     hookState.current = readyState({
       selectRun: async (runId) => {
         hookState.current = readyState({
           selectedRunId: runId,
-          runTrace: [trace({ spanId: '99', outcome: 'error' })],
+          runBundle: bundle({ spans: [trace({ spanId: '99', outcome: 'error' })] }),
         });
         renderDetails();
       },
@@ -193,12 +255,14 @@ describe('GraphTraceDetails', () => {
 
   it('renders cleanup metadata without heuristic start-finish pairing', () => {
     hookState.current = readyState({
-      graphTraces: [trace({
-        kind: 'cleanup',
-        operationId: null,
-        activationId: null,
-        attemptId: null,
-        outcome: { cleanup: { errorCount: '2', panicking: true } },
+      graphBundles: [bundle({
+        spans: [trace({
+          kind: 'cleanup',
+          operationId: null,
+          activationId: null,
+          attemptId: null,
+          outcome: { cleanup: { errorCount: '2', panicking: true } },
+        })],
       })],
     });
     renderDetails();
@@ -212,10 +276,10 @@ describe('GraphTraceDetails', () => {
 
   it.each([
     [readyState({ graphLoading: true }), 'Loading trace…'],
-    [readyState({ graphTraces: [], graphError: { code: 'trace_query_failed', message: 'secret backend detail' } }), 'Unable to load graph traces'],
+    [readyState({ graphBundles: [], graphError: { code: 'trace_query_failed', message: 'secret backend detail' } }), 'Unable to load graph traces'],
     [readyState({ selectedRunId: '41', runError: { code: 'trace_query_failed', message: 'secret run detail' } }), 'Unable to load run trace'],
     [readyState({ selectedRunId: '41', selectedRunNotFound: true, runError: { code: 'trace_not_found', message: 'evicted' } }), 'Run trace is no longer retained'],
-    [readyState({ graphTraces: [] }), 'No retained traces'],
+    [readyState({ graphBundles: [] }), 'No retained traces'],
   ])('renders privacy-safe loading, error, not-found, and empty states', (state, message) => {
     hookState.current = state;
     renderDetails();

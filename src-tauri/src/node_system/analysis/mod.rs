@@ -9,7 +9,10 @@ mod observability;
 mod projection;
 mod semantic;
 mod snapshot;
+mod trace_bundle;
 mod trace_store;
+#[cfg(test)]
+mod trace_store_tests;
 
 pub use crate::node_system::document::PortAddressDto;
 pub use basis::{
@@ -25,10 +28,11 @@ pub use diagnostic::{
 #[cfg(test)]
 pub use observability::FakeTraceClock;
 pub use observability::{
-    CompileProvenance, CorrelationContext, InvalidTraceIdentity, MonotonicTimestamp,
-    NOOP_TRACE_SINK, NoopTraceSink, ParentCallId, ProjectSessionId, RedactionPolicy, RunId,
-    SYSTEM_TRACE_CLOCK, SensitiveFieldAction, SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec,
-    SystemTraceClock, TraceClock, TraceFieldSensitivity, TraceSink, TraceSpan, TraceValue,
+    CompilationTraceBundle, CompileProvenance, CorrelationContext, InvalidTraceIdentity,
+    MonotonicTimestamp, NOOP_TRACE_SINK, NoopTraceSink, ParentCallId, ProjectSessionId,
+    RedactionPolicy, RunId, RunTraceBundle, SYSTEM_TRACE_CLOCK, SensitiveFieldAction, SpanGuard,
+    SpanId, SpanKind, SpanOutcome, SpanSpec, SystemTraceClock, TraceBundle, TraceBundleMetadata,
+    TraceClock, TraceFieldSensitivity, TraceProvenanceScope, TraceSink, TraceSpan, TraceValue,
     complete_span_safely, start_span_safely,
 };
 pub(crate) use projection::resolve_function_data_type;
@@ -51,7 +55,10 @@ pub use snapshot::{
     AnalysisSnapshot, AnalyzedNode, ResolvedInterface, ResolvedPort, ResolvedPortStatus,
     SchemaFacts, TypeFacts, ValidationError,
 };
-pub use trace_store::{BoundedTraceSink, DEFAULT_PROJECT_TRACE_CAPACITY};
+pub use trace_store::{
+    BoundedTraceSink, DEFAULT_ACTIVE_TRACE_SPAN_LIMIT, DEFAULT_COMPLETED_RUN_TRACE_LIMIT,
+    DEFAULT_PROJECT_TRACE_BYTE_LIMIT, TraceRetentionError, TraceRetentionPolicy,
+};
 
 #[cfg(test)]
 mod tests {

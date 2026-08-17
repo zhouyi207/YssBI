@@ -1,5 +1,8 @@
-use crate::error::AppError;
-use crate::node_system::analysis::{CorrelationContext, RunId, SpanKind, SpanOutcome, TraceSpan};
+use crate::error::CommandError;
+use crate::node_system::analysis::{
+    CompilationTraceBundle, CorrelationContext, RunId, RunTraceBundle, SpanKind, SpanOutcome,
+    TraceBundle, TraceBundleMetadata, TraceProvenanceScope, TraceSpan,
+};
 use crate::project::{GraphResourcePath, ProjectInstanceId, ProjectState, TraceQueryError};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -66,6 +69,50 @@ struct TraceCorrelationDto {
     node_id: Option<String>,
     node_type_id: Option<String>,
     parent_call: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TraceProvenanceScopeDto {
+    project_session_id: String,
+    graph_path: String,
+    graph_revision: String,
+    registry_fingerprint: String,
+    resource_versions: BTreeMap<String, String>,
+    compile_id: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TraceBundleMetadataDto {
+    provenance_scopes: Vec<TraceProvenanceScopeDto>,
+    truncated: bool,
+    dropped_span_count: String,
+    estimated_bytes: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(
+    tag = "bundleKind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum TraceBundleDto {
+    Compilation {
+        compile_id: String,
+        graph_path: String,
+        metadata: TraceBundleMetadataDto,
+        spans: Vec<TraceSpanDto>,
+    },
+    Run {
+        run_id: String,
+        compile_id: String,
+        graph_path: String,
+        selection_digest: Option<Box<str>>,
+        incident_id: Option<Box<str>>,
+        metadata: TraceBundleMetadataDto,
+        spans: Vec<TraceSpanDto>,
+    },
 }
 
 impl From<TraceSpan> for TraceSpanDto {
@@ -145,20 +192,91 @@ impl From<CorrelationContext> for TraceCorrelationDto {
     }
 }
 
-fn trace_error(error: TraceQueryError) -> AppError {
-    match error {
-        TraceQueryError::ProjectStale => AppError::new(
-            "trace_project_stale",
-            "The active project changed; refresh trace details.",
-        ),
-        TraceQueryError::NotFound => AppError::new(
-            "trace_not_found",
-            "The requested trace is no longer retained.",
-        ),
+impl From<TraceProvenanceScope> for TraceProvenanceScopeDto {
+    fn from(scope: TraceProvenanceScope) -> Self {
+        Self {
+            project_session_id: scope.project_session_id.as_str().to_owned(),
+            graph_path: String::from(scope.graph_path.0),
+            graph_revision: scope.graph_revision.get().to_string(),
+            registry_fingerprint: scope.registry_fingerprint.to_hex(),
+            resource_versions: scope
+                .resource_versions
+                .into_iter()
+                .map(|(key, version)| (key.as_str().to_owned(), version.as_str().to_owned()))
+                .collect(),
+            compile_id: scope.compile_id.get().to_string(),
+        }
     }
 }
 
-fn parse_run_id(run_id: &str) -> Result<RunId, AppError> {
+impl From<TraceBundleMetadata> for TraceBundleMetadataDto {
+    fn from(metadata: TraceBundleMetadata) -> Self {
+        Self {
+            provenance_scopes: metadata
+                .provenance_scopes
+                .into_vec()
+                .into_iter()
+                .map(TraceProvenanceScopeDto::from)
+                .collect(),
+            truncated: metadata.truncated,
+            dropped_span_count: metadata.dropped_span_count.to_string(),
+            estimated_bytes: metadata.estimated_bytes.to_string(),
+        }
+    }
+}
+
+impl From<CompilationTraceBundle> for TraceBundleDto {
+    fn from(bundle: CompilationTraceBundle) -> Self {
+        Self::Compilation {
+            compile_id: bundle.compile_id.get().to_string(),
+            graph_path: String::from(bundle.graph_path.0),
+            metadata: bundle.metadata.into(),
+            spans: bundle
+                .spans
+                .into_vec()
+                .into_iter()
+                .map(TraceSpanDto::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<RunTraceBundle> for TraceBundleDto {
+    fn from(bundle: RunTraceBundle) -> Self {
+        Self::Run {
+            run_id: bundle.run_id.get().to_string(),
+            compile_id: bundle.compile_id.get().to_string(),
+            graph_path: String::from(bundle.graph_path.0),
+            selection_digest: bundle.selection_digest,
+            incident_id: bundle.incident_id,
+            metadata: bundle.metadata.into(),
+            spans: bundle
+                .spans
+                .into_vec()
+                .into_iter()
+                .map(TraceSpanDto::from)
+                .collect(),
+        }
+    }
+}
+
+impl From<TraceBundle> for TraceBundleDto {
+    fn from(bundle: TraceBundle) -> Self {
+        match bundle {
+            TraceBundle::Compilation(bundle) => bundle.into(),
+            TraceBundle::Run(bundle) => bundle.into(),
+        }
+    }
+}
+
+fn trace_error(error: TraceQueryError) -> CommandError {
+    match error {
+        TraceQueryError::ProjectStale => CommandError::expected("trace_project_stale"),
+        TraceQueryError::NotFound => CommandError::expected("trace_not_found"),
+    }
+}
+
+fn parse_run_id(run_id: &str) -> Result<RunId, CommandError> {
     let canonical_decimal = !run_id.is_empty()
         && run_id.bytes().all(|byte| byte.is_ascii_digit())
         && (run_id == "0" || !run_id.starts_with('0'));
@@ -166,52 +284,47 @@ fn parse_run_id(run_id: &str) -> Result<RunId, AppError> {
         .then(|| run_id.parse::<u64>().ok())
         .flatten()
         .and_then(|id| RunId::try_new(id).ok())
-        .ok_or_else(|| {
-            AppError::new(
-                "invalid_opaque_id",
-                "runId must be a non-zero unsigned decimal string.",
-            )
-        })
+        .ok_or_else(|| CommandError::expected("invalid_opaque_id"))
 }
 
-pub(crate) fn list_graph_traces_from_state(
+pub(crate) fn list_graph_trace_bundles_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
-) -> Result<Vec<TraceSpanDto>, AppError> {
+) -> Result<Vec<TraceBundleDto>, CommandError> {
     let graph_path = GraphResourcePath::new(graph_path)
-        .map_err(|_| AppError::new("invalid_graph_path", "graphPath is invalid."))?;
+        .map_err(|_| CommandError::expected("invalid_graph_path"))?;
     state
-        .list_graph_traces(&project_instance_id, &graph_path)
-        .map(|spans| spans.into_iter().map(TraceSpanDto::from).collect())
+        .list_graph_trace_bundles(&project_instance_id, &graph_path)
+        .map(|bundles| bundles.into_iter().map(TraceBundleDto::from).collect())
         .map_err(trace_error)
 }
 
-pub(crate) fn get_run_trace_from_state(
+pub(crate) fn get_run_trace_bundle_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     run_id: String,
-) -> Result<Vec<TraceSpanDto>, AppError> {
+) -> Result<TraceBundleDto, CommandError> {
     state
-        .get_run_trace(&project_instance_id, parse_run_id(&run_id)?)
-        .map(|spans| spans.into_iter().map(TraceSpanDto::from).collect())
+        .get_run_trace_bundle(&project_instance_id, parse_run_id(&run_id)?)
+        .map(TraceBundleDto::from)
         .map_err(trace_error)
 }
 
 #[tauri::command]
-pub fn list_graph_traces(
+pub fn list_graph_trace_bundles(
     state: State<'_, ProjectState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
-) -> Result<Vec<TraceSpanDto>, AppError> {
-    list_graph_traces_from_state(state.inner(), project_instance_id, graph_path)
+) -> Result<Vec<TraceBundleDto>, CommandError> {
+    list_graph_trace_bundles_from_state(state.inner(), project_instance_id, graph_path)
 }
 
 #[tauri::command]
-pub fn get_run_trace(
+pub fn get_run_trace_bundle(
     state: State<'_, ProjectState>,
     project_instance_id: ProjectInstanceId,
     run_id: String,
-) -> Result<Vec<TraceSpanDto>, AppError> {
-    get_run_trace_from_state(state.inner(), project_instance_id, run_id)
+) -> Result<TraceBundleDto, CommandError> {
+    get_run_trace_bundle_from_state(state.inner(), project_instance_id, run_id)
 }

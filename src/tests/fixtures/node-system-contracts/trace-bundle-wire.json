@@ -1,0 +1,89 @@
+{
+  "bundleKind": "run",
+  "compileId": "9",
+  "graphPath": "events/contract.yssbi-event",
+  "incidentId": "contract-incident",
+  "metadata": {
+    "droppedSpanCount": "0",
+    "estimatedBytes": "9007199254740999",
+    "provenanceScopes": [
+      {
+        "compileId": "9",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "c60af510a508bb69775410ade5fcc5bf5da8662176def016086210afbe9d0e94",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        }
+      }
+    ],
+    "truncated": false
+  },
+  "runId": "9007199254740997",
+  "selectionDigest": "contract-selection",
+  "spans": [
+    {
+      "activationId": null,
+      "attemptId": null,
+      "correlation": {
+        "compileId": "9",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "c60af510a508bb69775410ade5fcc5bf5da8662176def016086210afbe9d0e94",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740997",
+        "selectionDigest": "contract-selection"
+      },
+      "finishedAt": "9007199254740998",
+      "kind": "run",
+      "operationId": null,
+      "outcome": "success",
+      "parentSpanId": null,
+      "runId": "9007199254740997",
+      "spanId": "9007199254740993",
+      "startedAt": "9007199254740993"
+    },
+    {
+      "activationId": null,
+      "attemptId": null,
+      "correlation": {
+        "compileId": "9",
+        "graphPath": "events/contract.yssbi-event",
+        "graphRevision": "7",
+        "nodeId": null,
+        "nodeTypeId": null,
+        "parentCall": null,
+        "projectSessionId": "contract-session",
+        "registryFingerprint": "c60af510a508bb69775410ade5fcc5bf5da8662176def016086210afbe9d0e94",
+        "resourceVersions": {
+          "databases/contract-database": "13",
+          "functions/contract-function": "11"
+        },
+        "runId": "9007199254740997",
+        "selectionDigest": "contract-selection"
+      },
+      "finishedAt": "9007199254740996",
+      "kind": "cleanup",
+      "operationId": null,
+      "outcome": {
+        "cleanup": {
+          "errorCount": "9007199254740997",
+          "panicking": true
+        }
+      },
+      "parentSpanId": "9007199254740993",
+      "runId": "9007199254740997",
+      "spanId": "9007199254740994",
+      "startedAt": "9007199254740995"
+    }
+  ]
+}

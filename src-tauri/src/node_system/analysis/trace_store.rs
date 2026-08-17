@@ -1,835 +1,538 @@
+use super::trace_bundle::{
+    build_compilation_bundle, build_run_bundle, estimate_run_bundle, estimate_span,
+    is_top_level_run_root,
+};
 use super::{
-    RunId, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanOutcome, SpanSpec, TraceClock, TraceSink,
-    TraceSpan,
+    RunId, RunTraceBundle, SYSTEM_TRACE_CLOCK, SpanGuard, SpanId, SpanKind, SpanSpec, TraceBundle,
+    TraceClock, TraceSink, TraceSpan,
 };
 use crate::node_system::document::GraphResourcePath;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::sync::{Arc, Mutex};
 
-pub const DEFAULT_PROJECT_TRACE_CAPACITY: usize = 4096;
+pub const DEFAULT_COMPLETED_RUN_TRACE_LIMIT: usize = 32;
+pub const DEFAULT_PROJECT_TRACE_BYTE_LIMIT: usize = 2 * 1024 * 1024;
+pub const DEFAULT_ACTIVE_TRACE_SPAN_LIMIT: usize = 4_096;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TraceCapacityError;
+pub struct TraceRetentionPolicy {
+    max_completed_runs: usize,
+    max_estimated_bytes: usize,
+    max_active_spans_per_bundle: usize,
+}
 
-impl fmt::Display for TraceCapacityError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("trace capacity must be greater than zero")
+impl TraceRetentionPolicy {
+    pub fn new(
+        max_completed_runs: usize,
+        max_estimated_bytes: usize,
+    ) -> Result<Self, TraceRetentionError> {
+        let policy = Self {
+            max_completed_runs,
+            max_estimated_bytes,
+            max_active_spans_per_bundle: DEFAULT_ACTIVE_TRACE_SPAN_LIMIT,
+        };
+        policy.validate()?;
+        Ok(policy)
+    }
+
+    pub fn with_max_active_spans_per_bundle(
+        mut self,
+        max_active_spans_per_bundle: usize,
+    ) -> Result<Self, TraceRetentionError> {
+        self.max_active_spans_per_bundle = max_active_spans_per_bundle;
+        self.validate()?;
+        Ok(self)
+    }
+
+    pub const fn max_completed_runs(self) -> usize {
+        self.max_completed_runs
+    }
+
+    pub const fn max_estimated_bytes(self) -> usize {
+        self.max_estimated_bytes
+    }
+
+    pub const fn max_active_spans_per_bundle(self) -> usize {
+        self.max_active_spans_per_bundle
+    }
+
+    fn validate(self) -> Result<(), TraceRetentionError> {
+        if self.max_completed_runs == 0
+            || self.max_estimated_bytes == 0
+            || self.max_active_spans_per_bundle == 0
+        {
+            return Err(TraceRetentionError);
+        }
+        Ok(())
     }
 }
 
-impl std::error::Error for TraceCapacityError {}
+impl Default for TraceRetentionPolicy {
+    fn default() -> Self {
+        Self {
+            max_completed_runs: DEFAULT_COMPLETED_RUN_TRACE_LIMIT,
+            max_estimated_bytes: DEFAULT_PROJECT_TRACE_BYTE_LIMIT,
+            max_active_spans_per_bundle: DEFAULT_ACTIVE_TRACE_SPAN_LIMIT,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TraceRetentionError;
+
+impl fmt::Display for TraceRetentionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("trace retention and active span limits must be greater than zero")
+    }
+}
+
+impl std::error::Error for TraceRetentionError {}
+
+struct ActiveTrace {
+    root_span_id: SpanId,
+    spans: Vec<TraceSpan>,
+    child_counts: HashMap<SpanId, usize>,
+    estimated_span_bytes: u64,
+    dropped_span_count: u64,
+}
+
+impl ActiveTrace {
+    fn new(root_span_id: SpanId) -> Self {
+        Self {
+            root_span_id,
+            spans: Vec::new(),
+            child_counts: HashMap::new(),
+            estimated_span_bytes: 0,
+            dropped_span_count: 0,
+        }
+    }
+
+    fn record(&mut self, span: TraceSpan, policy: TraceRetentionPolicy) {
+        let span_bytes = estimate_span(&span);
+        let is_root = span.span_id == self.root_span_id;
+        let is_retained_parent = self.child_count(span.span_id) > 0;
+        if !is_root && !self.fits_with(span_bytes, policy) && !is_retained_parent {
+            self.dropped_span_count = self.dropped_span_count.saturating_add(1);
+            return;
+        }
+
+        self.insert(span, span_bytes);
+        self.enforce_budget(policy);
+    }
+
+    fn fits_with(&self, span_bytes: u64, policy: TraceRetentionPolicy) -> bool {
+        self.spans.len().saturating_add(1) <= policy.max_active_spans_per_bundle
+            && self.estimated_span_bytes.saturating_add(span_bytes)
+                <= policy.max_estimated_bytes as u64
+    }
+
+    fn insert(&mut self, span: TraceSpan, span_bytes: u64) {
+        if let Some(parent_span_id) = span.parent_span_id {
+            *self.child_counts.entry(parent_span_id).or_default() += 1;
+        }
+        self.estimated_span_bytes = self.estimated_span_bytes.saturating_add(span_bytes);
+        self.spans.push(span);
+    }
+
+    fn enforce_budget(&mut self, policy: TraceRetentionPolicy) {
+        while self.over_budget(policy) {
+            if let Some(index) = self.spans.iter().rposition(|span| {
+                span.span_id != self.root_span_id && self.child_count(span.span_id) == 0
+            }) {
+                self.remove_leaf(index);
+            } else if !self.remove_non_root_subtree() {
+                break;
+            }
+        }
+    }
+
+    fn over_budget(&self, policy: TraceRetentionPolicy) -> bool {
+        self.spans.len() > policy.max_active_spans_per_bundle
+            || self.estimated_span_bytes > policy.max_estimated_bytes as u64
+    }
+
+    fn child_count(&self, span_id: SpanId) -> usize {
+        self.child_counts.get(&span_id).copied().unwrap_or(0)
+    }
+
+    fn remove_leaf(&mut self, index: usize) {
+        let span = self.spans.swap_remove(index);
+        debug_assert_eq!(self.child_count(span.span_id), 0);
+        self.child_counts.remove(&span.span_id);
+        if let Some(parent_span_id) = span.parent_span_id {
+            let remove_parent_entry =
+                if let Some(count) = self.child_counts.get_mut(&parent_span_id) {
+                    *count = count.saturating_sub(1);
+                    *count == 0
+                } else {
+                    false
+                };
+            if remove_parent_entry {
+                self.child_counts.remove(&parent_span_id);
+            }
+        }
+        self.estimated_span_bytes = self
+            .estimated_span_bytes
+            .saturating_sub(estimate_span(&span));
+        self.dropped_span_count = self.dropped_span_count.saturating_add(1);
+    }
+
+    fn remove_non_root_subtree(&mut self) -> bool {
+        let Some(seed) = self
+            .spans
+            .iter()
+            .rev()
+            .find(|span| span.span_id != self.root_span_id)
+            .map(|span| span.span_id)
+        else {
+            return false;
+        };
+        let mut removed_ids = HashSet::from([seed]);
+        loop {
+            let previous_len = removed_ids.len();
+            for span in &self.spans {
+                if span
+                    .parent_span_id
+                    .is_some_and(|parent| removed_ids.contains(&parent))
+                {
+                    removed_ids.insert(span.span_id);
+                }
+            }
+            if removed_ids.len() == previous_len {
+                break;
+            }
+        }
+
+        let original = std::mem::take(&mut self.spans);
+        let mut removed_count = 0_u64;
+        self.spans = original
+            .into_iter()
+            .filter(|span| {
+                let retain = !removed_ids.contains(&span.span_id);
+                if !retain {
+                    removed_count = removed_count.saturating_add(1);
+                }
+                retain
+            })
+            .collect();
+        self.dropped_span_count = self.dropped_span_count.saturating_add(removed_count);
+        self.rebuild_accounting();
+        true
+    }
+
+    fn rebuild_accounting(&mut self) {
+        self.child_counts.clear();
+        self.estimated_span_bytes = 0;
+        for span in &self.spans {
+            if let Some(parent_span_id) = span.parent_span_id {
+                *self.child_counts.entry(parent_span_id).or_default() += 1;
+            }
+            self.estimated_span_bytes = self
+                .estimated_span_bytes
+                .saturating_add(estimate_span(span));
+        }
+    }
+
+    fn into_parts(self) -> (Vec<TraceSpan>, u64) {
+        (self.spans, self.dropped_span_count)
+    }
+}
+
+#[derive(Default)]
+struct TraceStoreState {
+    active_runs: HashMap<RunId, ActiveTrace>,
+    active_compilations: HashMap<SpanId, ActiveTrace>,
+    completed: VecDeque<TraceBundle>,
+    completed_run_count: usize,
+    estimated_bytes: u64,
+}
 
 pub struct BoundedTraceSink {
-    capacity: usize,
+    policy: TraceRetentionPolicy,
     clock: Arc<dyn TraceClock>,
-    spans: Mutex<VecDeque<TraceSpan>>,
+    state: Mutex<TraceStoreState>,
 }
 
 impl fmt::Debug for BoundedTraceSink {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
         formatter
             .debug_struct("BoundedTraceSink")
-            .field("capacity", &self.capacity)
-            .field(
-                "span_count",
-                &self.spans.lock().map(|spans| spans.len()).unwrap_or(0),
-            )
+            .field("policy", &self.policy)
+            .field("active_run_count", &state.active_runs.len())
+            .field("active_compilation_count", &state.active_compilations.len())
+            .field("completed_bundle_count", &state.completed.len())
+            .field("estimated_bytes", &state.estimated_bytes)
             .finish()
     }
 }
 
 impl BoundedTraceSink {
-    pub fn new(capacity: usize) -> Result<Self, TraceCapacityError> {
-        Self::with_clock(capacity, Arc::new(SYSTEM_TRACE_CLOCK))
+    pub fn new(policy: TraceRetentionPolicy) -> Result<Self, TraceRetentionError> {
+        Self::with_clock(policy, Arc::new(SYSTEM_TRACE_CLOCK))
     }
 
     pub fn with_clock(
-        capacity: usize,
+        policy: TraceRetentionPolicy,
         clock: Arc<dyn TraceClock>,
-    ) -> Result<Self, TraceCapacityError> {
-        if capacity == 0 {
-            return Err(TraceCapacityError);
-        }
+    ) -> Result<Self, TraceRetentionError> {
+        policy.validate()?;
         Ok(Self {
-            capacity,
+            policy,
             clock,
-            spans: Mutex::new(VecDeque::with_capacity(capacity)),
+            state: Mutex::new(TraceStoreState::default()),
         })
     }
 
-    pub fn spans(&self) -> Vec<TraceSpan> {
-        complete_snapshot(
-            self.spans
-                .lock()
-                .unwrap_or_else(|error| error.into_inner())
-                .iter()
-                .cloned()
-                .collect(),
-        )
+    pub fn bundles(&self) -> Vec<TraceBundle> {
+        self.state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .completed
+            .iter()
+            .cloned()
+            .collect()
     }
 
-    pub fn spans_for_graph(&self, graph_path: &GraphResourcePath) -> Vec<TraceSpan> {
-        complete_snapshot(
-            self.spans()
-                .into_iter()
-                .filter(|span| span.correlation.graph_path == *graph_path)
-                .collect(),
-        )
+    pub fn bundles_for_graph(&self, graph_path: &GraphResourcePath) -> Vec<TraceBundle> {
+        self.state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .completed
+            .iter()
+            .filter(|bundle| bundle.is_associated_with_graph(graph_path))
+            .cloned()
+            .collect()
     }
 
-    pub fn spans_for_run(&self, run_id: RunId) -> Vec<TraceSpan> {
-        complete_snapshot(
-            self.spans()
-                .into_iter()
-                .filter(|span| span.run_id == Some(run_id))
-                .collect(),
-        )
-    }
-}
-
-fn complete_snapshot(mut spans: Vec<TraceSpan>) -> Vec<TraceSpan> {
-    spans.sort_by_key(|span| (span.started_at, span.span_id));
-    let mut valid = vec![true; spans.len()];
-    let mut indices = HashMap::with_capacity(spans.len());
-    for (index, span) in spans.iter().enumerate() {
-        if let Some(previous) = indices.insert(span.span_id, index) {
-            valid[previous] = false;
-            valid[index] = false;
-        }
+    pub fn run_bundle(&self, run_id: RunId) -> Option<RunTraceBundle> {
+        self.state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .completed
+            .iter()
+            .find_map(|bundle| match bundle {
+                TraceBundle::Run(bundle) if bundle.run_id == run_id => Some(bundle.clone()),
+                TraceBundle::Compilation(_) | TraceBundle::Run(_) => None,
+            })
     }
 
-    let parents = spans
-        .iter()
-        .enumerate()
-        .map(|(index, span)| match span.parent_span_id {
-            None => None,
-            Some(parent_id) => match indices.get(&parent_id).copied() {
-                Some(parent) if parent != index => Some(parent),
-                _ => {
-                    valid[index] = false;
-                    None
-                }
-            },
-        })
-        .collect::<Vec<_>>();
-    for (index, parent) in parents.iter().copied().enumerate() {
-        if valid[index] && !compatible_parent(&spans[index], parent.map(|parent| &spans[parent])) {
-            valid[index] = false;
-        }
+    pub fn associate_run_incident(&self, run_id: RunId, incident_id: impl Into<Box<str>>) -> bool {
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        let Some(index) = state.completed.iter().position(
+            |bundle| matches!(bundle, TraceBundle::Run(bundle) if bundle.run_id == run_id),
+        ) else {
+            return false;
+        };
+        let previous_bytes = state.completed[index].metadata().estimated_bytes;
+        let new_bytes = {
+            let TraceBundle::Run(bundle) = &mut state.completed[index] else {
+                unreachable!("run bundle position was matched above")
+            };
+            bundle.incident_id = Some(incident_id.into());
+            bundle.metadata.estimated_bytes = estimate_run_bundle(bundle);
+            bundle.metadata.estimated_bytes
+        };
+        state.estimated_bytes = state
+            .estimated_bytes
+            .saturating_sub(previous_bytes)
+            .saturating_add(new_bytes);
+        enforce_retention(&mut state, self.policy);
+        true
     }
 
-    let mut colors = vec![0_u8; spans.len()];
-    for start in 0..spans.len() {
-        if !valid[start] || colors[start] != 0 {
-            continue;
-        }
-        let mut path = Vec::new();
-        let mut current = Some(start);
-        while let Some(index) = current.filter(|index| valid[*index] && colors[*index] == 0) {
-            colors[index] = 1;
-            path.push(index);
-            current = parents[index];
-        }
-        if let Some(cycle_start) = current.filter(|index| colors[*index] == 1)
-            && let Some(position) = path.iter().position(|index| *index == cycle_start)
-        {
-            for index in &path[position..] {
-                valid[*index] = false;
-            }
-        }
-        for index in path {
-            colors[index] = 2;
-        }
-    }
-
-    let mut children = vec![Vec::new(); spans.len()];
-    for (child, parent) in parents.iter().copied().enumerate() {
-        if let Some(parent) = parent {
-            children[parent].push(child);
-        }
-    }
-    let mut invalid = valid
-        .iter()
-        .enumerate()
-        .filter_map(|(index, valid)| (!valid).then_some(index))
-        .collect::<VecDeque<_>>();
-    while let Some(parent) = invalid.pop_front() {
-        for child in children[parent].iter().copied() {
-            if valid[child] {
-                valid[child] = false;
-                invalid.push_back(child);
-            }
-        }
-    }
-
-    spans
-        .into_iter()
-        .zip(valid)
-        .filter_map(|(span, valid)| valid.then_some(span))
-        .collect()
-}
-
-fn compatible_parent(span: &TraceSpan, parent: Option<&TraceSpan>) -> bool {
-    if !has_valid_kind_semantics(span) {
-        return false;
-    }
-    if parent.is_some_and(|parent| !same_lineage(span, parent)) {
-        return false;
-    }
-    if is_runtime_kind(span.kind) && parent.is_some_and(|parent| !interval_contains(parent, span)) {
-        return false;
-    }
-    match span.kind {
-        SpanKind::Snapshot => parent.is_none(),
-        SpanKind::Analysis | SpanKind::Lowering => {
-            parent.is_some_and(|parent| parent.kind == SpanKind::Snapshot)
-        }
-        SpanKind::Run => parent.is_none_or(|parent| parent.kind == SpanKind::Run),
-        SpanKind::ResourceAcquire
-        | SpanKind::ResultPublication
-        | SpanKind::Cleanup
-        | SpanKind::OperationAttempt => parent.is_some_and(|parent| parent.kind == SpanKind::Run),
-        SpanKind::AdapterIo => parent.is_some_and(|parent| {
-            parent.kind == SpanKind::OperationAttempt
-                && span.operation_id == parent.operation_id
-                && span.activation_id == parent.activation_id
-                && span.attempt_id == parent.attempt_id
-        }),
-    }
-}
-
-fn has_valid_kind_semantics(span: &TraceSpan) -> bool {
-    if span.finished_at < span.started_at || span.run_id != span.correlation.run_id {
-        return false;
-    }
-    match span.kind {
-        SpanKind::Snapshot | SpanKind::Analysis | SpanKind::Lowering => {
-            span.run_id.is_none()
-                && has_no_operation_identity(span)
-                && is_general_outcome(&span.outcome)
-        }
-        SpanKind::Run => {
-            span.run_id.is_some()
-                && has_no_operation_identity(span)
-                && is_general_outcome(&span.outcome)
-        }
-        SpanKind::ResourceAcquire | SpanKind::ResultPublication => {
-            span.run_id.is_some()
-                && has_no_operation_identity(span)
-                && is_phase_outcome(&span.outcome)
-        }
-        SpanKind::Cleanup => {
-            span.run_id.is_some()
-                && has_no_operation_identity(span)
-                && matches!(
-                    span.outcome,
-                    SpanOutcome::NotReached
-                        | SpanOutcome::Cleanup { .. }
-                        | SpanOutcome::InternalAborted
+    #[cfg(test)]
+    pub(super) fn active_run_stats(&self, run_id: RunId) -> Option<(usize, u64, u64)> {
+        self.state
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .active_runs
+            .get(&run_id)
+            .map(|active| {
+                (
+                    active.spans.len(),
+                    active.estimated_span_bytes,
+                    active.dropped_span_count,
                 )
-        }
-        SpanKind::OperationAttempt => {
-            span.run_id.is_some()
-                && has_operation_identity(span)
-                && (is_general_outcome(&span.outcome) || span.outcome == SpanOutcome::Retry)
-        }
-        SpanKind::AdapterIo => {
-            span.run_id.is_some()
-                && has_operation_identity(span)
-                && is_general_outcome(&span.outcome)
+            })
+    }
+
+    #[cfg(test)]
+    pub(super) fn active_bundle_counts(&self) -> (usize, usize) {
+        let state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        (state.active_runs.len(), state.active_compilations.len())
+    }
+
+    fn record_completed_span(&self, span: TraceSpan) {
+        let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+        match span.run_id {
+            Some(run_id) => {
+                let completes_run = {
+                    let Some(active) = state.active_runs.get_mut(&run_id) else {
+                        return;
+                    };
+                    let completes_run =
+                        active.root_span_id == span.span_id && is_top_level_run_root(&span);
+                    active.record(span, self.policy);
+                    completes_run
+                };
+                if !completes_run {
+                    return;
+                }
+                let active = state
+                    .active_runs
+                    .remove(&run_id)
+                    .expect("the completed run lifecycle was present above");
+                let (spans, dropped_span_count) = active.into_parts();
+                let span_count = spans.len();
+                if let Some(bundle) = build_run_bundle(
+                    run_id,
+                    spans,
+                    dropped_span_count,
+                    self.policy.max_estimated_bytes as u64,
+                ) {
+                    retain_bundle(&mut state, TraceBundle::Run(bundle), self.policy);
+                } else {
+                    tracing::error!(
+                        target: "yssbi::execution_trace",
+                        trace_bundle_kind = "run",
+                        run_id = run_id.get(),
+                        span_count,
+                        dropped_span_count,
+                        "Execution trace bundle failed commit validation"
+                    );
+                }
+            }
+            None => {
+                let completes_compilation =
+                    span.kind == SpanKind::Snapshot && span.parent_span_id.is_none();
+                let root_span_id = if completes_compilation {
+                    span.span_id
+                } else {
+                    let Some(parent_span_id) = span.parent_span_id else {
+                        return;
+                    };
+                    parent_span_id
+                };
+                let compile_id = span.correlation.compile_id;
+                {
+                    let Some(active) = state.active_compilations.get_mut(&root_span_id) else {
+                        return;
+                    };
+                    active.record(span, self.policy);
+                }
+                if !completes_compilation {
+                    return;
+                }
+                let active = state
+                    .active_compilations
+                    .remove(&root_span_id)
+                    .expect("the completed compilation lifecycle was present above");
+                let (spans, dropped_span_count) = active.into_parts();
+                let span_count = spans.len();
+                if let Some(bundle) = build_compilation_bundle(
+                    compile_id,
+                    spans,
+                    dropped_span_count,
+                    self.policy.max_estimated_bytes as u64,
+                ) {
+                    retain_bundle(&mut state, TraceBundle::Compilation(bundle), self.policy);
+                } else {
+                    tracing::error!(
+                        target: "yssbi::execution_trace",
+                        trace_bundle_kind = "compilation",
+                        compile_id = compile_id.get(),
+                        root_span_id = root_span_id.get(),
+                        span_count,
+                        dropped_span_count,
+                        "Execution trace bundle failed commit validation"
+                    );
+                }
+            }
         }
     }
-}
-
-fn has_operation_identity(span: &TraceSpan) -> bool {
-    span.operation_id.is_some() && span.activation_id.is_some() && span.attempt_id.is_some()
-}
-
-fn is_general_outcome(outcome: &SpanOutcome) -> bool {
-    matches!(
-        outcome,
-        SpanOutcome::Success
-            | SpanOutcome::Error
-            | SpanOutcome::Cancellation
-            | SpanOutcome::Timeout
-            | SpanOutcome::InternalAborted
-    )
-}
-
-fn is_phase_outcome(outcome: &SpanOutcome) -> bool {
-    is_general_outcome(outcome) || *outcome == SpanOutcome::NotReached
-}
-
-fn is_runtime_kind(kind: SpanKind) -> bool {
-    !matches!(
-        kind,
-        SpanKind::Snapshot | SpanKind::Analysis | SpanKind::Lowering
-    )
-}
-
-fn interval_contains(parent: &TraceSpan, child: &TraceSpan) -> bool {
-    child.started_at >= parent.started_at && child.finished_at <= parent.finished_at
-}
-
-fn has_no_operation_identity(span: &TraceSpan) -> bool {
-    span.operation_id.is_none() && span.activation_id.is_none() && span.attempt_id.is_none()
-}
-
-fn same_lineage(span: &TraceSpan, parent: &TraceSpan) -> bool {
-    span.run_id == parent.run_id
-        && span.correlation.project_session_id == parent.correlation.project_session_id
-        && span.correlation.graph_path == parent.correlation.graph_path
-        && span.correlation.graph_revision == parent.correlation.graph_revision
-        && span.correlation.registry_fingerprint == parent.correlation.registry_fingerprint
-        && span.correlation.compile_id == parent.correlation.compile_id
 }
 
 impl Default for BoundedTraceSink {
     fn default() -> Self {
-        Self::new(DEFAULT_PROJECT_TRACE_CAPACITY).expect("default trace capacity is non-zero")
+        Self::new(TraceRetentionPolicy::default())
+            .expect("default trace retention limits are non-zero")
     }
 }
 
 impl TraceSink for BoundedTraceSink {
     fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
-        SpanGuard::new(self, spec, self.clock.as_ref())
+        let run_root = if spec.kind == SpanKind::Run
+            && spec.parent_span_id.is_none()
+            && spec.correlation.parent_call.is_none()
+        {
+            spec.run_id
+        } else {
+            None
+        };
+        let compilation_root = spec.run_id.is_none()
+            && spec.kind == SpanKind::Snapshot
+            && spec.parent_span_id.is_none();
+        let guard = SpanGuard::new(self, spec, self.clock.as_ref());
+        if run_root.is_some() || compilation_root {
+            let root_span_id = guard.span_id();
+            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
+            if let Some(run_id) = run_root {
+                state
+                    .active_runs
+                    .entry(run_id)
+                    .or_insert_with(|| ActiveTrace::new(root_span_id));
+            } else {
+                state
+                    .active_compilations
+                    .insert(root_span_id, ActiveTrace::new(root_span_id));
+            }
+        }
+        guard
     }
 
     fn complete_span(&self, span: TraceSpan) {
-        let mut spans = self.spans.lock().unwrap_or_else(|error| error.into_inner());
-        if spans.len() == self.capacity {
-            spans.pop_front();
-        }
-        spans.push_back(span);
+        self.record_completed_span(span);
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::node_system::analysis::{
-        CompilationBasis, CompileId, CompileProvenance, CorrelationContext, FakeTraceClock,
-        MonotonicTimestamp, ProjectSessionId, RunId, SpanKind, SpanOutcome,
-    };
-    use crate::node_system::document::{GraphResourcePath, GraphRevision};
-    use crate::node_system::plan::{AttemptId, OperationStableId};
-    use crate::node_system::registry::RegistryFingerprint;
-    use crate::node_system::runtime::ActivationId;
-    use std::collections::BTreeMap;
+fn retain_bundle(state: &mut TraceStoreState, bundle: TraceBundle, policy: TraceRetentionPolicy) {
+    state.estimated_bytes = state
+        .estimated_bytes
+        .saturating_add(bundle.metadata().estimated_bytes);
+    if matches!(bundle, TraceBundle::Run(_)) {
+        state.completed_run_count = state.completed_run_count.saturating_add(1);
+    }
+    state.completed.push_back(bundle);
+    enforce_retention(state, policy);
+}
 
-    fn correlation(graph_path: &str, run_id: Option<u64>) -> CorrelationContext {
-        let provenance = CompileProvenance {
-            project_session_id: ProjectSessionId::new("project-session"),
-            graph_path: GraphResourcePath(graph_path.into()),
-            basis: CompilationBasis {
-                graph_revision: GraphRevision::new(1),
-                registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
-                resource_versions: BTreeMap::new(),
-                resource_observations: BTreeMap::new(),
-            },
-            compile_id: CompileId::new(1),
+fn enforce_retention(state: &mut TraceStoreState, policy: TraceRetentionPolicy) {
+    while state.completed_run_count > policy.max_completed_runs {
+        let Some(index) = state
+            .completed
+            .iter()
+            .position(|bundle| matches!(bundle, TraceBundle::Run(_)))
+        else {
+            break;
         };
-        match run_id {
-            Some(run_id) => CorrelationContext::compile(&provenance)
-                .for_run(RunId::try_new(run_id).unwrap(), None),
-            None => CorrelationContext::compile(&provenance),
+        if let Some(bundle) = state.completed.remove(index) {
+            remove_retained_bundle(state, &bundle);
         }
     }
-
-    fn completed_span(
-        span_id: u64,
-        parent_span_id: Option<u64>,
-        graph_path: &str,
-        run_id: Option<u64>,
-        kind: SpanKind,
-    ) -> TraceSpan {
-        let run_id = run_id.map(RunId::new);
-        TraceSpan {
-            span_id: crate::node_system::analysis::SpanId::new(span_id).unwrap(),
-            parent_span_id: parent_span_id
-                .map(|id| crate::node_system::analysis::SpanId::new(id).unwrap()),
-            run_id,
-            operation_id: None,
-            activation_id: None,
-            attempt_id: None,
-            kind,
-            started_at: MonotonicTimestamp::new(1).unwrap(),
-            finished_at: MonotonicTimestamp::new(1_000_000).unwrap(),
-            outcome: SpanOutcome::Success,
-            correlation: correlation(graph_path, run_id.map(RunId::get)),
+    while state.estimated_bytes > policy.max_estimated_bytes as u64 && state.completed.len() > 1 {
+        if let Some(bundle) = state.completed.pop_front() {
+            remove_retained_bundle(state, &bundle);
         }
     }
+}
 
-    fn finish(
-        sink: &BoundedTraceSink,
-        graph_path: &str,
-        run_id: Option<u64>,
-        parent_span_id: Option<crate::node_system::analysis::SpanId>,
-    ) -> crate::node_system::analysis::SpanId {
-        let run_id = run_id.map(|id| RunId::try_new(id).unwrap());
-        let mut guard = sink.start_span(SpanSpec {
-            parent_span_id,
-            run_id,
-            operation_id: None,
-            activation_id: None,
-            attempt_id: None,
-            kind: SpanKind::Run,
-            correlation: correlation(graph_path, run_id.map(RunId::get)),
-        });
-        let span_id = guard.span_id();
-        guard.finish(SpanOutcome::Success);
-        span_id
-    }
-
-    #[test]
-    fn trace_span_store_rejects_zero_capacity() {
-        assert!(BoundedTraceSink::new(0).is_err());
-    }
-
-    #[test]
-    fn trace_span_store_retains_only_complete_spans() {
-        let clock = Arc::new(FakeTraceClock::new(MonotonicTimestamp::new(1).unwrap()));
-        let sink = BoundedTraceSink::with_clock(2, clock).unwrap();
-        let parent = finish(&sink, "events/one", Some(1), None);
-        finish(&sink, "events/one", Some(1), Some(parent));
-        finish(&sink, "events/two", Some(2), None);
-
-        assert_eq!(sink.spans().len(), 1);
-        assert_eq!(
-            sink.spans()[0].correlation.graph_path.0.as_ref(),
-            "events/two"
-        );
-    }
-
-    #[test]
-    fn trace_span_store_removes_self_and_multi_span_cycles_with_descendants() {
-        let sink = BoundedTraceSink::new(16).unwrap();
-        for span in [
-            completed_span(1, Some(1), "events/cycles", Some(7), SpanKind::Run),
-            completed_span(2, Some(3), "events/cycles", Some(7), SpanKind::Run),
-            completed_span(3, Some(2), "events/cycles", Some(7), SpanKind::Run),
-            completed_span(4, Some(6), "events/cycles", Some(7), SpanKind::Run),
-            completed_span(5, Some(4), "events/cycles", Some(7), SpanKind::Run),
-            completed_span(6, Some(5), "events/cycles", Some(7), SpanKind::Run),
-            completed_span(7, Some(4), "events/cycles", Some(7), SpanKind::Run),
-            completed_span(8, None, "events/cycles", Some(7), SpanKind::Run),
-        ] {
-            sink.complete_span(span);
-        }
-
-        let spans = sink.spans();
-        assert_eq!(spans.len(), 1);
-        assert_eq!(spans[0].span_id.get(), 8);
-    }
-
-    #[test]
-    fn trace_span_store_removes_incompatible_lineage_and_keeps_compiler_hierarchy() {
-        let sink = BoundedTraceSink::new(10).unwrap();
-        for span in [
-            completed_span(10, None, "events/main", Some(10), SpanKind::Run),
-            completed_span(11, Some(10), "events/main", Some(11), SpanKind::Run),
-            completed_span(12, Some(10), "events/other", Some(10), SpanKind::Run),
-            {
-                let mut cross_project =
-                    completed_span(13, Some(10), "events/main", Some(10), SpanKind::Run);
-                cross_project.correlation.project_session_id =
-                    ProjectSessionId::new("other-project-session");
-                cross_project
-            },
-            completed_span(20, None, "events/compiler", None, SpanKind::Snapshot),
-            completed_span(21, Some(20), "events/compiler", None, SpanKind::Analysis),
-        ] {
-            sink.complete_span(span);
-        }
-
-        let spans = sink.spans();
-        assert_eq!(
-            spans
-                .iter()
-                .map(|span| span.span_id.get())
-                .collect::<Vec<_>>(),
-            vec![10, 20, 21]
-        );
-    }
-
-    #[test]
-    fn trace_span_store_enforces_operation_and_adapter_parent_identity() {
-        let sink = BoundedTraceSink::new(8).unwrap();
-        let operation_id = OperationStableId::new("trace.operation").unwrap();
-        let activation_id = ActivationId::next().unwrap();
-        let attempt_id = AttemptId::initial();
-        let run = completed_span(30, None, "events/operation", Some(30), SpanKind::Run);
-        let mut operation = completed_span(
-            31,
-            Some(30),
-            "events/operation",
-            Some(30),
-            SpanKind::OperationAttempt,
-        );
-        operation.operation_id = Some(operation_id.clone());
-        operation.activation_id = Some(activation_id);
-        operation.attempt_id = Some(attempt_id);
-        let mut adapter = completed_span(
-            32,
-            Some(31),
-            "events/operation",
-            Some(30),
-            SpanKind::AdapterIo,
-        );
-        adapter.operation_id = Some(operation_id.clone());
-        adapter.activation_id = Some(activation_id);
-        adapter.attempt_id = Some(attempt_id);
-        let mut wrong_parent = adapter.clone();
-        wrong_parent.span_id = crate::node_system::analysis::SpanId::new(33).unwrap();
-        wrong_parent.parent_span_id = Some(run.span_id);
-        let mut wrong_attempt = adapter.clone();
-        wrong_attempt.span_id = crate::node_system::analysis::SpanId::new(34).unwrap();
-        wrong_attempt.attempt_id = Some(AttemptId::new(2));
-        for span in [run, operation, adapter, wrong_parent, wrong_attempt] {
-            sink.complete_span(span);
-        }
-
-        assert_eq!(
-            sink.spans()
-                .iter()
-                .map(|span| span.span_id.get())
-                .collect::<Vec<_>>(),
-            vec![30, 31, 32]
-        );
-    }
-
-    #[test]
-    fn trace_span_store_enforces_kind_outcome_run_and_runtime_interval_semantics() {
-        let operation_id = OperationStableId::new("trace.semantic.operation").unwrap();
-        let activation_id = ActivationId::next().unwrap();
-        let attempt_id = AttemptId::initial();
-        let run = completed_span(100, None, "events/semantic", Some(50), SpanKind::Run);
-        let mut attempt = completed_span(
-            101,
-            Some(100),
-            "events/semantic",
-            Some(50),
-            SpanKind::OperationAttempt,
-        );
-        attempt.operation_id = Some(operation_id.clone());
-        attempt.activation_id = Some(activation_id);
-        attempt.attempt_id = Some(attempt_id);
-        attempt.outcome = SpanOutcome::Retry;
-        attempt.started_at = MonotonicTimestamp::new(10).unwrap();
-        attempt.finished_at = MonotonicTimestamp::new(900_000).unwrap();
-        let mut adapter = completed_span(
-            102,
-            Some(101),
-            "events/semantic",
-            Some(50),
-            SpanKind::AdapterIo,
-        );
-        adapter.operation_id = Some(operation_id);
-        adapter.activation_id = Some(activation_id);
-        adapter.attempt_id = Some(attempt_id);
-        adapter.outcome = SpanOutcome::InternalAborted;
-        adapter.started_at = MonotonicTimestamp::new(20).unwrap();
-        adapter.finished_at = MonotonicTimestamp::new(800_000).unwrap();
-        let mut cleanup = completed_span(
-            103,
-            Some(100),
-            "events/semantic",
-            Some(50),
-            SpanKind::Cleanup,
-        );
-        cleanup.outcome = SpanOutcome::Cleanup {
-            error_count: 0,
-            panicking: false,
-        };
-        for span in [
-            run.clone(),
-            attempt.clone(),
-            adapter.clone(),
-            cleanup.clone(),
-        ] {
-            let sink = BoundedTraceSink::new(8).unwrap();
-            sink.complete_span(run.clone());
-            if span.span_id != run.span_id {
-                if span.parent_span_id == Some(attempt.span_id) {
-                    sink.complete_span(attempt.clone());
-                }
-                sink.complete_span(span.clone());
-            }
-            assert!(
-                sink.spans()
-                    .iter()
-                    .any(|retained| retained.span_id == span.span_id)
-            );
-        }
-
-        let malformed = [
-            completed_span(110, None, "events/semantic", Some(50), SpanKind::Snapshot),
-            completed_span(111, None, "events/semantic", None, SpanKind::Run),
-            {
-                let mut span = run.clone();
-                span.span_id = crate::node_system::analysis::SpanId::new(112).unwrap();
-                span.outcome = SpanOutcome::NotReached;
-                span
-            },
-            {
-                let mut span = cleanup.clone();
-                span.span_id = crate::node_system::analysis::SpanId::new(113).unwrap();
-                span.outcome = SpanOutcome::Success;
-                span
-            },
-            {
-                let mut span = cleanup.clone();
-                span.span_id = crate::node_system::analysis::SpanId::new(118).unwrap();
-                span.outcome = SpanOutcome::Error;
-                span
-            },
-            {
-                let mut span = attempt.clone();
-                span.span_id = crate::node_system::analysis::SpanId::new(114).unwrap();
-                span.outcome = SpanOutcome::Cleanup {
-                    error_count: 0,
-                    panicking: false,
-                };
-                span
-            },
-            {
-                let mut span = adapter.clone();
-                span.span_id = crate::node_system::analysis::SpanId::new(115).unwrap();
-                span.parent_span_id = Some(attempt.span_id);
-                span.outcome = SpanOutcome::Retry;
-                span
-            },
-            {
-                let mut span = attempt.clone();
-                span.span_id = crate::node_system::analysis::SpanId::new(116).unwrap();
-                span.started_at = MonotonicTimestamp::new(0).unwrap();
-                span
-            },
-            {
-                let mut span = adapter.clone();
-                span.span_id = crate::node_system::analysis::SpanId::new(117).unwrap();
-                span.parent_span_id = Some(attempt.span_id);
-                span.finished_at = MonotonicTimestamp::new(950_000).unwrap();
-                span
-            },
-        ];
-        for span in malformed {
-            let sink = BoundedTraceSink::new(8).unwrap();
-            if span.parent_span_id.is_some() {
-                sink.complete_span(run.clone());
-                if span.parent_span_id == Some(attempt.span_id) {
-                    sink.complete_span(attempt.clone());
-                }
-            }
-            let invalid_id = span.span_id;
-            sink.complete_span(span);
-            assert!(
-                sink.spans()
-                    .iter()
-                    .all(|retained| retained.span_id != invalid_id)
-            );
-        }
-
-        let mut malformed_attempt = attempt.clone();
-        malformed_attempt.span_id = crate::node_system::analysis::SpanId::new(120).unwrap();
-        malformed_attempt.outcome = SpanOutcome::Cleanup {
-            error_count: 0,
-            panicking: false,
-        };
-        let mut descendant = adapter;
-        descendant.span_id = crate::node_system::analysis::SpanId::new(121).unwrap();
-        descendant.parent_span_id = Some(malformed_attempt.span_id);
-        let sink = BoundedTraceSink::new(8).unwrap();
-        for span in [run, malformed_attempt, descendant] {
-            sink.complete_span(span);
-        }
-        assert_eq!(
-            sink.spans()
-                .iter()
-                .map(|span| span.span_id.get())
-                .collect::<Vec<_>>(),
-            vec![100]
-        );
-    }
-
-    #[test]
-    fn trace_span_store_removes_every_reversed_interval_and_its_descendants() {
-        let reversed = |mut span: TraceSpan| {
-            span.started_at = MonotonicTimestamp::new(80).unwrap();
-            span.finished_at = MonotonicTimestamp::new(20).unwrap();
-            span
-        };
-
-        let sink = BoundedTraceSink::new(8).unwrap();
-        let reversed_run = reversed(completed_span(
-            200,
-            None,
-            "events/reversed-root",
-            Some(60),
-            SpanKind::Run,
-        ));
-        let mut cleanup = completed_span(
-            201,
-            Some(200),
-            "events/reversed-root",
-            Some(60),
-            SpanKind::Cleanup,
-        );
-        cleanup.outcome = SpanOutcome::Cleanup {
-            error_count: 0,
-            panicking: false,
-        };
-        for span in [reversed_run, cleanup] {
-            sink.complete_span(span);
-        }
-        assert!(sink.spans().is_empty());
-
-        let sink = BoundedTraceSink::new(8).unwrap();
-        let reversed_snapshot = reversed(completed_span(
-            210,
-            None,
-            "events/reversed-compiler-root",
-            None,
-            SpanKind::Snapshot,
-        ));
-        let analysis = completed_span(
-            211,
-            Some(210),
-            "events/reversed-compiler-root",
-            None,
-            SpanKind::Analysis,
-        );
-        for span in [reversed_snapshot, analysis] {
-            sink.complete_span(span);
-        }
-        assert!(sink.spans().is_empty());
-
-        let sink = BoundedTraceSink::new(8).unwrap();
-        let snapshot = completed_span(
-            220,
-            None,
-            "events/reversed-compiler-child",
-            None,
-            SpanKind::Snapshot,
-        );
-        let reversed_analysis = reversed(completed_span(
-            221,
-            Some(220),
-            "events/reversed-compiler-child",
-            None,
-            SpanKind::Analysis,
-        ));
-        for span in [snapshot, reversed_analysis] {
-            sink.complete_span(span);
-        }
-        assert_eq!(
-            sink.spans()
-                .iter()
-                .map(|span| span.span_id.get())
-                .collect::<Vec<_>>(),
-            vec![220]
-        );
-
-        let sink = BoundedTraceSink::new(8).unwrap();
-        let operation_id = OperationStableId::new("trace.reversed.operation").unwrap();
-        let activation_id = ActivationId::next().unwrap();
-        let attempt_id = AttemptId::initial();
-        let run = completed_span(230, None, "events/reversed-child", Some(61), SpanKind::Run);
-        let mut attempt = reversed(completed_span(
-            231,
-            Some(230),
-            "events/reversed-child",
-            Some(61),
-            SpanKind::OperationAttempt,
-        ));
-        attempt.operation_id = Some(operation_id.clone());
-        attempt.activation_id = Some(activation_id);
-        attempt.attempt_id = Some(attempt_id);
-        let mut adapter = completed_span(
-            232,
-            Some(231),
-            "events/reversed-child",
-            Some(61),
-            SpanKind::AdapterIo,
-        );
-        adapter.operation_id = Some(operation_id);
-        adapter.activation_id = Some(activation_id);
-        adapter.attempt_id = Some(attempt_id);
-        for span in [run, attempt, adapter] {
-            sink.complete_span(span);
-        }
-        assert_eq!(
-            sink.spans()
-                .iter()
-                .map(|span| span.span_id.get())
-                .collect::<Vec<_>>(),
-            vec![230]
-        );
-    }
-
-    #[test]
-    fn trace_span_store_retains_unexpected_cleanup_unwind_fallback() {
-        let sink = BoundedTraceSink::new(8).unwrap();
-        let run_id = RunId::new(70);
-        let mut run = sink.start_span(SpanSpec {
-            parent_span_id: None,
-            run_id: Some(run_id),
-            operation_id: None,
-            activation_id: None,
-            attempt_id: None,
-            kind: SpanKind::Run,
-            correlation: correlation("events/cleanup-drop", Some(70)),
-        });
-        let run_span_id = run.span_id();
-        let unwind = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _cleanup = sink.start_span(SpanSpec {
-                parent_span_id: Some(run_span_id),
-                run_id: Some(run_id),
-                operation_id: None,
-                activation_id: None,
-                attempt_id: None,
-                kind: SpanKind::Cleanup,
-                correlation: correlation("events/cleanup-drop", Some(70)),
-            });
-            panic!("unexpected cleanup unwind sentinel");
-        }));
-        assert!(unwind.is_err());
-        run.finish(SpanOutcome::Success);
-
-        let spans = sink.spans();
-        assert_eq!(spans.len(), 2);
-        assert!(spans.iter().any(|span| {
-            span.kind == SpanKind::Cleanup && span.outcome == SpanOutcome::InternalAborted
-        }));
-    }
-
-    #[test]
-    fn trace_span_store_accepts_equal_endpoints() {
-        let sink = BoundedTraceSink::new(4).unwrap();
-        let mut equal_run =
-            completed_span(240, None, "events/equal-runtime", Some(71), SpanKind::Run);
-        equal_run.started_at = MonotonicTimestamp::new(50).unwrap();
-        equal_run.finished_at = equal_run.started_at;
-        let mut equal_snapshot =
-            completed_span(241, None, "events/equal-compiler", None, SpanKind::Snapshot);
-        equal_snapshot.started_at = MonotonicTimestamp::new(50).unwrap();
-        equal_snapshot.finished_at = equal_snapshot.started_at;
-        for span in [equal_run, equal_snapshot] {
-            sink.complete_span(span);
-        }
-        assert_eq!(sink.spans().len(), 2);
-    }
-
-    #[test]
-    fn trace_span_store_orders_by_monotonic_start_then_span_id() {
-        let clock = Arc::new(FakeTraceClock::new(MonotonicTimestamp::new(5).unwrap()));
-        let sink = BoundedTraceSink::with_clock(4, clock).unwrap();
-        finish(&sink, "events/orders", Some(7), None);
-        finish(&sink, "events/orders", Some(7), None);
-
-        let spans = sink.spans_for_run(RunId::try_new(7).unwrap());
-        assert_eq!(spans.len(), 2);
-        assert!(spans[0].span_id < spans[1].span_id);
+fn remove_retained_bundle(state: &mut TraceStoreState, bundle: &TraceBundle) {
+    state.estimated_bytes = state
+        .estimated_bytes
+        .saturating_sub(bundle.metadata().estimated_bytes);
+    if matches!(bundle, TraceBundle::Run(_)) {
+        state.completed_run_count = state.completed_run_count.saturating_sub(1);
     }
 }
