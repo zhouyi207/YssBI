@@ -1,5 +1,6 @@
 import { i18n } from '@/app/i18n';
 import { logger } from '@/utils/appLogger';
+import { normalizeIpcError } from '@/services/ipc';
 import { createPersistedWindow } from './createPersistedWindow';
 import { createEphemeralWindowLabel } from './windowLabels';
 
@@ -13,10 +14,11 @@ export async function openBayesWindow(): Promise<void> {
       title: i18n.t('bayes.title'),
     });
   } catch (error) {
+    const ipcError = normalizeIpcError('open_bayes_window', error);
     logger.app.error(
-      `Failed to open Bayes window: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to open Bayes window code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
       'Window',
     );
-    logger.notify.error(i18n.t('bayes.failedOpenWindow'), "UI");
+    throw error;
   }
 }

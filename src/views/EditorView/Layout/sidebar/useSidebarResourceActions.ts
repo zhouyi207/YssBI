@@ -1,4 +1,3 @@
-import { logger } from "@/utils/appLogger";
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorSessionCommandsContext } from '@/features/application/editor';
@@ -85,16 +84,13 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
   }, []);
 
   const demoteVariable = useCallback(async (id: string) => {
-    if (!scopePath || !graphType) {
-      logger.notify.warn(t('sidebar.noActiveGraph'), "UI");
-      return;
-    }
+    if (!scopePath || !graphType) return;
     const scope =
       graphType === 'function'
         ? { type: 'function' as const, functionPath: scopePath }
         : { type: 'event' as const, eventPath: scopePath };
     await updateVariableAction(id, { scope });
-  }, [graphType, scopePath, t]);
+  }, [graphType, scopePath]);
 
   const renameDatabaseItem = useCallback((id: string, name: string) => {
     openInputDialog(t('contextMenu.dialog.renameDataTitle'), name, async (nextName) => {
@@ -146,6 +142,7 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     deleteVariableItem,
     promoteVariable,
     demoteVariable,
+    canDemoteVariable: Boolean(scopePath && graphType),
     renameDatabaseItem,
     deleteDatabaseItem,
     renameWorksheetItem,

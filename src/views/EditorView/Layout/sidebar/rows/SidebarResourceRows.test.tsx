@@ -87,7 +87,9 @@ function catalogState(
 ): LocalizedNodeCatalogState {
   return {
     status,
-    error: status === 'error' ? 'stale' : null,
+    error: status === 'error'
+      ? { code: 'catalog_response_stale', incidentId: null }
+      : null,
     catalog: {
       projectInstanceId: 'project-1',
       registryFingerprint: 'registry-1',
@@ -135,13 +137,16 @@ describe('resource sidebar rows', () => {
     ));
   }
 
-  function renderDatabase(resourcePath: string | null = databasePath) {
+  function renderDatabase(
+    resourcePath: string | null = databasePath,
+    data: unknown = {},
+  ) {
     act(() => root.render(
       <SidebarDataRow
         id="database-id"
         resourcePath={resourcePath ?? undefined}
         name="Sales"
-        data={{}}
+        data={data}
         onContextMenu={vi.fn()}
       />,
     ));
@@ -181,6 +186,19 @@ describe('resource sidebar rows', () => {
     });
     const dragData = input?.data as { template?: { descriptor?: unknown } };
     expect(dragData.template?.descriptor).toBe(databaseSource);
+  });
+
+  it('shows the localized load failure tooltip from machine state', () => {
+    renderDatabase(databasePath, { loadFailed: true });
+
+    expect(host.textContent).toContain('sidebar.dataLoadFailed');
+  });
+
+  it('does not treat a legacy raw load error as failure state', () => {
+    renderDatabase(databasePath, { loadError: 'sensitive backend failure' });
+
+    expect(host.textContent).not.toContain('sidebar.dataLoadFailed');
+    expect(host.textContent).not.toContain('sensitive backend failure');
   });
 
   it.each([

@@ -14,6 +14,7 @@ import {
 import { pinPreviewCacheKey, useExecutionStore } from '@/features/core/execution';
 import { ProjectService } from '@/services/project/projectService';
 import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
+import { normalizeIpcError } from '@/services/ipc';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import type { ExecutionDemandDto } from '@/shared/types/dto/executionDemand';
 import type { RunEvent } from '@/shared/types/dto/runEvent';
@@ -211,6 +212,34 @@ describe('requestPinPreview', () => {
     expect(after.graphs).toBe(before.graphs);
     expect(beginPinPreview).not.toHaveBeenCalled();
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('returns a typed IPC failure without exposing backend details', async () => {
+    const { outputKey, outputAddress } = installGraph();
+    vi.spyOn(ProjectService, 'executeGraphDocument').mockRejectedValue(normalizeIpcError(
+      'execute_graph_document',
+      {
+        code: 'preview_execution_failed',
+        details: { debug: 'sensitive preview backend detail' },
+        incidentId: 'incident-preview-42',
+      },
+    ));
+
+    const result = await requestPinPreview(eventGraphPath, outputKey);
+
+    expect(result).toEqual({
+      status: 'failed',
+      generation: 1,
+      error: {
+        code: 'preview_execution_failed',
+        incidentId: 'incident-preview-42',
+      },
+    });
+    const preview = useExecutionStore.getState().getGraph(eventGraphPath).pinPreviews.get(
+      pinPreviewCacheKey(eventGraphPath, outputAddress),
+    );
+    expect(preview).toMatchObject({ status: 'error', error: 'preview_execution_failed' });
+    expect(JSON.stringify({ result, preview })).not.toContain('sensitive preview backend detail');
   });
 
   it.each([

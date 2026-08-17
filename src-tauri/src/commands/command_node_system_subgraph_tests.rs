@@ -1,4 +1,4 @@
-use super::{export_graph_subgraph_from_state, mutation_conflict_to_app_error};
+use super::{export_graph_subgraph_from_state, mutation_conflict_to_command_error};
 use crate::node_system::catalog::build_builtin_node_system;
 use crate::node_system::document::{
     DocumentNode, GraphDocument, MutationConflict, NodeId, NodePosition, ParameterValues,
@@ -70,7 +70,7 @@ fn export_graph_subgraph_rejects_stale_project_identity_without_side_effects() {
     )
     .unwrap_err();
 
-    assert_eq!(error.code, "stale_project_lifecycle");
+    assert_eq!(error.code(), "stale_project_lifecycle");
     assert_eq!(fixture.serialized_authority(), before);
 }
 
@@ -81,9 +81,9 @@ fn export_graph_subgraph_maps_clipboard_conflicts_to_stable_public_codes() {
         MutationConflict::ReferencedResourceUnavailable("missing resource".into()),
     ] {
         let expected_code = error.code();
-        let app_error = mutation_conflict_to_app_error(error, "graph_revision_conflict");
-        assert_eq!(app_error.code, expected_code);
-        assert!(app_error.details.is_none());
+        let command_error = mutation_conflict_to_command_error(error, "graph_revision_conflict");
+        assert_eq!(command_error.code(), expected_code);
+        assert!(command_error.details().is_none());
     }
 }
 

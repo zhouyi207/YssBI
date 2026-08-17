@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '@/services/ipc';
 import type { EditorGraphProjectionDto } from '@/shared/types/dto/editorProjection';
 import { parseEditorGraphProjectionDto } from '@/shared/types/dto/editorProjectionParser';
 
@@ -9,7 +9,7 @@ export class GraphProjectionService {
     lifecycleToken: number,
     projectInstanceId: string,
   ): Promise<EditorGraphProjectionDto> {
-    const response: unknown = await invoke('load_project_graph', {
+    const response: unknown = await invokeCommand('load_project_graph', {
       graphPath,
       locale,
       lifecycleToken,
@@ -23,7 +23,7 @@ export class GraphProjectionService {
     graphPath: string,
     locale: string,
   ): Promise<EditorGraphProjectionDto> {
-    const response: unknown = await invoke('hydrate_editor_graph', {
+    const response: unknown = await invokeCommand('hydrate_editor_graph', {
       projectInstanceId,
       graphPath,
       locale,

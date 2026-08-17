@@ -1,5 +1,6 @@
-import { logger } from "@/utils/appLogger";
-import { useRef, useState } from 'react';
+import type { TFunction } from 'i18next';
+import { useId, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { setNodeParameters } from '@/features/application/editor/setNodeParameters';
@@ -7,10 +8,14 @@ import type {
   DiagnosticDto,
   ParameterEditorDto,
 } from '@/shared/types/dto/editorProjection';
+import { formatInlineUserError } from '@/features/application/userErrorSummary';
 import { DetailReadonlyField } from '../../shared/DetailForm';
 import { DetailFieldRow } from '../../shared/DetailFieldRow';
 import { detailInlineInputClass } from '../../shared/detailStyles';
-import { parseInlineNumber } from '../../../../Nodes/InlineParameterEditor';
+import {
+  inlineNumberErrorMessage,
+  parseInlineNumber,
+} from '../../../../Nodes/InlineParameterEditor';
 import {
   FilterPredicateEditor,
   ProjectColumnsEditor,
@@ -31,23 +36,16 @@ function projectedDraft(parameter: ParameterEditorDto): string {
     : String(parameter.value);
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 type FailedMutationOutcome =
   | { status: 'stale' }
   | { status: 'conflict' }
   | { status: 'rejected'; code: string };
 
-function mutationOutcomeError(outcome: FailedMutationOutcome): string {
-  if (outcome.status === 'stale') {
-    return 'The edit became stale; the latest value was restored';
-  }
-  if (outcome.status === 'conflict') {
-    return 'The edit conflicted with a newer value; the latest value was restored';
-  }
-  return `The edit was rejected (${outcome.code}); the latest value was restored`;
+function mutationOutcomeError(outcome: FailedMutationOutcome, t: TFunction): string {
+  if (outcome.status === 'stale') return t('notifications.parameter.stale');
+  if (outcome.status === 'conflict') return t('notifications.parameter.conflict');
+  return t('notifications.parameter.rejected', { code: outcome.code });
 }
 
 interface CommitCallbacks {
@@ -63,8 +61,10 @@ export function NodeParameterEditor({
   diagnostics,
   formatFallback,
 }: NodeParameterEditorProps) {
+  const { t } = useTranslation();
   const [pending, setPending] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const fieldErrorId = useId();
   const pendingRef = useRef(false);
   const errors = diagnostics
     .filter((diagnostic) => diagnostic.location.kind === 'parameter'
@@ -90,14 +90,18 @@ export function NodeParameterEditor({
         parameters: { [parameter.key]: value },
       });
       if (outcome.status !== 'applied' && outcome.status !== 'noop') {
-        throw new Error(mutationOutcomeError(outcome));
+        setLocalError(t('notifications.parameter.updateFailed', {
+          error: mutationOutcomeError(outcome, t),
+        }));
+        callbacks.onRejected?.();
+        return;
       }
       callbacks.onResolved?.();
     } catch (error) {
-      const message = errorMessage(error);
-      setLocalError(message);
+      setLocalError(t('notifications.parameter.updateFailed', {
+        error: formatInlineUserError(error, t),
+      }));
       callbacks.onRejected?.();
-      logger.notify.error(message, "UI");
     } finally {
       pendingRef.current = false;
       setPending(false);
@@ -110,6 +114,7 @@ export function NodeParameterEditor({
       <ProjectedOverrideEditor
         parameter={parameter}
         pending={pending}
+        errors={errors}
         onCommit={commit}
       />
     );
@@ -143,12 +148,17 @@ export function NodeParameterEditor({
   if (parameter.editor === 'toggle') {
     return (
       <DetailFieldRow label={parameter.display.title}>
-        <Switch
-          checked={parameter.value === true}
-          disabled={pending}
-          aria-label={parameter.display.title}
-          onCheckedChange={(checked) => void commit(checked)}
-        />
+        <div className="space-y-1">
+          <Switch
+            checked={parameter.value === true}
+            disabled={pending}
+            aria-label={parameter.display.title}
+            aria-invalid={errors.length > 0}
+            aria-describedby={errors.length > 0 ? fieldErrorId : undefined}
+            onCheckedChange={(checked) => void commit(checked)}
+          />
+          <ParameterErrorList id={fieldErrorId} errors={errors} />
+        </div>
       </DetailFieldRow>
     );
   }
@@ -157,6 +167,7 @@ export function NodeParameterEditor({
       <OrdinaryValueEditor
         parameter={parameter}
         pending={pending}
+        errors={errors}
         onCommit={commit}
       />
     );
@@ -168,8 +179,9 @@ export function NodeParameterEditor({
   );
 }
 
-function ProjectedOverrideEditor({ parameter, pending, onCommit }: OrdinaryValueEditorProps) {
+function ProjectedOverrideEditor({ parameter, pending, errors, onCommit }: OrdinaryValueEditorProps) {
   const inherited = parameter.inheritedValue;
+  const errorId = useId();
   const source = parameter.valueSource ?? (parameter.value == null ? 'project' : 'node');
   const effectiveValue = source === 'project' ? inherited : parameter.value;
   const setSource = (next: 'project' | 'node') => {
@@ -184,6 +196,8 @@ function ProjectedOverrideEditor({ parameter, pending, onCommit }: OrdinaryValue
           className={detailInlineInputClass}
           value={source}
           disabled={pending}
+          aria-invalid={errors.length > 0}
+          aria-describedby={errors.length > 0 ? errorId : undefined}
           onChange={(event) => setSource(event.target.value as 'project' | 'node')}
         >
           <option value="project">Inherit project setting</option>
@@ -201,14 +215,25 @@ function ProjectedOverrideEditor({ parameter, pending, onCommit }: OrdinaryValue
             className={detailInlineInputClass}
             value={String(parameter.value ?? inherited)}
             disabled={pending}
+            aria-invalid={errors.length > 0}
+            aria-describedby={errors.length > 0 ? errorId : undefined}
             onChange={(event) => onCommit(event.target.value)}
           >
             {parameter.options.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
         </DetailFieldRow>
       ) : (
-        <OrdinaryValueEditor parameter={parameter} pending={pending} onCommit={onCommit} />
+        <OrdinaryValueEditor
+          parameter={parameter}
+          pending={pending}
+          errors={errors}
+          errorId={errorId}
+          onCommit={onCommit}
+        />
       )}
+      {source === 'project' || parameter.options?.length
+        ? <ParameterErrorList id={errorId} errors={errors} />
+        : null}
     </div>
   );
 }
@@ -216,17 +241,24 @@ function ProjectedOverrideEditor({ parameter, pending, onCommit }: OrdinaryValue
 interface OrdinaryValueEditorProps {
   parameter: ParameterEditorDto;
   pending: boolean;
+  errors: readonly string[];
+  errorId?: string;
   onCommit(value: unknown, callbacks?: CommitCallbacks): void;
 }
 
-function OrdinaryValueEditor({ parameter, pending, onCommit }: OrdinaryValueEditorProps) {
+function OrdinaryValueEditor({ parameter, pending, errors, errorId: providedErrorId, onCommit }: OrdinaryValueEditorProps) {
+  const { t } = useTranslation();
+  const generatedErrorId = useId();
+  const errorId = providedErrorId ?? generatedErrorId;
   const [draft, setDraft] = useState(() => projectedDraft(parameter));
   const [draftProjection, setDraftProjection] = useState(parameter.value);
+  const [parseError, setParseError] = useState<string | null>(null);
   const projectedRef = useRef(parameter);
   projectedRef.current = parameter;
   if (!Object.is(draftProjection, parameter.value)) {
     setDraftProjection(parameter.value);
     setDraft(projectedDraft(parameter));
+    setParseError(null);
   }
 
   const reset = () => {
@@ -237,10 +269,11 @@ function OrdinaryValueEditor({ parameter, pending, onCommit }: OrdinaryValueEdit
     if (parameter.editor === 'number') {
       const parsed = parseInlineNumber(draft, parameter.valueType);
       if (!parsed.ok) {
-        logger.notify.error(parsed.message, "UI");
+        setParseError(inlineNumberErrorMessage(parsed.error, t));
         if (resetInvalid) reset();
         return;
       }
+      setParseError(null);
       submit(parsed.value);
       return;
     }
@@ -250,17 +283,22 @@ function OrdinaryValueEditor({ parameter, pending, onCommit }: OrdinaryValueEdit
     if (event.key === 'Escape') {
       event.preventDefault();
       reset();
+      setParseError(null);
     } else if (event.key === 'Enter' && !parameter.multiline) {
       event.preventDefault();
       commitDraft();
     }
   };
+  const visibleErrors = parseError ? [...errors, parseError] : errors;
   const sharedProps = {
     value: draft,
     disabled: pending,
     'aria-label': parameter.display.title,
+    'aria-invalid': visibleErrors.length > 0,
+    'aria-describedby': visibleErrors.length > 0 ? errorId : undefined,
     onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       setDraft(event.target.value);
+      setParseError(null);
     },
     onBlur: () => commitDraft(true),
     onKeyDown: handleKeyDown,
@@ -268,19 +306,31 @@ function OrdinaryValueEditor({ parameter, pending, onCommit }: OrdinaryValueEdit
 
   return (
     <DetailFieldRow label={parameter.display.title}>
-      {parameter.editor === 'text' && parameter.multiline ? (
-        <textarea
-          {...sharedProps}
-          className="min-h-20 w-full rounded-md border border-border bg-input/30 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
-        />
-      ) : (
-        <Input
-          {...sharedProps}
-          type="text"
-          inputMode={parameter.editor === 'number' ? 'decimal' : undefined}
-          className={detailInlineInputClass}
-        />
-      )}
+      <div className="space-y-1">
+        {parameter.editor === 'text' && parameter.multiline ? (
+          <textarea
+            {...sharedProps}
+            className="min-h-20 w-full rounded-md border border-border bg-input/30 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        ) : (
+          <Input
+            {...sharedProps}
+            type="text"
+            inputMode={parameter.editor === 'number' ? 'decimal' : undefined}
+            className={detailInlineInputClass}
+          />
+        )}
+        <ParameterErrorList id={errorId} errors={visibleErrors} />
+      </div>
     </DetailFieldRow>
+  );
+}
+
+function ParameterErrorList({ id, errors }: { id: string; errors: readonly string[] }) {
+  if (errors.length === 0) return null;
+  return (
+    <div id={id} role="alert" className="space-y-1 text-xs text-destructive">
+      {errors.map((error, index) => <p key={`${index}-${error}`}>{error}</p>)}
+    </div>
   );
 }

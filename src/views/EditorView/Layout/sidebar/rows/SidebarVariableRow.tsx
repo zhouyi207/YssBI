@@ -1,5 +1,5 @@
-import { logger } from "@/utils/appLogger";
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { VscSymbolVariable } from 'react-icons/vsc';
 import {
   buildSidebarDragData,
@@ -7,7 +7,6 @@ import {
 } from '@/features/application/sidebar';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { findResourceNodeSpawnTemplate } from '@/features/application/editor/canvasDrop';
-import { RESOURCE_CATALOG_REFRESH_MESSAGE } from '@/features/application/editor/editorMutationAvailability';
 import { focusDetail } from '@/features/core/editor/detail/detailFocusCommands';
 import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
 import type { DataType } from '@/shared/types/domain/dataType';
@@ -37,6 +36,7 @@ export const SidebarVariableRow = memo(function SidebarVariableRow({
   isSelected?: boolean;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
+  const { t } = useTranslation();
   const iconColor = isGlobal ? TYPE_ICON_COLORS.variableGlobal : TYPE_ICON_COLORS.variable;
   const { status, catalog, refresh } = useLocalizedNodeCatalog();
   const templateForPath = (path: string) => status === 'ready' && catalog
@@ -51,6 +51,7 @@ export const SidebarVariableRow = memo(function SidebarVariableRow({
   const dragData = template
     ? buildSidebarDragData(id, name, 'variable', template.descriptor)
     : null;
+  const resourceCatalogRefreshMessage = t('notifications.editor.resourceCatalogRefreshing');
   const handleDisabledDragAttempt = () => {
     if (resourcePath) {
       refresh();
@@ -62,14 +63,13 @@ export const SidebarVariableRow = memo(function SidebarVariableRow({
         refreshCatalog: refresh,
       });
     }
-    logger.notify.warn(RESOURCE_CATALOG_REFRESH_MESSAGE, "UI");
   };
 
   return (
     <SidebarListItem
       id={id}
       dragData={dragData}
-      dragDisabledReason={RESOURCE_CATALOG_REFRESH_MESSAGE}
+      dragDisabledReason={resourceCatalogRefreshMessage}
       onDisabledDragAttempt={handleDisabledDragAttempt}
       isSelected={isSelected}
       indentDepth={indentDepth}

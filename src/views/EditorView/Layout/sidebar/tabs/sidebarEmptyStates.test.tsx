@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LocalizedNodeCatalogState } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 
 const historyAvailability = vi.hoisted(() => ({
   activeTabId: null as string | null,
@@ -13,31 +14,42 @@ const historyAvailability = vi.hoisted(() => ({
 const draggableInputs = vi.hoisted(() => [] as Array<{ data: unknown; disabled?: boolean }>);
 
 const catalogState = vi.hoisted(() => ({
-  status: 'ready' as const,
-  error: null,
-  catalog: {
-    items: [
-      {
-        nodeTypeId: 'yssbi.numeric.add.int64',
-        title: 'Add',
-        description: null,
-        documentation: null,
-        categoryId: 'math',
-        iconId: 'math',
-        styleId: 'default',
-        aliases: [],
-        technicalTerms: [],
-        backendSearchText: ['add'],
-        resourceNames: [],
-        ports: [],
-        parameters: [],
-        creation: { kind: 'static' as const, nodeTypeId: 'yssbi.numeric.add.int64' },
-      },
-    ],
-  },
-
-  refresh: vi.fn(),
+  current: null as LocalizedNodeCatalogState | null,
 }));
+
+function readyCatalogState(): LocalizedNodeCatalogState {
+  return {
+    status: 'ready',
+    error: null,
+    catalog: {
+      projectInstanceId: 'project-1',
+      registryFingerprint: 'registry-1',
+      resourcePublicationRevision: 1,
+      locale: 'en-US',
+      categories: [],
+      items: [
+        {
+          nodeTypeId: 'yssbi.numeric.add.int64',
+          title: 'Add',
+          description: null,
+          documentation: null,
+          categoryId: 'math',
+          iconId: 'math',
+          styleId: 'default',
+          aliases: [],
+          technicalTerms: [],
+          backendSearchText: ['add'],
+          resourceNames: [],
+          ports: [],
+          parameters: [],
+          creation: { kind: 'static', nodeTypeId: 'yssbi.numeric.add.int64' },
+        },
+      ],
+    },
+    searchIndex: null,
+    refresh: vi.fn(),
+  };
+}
 
 vi.mock('@dnd-kit/core', () => ({
   useDraggable: (input: { data: unknown; disabled?: boolean }) => {
@@ -54,6 +66,8 @@ vi.mock('react-i18next', async (importOriginal) => ({
 
         'common.loading': 'Loading...',
         'common.error': 'Error',
+        'common.incidentId': 'Incident ID',
+        'nodeCatalog.loadError': 'Node catalog unavailable',
         'sidebar.noActiveGraph': 'No active graph open',
         'sidebar.noActiveGraphDescription': 'Open a graph to view commands',
         'common.undo': 'Undo',
@@ -67,7 +81,7 @@ vi.mock('@/features/application/editor', () => ({
 }));
 
 vi.mock('@/features/application/nodeCatalog/useLocalizedNodeCatalog', () => ({
-  useLocalizedNodeCatalog: () => catalogState,
+  useLocalizedNodeCatalog: () => catalogState.current,
 }));
 
 import { SidebarCommandsTab } from './SidebarCommandsTab';
@@ -81,6 +95,7 @@ describe('Sidebar tab-level empty states', () => {
 
   beforeEach(() => {
     draggableInputs.length = 0;
+    catalogState.current = readyCatalogState();
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -109,7 +124,26 @@ describe('Sidebar tab-level empty states', () => {
       },
     });
     const dragData = draggableInputs[0]?.data as { template?: { descriptor?: unknown } };
-    expect(dragData.template?.descriptor).toBe(catalogState.catalog.items[0].creation);
+    expect(dragData.template?.descriptor).toBe(catalogState.current?.catalog?.items[0].creation);
+  });
+
+  it('renders localized generic Catalog text, code, and incident ID', () => {
+    catalogState.current = {
+      status: 'error',
+      error: {
+        code: 'catalog_backend_failed',
+        incidentId: 'incident-sidebar-catalog-42',
+      },
+      catalog: null,
+      searchIndex: null,
+      refresh: vi.fn(),
+    };
+
+    act(() => root.render(<SidebarNodesTab />));
+
+    expect(host.textContent).toContain('Node catalog unavailable');
+    expect(host.textContent).toContain('[catalog_backend_failed]');
+    expect(host.textContent).toContain('Incident ID: incident-sidebar-catalog-42');
   });
 
   it('uses the shared empty state when Commands has no active graph', () => {

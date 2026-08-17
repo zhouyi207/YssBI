@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '@/services/ipc';
 import type {
   FunctionDocumentPatchDto,
   MutationRequestDto,
@@ -12,7 +12,7 @@ export class FunctionMutationService {
     locale: string,
     request: MutationRequestDto<FunctionDocumentPatchDto>,
   ): Promise<ResourceMutationResultDto> {
-    return invoke<ResourceMutationResultDto>('update_function_signature', {
+    return invokeCommand<ResourceMutationResultDto>('update_function_signature', {
       projectInstanceId,
       functionPath,
       locale,

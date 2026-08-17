@@ -50,8 +50,7 @@ describe('resolveInspectableResult', () => {
     ['failed', {
       kind: 'failed',
       failure: {
-        code: 'executionFailed',
-        message: 'failed',
+        code: 'execution_failed',
         cause: { kind: 'execution' },
         upstreamResultIds: [],
       },

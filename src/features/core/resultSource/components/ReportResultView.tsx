@@ -3,6 +3,7 @@ import { ReportView } from '@/views/InfoView/ReportView';
 import type { ResultDescriptor } from '../types';
 import { reportResultValuePayload } from '../resultValuePayload';
 import { useResultValue } from '../useResultValue';
+import { ResultReadError } from './ResultReadError';
 
 export interface ReportResultViewProps {
   payload: ResultDescriptor;
@@ -24,7 +25,7 @@ export function ReportResultView({
   );
 
   if (error) {
-    return <p className="text-sm text-destructive">{error}</p>;
+    return <ResultReadError error={error} />;
   }
   if (preloadedData === undefined && loading) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;

@@ -4,6 +4,7 @@ import { buildGraphResourceMeta, resourceKey, useResourceStore } from '@/feature
 import { projectPublicationCoordinator } from './projectPublicationCoordinator';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import type { GraphMutationResultDto } from '@/shared/types/dto/editorMutation';
+import { normalizeIpcError } from '@/services/ipc';
 import {
   executeEditorMutation,
   resetEditorMutationCoordinator,
@@ -14,6 +15,10 @@ const replacementId = '00000000-0000-0000-0000-000000000699';
 const graphPath = 'functions/Main.yssbi-function';
 const operationId = '00000000-0000-0000-0000-000000000602';
 const locale = 'en-US';
+
+function backendError(code: string) {
+  return normalizeIpcError('mutate_graph_document', { code, details: null, incidentId: null });
+}
 
 function graphMutationResult(): GraphMutationResultDto {
   return {
@@ -253,10 +258,7 @@ describe('executeEditorMutation lifecycle identity', () => {
       },
       {
         createOperationId: () => operationId,
-        mutateGraph: vi.fn().mockRejectedValue({
-          code: 'stale_project_lifecycle',
-          message: 'project was replaced',
-        }),
+        mutateGraph: vi.fn().mockRejectedValue(backendError('stale_project_lifecycle')),
         hydrateGraph,
         updateHistoryStatus: applyStoreEffect,
       },
@@ -268,10 +270,9 @@ describe('executeEditorMutation lifecycle identity', () => {
   });
 
   it('returns a typed rejection for a recognized graph validation code without hydrating or replaying', async () => {
-    const mutateGraph = vi.fn().mockRejectedValue({
-      code: 'graph_connection_type_mismatch',
-      message: 'raw backend detail',
-    });
+    const mutateGraph = vi.fn().mockRejectedValue(
+      backendError('graph_connection_type_mismatch'),
+    );
     const hydrateGraph = vi.fn();
 
     await expect(executeEditorMutation(
@@ -296,10 +297,7 @@ describe('executeEditorMutation lifecycle identity', () => {
   });
 
   it('hydrates exactly once for a revision conflict and never replays the mutation', async () => {
-    const mutateGraph = vi.fn().mockRejectedValue({
-      code: 'graph_revision_conflict',
-      message: 'raw backend detail',
-    });
+    const mutateGraph = vi.fn().mockRejectedValue(backendError('graph_revision_conflict'));
     const hydrateGraph = vi.fn().mockResolvedValue(undefined);
 
     await expect(executeEditorMutation(

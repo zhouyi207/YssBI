@@ -14,8 +14,7 @@ export type ResultFailureCause =
   | { kind: 'upstream'; upstreamResultId: ResultId };
 
 export interface ResultFailure {
-  code: 'executionFailed' | 'upstreamFailed';
-  message: string;
+  code: 'execution_failed' | 'upstream_failed';
   cause: ResultFailureCause;
   upstreamResultIds: ResultId[];
 }

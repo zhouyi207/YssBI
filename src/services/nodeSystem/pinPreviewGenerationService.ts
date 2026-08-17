@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '@/services/ipc';
 
 export interface PinPreviewGenerationDto {
   generation: number;
@@ -21,7 +21,7 @@ export function parsePinPreviewGenerationDto(value: unknown): PinPreviewGenerati
 
 export class PinPreviewGenerationService {
   static async allocate(): Promise<number> {
-    const value = await invoke<unknown>('allocate_pin_preview_generation');
+    const value = await invokeCommand<unknown>('allocate_pin_preview_generation');
     return parsePinPreviewGenerationDto(value).generation;
   }
 }

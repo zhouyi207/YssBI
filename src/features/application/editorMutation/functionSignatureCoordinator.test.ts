@@ -12,6 +12,7 @@ import type {
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { GraphProjectionService } from '@/services/nodeSystem/graphProjectionService';
 import { ProjectService } from '@/services/project/projectService';
+import { normalizeIpcError } from '@/services/ipc';
 import { getPendingMutation, resetPendingMutations } from './pendingMutationRegistry';
 import {
   executeFunctionSignatureMutation,
@@ -27,6 +28,10 @@ import {
 const functionPath = 'functions/Compute.yssbi-function';
 const operationId = '00000000-0000-0000-0000-000000000501';
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';
+
+function backendError(code: string) {
+  return normalizeIpcError('update_function_signature', { code, details: null, incidentId: null });
+}
 
 const beforeSignature: FunctionSignatureDto = {
   parameters: [{ id: 'value', name: 'Value', type_name: 'Int64' }],
@@ -199,7 +204,7 @@ describe('executeFunctionSignatureMutation', () => {
         patch: { inputs: [] },
       },
       dependencies(vi.fn(async () => {
-        throw { code: 'stale_project_lifecycle', message: 'project was replaced' };
+        throw backendError('stale_project_lifecycle');
       })),
     )).resolves.toEqual({ status: 'stale' });
 
@@ -384,7 +389,7 @@ describe('executeFunctionSignatureMutation', () => {
         patch: { inputs: [] },
       },
       dependencies(vi.fn(async () => {
-        throw { code: 'function_revision_conflict', message: 'stale signature' };
+        throw backendError('function_revision_conflict');
       }), hydrateGraph, loadFunctionResources),
     );
 

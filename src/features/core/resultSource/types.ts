@@ -1,3 +1,5 @@
+import type { ErrorReference } from '@/services/ipc';
+
 export type {
   ResultPlotKind as PlotChart,
   ResultPresentation as Presentation,
@@ -16,5 +18,5 @@ export interface ResultPageState {
   rows: unknown[][];
   values: unknown[];
   loading: boolean;
-  error: string | null;
+  error: ErrorReference | null;
 }

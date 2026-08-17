@@ -1,4 +1,3 @@
-
 import type { TFunction } from 'i18next';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
@@ -16,13 +15,14 @@ import {
 } from '@/features/core/execution';
 import { ProjectService } from '@/services/project/projectService';
 import { PinPreviewGenerationService } from '@/services/nodeSystem/pinPreviewGenerationService';
+import { normalizeIpcError } from '@/services/ipc';
 import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
 import { resultRef } from '@/features/core/resultSource';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import type { GraphOutputRefDto } from '@/shared/types/dto/executionDemand';
 import type { PinData } from '@/shared/types/store/graph';
 import { inferGraphResourceKind } from '@/shared/types/domain/graphResourcePath';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
+
 import {
   observeGraphRunEvent,
   type GraphRunOutcomeState,
@@ -41,10 +41,15 @@ export type PinPreviewRejectionReason =
   | 'generation-exhausted'
   | 'stale-project-lifecycle';
 
+export interface PinPreviewFailure {
+  code: string;
+  incidentId: string | null;
+}
+
 export type PinPreviewRequestResult =
   | { status: 'completed'; generation: number; resultId: string }
   | { status: 'rejected'; reason: PinPreviewRejectionReason }
-  | { status: 'failed'; generation: number; error: string };
+  | { status: 'failed'; generation: number; error: PinPreviewFailure };
 
 type PreviewAuthority = {
   project: ProjectIdentitySnapshot;
@@ -207,9 +212,10 @@ export async function requestPinPreview(
       captured.output.port,
     );
     if (current?.generation !== generation) return staleSettlement();
-    const message = formatErrorMessage(error);
-    lease.fail(message);
-    return { status: 'failed', generation, error: message };
+    const ipcError = normalizeIpcError('execute_graph_document', error);
+    const failure = { code: ipcError.code, incidentId: ipcError.incidentId };
+    lease.fail(failure.code);
+    return { status: 'failed', generation, error: failure };
   }
 
   if (!lease.isCurrent()) return staleSettlement();
@@ -239,12 +245,12 @@ export async function requestPinPreview(
   if (observation.terminal === 'pending' || observation.terminal === 'completed') {
     return staleSettlement();
   }
-  const message = observation.terminal === 'cancelled'
-    ? 'preview run was cancelled'
-    : 'preview run failed';
-  lease.fail(message);
-  return { status: 'failed', generation, error: message };
-
+  const failure: PinPreviewFailure = {
+    code: observation.terminal === 'cancelled' ? 'run_cancelled' : 'run_failed',
+    incidentId: null,
+  };
+  lease.fail(failure.code);
+  return { status: 'failed', generation, error: failure };
 }
 
 export async function requestAndOpenPinPreview(

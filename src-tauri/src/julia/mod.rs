@@ -42,8 +42,6 @@ pub struct JuliaRuntimeStatus {
     pub version: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub install_dir: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -66,20 +64,17 @@ pub fn get_runtime_status() -> JuliaRuntimeStatus {
 
 /// Installs the latest Julia release for the system, then returns its status.
 pub fn install_latest_julia() -> Result<JuliaRuntimeStatus, String> {
-    if let status @ JuliaRuntimeStatus {
-        state: JuliaRuntimeState::Ready,
-        ..
-    } = get_runtime_status()
-    {
+    let (status, _) = status_and_failure_from_probe(inspect_system_julia());
+    if status.state == JuliaRuntimeState::Ready {
         return Ok(status);
     }
 
     install_juliaup()?;
-    let status = get_runtime_status();
+    let (status, failure) = status_and_failure_from_probe(inspect_system_julia());
     if status.state == JuliaRuntimeState::Ready {
         Ok(status)
     } else {
-        Err(status.message.unwrap_or_else(|| {
+        Err(failure.unwrap_or_else(|| {
             "Julia installation completed, but Julia could not be started.".to_string()
         }))
     }
@@ -200,35 +195,45 @@ fn run_command(command: &mut Command, operation: &str) -> Result<(), String> {
 }
 
 fn status_from_probe(probe: RuntimeProbe) -> JuliaRuntimeStatus {
+    status_and_failure_from_probe(probe).0
+}
+
+fn status_and_failure_from_probe(probe: RuntimeProbe) -> (JuliaRuntimeStatus, Option<String>) {
     match probe {
-        RuntimeProbe::Missing => JuliaRuntimeStatus {
-            state: JuliaRuntimeState::Missing,
-            version: None,
-            install_dir: None,
-            message: Some("Julia was not found on the system PATH.".to_string()),
-        },
+        RuntimeProbe::Missing => (
+            JuliaRuntimeStatus {
+                state: JuliaRuntimeState::Missing,
+                version: None,
+                install_dir: None,
+            },
+            Some("Julia was not found on the system PATH.".to_string()),
+        ),
         RuntimeProbe::Ready {
             executable,
             version,
-        } => JuliaRuntimeStatus {
-            state: JuliaRuntimeState::Ready,
-            version: Some(version),
-            install_dir: executable
-                .parent()
-                .map(|path| path.to_string_lossy().into_owned()),
-            message: None,
-        },
+        } => (
+            JuliaRuntimeStatus {
+                state: JuliaRuntimeState::Ready,
+                version: Some(version),
+                install_dir: executable
+                    .parent()
+                    .map(|path| path.to_string_lossy().into_owned()),
+            },
+            None,
+        ),
         RuntimeProbe::Invalid {
             executable,
             message,
-        } => JuliaRuntimeStatus {
-            state: JuliaRuntimeState::Invalid,
-            version: None,
-            install_dir: executable
-                .parent()
-                .map(|path| path.to_string_lossy().into_owned()),
-            message: Some(message),
-        },
+        } => (
+            JuliaRuntimeStatus {
+                state: JuliaRuntimeState::Invalid,
+                version: None,
+                install_dir: executable
+                    .parent()
+                    .map(|path| path.to_string_lossy().into_owned()),
+            },
+            Some(message),
+        ),
     }
 }
 

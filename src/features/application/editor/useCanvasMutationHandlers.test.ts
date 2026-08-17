@@ -13,7 +13,6 @@ vi.mock('@/features/application/editorMutation/registerGraphMutationPort', () =>
 vi.mock('@/utils/appLogger', () => ({
   logger: {
     graph: { warn: graphWarn },
-    notify: { error: () => undefined },
   },
 }));
 vi.mock('@/app/i18n', () => ({ i18n: { t: (key: string) => `localized:${key}` } }));

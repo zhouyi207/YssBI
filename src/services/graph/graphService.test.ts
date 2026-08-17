@@ -1,8 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { logger } from '@/utils/appLogger';
-
+import { IpcError } from '@/services/ipc';
 import { GraphService } from './graphService';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -12,45 +10,46 @@ vi.mock('@tauri-apps/api/core', () => ({
 describe('GraphService errors', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.spyOn(logger.graph, 'error').mockImplementation(() => undefined);
   });
 
-  it('logs a structured Tauri function-creation error message', async () => {
+  it('surfaces a structured function-creation rejection as IpcError', async () => {
     const error = {
       code: 'resource_revision_conflict',
-      message: 'resource revision conflict: function recreation changed',
+      details: { resourcePath: 'functions/New Function.yssbi-function' },
+      incidentId: 'incident-function-creation',
     };
     vi.mocked(invoke).mockRejectedValue(error);
 
-    await expect(GraphService.createFunction(
+    const caught = await GraphService.createFunction(
       'project-instance-current',
       'New Function',
       '00000000-0000-0000-0000-000000000122',
-    )).rejects.toBe(error);
+    ).catch((caughtError: unknown) => caughtError);
 
-    expect(logger.graph.error).toHaveBeenCalledWith(
-      `Error creating function: ${error.message}`,
-      'GraphService',
-    );
+    expect(caught).toBeInstanceOf(IpcError);
+    expect(caught).toMatchObject({
+      kind: 'backend',
+      command: 'create_function',
+      code: error.code,
+      details: error.details,
+      incidentId: error.incidentId,
+      cause: error,
+    });
   });
 
-  it('logs a structured Tauri graph-removal error message', async () => {
-    const error = {
-      code: 'resource_revision_conflict',
-      message: "resource revision conflict: revision for 'events/Main.yssbi-event' changed",
-    };
-    vi.mocked(invoke).mockRejectedValue(error);
+  it('does not catch-log-rethrow graph-removal failures', async () => {
+    const transportError = new Error('transport unavailable');
+    vi.mocked(invoke).mockRejectedValue(transportError);
 
     await expect(GraphService.removeGraph(
       'project-instance-current',
       'events/Main.yssbi-event',
       4,
       '00000000-0000-0000-0000-000000000123',
-    )).rejects.toBe(error);
-
-    expect(logger.graph.error).toHaveBeenCalledWith(
-      `Error removing graph: ${error.message}`,
-      'GraphService',
-    );
+    )).rejects.toMatchObject({
+      kind: 'transport',
+      command: 'remove_graph',
+      cause: transportError,
+    });
   });
 });

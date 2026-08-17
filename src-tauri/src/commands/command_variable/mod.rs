@@ -1,4 +1,4 @@
-use crate::error::AppError;
+use crate::error::CommandError;
 use crate::event::ResourceMutationResultDto;
 use crate::event::{Event, EventProject, emit_project_event};
 use crate::graph::value::{DataType, DataValue};
@@ -13,13 +13,12 @@ use tauri::{AppHandle, State};
 fn ensure_command_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
-) -> Result<(), AppError> {
-    let session = state.capture_project_session().map_err(AppError::from)?;
+) -> Result<(), CommandError> {
+    let session = state
+        .capture_project_session()
+        .map_err(CommandError::from)?;
     if &session.instance_id != project_instance_id {
-        return Err(AppError::new(
-            "stale_project_lifecycle",
-            "variable command project instance is stale",
-        ));
+        return Err(CommandError::expected("stale_project_lifecycle"));
     }
     Ok(())
 }
@@ -34,10 +33,10 @@ fn persist_global_variables_with_emitter(
     >,
     operation_id: OperationId,
     mut emit: impl FnMut(Event),
-) -> Result<ProjectSaveResultDto, AppError> {
+) -> Result<ProjectSaveResultDto, CommandError> {
     let result = state
         .persist_global_variables(&project_instance_id, expected_revisions, operation_id)
-        .map_err(AppError::from)?;
+        .map_err(CommandError::from)?;
     emit(Event::Project(EventProject::ProjectSaved {
         result: result.clone(),
     }));
@@ -70,7 +69,7 @@ fn create_variable_with_emitter(
     expected_collection_revision: u64,
     operation_id: OperationId,
     mut emit: impl FnMut(Event),
-) -> Result<VariableCommandResult, AppError> {
+) -> Result<VariableCommandResult, CommandError> {
     ensure_command_project(state, &project_instance_id)?;
     ensure_variable_data_type(&data_type)?;
     if matches!(scope, VariableScope::Global) {
@@ -85,7 +84,7 @@ fn create_variable_with_emitter(
                 expected_collection_revision,
                 operation_id,
             )
-            .map_err(AppError::from)?;
+            .map_err(CommandError::from)?;
         emit_global_result(&mut emit, &committed.result);
         return Ok(VariableCommandResult {
             variable_id: committed.variable.id.to_string(),
@@ -105,7 +104,7 @@ fn create_variable_with_emitter(
             expected_collection_revision,
             operation_id,
         )
-        .map_err(AppError::from)?;
+        .map_err(CommandError::from)?;
     emit_global_result(&mut emit, &committed.result);
     Ok(VariableCommandResult {
         variable_id: committed.variable.id.to_string(),
@@ -126,20 +125,15 @@ fn update_variable_with_emitter(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     mut emit: impl FnMut(Event),
-) -> Result<VariableCommandResult, AppError> {
+) -> Result<VariableCommandResult, CommandError> {
     ensure_command_project(state, &project_instance_id)?;
     if let Some(ref data_type) = data_type {
         ensure_variable_data_type(data_type)?;
     }
     let current = state
         .get_variable(&variable_id)
-        .map_err(AppError::from)?
-        .ok_or_else(|| {
-            AppError::new(
-                "variable_not_found",
-                format!("Variable '{variable_id}' not found"),
-            )
-        })?;
+        .map_err(CommandError::from)?
+        .ok_or_else(|| CommandError::expected("variable_not_found"))?;
     if matches!(current.scope, VariableScope::Global) {
         let committed = state
             .update_global_variable_transaction(
@@ -153,7 +147,7 @@ fn update_variable_with_emitter(
                 expected_revision,
                 operation_id,
             )
-            .map_err(AppError::from)?;
+            .map_err(CommandError::from)?;
         emit_global_result(&mut emit, &committed.result);
         return Ok(VariableCommandResult {
             variable_id: committed.variable.id.to_string(),
@@ -173,7 +167,7 @@ fn update_variable_with_emitter(
             expected_revision,
             operation_id,
         )
-        .map_err(AppError::from)?;
+        .map_err(CommandError::from)?;
     emit_global_result(&mut emit, &committed.result);
     Ok(VariableCommandResult {
         variable_id: committed.variable.id.to_string(),
@@ -189,17 +183,12 @@ fn delete_variable_with_emitter(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     mut emit: impl FnMut(Event),
-) -> Result<VariableCommandResult, AppError> {
+) -> Result<VariableCommandResult, CommandError> {
     ensure_command_project(state, &project_instance_id)?;
     let current = state
         .get_variable(&variable_id)
-        .map_err(AppError::from)?
-        .ok_or_else(|| {
-            AppError::new(
-                "variable_not_found",
-                format!("Variable '{variable_id}' not found"),
-            )
-        })?;
+        .map_err(CommandError::from)?
+        .ok_or_else(|| CommandError::expected("variable_not_found"))?;
     if matches!(current.scope, VariableScope::Global) {
         let committed = state
             .delete_global_variable_transaction(
@@ -208,7 +197,7 @@ fn delete_variable_with_emitter(
                 expected_revision,
                 operation_id,
             )
-            .map_err(AppError::from)?;
+            .map_err(CommandError::from)?;
         emit_global_result(&mut emit, &committed.result);
         return Ok(VariableCommandResult {
             variable_id: committed.variable.id.to_string(),
@@ -223,7 +212,7 @@ fn delete_variable_with_emitter(
             expected_revision,
             operation_id,
         )
-        .map_err(AppError::from)?;
+        .map_err(CommandError::from)?;
     emit_global_result(&mut emit, &committed.result);
     Ok(VariableCommandResult {
         variable_id: committed.variable.id.to_string(),
@@ -232,12 +221,9 @@ fn delete_variable_with_emitter(
     })
 }
 
-fn ensure_variable_data_type(data_type: &DataType) -> Result<(), AppError> {
+fn ensure_variable_data_type(data_type: &DataType) -> Result<(), CommandError> {
     if matches!(data_type, DataType::Any) {
-        return Err(AppError::new(
-            "invalid_variable_type",
-            "Variable data type cannot be Any",
-        ));
+        return Err(CommandError::expected("invalid_variable_type"));
     }
     Ok(())
 }
@@ -256,7 +242,7 @@ pub fn create_variable(
     project_instance_id: ProjectInstanceId,
     expected_collection_revision: u64,
     operation_id: OperationId,
-) -> Result<VariableCommandResult, AppError> {
+) -> Result<VariableCommandResult, CommandError> {
     create_variable_with_emitter(
         state.inner(),
         name,
@@ -279,17 +265,12 @@ pub fn get_variable(
     state: State<ProjectState>,
     variable_id: VariableId,
     project_instance_id: ProjectInstanceId,
-) -> Result<VariableInstanceDTO, AppError> {
+) -> Result<VariableInstanceDTO, CommandError> {
     ensure_command_project(state.inner(), &project_instance_id)?;
     let variable = state
         .get_variable(&variable_id)
-        .map_err(AppError::from)?
-        .ok_or_else(|| {
-            AppError::new(
-                "variable_not_found",
-                format!("Variable '{}' not found", variable_id),
-            )
-        })?;
+        .map_err(CommandError::from)?
+        .ok_or_else(|| CommandError::expected("variable_not_found"))?;
     Ok((&variable).into())
 }
 
@@ -307,7 +288,7 @@ pub fn update_variable(
     project_instance_id: ProjectInstanceId,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<VariableCommandResult, AppError> {
+) -> Result<VariableCommandResult, CommandError> {
     update_variable_with_emitter(
         state.inner(),
         variable_id,
@@ -332,7 +313,7 @@ pub fn delete_variable(
     project_instance_id: ProjectInstanceId,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<VariableCommandResult, AppError> {
+) -> Result<VariableCommandResult, CommandError> {
     delete_variable_with_emitter(
         state.inner(),
         variable_id,
@@ -412,7 +393,7 @@ mod tests {
         .unwrap_err();
         state.set_project_filesystem_fault(None);
 
-        assert_eq!(error.code, "transaction_prepare_failed", "{error:?}");
+        assert_eq!(error.code(), "transaction_prepare_failed", "{error:?}");
         assert_eq!(command_snapshot(&state), before);
         assert!(events.is_empty());
         assert!(!root.join(crate::project::GLOBAL_VARIABLES_FILE).exists());
@@ -462,7 +443,7 @@ mod tests {
         .unwrap_err();
         state.set_project_filesystem_fault(None);
 
-        assert_eq!(error.code, "transaction_commit_failed");
+        assert_eq!(error.code(), "transaction_commit_failed");
         assert_eq!(command_snapshot(&state), before);
         assert_eq!(
             std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
@@ -510,7 +491,7 @@ mod tests {
         .unwrap_err();
         state.set_project_filesystem_fault(None);
 
-        assert_eq!(error.code, "transaction_commit_failed");
+        assert_eq!(error.code(), "transaction_commit_failed");
         assert_eq!(command_snapshot(&state), before);
         assert_eq!(
             std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
@@ -643,7 +624,7 @@ mod tests {
             |event| events.push(event),
         )
         .unwrap_err();
-        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_project_lifecycle");
         assert_eq!(events.len(), 1);
         let _ = std::fs::remove_dir_all(root);
     }
@@ -707,7 +688,7 @@ mod tests {
             |event| events.push(event),
         )
         .unwrap_err();
-        assert_eq!(stale.code, "resource_revision_conflict");
+        assert_eq!(stale.code(), "resource_revision_conflict");
         assert_eq!(events.len(), 2);
 
         let deleted = delete_variable_with_emitter(
@@ -747,7 +728,7 @@ mod tests {
             |event| events.push(event),
         )
         .unwrap_err();
-        assert_eq!(stale_create.code, "resource_revision_conflict");
+        assert_eq!(stale_create.code(), "resource_revision_conflict");
         assert!(state.get_data().unwrap().variables.is_empty());
         assert!(events.is_empty());
 
@@ -786,7 +767,7 @@ mod tests {
             |event| events.push(event),
         )
         .unwrap_err();
-        assert_eq!(duplicate.code, "duplicate_operation");
+        assert_eq!(duplicate.code(), "duplicate_operation");
 
         let updated = update_variable_with_emitter(
             &state,
@@ -814,7 +795,7 @@ mod tests {
             |event| events.push(event),
         )
         .unwrap_err();
-        assert_eq!(stale.code, "resource_revision_conflict");
+        assert_eq!(stale.code(), "resource_revision_conflict");
         assert!(state.get_variable(&variable_id).unwrap().is_some());
         assert_eq!(events.len(), 2);
 

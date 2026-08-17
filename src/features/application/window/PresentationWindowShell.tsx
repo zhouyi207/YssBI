@@ -35,7 +35,13 @@ export function PresentationWindowShell({
   children,
 }: PresentationWindowShellProps) {
   const { t } = useTranslation();
-  const error = presentationWindowErrorMessage(state, errorMessages);
+  const error = presentationWindowErrorMessage(state, {
+    ...errorMessages,
+    pending: (completed, total) => t('resultState.pending', { completed, total: total ?? '?' }),
+    executionFailed: t('resultState.executionFailed'),
+    upstreamFailed: t('resultState.upstreamFailed'),
+    cancelled: t('resultState.cancelled'),
+  });
 
   const handleMinimize = async () => {
     try {

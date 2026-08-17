@@ -16,6 +16,7 @@ function sidebarActions() {
     deleteVariable: vi.fn(),
     promoteVariable: vi.fn(),
     demoteVariable: vi.fn(),
+    canDemoteVariable: true,
     openDatabase: vi.fn(),
     renameDatabaseItem: vi.fn(),
     deleteDatabaseItem: vi.fn(),
@@ -30,6 +31,18 @@ function sidebarActions() {
 }
 
 describe('buildSidebarContextMenuSections', () => {
+  it('disables demotion with a reason when no graph scope is active', () => {
+    const actions = { ...sidebarActions(), canDemoteVariable: false };
+    const sections = buildSidebarContextMenuSections({
+      x: 10,
+      y: 20,
+      target: { type: 'variable', id: 'variable-1', name: 'Counter', isGlobal: true },
+    }, actions, t);
+
+    expect(sections.flatMap((section) => section.items).find((item) => item.id === 'demote-to-local'))
+      .toMatchObject({ disabled: true, title: 'sidebar.noActiveGraph' });
+  });
+
   it('exposes authoritative worksheet rename with the opaque path and Rust-provided name', () => {
     const actions = sidebarActions();
     const sections = buildSidebarContextMenuSections({

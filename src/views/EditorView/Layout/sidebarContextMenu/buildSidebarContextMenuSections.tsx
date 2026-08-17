@@ -51,6 +51,8 @@ export function buildSidebarContextMenuSections(
           id: "demote-to-local",
           label: t("sidebar.demoteToLocal"),
           icon: <VscEdit size={12} />,
+          disabled: !actions.canDemoteVariable,
+          title: actions.canDemoteVariable ? undefined : t("sidebar.noActiveGraph"),
           onClick: () => void actions.demoteVariable(target.id),
         }]
       : [{

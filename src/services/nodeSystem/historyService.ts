@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '@/services/ipc';
 import type {
   HistoryMutationDto,
   HistoryStatusDto,
@@ -8,7 +8,7 @@ import type {
 
 export class HistoryService {
   static getStatus(projectInstanceId: string): Promise<HistoryStatusDto> {
-    return invoke<HistoryStatusDto>('get_project_history_status', { projectInstanceId });
+    return invokeCommand<HistoryStatusDto>('get_project_history_status', { projectInstanceId });
   }
 
   static undo(
@@ -16,7 +16,7 @@ export class HistoryService {
     locale: string,
     request: MutationRequestDto<HistoryMutationDto>,
   ): Promise<ResourceMutationResultDto> {
-    return invoke<ResourceMutationResultDto>('undo_graph_document', {
+    return invokeCommand<ResourceMutationResultDto>('undo_graph_document', {
       projectInstanceId,
       locale,
       request,
@@ -28,7 +28,7 @@ export class HistoryService {
     locale: string,
     request: MutationRequestDto<HistoryMutationDto>,
   ): Promise<ResourceMutationResultDto> {
-    return invoke<ResourceMutationResultDto>('redo_graph_document', {
+    return invokeCommand<ResourceMutationResultDto>('redo_graph_document', {
       projectInstanceId,
       locale,
       request,

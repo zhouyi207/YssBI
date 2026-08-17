@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import { useSidebarStore } from '@/features/core/sidebar';
@@ -70,7 +71,6 @@ export function useGraphManagement(
     } catch (error) {
       const message = formatErrorMessage(error);
       logger.graph.error(`Failed to create event: ${message}`, 'GraphManagement');
-      logger.notify.error(`创建 Event 失败: ${message}`, "UI");
       throw error;
     }
   }, [openCreatedGraph, switchSidebarTab]);
@@ -107,7 +107,6 @@ export function useGraphManagement(
     } catch (error) {
       const message = formatErrorMessage(error);
       logger.graph.error(`Failed to create function: ${message}`, 'GraphManagement');
-      logger.notify.error(`创建 Function 失败: ${message}`, "UI");
       throw error;
     }
   }, [openCreatedGraph, switchSidebarTab]);

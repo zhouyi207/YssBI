@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '@/services/ipc';
 import type {
   EditorGraphMutationDto,
   GraphMutationResultDto,
@@ -19,7 +19,7 @@ export class GraphMutationService {
     const wireRequest = request.payload.type === 'insertReroute'
       ? { ...request, payload: parseEditorGraphMutationDto(request.payload) }
       : request;
-    const response: unknown = await invoke('mutate_graph_document', {
+    const response: unknown = await invokeCommand('mutate_graph_document', {
       projectInstanceId,
       graphPath,
       locale,

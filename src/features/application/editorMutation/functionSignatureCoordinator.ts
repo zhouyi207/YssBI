@@ -19,6 +19,7 @@ import type {
   ResourceMutationResultDto,
 } from '@/shared/types/dto/editorMutation';
 import { FunctionMutationService } from '@/services/nodeSystem/functionMutationService';
+import { isIpcErrorCode } from '@/services/ipc';
 import {
   ProjectService,
   type ProjectGraphIndexRow,
@@ -74,15 +75,8 @@ const defaultDependencies: FunctionSignatureCoordinatorDependencies = {
 
 
 
-function hasErrorCode(error: unknown, code: string): boolean {
-  return typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && (error as { code?: unknown }).code === code;
-}
-
 function isFunctionRevisionConflict(error: unknown): boolean {
-  return hasErrorCode(error, 'function_revision_conflict');
+  return isIpcErrorCode(error, 'function_revision_conflict');
 }
 
 function buildSignature(
@@ -198,7 +192,7 @@ export async function executeFunctionSignatureMutation(
       if (!isCurrentProjectIdentity(identity)) return { status: 'stale', result };
     } catch (error) {
       if (!isCurrentProjectIdentity(identity)
-        || hasErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
+        || isIpcErrorCode(error, 'stale_project_lifecycle')) return { status: 'stale' };
       if (epoch !== coordinatorEpoch) return { status: 'stale' };
       if (!isFunctionRevisionConflict(error)) throw error;
       await hydrateAuthoritativeState(

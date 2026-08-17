@@ -1,4 +1,3 @@
-import { logger } from "@/utils/appLogger";
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscDatabase } from 'react-icons/vsc';
@@ -8,7 +7,6 @@ import {
 } from '@/features/application/sidebar';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { findResourceNodeSpawnTemplate } from '@/features/application/editor/canvasDrop';
-import { RESOURCE_CATALOG_REFRESH_MESSAGE } from '@/features/application/editor/editorMutationAvailability';
 import { openDatabaseEditorWindow } from '@/features/application/window';
 import { focusDetail } from '@/features/core/editor/detail/detailFocusCommands';
 import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
@@ -34,7 +32,7 @@ export const SidebarDataRow = memo(function SidebarDataRow({
 }) {
   const { t } = useTranslation();
   const isLoading = (data as { loading?: unknown }).loading === true;
-  const loadError = (data as { loadError?: unknown }).loadError;
+  const loadFailed = (data as { loadFailed?: unknown }).loadFailed === true;
   const { status, catalog, refresh } = useLocalizedNodeCatalog();
   const templateForPath = (path: string) => status === 'ready' && catalog
     ? findResourceNodeSpawnTemplate(
@@ -48,6 +46,7 @@ export const SidebarDataRow = memo(function SidebarDataRow({
   const dragData = template
     ? buildSidebarDragData(id, name, 'data', template.descriptor)
     : null;
+  const resourceCatalogRefreshMessage = t('notifications.editor.resourceCatalogRefreshing');
   const handleDisabledDragAttempt = () => {
     if (resourcePath) {
       refresh();
@@ -59,14 +58,13 @@ export const SidebarDataRow = memo(function SidebarDataRow({
         refreshCatalog: refresh,
       });
     }
-    logger.notify.warn(RESOURCE_CATALOG_REFRESH_MESSAGE, "UI");
   };
 
   return (
     <SidebarListItem
       id={id}
       dragData={dragData}
-      dragDisabledReason={RESOURCE_CATALOG_REFRESH_MESSAGE}
+      dragDisabledReason={resourceCatalogRefreshMessage}
       onDisabledDragAttempt={handleDisabledDragAttempt}
       isSelected={isSelected}
       indentDepth={indentDepth}
@@ -91,7 +89,7 @@ export const SidebarDataRow = memo(function SidebarDataRow({
               <TooltipContent side="top">{t('sidebar.dataLoading')}</TooltipContent>
             </Tooltip>
           )}
-          {!isLoading && typeof loadError === 'string' && loadError.length > 0 && (
+          {!isLoading && loadFailed && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-red-500" />

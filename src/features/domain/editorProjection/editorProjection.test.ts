@@ -212,7 +212,7 @@ describe('editor projection architecture', () => {
     ])],
     ['graphProjectionService.ts', new Set([
       'editorProjectionParser.ts',
-      'external:@tauri-apps/api/core',
+      'src/services/ipc/index.ts',
     ])],
   ]);
   const runtimeBypassFixtures = [
@@ -387,10 +387,10 @@ describe('editor projection architecture', () => {
     )).toBe('src/shared/types/dto/projectionRuntimeHelper.ts');
   });
 
-  it('retains the explicitly allowed Tauri service external', () => {
+  it('routes the graph projection service through the unified IPC boundary', () => {
     expect(actualEdges()).toContainEqual([
       'graphProjectionService.ts',
-      'external:@tauri-apps/api/core',
+      'src/services/ipc/index.ts',
       'runtime',
     ]);
   });

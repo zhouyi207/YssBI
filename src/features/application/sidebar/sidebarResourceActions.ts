@@ -1,11 +1,11 @@
-import { logger } from "@/utils/appLogger";
-import { i18n } from '@/app/i18n';
+import { logger } from '@/utils/appLogger';
 
 import { ProjectService, type RevealProjectResourceRequest } from '@/services/project/projectService';
+import { normalizeIpcError } from '@/services/ipc';
 
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { renameResource } from '@/features/application/resource/resourceActions';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
+
 
 export async function revealProjectResourceInExplorer(
   request: RevealProjectResourceRequest,
@@ -16,9 +16,12 @@ export async function revealProjectResourceInExplorer(
     if (!context.isCurrent()) return;
   } catch (error) {
     if (!context.isCurrent()) return;
-    logger.notify.error(i18n.t('contextMenu.sidebar.revealInExplorerFailed', {
-        error: formatErrorMessage(error, 'Unknown error'),
-      }), "UI");
+    const ipcError = normalizeIpcError('reveal_project_resource', error);
+    logger.app.error(
+      `Failed to reveal project resource code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
+      'SidebarResourceActions',
+    );
+    throw error;
   }
 }
 
@@ -26,9 +29,5 @@ export async function renameWorksheetResource(
   worksheetPath: string,
   nextName: string,
 ): Promise<void> {
-  try {
-    await renameResource({ id: worksheetPath, kind: 'worksheet' }, nextName);
-  } catch (error) {
-    throw new Error(formatErrorMessage(error, 'Worksheet rename failed'));
-  }
+  await renameResource({ id: worksheetPath, kind: 'worksheet' }, nextName);
 }

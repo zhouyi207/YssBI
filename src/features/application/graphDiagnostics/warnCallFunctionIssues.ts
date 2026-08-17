@@ -1,8 +1,8 @@
-import { logger } from "@/utils/appLogger";
+import { logger } from '@/utils/appLogger';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useResourceStore } from '@/features/core/resource';
 import { collectCallFunctionIssuesForBucket } from '@/features/domain/graphDiagnostics';
-import { i18n } from '@/app/i18n';
+
 
 /** Non-blocking save warning when a graph contains broken Call Function targets. */
 export function warnCallFunctionIssuesBeforeSave(graphPath: string): boolean {
@@ -16,6 +16,9 @@ export function warnCallFunctionIssuesBeforeSave(graphPath: string): boolean {
   );
   if (issues.length === 0) return true;
 
-  logger.notify.warn(i18n.t('graphDiagnostics.callFunctionSaveWarning', { count: issues.length }), "UI");
+  logger.graph.warn(
+    `Saving graph '${graphPath}' with ${issues.length} broken Call Function reference(s)`,
+    'GraphDiagnostics',
+  );
   return true;
 }

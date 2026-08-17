@@ -6,6 +6,7 @@ import { projectPublicationCoordinator } from '@/features/application/editorMuta
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { useNodeCatalogStore } from '@/features/core/nodeCatalog/nodeCatalogStore';
 import { CatalogService, type LocalizedCatalogDto } from '@/services/nodeSystem/catalogService';
+import { normalizeIpcError } from '@/services/ipc';
 import { useLocalizedNodeCatalog } from './useLocalizedNodeCatalog';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -64,7 +65,8 @@ function Harness() {
   const state = useLocalizedNodeCatalog();
   return createElement('output', {
     'data-status': state.status,
-    'data-error': state.error ?? '',
+    'data-error-code': state.error?.code ?? '',
+    'data-incident-id': state.error?.incidentId ?? '',
     'data-project': state.catalog?.projectInstanceId ?? '',
     'data-locale': state.catalog?.locale ?? '',
     'data-results': state.searchIndex?.search('').length ?? 0,
@@ -175,7 +177,7 @@ describe('useLocalizedNodeCatalog', () => {
 
     const output = host.querySelector('output');
     expect(output?.dataset.status).toBe('ready');
-    expect(output?.dataset.error).toBe('');
+    expect(output?.dataset.errorCode).toBe('');
     expect(output?.dataset.project).toBe('project-2');
   });
 
@@ -224,10 +226,11 @@ describe('useLocalizedNodeCatalog', () => {
     });
 
     expect(host.querySelector('output')?.dataset).toMatchObject({
-      error: 'refresh unavailable',
+      errorCode: 'catalog_response_contract_error',
       project: 'project-1',
       results: '1',
     });
+    expect(host.innerHTML).not.toContain('refresh unavailable');
 
     await act(async () => {
       host.querySelector('output')?.click();
@@ -238,13 +241,51 @@ describe('useLocalizedNodeCatalog', () => {
     expect(CatalogService.getLocalizedCatalog).toHaveBeenCalledTimes(3);
   });
 
-  it('exposes an error only for the current project request', async () => {
-    vi.mocked(CatalogService.getLocalizedCatalog).mockRejectedValue(new Error('catalog unavailable'));
+  it('maps parser prose to an explicit contract code for the current project request', async () => {
+    vi.mocked(CatalogService.getLocalizedCatalog).mockRejectedValue(
+      new Error('private localized catalog parser prose'),
+    );
 
     await act(async () => root.render(createElement(Harness)));
     await vi.waitFor(() => expect(host.querySelector('output')?.dataset.status).toBe('error'));
 
-    expect(host.querySelector('output')?.dataset.error).toBe('catalog unavailable');
-    expect(host.querySelector('output')?.dataset.project).toBe('');
+    expect(host.querySelector('output')?.dataset.errorCode).toBe(
+      'catalog_response_contract_error',
+    );
+    expect(host.innerHTML).not.toContain('private localized catalog parser prose');
+  });
+
+  it('keeps only the normalized transport code and drops transport prose', async () => {
+    vi.mocked(CatalogService.getLocalizedCatalog).mockRejectedValue(
+      normalizeIpcError(
+        'get_localized_node_catalog',
+        new Error('private localized catalog transport prose'),
+      ),
+    );
+
+    await act(async () => root.render(createElement(Harness)));
+    await vi.waitFor(() => expect(host.querySelector('output')?.dataset.status).toBe('error'));
+
+    expect(host.querySelector('output')?.dataset.errorCode).toBe('ipc_transport_failure');
+    expect(host.innerHTML).not.toContain('private localized catalog transport prose');
+  });
+
+  it('preserves backend code and incident ID without retaining backend details', async () => {
+    vi.mocked(CatalogService.getLocalizedCatalog).mockRejectedValue(
+      normalizeIpcError('get_localized_node_catalog', {
+        code: 'catalog_backend_failed',
+        details: { debug: 'private catalog backend detail' },
+        incidentId: 'incident-catalog-42',
+      }),
+    );
+
+    await act(async () => root.render(createElement(Harness)));
+    await vi.waitFor(() => expect(host.querySelector('output')?.dataset.status).toBe('error'));
+
+    expect(host.querySelector('output')?.dataset).toMatchObject({
+      errorCode: 'catalog_backend_failed',
+      incidentId: 'incident-catalog-42',
+    });
+    expect(host.innerHTML).not.toContain('private catalog backend detail');
   });
 });

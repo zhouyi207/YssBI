@@ -6,12 +6,8 @@ export interface InternalCompilationFailureDto {
   nodeId: string | null;
 }
 
-export interface InternalCompilationAppError {
-  code: 'internal_compilation_failure';
-  message: string;
-  details: {
-    internalCompilationFailure: InternalCompilationFailureDto;
-  };
+export interface InternalCompilationErrorDetailsDto {
+  internalCompilationFailure: InternalCompilationFailureDto;
 }
 
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -28,16 +24,13 @@ function hasExactKeys(value: unknown, keys: readonly string[]): value is Record<
   ));
 }
 
-export function parseInternalCompilationAppError(
+export function parseInternalCompilationErrorDetails(
   value: unknown,
-): InternalCompilationAppError | null {
-  if (!isRecord(value) || value.code !== 'internal_compilation_failure') return null;
-  if (!hasExactKeys(value, ['code', 'message', 'details'])
-    || typeof value.message !== 'string'
-    || !hasExactKeys(value.details, ['internalCompilationFailure'])) {
+): InternalCompilationErrorDetailsDto {
+  if (!hasExactKeys(value, ['internalCompilationFailure'])) {
     throw new Error('Invalid internal compilation failure response');
   }
-  const failure = value.details.internalCompilationFailure;
+  const failure = value.internalCompilationFailure;
   if (!hasExactKeys(failure, ['stage', 'code', 'nodeId'])
     || (failure.stage !== 'analysis' && failure.stage !== 'lowering')
     || typeof failure.code !== 'string'
@@ -46,5 +39,11 @@ export function parseInternalCompilationAppError(
       && (typeof failure.nodeId !== 'string' || !uuidPattern.test(failure.nodeId)))) {
     throw new Error('Invalid internal compilation failure response');
   }
-  return value as unknown as InternalCompilationAppError;
+  return {
+    internalCompilationFailure: {
+      stage: failure.stage,
+      code: failure.code,
+      nodeId: failure.nodeId,
+    },
+  };
 }

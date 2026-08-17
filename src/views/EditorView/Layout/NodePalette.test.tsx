@@ -30,6 +30,8 @@ vi.mock('react-i18next', () => ({
     t: (key: string) => ({
       'common.loading': 'Loading...',
       'common.error': 'Error',
+      'common.incidentId': 'Incident ID',
+      'nodeCatalog.loadError': 'Node catalog unavailable',
       'canvas.nodePalette.searchPlaceholder': 'Search nodes...',
       'canvas.nodePalette.noMatches': 'No matches found',
     }[key] ?? key),
@@ -212,10 +214,13 @@ describe('NodePalette', () => {
     expect(host.textContent).toContain('Loading...');
   });
 
-  it('renders the catalog load error', () => {
+  it('renders localized generic catalog text, code, and incident ID', () => {
     catalogState.current = {
       status: 'error',
-      error: 'Catalog request failed',
+      error: {
+        code: 'catalog_backend_failed',
+        incidentId: 'incident-catalog-42',
+      },
       catalog: null,
       searchIndex: null,
       refresh: vi.fn(),
@@ -223,20 +228,22 @@ describe('NodePalette', () => {
 
     renderPalette();
 
-    expect(host.textContent).toContain('Catalog request failed');
+    expect(host.textContent).toContain('Node catalog unavailable');
+    expect(host.textContent).toContain('[catalog_backend_failed]');
+    expect(host.textContent).toContain('Incident ID: incident-catalog-42');
   });
 
   it('keeps rendering the last catalog when a refresh fails', () => {
     catalogState.current = {
       ...readyState(),
       status: 'error',
-      error: 'Refresh failed',
+      error: { code: 'catalog_refresh_failed', incidentId: null },
     };
 
     renderPalette();
 
     expect(host.textContent).toContain('加法');
-    expect(host.textContent).not.toContain('Refresh failed');
+    expect(host.textContent).not.toContain('catalog_refresh_failed');
   });
 
   it('renders localized categories and items from the catalog response', () => {

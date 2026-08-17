@@ -82,7 +82,6 @@ vi.mock('@/features/core/dataStore/graphDataStore', () => ({
 vi.mock('@/utils/appLogger', () => ({
   logger: {
     graph: { error: mocks.graphError },
-    notify: { error: vi.fn() },
   },
 }));
 

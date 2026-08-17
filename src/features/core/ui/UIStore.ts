@@ -1,6 +1,7 @@
 import {
     DialogOptions,
     InputDialogOptions,
+    MessageDialogOptions,
     ImportDialogOptions,
     SqliteTableSelectDialogOptions,
     ExcelSheetSelectDialogOptions,
@@ -11,6 +12,7 @@ import {
 } from "@/shared/types/ui";
 
 type UIModal =
+    | { id: string; type: "message"; options: MessageDialogOptions }
     | { id: string; type: "confirm"; options: DialogOptions }
     | { id: string; type: "input"; options: InputDialogOptions }
     | { id: string; type: "import"; options: ImportDialogOptions }
@@ -64,6 +66,22 @@ class UIStore {
       ],
     };
     this.emit();
+  }
+
+  alert(options: MessageDialogOptions): Promise<void> {
+    return new Promise((resolve) => {
+      const id = crypto.randomUUID();
+      this.state = {
+        ...this.state,
+        modals: [...this.state.modals, { id, type: "message", options }],
+      };
+      this.emit();
+      const unsubscribe = this.subscribe(() => {
+        if (this.state.modals.some((modal) => modal.id === id)) return;
+        unsubscribe();
+        resolve();
+      });
+    });
   }
 
   confirm(options: Omit<DialogOptions, "onConfirm" | "onCancel">): Promise<boolean> {

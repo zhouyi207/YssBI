@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '@/services/ipc';
 import {
   isLocalizedCatalogDto,
   type LocalizedCatalogDto,
@@ -25,7 +25,7 @@ export class CatalogService {
   static async getCompatibleNodeCatalog(
     request: CompatibleNodeCatalogRequest,
   ): Promise<LocalizedCatalogDto> {
-    const response: unknown = await invoke('get_compatible_node_catalog', {
+    const response: unknown = await invokeCommand('get_compatible_node_catalog', {
       projectInstanceId: request.projectInstanceId,
       graphPath: request.graphPath,
       graphRevision: request.graphRevision,
@@ -42,7 +42,7 @@ export class CatalogService {
     projectInstanceId: string,
     locale: string,
   ): Promise<LocalizedCatalogDto> {
-    const response: unknown = await invoke('get_localized_node_catalog', {
+    const response: unknown = await invokeCommand('get_localized_node_catalog', {
       projectInstanceId,
       locale,
     });

@@ -1,3 +1,5 @@
+import { IpcError } from '@/services/ipc';
+
 export const GRAPH_MUTATION_ERROR_CODES = [
   'graph_port_not_found',
   'graph_node_not_found',
@@ -36,16 +38,16 @@ const ERROR_MESSAGE_KEYS: Record<GraphMutationErrorCode, GraphMutationErrorMessa
   ])) as Record<GraphMutationErrorCode, GraphMutationErrorMessageKey>;
 
 export function graphMutationErrorCode(error: unknown): GraphMutationErrorCode | null {
-  if (typeof error !== 'object' || error === null || !('code' in error)) return null;
-  const code = (error as { code?: unknown }).code;
-  return typeof code === 'string' && code in ERROR_MESSAGE_KEYS
-    ? code as GraphMutationErrorCode
+  if (!(error instanceof IpcError)) return null;
+  return error.code in ERROR_MESSAGE_KEYS
+    ? error.code as GraphMutationErrorCode
     : null;
 }
 
 export function graphMutationErrorMessageKey(
-  error: unknown,
+  code: string,
 ): GraphMutationErrorMessageKey | null {
-  const code = graphMutationErrorCode(error);
-  return code ? ERROR_MESSAGE_KEYS[code] : null;
+  return code in ERROR_MESSAGE_KEYS
+    ? ERROR_MESSAGE_KEYS[code as GraphMutationErrorCode]
+    : null;
 }

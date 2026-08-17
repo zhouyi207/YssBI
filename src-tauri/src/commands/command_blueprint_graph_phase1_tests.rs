@@ -117,7 +117,7 @@ fn command_blueprint_graph_phase1_tests_validation_failure_emits_zero_events() {
         .expect_err("validation failure must not return a command result");
 
         assert_eq!(
-            error.code,
+            error.code(),
             kind.validation_error_code(),
             "{} code",
             kind.label()
@@ -180,7 +180,7 @@ fn command_blueprint_graph_phase1_tests_stale_emits_zero_events() {
         .expect_err("stale request must not return a command result");
 
         assert_eq!(
-            error.code,
+            error.code(),
             "graph_revision_conflict",
             "{} code",
             kind.label()

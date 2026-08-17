@@ -34,6 +34,7 @@ export interface SidebarContextMenuActions {
   deleteVariable: (id: string, name: string) => unknown | Promise<unknown>;
   promoteVariable: (id: string) => unknown | Promise<unknown>;
   demoteVariable: (id: string) => unknown | Promise<unknown>;
+  canDemoteVariable: boolean;
   openDatabase: (id: string) => void;
   renameDatabaseItem: (id: string, name: string) => void;
   deleteDatabaseItem: (id: string, name: string) => unknown | Promise<unknown>;

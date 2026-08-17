@@ -1,6 +1,7 @@
 import { createPersistedWindow } from './createPersistedWindow';
 import { createEphemeralWindowLabel } from './windowLabels';
 import { logger } from '@/utils/appLogger';
+import { normalizeIpcError } from '@/services/ipc';
 import { i18n } from '@/app/i18n';
 
 export async function openDatabaseEditorWindow(databaseId?: string): Promise<void> {
@@ -16,10 +17,11 @@ export async function openDatabaseEditorWindow(databaseId?: string): Promise<voi
       title: i18n.t('databaseEditor.title'),
     });
   } catch (error) {
+    const ipcError = normalizeIpcError('open_database_editor_window', error);
     logger.app.error(
-      `Failed to open data view: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to open data view code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
       'Window',
     );
-    logger.notify.error(i18n.t('databaseEditor.failedOpenWindow'), "UI");
+    throw error;
   }
 }

@@ -1,6 +1,7 @@
 import { createPersistedWindow } from './createPersistedWindow';
 import { windowKindForRoute } from './windowRoute';
 import { logger } from '@/utils/appLogger';
+import { normalizeIpcError } from '@/services/ipc';
 import {
   plotTypeFromPresentation,
   presentationRoute,
@@ -45,25 +46,19 @@ export async function openPresentationWindow(
   if (presentation.plotType) params.set('plotType', presentation.plotType);
   const url = `index.html#${route}?${params.toString()}`;
 
-  await createPersistedWindow({
-    geometry: { source: 'backend', kind: windowKindForRoute(route) },
-    label,
-    url,
-    title: presentation.windowTitle.trim() || 'Source Inspector',
-  });
-}
-
-export async function openPresentationWindowSafe(
-  resultId: string,
-  presentation: PresentationWindowPayload,
-  logTag = 'Window',
-): Promise<void> {
   try {
-    await openPresentationWindow(resultId, presentation);
-  } catch (e) {
+    await createPersistedWindow({
+      geometry: { source: 'backend', kind: windowKindForRoute(route) },
+      label,
+      url,
+      title: presentation.windowTitle.trim() || 'Source Inspector',
+    });
+  } catch (error) {
+    const ipcError = normalizeIpcError('open_presentation_window', error);
     logger.exec.error(
-      `Failed to open window: ${e instanceof Error ? e.message : String(e)}`,
-      logTag,
+      `Failed to open presentation window code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
+      'Window',
     );
+    throw error;
   }
 }

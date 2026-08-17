@@ -18,6 +18,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
+import { nodeCatalogErrorText } from '@/features/application/nodeCatalog/nodeCatalogErrorPresentation';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
 import { MarkdownRenderer } from '@/shared/ui/MarkdownRenderer';
@@ -190,7 +191,7 @@ export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentation
               <div className="space-y-1 pr-2">
                 {status === 'error' && !catalog ? (
                   <p role="alert" className="px-2 py-3 text-sm text-destructive">
-                    {error ?? t('common.error')}
+                    {nodeCatalogErrorText(error, t)}
                   </p>
                 ) : !catalog ? (
                   <p role="status" className="px-2 py-3 text-sm text-muted-foreground">

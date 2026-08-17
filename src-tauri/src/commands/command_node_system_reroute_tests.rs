@@ -62,8 +62,8 @@ fn phase2_reroute_command_event_failure_emits_zero() {
         serialized,
         serde_json::json!({
             "code": "graph_connection_not_found",
-            "message": "Graph mutation rejected",
-            "details": { "category": "graphMutation" }
+            "details": { "category": "graphMutation" },
+            "incidentId": null
         })
     );
     let wire = serialized.to_string();
@@ -87,7 +87,7 @@ fn phase2_reroute_command_event_stale_emits_zero() {
         |event| events.push(event),
     )
     .unwrap_err();
-    assert_eq!(error.code, "graph_revision_conflict");
+    assert_eq!(error.code(), "graph_revision_conflict");
     assert!(events.is_empty());
     assert_eq!(fixture.serialized_authority(), before);
 }

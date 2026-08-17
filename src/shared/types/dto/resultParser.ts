@@ -113,9 +113,8 @@ export function parseResultState(value: unknown): ResultState {
 
 function parseResultFailure(value: unknown): ResultFailure {
   if (!isRecord(value)
-    || !hasExactKeys(value, ['code', 'message', 'cause', 'upstreamResultIds'])
-    || (value.code !== 'executionFailed' && value.code !== 'upstreamFailed')
-    || typeof value.message !== 'string'
+    || !hasExactKeys(value, ['code', 'cause', 'upstreamResultIds'])
+    || (value.code !== 'execution_failed' && value.code !== 'upstream_failed')
     || !Array.isArray(value.upstreamResultIds)
     || !value.upstreamResultIds.every(isDecimalId)
     || !isRecord(value.cause)
@@ -130,7 +129,6 @@ function parseResultFailure(value: unknown): ResultFailure {
       || !isDecimalId(value.cause.upstreamResultId)) return fail('upstream failure cause');
     return {
       code: value.code,
-      message: value.message,
       cause: { kind: 'upstream', upstreamResultId: value.cause.upstreamResultId },
       upstreamResultIds: value.upstreamResultIds,
     };

@@ -93,7 +93,10 @@ describe('useNodeCatalogStore', () => {
     const newer = store.beginRequest(response.projectInstanceId, response.locale)!;
 
     expect(store.storeResponse(newer, response)).toBe(true);
-    expect(store.storeError(older, 'older request failed')).toBe(false);
+    expect(store.storeError(older, {
+      code: 'catalog_request_failed',
+      incidentId: null,
+    })).toBe(false);
     expect(useNodeCatalogStore.getState().responses).toEqual({
       [catalogResponseKey(response)]: response,
     });
@@ -128,6 +131,20 @@ describe('useNodeCatalogStore', () => {
         error: null,
         requestGeneration: newer.requestGeneration,
         minimumResourcePublicationRevision: 0,
+      },
+    });
+  });
+
+  it('stores a stable contract code when response identity does not match its request', () => {
+    const store = useNodeCatalogStore.getState();
+    const owner = store.beginRequest('project-1', 'zh-CN')!;
+
+    expect(store.storeResponse(owner, catalog({ projectInstanceId: 'project-2' }))).toBe(false);
+    expect(useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']).toMatchObject({
+      status: 'error',
+      error: {
+        code: 'catalog_response_contract_error',
+        incidentId: null,
       },
     });
   });
@@ -168,7 +185,10 @@ describe('useNodeCatalogStore', () => {
     expect(useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']).toMatchObject({
       status: 'error',
       responseKey: catalogResponseKey(previous),
-      error: 'Catalog response is older than publication revision 9',
+      error: {
+        code: 'catalog_response_stale',
+        incidentId: null,
+      },
       minimumResourcePublicationRevision: 9,
     });
   });
@@ -180,11 +200,17 @@ describe('useNodeCatalogStore', () => {
     store.observeResourcePublication('project-1', 8);
     const refresh = store.beginRequest('project-1', 'zh-CN')!;
 
-    expect(store.storeError(refresh, 'refresh failed')).toBe(true);
+    expect(store.storeError(refresh, {
+      code: 'catalog_refresh_failed',
+      incidentId: 'incident-catalog-refresh',
+    })).toBe(true);
     expect(useNodeCatalogStore.getState().requests['["project-1","zh-CN"]']).toMatchObject({
       status: 'error',
       responseKey: catalogResponseKey(previous),
-      error: 'refresh failed',
+      error: {
+        code: 'catalog_refresh_failed',
+        incidentId: 'incident-catalog-refresh',
+      },
       minimumResourcePublicationRevision: 8,
     });
   });

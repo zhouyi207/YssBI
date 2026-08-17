@@ -77,6 +77,6 @@ export function useJuliaWorkerStatus(): JuliaWorkerStatusViewModel {
   return {
     state: "unavailable",
     label: t("julia.worker.unavailable"),
-    tooltip: status.message ?? t("julia.worker.unavailableDetail"),
+    tooltip: t("julia.worker.unavailableDetail"),
   };
 }

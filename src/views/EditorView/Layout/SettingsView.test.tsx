@@ -3,9 +3,17 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { uiStore } from '@/features/core/ui/UIStore';
+import { normalizeIpcError } from '@/services/ipc';
 import { SettingsView } from './SettingsView';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const settings = vi.hoisted(() => ({
+  resetAllToDefaults: vi.fn(),
+  resetThemeToDefaults: vi.fn(),
+  resetEditorToDefaults: vi.fn(),
+  resetAppearanceToDefaults: vi.fn(),
+}));
 
 const computation = vi.hoisted(() => ({
   enabled: true,
@@ -27,7 +35,15 @@ vi.mock('@/features/application/projectSettings/useProjectComputationSettings', 
 
 vi.mock('react-i18next', () => ({
   initReactI18next: { type: '3rdParty', init: vi.fn() },
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, values?: Record<string, unknown>) => {
+      if (key === 'common.error') return 'Error';
+      if (key === 'common.incidentId') return 'Incident ID';
+      if (key === 'common.unexpectedError') return 'An unexpected error occurred';
+      if (typeof values?.error === 'string') return `${key}: ${values.error}`;
+      return key;
+    },
+  }),
 }));
 
 vi.mock('@/app/i18n', () => ({
@@ -69,8 +85,10 @@ vi.mock('@/features/core/settings/settingsStore', () => {
     project: { projectName: '', exportPath: '' },
     isLoading: false,
     updateTheme: vi.fn(), updateEditor: vi.fn(), updateAppearance: vi.fn(), updateProject: vi.fn(),
-    resetAllToDefaults: vi.fn(), resetThemeToDefaults: vi.fn(), resetEditorToDefaults: vi.fn(),
-    resetAppearanceToDefaults: vi.fn(),
+    resetAllToDefaults: settings.resetAllToDefaults,
+    resetThemeToDefaults: settings.resetThemeToDefaults,
+    resetEditorToDefaults: settings.resetEditorToDefaults,
+    resetAppearanceToDefaults: settings.resetAppearanceToDefaults,
   };
   return { useSettingsStore: (selector: (value: typeof state) => unknown) => selector(state) };
 });
@@ -86,6 +104,10 @@ describe('SettingsView computation settings', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    settings.resetAllToDefaults.mockResolvedValue(undefined);
+    settings.resetThemeToDefaults.mockResolvedValue(undefined);
+    settings.resetEditorToDefaults.mockResolvedValue(undefined);
+    settings.resetAppearanceToDefaults.mockResolvedValue(undefined);
     computation.enabled = true;
     computation.isDirty = false;
     computation.validationError = null;
@@ -98,10 +120,18 @@ describe('SettingsView computation settings', () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    vi.restoreAllMocks();
   });
 
   function render(): void {
     act(() => root.render(<SettingsView onRequestClose={onRequestClose} />));
+  }
+
+  async function flushPromises(): Promise<void> {
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
   }
 
   async function openComputation(): Promise<void> {
@@ -134,6 +164,59 @@ describe('SettingsView computation settings', () => {
     click([...host.querySelectorAll('button')].find((item) => item.textContent === 'Apply')!);
     expect(computation.restoreRecommended).toHaveBeenCalledOnce();
     expect(computation.apply).toHaveBeenCalledOnce();
+  });
+
+  it('shows an IPC reset-all failure in a top-level alert without raw backend details', async () => {
+    vi.spyOn(uiStore, 'confirm').mockResolvedValue(true);
+    settings.resetAllToDefaults.mockRejectedValueOnce(normalizeIpcError('reset_all_settings', {
+      code: 'settings_reset_failed',
+      details: { debug: 'raw backend settings failure' },
+      incidentId: 'incident-settings-all-42',
+    }));
+    render();
+
+    const resetAll = [...host.querySelectorAll('button')].find((item) => (
+      item.textContent === 'common.restoreAllDefaults'
+    ));
+    click(resetAll!);
+    await flushPromises();
+
+    const alert = host.querySelector<HTMLElement>('[data-settings-reset-all-error]');
+    expect(alert?.textContent).toContain('settings_reset_failed');
+    expect(alert?.textContent).toContain('incident-settings-all-42');
+    expect(alert?.textContent).not.toContain('raw backend settings failure');
+  });
+
+  it('shows a section reset failure with the active section', async () => {
+    vi.spyOn(uiStore, 'confirm').mockResolvedValue(true);
+    settings.resetEditorToDefaults.mockRejectedValueOnce(normalizeIpcError('reset_editor_settings', {
+      code: 'settings_section_reset_failed',
+      details: null,
+      incidentId: null,
+    }));
+    render();
+
+    const resetSection = [...host.querySelectorAll('button')].find((item) => (
+      item.textContent === 'common.restoreDefaults'
+    ));
+    click(resetSection!);
+    await flushPromises();
+
+    const alert = host.querySelector<HTMLElement>('main [data-settings-section-reset-error]');
+    expect(alert?.textContent).toContain('settings_section_reset_failed');
+  });
+
+  it('does not show feedback after a successful reset', async () => {
+    vi.spyOn(uiStore, 'confirm').mockResolvedValue(true);
+    render();
+
+    const resetAll = [...host.querySelectorAll('button')].find((item) => (
+      item.textContent === 'common.restoreAllDefaults'
+    ));
+    click(resetAll!);
+    await flushPromises();
+
+    expect(host.querySelector('[data-settings-reset-all-error]')).toBeNull();
   });
 
   it('uses the application confirmation modal before dirty close and section changes', async () => {

@@ -59,6 +59,7 @@ pub use project_registry::*;
 pub use project_scan::*;
 pub use project_session::*;
 pub use project_state::*;
+pub use project_state_database::ProjectDatabaseError;
 pub use project_store::*;
 pub use project_traces::*;
 

@@ -5,6 +5,7 @@ import {
   ExcelSheetSelectModal,
   ImportModal,
   InputModal,
+  MessageDialog,
   Modal,
   ProgressOverlay,
   SqlConnectionModal,
@@ -23,6 +24,10 @@ export const UIHost = () => {
     <>
 
       {progress && <ProgressOverlay progress={progress} />}
+
+      {top?.type === "message" && (
+        <MessageDialog key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />
+      )}
 
       {top?.type === "confirm" && (
         <Modal key={top.id} options={top.options} onClose={() => uiStore.closeModal(top.id)} />

@@ -7,6 +7,7 @@ export * from "./stats";
 export * from "./bayes";
 export * from "./window";
 export * from "./log";
+export * from "./ipc";
 
 export { GraphService } from "./graph/graphService";
 export { VariableService } from "./variable/variableService";

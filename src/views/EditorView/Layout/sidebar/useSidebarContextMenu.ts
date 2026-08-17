@@ -1,8 +1,8 @@
-import { logger } from "@/utils/appLogger";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePositionedContextMenu } from "@/shared/ui/contextMenu";
 import type { SidebarContextMenuTarget, SidebarInputDialogState } from "../sidebarContextMenu/sidebarContextMenuTypes";
+import { formatInlineUserError } from '@/features/application/userErrorSummary';
 
 export function useSidebarContextMenu() {
   const { t } = useTranslation();
@@ -30,11 +30,12 @@ export function useSidebarContextMenu() {
       await inputDialog.onSubmit(value);
       setInputDialog(null);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = t('notifications.sidebar.actionFailed', {
+        error: formatInlineUserError(error, t),
+      });
       setInputDialog((prev) => (prev ? { ...prev, error: message } : null));
-      logger.notify.error(message, "UI");
     }
-  }, [inputDialog]);
+  }, [inputDialog, t]);
 
   const cancelInputDialog = useCallback(() => {
     setInputDialog(null);

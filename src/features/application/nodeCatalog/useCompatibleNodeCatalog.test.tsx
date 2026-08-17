@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { CatalogService, type LocalizedCatalogDto } from '@/services/nodeSystem/catalogService';
+import { normalizeIpcError } from '@/services/ipc';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { useCompatibleNodeCatalog } from './useCompatibleNodeCatalog';
 
@@ -74,6 +75,8 @@ function Harness({ graphRevision = 4 }: { graphRevision?: number }) {
   });
   return createElement('output', {
     'data-status': state.status,
+    'data-error-code': state.error?.code ?? '',
+    'data-incident-id': state.error?.incidentId ?? '',
     'data-project': state.catalog?.projectInstanceId ?? '',
     'data-results': state.searchIndex?.search('').map((item) => item.nodeTypeId).join(',') ?? '',
   });
@@ -115,6 +118,45 @@ describe('useCompatibleNodeCatalog', () => {
       locale: 'en-US',
     });
     expect(host.querySelector('output')?.dataset.results).toBe('compatible.node');
+  });
+
+  it('maps a current response identity mismatch to an explicit contract code', async () => {
+    vi.mocked(CatalogService.getCompatibleNodeCatalog)
+      .mockResolvedValue(catalog('project-other', 'wrong-project.node'));
+
+    await act(async () => root.render(createElement(Harness)));
+    await vi.waitFor(() => expect(host.querySelector('output')?.dataset.status).toBe('error'));
+
+    expect(host.querySelector('output')?.dataset.errorCode).toBe(
+      'catalog_response_contract_error',
+    );
+  });
+
+  it('maps parser prose to an explicit contract code', async () => {
+    vi.mocked(CatalogService.getCompatibleNodeCatalog).mockRejectedValue(
+      new Error('private compatible catalog parser prose'),
+    );
+
+    await act(async () => root.render(createElement(Harness)));
+    await vi.waitFor(() => expect(host.querySelector('output')?.dataset.status).toBe('error'));
+
+    expect(host.querySelector('output')?.dataset.errorCode).toBe('catalog_response_contract_error');
+    expect(host.innerHTML).not.toContain('private compatible catalog parser prose');
+  });
+
+  it('keeps only the normalized transport code and drops transport prose', async () => {
+    vi.mocked(CatalogService.getCompatibleNodeCatalog).mockRejectedValue(
+      normalizeIpcError(
+        'get_compatible_node_catalog',
+        new Error('private compatible catalog transport prose'),
+      ),
+    );
+
+    await act(async () => root.render(createElement(Harness)));
+    await vi.waitFor(() => expect(host.querySelector('output')?.dataset.status).toBe('error'));
+
+    expect(host.querySelector('output')?.dataset.errorCode).toBe('ipc_transport_failure');
+    expect(host.innerHTML).not.toContain('private compatible catalog transport prose');
   });
 
   it('ignores a response from a stale project identity', async () => {

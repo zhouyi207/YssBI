@@ -1,4 +1,3 @@
-import { logger } from "@/utils/appLogger";
 import type { TFunction } from 'i18next';
 import {
   resolveInspectableResult,
@@ -15,7 +14,6 @@ import {
 } from '@/features/application/window';
 import {
   evaluatePinViewState,
-  pinViewDisabledTitle,
   type ResolvePinViewTargetParams,
 } from '@/features/core/execution/pinViewTarget';
 import { useExecutionStore } from '@/features/core/execution/useExecutionStore';
@@ -35,7 +33,7 @@ export async function launchInspectablePresentation(
 export async function openInspectableResult(
   ref: InspectableResultRef,
   t: TFunction,
-  options?: { silent?: boolean; selectedResultId?: string | null },
+  options?: { selectedResultId?: string | null },
 ): Promise<boolean> {
   try {
     const resolved = await resolveInspectableResultRef(ref, options?.selectedResultId);
@@ -45,12 +43,7 @@ export async function openInspectableResult(
     const descriptor = resolved.ref
       ? await resolveInspectableResult(resolved.ref)
       : null;
-    if (!descriptor) {
-      if (!options?.silent) {
-        logger.notify.error(t('sourceInspector.noSource'), "UI");
-      }
-      return false;
-    }
+    if (!descriptor) return false;
     if (descriptor.presentation.kind === 'plot') {
       await launchInspectablePresentation(descriptor, t('contextMenu.pin.view'));
     } else {
@@ -58,11 +51,7 @@ export async function openInspectableResult(
       ensureDetailVisible();
     }
     return true;
-  } catch (error) {
-    if (!options?.silent) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.notify.error(t('toast.viewOpenFailed', { error: message }), "UI");
-    }
+  } catch {
     return false;
   }
 }
@@ -73,18 +62,15 @@ export async function openPinInspectableView(
   t: TFunction,
   options?: { selectedResultId?: string | null },
 ): Promise<boolean> {
-  const { refs, disabledReason } = evaluatePinViewState(params);
+  const { refs } = evaluatePinViewState(params);
   for (const ref of refs) {
     if (await openInspectableResult(ref, t, {
-      silent: true,
       selectedResultId: options?.selectedResultId,
     })) {
       return true;
     }
   }
 
-  const hint = pinViewDisabledTitle(disabledReason, t);
-  logger.notify.error(hint ?? t('sourceInspector.noSource'), "UI");
   return false;
 }
 

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/services/ipc";
 import type { WindowKind, WindowState } from "@/shared/types/settings";
 
 /**
@@ -11,16 +11,16 @@ import type { WindowKind, WindowState } from "@/shared/types/settings";
 export const WindowStateService = {
     /** 获取所有 kind 的当前几何状态（未保存过的 kind 会返回内置默认值）。 */
     async getAll(): Promise<Record<WindowKind, WindowState>> {
-        return await invoke<Record<WindowKind, WindowState>>("get_window_states");
+        return await invokeCommand<Record<WindowKind, WindowState>>("get_window_states");
     },
 
     /** 读取单个 kind 的几何状态。 */
     async get(kind: WindowKind): Promise<WindowState> {
-        return await invoke<WindowState>("get_window_state", { kind });
+        return await invokeCommand<WindowState>("get_window_state", { kind });
     },
 
     /** 写入单个 kind 的几何状态并立即落盘。 */
     async save(kind: WindowKind, value: WindowState): Promise<void> {
-        await invoke("save_window_state", { kind, value });
+        await invokeCommand("save_window_state", { kind, value });
     },
 };

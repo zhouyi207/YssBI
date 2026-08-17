@@ -6,10 +6,7 @@ import { JsonTreeView } from '../JsonTreeView';
 import { ResultPageToolbar } from '../ResultPageToolbar';
 import { ResultViewShell } from '../ResultViewShell';
 import { ReadOnlyDataGrid } from '../ReadOnlyDataGrid';
-
-function SourceError({ error }: { error: string }) {
-  return <p className="text-sm text-destructive">{error}</p>;
-}
+import { ResultReadError } from '../ResultReadError';
 
 export function SequenceResultView({ payload }: { payload: ResultDescriptor }) {
   const totalCount = payload.totalCount ?? 0;
@@ -27,7 +24,7 @@ export function SequenceResultView({ payload }: { payload: ResultDescriptor }) {
         onNext={paging.goToNextPage}
       />}
     >
-      {paging.error ? <SourceError error={paging.error} /> : (
+      {paging.error ? <ResultReadError error={paging.error} /> : (
         <ReadOnlyDataGrid
           columns={[]}
           rows={paging.rows}
@@ -46,7 +43,7 @@ export function DataSeriesResultView({ payload }: { payload: ResultDescriptor })
   const paging = usePagedResultRows(payload.resultId, totalCount);
   return (
     <ResultViewShell title={payload.title} meta={<span>Length: {totalCount}</span>}>
-      {paging.error ? <SourceError error={paging.error} /> : (
+      {paging.error ? <ResultReadError error={paging.error} /> : (
         <ScrollArea className="min-h-0 flex-1">
           <JsonTreeView value={paging.values} />
         </ScrollArea>
@@ -59,7 +56,7 @@ export function ScalarResultView({ payload }: { payload: ResultDescriptor }) {
   const { value, loading, error } = useResultValue(payload.resultId);
   return (
     <ResultViewShell title={payload.title}>
-      {error ? <SourceError error={error} /> : (
+      {error ? <ResultReadError error={error} /> : (
         <ScrollArea className="min-h-0 flex-1">
           <pre className="break-all text-sm">{loading ? 'Loading…' : JSON.stringify(value?.value, null, 2)}</pre>
         </ScrollArea>
@@ -72,7 +69,7 @@ export function JsonResultView({ payload }: { payload: ResultDescriptor }) {
   const { value, loading, error } = useResultValue(payload.resultId);
   return (
     <ResultViewShell title={payload.title}>
-      {error ? <SourceError error={error} /> : loading ? (
+      {error ? <ResultReadError error={error} /> : loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : (
         <ScrollArea className="min-h-0 flex-1">

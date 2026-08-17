@@ -8,6 +8,7 @@ import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutatio
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { prepareGraphProjectionForPublication } from '@/features/application/editorProjection/graphProjectionCoordinator';
 import { ProjectService, type ProjectIndexRow } from '@/services/project/projectService';
+import { normalizeIpcError } from '@/services/ipc';
 
 import { getPendingMutation, resetPendingMutations } from './pendingMutationRegistry';
 import {
@@ -36,6 +37,9 @@ const projectInstanceId = '00000000-0000-0000-0000-000000000601';
 const replacementProjectInstanceId = '00000000-0000-0000-0000-000000000602';
 const thresholdVariableId = '00000000-0000-0000-0000-000000000703';
 
+function backendError(code: string) {
+  return normalizeIpcError('undo_graph_document', { code, details: null, incidentId: null });
+}
 
 
 vi.mock('@/features/application/editorProjection/graphProjectionCoordinator', async (importOriginal) => ({
@@ -506,7 +510,7 @@ describe('executeHistoryMutation', () => {
     const outcome = await executeHistoryMutation(
       { direction: 'undo', graphPath: functionPath, locale: 'en-US' },
       dependencies(vi.fn(async () => {
-        throw { code: 'history_revision_conflict', message: 'stale anchor' };
+        throw backendError('history_revision_conflict');
       }), hydrateGraph),
     );
 
@@ -562,7 +566,7 @@ describe('executeHistoryMutation', () => {
       await expect(executeHistoryMutation(
         { direction, graphPath: functionPath, locale: 'en-US' },
         dependencies(vi.fn(async () => {
-          throw { code: 'stale_project_lifecycle', message: 'backend project changed' };
+          throw backendError('stale_project_lifecycle');
         }), hydrateGraph),
       )).resolves.toEqual({ status: 'stale' });
 

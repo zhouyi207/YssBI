@@ -51,8 +51,7 @@ describe('result DTO parsers', () => {
       state: {
         kind: 'failed',
         failure: {
-          code: 'upstreamFailed',
-          message: 'upstream failed',
+          code: 'upstream_failed',
           cause: { kind: 'upstream', upstreamResultId: '9' },
           upstreamResultIds: ['9'],
         },

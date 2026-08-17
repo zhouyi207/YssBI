@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { toErrorReference } from '@/services/ipc';
 import { ResultService } from '@/services/result/resultService';
 import type { ResultPageState } from './types';
 
@@ -49,7 +50,7 @@ export function usePagedResultRows(
       setState((prev) => ({
         ...prev,
         loading: false,
-        error: cause instanceof Error ? cause.message : String(cause),
+        error: toErrorReference(cause, 'result_page_read_failed'),
       }));
     }
   }, [resultId, pageSize, totalCount]);

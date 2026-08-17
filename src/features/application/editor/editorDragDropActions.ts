@@ -1,4 +1,5 @@
 import type { DragEndEvent } from '@dnd-kit/core';
+
 import { handleGraphResourceDrop } from './handleGraphResourceDrop';
 
 import { clearEditorDragSession } from './useEditorDragPreviewMonitor';
@@ -95,7 +96,10 @@ export async function executeEditorDragEnd(
   try {
     await executeSidebarSpawnDragEnd(event, activeData, options);
   } catch (error) {
-    logger.notify.error(formatErrorMessage(error), 'UI');
+    logger.graph.error(
+      `Editor drag/drop failed: ${formatErrorMessage(error)}`,
+      'EditorDragDrop',
+    );
     clearEditorDragSession();
   }
 }

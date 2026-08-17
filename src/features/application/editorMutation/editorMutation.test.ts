@@ -5,6 +5,7 @@ import type {
   GraphMutationResultDto,
 } from '@/shared/types/dto/editorMutation';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
+import { normalizeIpcError } from '@/services/ipc';
 import {
   executeEditorMutation,
   resetEditorMutationCoordinator,
@@ -17,6 +18,10 @@ import {
 
 const graphPath = 'functions/Main.yssbi-function';
 const projectedNodeId = '00000000-0000-0000-0000-000000000603';
+
+function backendError(code: string) {
+  return normalizeIpcError('mutate_graph_document', { code, details: null, incidentId: null });
+}
 
 function deleteNodeMutation(): EditorGraphMutationDto {
   return { type: 'deleteNodes', payload: { nodeIds: ['local-node'] } };
@@ -168,10 +173,7 @@ describe('executeEditorMutation', () => {
       { graphPath, locale: 'en-US', mutation: deleteNodeMutation() },
       {
         createOperationId: () => 'operation-conflict',
-        mutateGraph: vi.fn().mockRejectedValue({
-          code: 'graph_revision_conflict',
-          message: 'revision conflict',
-        }),
+        mutateGraph: vi.fn().mockRejectedValue(backendError('graph_revision_conflict')),
         hydrateGraph,
         updateHistoryStatus: vi.fn(),
       },

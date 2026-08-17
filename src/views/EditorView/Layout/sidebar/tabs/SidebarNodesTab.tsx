@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { nodeCatalogErrorText } from '@/features/application/nodeCatalog/nodeCatalogErrorPresentation';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { DRAG_TYPES, type NodeTemplateDragData } from '@/features/core/dnd';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,7 +16,7 @@ export function SidebarNodesTab() {
         <div className="space-y-1 p-2">
           {status === 'error' && !catalog ? (
             <p role="alert" className="px-2 py-3 text-sm text-destructive">
-              {error ?? t('common.error')}
+              {nodeCatalogErrorText(error, t)}
             </p>
           ) : !catalog ? (
             <p role="status" className="px-2 py-3 text-sm text-muted-foreground">

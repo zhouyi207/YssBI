@@ -19,7 +19,6 @@ export {
 export { useWindowDecorationEffect, useCustomTitleBar } from "./useWindowDecorations";
 export {
   openPresentationWindow,
-  openPresentationWindowSafe,
   presentationWindowPayload,
   presentationWindowPayloadFromDescriptor,
 } from "./openPresentationWindow";
@@ -28,6 +27,7 @@ export { openDatabaseEditorWindow } from "./openDatabaseEditor";
 export { openBayesWindow } from "./openBayesWindow";
 export { openLogsWindow } from "./openLogsWindow";
 export type { OpenLogsWindowOptions } from "./openLogsWindow";
+export { openExternalUrlWithDialog } from "./openExternalUrlWithDialog";
 export { createEphemeralWindowLabel } from "./windowLabels";
 export { usePresentationWindowLifecycle } from "./usePresentationWindowLifecycle";
 export { PresentationWindowShell } from "./PresentationWindowShell";

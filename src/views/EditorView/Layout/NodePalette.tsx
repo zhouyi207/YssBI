@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { nodeCatalogErrorText } from '@/features/application/nodeCatalog/nodeCatalogErrorPresentation';
 import { useCompatibleNodeCatalog } from '@/features/application/nodeCatalog/useCompatibleNodeCatalog';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
@@ -111,7 +112,7 @@ export function NodePalette({
     >
       {status === 'error' && (!catalog || !searchIndex) ? (
         <p role="alert" className="px-2 py-1 text-destructive">
-          {error ?? t('common.error')}
+          {nodeCatalogErrorText(error, t)}
         </p>
       ) : !catalog || !searchIndex ? (
         <p role="status" className="px-2 py-1 text-muted-foreground">

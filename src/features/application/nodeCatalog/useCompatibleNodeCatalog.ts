@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import { getLocalizedSearchIndex } from '@/features/core/nodeCatalog/localizedSearchIndex';
-import type { LocalizedCatalogResponse } from '@/features/core/nodeCatalog/nodeCatalogStore';
+import {
+  CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
+  type LocalizedCatalogResponse,
+} from '@/features/core/nodeCatalog/nodeCatalogStore';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { CatalogService } from '@/services/nodeSystem/catalogService';
+import { toErrorReference } from '@/services/ipc';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import type { LocalizedNodeCatalogState } from './useLocalizedNodeCatalog';
 
 interface CompatibleNodeCatalogInput {
@@ -22,7 +25,7 @@ interface CompatibleNodeCatalogInput {
 
 interface CompatibleRequestState {
   status: LocalizedNodeCatalogState['status'];
-  error: string | null;
+  error: LocalizedNodeCatalogState['error'];
   catalog: LocalizedCatalogResponse | null;
 }
 
@@ -71,14 +74,24 @@ export function useCompatibleNodeCatalog({
     }).then((catalog) => {
       if (!current || !isCurrentProjectIdentity(identity)) return;
       if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
-      if (catalog.projectInstanceId !== identity.projectInstanceId || catalog.locale !== locale) return;
+      if (catalog.projectInstanceId !== identity.projectInstanceId || catalog.locale !== locale) {
+        setState({
+          status: 'error',
+          error: {
+            code: CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
+            incidentId: null,
+          },
+          catalog: null,
+        });
+        return;
+      }
       setState({ status: 'ready', error: null, catalog });
     }).catch((error: unknown) => {
       if (!current || !isCurrentProjectIdentity(identity)) return;
       if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
       setState({
         status: 'error',
-        error: formatErrorMessage(error, 'Failed to load compatible node catalog'),
+        error: toErrorReference(error, CATALOG_RESPONSE_CONTRACT_ERROR_CODE),
         catalog: null,
       });
     });

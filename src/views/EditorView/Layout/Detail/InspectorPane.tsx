@@ -82,6 +82,10 @@ export function InspectorPane() {
     missingResultId: t('sourceInspector.missingResultId'),
     notFound: t('sourceInspector.noSource'),
     loadFailed: t('sourceInspector.loadFailed'),
+    pending: (completed, total) => t('resultState.pending', { completed, total: total ?? '?' }),
+    executionFailed: t('resultState.executionFailed'),
+    upstreamFailed: t('resultState.upstreamFailed'),
+    cancelled: t('resultState.cancelled'),
   });
   const title = 'descriptor' in state
     ? state.descriptor.title || t('detail.inspector.title')

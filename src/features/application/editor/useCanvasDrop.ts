@@ -1,4 +1,4 @@
-import { logger } from "@/utils/appLogger";
+
 import { useState, useEffect, useCallback } from "react";
 import { useGestureStore } from "@/features/core/gesture";
 import { useGraphDataStore } from "@/features/core/dataStore";
@@ -9,7 +9,6 @@ import {
   BUILTIN_NODE_TYPE_IDS,
   type VariableNodeTypeId,
 } from '@/features/domain/nodeCatalog';
-import { RESOURCE_CATALOG_REFRESH_MESSAGE } from './editorMutationAvailability';
 import { addGlobalEventListener } from "@/shared/utils/globalEvent";
 import type { Pin } from '@/shared/types/domain/pin';
 import {
@@ -92,13 +91,8 @@ export function useCanvasDrop({
         .map((pinId) => store.getGraphPin(graphPath, pinId))
         .find((pin) => pin?.instanceKind === 'userCreated' && pin.templateKey)
         ?.templateKey;
-      if (!template) {
-        logger.notify.error('Repeatable port template is unavailable', "UI");
-        return;
-      }
-      void executeCommand(graphPath, 'AddRepeatablePin', { nodeId, template }).then((applied) => {
-        if (!applied) logger.notify.error('Failed to add repeatable port', "UI");
-      });
+      if (!template) return;
+      void executeCommand(graphPath, 'AddRepeatablePin', { nodeId, template });
     },
     [graphPath]
   );
@@ -106,9 +100,7 @@ export function useCanvasDrop({
   const handleNodeRemovePin = useCallback(
     (nodeId: string, pinId: string) => {
       if (!graphPath) return Promise.resolve();
-      return executeCommand(graphPath, 'RemoveRepeatablePin', { nodeId, pinId }).then((applied) => {
-        if (!applied) logger.notify.error('Failed to remove repeatable port', "UI");
-      });
+      return executeCommand(graphPath, 'RemoveRepeatablePin', { nodeId, pinId }).then(() => undefined);
     },
     [graphPath]
   );
@@ -141,7 +133,6 @@ export function useCanvasDrop({
         : null;
       if (!template) {
         refreshCatalog();
-        logger.notify.warn(RESOURCE_CATALOG_REFRESH_MESSAGE, "UI");
         return;
       }
       await spawnNodeFromTemplate(
@@ -176,7 +167,6 @@ export function useCanvasDrop({
           : null;
         if (!template) {
           refreshCatalog();
-          logger.notify.warn(RESOURCE_CATALOG_REFRESH_MESSAGE, "UI");
           return false;
         }
       }

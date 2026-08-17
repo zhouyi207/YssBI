@@ -80,8 +80,6 @@ pub struct JuliaWorkerStatus {
     pub environment_state: JuliaWorkerEnvironmentState,
     pub process_state: JuliaWorkerProcessState,
     pub project_dir: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub message: Option<String>,
 }
 
 /// Reuses one Julia process while serializing compute requests. Cancellation
@@ -102,7 +100,7 @@ struct JuliaWorkerInner {
 enum JuliaWorkerStartupState {
     Idle,
     Preparing,
-    Failed(String),
+    Failed,
 }
 
 impl JuliaWorkerManager {
@@ -124,18 +122,13 @@ impl JuliaWorkerManager {
             .startup
             .lock()
             .map(|state| state.clone())
-            .unwrap_or_else(|_| {
-                JuliaWorkerStartupState::Failed(
-                    "Julia worker startup state is unavailable.".to_string(),
-                )
-            });
+            .unwrap_or(JuliaWorkerStartupState::Failed);
         if matches!(startup, JuliaWorkerStartupState::Preparing) {
             return JuliaWorkerStatus {
                 runtime_state: JuliaRuntimeState::Ready,
                 environment_state: JuliaWorkerEnvironmentState::Missing,
                 process_state: JuliaWorkerProcessState::Starting,
                 project_dir: worker_dir.to_string_lossy().into_owned(),
-                message: None,
             };
         }
         if self.process_state() == JuliaWorkerProcessState::Running {
@@ -144,24 +137,21 @@ impl JuliaWorkerManager {
                 environment_state: JuliaWorkerEnvironmentState::Ready,
                 process_state: JuliaWorkerProcessState::Running,
                 project_dir: worker_dir.to_string_lossy().into_owned(),
-                message: None,
             };
         }
 
         match startup {
-            JuliaWorkerStartupState::Failed(message) => JuliaWorkerStatus {
+            JuliaWorkerStartupState::Failed => JuliaWorkerStatus {
                 runtime_state: JuliaRuntimeState::Invalid,
                 environment_state: JuliaWorkerEnvironmentState::Invalid,
                 process_state: self.process_state(),
                 project_dir: worker_dir.to_string_lossy().into_owned(),
-                message: Some(message),
             },
             JuliaWorkerStartupState::Idle => JuliaWorkerStatus {
                 runtime_state: JuliaRuntimeState::Missing,
                 environment_state: JuliaWorkerEnvironmentState::Missing,
                 process_state: self.process_state(),
                 project_dir: worker_dir.to_string_lossy().into_owned(),
-                message: Some("Julia worker has not been started.".to_string()),
             },
             JuliaWorkerStartupState::Preparing => unreachable!(),
         }
@@ -186,9 +176,7 @@ impl JuliaWorkerManager {
         });
         match &result {
             Ok(()) => self.set_startup_state(JuliaWorkerStartupState::Idle),
-            Err(message) => {
-                self.set_startup_state(JuliaWorkerStartupState::Failed(message.clone()))
-            }
+            Err(_) => self.set_startup_state(JuliaWorkerStartupState::Failed),
         }
         result
     }

@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invokeCommand } from '@/services/ipc';
 import type { ClipboardSubgraphDto } from '@/shared/types/dto/clipboardSubgraph';
 import { parseClipboardSubgraphDto } from '@/shared/types/dto/clipboardSubgraphWireParser';
 
@@ -8,7 +8,7 @@ export class GraphSubgraphService {
     graphPath: string,
     nodeIds: string[],
   ): Promise<ClipboardSubgraphDto> {
-    const response: unknown = await invoke('export_graph_subgraph', {
+    const response: unknown = await invokeCommand('export_graph_subgraph', {
       projectInstanceId,
       graphPath,
       nodeIds,

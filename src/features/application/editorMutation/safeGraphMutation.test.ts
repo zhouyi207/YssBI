@@ -10,7 +10,6 @@ vi.mock('@/app/i18n', () => ({ i18n: { t: (key: string) => `localized:${key}` } 
 vi.mock('@/utils/appLogger', () => ({
   logger: {
     graph: { warn: graphWarn },
-    notify: { error: () => undefined },
   },
 }));
 

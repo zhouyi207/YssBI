@@ -1,4 +1,3 @@
-import { logger } from "@/utils/appLogger";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -15,20 +14,25 @@ import {
   JuliaRuntimeService,
   type JuliaWorkerStatus,
 } from "@/services/julia/juliaRuntimeService";
-import { formatErrorMessage } from "@/shared/utils/formatErrorMessage";
+import { formatInlineUserError, summarizeUserError, type UserErrorSummary } from '@/features/application/userErrorSummary';
 
 export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<JuliaWorkerStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const refreshStatus = useCallback(async () => {
     try {
       setStatus(await JuliaRuntimeService.getWorkerStatus());
+      setStatusError(null);
     } catch (error) {
-      logger.notify.error(formatErrorMessage(error), "UI");
+      setStatus(null);
+      setStatusError(t("notifications.julia.statusFailed", {
+        error: formatInlineUserError(error, t),
+      }));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void refreshStatus();
@@ -44,31 +48,44 @@ export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
 
     setLoading(true);
     uiStore.startProgress({ stage: t("julia.install.preparing"), detail: t("julia.install.preparingDetail") });
+    let failure: UserErrorSummary | null = null;
     try {
       const nextStatus = await JuliaRuntimeService.install();
-      if (nextStatus.state === "ready") {
-        logger.notify.info(t("julia.install.success", { version: nextStatus.version }), "UI");
-      } else {
-        logger.notify.error(nextStatus.message ?? t("julia.install.failed"), "UI");
+      if (nextStatus.state !== "ready") {
+        failure = {
+          message: t(nextStatus.state === "invalid" ? "julia.status.invalid" : "julia.status.notInstalled"),
+          incidentId: null,
+        };
       }
     } catch (error) {
-      logger.notify.error(formatErrorMessage(error), "UI");
+      failure = summarizeUserError(error, t);
     } finally {
       uiStore.finishProgress();
       setLoading(false);
       void refreshStatus();
     }
+
+    if (failure) {
+      await uiStore.alert({
+        title: t("julia.install.failed"),
+        message: t("notifications.julia.installFailed", { error: failure.message }),
+        closeText: t("common.close"),
+        type: "error",
+        incidentId: failure.incidentId,
+        incidentLabel: t("common.incidentId"),
+      });
+    }
   }, [refreshStatus, t]);
 
-  const ready = status?.processState === "running";
-  const runtimeReady = status?.runtimeState === "ready";
+  const ready = !statusError && status?.processState === "running";
+  const runtimeReady = !statusError && status?.runtimeState === "ready";
   const statusLabel = loading
     ? t("julia.status.installing")
-    : status?.processState === "starting"
+    : statusError ?? (status?.processState === "starting"
       ? t("julia.worker.starting")
       : ready
         ? t("julia.worker.ready")
-        : t("julia.worker.unavailable");
+        : t("julia.worker.unavailable"));
 
   return (
     <DropdownMenu onOpenChange={(open) => open && void refreshStatus()}>
@@ -84,7 +101,7 @@ export function JuliaMenuButton({ onOpenBayes }: { onOpenBayes: () => void }) {
         </DropdownMenuItem>
         <DropdownMenuSeparator className="my-0" />
         <DropdownMenuLabel>{t("julia.menu.title")}</DropdownMenuLabel>
-        <DropdownMenuItem disabled className="text-xs">
+        <DropdownMenuItem disabled className={statusError && !loading ? "text-xs text-destructive" : "text-xs"}>
           {statusLabel}
         </DropdownMenuItem>
         <DropdownMenuSeparator className="my-0" />

@@ -1,3 +1,4 @@
+
 import { logger } from '@/utils/appLogger';
 import { useCallback, useRef } from 'react';
 import {
@@ -237,9 +238,7 @@ export function useEditorOperations() {
   const resetPinValue = useCallback(async (nodeId: string, pinId: string) => {
     const tid = activeTabIdRef.current;
     if (!tid) return;
-    const applied = await executeCommand(tid, 'SetPinValue', { nodeId, pinId, newValue: null });
-    if (!applied) logger.notify.error("恢复默认值失败", "UI");
-    return applied;
+    return executeCommand(tid, 'SetPinValue', { nodeId, pinId, newValue: null });
   }, []);
 
   const paste = useCallback(async (pos = { x: 0, y: 0 }) => {

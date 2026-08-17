@@ -50,8 +50,7 @@ describe('loadPresentationWindow', () => {
     ['18', descriptor('18', {
       kind: 'failed',
       failure: {
-        code: 'executionFailed',
-        message: 'kernel failed',
+        code: 'execution_failed',
         cause: { kind: 'execution' },
         upstreamResultIds: [],
       },
@@ -98,9 +97,8 @@ describe('loadPresentationWindow', () => {
       values: [{ title: 'OLS Summary' }],
     });
 
-    await expect(loadPresentationWindow('21')).resolves.toMatchObject({
+    await expect(loadPresentationWindow('21')).resolves.toEqual({
       status: 'load_failed',
-      message: 'Report results require a canonical scalar object',
     });
   });
 

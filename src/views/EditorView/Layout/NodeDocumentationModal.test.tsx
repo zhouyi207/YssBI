@@ -27,7 +27,9 @@ vi.mock('@/features/application/nodeCatalog/useLocalizedNodeCatalog', () => ({
 
 const translations: Record<string, string> = {
   'common.error': 'Error',
+  'common.incidentId': 'Incident ID',
   'common.loading': 'Loading...',
+  'nodeCatalog.loadError': 'Node catalog unavailable',
   'nodeDocumentationModal.title': 'Node Documentation',
   'nodeDocumentationModal.description': 'Search current-language node titles and aliases.',
   'nodeDocumentationModal.searchPlaceholder': 'Search node titles and aliases...',
@@ -167,6 +169,27 @@ describe('NodeDocumentationModal', () => {
     expect(document.body.textContent).toContain('超时');
     expect(document.body.textContent).toContain('functions/opaque/%E5%8A%A9%E6%89%8B.fn');
     expect(document.body.textContent).toContain('9');
+  });
+
+  it('renders localized generic catalog text, code, and incident ID', () => {
+    catalogState.current = {
+      status: 'error',
+      error: {
+        code: 'catalog_backend_failed',
+        incidentId: 'incident-documentation-catalog-42',
+      },
+      catalog: null,
+      searchIndex: null,
+      refresh: vi.fn(),
+    };
+
+    render();
+
+    expect(document.body.textContent).toContain('Node catalog unavailable');
+    expect(document.body.textContent).toContain('[catalog_backend_failed]');
+    expect(document.body.textContent).toContain(
+      'Incident ID: incident-documentation-catalog-42',
+    );
   });
 
   it('searches the current Catalog index without searching documentation bodies', () => {

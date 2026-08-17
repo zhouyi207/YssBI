@@ -1,15 +1,17 @@
-import { logger } from "@/utils/appLogger";
 import React, { useEffect, useMemo, useState } from "react";
+import { VscError } from 'react-icons/vsc';
 import { useTranslation } from "react-i18next";
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { uiStore } from "@/features/core/ui/UIStore";
 import { Select } from "@/shared/ui";
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { i18n, type AppLanguage } from "@/app/i18n";
 import { useProjectComputationSettings } from '@/features/application/projectSettings/useProjectComputationSettings';
+import { formatInlineUserError } from '@/features/application/userErrorSummary';
 
 interface SettingsViewProps {
     onRequestClose?: () => void;
@@ -35,6 +37,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
     const computation = useProjectComputationSettings();
     const [activeSection, setActiveSection] = useState("editor");
     const [isResetting, setIsResetting] = useState(false);
+    const [resetAllError, setResetAllError] = useState<string | null>(null);
+    const [sectionResetError, setSectionResetError] = useState<{ section: string; message: string } | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
 
     const sections = [
@@ -133,11 +137,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
         if (!confirmed) return;
 
         setIsResetting(true);
+        setResetAllError(null);
+        setSectionResetError(null);
         try {
             await resetAllToDefaults();
-            logger.notify.info(t("settings.restoredAll"), "UI");
         } catch (error) {
-            logger.notify.error(t("settings.restoreAllFailed", { error: String(error) }), "UI");
+            setResetAllError(t("settings.restoreAllFailed", {
+                error: formatInlineUserError(error, t),
+            }));
         } finally {
             setIsResetting(false);
         }
@@ -160,6 +167,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
         if (!confirmed) return;
 
         setIsResetting(true);
+        setSectionResetError((current) => current?.section === section ? null : current);
         try {
             switch (section) {
                 case "editor":
@@ -172,9 +180,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                     await resetThemeToDefaults();
                     break;
             }
-            logger.notify.info(t("settings.restoredSection", { section: sectionName }), "UI");
         } catch (error) {
-            logger.notify.error(t("settings.restoreSectionFailed", { section: sectionName, error: String(error) }), "UI");
+            setSectionResetError({
+                section,
+                message: t("settings.restoreSectionFailed", {
+                    section: sectionName,
+                    error: formatInlineUserError(error, t),
+                }),
+            });
         } finally {
             setIsResetting(false);
         }
@@ -701,6 +714,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                 )}
             </div>
 
+            {resetAllError ? (
+                <div className="shrink-0 px-6 pt-4">
+                    <Alert data-settings-reset-all-error variant="destructive">
+                        <VscError aria-hidden="true" />
+                        <AlertDescription className="text-destructive">{resetAllError}</AlertDescription>
+                    </Alert>
+                </div>
+            ) : null}
+
             <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Sidebar Navigation */}
                 <aside className="w-64 border-r border-border bg-[var(--sidebar-bg)] shrink-0 flex flex-col min-h-0">
@@ -724,7 +746,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                 {/* Main Content Area */}
                 <main className="flex-1 min-h-0 flex flex-col">
                     <ScrollArea className="flex-1 min-h-0" orientation="vertical">
-                    <div className="max-w-4xl px-12 py-8">
+                    <div className="max-w-4xl space-y-4 px-12 py-8">
+                        {sectionResetError?.section === activeSection ? (
+                            <Alert data-settings-section-reset-error variant="destructive">
+                                <VscError aria-hidden="true" />
+                                <AlertDescription className="text-destructive">
+                                    {sectionResetError.message}
+                                </AlertDescription>
+                            </Alert>
+                        ) : null}
                         {renderContent()}
                     </div>
                     </ScrollArea>

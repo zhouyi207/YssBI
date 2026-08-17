@@ -1,6 +1,7 @@
-import { logger } from "@/utils/appLogger";
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { VscError } from 'react-icons/vsc';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -43,13 +44,17 @@ export function VariableValueEditorModal({
 }: VariableValueEditorModalProps) {
   const { t } = useTranslation();
   const [jsonDraft, setJsonDraft] = useState('');
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const jsonErrorId = useId();
 
   useEffect(() => {
     if (!open || !isJsonEditableVariableType(dataType)) return;
     setJsonDraft(dataValueToEditableJson(dataType, dataValue));
+    setJsonError(null);
   }, [open, dataType, dataValue]);
 
   const handleClear = () => {
+    setJsonError(null);
     onSave({ kind: 'Null' });
     onClose();
   };
@@ -77,9 +82,10 @@ export function VariableValueEditorModal({
     }
 
     if (!result.ok) {
-      logger.notify.error(t(`detail.variableValue.errors.${result.error}`), "UI");
+      setJsonError(t(`detail.variableValue.errors.${result.error}`));
       return;
     }
+    setJsonError(null);
     onSave(result.value);
     onClose();
   };
@@ -100,15 +106,27 @@ export function VariableValueEditorModal({
 
         <div className="min-h-0 flex-1 px-6 py-5">
           <div className="flex min-h-0 flex-1 flex-col gap-2">
-            <Label>{t('detail.variableValue.jsonLabel')}</Label>
+            <Label htmlFor="variable-value-json">{t('detail.variableValue.jsonLabel')}</Label>
             <ScrollArea className="min-h-0 flex-1">
               <textarea
+                id="variable-value-json"
                 className={jsonTextareaClass}
                 value={jsonDraft}
                 spellCheck={false}
-                onChange={(event) => setJsonDraft(event.target.value)}
+                aria-invalid={Boolean(jsonError)}
+                aria-describedby={jsonError ? jsonErrorId : undefined}
+                onChange={(event) => {
+                  setJsonDraft(event.target.value);
+                  setJsonError(null);
+                }}
               />
             </ScrollArea>
+            {jsonError ? (
+              <Alert id={jsonErrorId} variant="destructive">
+                <VscError aria-hidden="true" />
+                <AlertDescription className="text-destructive">{jsonError}</AlertDescription>
+              </Alert>
+            ) : null}
           </div>
         </div>
 

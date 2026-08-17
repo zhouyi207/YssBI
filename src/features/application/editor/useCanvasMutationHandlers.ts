@@ -16,7 +16,7 @@ function toCanvasMutationOutcome(outcome: Awaited<ReturnType<typeof executeSafeG
   const code = outcome.status === 'rejected'
     ? outcome.code
     : outcome.status === 'conflict' ? 'graph_revision_conflict' : null;
-  const key = code ? graphMutationErrorMessageKey({ code }) : null;
+  const key = code ? graphMutationErrorMessageKey(code) : null;
   return key ? { status: 'failed', message: i18n.t(key) } : { status: 'failed' };
 }
 
@@ -50,12 +50,12 @@ export function createCanvasMutationHandlers(): CanvasInteractionHandlers {
     async insertRerouteAtConnection({ graphPath, connectionId, position }) {
       return toCanvasMutationOutcome(await insertRerouteAtConnection(graphPath, connectionId, position));
     },
-    reportMutationFailure({ graphPath, intent, message }) {
+    reportMutationFailure({ graphPath, intent }) {
       logger.graph.warn(
         `Graph mutation failed graphPath=${graphPath} intent=${intent}`,
         'CanvasInteraction',
       );
-      logger.notify.error(message, "UI");
+
     },
   };
 }

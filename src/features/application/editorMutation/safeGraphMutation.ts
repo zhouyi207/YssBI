@@ -1,10 +1,9 @@
-import { i18n } from '@/app/i18n';
+
 import { executeCommandOutcome } from '@/features/core/history';
 import type { GraphMutationCommandInvocation } from '@/features/core/history/commandExecutor';
 import type { GraphMutationCommandResult } from '@/features/core/history/types';
 import { logger } from '@/utils/appLogger';
 
-import { graphMutationErrorMessageKey } from './graphMutationError';
 
 export async function executeSafeGraphMutationOutcome(
   graphPath: string,
@@ -22,8 +21,7 @@ export async function executeSafeGraphMutationOutcome(
         `Graph mutation outcome code=${code} graphPath=${graphPath} operation=${operation}`,
         'GraphMutation',
       );
-      const key = graphMutationErrorMessageKey({ code });
-      if (key) logger.notify.error(i18n.t(key), "UI");
+
     }
     return outcome;
   } catch {

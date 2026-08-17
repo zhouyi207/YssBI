@@ -7,6 +7,7 @@ import {
   type LocalizedSearchIndex,
 } from '@/features/core/nodeCatalog/localizedSearchIndex';
 import {
+  CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
   selectCatalogRequest,
   selectCatalogResponse,
   useNodeCatalogStore,
@@ -14,15 +15,15 @@ import {
   type LocalizedCatalogResponse,
 } from '@/features/core/nodeCatalog/nodeCatalogStore';
 import { CatalogService } from '@/services/nodeSystem/catalogService';
+import { toErrorReference, type ErrorReference } from '@/services/ipc';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 
 export interface LocalizedNodeCatalogState {
   status: CatalogLoadStatus;
-  error: string | null;
+  error: ErrorReference | null;
   catalog: LocalizedCatalogResponse | null;
   searchIndex: LocalizedSearchIndex | null;
   refresh(): void;
@@ -60,7 +61,6 @@ export function useLocalizedNodeCatalog(enabled = true): LocalizedNodeCatalogSta
       .then((response) => {
         if (!isCurrentProjectIdentity(identity)) return;
         if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
-        if (response.projectInstanceId !== identity.projectInstanceId || response.locale !== locale) return;
         useNodeCatalogStore.getState().storeResponse(requestIdentity, response);
       })
       .catch((error: unknown) => {
@@ -68,7 +68,7 @@ export function useLocalizedNodeCatalog(enabled = true): LocalizedNodeCatalogSta
         if (useProjectIOStore.getState().projectInstanceId !== identity.projectInstanceId) return;
         useNodeCatalogStore.getState().storeError(
           requestIdentity,
-          formatErrorMessage(error, 'Failed to load node catalog'),
+          toErrorReference(error, CATALOG_RESPONSE_CONTRACT_ERROR_CODE),
         );
       });
   }, [enabled, locale, projectInstanceId, request?.status]);

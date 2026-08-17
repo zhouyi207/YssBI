@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { openExternalUrl } from "@/shared/utils/openExternalUrl";
+import { openExternalUrlWithDialog } from "@/features/application/window";
 
 interface AboutModalProps {
   open: boolean;
@@ -46,7 +46,7 @@ export function AboutModal({ open, onOpenChange }: AboutModalProps) {
             type="button"
             variant="outline"
             className="w-full justify-center gap-2"
-            onClick={() => void openExternalUrl(APP_LINKS.repository)}
+            onClick={() => void openExternalUrlWithDialog(APP_LINKS.repository, t)}
           >
             <VscGithub size={16} />
             {t("menubar.githubRepository")}
@@ -55,7 +55,7 @@ export function AboutModal({ open, onOpenChange }: AboutModalProps) {
             type="button"
             variant="outline"
             className="w-full"
-            onClick={() => void openExternalUrl(APP_LINKS.reportIssue)}
+            onClick={() => void openExternalUrlWithDialog(APP_LINKS.reportIssue, t)}
           >
             {t("menubar.reportIssue")}
           </Button>

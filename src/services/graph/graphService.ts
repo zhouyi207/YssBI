@@ -1,12 +1,8 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeCommand } from "@/services/ipc";
 import type {
     ProjectSaveResultDto,
     ResourceMutationResultDto,
 } from "@/shared/types/dto";
-
-import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
-import { logger } from '@/utils/appLogger';
-
 
 
 /**
@@ -25,18 +21,11 @@ export class GraphService {
         graphName: string,
         operationId: string,
     ): Promise<ResourceMutationResultDto> {
-        try {
-            const result = await invoke<ResourceMutationResultDto>("create_event", {
-                projectInstanceId,
-                graphName,
-                operationId,
-            });
-            logger.graph.info(`Event '${graphName}' created`, 'GraphService');
-            return result;
-        } catch (error) {
-            logger.graph.error(`Error creating event: ${formatErrorMessage(error)}`, 'GraphService');
-            throw error;
-        }
+        return invokeCommand<ResourceMutationResultDto>("create_event", {
+            projectInstanceId,
+            graphName,
+            operationId,
+        });
     }
 
     /**
@@ -49,18 +38,11 @@ export class GraphService {
         graphName: string,
         operationId: string,
     ): Promise<ResourceMutationResultDto> {
-        try {
-            const result = await invoke<ResourceMutationResultDto>("create_function", {
-                projectInstanceId,
-                graphName,
-                operationId,
-            });
-            logger.graph.info(`Function '${graphName}' created`, 'GraphService');
-            return result;
-        } catch (error) {
-            logger.graph.error(`Error creating function: ${formatErrorMessage(error)}`, 'GraphService');
-            throw error;
-        }
+        return invokeCommand<ResourceMutationResultDto>("create_function", {
+            projectInstanceId,
+            graphName,
+            operationId,
+        });
     }
 
     /**
@@ -73,19 +55,12 @@ export class GraphService {
         expectedRevision: number,
         operationId: string,
     ): Promise<ResourceMutationResultDto> {
-        try {
-            const result = await invoke<ResourceMutationResultDto>("remove_graph", {
-                projectInstanceId,
-                graphPath,
-                expectedRevision,
-                operationId,
-            });
-            logger.graph.info(`Graph '${graphPath}' removed successfully`, 'GraphService');
-            return result;
-        } catch (error) {
-            logger.graph.error(`Error removing graph: ${formatErrorMessage(error)}`, 'GraphService');
-            throw error;
-        }
+        return invokeCommand<ResourceMutationResultDto>("remove_graph", {
+            projectInstanceId,
+            graphPath,
+            expectedRevision,
+            operationId,
+        });
     }
 
 
@@ -94,7 +69,7 @@ export class GraphService {
         lifecycleToken: number,
         projectInstanceId: string,
     ): Promise<void> {
-        await invoke("unload_project_graph", { graphPath, lifecycleToken, projectInstanceId });
+        await invokeCommand("unload_project_graph", { graphPath, lifecycleToken, projectInstanceId });
     }
 
     static async saveProjectGraph(
@@ -103,7 +78,7 @@ export class GraphService {
         expectedRevision: number,
         operationId: string,
     ): Promise<ProjectSaveResultDto> {
-        return await invoke<ProjectSaveResultDto>("save_project_graph", {
+        return await invokeCommand<ProjectSaveResultDto>("save_project_graph", {
             projectInstanceId,
             graphPath,
             expectedRevision,
@@ -117,14 +92,12 @@ export class GraphService {
         expectedRevision: number,
         operationId: string,
     ): Promise<ResourceMutationResultDto> {
-        const result = await invoke<ResourceMutationResultDto>("duplicate_graph", {
+        return invokeCommand<ResourceMutationResultDto>("duplicate_graph", {
             projectInstanceId,
             graphPath,
             expectedRevision,
             operationId,
         });
-        logger.graph.info(`Graph '${graphPath}' duplicated`, 'GraphService');
-        return result;
     }
 
     static async renameGraphResource(
@@ -135,7 +108,7 @@ export class GraphService {
         lifecycleToken: number,
         operationId: string,
     ): Promise<ResourceMutationResultDto> {
-        return invoke<ResourceMutationResultDto>('rename_graph_resource', {
+        return invokeCommand<ResourceMutationResultDto>('rename_graph_resource', {
             projectInstanceId,
             graphPath,
             expectedRevision,

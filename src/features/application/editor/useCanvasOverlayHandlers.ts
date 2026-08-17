@@ -1,3 +1,4 @@
+
 import { useCallback, type RefObject } from 'react';
 import { createNodeFromDescriptor } from '@/features/application/nodeCatalog/createNodeFromDescriptor';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
@@ -9,10 +10,7 @@ import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 import { clientToWorldInCanvas } from './canvasDrop';
-import {
-  EDITOR_MUTATION_CAPABILITIES,
-  notifyNodeCreationUnavailable,
-} from './editorMutationAvailability';
+import { EDITOR_MUTATION_CAPABILITIES } from './editorMutationAvailability';
 
 function readPendingConnectionAddress(pendingConnection: Pin | null): PortAddressDto | null {
   if (!pendingConnection) return null;
@@ -79,10 +77,7 @@ export function useCanvasOverlayHandlers({
       const canvasElement = canvasElementRef.current;
       if (!canvasElement || !activeTabId) return;
 
-      if (!EDITOR_MUTATION_CAPABILITIES.catalogDescriptors) {
-        notifyNodeCreationUnavailable();
-        return;
-      }
+      if (!EDITOR_MUTATION_CAPABILITIES.catalogDescriptors) return;
 
       const position = clientToWorldInCanvas(
         canvasElement,
@@ -110,7 +105,6 @@ export function useCanvasOverlayHandlers({
           `Failed to create node '${descriptor.nodeTypeId}' in '${activeTabId}': ${message}`,
           'NodePalette',
         );
-        logger.notify.error(`Failed to create node: ${message}`, "UI");
       }
     },
     [

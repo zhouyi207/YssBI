@@ -1,5 +1,4 @@
-import { logger } from "@/utils/appLogger";
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { parsePlotPayload, usePresentationWindow } from '@/features/application/presentation';
 import { PresentationWindowShell } from '@/features/application/window/PresentationWindowShell';
@@ -25,15 +24,6 @@ export const PlotWindow: React.FC = () => {
     return parsePlotPayload(state.payload.chart, state.payload.data);
   }, [state]);
 
-  const plotParseKey =
-    state.status === 'ready' && state.payload.mode === 'plot'
-      ? `${state.descriptor.resultId}:${state.payload.chart}`
-      : null;
-
-  useEffect(() => {
-    if (!plotParseKey || plotPayload) return;
-    logger.notify.error(t('plot.invalidData'), "UI");
-  }, [plotParseKey, plotPayload, t]);
 
   const title =
     state.status === 'ready' ? state.descriptor.title : t('plot.title');

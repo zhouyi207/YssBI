@@ -7,6 +7,7 @@ import type {
   ResultProgress,
   ResultReportKind,
 } from '@/shared/types/dto/result';
+import { logger } from '@/utils/appLogger';
 import { parsePlotChartFromLocation } from './parsePresentationWindowQuery';
 
 export type PresentationWindowState =
@@ -16,7 +17,7 @@ export type PresentationWindowState =
   | { status: 'pending'; descriptor: ResultDescriptor; progress: ResultProgress }
   | { status: 'failed'; descriptor: ResultDescriptor; failure: ResultFailure }
   | { status: 'cancelled'; descriptor: ResultDescriptor }
-  | { status: 'load_failed'; message: string }
+  | { status: 'load_failed' }
   | { status: 'ready'; descriptor: ResultDescriptor; payload: PresentationPayload };
 
 export type PresentationPayload =
@@ -80,9 +81,10 @@ export async function loadPresentationWindow(resultId: string): Promise<Presenta
         return { status: 'ready', descriptor, payload: await loadReadyPayload(descriptor) };
     }
   } catch (error) {
-    return {
-      status: 'load_failed',
-      message: error instanceof Error ? error.message : String(error),
-    };
+    logger.app.error(
+      `Failed to load presentation result: ${error instanceof Error ? error.message : String(error)}`,
+      'loadPresentationWindow',
+    );
+    return { status: 'load_failed' };
   }
 }

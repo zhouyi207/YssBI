@@ -6,6 +6,10 @@ export function presentationWindowErrorMessage(
     missingResultId: string;
     notFound: string;
     loadFailed: string;
+    pending: (completed: string, total: string | null) => string;
+    executionFailed: string;
+    upstreamFailed: string;
+    cancelled: string;
   },
 ): string | null {
   switch (state.status) {
@@ -14,13 +18,15 @@ export function presentationWindowErrorMessage(
     case 'not_found':
       return messages.notFound;
     case 'load_failed':
-      return state.message || messages.loadFailed;
+      return messages.loadFailed;
     case 'pending':
-      return `Result pending (${state.progress.completed}/${state.progress.total ?? '?'})`;
+      return messages.pending(state.progress.completed, state.progress.total);
     case 'failed':
-      return state.failure.message;
+      return state.failure.code === 'upstream_failed'
+        ? messages.upstreamFailed
+        : messages.executionFailed;
     case 'cancelled':
-      return 'Result was cancelled';
+      return messages.cancelled;
     default:
       return null;
   }

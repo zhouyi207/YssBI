@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { toErrorReference, type ErrorReference } from '@/services/ipc';
 import { ResultService } from '@/services/result/resultService';
 import type { ResultValue } from '@/shared/types/dto/result';
 
 export function useResultValue(resultId: string | null) {
   const [value, setValue] = useState<ResultValue | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ErrorReference | null>(null);
   const requestRef = useRef(0);
 
   useEffect(() => {
@@ -22,7 +23,7 @@ export function useResultValue(resultId: string | null) {
       .then((next) => { if (requestId === requestRef.current) setValue(next); })
       .catch((cause) => {
         if (requestId === requestRef.current) {
-          setError(cause instanceof Error ? cause.message : String(cause));
+          setError(toErrorReference(cause, 'result_value_read_failed'));
         }
       })
       .finally(() => { if (requestId === requestRef.current) setLoading(false); });

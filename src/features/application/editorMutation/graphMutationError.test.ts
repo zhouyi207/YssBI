@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { enUS } from '@/app/i18n/locales/en-US';
 import { zhCN } from '@/app/i18n/locales/zh-CN';
+import { normalizeIpcError } from '@/services/ipc';
 import {
   GRAPH_MUTATION_ERROR_CODES,
+  graphMutationErrorCode,
   graphMutationErrorMessageKey,
   type GraphMutationErrorCode,
 } from './graphMutationError';
 
-const backendMessage = 'raw backend message for 00000000-0000-0000-0000-000000000123';
+const backendDetail = 'raw backend detail for 00000000-0000-0000-0000-000000000123';
+
+function backendError(code: string) {
+  return normalizeIpcError('mutate_graph_document', {
+    code,
+    details: { debug: backendDetail },
+    incidentId: null,
+  });
+}
 
 function localizedMessage(
   locale: typeof enUS | typeof zhCN,
@@ -18,23 +28,28 @@ function localizedMessage(
 
 describe('graphMutationErrorMessageKey', () => {
   it.each(GRAPH_MUTATION_ERROR_CODES)('maps %s to safe non-empty copy in both locales', (code) => {
-    const key = graphMutationErrorMessageKey({ code, message: backendMessage });
+    const error = backendError(code);
 
-    expect(key).toBe(`canvas.connection.errors.${code}`);
+    expect(graphMutationErrorCode(error)).toBe(code);
+    expect(graphMutationErrorMessageKey(code)).toBe(`canvas.connection.errors.${code}`);
     for (const locale of [enUS, zhCN]) {
       const copy = localizedMessage(locale, code);
       expect(copy.trim()).not.toBe('');
-      expect(copy).not.toContain(backendMessage);
+      expect(copy).not.toContain(backendDetail);
       expect(copy).not.toContain('00000000-0000-0000-0000-000000000123');
     }
   });
 
+  it('returns null for an unknown code value', () => {
+    expect(graphMutationErrorMessageKey('internal_error')).toBeNull();
+  });
+
   it.each([
     null,
-    new Error(backendMessage),
-    { code: 'internal_error', message: backendMessage },
-    { code: 42, message: backendMessage },
+    new Error(backendDetail),
+    backendError('internal_error'),
+    { code: 'graph_connection_type_mismatch', details: null, incidentId: null },
   ])('returns null for an unrecognized rejection %#', (error) => {
-    expect(graphMutationErrorMessageKey(error)).toBeNull();
+    expect(graphMutationErrorCode(error)).toBeNull();
   });
 });

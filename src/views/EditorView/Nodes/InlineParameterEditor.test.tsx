@@ -4,7 +4,9 @@ import { act } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { i18n } from '@/app/i18n';
 import type { ExecuteEditorMutationOutcome } from '@/features/application/editorMutation/editorMutationCoordinator';
+import { normalizeIpcError } from '@/services/ipc';
 import type { ParameterEditorDto } from '@/shared/types/dto/editorProjection';
 import { InlineParameterEditor } from './InlineParameterEditor';
 
@@ -15,6 +17,7 @@ const { setNodeParameters } = vi.hoisted(() => ({
 vi.mock('@/features/application/editor/setNodeParameters', () => ({
   setNodeParameters,
 }));
+
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -197,12 +200,15 @@ describe('InlineParameterEditor', () => {
     },
   );
 
-  it('does not submit an invalid numeric draft on Enter', () => {
+  it('shows and describes an invalid numeric draft beside the input', () => {
     renderEditor(projectedParameter('number', 12, { kind: 'Int64' }));
 
     changeInput('1.5');
     keyDown('Enter');
 
+    const error = container.querySelector<HTMLElement>('[role="alert"]');
+    expect(error?.textContent).toContain(i18n.t('notifications.parameter.enterInteger'));
+    expect(input().getAttribute('aria-describedby')).toBe(error?.id);
     expect(setNodeParameters).not.toHaveBeenCalled();
   });
 
@@ -253,6 +259,25 @@ describe('InlineParameterEditor', () => {
       expect(input().value).toBe('latest projection');
     },
   );
+
+  it('shows an IPC update failure beside the input without exposing backend details', async () => {
+    setNodeParameters.mockRejectedValueOnce(normalizeIpcError('mutate_graph_document', {
+      code: 'parameter_update_failed',
+      details: { debug: 'raw backend inline failure' },
+      incidentId: 'incident-inline-42',
+    }));
+    renderEditor(projectedParameter('number', 12, { kind: 'Int64' }));
+
+    changeInput('24');
+    keyDown('Enter');
+    await flushPromises();
+
+    const error = container.querySelector<HTMLElement>('[role="alert"]');
+    expect(error?.textContent).toContain('parameter_update_failed');
+    expect(error?.textContent).toContain('incident-inline-42');
+    expect(error?.textContent).not.toContain('raw backend inline failure');
+    expect(input().getAttribute('aria-describedby')).toBe(error?.id);
+  });
 
   it('restores the projected value when mutation rejects', async () => {
     setNodeParameters.mockRejectedValueOnce(new Error('backend rejected value'));

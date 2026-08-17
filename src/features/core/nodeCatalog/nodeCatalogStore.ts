@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ErrorReference } from '@/services/ipc';
 import type {
   LocalizedCatalogCategory,
   LocalizedCatalogItem,
@@ -15,6 +16,9 @@ export interface LocalizedCatalogResponse {
 
 export type CatalogLoadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
+export const CATALOG_RESPONSE_CONTRACT_ERROR_CODE = 'catalog_response_contract_error';
+export const CATALOG_RESPONSE_STALE_ERROR_CODE = 'catalog_response_stale';
+
 export interface CatalogRequestIdentity {
   projectInstanceId: string;
   locale: string;
@@ -25,7 +29,7 @@ export interface CatalogRequestIdentity {
 export interface CatalogRequestState {
   status: CatalogLoadStatus;
   responseKey: string | null;
-  error: string | null;
+  error: ErrorReference | null;
   requestGeneration: number | null;
   minimumResourcePublicationRevision: number;
 }
@@ -36,7 +40,7 @@ export interface NodeCatalogState {
   projectWatermarks: Record<string, number>;
   beginRequest(projectInstanceId: string, locale: string): CatalogRequestIdentity | null;
   storeResponse(identity: CatalogRequestIdentity, response: LocalizedCatalogResponse): boolean;
-  storeError(identity: CatalogRequestIdentity, error: string): boolean;
+  storeError(identity: CatalogRequestIdentity, error: ErrorReference): boolean;
   observeResourcePublication(projectInstanceId: string, revision: number): boolean;
   requestRefresh(projectInstanceId: string, locale: string): void;
   clear(): void;
@@ -125,10 +129,24 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
     let stored = false;
     set((state) => {
       if (!ownsRequest(state, identity)) return state;
-      if (response.projectInstanceId !== identity.projectInstanceId
-        || response.locale !== identity.locale) return state;
       const requestKey = catalogRequestKey(identity.projectInstanceId, identity.locale);
       const request = state.requests[requestKey];
+      if (response.projectInstanceId !== identity.projectInstanceId
+        || response.locale !== identity.locale) {
+        return {
+          requests: {
+            ...state.requests,
+            [requestKey]: {
+              ...request,
+              status: 'error',
+              error: {
+                code: CATALOG_RESPONSE_CONTRACT_ERROR_CODE,
+                incidentId: null,
+              },
+            },
+          },
+        };
+      }
       if (response.resourcePublicationRevision < identity.minimumResourcePublicationRevision) {
         return {
           requests: {
@@ -136,7 +154,10 @@ export const useNodeCatalogStore = create<NodeCatalogState>((set) => ({
             [requestKey]: {
               ...request,
               status: 'error',
-              error: `Catalog response is older than publication revision ${identity.minimumResourcePublicationRevision}`,
+              error: {
+                code: CATALOG_RESPONSE_STALE_ERROR_CODE,
+                incidentId: null,
+              },
               requestGeneration: null,
             },
           },
