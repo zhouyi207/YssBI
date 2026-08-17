@@ -1,5 +1,10 @@
 export const LOG_ITEM_HEIGHT = 36;
 export const LOG_ITEM_GAP = 8;
 export const VIRTUALIZE_THRESHOLD = 80;
-/** 前端实时日志环形缓冲上限：超出丢弃最旧，历史仍可经后端分页回看 */
+/** 前端诊断 recent 缓冲上限：超出后只保留最新记录。 */
 export const LOG_BUFFER_MAX = 5000;
+
+export const FRONTEND_DIAGNOSTIC_BATCH_MAX_ENTRIES = 32;
+export const FRONTEND_DIAGNOSTIC_BATCH_MAX_PENDING = 256;
+export const FRONTEND_DIAGNOSTIC_BATCH_MAX_DELAY_MS = 100;
+export const FRONTEND_DIAGNOSTIC_MESSAGE_MAX_BYTES = 16_384;

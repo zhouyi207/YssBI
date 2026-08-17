@@ -9,7 +9,6 @@ use std::time::Duration;
 
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::AppHandle;
-use tauri_plugin_log::log::warn;
 
 use crate::event::{Event as ProjectEvent, EventResource, emit_project_event};
 use crate::project::read_project_index;
@@ -73,7 +72,13 @@ fn enqueue_relevant_change(tx: &SyncSender<()>, root: &Path, result: notify::Res
         }
         Ok(_) => {}
         Err(error) => {
-            warn!("Project watcher error: {}", error);
+            tracing::warn!(
+                target: "yssbi::project::watcher",
+                diagnostic_domain = "system",
+                diagnostic_event = "watcherError",
+                error = %error,
+                "Project watcher error"
+            );
             // A watcher error may hide a relevant change, so conservatively
             // invalidate the index instead of silently losing synchronization.
             let _ = tx.try_send(());
@@ -102,7 +107,13 @@ fn spawn_project_watcher_thread(
                             version = version.saturating_add(1);
                             emit_project_index_invalidated_from_watcher(&app, version);
                         }
-                        Err(error) => warn!("Failed to refresh watched project index: {}", error),
+                        Err(error) => tracing::warn!(
+                            target: "yssbi::project::watcher",
+                            diagnostic_domain = "system",
+                            diagnostic_event = "projectIndexRefreshFailed",
+                            error = %error,
+                            "Failed to refresh watched project index"
+                        ),
                     }
                 }
                 Err(_) => break,

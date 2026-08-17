@@ -40,9 +40,14 @@ pub fn emit_project_event_result(app_handle: &AppHandle, event: &Event) -> Resul
 }
 
 pub fn emit_project_event(app_handle: &AppHandle, event: Event) {
-    use tauri_plugin_log::log::error;
     if let Err(error) = emit_project_event_result(app_handle, &event) {
-        error!("Failed to emit project event: {error}");
+        tracing::error!(
+            target: "yssbi::project::events",
+            diagnostic_domain = "application",
+            diagnostic_event = "projectEventEmitFailed",
+            error = %error,
+            "Failed to emit project event"
+        );
     }
 }
 

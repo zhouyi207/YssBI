@@ -393,10 +393,10 @@ pub(crate) fn materialize_dynamic_interface_with_resources(
                     Err(error) => {
                         if let Some((resource_key, reason)) = error.resource {
                             state.push_node_diagnostic(
-                                CompilerDiagnostic::ResourceResolutionFailed {
-                                    resource_key: resource_key.as_str().into(),
+                                CompilerDiagnostic::resource_resolution_failed(
+                                    resource_key.as_str(),
                                     reason,
-                                },
+                                ),
                             );
                         } else {
                             state.push_node_diagnostic(

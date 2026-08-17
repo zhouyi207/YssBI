@@ -573,9 +573,12 @@ impl Drop for RunResourceOwner {
     fn drop(&mut self) {
         let errors = self.cleanup();
         for error in errors {
-            tauri_plugin_log::log::warn!(
+            tracing::warn!(
                 target: "yssbi::node_system::runtime::cleanup",
-                "{error}"
+                diagnostic_domain = "execution",
+                diagnostic_event = "resourceCleanupFailed",
+                error = %error,
+                "Runtime resource cleanup failed"
             );
         }
     }

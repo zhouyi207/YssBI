@@ -495,12 +495,12 @@ define_compiler_diagnostics! {
         en: "Resource {resource_key} uses the default node title: {reason}.",
         zh: "资源 {resource_key} 使用默认节点标题：{reason}。",
     },
-    ResourceResolutionFailed { resource_key, reason } => {
+    ResourceResolutionFailed { resource_key } => {
         code: "compiler.resource.resolution_failed",
         message_key: "diagnostics.compiler.resource.resolution_failed",
         severity: Error,
-        en: "Resource {resource_key} could not be resolved: {reason}.",
-        zh: "无法解析资源 {resource_key}：{reason}。",
+        en: "Resource {resource_key} could not be resolved.",
+        zh: "无法解析资源 {resource_key}。",
     },
     FunctionAbiTargetMismatch { function_path } => {
         code: "compiler.function.abi_target_mismatch",
@@ -911,6 +911,24 @@ define_compiler_diagnostics! {
     },
 }
 
+impl CompilerDiagnostic {
+    pub(crate) fn resource_resolution_failed(
+        resource_key: impl Into<Box<str>>,
+        internal_reason: impl AsRef<str>,
+    ) -> Self {
+        let resource_key = resource_key.into();
+        tracing::warn!(
+            target: "yssbi::compiler",
+            diagnostic_domain = "graph",
+            diagnostic_event = "compilerResourceResolutionFailed",
+            resource_key = resource_key.as_ref(),
+            internal_reason = internal_reason.as_ref(),
+            "Compiler resource resolution failed"
+        );
+        Self::ResourceResolutionFailed { resource_key }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CompilerDiagnosticDefinitionError {
     DuplicateCode {
@@ -1226,6 +1244,30 @@ mod tests {
                 .templates
                 .iter()
                 .any(|template| template.locale == "en-US")
+        }));
+    }
+
+    #[test]
+    fn resource_resolution_diagnostic_keeps_internal_reason_out_of_projection_arguments() {
+        let diagnostic = CompilerDiagnostic::resource_resolution_failed(
+            "variables/not-a-uuid",
+            "private uuid parser detail",
+        )
+        .into_node(DiagnosticLocation::Graph);
+        let definition = COMPILER_DIAGNOSTIC_DEFINITIONS
+            .iter()
+            .find(|definition| definition.code == "compiler.resource.resolution_failed")
+            .expect("resource resolution diagnostic definition");
+
+        assert_eq!(definition.argument_names, ["resource_key"]);
+        assert_eq!(
+            diagnostic.arguments.get("resource_key").map(Box::as_ref),
+            Some("variables/not-a-uuid"),
+        );
+        assert!(!diagnostic.arguments.contains_key("reason"));
+        assert!(definition.templates.iter().all(|template| {
+            !template.text.contains("{reason}")
+                && !template.text.contains("private uuid parser detail")
         }));
     }
 

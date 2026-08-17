@@ -1,4 +1,4 @@
-import type { LogMessage } from '@/shared/types/ui';
+import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 
 export type DetailTarget =
   | { kind: 'node'; id: string; graphPath: string }
@@ -15,5 +15,5 @@ export type DetailFocus = DetailTarget;
 
 export interface DetailTargetInput {
   detailFocus: DetailFocus | null;
-  selectedLog: LogMessage | null;
+  selectedLog: DiagnosticRecordDto | null;
 }

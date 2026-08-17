@@ -5,15 +5,15 @@
 pub mod application;
 pub mod commands;
 pub mod database;
+pub mod diagnostics;
 pub mod error;
 pub mod event;
 #[allow(dead_code, unused_imports)]
 mod execution;
-pub mod frontend;
+
 #[allow(dead_code, unused_imports)]
 mod graph;
 pub mod julia;
-pub mod log;
 pub mod math;
 pub mod node_system;
 pub mod project;
@@ -53,35 +53,6 @@ pub fn run() {
     let bayes_worker = julia_worker.clone();
 
     tauri::Builder::default()
-        .plugin(
-            tauri_plugin_log::Builder::new()
-                .targets([tauri_plugin_log::Target::new(
-                    tauri_plugin_log::TargetKind::Stdout,
-                )])
-                .level(tauri_plugin_log::log::LevelFilter::Debug)
-                .format(|out, message, record| {
-                    use chrono::Local;
-                    // 简化日志格式: [时间][来源][级别] 消息
-                    let target = record.target();
-                    // 简化 webview 目标名称
-                    let short_target = if target.starts_with("webview:") {
-                        "FE"
-                    } else if target.contains("yssbi") {
-                        "BE"
-                    } else {
-                        target
-                    };
-                    let now = Local::now();
-                    out.finish(format_args!(
-                        "[{}][{}][{}] {}",
-                        now.format("%H:%M:%S%.3f"),
-                        short_target,
-                        record.level(),
-                        message
-                    ))
-                })
-                .build(),
-        )
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
@@ -91,12 +62,19 @@ pub fn run() {
         .manage(project::ProjectPickerTaskCancelRegistry::new())
         .manage(julia_worker)
         .setup(move |app| {
+            let log_dir = match app.path().app_log_dir() {
+                Ok(path) => Some(path),
+                Err(error) => {
+                    eprintln!("failed to resolve application log directory: {error}");
+                    None
+                }
+            };
+            app.manage(diagnostics::DiagnosticsRuntime::initialize(log_dir));
+
             let project_state =
                 initialize_project_state().map_err(Box::<dyn std::error::Error>::from)?;
             app.manage(project_state);
 
-            // 初始化日志管理器
-            log::init_log_manager(app.handle().clone());
             let app_dir = app.path().app_data_dir()?;
             let project_registry =
                 tauri::async_runtime::block_on(project::ProjectRegistry::init(app_dir.clone()))?;
@@ -110,7 +88,12 @@ pub fn run() {
             let warmup_worker = bayes_worker.clone();
             tauri::async_runtime::spawn_blocking(move || {
                 if let Err(error) = warmup_worker.warm_up(&app_dir) {
-                    tauri_plugin_log::log::warn!("Failed to warm up Julia worker: {error}");
+                    tracing::warn!(
+                        target: "yssbi::julia::worker",
+                        diagnostic_domain = "execution",
+                        error = %error,
+                        "Failed to warm up Julia worker"
+                    );
                 }
             });
 
@@ -125,7 +108,12 @@ pub fn run() {
             let window_state_store = window_state::WindowStateStore::load(window_state_path);
             if let Err(e) = window_state::apply_main_window_state(app.handle(), &window_state_store)
             {
-                tauri_plugin_log::log::warn!("Failed to apply main window state: {}", e);
+                tracing::warn!(
+                    target: "yssbi::window_state",
+                    diagnostic_domain = "ui",
+                    error = %e,
+                    "Failed to apply main window state"
+                );
                 // 兜底：即便恢复失败也确保主窗口显示出来
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = win.show();
@@ -156,8 +144,8 @@ pub fn run() {
             allocate_pin_preview_generation,
             execute_graph_document,
             cancel_graph_run,
-            list_graph_traces,
-            get_run_trace,
+            list_graph_trace_bundles,
+            get_run_trace_bundle,
             get_result_descriptor,
             get_result_value,
             get_result_page,
@@ -256,11 +244,10 @@ pub fn run() {
             get_julia_runtime_status,
             get_julia_worker_status,
             install_julia_runtime,
-            // ==================== 日志 ====================
-            frontend_log,
-            get_logs,
-            get_log_file_path,
-            get_log_count,
+            // ==================== Diagnostics ====================
+            submit_frontend_diagnostics,
+            subscribe_diagnostics,
+            unsubscribe_diagnostics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

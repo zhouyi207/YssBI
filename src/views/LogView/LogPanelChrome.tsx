@@ -1,9 +1,9 @@
 import { cn } from '@/lib/utils';
 import { workbenchPanelHeaderClass } from '@/views/EditorView/Layout/workbenchPanelHeaderStyles';
+import { LogDomainTabStrip } from './LogDomainTabStrip';
 import { useLogPanelContext } from './logPanelContext';
 import { LogPanelStatus } from './LogPanelStatus';
 import { LogPanelToolbar } from './LogPanelToolbar';
-import { LogTypeTabStrip } from './LogTypeTabStrip';
 
 /** Shared log panel header: draggable tabs row + status + toolbar. */
 export function LogPanelChrome() {
@@ -22,7 +22,7 @@ export function LogPanelChrome() {
         onDrag={dragHandleProps?.onDrag}
         onDragEnd={dragHandleProps?.onDragEnd}
       >
-        <LogTypeTabStrip />
+        <LogDomainTabStrip />
         <div className="h-3 w-px shrink-0 bg-border/60" aria-hidden />
         <LogPanelStatus />
       </div>

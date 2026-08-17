@@ -387,7 +387,6 @@ impl<S: ResourceSnapshot> AnalysisResourceResolver for TrackedResourceResolver<'
 pub struct CompilationSnapshot {
     pub provenance: CompileProvenance,
     pub document: GraphDocument,
-    pub trace_span_id: SpanId,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -571,8 +570,19 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             },
             compile_id,
         };
-        let correlation = CorrelationContext::compile(&provenance);
-        let mut span = start_span_safely(
+        CompilationSnapshot {
+            provenance,
+            document: document.clone(),
+        }
+    }
+
+    pub fn compile_snapshot(
+        &self,
+        snapshot: &CompilationSnapshot,
+        cancellation: &CompileCancellationToken,
+    ) -> Result<CompileResult, CompileCancelled> {
+        let correlation = CorrelationContext::compile(&snapshot.provenance);
+        let mut snapshot_span = start_span_safely(
             self.trace,
             SpanSpec {
                 parent_span_id: None,
@@ -584,20 +594,29 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 correlation,
             },
         );
-        let trace_span_id = span.span_id();
-        let snapshot = CompilationSnapshot {
-            provenance,
-            document: document.clone(),
-            trace_span_id,
+        let result = self.compile_snapshot_inner(snapshot, cancellation, snapshot_span.span_id());
+        let outcome = match &result {
+            Ok(result) => {
+                let mut final_provenance = snapshot.provenance.clone();
+                final_provenance.basis = result.analysis.basis.clone();
+                snapshot_span.replace_correlation(CorrelationContext::compile(&final_provenance));
+                if result.outcome == CompilationOutcome::Succeeded {
+                    SpanOutcome::Success
+                } else {
+                    SpanOutcome::Error
+                }
+            }
+            Err(_) => SpanOutcome::Cancellation,
         };
-        span.finish(SpanOutcome::Success);
-        snapshot
+        snapshot_span.finish(outcome);
+        result
     }
 
-    pub fn compile_snapshot(
+    fn compile_snapshot_inner(
         &self,
         snapshot: &CompilationSnapshot,
         cancellation: &CompileCancellationToken,
+        snapshot_trace_span_id: SpanId,
     ) -> Result<CompileResult, CompileCancelled> {
         #[cfg(test)]
         COMPILE_SNAPSHOT_INVOCATIONS.fetch_add(1, Ordering::Relaxed);
@@ -605,7 +624,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         let mut analysis_span = start_span_safely(
             self.trace,
             SpanSpec {
-                parent_span_id: Some(snapshot.trace_span_id),
+                parent_span_id: Some(snapshot_trace_span_id),
                 run_id: None,
                 operation_id: None,
                 activation_id: None,
@@ -719,7 +738,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         let mut lowering_span = start_span_safely(
             self.trace,
             SpanSpec {
-                parent_span_id: Some(snapshot.trace_span_id),
+                parent_span_id: Some(snapshot_trace_span_id),
                 run_id: None,
                 operation_id: None,
                 activation_id: None,
@@ -1019,10 +1038,10 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 if let Some(sites) = root_sites {
                     for &node_id in sites {
                         diagnostics.push(
-                            CompilerDiagnostic::ResourceResolutionFailed {
-                                resource_key: error.key().as_str().into(),
-                                reason: error.reason().into(),
-                            }
+                            CompilerDiagnostic::resource_resolution_failed(
+                                error.key().as_str(),
+                                error.reason(),
+                            )
                             .into_node(DiagnosticLocation::Node(node_id)),
                         );
                     }
@@ -1567,10 +1586,10 @@ impl<'a> AnalysisState<'a> {
             Ok(title) => Some(title),
             Err((reason, semantic_failure)) => {
                 let diagnostic = if semantic_failure {
-                    CompilerDiagnostic::ResourceResolutionFailed {
-                        resource_key: resource.unwrap_or(parameter.as_str()).into(),
-                        reason: reason.into(),
-                    }
+                    CompilerDiagnostic::resource_resolution_failed(
+                        resource.unwrap_or(parameter.as_str()),
+                        reason,
+                    )
                 } else {
                     CompilerDiagnostic::ResourceDisplayNameUnavailable {
                         resource_key: resource.unwrap_or(parameter.as_str()).into(),
@@ -1591,10 +1610,10 @@ impl<'a> AnalysisState<'a> {
             Ok(resolved) => resolved,
             Err(error) => {
                 self.push(
-                    CompilerDiagnostic::ResourceResolutionFailed {
-                        resource_key: error.key().as_str().into(),
-                        reason: error.reason().into(),
-                    },
+                    CompilerDiagnostic::resource_resolution_failed(
+                        error.key().as_str(),
+                        error.reason(),
+                    ),
                     DiagnosticLocation::Graph,
                 );
                 return;
@@ -1757,10 +1776,10 @@ impl<'a> AnalysisState<'a> {
                 Ok(resolved) => resolved,
                 Err(error) => {
                     self.push(
-                        CompilerDiagnostic::ResourceResolutionFailed {
-                            resource_key: error.key().as_str().into(),
-                            reason: error.reason().into(),
-                        },
+                        CompilerDiagnostic::resource_resolution_failed(
+                            error.key().as_str(),
+                            error.reason(),
+                        ),
                         DiagnosticLocation::Node(node_id),
                     );
                     continue;

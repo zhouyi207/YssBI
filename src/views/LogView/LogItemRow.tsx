@@ -1,28 +1,28 @@
 import type { MouseEvent } from 'react';
-import type { LogMessage } from '@/shared/types/ui';
 import { LOG_ITEM_HEIGHT } from '@/app/appConfig/default';
+import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 import {
+  formatDiagnosticTime,
+  getLogDomainColor,
   getLogLevelBackground,
   getLogLevelColor,
-  getLogTypeColor,
-  LOG_TYPE_BACKGROUND,
-  LOG_TYPE_LABELS,
+  LOG_DOMAIN_BACKGROUND,
+  LOG_DOMAIN_LABELS,
 } from './logPresentation';
-
 
 export function LogItemRow({
   log,
   isSelected,
   onClick,
 }: {
-  log: LogMessage;
+  log: DiagnosticRecordDto;
   isSelected: boolean;
   onClick: () => void;
 }) {
   const levelColor = getLogLevelColor(log.level);
   const levelBg = getLogLevelBackground(log.level);
-  const typeColor = getLogTypeColor(log.log_type);
-  const typeBg = LOG_TYPE_BACKGROUND[log.log_type] ?? 'bg-muted/40';
+  const domainColor = getLogDomainColor(log.domain);
+  const domainBg = LOG_DOMAIN_BACKGROUND[log.domain] ?? 'bg-muted/40';
 
   const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
     if (event.detail === 0) {
@@ -33,10 +33,10 @@ export function LogItemRow({
     const row = event.currentTarget;
     const selection = window.getSelection();
     const hasRowSelection = Boolean(
-      selection &&
-        !selection.isCollapsed &&
-        ((selection.anchorNode && row.contains(selection.anchorNode)) ||
-          (selection.focusNode && row.contains(selection.focusNode))),
+      selection
+        && !selection.isCollapsed
+        && ((selection.anchorNode && row.contains(selection.anchorNode))
+          || (selection.focusNode && row.contains(selection.focusNode))),
     );
     if (!hasRowSelection) onClick();
   };
@@ -47,14 +47,12 @@ export function LogItemRow({
       onClick={handleClick}
       className={[
         'group flex w-full cursor-text select-text items-center gap-2.5 border-b border-border/30 px-3 py-1.5 text-left transition-colors',
-        isSelected
-          ? 'bg-[var(--accent-color)]/8'
-          : 'hover:bg-muted/30',
+        isSelected ? 'bg-[var(--accent-color)]/8' : 'hover:bg-muted/30',
       ].join(' ')}
       style={{ minHeight: LOG_ITEM_HEIGHT }}
     >
       <span className="w-[52px] shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/80">
-        {log.timestamp.split(' ')[1]}
+        {formatDiagnosticTime(log.timestamp)}
       </span>
       <span
         className={`w-12 shrink-0 rounded px-1 py-0.5 text-center text-[9px] font-semibold uppercase tracking-wide ${levelBg} ${levelColor}`}
@@ -62,9 +60,9 @@ export function LogItemRow({
         {log.level}
       </span>
       <span
-        className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${typeBg} ${typeColor}`}
+        className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${domainBg} ${domainColor}`}
       >
-        {LOG_TYPE_LABELS[log.log_type] ?? log.log_type.toUpperCase()}
+        {LOG_DOMAIN_LABELS[log.domain] ?? log.domain.toUpperCase()}
       </span>
       {log.source ? (
         <span className="max-w-[88px] shrink-0 truncate font-mono text-[10px] text-sky-500/80">

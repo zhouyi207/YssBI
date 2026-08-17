@@ -382,16 +382,18 @@ fn prepare_participating_rows(
 }
 
 fn emit_fit_log(family: &str, metadata: &StatisticalObservationMetadata) {
-    crate::log::emit_execution_log(
-        crate::log::LogLevel::Info,
-        format!(
-            "{family} fit used {} of {} rows ({} null, {} NaN dropped)",
-            metadata.used_observation_count,
-            metadata.original_observation_count,
-            metadata.dropped_null_count,
-            metadata.dropped_nan_count,
-        ),
-        Some(format!("yssbi.statistics.{family}.fit")),
+    let source = format!("yssbi.statistics.{family}.fit");
+    tracing::info!(
+        target: "yssbi::node_system::runtime::statistics",
+        diagnostic_domain = "execution",
+        diagnostic_event = "fitCompleted",
+        diagnostic_source = source.as_str(),
+        family,
+        used_observation_count = metadata.used_observation_count,
+        original_observation_count = metadata.original_observation_count,
+        dropped_null_count = metadata.dropped_null_count,
+        dropped_nan_count = metadata.dropped_nan_count,
+        "Statistical fit completed"
     );
 }
 

@@ -2,17 +2,22 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LogLevel, LogType, type LogMessage } from '@/shared/types/ui';
+import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 import { LogItemRow } from './LogItemRow';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const LOG: LogMessage = {
-  timestamp: '2026-08-11 12:34:56',
-  level: LogLevel.Info,
-  log_type: LogType.Application,
+const LOG: DiagnosticRecordDto = {
+  streamId: 'stream-1',
+  sequence: 12,
+  timestamp: '2026-08-11T12:34:56.000Z',
+  level: 'info',
+  origin: 'frontend',
+  domain: 'application',
+  target: 'worksheet',
   source: 'worksheet',
   message: 'Rendered chart successfully',
+  fields: {},
 };
 
 describe('LogItemRow', () => {

@@ -1,1 +1,2 @@
-export { useLogActions } from "./useLogActions";
+export { useDiagnosticSubscription } from './useDiagnosticSubscription';
+export type { DiagnosticSubscriptionStatus } from './useDiagnosticSubscription';

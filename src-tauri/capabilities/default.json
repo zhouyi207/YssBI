@@ -53,7 +53,6 @@
           "path": "$APPCONFIG/**"
         }
       ]
-    },
-    "log:default"
+    }
   ]
 }

@@ -881,11 +881,12 @@ const fn registration(
 mod tests {
     use super::*;
     use crate::node_system::analysis::RunId;
+    use crate::node_system::document::{GraphResourcePath, NodeId};
     use crate::node_system::plan::{CompiledParameterHandle, CompiledResourceRequirement};
     use crate::node_system::runtime::{
         ActivationId, CancellationToken, EffectiveComputationSettings, FrameId, KernelErrorKind,
-        ResourceError, ResourceLease, ResourceProvider, RunResourceBudgets, RunResourceOwner,
-        RunResourceSet,
+        NOOP_RUN_OUTPUT_SINK, ResourceError, ResourceLease, ResourceProvider, RunResourceBudgets,
+        RunResourceOwner, RunResourceSet,
     };
 
     struct NoResources;
@@ -911,10 +912,14 @@ mod tests {
             cancellation.clone(),
         )
         .unwrap();
+        let source_graph_path = GraphResourcePath("events/dataframe-test.yssbi-event".into());
         let context = KernelContext {
             run_id: RunId::new(1),
             frame_id: FrameId::next(),
             activation_id: ActivationId::next().unwrap(),
+            source_graph_path: &source_graph_path,
+            source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+            run_output: &NOOP_RUN_OUTPUT_SINK,
             computation_settings: EffectiveComputationSettings::default(),
             params: &params,
             compiled_parameters: None,

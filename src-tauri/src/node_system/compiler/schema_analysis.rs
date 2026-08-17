@@ -311,10 +311,7 @@ impl<'a> SchemaAnalyzer<'a> {
             Ok(schema) => Some(schema),
             Err(error) => {
                 let diagnostic = if let Some((resource_key, reason)) = error.resource {
-                    CompilerDiagnostic::ResourceResolutionFailed {
-                        resource_key: resource_key.as_str().into(),
-                        reason,
-                    }
+                    CompilerDiagnostic::resource_resolution_failed(resource_key.as_str(), reason)
                 } else {
                     CompilerDiagnostic::SchemaResolverFailed {
                         resolver_id: resolver_id.to_string().into(),

@@ -1,4 +1,3 @@
-import "@/utils/appLogger";
 import "./App.css";
 import "./i18n";
 

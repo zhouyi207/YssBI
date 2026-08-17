@@ -1,15 +1,12 @@
-import { LOG_ITEM_HEIGHT, LOG_ITEM_GAP } from '@/app/appConfig/default';
+import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from '@/app/appConfig/default';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import type { LogMessage } from '@/shared/types/ui';
+import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 import { LogItemRow } from './LogItemRow';
 import { useLogPanelVirtualList } from './useLogPanelVirtualList';
 import type { LogPanelVariant } from './useLogPanelController';
 
 export interface LogPanelVirtualListProps {
-  logs: LogMessage[];
-  loading: boolean;
-  hasMore: boolean;
-  loadMoreLogs: () => Promise<void>;
+  logs: DiagnosticRecordDto[];
   autoScroll: boolean;
   refreshScrollToken: number;
   variant: LogPanelVariant;
@@ -19,9 +16,6 @@ export interface LogPanelVirtualListProps {
 
 export function LogPanelVirtualList({
   logs,
-  loading,
-  hasMore,
-  loadMoreLogs,
   autoScroll,
   refreshScrollToken,
   variant,
@@ -31,9 +25,6 @@ export function LogPanelVirtualList({
   const { viewportRef, virtualizer, handleScroll } = useLogPanelVirtualList({
     logs,
     autoScroll,
-    hasMore,
-    loading,
-    loadMoreLogs,
     variant,
     refreshScrollToken,
   });
@@ -45,11 +36,6 @@ export function LogPanelVirtualList({
       orientation="vertical"
       className="relative min-h-0 flex-1 bg-[var(--workbench-bg)]"
     >
-      {loading ? (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-center gap-2 border-b border-border/40 bg-[var(--workbench-bg)]/90 py-1.5 text-[10px] text-[var(--accent-color)]">
-          <div className="h-2.5 w-2.5 animate-spin rounded-full border border-[var(--accent-color)] border-t-transparent" />
-        </div>
-      ) : null}
       <div className="py-0.5">
         <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {
@@ -57,7 +43,7 @@ export function LogPanelVirtualList({
             if (!log) return null;
             return (
               <div
-                key={virtualRow.key}
+                key={`${log.streamId}:${log.sequence}`}
                 data-index={virtualRow.index}
                 style={{
                   position: 'absolute',

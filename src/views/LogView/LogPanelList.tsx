@@ -15,11 +15,8 @@ export function LogPanelList() {
   const {
     filteredLogs,
     logs,
-    loading,
-    hasMore,
-    loadMoreLogs,
     isInitialLoad,
-    activeLogTypeTab,
+    activeLogDomainTab,
     autoScroll,
     refreshScrollToken,
     variant,
@@ -54,11 +51,8 @@ export function LogPanelList() {
 
   return (
     <LogPanelVirtualList
-      key={activeLogTypeTab}
+      key={activeLogDomainTab}
       logs={filteredLogs}
-      loading={loading}
-      hasMore={hasMore}
-      loadMoreLogs={loadMoreLogs}
       autoScroll={autoScroll}
       refreshScrollToken={refreshScrollToken}
       variant={variant}

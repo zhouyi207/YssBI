@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { createDataSignaturePin } from '@/shared/types/domain/functionSignaturePin';
-import type { LogMessage } from '@/shared/types/ui';
+import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 import { resolveDetailPanelModel } from './resolveDetailPanelModel';
 
-const logEntry = { level: 'info', message: 'hello' } as LogMessage;
+const logEntry = {
+  streamId: 'stream-1',
+  sequence: 1,
+  timestamp: '2026-08-16T10:11:12.000Z',
+  level: 'info',
+  origin: 'frontend',
+  domain: 'application',
+  target: 'test',
+  message: 'hello',
+  fields: {},
+} satisfies DiagnosticRecordDto;
 
 const catalog = {
   variables: {

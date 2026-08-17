@@ -53,9 +53,12 @@ impl Drop for SpillFile {
                 Ok(()) => return,
                 Err(_) if attempt == 0 => std::thread::yield_now(),
                 Err(error) => {
-                    tauri_plugin_log::log::warn!(
+                    tracing::warn!(
                         target: "yssbi::node_system::runtime::cleanup",
-                        "failed to remove durable spill file after retry: {error}"
+                        diagnostic_domain = "execution",
+                        diagnostic_event = "spillDeleteFailed",
+                        error = %error,
+                        "Failed to remove durable spill file after retry"
                     );
                 }
             }
@@ -284,9 +287,12 @@ impl Drop for SpillCursor {
         if Arc::strong_count(&self.file) == 1
             && let Err(error) = self.file.delete()
         {
-            tauri_plugin_log::log::warn!(
+            tracing::warn!(
                 target: "yssbi::node_system::runtime::cleanup",
-                "failed to remove durable spill file after cursor close: {error}"
+                diagnostic_domain = "execution",
+                diagnostic_event = "spillDeleteFailed",
+                error = %error,
+                "Failed to remove durable spill file after cursor close"
             );
         }
     }

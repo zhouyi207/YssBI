@@ -6,20 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
-import { LogLevel } from '@/shared/types/ui';
+import { DIAGNOSTIC_LEVELS, type DiagnosticLevel } from '@/shared/types/dto/diagnostics';
 import {
   getLogLevelBackground,
   getLogLevelColor,
 } from './logPresentation';
 import { useLogPanelContext } from './logPanelContext';
 
-const LOG_FILTER_LEVELS: LogLevel[] = [
-  LogLevel.Trace,
-  LogLevel.Debug,
-  LogLevel.Info,
-  LogLevel.Warn,
-  LogLevel.Error,
-];
+const LOG_FILTER_LEVELS: DiagnosticLevel[] = [...DIAGNOSTIC_LEVELS];
 
 export function LogPanelToolbar() {
   const { t } = useTranslation();
@@ -142,15 +136,17 @@ export function LogPanelToolbar() {
         <FiTrash2 size={14} />
       </ToolbarIconButton>
 
-      <ToolbarIconButton
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        onClick={handleClose}
-        tooltip={variant === 'embedded' ? t('log.closePanel') : t('log.closeWindow')}
-      >
-        <FiX size={14} />
-      </ToolbarIconButton>
+      {variant === 'standalone' ? (
+        <ToolbarIconButton
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          onClick={handleClose}
+          tooltip={t('log.closeWindow')}
+        >
+          <FiX size={14} />
+        </ToolbarIconButton>
+      ) : null}
     </div>
   );
 }

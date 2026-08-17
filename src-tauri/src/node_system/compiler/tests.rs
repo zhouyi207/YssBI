@@ -1,8 +1,8 @@
 use super::*;
 use crate::node_system::analysis::{
     CompileId, DiagnosticLocation, DiagnosticSeverity, NOOP_TRACE_SINK, ProjectSessionId,
-    ResourceKey, ResourceVersion, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanSpec, TraceSink,
-    TraceSpan,
+    ResourceKey, ResourceVersion, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanOutcome, SpanSpec,
+    TraceSink, TraceSpan,
 };
 use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
@@ -311,8 +311,8 @@ fn compile_plan_and_trace_keep_the_exact_requested_correlation() {
         .iter()
         .find(|span| span.kind == SpanKind::Snapshot)
         .unwrap();
-    assert_eq!(snapshot_span.span_id, snapshot.trace_span_id);
     assert_eq!(snapshot_span.parent_span_id, None);
+    assert_eq!(snapshot_span.outcome, SpanOutcome::Success);
     for kind in [SpanKind::Analysis, SpanKind::Lowering] {
         let span = spans.iter().find(|span| span.kind == kind).unwrap();
         assert_eq!(span.parent_span_id, Some(snapshot_span.span_id));

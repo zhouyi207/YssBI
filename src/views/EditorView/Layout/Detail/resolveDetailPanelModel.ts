@@ -5,7 +5,7 @@ import type { FunctionPinSpec } from '@/shared/types/domain/graph';
 import type { Variable } from '@/shared/types/domain/variable';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import type { DatabaseRecord } from '@/shared/types/dto/database';
-import type { LogMessage } from '@/shared/types/ui';
+import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 
 export interface DetailCatalogSnapshot {
   variables: Record<string, Variable>;
@@ -17,7 +17,7 @@ export interface DetailCatalogSnapshot {
 
 export interface DetailPanelResolveInput extends DetailCatalogSnapshot {
   target: DetailTarget | null;
-  selectedLog: LogMessage | null;
+  selectedLog: DiagnosticRecordDto | null;
   worksheetDocument: WorksheetDocument | null;
 }
 
@@ -30,7 +30,7 @@ export type FunctionDetailModel = {
 
 export type DetailPanelModel =
   | { kind: 'empty' }
-  | { kind: 'log'; log: LogMessage }
+  | { kind: 'log'; log: DiagnosticRecordDto }
   | { kind: 'node'; nodeId: string; graphPath: string }
   | { kind: 'nodeDefinition'; nodeType: string }
   | { kind: 'variable'; id: string; variable: Variable }
