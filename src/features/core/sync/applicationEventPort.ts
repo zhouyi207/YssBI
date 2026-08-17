@@ -1,18 +1,14 @@
 import type { ComputationSettingsMutationReceiptDto } from '@/shared/types/dto/projectComputationSettings';
 
 export interface SyncApplicationEventPort {
-  eventUpdated(graphPath: string): void;
-  functionUpdated(payload: unknown): void;
-  variablesChanged(): void;
   graphDelta(graphPath: string): void;
   computationSettingsChanged(receipt: ComputationSettingsMutationReceiptDto): void;
   resourceMutationCommitted(result: unknown): Promise<unknown>;
   applyProjectLifecycleReceipt(
     result: unknown,
-    onProjectCleared?: () => void,
     dependencies?: unknown,
   ): Promise<void>;
-  clearProject(onProjectCleared?: () => void): void;
+  clearProject(): void;
 }
 
 let port: SyncApplicationEventPort | null = null;

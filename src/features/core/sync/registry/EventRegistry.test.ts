@@ -15,23 +15,32 @@ describe('EventRegistry project mutation registrations', () => {
     ]));
   });
 
-  it('preserves unrelated project, resource, database, and variable events', () => {
+  it('keeps active project wires and rejects producerless legacy wires', () => {
     const registered = new EventRegistry(createEventHandlers()).getRegisteredTypes();
+    const removedTypes = [
+      'EventUpdated',
+      'EventDeleted',
+      'FunctionUpdated',
+      'FunctionDeleted',
+      'ResourceChanged',
+      'DataFrameCreated',
+      'DataFrameDeleted',
+      'VariableCreated',
+      'VariableUpdated',
+      'VariableDeleted',
+    ];
 
     expect(registered).toEqual(expect.arrayContaining([
       'ProjectLoaded',
       'ProjectCleared',
       'ProjectLifecycleCommitted',
       'ProjectSaved',
-      'ResourceChanged',
       'ProjectIndexInvalidated',
-      'DataFrameCreated',
-      'DataFrameDeleted',
-      'VariableCreated',
-      'VariableUpdated',
-      'VariableDeleted',
     ]));
-    expect(registered).not.toContain('DataFrameSchemaUpdated');
+    for (const type of removedTypes) {
+      expect(registered).not.toContain(type);
+      expect(isValidEventType(type)).toBe(false);
+    }
   });
 
   it('rejects the removed dataframe schema event type', () => {

@@ -76,10 +76,6 @@ function graphSaveContextFrom(
   return { ...context, expectedRevision: basis.graphRevision };
 }
 
-export function captureGraphSaveCommandContext(graphPath: string): GraphSaveCommandContext {
-  return graphSaveContextFrom(captureProjectCommandContext(), graphPath);
-}
-
 export async function captureSettledGraphSaveCommandContext(
   graphPath: string,
 ): Promise<GraphSaveCommandContext> {

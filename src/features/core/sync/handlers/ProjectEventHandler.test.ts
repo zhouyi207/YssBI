@@ -65,7 +65,7 @@ describe('Project event handlers', () => {
     expect(computationSettingsChanged).toHaveBeenCalledWith(receipt);
   });
 
-  it('clears execution state through the shared lifecycle path before its callback', () => {
+  it('clears execution state through the shared lifecycle path', () => {
     const execution = useExecutionStore.getState();
     execution.startExecution(graphPath);
     execution.setActiveRunId(graphPath, 'old-run');
@@ -76,20 +76,17 @@ describe('Project event handlers', () => {
     });
     const clearProjectData = vi.spyOn(useProjectIOStore.getState(), 'loadProjectFromData');
     const cancelProject = vi.spyOn(projectPublicationCoordinator, 'cancelProject');
-    const onProjectCleared = vi.fn(() => {
-      expect(useExecutionStore.getState()).toMatchObject({
-        graphs: {},
-        playbackGraphPath: null,
-        isPlaying: false,
-      });
-      expect(useProjectIOStore.getState().projectInstanceId).toBeNull();
-    });
 
-    new ProjectClearedHandler().handle(undefined, { onProjectCleared });
+    new ProjectClearedHandler().handle(undefined);
 
     expect(lease.isCurrent()).toBe(false);
     expect(cancelProject).toHaveBeenCalledOnce();
     expect(clearProjectData).toHaveBeenCalledOnce();
-    expect(onProjectCleared).toHaveBeenCalledOnce();
+    expect(useExecutionStore.getState()).toMatchObject({
+      graphs: {},
+      playbackGraphPath: null,
+      isPlaying: false,
+    });
+    expect(useProjectIOStore.getState().projectInstanceId).toBeNull();
   });
 });

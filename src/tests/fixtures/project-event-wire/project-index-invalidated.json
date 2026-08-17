@@ -1,0 +1,11 @@
+{
+  "type": "Resource",
+  "payload": {
+    "type": "ProjectIndexInvalidated",
+    "payload": {
+      "projectInstanceId": "00000000-0000-0000-0000-000000000601",
+      "source": "watcher",
+      "version": 3
+    }
+  }
+}

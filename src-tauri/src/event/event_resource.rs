@@ -1,29 +1,37 @@
+use crate::project::ProjectInstanceId;
 use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ProjectResourceMetaEvent {
-    pub id: String,
-    pub kind: String,
-    pub name: String,
-    pub uri: String,
-    pub exists: bool,
-    pub loaded: bool,
-    pub has_dirty_document: bool,
-    pub has_stale_document: bool,
-    pub has_conflict_document: bool,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "payload")]
 pub enum EventResource {
     #[serde(rename_all = "camelCase")]
-    ResourceChanged {
-        id: String,
-        kind: String,
+    ProjectIndexInvalidated {
+        project_instance_id: ProjectInstanceId,
         source: String,
-        data: ProjectResourceMetaEvent,
+        version: u64,
     },
-    #[serde(rename_all = "camelCase")]
-    ProjectIndexInvalidated { source: String, version: u64 },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn project_index_invalidation_serializes_project_identity_and_watcher_version() {
+        let event = crate::event::Event::Resource(EventResource::ProjectIndexInvalidated {
+            project_instance_id: ProjectInstanceId::from_existing(
+                "00000000-0000-0000-0000-000000000601".into(),
+            ),
+            source: "watcher".into(),
+            version: 3,
+        });
+
+        let contract: serde_json::Value = serde_json::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../src/tests/fixtures/project-event-wire/project-index-invalidated.json"
+        )))
+        .unwrap();
+
+        assert_eq!(serde_json::to_value(event).unwrap(), contract);
+    }
 }

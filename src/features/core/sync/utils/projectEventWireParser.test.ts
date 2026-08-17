@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import editorProjection from '@/tests/fixtures/node-system-contracts/editor-projection.json';
 import functionEditorProjection from '@/tests/fixtures/node-system-contracts/function-editor-projection.json';
 import projectEvents from '@/tests/fixtures/node-system-contracts/project-events.json';
+import projectIndexInvalidatedEvent from '@/tests/fixtures/project-event-wire/project-index-invalidated.json';
 import {
   parseGraphDeltaEventPayload,
+  parseProjectIndexInvalidatedPayload,
   parseProjectMutationEvent,
   parseResourceMutationCommittedPayload,
 } from './projectEventWireParser';
@@ -116,6 +118,16 @@ function functionResourceResult(functionRevision = 1) {
 }
 
 describe('project event wire parser', () => {
+  it('parses only the exact Rust ProjectIndexInvalidated contract payload', () => {
+    const payload = projectIndexInvalidatedEvent.payload.payload;
+
+    expect(parseProjectIndexInvalidatedPayload(payload)).toEqual(payload);
+    expect(() => parseProjectIndexInvalidatedPayload({ source: 'watcher', version: 3 }))
+      .toThrow('projectInstanceId');
+    expect(() => parseProjectIndexInvalidatedPayload({ ...payload, extra: true }))
+      .toThrow('exact');
+  });
+
   it('parses every semantic Rust-generated worksheet direct result and event envelope', () => {
     expect(projectEvents.resourceMutationResults.map(({ scenario, result }) => ({
       scenario,

@@ -42,16 +42,17 @@ const projectData = await ProjectService.getProjectState();
 ---
 
 ### 2. 事件流（Event Flow）- 修改类操作
-**特征：改变项目状态，通过事件推送更新**
+**特征：改变项目状态，使用带 identity/revision 的直接回包与同源事件**
 
 ```
-前端 UI/Hook 
-  → Service Layer (invoke) 
-  → 后端 Command Handler 
-  → 修改状态 
-  → emit Event 
-  → 前端 Event Listener (useProjectSync) 
-  → 更新 Store 
+前端 UI/Hook
+  → Application Coordinator
+  → Service Layer (invoke)
+  → 后端 Command Handler
+  → 修改权威状态
+  → 返回 canonical mutation result，同时 emit project-event
+  → 发起方校验并应用直接回包；ProjectListener 分发远端事件/回声
+  → Application Port / Coordinator 更新前端投影
   → UI 自动响应
 ```
 
@@ -63,33 +64,23 @@ const projectData = await ProjectService.getProjectState();
 - Variable 创建/更新/删除
 
 **范式规则：**
-- Service 方法调用后端，通常返回 `void` 或简单确认
-- 后端执行操作后 emit 事件（如 `EventCreated`, `NodeDeleted`）
-- 前端通过 `useProjectSync` 全局监听事件
-- 事件处理器更新 Zustand Store
-- React 组件通过 Store 订阅自动重渲染
+- Service 只负责 invoke、DTO 解析与错误 wire 映射；修改命令返回带项目 identity、operation ID 和 revision 的结果
+- Graph 文档修改 emit `GraphDelta`；资源/变量/数据库等发布 emit `ResourceMutationCommitted`
+- 发起方由 application coordinator 校验并应用直接回包；matching `GraphDelta` 回声只按 pending operation 抑制
+- `ProjectListener` + `EventRegistry` 处理其他窗口、外部变更和先到达的事件，并通过窄 application port 协调投影
+- React 组件只订阅前端投影 Store
 
 **示例：**
 ```typescript
-// Service Layer - 只负责发送命令
-static async createEvent(graphName: string): Promise<void> {
-    await invoke("create_event", { graphName });
-    // 不返回数据，等待事件
-}
+// 发起方：application coordinator 消费 canonical GraphMutationResultDto
+const outcome = await executeEditorMutation({ graphPath, locale, mutation });
 
-// Event Listener - 全局单例监听
-useEffect(() => {
-    const unlisten = await listen('project-event', (event) => {
-        switch (event.payload.type) {
-            case 'EventCreated':
-                projectStore.addGraph(payload.id, payload.data);
-                break;
-        }
-    });
-}, []);
+// 全局单例 listener：registry 负责解包、校验类型并路由 handler
+const listener = new ProjectListener();
+await listener.start();
 
-// UI Component - 通过 Store 订阅
-const graphs = useProjectStore(state => state.graphs);
+// GraphDeltaHandler 对非 matching echo 的新 revision 请求权威投影刷新
+syncApplicationEventPort().graphDelta(delta.graphPath);
 ```
 
 ---
@@ -162,36 +153,31 @@ src/features/core/
 **职责：监听后端事件，同步状态到 Store**
 
 **规范：**
-- 使用 `listen()` 监听 Tauri 事件
+- 使用 `listen()` 监听 Tauri 的 `project-event`
 - 全局单例模式（防止重复监听）
-- 解析事件类型，调用 Store 方法
-- 支持可选回调（onEventCreated 等）
+- 只接受当前 Rust `Event` 的 `Project` / `Resource` 外层 envelope
+- `EventRegistry` 解包并校验 leaf type；handler 校验 identity/revision 后调用窄 application port
+- handler 不调用 Service，也不保留已无 Rust producer 的兼容事件
 
 **核心实现：**
 ```typescript
-// Core: ProjectListener + EventRegistry + Handlers（直接更新 Store）
-// Handlers 负责更新 Store，callbacks 为可选的 UI 扩展（如打开新 Tab）
+// Core：全局 listener 将原始 wire 交给 registry。
+const listener = new ProjectListener(callbacks);
+await listener.start();
 
-// Application: useProjectSyncWithEditor 协调监听器与编辑器 session 回调
-// EditorWindow 根节点需包裹 EditorSessionProvider，全窗口共享单一 session
-export function useProjectSyncWithEditor() {
-  const editor = useEditorSession();
-  const callbacks = useMemo(() => ({
-    onNodeCreated: editor.handleNodeCreated,
-    onNodeDeleted: editor.handleNodeDeleted,
-    // ...
-  }), [editor.handleNodeCreated, ...]);
+// Registry：parseEvent → isValidEventType → 对应 handler。
+registry.dispatch(event.payload as RawBackendEvent);
 
-  useProjectSyncCore(callbacks);
-}
+// Application：启动时注册 core 所需的协调器适配。
+registerCoreApplicationPorts();
 ```
 
 **文件位置：**
 ```
-src/features/core/sync/           # ProjectListener、EventRegistry、handlers（更新 Store）
-src/features/application/initialization/useProjectSync.ts   # 协调监听器与 useEditorSession 回调
-src/features/application/editor/EditorSessionContext.tsx    # EditorSessionProvider（每 Editor 窗口单例）
-src/features/domain/execution/hooks/useExecutionVisualization.ts  # 执行事件监听
+src/features/core/sync/                                      # listener、registry、parser、handlers、ports
+src/features/application/initialization/useProjectSync.ts    # 管理全局 listener 生命周期
+src/features/application/initialization/registerCoreApplicationPorts.ts
+src/features/domain/execution/hooks/useExecutionVisualization.ts  # 执行事件监听（独立于 project-event）
 ```
 
 ---
@@ -207,38 +193,38 @@ src/features/domain/execution/hooks/useExecutionVisualization.ts  # 执行事件
 
 **示例：**
 ```typescript
-export function useProjectOperations() {
-    const projectStore = useProjectStore();
-    
-    const createNewEvent = async (name: string) => {
-        try {
-            // 1. 调用 Service
-            await GraphService.createEvent(name);
-            // 2. 等待事件自动更新 Store
-            // 3. UI 自动响应
-        } catch (error) {
-            // 错误处理
-        }
-    };
-    
-    return { createNewEvent };
+export async function mutateOpenGraph(graphPath: string, mutation: EditorGraphMutationDto) {
+    return executeEditorMutation({
+        graphPath,
+        locale: i18n.resolvedLanguage ?? 'en-US',
+        mutation,
+    });
 }
 ```
 
-**Editor 窗口编排（单例 session）：**
+Application coordinator 负责 project identity、operation ID、revision、pending echo 与回包应用；Hook 不直接拼装 event，也不直接写后端权威状态。
+
+**Editor 窗口编排（单例 provider + caller-shaped Canvas）：**
 
 ```tsx
 // EditorWindow.tsx
 <EditorSessionProvider>
-  <EditorWindowReady />  {/* useProjectSyncWithEditor 使用 useEditorSession */}
+  <EditorWindowReady />
 </EditorSessionProvider>
 
-// Canvas.tsx — 唯一启用 pointer loop 的位置
-const editor = useEditorGroup({ withCanvasInteraction: true });
+// Canvas.tsx — useEditorCanvas 的唯一 caller
+const canvas = useEditorCanvas({ mode });
 
-// Sidebar / Menubar / Overlays — 共享 session，不注册 pointer loop
-const editor = useEditorGroup();
+// 只有 interactive Canvas 挂 pointer loop/drop/overlay；Overlay 不读 session
+return mode === 'interactive'
+  ? <CanvasOverlays model={overlayModel} />
+  : null;
+
+// Detail / 资源列表按 caller 使用窄 slice
+const resources = useEditorSessionResources();
 ```
+
+`useEditorCanvas` 只暴露 Canvas 实际使用的 commands/workspace/resources/interaction。variables/functions 使用现有窄 hooks；shared resource context 不承担 Dockview group topology，Dockview 仍是唯一 authority。
 
 ---
 
@@ -246,58 +232,54 @@ const editor = useEditorGroup();
 
 ### 后端事件结构
 ```rust
-// 嵌套事件结构
-Event::Event(EventEvent::EventCreated { id, data })
+// 当前仅有 Project / Resource 两种外层 envelope。
+Event::Project(EventProject::GraphDelta {
+    project_instance_id,
+    delta,
+})
 
 // 序列化为 JSON
 {
-    "type": "Event",
+    "type": "Project",
     "payload": {
-        "type": "EventCreated",
-        "payload": { "id": "...", "data": {...} }
+        "type": "GraphDelta",
+        "payload": {
+            "projectInstanceId": "...",
+            "delta": { "graphPath": "events/Main.yssbi-event", "fromRevision": 1, "toRevision": 2 }
+        }
     }
 }
 ```
 
 ### 前端事件解析
 ```typescript
-// 提取实际事件类型
-const eventType = eventData.type; // "Event"
-const eventPayload = eventData.payload;
+// ProjectListener 将完整外层 wire 交给 EventRegistry。
+registry.dispatch(event.payload as RawBackendEvent);
 
-let type: string;
-let payload: any;
-
-if (eventPayload && 'type' in eventPayload) {
-    // 嵌套事件
-    type = eventPayload.type; // "EventCreated"
-    payload = eventPayload.payload; // { id, data }
-} else {
-    // 直接事件
-    type = eventType;
-    payload = eventPayload;
+// EventRegistry 内部统一解包和校验，不在视图中 switch event type。
+const parsed = parseEvent(event);
+if (isValidEventType(parsed.type)) {
+    handlers.get(parsed.type)?.handle(parsed.payload, callbacks);
 }
 ```
 
-### 事件类型清单
+### `project-event` leaf type 清单
 
-**项目级事件：**
-- `ProjectLoaded` - 项目加载完成
-- `ProjectCleared` - 项目清空
-- `ProjectSaved` - 项目保存完成
+**`Project` envelope：**
+- `ProjectLoaded`
+- `ProjectCleared`
+- `ProjectLifecycleCommitted`
+- `ProjectSaved`
+- `ComputationSettingsChanged`
+- `GraphDelta`
+- `ResourceMutationCommitted`
 
-**Graph 事件：**
-- `EventCreated` / `EventUpdated` / `EventDeleted`
-- `FunctionCreated` / `FunctionUpdated` / `FunctionDeleted`
-- `MacroCreated` / `MacroUpdated` / `MacroDeleted`
+**`Resource` envelope：**
+- `ProjectIndexInvalidated`
 
-**Variable 事件：**
-- `GlobalVariableCreated` / `GlobalVariableUpdated` / `GlobalVariableDeleted`
+Graph/Function/Variable/DataFrame 不再各自拥有 CRUD leaf event；其 revisioned 变更统一由 `GraphDelta` 或 `ResourceMutationCommitted` 表达。`EventUpdated`、`EventDeleted`、`FunctionUpdated`、`FunctionDeleted`、`ResourceChanged` 以及旧 Variable/DataFrame leaf 均不是有效 wire。
 
-**DataFrame 事件：**
-- `DataFrameCreated` / `DataFrameDeleted`
-
-**执行事件：**
+**执行事件（独立于 `project-event`）：**
 - `execution_start` / `execution_complete`
 - `node_start` / `node_complete` / `node_error`
 - `connection_active`
@@ -421,7 +403,7 @@ if (eventPayload && 'type' in eventPayload) {
 │       │                                       │            │
 │       │                                       │            │
 │       └───────────────────────────────────────┘            │
-│                      直接返回（查询）                        │
+│                 直接返回（查询结果 / 修改 receipt）            │
 └───────────────────────────────────────────────────────────┘
 ```
 
@@ -440,9 +422,11 @@ if (eventPayload && 'type' in eventPayload) {
 - **打开图**：`load_project_graph` 命令把图反序列化进
   `project_data.graphs` 并通过 **统一入口 `ProjectState::insert_graph`**
   绑定 registry / schema provider / schema 传播 / 动态 pin 解析。
-- **修改图**：所有修改走后端命令（mutate `project_data` → emit 事件 →
-  前端 handler 更新 store）。高频写命令（如节点拖拽）使用
-  `trackPending` + `isPending` 抑制自回声。
+- **修改图**：所有修改走后端命令；命令返回 `GraphMutationResultDto`，同时
+  emit `GraphDelta`。发起方按 identity/operation/revision 应用直接回包，matching
+  pending echo 被抑制；其他窗口或更新 revision 的 `GraphDelta` 请求权威投影刷新。
+  资源、变量、数据库和 worksheet 发布统一经 `ResourceMutationCommitted` 进入
+  `projectPublicationCoordinator`。
 - **关闭/保存图**：单图 `save_project_graph` / `unload_project_graph`；
   关 tab 与关窗口都走应用内三态确认（Save All / Don't Save / Cancel）。
 

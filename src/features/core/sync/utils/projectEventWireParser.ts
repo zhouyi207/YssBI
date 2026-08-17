@@ -1,5 +1,6 @@
 import type {
   GraphDeltaEventPayload,
+  ProjectIndexInvalidatedPayload,
   ResourceMutationCommittedPayload,
 } from '../types';
 import { parseGraphDeltaDto } from '@/shared/types/dto/editorMutationWireParser';
@@ -53,6 +54,31 @@ export function parseGraphDeltaEventPayload(value: unknown): GraphDeltaEventPayl
   return {
     projectInstanceId: value.projectInstanceId,
     delta: parseGraphDeltaDto(value.delta),
+  };
+}
+
+export function parseProjectIndexInvalidatedPayload(
+  value: unknown,
+): ProjectIndexInvalidatedPayload {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['projectInstanceId', 'source', 'version'])) {
+    throw new Error(
+      'ProjectIndexInvalidated payload must have exact projectInstanceId, source, and version fields',
+    );
+  }
+  if (typeof value.projectInstanceId !== 'string' || value.projectInstanceId.length === 0) {
+    throw new Error('ProjectIndexInvalidated projectInstanceId is malformed');
+  }
+  if (value.source !== 'watcher') {
+    throw new Error('ProjectIndexInvalidated source is malformed');
+  }
+  if (!Number.isSafeInteger(value.version) || (value.version as number) < 1) {
+    throw new Error('ProjectIndexInvalidated watcher version is malformed');
+  }
+  return {
+    projectInstanceId: value.projectInstanceId,
+    source: value.source,
+    version: value.version as number,
   };
 }
 

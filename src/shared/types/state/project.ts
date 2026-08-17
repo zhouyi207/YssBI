@@ -1,5 +1,4 @@
 import type { LoadStatus } from "../ui";
-import type { ProjectData } from "../domain/project";
 
 /**
  * Project 初始化状态
@@ -15,14 +14,4 @@ export interface ProjectState {
 export interface ProjectEventPayload {
   type: string;
   payload: unknown;
-}
-
-/**
- * useProjectSync 配置
- */
-export interface UseProjectSyncOptions {
-  enabled?: boolean;
-  onProjectLoaded?: (data: ProjectData, path: string | null) => void;
-  onProjectCleared?: () => void;
-  onProjectSaved?: (path: string) => void;
 }

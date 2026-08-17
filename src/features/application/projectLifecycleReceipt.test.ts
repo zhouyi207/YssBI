@@ -82,7 +82,7 @@ describe('project lifecycle pending receipt registry', () => {
     resetProjectLifecycleReceiptHandlerForTests();
     installCoreApplicationTestPorts({
       syncEvents: {
-        applyProjectLifecycleReceipt: async (result, _onProjectCleared, deps) => {
+        applyProjectLifecycleReceipt: async (result, deps) => {
           await applyProjectLifecycleReceipt(
             result as LifecycleMutationResultDto,
             'event',
@@ -102,7 +102,7 @@ describe('project lifecycle pending receipt registry', () => {
       const pending = registerPendingProjectLifecycleOperation({ kind: 'saveAs' });
       const result = receipt(pending.operationId);
       const deps = dependencies();
-      const handler = new ProjectLifecycleCommittedHandler(undefined, deps);
+      const handler = new ProjectLifecycleCommittedHandler(deps);
 
       if (order === 'event-first') {
         handler.handle({ result: structuredClone(result) });
@@ -129,7 +129,7 @@ describe('project lifecycle pending receipt registry', () => {
     });
     const recovered = dependencies();
 
-    new ProjectLifecycleCommittedHandler(undefined, failed).handle({ result });
+    new ProjectLifecycleCommittedHandler(failed).handle({ result });
     await vi.waitFor(() => expect(failed.prepareProjectTransition).toHaveBeenCalledOnce());
     await expect(applyProjectLifecycleReceipt(result, 'direct', recovered)).resolves.toMatchObject({
       status: 'applied',
@@ -150,7 +150,7 @@ describe('project lifecycle pending receipt registry', () => {
     const directDeps = dependencies();
     const eventResult = receipt(pending.operationId);
 
-    new ProjectLifecycleCommittedHandler(undefined, eventDeps).handle({ result: eventResult });
+    new ProjectLifecycleCommittedHandler(eventDeps).handle({ result: eventResult });
     await vi.waitFor(() => expect(eventDeps.prepareProjectTransition).toHaveBeenCalledOnce());
     await expect(applyProjectLifecycleReceipt(
       receipt(pending.operationId, { path: 'C:/different/metadata.yssbi' }),
@@ -173,7 +173,7 @@ describe('project lifecycle pending receipt registry', () => {
   it('gives an external event without a pending operation zero effects', async () => {
     const deps = dependencies();
 
-    new ProjectLifecycleCommittedHandler(undefined, deps).handle({
+    new ProjectLifecycleCommittedHandler(deps).handle({
       result: receipt('external-operation'),
     });
     await Promise.resolve();
@@ -190,7 +190,7 @@ describe('project lifecycle pending receipt registry', () => {
     const deps = dependencies();
     startProject('project-a', 9);
 
-    new ProjectLifecycleCommittedHandler(undefined, deps).handle({
+    new ProjectLifecycleCommittedHandler(deps).handle({
       result: receipt(pending.operationId),
     });
     await Promise.resolve();
@@ -284,7 +284,7 @@ describe('project lifecycle pending receipt registry', () => {
         invalidation: { project: false, registry: true },
       } as LifecycleMutationResultDto;
       const deps = dependencies();
-      const handler = new ProjectLifecycleCommittedHandler(undefined, deps);
+      const handler = new ProjectLifecycleCommittedHandler(deps);
 
       if (order === 'event-first') {
         handler.handle({ result: structuredClone(result) });
@@ -437,7 +437,7 @@ describe('project lifecycle pending receipt registry', () => {
     const pending = registerPendingProjectLifecycleOperation({ kind: 'saveAs' });
     const registry = deferred<[]>();
     const deps = dependencies({ refreshRegistry: vi.fn(() => registry.promise) });
-    new ProjectLifecycleCommittedHandler(undefined, deps).handle({
+    new ProjectLifecycleCommittedHandler(deps).handle({
       result: receipt(pending.operationId),
     });
     await vi.waitFor(() => expect(deps.refreshRegistry).toHaveBeenCalledOnce());

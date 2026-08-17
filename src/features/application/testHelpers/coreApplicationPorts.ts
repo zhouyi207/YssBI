@@ -54,9 +54,6 @@ export function installCoreApplicationTestPorts(
       ...overrides.pendingMutation,
     },
     syncEvents: {
-      eventUpdated: () => undefined,
-      functionUpdated: () => undefined,
-      variablesChanged: () => undefined,
       graphDelta: () => undefined,
       computationSettingsChanged: () => undefined,
       resourceMutationCommitted: async () => undefined,

@@ -13,9 +13,7 @@ import {
 } from '@/features/core/execution';
 import { clearCanvasInteractionProject } from '@/features/core/canvas/canvasInteractionCleanup';
 
-export function createProjectLifecycleReceiptDependencies(
-  onProjectCleared?: () => void,
-): ProjectLifecycleReceiptDependencies {
+export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleReceiptDependencies {
   return {
     prepareProjectTransition: async () => {
       const prepared = await prepareAuthoritativeProjectLoad(captureProjectIdentity());
@@ -46,7 +44,6 @@ export function createProjectLifecycleReceiptDependencies(
         null,
       );
       useProjectIOStore.setState({ projectInstanceId: null });
-      onProjectCleared?.();
     },
     markProjectStale: () => projectPublicationCoordinator.markProjectProjectionStale(),
   };

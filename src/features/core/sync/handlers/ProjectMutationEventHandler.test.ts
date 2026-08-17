@@ -205,9 +205,6 @@ describe('Project mutation event synchronization', () => {
     });
     graphDelta = vi.fn<(path: string) => void>();
     registerSyncApplicationEventPort({
-      eventUpdated: vi.fn(),
-      functionUpdated: vi.fn(),
-      variablesChanged: vi.fn(),
       graphDelta,
       computationSettingsChanged: vi.fn(),
       resourceMutationCommitted: (result) =>

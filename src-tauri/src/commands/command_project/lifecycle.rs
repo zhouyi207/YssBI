@@ -20,8 +20,13 @@ fn emit_project_loaded(app: &AppHandle, result: ProjectActivationResultDto) {
     emit_project_event(app, Event::Project(EventProject::ProjectLoaded { result }));
 }
 
-fn start_project_watcher(app: &AppHandle, watcher: &ProjectWatcherState, path: &str) {
-    if let Err(error) = watcher.watch_project(app.clone(), path) {
+fn start_project_watcher(
+    app: &AppHandle,
+    watcher: &ProjectWatcherState,
+    path: &str,
+    project_instance_id: &ProjectInstanceId,
+) {
+    if let Err(error) = watcher.watch_project(app.clone(), path, project_instance_id.clone()) {
         tracing::warn!(
             target: "yssbi::project::watcher",
             diagnostic_domain = "system",
@@ -65,7 +70,7 @@ pub fn load_project(
         "Project loaded"
     );
 
-    start_project_watcher(&app, &watcher, &path);
+    start_project_watcher(&app, &watcher, &path, &session.instance_id);
     let result = ProjectActivationResultDto {
         path,
         project_instance_id: session.instance_id.to_string(),
@@ -187,8 +192,12 @@ pub async fn save_project_as(
     )
     .await?;
     if result.outcome == LifecycleMutationOutcomeDto::Committed {
-        if let Some(metadata_path) = result.path.as_deref() {
-            start_project_watcher(&app, &watcher, metadata_path);
+        if let (Some(metadata_path), Some(project_instance_id)) = (
+            result.path.as_deref(),
+            result.new_project_instance_id.as_deref(),
+        ) {
+            let project_instance_id = ProjectInstanceId::from_existing(project_instance_id.into());
+            start_project_watcher(&app, &watcher, metadata_path, &project_instance_id);
         }
     }
     Ok(result)
@@ -336,7 +345,11 @@ pub fn flush_project(
 
 /// 新建项目（清空当前状态）
 #[tauri::command]
-pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), CommandError> {
+pub fn new_project(
+    app: AppHandle,
+    state: State<ProjectState>,
+    watcher: State<ProjectWatcherState>,
+) -> Result<(), CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
         diagnostic_domain = "application",
@@ -345,6 +358,7 @@ pub fn new_project(app: AppHandle, state: State<ProjectState>) -> Result<(), Com
     );
 
     state.clear_project()?;
+    watcher.stop();
     emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     Ok(())
 }

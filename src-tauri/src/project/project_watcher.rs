@@ -11,7 +11,7 @@ use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
 use tauri::AppHandle;
 
 use crate::event::{Event as ProjectEvent, EventResource, emit_project_event};
-use crate::project::read_project_index;
+use crate::project::{ProjectInstanceId, read_project_index};
 
 pub struct ProjectWatcherState {
     watcher: Mutex<Option<RecommendedWatcher>>,
@@ -26,7 +26,12 @@ impl ProjectWatcherState {
         }
     }
 
-    pub fn watch_project(&self, app: AppHandle, metadata_path: &str) -> Result<(), String> {
+    pub fn watch_project(
+        &self,
+        app: AppHandle,
+        metadata_path: &str,
+        project_instance_id: ProjectInstanceId,
+    ) -> Result<(), String> {
         self.stop();
 
         let root = crate::project::project_root_from_path(metadata_path);
@@ -47,6 +52,7 @@ impl ProjectWatcherState {
         spawn_project_watcher_thread(
             app,
             metadata_path.to_string(),
+            project_instance_id,
             rx,
             active_generation,
             generation,
@@ -89,6 +95,7 @@ fn enqueue_relevant_change(tx: &SyncSender<()>, root: &Path, result: notify::Res
 fn spawn_project_watcher_thread(
     app: AppHandle,
     metadata_path: String,
+    project_instance_id: ProjectInstanceId,
     rx: Receiver<()>,
     active_generation: Arc<AtomicU64>,
     generation: u64,
@@ -105,7 +112,11 @@ fn spawn_project_watcher_thread(
                     match read_project_index(&metadata_path) {
                         Ok(_) => {
                             version = version.saturating_add(1);
-                            emit_project_index_invalidated_from_watcher(&app, version);
+                            emit_project_index_invalidated_from_watcher(
+                                &app,
+                                &project_instance_id,
+                                version,
+                            );
                         }
                         Err(error) => tracing::warn!(
                             target: "yssbi::project::watcher",
@@ -122,10 +133,15 @@ fn spawn_project_watcher_thread(
     });
 }
 
-fn emit_project_index_invalidated_from_watcher(app: &AppHandle, version: u64) {
+fn emit_project_index_invalidated_from_watcher(
+    app: &AppHandle,
+    project_instance_id: &ProjectInstanceId,
+    version: u64,
+) {
     emit_project_event(
         app,
         ProjectEvent::Resource(EventResource::ProjectIndexInvalidated {
+            project_instance_id: project_instance_id.clone(),
             source: "watcher".to_string(),
             version,
         }),

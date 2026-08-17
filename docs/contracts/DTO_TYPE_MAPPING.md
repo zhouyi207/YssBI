@@ -225,7 +225,7 @@ EditorViewport          →    （无 IPC / 无 DTO）   →    EditorViewport�
 | 视口首屏 | `ensureGraphViewport` → `resolveInitialGraphViewport` | tab 激活 / 图加载成功后单点 seed |
 | Pin 连接状态派生 | `derivePinConnectionView` (pinLinks) | 从 `pinConnections[pinId]` 派生 `connected` / `linkCount` / `connectionIds` |
 | Spawn → IPC params | `spawnParamsToInstanceParams` (nodeInstanceParams.ts) | 创建节点打 tag |
-| NodeCreated → Store | `flattenInstanceParams` (NodeEventHandler) | flatten DTO 写入 NodeData |
+| Graph mutation → Store | `executeEditorMutation` → `applyMutationResult` | 校验并应用 `GraphMutationResultDto.projectionReplacement`；matching `GraphDelta` echo 不重复灌图 |
 | Undo apply | `NodeService.applyGraphPatch` | GraphUndoPatch 透传 |
 
 ---
@@ -268,7 +268,7 @@ Rust：`graph/node/node_instance.rs` — `#[serde(tag = "paramsKind")]`。
 
 创建命令使用扁平 `NodeSpawnParams`（`variableId` / `subGraphPath` / `dataframeId` 等），经 `spawnParamsToInstanceParams` 打 tag 后 invoke 后端。
 
-事件回传 `NodeInstanceDTO` 经 `flattenInstanceParams` 写入 `NodeData` 扁平字段。
+图修改命令返回 `GraphMutationResultDto`（delta + `projectionReplacement`），由 `executeEditorMutation` 校验 identity/operation/revision 后应用；后端同时发送的 `GraphDelta` 用于其他窗口或更新 revision，不再存在 `NodeCreated`/`EventUpdated` 一类专用 hydrate event。
 
 **禁止**在 `createNode.ts`、`useClipboardStore` 等 command 层重复 inline 定义 params 形状；统一 `import type { NodeSpawnParams } from '@/shared/types/dto/nodeInstanceParams'`。
 
@@ -301,7 +301,7 @@ Rust：`schema/history.rs` — `GraphUndoPatch`, `NodeSubgraphDTO`。
 
 ### 13.3 SubgraphPinInstanceDTO（Pin 磁盘形态）
 
-与运行时 `PinInstanceDTO`（画布事件用）不同，undo 使用磁盘序列化形态：
+与 `EditorGraphProjectionDto` 中的运行时 Pin 投影不同，undo 使用磁盘序列化形态：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -340,7 +340,7 @@ delete / disconnect / paste redo
 | --- | --- | --- |
 | 创建 → IPC | `spawnParamsToInstanceParams` | `NodeSpawnParams` → `NodeInstanceParamsDTO \| null` |
 | 批量创建 | `toBatchCreateNodeIpcItems` | `batchCreateNode.ts` |
-| 事件 → Store | `flattenInstanceParams` | `NodeEventHandler.dtoToNodeData` |
+| Graph command → Store | `applyMutationResult` | 应用 `GraphMutationResultDto.projectionReplacement` |
 | Undo 空快照 | `EMPTY_GRAPH_UNDO_PATCH` | `graphUndoPatch.ts` |
 | Undo 空快照 | `EMPTY_GRAPH_UNDO_PATCH` | `graphUndoPatch.ts` |
 | Apply undo | `NodeService.applyGraphPatch` | patch 透传，无前端重组 |
@@ -380,18 +380,17 @@ delete / disconnect / paste redo
 
 ---
 
-## 十七、Graph store hydrate
+## 十七、Graph projection hydrate 与事件路径
 
 | 层级 | 模块 | 说明 |
 | --- | --- | --- |
-| 类型契约 | `shared/types/store/graph.ts` | `GraphData` / `GraphDataLike` / `RuntimeNodeInput`（**无** viewport / canvas） |
-| normalize 单点 | `normalizeGraphDataLike` (`dto/graphModel.ts`) | 所有入站图数据规范化 |
-| DTO 入站 | `graphInstanceDtoToGraphData` | IPC `get_graph` 等 → Store |
-| Pin 引用窄化 | `runtimePinRefToId` / `runtimePinRefsToIds` | `RuntimeNodeInput.inputs/outputs` |
-| 连接兼容 | `normalizeGraphConnections` | DTO / domain 多形态 connections |
-| Store 写入 | `graphDataStore.buildGraphBucket` | 实体桶索引 |
-| 同步入站 | `graphUpdatedPayloadToGraphDataLike` | `GraphEventHandler` |
-| 视口（独立） | `features/core/viewport/*` | `EditorViewport`；与 hydrate 边界无交叉 |
-| 测试夹具 | `makeTestGraph()` | hydrate-safe `GraphDataLike` |
+| 类型契约 | `shared/types/dto/editorProjection.ts` | `EditorGraphProjectionDto` 是权威图投影 wire；不携带 viewport |
+| DTO 窄化 | `features/domain/editorProjection` | `toProjectionEntities` 将投影 DTO 转为 Store 实体 |
+| 初次加载/恢复 | `graphProjectionCoordinator` | `hydrateGraphProjection` 获取并安装权威投影 |
+| 发起方图修改 | `executeEditorMutation` → `applyMutationResult` | 直接应用 `GraphMutationResultDto.projectionReplacement` |
+| 远端图修改 | `GraphDeltaHandler` → `graphDelta` application port | 新 revision 只触发 `invalidateGraphProjection`，不从 event payload 直接 hydrate |
+| 资源发布 | `ResourceMutationCommittedHandler` → `projectPublicationCoordinator` | 直接回包与 event 共用 `ResourceMutationResultDto`，按 publication revision 幂等提交 |
+| Store 写入 | `graphDataStore` | 安装准备完成的 projection entities |
+| 视口（独立） | `features/core/viewport/*` | `EditorViewport`；与 projection hydrate 边界无交叉 |
 
-约定详见 [DESIGN_RULE.md §2.14](../architecture/DESIGN_RULE.md#214-graph-store-hydrate) 及当前实现 `src/features/core/sync/graphStoreHydrate.ts`；历史 ADR 已不再作为维护入口。
+当前实现入口为 `src/features/application/editorProjection/graphProjectionCoordinator.ts`、`src/features/application/editorMutation/editorMutationCoordinator.ts` 和 `src/features/core/sync/handlers/ProjectMutationEventHandler.ts`；不再经过 `GraphEventHandler` 或 graph CRUD leaf event。

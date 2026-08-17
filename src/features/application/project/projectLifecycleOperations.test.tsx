@@ -50,9 +50,6 @@ vi.mock('@/features/core/execution', () => ({
   graphHasClearableArtifacts: vi.fn(),
   enqueueLiveExecutionEvent: vi.fn(),
 }));
-vi.mock('@/features/application/execution/openInspectableResult', () => ({
-  openWindowInspectableResult: vi.fn(),
-}));
 vi.mock('@/features/application/graphDiagnostics/warnCallFunctionIssues', () => ({
   warnCallFunctionIssuesBeforeSave: vi.fn(),
 }));
@@ -168,12 +165,12 @@ describe('project lifecycle initiating operations', () => {
     resetProjectLifecycleReceiptHandlerForTests();
     installCoreApplicationTestPorts({
       syncEvents: {
-        applyProjectLifecycleReceipt: async (result, onProjectCleared, dependencies) => {
+        applyProjectLifecycleReceipt: async (result, dependencies) => {
           await applyProjectLifecycleReceipt(
             result as LifecycleMutationResultDto,
             'event',
             dependencies as Parameters<typeof applyProjectLifecycleReceipt>[2]
-              ?? createProjectLifecycleReceiptDependencies(onProjectCleared),
+              ?? createProjectLifecycleReceiptDependencies(),
           );
         },
       },

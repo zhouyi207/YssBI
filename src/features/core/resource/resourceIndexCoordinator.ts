@@ -1,51 +1,81 @@
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 const INVALIDATION_DEBOUNCE_MS = 50;
-const COMMAND_ECHO_SUPPRESSION_MS = 500;
 
-let invalidationTimer: ReturnType<typeof setTimeout> | null = null;
-let invalidationPromise: Promise<boolean> | null = null;
-let lastCommandRefreshAt: number | null = null;
-let lastCommandRefresh: Promise<boolean> | null = null;
+interface InvalidationState {
+  readonly identity: ProjectIdentitySnapshot;
+  latestVersion: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  promise: Promise<boolean>;
+}
 
-function refreshResourceIndex(): Promise<boolean> {
+const invalidationsByIdentity = new Map<string, InvalidationState>();
+
+function identityKey(identity: ProjectIdentitySnapshot): string {
+  return `${identity.projectInstanceId}:${identity.epoch}`;
+}
+
+function refreshResourceIndex(identity: ProjectIdentitySnapshot): Promise<boolean> {
+  if (!isCurrentProjectIdentity(identity)) return Promise.resolve(false);
   return useProjectIOStore.getState().refreshResourceIndex();
 }
 
-export function commitAfterCommand(): Promise<boolean> {
-  lastCommandRefreshAt = Date.now();
-  lastCommandRefresh = refreshResourceIndex();
-  return lastCommandRefresh;
+async function refreshInvalidatedVersions(state: InvalidationState): Promise<boolean> {
+  let result = false;
+  while (isCurrentProjectIdentity(state.identity)) {
+    const refreshingVersion = state.latestVersion;
+    result = await refreshResourceIndex(state.identity);
+    if (!isCurrentProjectIdentity(state.identity)) return false;
+    if (state.latestVersion <= refreshingVersion) return result;
+  }
+  return false;
 }
 
-export function notifyIndexInvalidated(_source: 'event' | 'watcher'): Promise<boolean> {
-  if (
-    lastCommandRefreshAt !== null
-    && Date.now() - lastCommandRefreshAt < COMMAND_ECHO_SUPPRESSION_MS
-  ) {
-    return lastCommandRefresh ?? Promise.resolve(true);
+export function commitAfterCommand(): Promise<boolean> {
+  return refreshResourceIndex(captureProjectIdentity());
+}
+
+export function notifyIndexInvalidated(
+  identity: ProjectIdentitySnapshot,
+  version: number,
+): Promise<boolean> {
+  if (!isCurrentProjectIdentity(identity)) return Promise.resolve(false);
+
+  const key = identityKey(identity);
+  const existing = invalidationsByIdentity.get(key);
+  if (existing) {
+    existing.latestVersion = Math.max(existing.latestVersion, version);
+    return existing.promise;
   }
 
-  if (invalidationPromise) return invalidationPromise;
-
-  invalidationPromise = new Promise((resolve) => {
-    invalidationTimer = setTimeout(() => {
-      invalidationTimer = null;
-      void refreshResourceIndex()
-        .then(resolve)
-        .finally(() => {
-          invalidationPromise = null;
-        });
+  const state: InvalidationState = {
+    identity,
+    latestVersion: version,
+    timer: null,
+    promise: Promise.resolve(false),
+  };
+  state.promise = new Promise<boolean>((resolve, reject) => {
+    state.timer = setTimeout(() => {
+      state.timer = null;
+      void refreshInvalidatedVersions(state).then(resolve, reject);
     }, INVALIDATION_DEBOUNCE_MS);
+  }).finally(() => {
+    if (invalidationsByIdentity.get(key) === state) {
+      invalidationsByIdentity.delete(key);
+    }
   });
-
-  return invalidationPromise;
+  invalidationsByIdentity.set(key, state);
+  return state.promise;
 }
 
 export function resetResourceIndexCoordinatorForTests(): void {
-  if (invalidationTimer) clearTimeout(invalidationTimer);
-  invalidationTimer = null;
-  invalidationPromise = null;
-  lastCommandRefreshAt = null;
-  lastCommandRefresh = null;
+  for (const state of invalidationsByIdentity.values()) {
+    if (state.timer) clearTimeout(state.timer);
+  }
+  invalidationsByIdentity.clear();
 }

@@ -3,7 +3,7 @@
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { EventRegistry } from '../registry/EventRegistry';
 import { createEventHandlers } from '../handlers';
-import type { EventCallbacks, RawBackendEvent } from '../types';
+import type { RawBackendEvent } from '../types';
 import { logger } from '@/utils/appLogger';
 
 /**
@@ -14,9 +14,9 @@ export class ProjectListener {
     private unlisten: UnlistenFn | null = null;
     private registry: EventRegistry;
 
-    constructor(callbacks?: EventCallbacks) {
+    constructor() {
         const handlers = createEventHandlers();
-        this.registry = new EventRegistry(handlers, callbacks);
+        this.registry = new EventRegistry(handlers);
     }
 
     /**
@@ -47,13 +47,6 @@ export class ProjectListener {
             this.unlisten = null;
             logger.sys.info('Project event listener stopped', 'ProjectListener');
         }
-    }
-
-    /**
-     * 更新回调函数
-     */
-    updateCallbacks(callbacks: EventCallbacks): void {
-        this.registry.updateCallbacks(callbacks);
     }
 
     /**

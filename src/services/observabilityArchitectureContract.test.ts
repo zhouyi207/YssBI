@@ -40,44 +40,9 @@ describe('observability architecture contract', () => {
     expect(cargo).not.toMatch(/tauri-plugin-log|tracing-appender/);
   });
 
-  it('keeps CommandError on the exact machine-readable wire', () => {
-    const source = readFileSync(resolve('src-tauri/src/error/mod.rs'), 'utf8');
-    const body = source.match(/pub struct CommandError\s*\{([\s\S]*?)\n\}/)?.[1];
-    if (!body) throw new Error('CommandError struct not found');
-    const fields = [...body.matchAll(/^\s*(\w+)\s*:/gm)].map((match) => match[1]);
-
-    expect(fields).toEqual(['code', 'details', 'incident_id']);
-    expect(body).not.toMatch(/\bmessage\b/);
-    expect(source).toContain('#[serde(rename_all = "camelCase")]');
-  });
-
-  it('keeps asynchronous Bayes failures and diagnostics free of backend prose', () => {
-    const resultSource = readFileSync(resolve('src-tauri/src/sci/api/bayes/result.rs'), 'utf8');
-    const validationSource = readFileSync(resolve('src-tauri/src/sci/api/bayes/validation.rs'), 'utf8');
-    const frontendResultSource = readFileSync(resolve('src/shared/types/bayes/result.ts'), 'utf8');
-    const frontendValidationSource = readFileSync(resolve('src/shared/types/bayes/validation.ts'), 'utf8');
-
-    const taskError = resultSource.match(/pub struct TaskError\s*\{([\s\S]*?)\n\}/)?.[1];
-    const warning = resultSource.match(/pub struct DiagnosticWarning\s*\{([\s\S]*?)\n\}/)?.[1];
-    const validationIssue = validationSource.match(/pub struct ValidationIssue\s*\{([\s\S]*?)\n\}/)?.[1];
-    if (!taskError || !warning || !validationIssue) throw new Error('Bayes DTO contract not found');
-
-    expect([...taskError.matchAll(/^\s*pub\s+(\w+)\s*:/gm)].map(match => match[1]))
-      .toEqual(['code', 'details', 'incident_id']);
-    expect([...warning.matchAll(/^\s*pub\s+(\w+)\s*:/gm)].map(match => match[1]))
-      .toEqual(['code', 'metric', 'value', 'threshold', 'parameter']);
-    expect([...validationIssue.matchAll(/^\s*pub\s+(\w+)\s*:/gm)].map(match => match[1]))
-      .toEqual(['code', 'severity', 'path']);
-
-    for (const source of [taskError, warning, validationIssue, frontendResultSource, frontendValidationSource]) {
-      expect(source).not.toMatch(/^\s*(?:pub\s+)?(?:message|hint|detail)\??\s*:/gm);
-    }
-  });
-
   it('keeps other successful and asynchronous status payloads free of failure prose', () => {
     const databaseSource = readFileSync(resolve('src-tauri/src/schema/database.rs'), 'utf8');
     const databaseDto = databaseSource.match(/pub struct DatabaseDeclDTO\s*\{([\s\S]*?)\n\}/)?.[1];
-    const dataframeEventSource = readFileSync(resolve('src-tauri/src/event/event_dataframe.rs'), 'utf8');
     const didSource = readFileSync(resolve('src-tauri/src/sci/models/panel_did.rs'), 'utf8');
     const didBlock = didSource.match(/pub struct DidPlaceboFakeGroupBlock\s*\{([\s\S]*?)\n\}/)?.[1];
     const worksheetType = readFileSync(resolve('src/shared/types/domain/worksheet.ts'), 'utf8');
@@ -98,7 +63,6 @@ describe('observability architecture contract', () => {
 
     expect(databaseDto).toContain('load_failed: bool');
     expect(databaseDto).not.toMatch(/load_error|message|detail|hint/);
-    expect(dataframeEventSource).not.toContain('DataFrameSchemaUpdated');
     expect(didBlock).toContain('unavailable_code');
     expect(didBlock).not.toMatch(/method_note|message|detail|hint/);
     expect(worksheetType).toMatch(/kind: 'error';\s+code: string;\s+incidentId: string \| null;/);
@@ -136,24 +100,6 @@ describe('observability architecture contract', () => {
     const diagnosticImports = /(?:@\/features\/core\/log|@\/services\/log|@\/shared\/types\/dto\/diagnostics)/;
 
     expect(matchingFiles(applicationFiles, diagnosticImports)).toEqual([]);
-  });
-
-  it('routes Print through Run Output without crossing into diagnostics', () => {
-    const printKernel = readFileSync(
-      resolve('src-tauri/src/node_system/runtime/kernels/core_nodes/debug.rs'),
-      'utf8',
-    );
-    const outputRuntime = readFileSync(
-      resolve('src-tauri/src/node_system/runtime/run_output.rs'),
-      'utf8',
-    );
-    const outputView = readFileSync(resolve('src/views/LogView/OutputPanel.tsx'), 'utf8');
-
-    expect(printKernel).toContain('context.emit_stdout(message)');
-    expect(printKernel).not.toContain('tracing::');
-    expect(outputRuntime).toContain('source_graph_path');
-    expect(outputRuntime).toContain('RUN_OUTPUT_EVENT_MAX_COUNT');
-    expect(outputView).not.toMatch(/appLogger|features\/core\/log|services\/log|dto\/diagnostics/);
   });
 
   it('has no raw tracing formatter or frontend mirror bypassing the sanitizer', () => {

@@ -1,7 +1,7 @@
 // src/features/core/sync/handlers/ProjectEventHandler.ts
 
 import { BaseEventHandler } from './BaseEventHandler';
-import { ComputationSettingsChangedPayload, ProjectLifecycleCommittedPayload, ProjectLoadedPayload, ProjectSavedPayload, EventCallbacks } from '../types';
+import { ComputationSettingsChangedPayload, ProjectLifecycleCommittedPayload, ProjectLoadedPayload, ProjectSavedPayload } from '../types';
 import { loadActivatedProject } from '@/features/core/dataStore';
 import { syncApplicationEventPort } from '../applicationEventPort';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
@@ -11,41 +11,31 @@ import { parseComputationSettingsMutationReceipt } from '@/shared/types/dto/proj
 export class ProjectLoadedHandler extends BaseEventHandler<ProjectLoadedPayload> {
     eventType = 'ProjectLoaded';
     
-    handle(payload: ProjectLoadedPayload, callbacks?: EventCallbacks): void {
+    handle(payload: ProjectLoadedPayload): void {
         this.log('Project loaded:', payload.result.path);
-
-        loadActivatedProject(payload.result).then((data) => {
-            if (data) callbacks?.onProjectLoaded?.(data, payload.result.path);
-        });
+        void loadActivatedProject(payload.result);
     }
 }
 
 export class ProjectClearedHandler extends BaseEventHandler<void> {
     eventType = 'ProjectCleared';
     
-    handle(_payload: void, callbacks?: EventCallbacks): void {
+    handle(_payload: void): void {
         this.log('Project cleared');
-        
-        syncApplicationEventPort().clearProject(
-            (callbacks ?? this.callbacks)?.onProjectCleared,
-        );
+        syncApplicationEventPort().clearProject();
     }
 }
 
 export class ProjectLifecycleCommittedHandler extends BaseEventHandler<ProjectLifecycleCommittedPayload> {
     eventType = 'ProjectLifecycleCommitted';
 
-    constructor(
-        callbacks?: EventCallbacks,
-        private readonly dependencies?: unknown,
-    ) {
-        super(callbacks);
+    constructor(private readonly dependencies?: unknown) {
+        super();
     }
 
-    handle(payload: ProjectLifecycleCommittedPayload, callbacks?: EventCallbacks): void {
+    handle(payload: ProjectLifecycleCommittedPayload): void {
         const operation = syncApplicationEventPort().applyProjectLifecycleReceipt(
             payload.result,
-            (callbacks ?? this.callbacks)?.onProjectCleared,
             this.dependencies,
         );
         void operation.catch((error) => {
@@ -70,7 +60,7 @@ export class ComputationSettingsChangedHandler extends BaseEventHandler<Computat
 export class ProjectSavedHandler extends BaseEventHandler<ProjectSavedPayload> {
     eventType = 'ProjectSaved';
     
-    handle(payload: ProjectSavedPayload, _callbacks?: EventCallbacks): void {
+    handle(payload: ProjectSavedPayload): void {
         this.log('Project saved:', payload.result.operationId);
     }
 }

@@ -1,6 +1,6 @@
 // src/features/core/sync/registry/EventRegistry.ts
 
-import { EventHandler, EventCallbacks, RawBackendEvent } from '../types';
+import { EventHandler, RawBackendEvent } from '../types';
 import { parseEvent, isValidEventType } from '../utils/eventParser';
 import { logger } from '@/utils/appLogger';
 
@@ -10,10 +10,8 @@ import { logger } from '@/utils/appLogger';
  */
 export class EventRegistry {
     private handlers = new Map<string, EventHandler>();
-    private callbacks?: EventCallbacks;
 
-    constructor(handlers: EventHandler[] = [], callbacks?: EventCallbacks) {
-        this.callbacks = callbacks;
+    constructor(handlers: EventHandler[] = []) {
         handlers.forEach(handler => this.register(handler));
     }
 
@@ -53,17 +51,10 @@ export class EventRegistry {
         }
 
         try {
-            handler.handle(parsed.payload, this.callbacks);
+            handler.handle(parsed.payload);
         } catch (error) {
             logger.sys.error(`Error handling event '${parsed.type}': ${error instanceof Error ? error.message : String(error)}`, 'EventRegistry');
         }
-    }
-
-    /**
-     * 更新回调函数
-     */
-    updateCallbacks(callbacks: EventCallbacks): void {
-        this.callbacks = callbacks;
     }
 
     /**

@@ -389,13 +389,6 @@ export function getProjectLifecycleRegistrySizeForTests(): number {
   return pendingOperations.size;
 }
 
-export function getProjectLifecycleOperationForTests(operationId: string): {
-  state: ProjectLifecycleRegistryEntry['state'];
-} | undefined {
-  const entry = pendingOperations.get(operationId);
-  return entry ? { state: entry.state } : undefined;
-}
-
 export function setProjectLifecycleClockForTests(clock: () => number): void {
   lifecycleClock = clock;
 }
