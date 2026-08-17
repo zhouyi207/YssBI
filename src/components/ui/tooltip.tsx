@@ -4,17 +4,76 @@ import * as React from "react"
 import { Tooltip as TooltipPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { addGlobalEventListener } from "@/shared/utils/globalEvent"
+
+type ActiveTooltip = {
+  close: () => void
+}
+
+type TooltipCoordinator = {
+  registerActiveTooltip: (close: () => void) => () => void
+  requestOpenChange: (change: () => void) => void
+}
+
+const TooltipCoordinatorContext = React.createContext<TooltipCoordinator>({
+  registerActiveTooltip: () => () => undefined,
+  requestOpenChange: (change) => change(),
+})
 
 function TooltipProvider({
   delayDuration = 0,
+  children,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+  const windowDraggingRef = React.useRef(false)
+  const activeTooltipRef = React.useRef<ActiveTooltip | null>(null)
+  const coordinator = React.useMemo<TooltipCoordinator>(() => ({
+    registerActiveTooltip: (close) => {
+      const activeTooltip = { close }
+      activeTooltipRef.current = activeTooltip
+
+      return () => {
+        if (activeTooltipRef.current === activeTooltip) {
+          activeTooltipRef.current = null
+        }
+      }
+    },
+    requestOpenChange: (change) => {
+      if (!windowDraggingRef.current) change()
+    },
+  }), [])
+
+  React.useEffect(() => {
+    const dragStart = () => {
+      if (windowDraggingRef.current) return
+
+      windowDraggingRef.current = true
+      activeTooltipRef.current?.close()
+    }
+    const dragEnd = () => {
+      if (!windowDraggingRef.current) return
+
+      windowDraggingRef.current = false
+    }
+    const cleanupDragStart = addGlobalEventListener(window, "yssbi-window-drag-start", dragStart)
+    const cleanupDragEnd = addGlobalEventListener(window, "yssbi-window-drag-end", dragEnd)
+
+    return () => {
+      cleanupDragStart()
+      cleanupDragEnd()
+    }
+  }, [])
+
   return (
-    <TooltipPrimitive.Provider
-      data-slot="tooltip-provider"
-      delayDuration={delayDuration}
-      {...props}
-    />
+    <TooltipCoordinatorContext.Provider value={coordinator}>
+      <TooltipPrimitive.Provider
+        data-slot="tooltip-provider"
+        delayDuration={delayDuration}
+        {...props}
+      >
+        {children}
+      </TooltipPrimitive.Provider>
+    </TooltipCoordinatorContext.Provider>
   )
 }
 
@@ -24,35 +83,35 @@ function Tooltip({
   onOpenChange,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen);
-  const [windowDragging, setWindowDragging] = React.useState(false);
-  const controlled = controlledOpen !== undefined;
-  const open = controlled ? controlledOpen : uncontrolledOpen;
+  const { registerActiveTooltip, requestOpenChange } = React.useContext(TooltipCoordinatorContext)
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen)
+  const controlled = controlledOpen !== undefined
+  const open = controlled ? controlledOpen : uncontrolledOpen
+  const dragCloseRef = React.useRef<() => void>(() => undefined)
+
+  dragCloseRef.current = () => {
+    if (!open) return
+    if (!controlled) setUncontrolledOpen(false)
+    onOpenChange?.(false)
+  }
+
+  const closeForWindowDrag = React.useCallback(() => dragCloseRef.current(), [])
 
   React.useEffect(() => {
-    const dragStart = () => {
-      setWindowDragging(true);
-      if (!controlled) setUncontrolledOpen(false);
-      onOpenChange?.(false);
-    };
-    const dragEnd = () => setWindowDragging(false);
-    window.addEventListener('yssbi-window-drag-start', dragStart);
-    window.addEventListener('yssbi-window-drag-end', dragEnd);
-    return () => {
-      window.removeEventListener('yssbi-window-drag-start', dragStart);
-      window.removeEventListener('yssbi-window-drag-end', dragEnd);
-    };
-  }, [controlled, onOpenChange]);
+    if (!open) return
+    return registerActiveTooltip(closeForWindowDrag)
+  }, [closeForWindowDrag, open, registerActiveTooltip])
 
   return (
     <TooltipPrimitive.Root
       data-slot="tooltip"
       {...props}
       open={open}
-      disableHoverableContent={windowDragging}
       onOpenChange={(nextOpen) => {
-        if (!controlled && !windowDragging) setUncontrolledOpen(nextOpen);
-        if (!windowDragging) onOpenChange?.(nextOpen);
+        requestOpenChange(() => {
+          if (!controlled) setUncontrolledOpen(nextOpen)
+          onOpenChange?.(nextOpen)
+        })
       }}
     />
   )

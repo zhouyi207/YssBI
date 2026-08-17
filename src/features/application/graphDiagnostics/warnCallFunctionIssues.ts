@@ -5,20 +5,19 @@ import { collectCallFunctionIssuesForBucket } from '@/features/domain/graphDiagn
 
 
 /** Non-blocking save warning when a graph contains broken Call Function targets. */
-export function warnCallFunctionIssuesBeforeSave(graphPath: string): boolean {
+export function warnCallFunctionIssuesBeforeSave(graphPath: string): void {
   const bucket = useGraphDataStore.getState().graphEntities[graphPath];
-  if (!bucket) return true;
+  if (!bucket) return;
 
   const issues = collectCallFunctionIssuesForBucket(
     graphPath,
     bucket,
     useResourceStore.getState().resources,
   );
-  if (issues.length === 0) return true;
+  if (issues.length === 0) return;
 
   logger.graph.warn(
     `Saving graph '${graphPath}' with ${issues.length} broken Call Function reference(s)`,
     'GraphDiagnostics',
   );
-  return true;
 }
