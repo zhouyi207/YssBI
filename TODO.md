@@ -333,8 +333,14 @@ src/app/appConfig/appLinks.ts
 
 ## 2026.08.16
 
-- [ ] 重构日志和错误管理
-
+- [x] 重构诊断与日志系统：以有界、可丢弃、统一脱敏的 Rust `tracing` 管线替代旧 `LogManager`、Tauri log plugin 和磁盘日志分页；前端改用 recent snapshot + live Channel，并显式展示重连、序列缺口与丢弃状态。
+- [x] 统一 IPC 错误与用户反馈：命令错误固定为 `{ code, details, incidentId }`，普通前端调用统一经 `invokeCommand`；React 使用本地化 `Alert`、字段内错误或 `MessageDialog`，移除 Sonner、Toast、`logger.notify` 和后端用户文案。
+- [x] 重构 Execution Trace：按完整 compilation/run bundle 原子提交和整包淘汰，显式暴露 provenance、截断、丢弃 span 数、容量估算与 incident 关联。
+- [x] 新增独立的有序有界 Run Output 通道：Print/stdout/stderr 不再进入 diagnostics，保留真实来源 graph/node identity，并在 Output 面板展示截断、丢弃和前端投影缺口。
+- [x] 收紧项目、数据库、Worksheet、Bayes 与 DID 数据契约：使用稳定 code、结构化统计字段、严格 wire parser 和类型化 lifecycle outcome，抑制过期请求副作用并避免原始错误文本进入前端状态。
+- [x] 将 Logs/Output 迁移到 shell Dockview 原生 edge group，由 Dockview 统一管理面板位置、顺序、尺寸、折叠状态和布局恢复，删除外层 Gridview 与 Zustand 中的重复布局事实源。
+- [x] 重构项目选择页与 workbench 视觉层级：统一品牌、主题 surface、窗口 chrome、Activity Bar、画布空状态、参数字段反馈及项目操作的持久错误提示。
+- [x] 更新 diagnostics、错误、Trace、Output、Dockview 与测试范围的架构文档和 Agent 指南，并排除 Claude worktree 对本地 Vitest 测试发现的干扰。
 
 
 - [ ] 在更改 graph 的时候 tabbar 中的样式并没有其他变化，如果在更改后不保存关闭，那么下次打开打开的时候还是更改前的状态，这里明显是不符合逻辑的，除此之外还有其他的需要检查；同时磁盘上以及更新的符号和标签我感觉可以去掉，可以学习 vscode 的 tabbar 处理

@@ -48,9 +48,12 @@ the architecture changes.
 - Rust `tracing` is the single diagnostic pipeline. Diagnostic storage and
   delivery are bounded, lossy, sanitized, and non-authoritative; logs never
   drive domain state, workflows, or user feedback.
-- React owns localization and presentation. Map stable error codes and safe
-  details to page/section `Alert`, inline field errors, or a normal
-  single-button `Dialog`; reserve `AlertDialog` for destructive confirmation.
+- React owns application error localization and feedback presentation. Map
+  stable error codes and safe details to page/section `Alert`, inline field
+  errors, or a normal single-button `Dialog`; reserve `AlertDialog` for
+  destructive confirmation. Rust's extensible node catalog may own deterministic
+  node metadata and compiler diagnostic templates, but those templates must never
+  interpolate raw internal error text.
 - Do not add toaster/Sonner, `logger.notify`, browser dialogs, native message
   dialogs, disk log pagination commands, or compatibility logging paths.
 - Execution Trace remains runtime-authoritative and separate from diagnostics.
@@ -101,9 +104,15 @@ the architecture changes.
   topology/sizes, panel placement/order, active group/panel, and serialized
   layout restoration. Do not mirror those values into Zustand or recreate a
   `LayoutTree` compatibility model.
-- `GridviewReact` owns the outer workbench panes and nested `DockviewReact` owns
-  editor groups and panels. Keep menubar, activity bar, status bar, and modals
-  outside the Dockview workspace.
+- `GridviewReact` owns the outer sidebar/editor-shell/detail panes. The shell
+  `DockviewReact` hosts the editor surface in its center and Logs/Output in a
+  native edge group; the nested editor `DockviewReact` owns editor groups and
+  panels. Keep menubar, activity bar, status bar, and modals outside the Dockview
+  workspace.
+- The shell edge group owns panel placement, splitter size, collapsed state, and
+  last expanded size. Collapse only the edge-group content while retaining its
+  tab bar; never emulate collapse by resizing an outer Gridview leaf to the
+  header height.
 - Application stores may keep non-placement panel metadata and pane-local state
   keyed by `panelInstanceId`; resource identity remains separate and opaque.
 - Route all panel closes through application dirty/save confirmation before
@@ -125,6 +134,24 @@ the architecture changes.
   and resource loaded state.
 - Save/close flows use the application confirmation modal and keep sub-windows
   read-only with respect to project state.
+
+## Test scope discipline
+
+- Add the smallest focused regression test that proves the requested behavior
+  or reproduces the reported bug. Prefer one representative case per distinct
+  project-owned contract or failure mode.
+- Test through stable public seams rather than private implementation details.
+  Do not add tests at unrelated or unconfirmed seams.
+- Do not add speculative edge-case tests, exhaustive input matrices, duplicate
+  coverage, or tests for unchanged behavior unless acceptance criteria require
+  them or a demonstrated regression risk justifies them.
+- Before adding more than two new tests, identify the distinct regression each
+  additional test catches; omit cases without a unique failure mode.
+- For behavior-preserving refactors, rely on existing coverage and run the
+  relevant suites. Add tests only when current coverage cannot establish the
+  preserved contract.
+- Do not test behavior owned by the language, framework, type system, or third-
+  party dependencies; test only contracts owned by this project.
 
 ## Local development and verification
 

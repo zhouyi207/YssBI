@@ -2,6 +2,13 @@
 
 本文档从整体到细节描述 YssBI 的当前架构：前端 React 桌面应用、Tauri/Rust 后端、图节点执行系统、数据集管理、统计计算库 `yss-sci`，以及它们之间的边界、数据流和扩展方式。
 
+专项权威文档：
+
+- 诊断、IPC 错误、用户反馈、Execution Trace 与 Program Output：[`DIAGNOSTICS_ERRORS_AND_OUTPUT.md`](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
+- 编辑器与 Dockview/Gridview 布局：[`EDITOR_GRID_ARCHITECTURE.md`](./EDITOR_GRID_ARCHITECTURE.md)
+
+专项文档优先于本总览中的简化描述。
+
 ## 1. 项目定位
 
 YssBI 是一个基于 Tauri 的桌面数据分析与可视化应用。它的核心产品形态不是传统表单式 BI，而是一个类似 IDE 的图编辑器：用户在画布上组合节点，导入数据集，执行统计、计量、时间序列、面板回归、绘图等分析流程，并通过独立窗口查看表格、图形、日志和模型结果。
@@ -38,7 +45,7 @@ flowchart TD
 - 状态管理：Zustand，部分 store 使用 Immer。
 - UI 组件：shadcn 风格组件位于 `src/components/ui/`，底层依赖 Radix、`class-variance-authority`、`tailwind-merge`。
 - 样式：Tailwind CSS v4，主题变量由设置系统写入 CSS variables。
-- 桌面能力：`@tauri-apps/api`、dialog、log、opener。
+- 桌面能力：`@tauri-apps/api`、dialog、clipboard-manager、opener；诊断不使用 Tauri log 插件。
 - 交互与渲染：`@dnd-kit/core`、`@tanstack/react-virtual`、D3、KaTeX、React Markdown。
 
 ### 2.2 后端
@@ -74,8 +81,9 @@ YssBI/
 │  │  ├─ database/              # 数据源 engine、DatabaseInstance、读写编辑
 │  │  ├─ schema/                # 前后端 DTO/schema
 │  │  ├─ variable/              # 变量系统
-│  │  ├─ editor/                # 设置持久化
-│  │  └─ log/                   # 日志管理
+│  │  ├─ diagnostics/           # tracing、脱敏、有界 recent/JSONL/Channel
+│  │  ├─ error/                 # CommandError IPC wire
+│  │  └─ editor/                # 设置持久化
 │  └─ sci/                      # yss-sci 统计计算库
 └─ docs/                        # 架构、分析和需求文档
 ```
@@ -98,7 +106,7 @@ index.html
 
 `src/app/App.tsx` 是根组件。它做三件事：
 
-- 提前导入 `@/utils/appLogger`，让前端日志拦截和转发尽早生效。
+- 提前导入 `@/utils/appLogger`，启用显式前端 diagnostics 批处理；不劫持全局 `console`。
 - 使用 `SettingsEffectsProvider` 应用主题、字体、窗口相关设置。
 - 使用 `HashRouter` 挂载多窗口路由，并在路由外挂载 `UIHost`。
 
@@ -157,7 +165,7 @@ components/ui and shared/ui → reusable UI
 - `features/domain/`：目前较薄，主要放纯函数、节点命名、sidebar 常量等。
 - `services/`：Tauri `invoke` 封装，是前端访问后端命令的主要边界。
 - `components/ui/`：shadcn primitives。
-- `shared/ui/`：应用级共享组件，例如 Toast、Modal、SQL/导入相关 modal；通用滚动区域使用 `components/ui/scroll-area.tsx`。
+- `shared/ui/`：应用级共享组件，例如 `PageAlert`、`MessageDialog` 和领域无关 modal；不提供 toaster。通用滚动区域使用 `components/ui/scroll-area.tsx`。
 
 ### 4.5 状态管理
 
@@ -169,7 +177,7 @@ components/ui and shared/ui → reusable UI
 - 编辑器 application 编排：`features/application/editor/`（`EditorSessionProvider`、`useEditorSession`、`useEditorGroup`）
 - Schema / Node Registry：`features/core/schema`、`features/core/nodeRegister`
 - 历史：`features/core/history`
-- UI Modal / Toast：`features/core/ui/UIStore.ts`
+- 阻断式 MessageDialog：`features/core/ui/UIStore.ts`；页面/字段错误由所属 view 的 `Alert` 或 inline state 持有
 - 视口、选择、手势、侧边栏、日志、执行状态等：分别由多个 core store 管理
 
 项目初始化由 `useAppInitialization` 驱动：先等待 schema store 从后端同步节点定义，再调用 `initProjectSync` 同步项目数据。
@@ -187,7 +195,7 @@ Editor 窗口在 `EditorWindow` 根节点挂载 `EditorSessionProvider`，全窗
 - `services/stats/**`
 - `services/log/**`
 
-例如 `DatabaseService` 将 `load_database`、`get_database_rows`、`edit_cell`、`export_database` 等命令包装为 TypeScript 方法。前端视图一般应通过 service 或 application hook 调用后端，而不是到处直接 `invoke`。
+例如 `DatabaseService` 将 `load_database`、`get_database_rows`、`edit_cell`、`export_database` 等命令包装为 TypeScript 方法。普通命令统一经 `services/ipc/invokeCommand.ts` 解析精确的 `{ code, details, incidentId }` error wire；view 不直接 `invoke`。
 
 但也存在合理例外：窗口生命周期、窗口打开/关闭、当前窗口控制等 Tauri shell API 会在部分 view 或 layout 组件中直接使用。
 
@@ -195,7 +203,7 @@ Editor 窗口在 `EditorWindow` 根节点挂载 `EditorSessionProvider`，全窗
 
 后端通过 Tauri event 推送低频项目事件。前端 `features/core/sync` 里的 `ProjectListener` 监听 `project-event`，再通过 `EventRegistry` 派发给对应 handler，最终写入 Zustand stores。
 
-执行进度不是普通 event，而是 `execute_project` 命令传入 Tauri `Channel<ExecutionEvent>`，后端执行器通过 channel 推送 `ExecutionStart`、`NodeStart`、`NodeComplete`、`NodeError`、`OpenWindow`、`ExecutionComplete` 等事件。
+执行进度与 Program Output 不是普通 event，而由 `execute_graph_document` 的有序 Tauri Channel 推送 typed `RunEvent` / `RunOutputEvent`。Print 输出进入独立 Output 面板，不进入 diagnostics。
 
 ## 5. Tauri 后端架构
 
@@ -212,9 +220,9 @@ src-tauri/src/main.rs
 
 `lib.rs` 负责：
 
-- 注册 Tauri plugins：log、fs、dialog、opener。
-- 注册全局 managed state：`ProjectState`、`ResultSourceStore`。
-- 初始化日志管理器。
+- 注册 Tauri plugins：fs、dialog、clipboard-manager、opener。
+- 注册全局 managed state：`ProjectState`、`ResultSourceStore`、`DiagnosticsRuntime`。
+- 初始化单一 Rust `tracing` diagnostics 管线。
 - 通过 `tauri::generate_handler!` 集中注册所有命令。
 
 命令注册列表是后端 IPC 的事实目录。新增命令时必须在 `commands/` 下实现并在 `lib.rs` 中注册。
@@ -231,7 +239,8 @@ src-tauri/src/
 ├─ schema/         # 前后端 DTO/schema
 ├─ variable/       # 变量模型和作用域
 ├─ editor/         # 设置文件读写
-├─ log/            # 前后端日志收集与文件输出
+├─ diagnostics/    # bounded tracing、脱敏、recent、JSONL、Channel
+├─ error/          # CommandError 固定 IPC wire
 ├─ event/          # project-event 推送
 ├─ ast/            # 表达式 lexer/parser/validator
 └─ frontend/       # 面向前端的数据结构或辅助

@@ -2,6 +2,8 @@
 
 本文档定义 YssBI 项目的核心设计原则与约定，供开发与评审时参考。
 
+诊断、错误、用户反馈、Execution Trace 与 Program Output 的专项权威规则见 [`DIAGNOSTICS_ERRORS_AND_OUTPUT.md`](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)。若本文件的历史示例与专项文档或根目录 `AGENTS.md` 冲突，以后两者为准。
+
 ---
 
 ## 1. 整体设计
@@ -77,7 +79,7 @@ src/
 └─ shared/              # 共享资源（无业务逻辑）
     ├─ types/           # 类型定义（domain/dto/store/ui/state/settings）
     ├─ utils/           # 工具函数（math、dtoConverters、connections、internalNodes）
-    ├─ ui/              # 通用 UI 组件（Modal、Toast、Select）
+    ├─ ui/              # 通用 UI 组件（PageAlert、MessageDialog、Select）
     └─ assets/          # 静态资源
 ```
 
@@ -382,7 +384,8 @@ buildGraphBucket → GraphEntityBucket
 
 - 所有后端调用通过 `@/services` 下的 Service 类完成。
 - **命名**：`XxxService.methodName`（如 `ConnectionService.connectPins`、`GraphService.getGraph`）。
-- **流程**：invoke 命令 → 成功 → 拉取最新数据 → 更新 Store（如 `addGraphFromData`）。
+- **流程**：`invokeCommand` → typed DTO / `IpcError` → application use case → 更新 Store 或选择显式反馈表面。
+- 普通 invoke 只允许位于 `services/ipc/invokeCommand.ts`；Service 不负责用户提示。
 
 ### 2.7 命名约定
 
@@ -419,7 +422,8 @@ src-tauri/src/
 │   │   └─ command_pin.rs         # Pin 操作（update_value/dynamic_pin）
 │   ├─ command_variable/    # 变量 CRUD
 │   ├─ command_dataframe/   # DataFrame 导入与管理
-│   └─ command_log/         # 日志查询
+│   ├─ command_diagnostics/ # diagnostics submit/subscribe/unsubscribe
+│   └─ command_trace.rs     # Execution Trace bundle 查询
 │
 ├─ graph/                   # 核心领域：图运行时
 │   ├─ core/                # 图实例与状态
@@ -504,11 +508,8 @@ src-tauri/src/
 │
 ├─ editor/                  # 编辑器设置
 │   └─ settings/            # 各类设置（app、editor、theme、window）
-│
-└─ log/                     # 日志系统
-    ├─ log_manager.rs
-    ├─ log_type.rs
-    └─ macros.rs
+├─ diagnostics/             # tracing、脱敏、有界 worker/recent/JSONL
+└─ error/                   # CommandError 固定 IPC wire
 ```
 
 **各层依赖规则**：
@@ -602,7 +603,7 @@ RuntimeState（执行态快照） ─ 持有 ID + 当前状态 + 运行时值，
 - 所有命令在 `lib.rs` 的 `invoke_handler` 中统一注册。
 - **命名**：snake_case（如 `connect_pins`、`disconnect_pin`、`get_graph`）。
 - **参数**：`#[tauri::command]` 接收，前端传入 camelCase 对象，serde 自动映射。
-- **返回**：`Result<T, String>`，错误通过 `Err(String)` 传递。
+- **返回**：`Result<T, CommandError>`；wire 精确为 `{ code, details, incidentId }`，禁止后端用户文案和字符串前缀解析。
 
 ### 3.4 DTO 与序列化
 
