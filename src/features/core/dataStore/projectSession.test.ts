@@ -43,4 +43,34 @@ describe('projectSession', () => {
     expect(path).toBeNull();
     expect(useProjectIOStore.getState().currentPath).toBeNull();
   });
+
+  it('isolates reconciliation across project identity replacement', async () => {
+    let resolveProjectA!: (path: string | null) => void;
+    let resolveProjectB!: (path: string | null) => void;
+    const projectAPath = new Promise<string | null>((resolve) => {
+      resolveProjectA = resolve;
+    });
+    const projectBPath = new Promise<string | null>((resolve) => {
+      resolveProjectB = resolve;
+    });
+    vi.mocked(ProjectService.getProjectPath).mockImplementation((projectInstanceId) =>
+      projectInstanceId === 'project-instance-1' ? projectAPath : projectBPath,
+    );
+
+    const projectAReconciliation = reconcileProjectPath();
+    startProjectLifecycle('project-instance-2');
+    useProjectIOStore.setState({ currentPath: null });
+    const projectBReconciliation = reconcileProjectPath();
+
+    expect(ProjectService.getProjectPath).toHaveBeenNthCalledWith(1, 'project-instance-1');
+    expect(ProjectService.getProjectPath).toHaveBeenNthCalledWith(2, 'project-instance-2');
+
+    resolveProjectA('D:/project-a/metadata.yssbi');
+    await expect(projectAReconciliation).resolves.toBeNull();
+    expect(useProjectIOStore.getState().currentPath).toBeNull();
+
+    resolveProjectB('D:/project-b/metadata.yssbi');
+    await expect(projectBReconciliation).resolves.toBe('D:/project-b/metadata.yssbi');
+    expect(useProjectIOStore.getState().currentPath).toBe('D:/project-b/metadata.yssbi');
+  });
 });

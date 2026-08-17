@@ -4,7 +4,6 @@
  */
 
 import { LoadStatus } from '@/shared/types/ui/common';
-import { ProjectData } from '@/shared/types';
 import { loadActivatedProject, useProjectIOStore } from './projectIOStore';
 import { reconcileProjectPath } from './projectSession';
 import { captureProjectLifecycleState } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
@@ -20,29 +19,27 @@ export function getGraphByPath(graphPath: string): GraphSnapshotData | null {
 }
 
 /**
- * 初始化时从后端同步项目状态（可重复调用；与 `loadProject` 合并并发）。
+ * 显式 hydrate 前端项目投影（可重复调用；与 `loadProject` 合并并发）。
  *
- * - Ready + 有 `currentPath`：轻量返回快照
+ * - 无前端项目 identity：从后端 activation hydrate
+ * - Ready + 有 `currentPath`：投影已就绪，无操作
  * - Ready + 无 path 但后端有会话：全量 `loadProject` 重灌前端投影
  * - 其它：全量 `loadProject`
  */
-export async function initProjectSync(): Promise<ProjectData | null> {
+export async function initProjectSync(): Promise<void> {
   if (!captureProjectLifecycleState().projectInstanceId) {
-    return loadActivatedProject(await ProjectService.getProjectActivation());
+    await loadActivatedProject(await ProjectService.getProjectActivation());
+    return;
   }
 
-  const { status, currentPath, loadProject, exportSnapshot } = useProjectIOStore.getState();
+  const { status, currentPath, loadProject } = useProjectIOStore.getState();
 
   if (status === LoadStatus.Ready) {
-    if (currentPath) {
-      return exportSnapshot();
-    }
+    if (currentPath) return;
+
     const reconciled = await reconcileProjectPath();
-    if (!reconciled) {
-      return exportSnapshot();
-    }
-    return await loadProject();
+    if (!reconciled) return;
   }
 
-  return await loadProject();
+  await loadProject();
 }

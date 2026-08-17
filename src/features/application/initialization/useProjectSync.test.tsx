@@ -38,7 +38,7 @@ describe('useProjectSync', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(initProjectSync).mockResolvedValue(null);
+    vi.mocked(initProjectSync).mockResolvedValue(undefined);
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -47,6 +47,19 @@ describe('useProjectSync', () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     host.remove();
+  });
+
+  it('starts the project listener without hydrating project state', async () => {
+    const unlisten = vi.fn();
+    vi.mocked(listen).mockResolvedValue(unlisten);
+
+    await act(async () => {
+      root.render(<Harness />);
+      await Promise.resolve();
+    });
+
+    expect(listen).toHaveBeenCalledOnce();
+    expect(initProjectSync).not.toHaveBeenCalled();
   });
 
   it('keeps one project listener when StrictMode cleanup races async startup', async () => {

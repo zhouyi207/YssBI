@@ -3,14 +3,13 @@ import type { LayoutTab } from '@/shared/types';
 import { editorDockviewPort } from '@/features/core/dockview';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { GraphService } from '@/services/graph/graphService';
-import { logger } from '@/utils/appLogger';
-import { unloadGraphDocument } from './graphDocumentUnload';
+import { closeGraphDocumentPanel } from './graphDocumentCloseLifecycle';
 import { resolveTabDisplayName } from './resolveTabDisplayName';
 import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
 import { focusDetailOnActiveGraph } from '@/features/core/editor/detail/detailFocusCommands';
 import { syncVariablesGraphScopeAfterClose } from '@/features/core/editor/detail/variablesGraphScope';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
-import { clearResourceDocumentState, isGraphResourceDirty, markResourceDirty } from '@/features/core/resource';
+import { isGraphResourceDirty, markResourceDirty } from '@/features/core/resource';
 import { releaseEditorViewport } from '@/features/core/viewport';
 import { editorViewportScope } from '@/features/core/viewport/viewportScope';
 import { switchEditorTab } from './switchEditorTab';
@@ -64,23 +63,21 @@ export async function closeGraphTab(graphPath: string, groupId?: string, skipDir
   }
 
   const wasActive = editorDockviewPort.getActivePanel()?.panelInstanceId === panel.panelInstanceId;
-  await editorDockviewPort.remove(panel.panelInstanceId);
-  releaseEditorViewport(editorViewportScope(panel.groupId, graphPath));
-  if (wasActive) deactivateGraphTab(panel.groupId, graphPath);
-  clearDetailFocusForClosedTab(graphPath);
-  syncVariablesGraphScopeAfterClose(graphPath);
+  await closeGraphDocumentPanel({
+    graphPath,
+    graphKind: tab.type,
+    panelInstanceId: panel.panelInstanceId,
+    afterPanelRemoved: async () => {
+      releaseEditorViewport(editorViewportScope(panel.groupId, graphPath));
+      if (wasActive) deactivateGraphTab(panel.groupId, graphPath);
+      clearDetailFocusForClosedTab(graphPath);
+      syncVariablesGraphScopeAfterClose(graphPath);
 
-  const active = editorDockviewPort.getActivePanel();
-  const activeTab = active ? readLayoutTab(active) : null;
-  if (active && activeTab) await switchEditorTab(active.groupId, activeTab);
-  if (!useEditorStore.getState().detailFocus) focusDetailOnActiveGraph(active?.groupId ?? panel.groupId);
-
-  clearResourceDocumentState({ id: graphPath, kind: tab.type });
-  void unloadGraphDocument(graphPath).catch((error) => {
-    logger.graph.warn(
-      `Failed to release graph cache '${graphPath}': ${error instanceof Error ? error.message : String(error)}`,
-      'closeGraphTab',
-    );
+      const active = editorDockviewPort.getActivePanel();
+      const activeTab = active ? readLayoutTab(active) : null;
+      if (active && activeTab) await switchEditorTab(active.groupId, activeTab);
+      if (!useEditorStore.getState().detailFocus) focusDetailOnActiveGraph(active?.groupId ?? panel.groupId);
+    },
   });
   return true;
 }

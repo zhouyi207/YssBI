@@ -26,7 +26,7 @@ describe('useAppInitialization', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(initProjectSync).mockResolvedValue(null);
+    vi.mocked(initProjectSync).mockResolvedValue(undefined);
     initializationState = { status: LoadStatus.Idle, error: null };
     host = document.createElement('div');
     document.body.appendChild(host);

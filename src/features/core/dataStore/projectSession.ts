@@ -4,9 +4,23 @@ import { useProjectIOStore } from './projectIOStore';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
+  type ProjectIdentitySnapshot,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
-let reconcilePathInFlight: Promise<string | null> | null = null;
+interface ReconcilePathRequest {
+  readonly identity: ProjectIdentitySnapshot;
+  readonly promise: Promise<string | null>;
+}
+
+let reconcilePathInFlight: ReconcilePathRequest | null = null;
+
+function isSameProjectIdentity(
+  left: ProjectIdentitySnapshot,
+  right: ProjectIdentitySnapshot,
+): boolean {
+  return left.projectInstanceId === right.projectInstanceId
+    && left.epoch === right.epoch;
+}
 
 /**
  * Align `currentPath` with Rust `ProjectState.project_path` when the frontend
@@ -16,24 +30,33 @@ export async function reconcileProjectPath(): Promise<string | null> {
   const cached = useProjectIOStore.getState().currentPath;
   if (cached) return cached;
 
-  if (reconcilePathInFlight) return reconcilePathInFlight;
-
   const identity = captureProjectIdentity();
-  reconcilePathInFlight = (async () => {
-    try {
-      const path = await ProjectService.getProjectPath(identity.projectInstanceId);
-      if (!isCurrentProjectIdentity(identity)) return null;
-      if (path) {
-        useProjectIOStore.getState().setCurrentPath(path);
-        return formatDisplayPath(path);
-      }
-      return null;
-    } finally {
+  if (
+    reconcilePathInFlight
+    && isSameProjectIdentity(reconcilePathInFlight.identity, identity)
+  ) {
+    return reconcilePathInFlight.promise;
+  }
+
+  const promise = (async () => {
+    const path = await ProjectService.getProjectPath(identity.projectInstanceId);
+    if (!isCurrentProjectIdentity(identity)) return null;
+    if (path) {
+      useProjectIOStore.getState().setCurrentPath(path);
+      return formatDisplayPath(path);
+    }
+    return null;
+  })();
+  const request: ReconcilePathRequest = { identity, promise };
+  reconcilePathInFlight = request;
+
+  try {
+    return await promise;
+  } finally {
+    if (reconcilePathInFlight === request) {
       reconcilePathInFlight = null;
     }
-  })();
-
-  return reconcilePathInFlight;
+  }
 }
 
 /** Resolve the active project path; reconciles from backend when needed. */
@@ -41,7 +64,7 @@ export async function resolveActiveProjectPath(): Promise<string | null> {
   return reconcileProjectPath();
 }
 
-/** Subscribe to the active project path projection (reconcile via `useProjectSync` / save). */
+/** Subscribe to the active project path projection (reconcile via explicit hydration / save). */
 export function useActiveProjectPath(): string | null {
   return useProjectIOStore((state) => state.currentPath);
 }
