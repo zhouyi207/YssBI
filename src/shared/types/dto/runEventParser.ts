@@ -12,19 +12,24 @@ import type { ResultStateKind } from './result';
 import {
   RUN_ERROR_CODES,
   RUN_EVENT_KIND_TYPES,
+  RUN_OUTPUT_STATUSES,
+  RUN_OUTPUT_STREAMS,
   RUN_PHASES,
   type CompilationBasisDto,
   type ExecuteGraphResultDto,
+  type ExecutionChannelEvent,
   type RunCorrelationDto,
   type RunErrorCode,
   type RunEvent,
   type RunEventKind,
+  type RunOutputChannelEvent,
   type RunPhase,
 } from './runEvent';
 
 type UnknownRecord = Record<string, unknown>;
 
 const DECIMAL_ID_PATTERN = /^(0|[1-9]\d*)$/;
+const POSITIVE_DECIMAL_ID_PATTERN = /^[1-9]\d*$/;
 const FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
 const MAX_U32 = 4_294_967_295;
 
@@ -65,6 +70,10 @@ function isGeneration(value: unknown): value is number {
 
 function isDecimalId(value: unknown): value is string {
   return typeof value === 'string' && DECIMAL_ID_PATTERN.test(value);
+}
+
+function isPositiveDecimalId(value: unknown): value is string {
+  return typeof value === 'string' && POSITIVE_DECIMAL_ID_PATTERN.test(value);
 }
 
 function isNullableString(value: unknown): value is string | null {
@@ -199,10 +208,10 @@ function parseRunCorrelationDto(value: unknown): RunCorrelationDto {
     || !FINGERPRINT_PATTERN.test(value.registryFingerprint)
     || !isDecimalId(value.compileId)
     || !isNullableString(value.selectionDigest)
-    || !(value.runId === null || isDecimalId(value.runId))
+    || !(value.runId === null || isPositiveDecimalId(value.runId))
     || !(value.nodeId === null || isUuid(value.nodeId))
     || !isNullableString(value.nodeTypeId)
-    || !(value.parentCall === null || isDecimalId(value.parentCall))) {
+    || !(value.parentCall === null || isPositiveDecimalId(value.parentCall))) {
     return fail('run correlation');
   }
   return {
@@ -226,8 +235,8 @@ function parseOperationEvent(
 ): RunEventKind {
   if (!hasExactKeys(value, ['type', 'operationIndex', 'activationId', 'attemptId'])
     || !isU32(value.operationIndex)
-    || !isDecimalId(value.activationId)
-    || !isDecimalId(value.attemptId)) return fail(type);
+    || !isPositiveDecimalId(value.activationId)
+    || !isPositiveDecimalId(value.attemptId)) return fail(type);
   return {
     type,
     operationIndex: value.operationIndex,
@@ -269,8 +278,8 @@ function parseRunEventKind(value: unknown): RunEventKind {
         ['type', 'operationIndex', 'activationId', 'attemptId', 'code', 'phase'],
       )
         || !isU32(value.operationIndex)
-        || !isDecimalId(value.activationId)
-        || !isDecimalId(value.attemptId)) return fail('operationErrored');
+        || !isPositiveDecimalId(value.activationId)
+        || !isPositiveDecimalId(value.attemptId)) return fail('operationErrored');
       return {
         type: 'operationErrored',
         operationIndex: value.operationIndex,
@@ -282,7 +291,7 @@ function parseRunEventKind(value: unknown): RunEventKind {
       if (!hasExactKeys(value, ['type', 'activationId', 'resultIds', 'state'])
         || !isDecimalId(value.activationId)
         || !Array.isArray(value.resultIds)
-        || !value.resultIds.every(isDecimalId)) return fail('resultGroupChanged');
+        || !value.resultIds.every(isPositiveDecimalId)) return fail('resultGroupChanged');
       return {
         type: 'resultGroupChanged',
         activationId: value.activationId,
@@ -292,7 +301,7 @@ function parseRunEventKind(value: unknown): RunEventKind {
     case 'outputResultChanged':
       if (!hasExactKeys(value, ['type', 'output', 'generation', 'resultId'])
         || !(value.generation === null || isGeneration(value.generation))
-        || !isDecimalId(value.resultId)) return fail('outputResultChanged');
+        || !isPositiveDecimalId(value.resultId)) return fail('outputResultChanged');
       return {
         type: 'outputResultChanged',
         output: parseGraphOutputRefDto(value.output),
@@ -300,7 +309,7 @@ function parseRunEventKind(value: unknown): RunEventKind {
         resultId: value.resultId,
       };
     case 'openResultWindow':
-      if (!hasExactKeys(value, ['type', 'resultId']) || !isDecimalId(value.resultId)) {
+      if (!hasExactKeys(value, ['type', 'resultId']) || !isPositiveDecimalId(value.resultId)) {
         return fail('openResultWindow');
       }
       return { type: 'openResultWindow', resultId: value.resultId };
@@ -320,8 +329,55 @@ export function parseRunEvent(value: unknown): RunEvent {
   };
 }
 
+export function parseRunOutputChannelEvent(value: unknown): RunOutputChannelEvent {
+  if (!isRecord(value)
+    || !isPositiveDecimalId(value.runId)
+    || !Number.isSafeInteger(value.sequence)
+    || (value.sequence as number) < 1
+    || !isGraphResourcePath(value.sourceGraphPath)
+    || !isUuid(value.sourceNodeId)) {
+    return fail('run output event');
+  }
+  const stream = parseDiscriminant(value.stream, RUN_OUTPUT_STREAMS, 'run output stream');
+  if (Object.prototype.hasOwnProperty.call(value, 'text')) {
+    if (!hasExactKeys(value, [
+      'runId', 'sequence', 'stream', 'text', 'sourceGraphPath', 'sourceNodeId',
+    ]) || typeof value.text !== 'string') return fail('run output event');
+    return {
+      runId: value.runId,
+      sequence: value.sequence as number,
+      stream,
+      text: value.text,
+      sourceGraphPath: value.sourceGraphPath,
+      sourceNodeId: value.sourceNodeId,
+    };
+  }
+  if (!hasExactKeys(value, [
+    'runId', 'sequence', 'stream', 'status', 'sourceGraphPath', 'sourceNodeId',
+  ])) {
+    return fail('run output status event');
+  }
+  return {
+    runId: value.runId,
+    sequence: value.sequence as number,
+    stream,
+    status: parseDiscriminant(value.status, RUN_OUTPUT_STATUSES, 'run output status'),
+    sourceGraphPath: value.sourceGraphPath,
+    sourceNodeId: value.sourceNodeId,
+  };
+}
+
+export function parseExecutionChannelEvent(value: unknown): ExecutionChannelEvent {
+  if (isRecord(value) && Object.prototype.hasOwnProperty.call(value, 'kind')) {
+    return parseRunEvent(value);
+  }
+  return parseRunOutputChannelEvent(value);
+}
+
 export function parseExecuteGraphResultDto(value: unknown): ExecuteGraphResultDto {
-  if (!isRecord(value) || !hasExactKeys(value, ['runId']) || !isDecimalId(value.runId)) {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['runId'])
+    || !isPositiveDecimalId(value.runId)) {
     return fail('execute graph result');
   }
   return { runId: value.runId };

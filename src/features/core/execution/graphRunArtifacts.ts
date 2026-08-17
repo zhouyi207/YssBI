@@ -20,6 +20,8 @@ export function graphHasClearableArtifacts(
   return (
     graph.pinHistories.size > 0
     || graph.recording.length > 0
+    || graph.runOutput.entries.length > 0
+    || graph.runOutput.projectionDropped
     || graph.status === 'completed'
     || graph.status === 'error'
     || graph.nodeStates.size > 0

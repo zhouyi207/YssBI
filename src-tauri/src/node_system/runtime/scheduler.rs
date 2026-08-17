@@ -8,9 +8,9 @@ use super::{
     ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider, RelationalContext,
     ResourceErrorKind, ResourceProvider, ResultFailure, ResultId, ResultState, ResultStore,
     ResultUsage, RunDeadline, RunError, RunErrorOutcome, RunEvent, RunEventKind, RunEventSink,
-    RunOptions, RunPhase, RunResourceBudgets, RunResourceOwner, RunResourceSet, RunResult,
-    RuntimeValue, SchedulingPolicy, SessionMemoization, StoredValue, check_terminal,
-    execute_planned_adapter, validate_data_series_type_expr,
+    RunOptions, RunOutputEmitter, RunOutputSink, RunPhase, RunResourceBudgets, RunResourceOwner,
+    RunResourceSet, RunResult, RuntimeValue, SchedulingPolicy, SessionMemoization, StoredValue,
+    check_terminal, execute_planned_adapter, validate_data_series_type_expr,
 };
 use crate::node_system::analysis::{
     CorrelationContext, NOOP_TRACE_SINK, ParentCallId, ResourceVersionSet, RunId,
@@ -203,6 +203,7 @@ impl MemoTables<'_> {
 
 struct OperationWorkerContext<'a> {
     run_id: RunId,
+    run_output: &'a dyn RunOutputSink,
     frame_id: FrameId,
     computation_settings: EffectiveComputationSettings,
     plan: &'a ExecutionPlan,
@@ -851,6 +852,7 @@ impl<'a> RunExecutor<'a> {
         if let Some(digest) = self.selection_digest {
             correlation = correlation.with_selection_digest(digest);
         }
+        let run_output = RunOutputEmitter::new(run_id, self.events);
         self.record_event(plan, correlation.clone(), RunEventKind::RunStarted);
         let mut run_span = start_span_safely(
             self.trace,
@@ -895,6 +897,7 @@ impl<'a> RunExecutor<'a> {
                     plan,
                     cancellation.clone(),
                     run_id,
+                    &run_output,
                     correlation.clone(),
                     &resource_owner,
                     &trace_coverage,
@@ -936,6 +939,7 @@ impl<'a> RunExecutor<'a> {
         plan: &ExecutionPlan,
         cancellation: CancellationToken,
         run_id: RunId,
+        run_output: &dyn RunOutputSink,
         correlation: CorrelationContext,
         resource_owner: &RunResourceOwner,
         trace_coverage: &RunTraceCoverage<'_>,
@@ -945,6 +949,7 @@ impl<'a> RunExecutor<'a> {
             plan,
             cancellation.clone(),
             run_id,
+            run_output,
             correlation.clone(),
             resource_owner,
             trace_coverage,
@@ -1016,9 +1021,12 @@ impl<'a> RunExecutor<'a> {
         let mut span = trace_coverage.start_span(SpanKind::Cleanup);
         let cleanup_errors = resource_owner.cleanup();
         for error in &cleanup_errors {
-            tauri_plugin_log::log::warn!(
+            tracing::warn!(
                 target: "yssbi::node_system::runtime::cleanup",
-                "{error}"
+                diagnostic_domain = "execution",
+                diagnostic_event = "resourceCleanupFailed",
+                error = %error,
+                "Runtime resource cleanup failed"
             );
         }
         span.finish(SpanOutcome::Cleanup {
@@ -1068,6 +1076,7 @@ impl<'a> RunExecutor<'a> {
         plan: &ExecutionPlan,
         cancellation: CancellationToken,
         run_id: RunId,
+        run_output: &dyn RunOutputSink,
         correlation: CorrelationContext,
         resource_owner: &RunResourceOwner,
         trace_coverage: &RunTraceCoverage<'_>,
@@ -1093,6 +1102,7 @@ impl<'a> RunExecutor<'a> {
         let result = (|| {
             self.execute_region(
                 run_id,
+                run_output,
                 plan,
                 &plan.root_region,
                 &mut frame,
@@ -1268,9 +1278,12 @@ impl<'a> RunExecutor<'a> {
                 },
             ),
             Err(super::ResultStoreError::TerminalResult(_)) => {}
-            Err(error) => tauri_plugin_log::log::warn!(
+            Err(error) => tracing::warn!(
                 target: "yssbi::node_system::runtime::results",
-                "failed to transition activation result group: {error}"
+                diagnostic_domain = "execution",
+                diagnostic_event = "resultGroupTransitionFailed",
+                error = %error,
+                "Failed to transition activation result group"
             ),
         }
     }
@@ -1352,6 +1365,7 @@ impl<'a> RunExecutor<'a> {
     fn execute_region(
         &self,
         run_id: RunId,
+        run_output: &dyn RunOutputSink,
         plan: &ExecutionPlan,
         region: &StructuredControlRegion,
         frame: &mut Frame,
@@ -1371,6 +1385,7 @@ impl<'a> RunExecutor<'a> {
         match region {
             StructuredControlRegion::Sequence(steps) => self.execute_sequence(
                 run_id,
+                run_output,
                 plan,
                 steps,
                 frame,
@@ -1398,6 +1413,7 @@ impl<'a> RunExecutor<'a> {
                 };
                 self.execute_region(
                     run_id,
+                    run_output,
                     plan,
                     selected,
                     frame,
@@ -1434,6 +1450,7 @@ impl<'a> RunExecutor<'a> {
                     cancellation.check()?;
                     self.execute_region(
                         run_id,
+                        run_output,
                         plan,
                         body,
                         frame,
@@ -1538,6 +1555,7 @@ impl<'a> RunExecutor<'a> {
                         }
                         self.execute_region(
                             run_id,
+                            run_output,
                             &callee,
                             &callee.root_region,
                             &mut callee_frame,
@@ -1581,6 +1599,7 @@ impl<'a> RunExecutor<'a> {
     fn execute_sequence(
         &self,
         run_id: RunId,
+        run_output: &dyn RunOutputSink,
         plan: &ExecutionPlan,
         steps: &[ControlStep],
         frame: &mut Frame,
@@ -1605,6 +1624,7 @@ impl<'a> RunExecutor<'a> {
                 ControlStep::Region(child) => {
                     self.execute_ready_operations(
                         run_id,
+                        run_output,
                         plan,
                         &operations,
                         activation_id,
@@ -1622,6 +1642,7 @@ impl<'a> RunExecutor<'a> {
                     operations.clear();
                     self.execute_region(
                         run_id,
+                        run_output,
                         plan,
                         child,
                         frame,
@@ -1640,6 +1661,7 @@ impl<'a> RunExecutor<'a> {
         }
         self.execute_ready_operations(
             run_id,
+            run_output,
             plan,
             &operations,
             activation_id,
@@ -1660,6 +1682,7 @@ impl<'a> RunExecutor<'a> {
     fn execute_ready_operations(
         &self,
         run_id: RunId,
+        run_output: &dyn RunOutputSink,
         plan: &ExecutionPlan,
         operations: &[OperationIndex],
         activation_id: ActivationId,
@@ -1701,6 +1724,7 @@ impl<'a> RunExecutor<'a> {
         let mut worker_panic = None;
         let worker_context = OperationWorkerContext {
             run_id,
+            run_output,
             frame_id: frame.id,
             computation_settings: self.computation_settings,
             plan,
@@ -3121,16 +3145,16 @@ impl<'a> RunExecutor<'a> {
                         cancellation.cancel();
                         return;
                     };
-                    crate::log::emit_notify_log(
-                        crate::log::LogLevel::Info,
-                        format!(
-                            "View Data resultId={} runId={} activationId={} nodeId={}",
-                            result_id.get(),
-                            run_id.get(),
-                            completion.activation.get(),
-                            operation.source_node_id,
-                        ),
-                        Some("yssbi.debug.view".into()),
+                    tracing::info!(
+                        target: "yssbi::node_system::runtime::view",
+                        diagnostic_domain = "ui",
+                        diagnostic_event = "openResultWindow",
+                        diagnostic_source = "yssbi.debug.view",
+                        result_id = result_id.get(),
+                        run_id = run_id.get(),
+                        activation_id = completion.activation.get(),
+                        node_id = %operation.source_node_id,
+                        "View Data result is ready"
                     );
                     self.record_event(
                         plan,
@@ -3521,6 +3545,9 @@ fn execute_operation_worker_inner(
                     run_id: context.run_id,
                     frame_id: context.frame_id,
                     activation_id: job.activation,
+                    source_graph_path: &context.plan.provenance.graph_path,
+                    source_node_id: operation.source_node_id,
+                    run_output: context.run_output,
                     computation_settings: context.computation_settings,
                     params: &operation.params,
                     compiled_parameters: context.compiled_parameters,

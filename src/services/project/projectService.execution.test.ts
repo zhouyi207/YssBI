@@ -1,11 +1,14 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RunEvent } from '@/shared/types/dto/runEvent';
+import type { RunEvent, RunOutputChannelEvent } from '@/shared/types/dto/runEvent';
 import type { ExecutionDemandDto } from '@/shared/types/dto/executionDemand';
 import { disposeTrackedChannelsForHmr } from '@/services/devHmrIpc';
+import { IpcError } from '@/services/ipc';
 import {
+  PICKER_TASK_CANCELLED,
   ProjectService,
   isExecutionCancelledError,
+  isPickerTaskCancelledError,
 } from './projectService';
 
 const projectInstanceId = 'project-instance-1';
@@ -20,6 +23,20 @@ vi.mock('@tauri-apps/api/core', () => {
     invoke: vi.fn(),
   };
 });
+
+function backendIpcError(
+  code: string,
+  details: Record<string, unknown> | null = null,
+): IpcError {
+  return new IpcError({
+    kind: 'backend',
+    command: 'test_command',
+    code,
+    details,
+    incidentId: null,
+    cause: null,
+  });
+}
 
 function runEvent(kind: RunEvent['kind']): RunEvent {
   return {
@@ -61,18 +78,25 @@ describe('ProjectService execution contract', () => {
     });
   });
 
-  it('classifies only the structured canonical run cancellation error', () => {
+  it('classifies only the normalized canonical run cancellation error', () => {
+    expect(isExecutionCancelledError(backendIpcError('run_cancelled'))).toBe(true);
     expect(isExecutionCancelledError({
       code: 'run_cancelled',
-      message: 'run was cancelled',
-    })).toBe(true);
+      details: null,
+      incidentId: null,
+    })).toBe(false);
     expect(isExecutionCancelledError('EXECUTION_CANCELLED')).toBe(false);
+  });
+
+  it('classifies picker cancellation by normalized code instead of a message string', () => {
+    expect(isPickerTaskCancelledError(backendIpcError(PICKER_TASK_CANCELLED))).toBe(true);
+    expect(isPickerTaskCancelledError('PICKER_TASK_CANCELLED')).toBe(false);
+    expect(isPickerTaskCancelledError({ code: PICKER_TASK_CANCELLED })).toBe(false);
   });
 
   it('preserves a typed internal compilation failure from command IPC', async () => {
     const commandError = {
       code: 'internal_compilation_failure',
-      message: 'internal compilation failure',
       details: {
         internalCompilationFailure: {
           stage: 'lowering',
@@ -80,6 +104,7 @@ describe('ProjectService execution contract', () => {
           nodeId: '00000000-0000-0000-0000-00000000002a',
         },
       },
+      incidentId: 'incident-internal-compilation',
     };
     vi.mocked(invoke).mockRejectedValue(commandError);
 
@@ -87,19 +112,25 @@ describe('ProjectService execution contract', () => {
       projectInstanceId,
       'events/Main.yssbi-event',
       { type: 'default' },
-    )).rejects.toEqual(commandError);
+    )).rejects.toMatchObject({
+      kind: 'backend',
+      code: 'internal_compilation_failure',
+      details: commandError.details,
+      incidentId: commandError.incidentId,
+      cause: commandError,
+    });
   });
 
   it('rejects malformed internal compilation failure details at the service boundary', async () => {
     vi.mocked(invoke).mockRejectedValue({
       code: 'internal_compilation_failure',
-      message: 'internal compilation failure',
       details: {
         internalCompilationFailure: {
           stage: 'lowering',
           code: 'compiler.lowering.internal_invariant',
         },
       },
+      incidentId: null,
     });
 
     await expect(ProjectService.executeGraphDocument(
@@ -142,7 +173,7 @@ describe('ProjectService execution contract', () => {
       },
     },
   ])('forwards the exact $name demand', async ({ demand }) => {
-    const commandError = { code: 'test_stop', message: 'stop after invoke' };
+    const commandError = { code: 'test_stop', details: null, incidentId: null };
     vi.mocked(invoke).mockRejectedValue(commandError);
 
     const execution = ProjectService.executeGraphDocument(
@@ -151,7 +182,11 @@ describe('ProjectService execution contract', () => {
       demand,
     );
 
-    await expect(execution).rejects.toBe(commandError);
+    await expect(execution).rejects.toMatchObject({
+      kind: 'backend',
+      code: commandError.code,
+      cause: commandError,
+    });
     expect(vi.mocked(invoke).mock.calls[0]?.[1]).toMatchObject({ demand });
   });
 
@@ -245,6 +280,48 @@ describe('ProjectService execution contract', () => {
     expect(received).toEqual([completed]);
   });
 
+  it('routes ordered user output through a callback separate from RunEvent consumers', async () => {
+    vi.mocked(invoke).mockResolvedValue({ runId: '41' });
+    const receivedRunEvents: RunEvent[] = [];
+    const receivedOutput: RunOutputChannelEvent[] = [];
+    const execution = ProjectService.executeGraphDocument(
+      projectInstanceId,
+      'events/Main.yssbi-event',
+      { type: 'default' },
+      (event) => receivedRunEvents.push(event),
+      (event) => receivedOutput.push(event),
+    );
+    const [, args] = vi.mocked(invoke).mock.calls[0] as [
+      string,
+      { onEvent: Channel<unknown> },
+    ];
+    const output: RunOutputChannelEvent = {
+      runId: '41',
+      sequence: 1,
+      stream: 'stdout',
+      text: 'user-visible value',
+      sourceGraphPath: 'functions/output.yssbi-function',
+      sourceNodeId: '00000000-0000-0000-0000-000000000002',
+    };
+    const status: RunOutputChannelEvent = {
+      runId: '41',
+      sequence: 2,
+      stream: 'stdout',
+      status: 'truncated',
+      sourceGraphPath: 'functions/output.yssbi-function',
+      sourceNodeId: '00000000-0000-0000-0000-000000000002',
+    };
+    const completed = runEvent({ type: 'runCompleted' });
+
+    args.onEvent.onmessage?.(output);
+    args.onEvent.onmessage?.(status);
+    args.onEvent.onmessage?.(completed);
+
+    await expect(execution).resolves.toEqual({ runId: '41' });
+    expect(receivedOutput).toEqual([output, status]);
+    expect(receivedRunEvents).toEqual([completed]);
+  });
+
   it('surfaces a throwing runCompleted consumer after a successful invoke settles', async () => {
     const consumerError = new Error('runCompleted consumer failed');
     vi.mocked(invoke).mockResolvedValue({ runId: '41' });
@@ -269,16 +346,16 @@ describe('ProjectService execution contract', () => {
       terminal: { type: 'runErrored', code: 'kernelFailed', phase: null } as const,
       commandError: {
         code: 'run_failed',
-        message: 'run failed',
         details: { terminalRunEventSent: true },
+        incidentId: null,
       },
     },
     {
       terminal: { type: 'runCancelled' } as const,
       commandError: {
         code: 'run_cancelled',
-        message: 'run was cancelled',
         details: { terminalRunEventSent: true },
+        incidentId: null,
       },
     },
   ])('preserves the backend rejection when the $terminal.type consumer throws', async ({
@@ -300,7 +377,12 @@ describe('ProjectService execution contract', () => {
 
     expect(() => args.onEvent.onmessage?.(runEvent(terminal))).not.toThrow();
 
-    await expect(execution).rejects.toBe(commandError);
+    await expect(execution).rejects.toMatchObject({
+      kind: 'backend',
+      code: commandError.code,
+      details: commandError.details,
+      cause: commandError,
+    });
   });
 
   it('rejects its pending drain when HMR disposes the execution channel', async () => {
@@ -355,8 +437,8 @@ describe('ProjectService execution contract', () => {
   it('preserves the command error when HMR disposes its pending terminal drain', async () => {
     const commandError = {
       code: 'run_cancelled',
-      message: 'run was cancelled',
       details: { terminalRunEventSent: true },
+      incidentId: null,
     };
     vi.mocked(invoke).mockRejectedValue(commandError);
 
@@ -367,14 +449,18 @@ describe('ProjectService execution contract', () => {
     );
     disposeTrackedChannelsForHmr();
 
-    await expect(execution).rejects.toBe(commandError);
+    await expect(execution).rejects.toMatchObject({
+      kind: 'backend',
+      code: commandError.code,
+      cause: commandError,
+    });
   });
 
   it('drains a terminal run event before rethrowing the original command error', async () => {
     const commandError = {
       code: 'run_failed',
-      message: 'run failed',
       details: { terminalRunEventSent: true },
+      incidentId: null,
     };
     vi.mocked(invoke).mockRejectedValue(commandError);
     const received: RunEvent[] = [];
@@ -420,7 +506,11 @@ describe('ProjectService execution contract', () => {
     };
     args.onEvent.onmessage?.(errored);
 
-    await expect(execution).rejects.toBe(commandError);
+    await expect(execution).rejects.toMatchObject({
+      kind: 'backend',
+      code: commandError.code,
+      cause: commandError,
+    });
     expect(received).toEqual([errored]);
   });
 });

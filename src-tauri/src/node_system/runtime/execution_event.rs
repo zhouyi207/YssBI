@@ -1,3 +1,4 @@
+use super::run_output::RunOutputMessage;
 use super::{RelationalErrorCode, ResultId, ResultStateKind, RunError, RunPhase};
 use crate::node_system::analysis::{CompilationBasis, CorrelationContext};
 use crate::node_system::document::GraphRevision;
@@ -301,6 +302,8 @@ impl From<&RunError> for OrdinaryRunErrorCode {
 
 pub trait RunEventSink: Send + Sync {
     fn record(&self, event: RunEvent);
+
+    fn record_run_output(&self, _: RunOutputMessage) {}
 }
 
 #[derive(Debug, Default, Clone, Copy)]

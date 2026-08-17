@@ -40,6 +40,11 @@ export {
 } from './pinResultIndex';
 
 export {
+  RUN_OUTPUT_PROJECTION_MAX_ENTRIES,
+  appendRunOutput,
+  emptyRunOutputProjection,
+} from './runOutputProjection';
+export {
   collectPinResultSearchEntries,
   filterPinResultSearchEntries,
   type PinResultSearchEntry,

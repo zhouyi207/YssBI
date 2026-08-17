@@ -4,6 +4,7 @@ import { EXECUTION_DEMAND_TYPES } from './executionDemand';
 import { RUN_EVENT_KIND_TYPES } from './runEvent';
 import {
   parseExecuteGraphResultDto,
+  parseExecutionChannelEvent,
   parseExecutionDemandDto,
   parseRunEvent,
 } from './runEventParser';
@@ -105,6 +106,37 @@ describe('execution wire parsers', () => {
     expect(executionWire.runEvents.map(parseRunEvent)).toEqual(executionWire.runEvents);
     expect([...new Set(executionWire.runEvents.map((event) => event.kind.type))])
       .toEqual(Object.keys(RUN_EVENT_KIND_TYPES));
+  });
+
+  it('parses run output separately from diagnostic and lifecycle events', () => {
+    expect(executionWire.runOutputEvents.map(parseExecutionChannelEvent))
+      .toEqual(executionWire.runOutputEvents);
+    const output = {
+      runId: '41',
+      sequence: 1,
+      stream: 'stdout',
+      text: 'user-visible value',
+      sourceGraphPath: 'functions/output.yssbi-function',
+      sourceNodeId: '00000000-0000-0000-0000-000000000002',
+    } as const;
+    const truncated = {
+      runId: '41',
+      sequence: 2,
+      stream: 'stdout',
+      status: 'truncated',
+      sourceGraphPath: 'functions/output.yssbi-function',
+      sourceNodeId: '00000000-0000-0000-0000-000000000002',
+    } as const;
+
+    expect(parseExecutionChannelEvent(output)).toEqual(output);
+    expect(parseExecutionChannelEvent(truncated)).toEqual(truncated);
+    expect(() => parseRunEvent(output)).toThrow('run event');
+    expect(() => parseExecutionChannelEvent({ ...output, sequence: -1 })).toThrow();
+    expect(() => parseExecutionChannelEvent({ ...output, runId: '0' })).toThrow();
+    expect(() => parseExecutionChannelEvent({ ...output, sourceGraphPath: 'not-a-resource' })).toThrow();
+    expect(() => parseExecutionChannelEvent({ ...output, stream: 'diagnostic' })).toThrow();
+    expect(() => parseExecutionChannelEvent({ ...output, extra: true })).toThrow();
+    expect(() => parseExecutionChannelEvent({ ...truncated, status: 'warning' })).toThrow();
   });
 
   it('requires exact decimal attempt identity on every operation event', () => {
@@ -265,5 +297,6 @@ describe('execution wire parsers', () => {
     expect(() => parseExecuteGraphResultDto({ runId: 41 })).toThrow();
     expect(() => parseExecuteGraphResultDto({ runId: '41', extra: true })).toThrow();
     expect(() => parseExecuteGraphResultDto({ runId: '01' })).toThrow();
+    expect(() => parseExecuteGraphResultDto({ runId: '0' })).toThrow();
   });
 });

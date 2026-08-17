@@ -1,8 +1,8 @@
 use crate::commands::node_system_execution_dto::{
-    ExecutionDemandDto, PinResultEntryDto, ResultDescriptorDto, ResultPageDto, ResultValueDto,
-    RunEventDto,
+    ExecutionChannelEventDto, ExecutionDemandDto, PinResultEntryDto, ResultDescriptorDto,
+    ResultPageDto, ResultValueDto,
 };
-use crate::error::{AppError, GraphMutationErrorDetailsDto};
+use crate::error::{CommandError, GraphMutationErrorDetailsDto};
 use crate::event::{
     Event, EventProject, GraphMutationResultDto, ResourceMutationResultDto, emit_project_event,
 };
@@ -12,12 +12,14 @@ use crate::node_system::document::{
     ClipboardSubgraphDto, EditorGraphMutationDto, HistoryMutation, HistoryStatusDto,
     MutationRequest, NodeId, OperationId, PortAddressDto, ResourceRevision,
 };
-use crate::node_system::runtime::{ResultId, ResultState, RunEvent, RunEventSink, StoredValueKind};
+use crate::node_system::runtime::{
+    ResultId, ResultState, RunEvent, RunEventSink, RunOutputMessage, StoredValueKind,
+};
 use crate::project::project_writers::ProjectSaveResultDto;
 use crate::project::{GraphResourcePath, ProjectFilesystemError, ProjectInstanceId, ProjectState};
 use serde::Serialize;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use tauri::{AppHandle, State, ipc::Channel};
 
 #[cfg(test)]
@@ -27,79 +29,91 @@ mod command_node_system_reroute_tests;
 #[path = "command_node_system_subgraph_tests.rs"]
 mod command_node_system_subgraph_tests;
 
-fn parse_graph_path(value: String) -> Result<GraphResourcePath, AppError> {
-    GraphResourcePath::new(value).map_err(AppError::from)
+fn parse_graph_path(value: String) -> Result<GraphResourcePath, CommandError> {
+    GraphResourcePath::new(value).map_err(CommandError::from)
 }
 
-fn parse_opaque_u64(field: &'static str, value: &str) -> Result<u64, AppError> {
-    value.parse::<u64>().map_err(|_| AppError {
-        code: "invalid_opaque_id".into(),
-        message: format!("'{value}' is not a valid decimal {field}"),
-        details: Some(serde_json::json!({ "field": field })),
-    })
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ErrorFieldDetails {
+    field: &'static str,
 }
 
-fn mutation_conflict_to_app_error(
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryRequiredDetails {
+    recovery_required: bool,
+}
+
+fn parse_opaque_u64(field: &'static str, value: &str) -> Result<u64, CommandError> {
+    let canonical = !value.is_empty()
+        && value.bytes().all(|byte| byte.is_ascii_digit())
+        && !value.starts_with('0');
+    canonical
+        .then(|| value.parse::<u64>().ok())
+        .flatten()
+        .filter(|value| *value > 0)
+        .ok_or_else(|| {
+            CommandError::expected("invalid_opaque_id").with_details(ErrorFieldDetails { field })
+        })
+}
+
+fn mutation_conflict_to_command_error(
     error: crate::node_system::document::MutationConflict,
     revision_conflict_code: &'static str,
-) -> AppError {
+) -> CommandError {
     match error {
-        crate::node_system::document::MutationConflict::RecoveryRequired(message) => AppError {
-            code: "project_recovery_required".into(),
-            message: message.into(),
-            details: Some(serde_json::json!({ "recoveryRequired": true })),
-        },
+        crate::node_system::document::MutationConflict::RecoveryRequired(_) => {
+            CommandError::expected("project_recovery_required").with_details(
+                RecoveryRequiredDetails {
+                    recovery_required: true,
+                },
+            )
+        }
         public_error
         @ (crate::node_system::document::MutationConflict::CatalogResourceStale(_)
         | crate::node_system::document::MutationConflict::CatalogDescriptorInvalid(_)
         | crate::node_system::document::MutationConflict::ClipboardSubgraphInvalid(_)
         | crate::node_system::document::MutationConflict::ReferencedResourceUnavailable(_)) => {
-            AppError::new(public_error.code(), public_error.to_string())
+            CommandError::expected(public_error.code())
         }
         crate::node_system::document::MutationConflict::Document(
             crate::node_system::document::DocumentError::ConnectionNotFound(_),
         ) => {
-            tauri_plugin_log::log::warn!(
+            tracing::warn!(
                 target: "yssbi::node_system::graph_mutation",
-                "graph mutation rejected: {error}"
+                diagnostic_domain = "graph",
+                diagnostic_event = "mutationRejected",
+                error = %error,
+                "Graph mutation rejected"
             );
-            AppError {
-                code: "graph_connection_not_found".into(),
-                message: "Graph mutation rejected".into(),
-                details: Some(
-                    serde_json::to_value(GraphMutationErrorDetailsDto::VALUE).unwrap(),
-                ),
-            }
+            CommandError::expected("graph_connection_not_found")
+                .with_details(GraphMutationErrorDetailsDto::VALUE)
         }
         crate::node_system::document::MutationConflict::Editor(error) => {
-            tauri_plugin_log::log::warn!(
+            tracing::warn!(
                 target: "yssbi::node_system::graph_mutation",
-                "graph mutation rejected: {}",
-                error.detail
+                diagnostic_domain = "graph",
+                diagnostic_event = "mutationRejected",
+                error_code = error.code.as_str(),
+                detail = error.detail,
+                "Graph mutation rejected"
             );
-            AppError {
-                code: error.code.as_str().into(),
-                message: "Graph mutation rejected".into(),
-                details: Some(
-                    serde_json::to_value(GraphMutationErrorDetailsDto::VALUE).unwrap(),
-                ),
+            CommandError::expected(error.code.as_str())
+                .with_details(GraphMutationErrorDetailsDto::VALUE)
+        }
+        crate::node_system::document::MutationConflict::StaleRevision { .. } => {
+            let command_error = CommandError::expected(revision_conflict_code);
+            if revision_conflict_code == "graph_revision_conflict" {
+                command_error.with_details(GraphMutationErrorDetailsDto::VALUE)
+            } else {
+                command_error
             }
         }
-        crate::node_system::document::MutationConflict::StaleRevision { .. } => AppError {
-            code: revision_conflict_code.into(),
-            message: if revision_conflict_code == "graph_revision_conflict" {
-                "Graph revision changed".into()
-            } else {
-                error.to_string()
-            },
-            details: (revision_conflict_code == "graph_revision_conflict").then(|| {
-                serde_json::to_value(GraphMutationErrorDetailsDto::VALUE).unwrap()
-            }),
-        },
-        crate::node_system::document::MutationConflict::StaleProjectLifecycle(message) => {
-            AppError::new("stale_project_lifecycle", message)
+        crate::node_system::document::MutationConflict::StaleProjectLifecycle(_) => {
+            CommandError::expected("stale_project_lifecycle")
         }
-        _ => AppError::internal(error),
+        _ => CommandError::internal(error),
     }
 }
 
@@ -107,14 +121,14 @@ fn get_localized_node_catalog_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     locale: &str,
-) -> Result<LocalizedCatalogDto, AppError> {
+) -> Result<LocalizedCatalogDto, CommandError> {
     state
         .localized_catalog_snapshot(&project_instance_id, locale)
         .map_err(|error| match error {
             ProjectFilesystemError::StaleProjectLifecycle { .. } => {
-                AppError::new("catalog_project_stale", error.to_string())
+                CommandError::expected("catalog_project_stale")
             }
-            _ => AppError::from(error),
+            _ => CommandError::from(error),
         })
 }
 
@@ -123,7 +137,7 @@ pub fn get_localized_node_catalog(
     state: State<'_, ProjectState>,
     project_instance_id: ProjectInstanceId,
     locale: String,
-) -> Result<LocalizedCatalogDto, AppError> {
+) -> Result<LocalizedCatalogDto, CommandError> {
     get_localized_node_catalog_from_state(state.inner(), project_instance_id, &locale)
 }
 
@@ -134,40 +148,28 @@ fn get_compatible_node_catalog_from_state(
     graph_revision: ResourceRevision,
     source_port: PortAddressDto,
     locale: &str,
-) -> Result<LocalizedCatalogDto, AppError> {
+) -> Result<LocalizedCatalogDto, CommandError> {
     let snapshot = state.catalog_snapshot(&project_instance_id)?;
     let projection =
         state.graph_projection_for_project(&project_instance_id, &graph_path, locale)?;
     if projection.basis.graph_revision != graph_revision.get() {
-        return Err(AppError::new(
-            "graph_revision_conflict",
-            format!(
-                "compatible catalog requested graph revision {}, current revision is {}",
-                graph_revision.get(),
-                projection.basis.graph_revision
-            ),
-        ));
+        return Err(CommandError::expected("graph_revision_conflict"));
     }
     if projection.basis.registry_fingerprint != *snapshot.registry.fingerprint() {
-        return Err(AppError::new(
-            "catalog_project_stale",
-            "registry authority changed during compatibility resolution",
-        ));
+        return Err(CommandError::expected("catalog_project_stale"));
     }
     let mut source = crate::node_system::compatibility::source_from_projection(
         &projection,
         snapshot.registry.as_ref(),
         source_port,
     )
-    .map_err(|message| AppError::new("compatible_source_invalid", message))?;
+    .map_err(|_| CommandError::expected("compatible_source_invalid"))?;
     let document = state
         .get_data()?
         .graphs
         .get(&graph_path)
         .map(|resource| resource.document.clone())
-        .ok_or_else(|| {
-            AppError::new("graph_not_loaded", "compatible catalog graph is not loaded")
-        })?;
+        .ok_or_else(|| CommandError::expected("graph_not_loaded"))?;
     crate::node_system::compatibility::refine_source_type(
         &mut source,
         &document,
@@ -191,7 +193,7 @@ pub fn get_compatible_node_catalog(
     graph_revision: ResourceRevision,
     source_port: PortAddressDto,
     locale: String,
-) -> Result<LocalizedCatalogDto, AppError> {
+) -> Result<LocalizedCatalogDto, CommandError> {
     get_compatible_node_catalog_from_state(
         state.inner(),
         project_instance_id,
@@ -231,7 +233,7 @@ fn create_graph_resource_with_emitter<R: EmitOutcome>(
     kind: crate::project::GraphDocumentKind,
     operation_id: OperationId,
     mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     let result = state.create_graph_resource_transaction(
         &project_instance_id,
         graph_name,
@@ -249,7 +251,7 @@ pub fn create_event(
     project_instance_id: ProjectInstanceId,
     graph_name: String,
     operation_id: OperationId,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     create_graph_resource_with_emitter(
         state.inner(),
         project_instance_id,
@@ -267,7 +269,7 @@ pub fn create_function(
     project_instance_id: ProjectInstanceId,
     graph_name: String,
     operation_id: OperationId,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     create_graph_resource_with_emitter(
         state.inner(),
         project_instance_id,
@@ -284,7 +286,7 @@ pub fn unload_project_graph(
     project_instance_id: String,
     graph_path: String,
     lifecycle_token: u64,
-) -> Result<(), AppError> {
+) -> Result<(), CommandError> {
     let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
     state.unload_graph_resource_for_lifecycle(
         &project_instance_id,
@@ -301,7 +303,7 @@ fn save_project_graph_with_emitter(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     mut emit: impl FnMut(Event),
-) -> Result<ProjectSaveResultDto, AppError> {
+) -> Result<ProjectSaveResultDto, CommandError> {
     let result = state
         .save_graph_document(
             &project_instance_id,
@@ -309,7 +311,7 @@ fn save_project_graph_with_emitter(
             expected_revision,
             operation_id,
         )
-        .map_err(AppError::from)?;
+        .map_err(CommandError::from)?;
     emit(Event::Project(EventProject::ProjectSaved {
         result: result.clone(),
     }));
@@ -324,7 +326,7 @@ pub fn save_project_graph(
     graph_path: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<ProjectSaveResultDto, AppError> {
+) -> Result<ProjectSaveResultDto, CommandError> {
     save_project_graph_with_emitter(
         state.inner(),
         project_instance_id,
@@ -342,7 +344,7 @@ fn duplicate_graph_resource_with_emitter<R: EmitOutcome>(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     let result = state.duplicate_graph_resource_transaction(
         &project_instance_id,
         &graph_path,
@@ -361,7 +363,7 @@ pub fn duplicate_graph(
     graph_path: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     duplicate_graph_resource_with_emitter(
         state.inner(),
         project_instance_id,
@@ -379,7 +381,7 @@ fn remove_graph_resource_with_emitter<R: EmitOutcome>(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     let result = state.remove_graph_resource_transaction(
         &project_instance_id,
         &graph_path,
@@ -398,7 +400,7 @@ pub fn remove_graph(
     graph_path: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     remove_graph_resource_with_emitter(
         state.inner(),
         project_instance_id,
@@ -418,7 +420,7 @@ fn rename_graph_resource_with_emitter<R: EmitOutcome>(
     lifecycle_token: u64,
     operation_id: OperationId,
     mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     let result = state.rename_graph_resource_transaction(
         &project_instance_id,
         &graph_path,
@@ -441,7 +443,7 @@ pub fn rename_graph_resource(
     new_name: String,
     lifecycle_token: u64,
     operation_id: OperationId,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     rename_graph_resource_with_emitter(
         state.inner(),
         project_instance_id,
@@ -461,7 +463,7 @@ fn update_function_signature_with_emitter<R: EmitOutcome>(
     locale: &str,
     request: MutationRequest<crate::node_system::document::FunctionDocumentPatch>,
     mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     let path = parse_graph_path(function_path)?;
     state
         .update_function_signature_observed(
@@ -471,7 +473,7 @@ fn update_function_signature_with_emitter<R: EmitOutcome>(
             request,
             |result| emit_resource_result(&mut emit, result),
         )
-        .map_err(|error| mutation_conflict_to_app_error(error, "function_revision_conflict"))
+        .map_err(|error| mutation_conflict_to_command_error(error, "function_revision_conflict"))
 }
 
 #[tauri::command]
@@ -482,7 +484,7 @@ pub fn update_function_signature(
     function_path: String,
     locale: String,
     request: MutationRequest<crate::node_system::document::FunctionDocumentPatch>,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     update_function_signature_with_emitter(
         state.inner(),
         project_instance_id,
@@ -498,10 +500,10 @@ fn hydrate_editor_graph_from_state(
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: &str,
-) -> Result<EditorGraphProjectionDto, AppError> {
+) -> Result<EditorGraphProjectionDto, CommandError> {
     state
         .graph_projection_for_project(&project_instance_id, &parse_graph_path(graph_path)?, locale)
-        .map_err(AppError::from)
+        .map_err(CommandError::from)
 }
 
 #[tauri::command]
@@ -510,7 +512,7 @@ pub fn hydrate_editor_graph(
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: String,
-) -> Result<EditorGraphProjectionDto, AppError> {
+) -> Result<EditorGraphProjectionDto, CommandError> {
     hydrate_editor_graph_from_state(state.inner(), project_instance_id, graph_path, &locale)
 }
 
@@ -519,14 +521,14 @@ pub(crate) fn export_graph_subgraph_from_state(
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     node_ids: Vec<NodeId>,
-) -> Result<ClipboardSubgraphDto, AppError> {
+) -> Result<ClipboardSubgraphDto, CommandError> {
     state
         .export_editor_subgraph(
             &project_instance_id,
             &parse_graph_path(graph_path)?,
             node_ids,
         )
-        .map_err(|error| mutation_conflict_to_app_error(error, "graph_revision_conflict"))
+        .map_err(|error| mutation_conflict_to_command_error(error, "graph_revision_conflict"))
 }
 
 #[tauri::command]
@@ -535,20 +537,20 @@ pub fn export_graph_subgraph(
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     node_ids: Vec<NodeId>,
-) -> Result<ClipboardSubgraphDto, AppError> {
+) -> Result<ClipboardSubgraphDto, CommandError> {
     export_graph_subgraph_from_state(state.inner(), project_instance_id, graph_path, node_ids)
 }
 
 fn parse_editor_mutation_request(
     request: serde_json::Value,
-) -> Result<MutationRequest<EditorGraphMutationDto>, AppError> {
-    serde_json::from_value(request.clone()).map_err(|error| {
+) -> Result<MutationRequest<EditorGraphMutationDto>, CommandError> {
+    serde_json::from_value(request.clone()).map_err(|_| {
         let code = if is_create_node_descriptor_shape_error(&request) {
             "catalog_descriptor_invalid"
         } else {
             "invalid_editor_mutation"
         };
-        AppError::new(code, format!("invalid editor mutation request: {error}"))
+        CommandError::expected(code)
     })
 }
 
@@ -586,7 +588,7 @@ pub(crate) fn mutate_graph_document_with_emitter(
     locale: &str,
     request: serde_json::Value,
     mut emit: impl FnMut(Event),
-) -> Result<GraphMutationResultDto, AppError> {
+) -> Result<GraphMutationResultDto, CommandError> {
     let request = parse_editor_mutation_request(request)?;
     let result = state
         .apply_editor_graph_mutation(
@@ -595,7 +597,7 @@ pub(crate) fn mutate_graph_document_with_emitter(
             locale,
             request,
         )
-        .map_err(|error| mutation_conflict_to_app_error(error, "graph_revision_conflict"))?;
+        .map_err(|error| mutation_conflict_to_command_error(error, "graph_revision_conflict"))?;
     if !result.delta.payload.operations.is_empty() {
         emit(Event::Project(EventProject::GraphDelta {
             project_instance_id: result.project_instance_id.clone(),
@@ -613,7 +615,7 @@ pub fn mutate_graph_document(
     graph_path: String,
     locale: String,
     request: serde_json::Value,
-) -> Result<GraphMutationResultDto, AppError> {
+) -> Result<GraphMutationResultDto, CommandError> {
     mutate_graph_document_with_emitter(
         state.inner(),
         project_instance_id,
@@ -627,17 +629,17 @@ pub fn mutate_graph_document(
 fn get_project_history_status_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
-) -> Result<HistoryStatusDto, AppError> {
+) -> Result<HistoryStatusDto, CommandError> {
     state
         .history_status_for_project(&project_instance_id)
-        .map_err(AppError::from)
+        .map_err(CommandError::from)
 }
 
 #[tauri::command]
 pub fn get_project_history_status(
     state: State<'_, ProjectState>,
     project_instance_id: ProjectInstanceId,
-) -> Result<HistoryStatusDto, AppError> {
+) -> Result<HistoryStatusDto, CommandError> {
     get_project_history_status_from_state(state.inner(), project_instance_id)
 }
 
@@ -658,12 +660,12 @@ fn undo_graph_document_with_emitter<R: EmitOutcome>(
     locale: &str,
     request: MutationRequest<HistoryMutation>,
     mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     state
         .undo_last_transaction_observed(&project_instance_id, locale, request, |result| {
             emit_resource_result(&mut emit, result)
         })
-        .map_err(|error| mutation_conflict_to_app_error(error, "history_revision_conflict"))
+        .map_err(|error| mutation_conflict_to_command_error(error, "history_revision_conflict"))
 }
 
 #[tauri::command]
@@ -673,7 +675,7 @@ pub fn undo_graph_document(
     project_instance_id: ProjectInstanceId,
     locale: String,
     request: MutationRequest<HistoryMutation>,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     undo_graph_document_with_emitter(
         state.inner(),
         project_instance_id,
@@ -689,12 +691,12 @@ fn redo_graph_document_with_emitter<R: EmitOutcome>(
     locale: &str,
     request: MutationRequest<HistoryMutation>,
     mut emit: impl FnMut(Event) -> R,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     state
         .redo_last_transaction_observed(&project_instance_id, locale, request, |result| {
             emit_resource_result(&mut emit, result)
         })
-        .map_err(|error| mutation_conflict_to_app_error(error, "history_revision_conflict"))
+        .map_err(|error| mutation_conflict_to_command_error(error, "history_revision_conflict"))
 }
 
 #[tauri::command]
@@ -704,7 +706,7 @@ pub fn redo_graph_document(
     project_instance_id: ProjectInstanceId,
     locale: String,
     request: MutationRequest<HistoryMutation>,
-) -> Result<ResourceMutationResultDto, AppError> {
+) -> Result<ResourceMutationResultDto, CommandError> {
     redo_graph_document_with_emitter(
         state.inner(),
         project_instance_id,
@@ -731,8 +733,27 @@ impl TerminalRunEvent {
 }
 
 struct ChannelRunEvents {
-    channel: Channel<RunEventDto>,
+    channel: Channel<ExecutionChannelEventDto>,
     terminal: Arc<AtomicU8>,
+    terminal_run_id: Arc<AtomicU64>,
+    delivery_failed: Arc<AtomicBool>,
+}
+
+impl ChannelRunEvents {
+    fn send(&self, event: ExecutionChannelEventDto) -> bool {
+        if self.channel.send(event).is_ok() {
+            return true;
+        }
+        if !self.delivery_failed.swap(true, Ordering::AcqRel) {
+            tracing::warn!(
+                target: "yssbi::execution::channel",
+                diagnostic_domain = "execution",
+                diagnostic_event = "executionChannelDeliveryFailed",
+                "Execution channel rejected a streamed event"
+            );
+        }
+        false
+    }
 }
 
 impl RunEventSink for ChannelRunEvents {
@@ -746,65 +767,106 @@ impl RunEventSink for ChannelRunEvents {
             }
             _ => None,
         };
-        if self.channel.send(event.into()).is_ok() {
-            if let Some(terminal) = terminal {
-                self.terminal.store(terminal as u8, Ordering::Release);
-            }
+        let is_terminal = terminal.is_some()
+            || matches!(
+                &event.kind,
+                crate::node_system::runtime::RunEventKind::RunCompleted
+            );
+        if is_terminal && let Some(run_id) = event.correlation.run_id {
+            self.terminal_run_id.store(run_id.get(), Ordering::Release);
         }
+        if self.send(ExecutionChannelEventDto::RunEvent(event.into()))
+            && let Some(terminal) = terminal
+        {
+            self.terminal.store(terminal as u8, Ordering::Release);
+        }
+    }
+
+    fn record_run_output(&self, event: RunOutputMessage) {
+        self.send(event.into());
     }
 }
 
-fn execution_app_error(
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InternalCompilationFailureCommandDetails<'a> {
+    internal_compilation_failure: InternalCompilationFailureDetails<'a>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InternalCompilationFailureDetails<'a> {
+    stage: &'static str,
+    code: &'a str,
+    node_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TerminalRunEventDetails {
+    terminal_run_event_sent: bool,
+}
+
+fn execution_command_error(
     error: crate::project::ProjectExecutionError,
     terminal: Option<TerminalRunEvent>,
-) -> AppError {
-    let message = error.to_string();
-    if let Some(failure) = error.internal_compilation_failure() {
-        let stage = match failure.stage {
-            crate::node_system::compiler::CompilationStage::Analysis => "analysis",
-            crate::node_system::compiler::CompilationStage::Lowering => "lowering",
-        };
-        return AppError {
-            code: "internal_compilation_failure".into(),
-            message,
-            details: Some(serde_json::json!({
-                "internalCompilationFailure": {
-                    "stage": stage,
-                    "code": failure.code,
-                    "nodeId": failure.node_id.map(|node_id| node_id.to_string()),
-                }
-            })),
-        };
-    }
-    if message.starts_with("stale_project_lifecycle:") {
-        return AppError::new("stale_project_lifecycle", message);
-    }
-    let Some(terminal) = terminal else {
-        if message.starts_with("invalid_execution_demand:") {
-            return AppError {
-                code: "invalid_execution_demand".into(),
-                message,
-                details: None,
-            };
+) -> CommandError {
+    use crate::project::ProjectExecutionErrorKind;
+
+    match error.kind() {
+        ProjectExecutionErrorKind::StaleProjectLifecycle => {
+            CommandError::expected("stale_project_lifecycle")
         }
-        return AppError::internal(message);
-    };
-    let code = match terminal {
-        TerminalRunEvent::Cancelled => "run_cancelled",
-        TerminalRunEvent::Errored => error
-            .run_error()
-            .map(crate::node_system::runtime::RunErrorCode::from)
-            .and_then(relational_run_app_error_code)
-            .unwrap_or("run_failed"),
-    };
-    AppError {
-        code: code.into(),
-        message,
-        details: Some(serde_json::json!({ "terminalRunEventSent": true })),
+        ProjectExecutionErrorKind::RecoveryRequired => CommandError::expected(
+            "project_recovery_required",
+        )
+        .with_details(RecoveryRequiredDetails {
+            recovery_required: true,
+        }),
+        ProjectExecutionErrorKind::InvalidDemand => {
+            CommandError::expected("invalid_execution_demand")
+        }
+        ProjectExecutionErrorKind::InternalCompilation => {
+            let failure = error
+                .internal_compilation_failure()
+                .expect("internal compilation errors carry failure details");
+            let stage = match failure.stage {
+                crate::node_system::compiler::CompilationStage::Analysis => "analysis",
+                crate::node_system::compiler::CompilationStage::Lowering => "lowering",
+            };
+            let details = InternalCompilationFailureCommandDetails {
+                internal_compilation_failure: InternalCompilationFailureDetails {
+                    stage,
+                    code: failure.code.as_ref(),
+                    node_id: failure.node_id.map(|node_id| node_id.to_string()),
+                },
+            };
+            CommandError::diagnosed("internal_compilation_failure", &error).with_details(details)
+        }
+        ProjectExecutionErrorKind::Internal => CommandError::internal(error),
+        ProjectExecutionErrorKind::Run => {
+            let Some(terminal) = terminal else {
+                return CommandError::internal(error);
+            };
+            let command_error = match terminal {
+                TerminalRunEvent::Cancelled => CommandError::expected("run_cancelled"),
+                TerminalRunEvent::Errored => {
+                    let code = error
+                        .run_error()
+                        .map(crate::node_system::runtime::RunErrorCode::from)
+                        .and_then(relational_run_command_error_code)
+                        .unwrap_or("run_failed");
+                    CommandError::diagnosed(code, error)
+                }
+            };
+            command_error.with_details(TerminalRunEventDetails {
+                terminal_run_event_sent: true,
+            })
+        }
     }
 }
 
-fn relational_run_app_error_code(
+fn relational_run_command_error_code(
     code: crate::node_system::runtime::RunErrorCode,
 ) -> Option<&'static str> {
     use crate::node_system::runtime::RunErrorCode;
@@ -833,24 +895,20 @@ pub struct PinPreviewGenerationDto {
 }
 
 #[tauri::command]
-pub fn allocate_pin_preview_generation() -> Result<PinPreviewGenerationDto, AppError> {
+pub fn allocate_pin_preview_generation() -> Result<PinPreviewGenerationDto, CommandError> {
     crate::application::pin_preview_generation::allocate_pin_preview_generation()
         .map(|generation| PinPreviewGenerationDto { generation })
-        .map_err(|_| AppError {
-            code: "pin_preview_generation_exhausted".into(),
-            message: "pin preview generation allocator is exhausted".into(),
-            details: None,
-        })
+        .map_err(|_| CommandError::expected("pin_preview_generation_exhausted"))
 }
 
 fn get_result_descriptor_from_state(
     state: &ProjectState,
     result_id: &str,
-) -> Result<Option<ResultDescriptorDto>, AppError> {
+) -> Result<Option<ResultDescriptorDto>, CommandError> {
     let result_id = parse_opaque_u64("resultId", result_id)?;
     state
         .result(ResultId::new(result_id))
-        .map_err(AppError::from)
+        .map_err(CommandError::from)
         .map(|result| result.as_deref().map(Into::into))
 }
 
@@ -858,13 +916,13 @@ fn get_result_descriptor_from_state(
 pub fn get_result_descriptor(
     state: State<'_, ProjectState>,
     result_id: String,
-) -> Result<Option<ResultDescriptorDto>, AppError> {
+) -> Result<Option<ResultDescriptorDto>, CommandError> {
     get_result_descriptor_from_state(&state, &result_id)
 }
 
 pub(crate) fn result_value_to_json(
     value: &crate::node_system::protocol::Value,
-) -> Result<serde_json::Value, AppError> {
+) -> Result<serde_json::Value, CommandError> {
     use crate::node_system::protocol::Value;
 
     Ok(match value {
@@ -878,15 +936,7 @@ pub(crate) fn result_value_to_json(
             .ok()
             .and_then(serde_json::Number::from_f64)
             .map(serde_json::Value::Number)
-            .ok_or_else(|| {
-                AppError::new(
-                    "result_value_not_json",
-                    format!(
-                        "Result decimal '{}' is not a finite JSON number",
-                        value.as_str()
-                    ),
-                )
-            })?,
+            .ok_or_else(|| CommandError::expected("result_value_not_json"))?,
         Value::String(value) => value.as_ref().into(),
         Value::Bytes(values) => values
             .iter()
@@ -900,13 +950,13 @@ pub(crate) fn result_value_to_json(
         Value::Object(values) => values
             .iter()
             .map(|(key, value)| Ok((key.to_string(), result_value_to_json(value)?)))
-            .collect::<Result<_, AppError>>()?,
+            .collect::<Result<_, CommandError>>()?,
     })
 }
 
 fn result_values_to_json(
     values: &[crate::node_system::protocol::Value],
-) -> Result<Box<[serde_json::Value]>, AppError> {
+) -> Result<Box<[serde_json::Value]>, CommandError> {
     values
         .iter()
         .map(result_value_to_json)
@@ -916,52 +966,53 @@ fn result_values_to_json(
 
 const MAX_INLINE_RESULT_JSON_BYTES: usize = 64 * 1024;
 
-fn result_state_error(result_id: ResultId, state: &ResultState) -> AppError {
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ResultStateErrorDetails {
+    result_id: String,
+    state: &'static str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ResultPagingErrorDetails {
+    result_id: String,
+    value_kind: &'static str,
+}
+
+fn result_state_error(result_id: ResultId, state: &ResultState) -> CommandError {
     let state = match state {
         ResultState::Pending(_) => "pending",
         ResultState::Failed(_) => "failed",
         ResultState::Cancelled => "cancelled",
         ResultState::Ready(_) => unreachable!("ready results do not produce state errors"),
     };
-    AppError {
-        code: "result_not_ready".into(),
-        message: format!(
-            "Result {} is {state}; query its descriptor first",
-            result_id.get()
-        ),
-        details: Some(serde_json::json!({
-            "resultId": result_id.get().to_string(),
-            "state": state,
-        })),
-    }
+    CommandError::expected("result_not_ready").with_details(ResultStateErrorDetails {
+        result_id: result_id.get().to_string(),
+        state,
+    })
 }
 
-fn result_requires_paging(result_id: ResultId, kind: StoredValueKind) -> AppError {
-    AppError {
-        code: "result_requires_paging".into(),
-        message: format!(
-            "Result {} must be read through get_result_page",
-            result_id.get()
-        ),
-        details: Some(serde_json::json!({
-            "resultId": result_id.get().to_string(),
-            "valueKind": match kind {
-                StoredValueKind::Scalar => "scalar",
-                StoredValueKind::Sequence => "sequence",
-                StoredValueKind::DataSeries => "dataSeries",
-            },
-        })),
-    }
+fn result_requires_paging(result_id: ResultId, kind: StoredValueKind) -> CommandError {
+    let value_kind = match kind {
+        StoredValueKind::Scalar => "scalar",
+        StoredValueKind::Sequence => "sequence",
+        StoredValueKind::DataSeries => "dataSeries",
+    };
+    CommandError::expected("result_requires_paging").with_details(ResultPagingErrorDetails {
+        result_id: result_id.get().to_string(),
+        value_kind,
+    })
 }
 
 fn get_result_value_from_state(
     state: &ProjectState,
     result_id: &str,
-) -> Result<Option<ResultValueDto>, AppError> {
+) -> Result<Option<ResultValueDto>, CommandError> {
     let result_id = parse_opaque_u64("resultId", result_id)?;
     let Some(result) = state
         .result(ResultId::new(result_id))
-        .map_err(AppError::from)?
+        .map_err(CommandError::from)?
     else {
         return Ok(None);
     };
@@ -976,14 +1027,14 @@ fn get_result_value_from_state(
     }
     let values = value
         .page(0, 1)
-        .map_err(|error| AppError::new("result_read_failed", error.to_string()))?;
+        .map_err(|error| CommandError::diagnosed("result_read_failed", error))?;
     let value = values
         .first()
         .map(result_value_to_json)
         .transpose()?
         .unwrap_or(serde_json::Value::Null);
     let encoded_size = serde_json::to_vec(&value)
-        .map_err(|error| AppError::new("result_value_not_json", error.to_string()))?
+        .map_err(|error| CommandError::diagnosed("result_value_not_json", error))?
         .len();
     if encoded_size > MAX_INLINE_RESULT_JSON_BYTES {
         return Err(result_requires_paging(
@@ -998,7 +1049,7 @@ fn get_result_value_from_state(
 pub fn get_result_value(
     state: State<'_, ProjectState>,
     result_id: String,
-) -> Result<Option<ResultValueDto>, AppError> {
+) -> Result<Option<ResultValueDto>, CommandError> {
     get_result_value_from_state(&state, &result_id)
 }
 
@@ -1007,9 +1058,9 @@ fn get_result_page_from_state(
     result_id: &str,
     offset: usize,
     limit: usize,
-) -> Result<Option<ResultPageDto>, AppError> {
+) -> Result<Option<ResultPageDto>, CommandError> {
     let result_id = ResultId::new(parse_opaque_u64("resultId", result_id)?);
-    let Some(result) = state.result(result_id).map_err(AppError::from)? else {
+    let Some(result) = state.result(result_id).map_err(CommandError::from)? else {
         return Ok(None);
     };
     let ResultState::Ready(value) = &result.state else {
@@ -1017,7 +1068,7 @@ fn get_result_page_from_state(
     };
     let values = value
         .page(offset, limit)
-        .map_err(|error| AppError::new("result_read_failed", error.to_string()))?;
+        .map_err(|error| CommandError::diagnosed("result_read_failed", error))?;
     Ok(Some(ResultPageDto::new(
         result_id,
         offset.min(value.len()),
@@ -1035,7 +1086,7 @@ pub fn get_result_page(
     result_id: String,
     offset: usize,
     limit: usize,
-) -> Result<Option<ResultPageDto>, AppError> {
+) -> Result<Option<ResultPageDto>, CommandError> {
     get_result_page_from_state(&state, &result_id, offset, limit)
 }
 
@@ -1043,17 +1094,17 @@ fn get_pin_result_history_from_state(
     state: &ProjectState,
     graph_path: &str,
     output: PortAddressDto,
-) -> Result<Box<[PinResultEntryDto]>, AppError> {
+) -> Result<Box<[PinResultEntryDto]>, CommandError> {
     let port = output
         .try_into()
-        .map_err(|error: String| AppError::new("invalid_output", error))?;
+        .map_err(|_| CommandError::expected("invalid_output"))?;
     let output = crate::node_system::plan::GraphOutputRef {
         graph_path: crate::node_system::document::GraphResourcePath(graph_path.into()),
         port,
     };
     state
         .pin_result_history(&output)
-        .map_err(AppError::from)
+        .map_err(CommandError::from)
         .map(|history| {
             history
                 .into_vec()
@@ -1069,12 +1120,15 @@ pub fn get_pin_result_history(
     state: State<'_, ProjectState>,
     graph_path: String,
     output: PortAddressDto,
-) -> Result<Box<[PinResultEntryDto]>, AppError> {
+) -> Result<Box<[PinResultEntryDto]>, CommandError> {
     get_pin_result_history_from_state(&state, &graph_path, output)
 }
 
 #[tauri::command]
-pub fn cancel_graph_run(state: State<'_, ProjectState>, run_id: String) -> Result<bool, AppError> {
+pub fn cancel_graph_run(
+    state: State<'_, ProjectState>,
+    run_id: String,
+) -> Result<bool, CommandError> {
     let run_id = parse_opaque_u64("runId", &run_id)?;
     Ok(state.cancel_graph_run(crate::node_system::analysis::RunId::new(run_id)))
 }
@@ -1086,26 +1140,47 @@ pub async fn execute_graph_document(
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     demand: ExecutionDemandDto,
-    on_event: Channel<RunEventDto>,
-) -> Result<ExecuteGraphResultDto, AppError> {
+    on_event: Channel<ExecutionChannelEventDto>,
+) -> Result<ExecuteGraphResultDto, CommandError> {
     let graph_path = parse_graph_path(graph_path)?;
-    let demand =
-        crate::node_system::plan::ExecutionDemand::try_from(demand).map_err(|message| {
-            AppError {
-                code: "invalid_execution_demand".into(),
-                message,
-                details: None,
-            }
-        })?;
+    let demand = crate::node_system::plan::ExecutionDemand::try_from(demand)
+        .map_err(|_| CommandError::expected("invalid_execution_demand"))?;
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let terminal = Arc::new(AtomicU8::new(0));
+        let terminal_run_id = Arc::new(AtomicU64::new(0));
+        let delivery_failed = Arc::new(AtomicBool::new(false));
         let events = ChannelRunEvents {
             channel: on_event,
             terminal: Arc::clone(&terminal),
+            terminal_run_id: Arc::clone(&terminal_run_id),
+            delivery_failed: Arc::clone(&delivery_failed),
         };
-        state
-            .execute_graph(&project_instance_id, &graph_path, &demand, &events)
+        let execution = state.execute_graph(&project_instance_id, &graph_path, &demand, &events);
+        if execution.is_ok() && delivery_failed.load(Ordering::Acquire) {
+            let command_error = CommandError::diagnosed(
+                "execution_channel_failed",
+                "execution channel rejected a streamed event",
+            );
+            if let Some(incident_id) = command_error.incident_id()
+                && let Ok(run_id) = crate::node_system::analysis::RunId::try_new(
+                    terminal_run_id.load(Ordering::Acquire),
+                )
+                && !state
+                    .associate_run_trace_incident(&project_instance_id, run_id, incident_id)
+                    .is_ok_and(|associated| associated)
+            {
+                tracing::warn!(
+                    target: "yssbi::execution_trace",
+                    diagnostic_domain = "execution",
+                    diagnostic_event = "traceIncidentAssociationMissed",
+                    run_id = run_id.get(),
+                    "Run trace incident could not be associated"
+                );
+            }
+            return Err(command_error);
+        }
+        execution
             .map(|result| {
                 publish_run_resource_mutation(result.resource_mutation.as_ref(), |event| {
                     emit_project_event(&app, event)
@@ -1115,14 +1190,33 @@ pub async fn execute_graph_document(
                 }
             })
             .map_err(|error| {
-                execution_app_error(
+                let command_error = execution_command_error(
                     error,
                     TerminalRunEvent::from_state(terminal.load(Ordering::Acquire)),
-                )
+                );
+                if let Some(incident_id) = command_error.incident_id()
+                    && let Ok(run_id) = crate::node_system::analysis::RunId::try_new(
+                        terminal_run_id.load(Ordering::Acquire),
+                    )
+                {
+                    if !state
+                        .associate_run_trace_incident(&project_instance_id, run_id, incident_id)
+                        .is_ok_and(|associated| associated)
+                    {
+                        tracing::warn!(
+                            target: "yssbi::execution_trace",
+                            diagnostic_domain = "execution",
+                            diagnostic_event = "traceIncidentAssociationMissed",
+                            run_id = run_id.get(),
+                            "Run trace incident could not be associated"
+                        );
+                    }
+                }
+                command_error
             })
     })
     .await
-    .map_err(AppError::internal)?
+    .map_err(CommandError::internal)?
 }
 
 #[cfg(test)]
@@ -1472,9 +1566,9 @@ mod tests {
                 .is_some()
         );
         let value_error = get_result_value_from_state(&state, &result_id).unwrap_err();
-        assert_eq!(value_error.code, "result_not_ready");
+        assert_eq!(value_error.code(), "result_not_ready");
         let page_error = get_result_page_from_state(&state, &result_id, 0, 2).unwrap_err();
-        assert_eq!(page_error.code, "result_not_ready");
+        assert_eq!(page_error.code(), "result_not_ready");
         assert!(
             get_result_value_from_state(&state, "999999999")
                 .unwrap()
@@ -1494,7 +1588,7 @@ mod tests {
             )
             .unwrap();
         let paging_error = get_result_value_from_state(&state, &result_id).unwrap_err();
-        assert_eq!(paging_error.code, "result_requires_paging");
+        assert_eq!(paging_error.code(), "result_requires_paging");
         let page = get_result_page_from_state(&state, &result_id, 1, 2)
             .unwrap()
             .unwrap();
@@ -1556,8 +1650,8 @@ mod tests {
             .unwrap();
         let page = serde_json::to_value(page).unwrap();
 
-        assert_eq!(error.code, "result_requires_paging");
-        assert_eq!(error.details.unwrap()["valueKind"], "scalar");
+        assert_eq!(error.code(), "result_requires_paging");
+        assert_eq!(error.details().unwrap()["valueKind"], "scalar");
         assert_eq!(page["valueKind"], "scalar");
         assert_eq!(page["values"], serde_json::json!([scalar]));
         assert_eq!(page["hasMore"], false);
@@ -1591,11 +1685,11 @@ mod tests {
                 &crate::node_system::plan::ExecutionDemand::Default,
                 &events,
             )
-            .map_err(|error| execution_app_error(error, None))
+            .map_err(|error| execution_command_error(error, None))
             .unwrap_err();
 
-        assert_eq!(error.code, "stale_project_lifecycle");
-        assert_eq!(error.details, None);
+        assert_eq!(error.code(), "stale_project_lifecycle");
+        assert!(error.details().is_none());
         assert!(events.0.lock().unwrap().is_empty());
         let _ = std::fs::remove_dir_all(root);
     }
@@ -1647,7 +1741,7 @@ mod tests {
         .unwrap_err();
 
         for error in [status_error, undo_error, redo_error] {
-            assert_eq!(error.code, "stale_project_lifecycle");
+            assert_eq!(error.code(), "stale_project_lifecycle");
         }
         assert!(events.is_empty());
         assert_eq!(
@@ -1694,7 +1788,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_project_lifecycle");
         assert!(events.is_empty());
         assert_eq!(
             serde_json::to_value(state.get_data().unwrap()).unwrap(),
@@ -1747,7 +1841,7 @@ mod tests {
         rendezvous.wait();
         let error = worker.join().unwrap().unwrap_err();
 
-        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_project_lifecycle");
         assert!(events.lock().unwrap().is_empty());
         assert_eq!(
             serde_json::to_value(state.get_data().unwrap()).unwrap(),
@@ -1788,7 +1882,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_project_lifecycle");
         assert_eq!(
             state.get_data().unwrap().graphs[&graph_path].name,
             "Replacement"
@@ -1834,7 +1928,7 @@ mod tests {
             |event| events.push(event),
         );
 
-        assert_eq!(result.unwrap_err().code, "stale_project_lifecycle");
+        assert_eq!(result.unwrap_err().code(), "stale_project_lifecycle");
         assert_eq!(
             serde_json::to_value(state.get_data().unwrap()).unwrap(),
             data_before
@@ -1899,7 +1993,7 @@ mod tests {
         rendezvous.wait();
         let result = worker.join().unwrap();
 
-        assert_eq!(result.unwrap_err().code, "stale_project_lifecycle");
+        assert_eq!(result.unwrap_err().code(), "stale_project_lifecycle");
         assert_eq!(
             serde_json::to_value(state.get_data().unwrap()).unwrap(),
             data_before_release
@@ -1917,27 +2011,33 @@ mod tests {
 
     #[test]
     fn execution_errors_report_terminal_delivery_and_stable_codes() {
-        let cancelled = execution_app_error(
+        let cancelled = execution_command_error(
             crate::project::ProjectExecutionError::from(
                 crate::node_system::runtime::RunError::Cancelled,
             ),
             Some(TerminalRunEvent::Cancelled),
         );
-        let failed = execution_app_error(
-            crate::project::ProjectExecutionError::message("operation failed"),
+        let failed = execution_command_error(
+            crate::project::ProjectExecutionError::from(
+                crate::node_system::runtime::RunError::InvalidPlan("operation failed".into()),
+            ),
             Some(TerminalRunEvent::Errored),
         );
-        let pre_run = execution_app_error(
-            crate::project::ProjectExecutionError::message("compile failed"),
+        let pre_run = execution_command_error(
+            crate::project::ProjectExecutionError::internal("compile failed"),
             None,
         );
-        let invalid_demand = execution_app_error(
-            crate::project::ProjectExecutionError::message(
-                "invalid_execution_demand: requested output node is missing",
+        let invalid_demand = execution_command_error(
+            crate::project::ProjectExecutionError::invalid_demand(
+                "requested output node is missing",
             ),
             None,
         );
-        let internal_failure = execution_app_error(
+        let recovery_required = execution_command_error(
+            crate::project::ProjectExecutionError::recovery_required("project requires recovery"),
+            None,
+        );
+        let internal_failure = execution_command_error(
             crate::project::ProjectExecutionError::internal_compilation(
                 crate::node_system::compiler::InternalCompilationFailure {
                     stage: crate::node_system::compiler::CompilationStage::Lowering,
@@ -1950,44 +2050,51 @@ mod tests {
             None,
         );
 
-        assert_eq!(cancelled.code, "run_cancelled");
-        assert_eq!(failed.code, "run_failed");
-        assert_eq!(pre_run.code, "internal_error");
-        assert_eq!(invalid_demand.code, "invalid_execution_demand");
-        assert_eq!(internal_failure.code, "internal_compilation_failure");
+        assert_eq!(cancelled.code(), "run_cancelled");
+        assert_eq!(failed.code(), "run_failed");
+        assert_eq!(pre_run.code(), "internal_error");
+        assert_eq!(invalid_demand.code(), "invalid_execution_demand");
+        assert_eq!(recovery_required.code(), "project_recovery_required");
         assert_eq!(
-            internal_failure.details,
-            Some(serde_json::json!({
+            recovery_required.details(),
+            serde_json::json!({ "recoveryRequired": true }).as_object(),
+        );
+        assert!(recovery_required.incident_id().is_none());
+        assert_eq!(internal_failure.code(), "internal_compilation_failure");
+        assert_eq!(
+            internal_failure.details(),
+            serde_json::json!({
                 "internalCompilationFailure": {
                     "stage": "lowering",
                     "code": "compiler.lowering.internal_invariant",
                     "nodeId": "00000000-0000-0000-0000-00000000002a"
                 }
-            })),
+            })
+            .as_object(),
         );
         assert_eq!(
-            cancelled.details,
-            Some(serde_json::json!({ "terminalRunEventSent": true })),
+            cancelled.details(),
+            serde_json::json!({ "terminalRunEventSent": true }).as_object(),
         );
         assert_eq!(
-            failed.details,
-            Some(serde_json::json!({ "terminalRunEventSent": true })),
+            failed.details(),
+            serde_json::json!({ "terminalRunEventSent": true }).as_object(),
         );
-        assert!(pre_run.details.is_none());
+        assert!(pre_run.details().is_none());
+        assert!(failed.incident_id().is_some());
+        assert!(pre_run.incident_id().is_some());
     }
 
     #[test]
     fn relational_execution_errors_keep_exact_command_codes() {
-        for (relational, expected_code, expected_message) in [
+        for (relational, expected_code) in [
             (
                 crate::node_system::runtime::RelationalErrorCode::HintInvalid,
                 "relational_hint_invalid",
-                "relational pushdown metadata is invalid",
             ),
             (
                 crate::node_system::runtime::RelationalErrorCode::TypeMismatch,
                 "relational_type_mismatch",
-                "relational types do not match",
             ),
         ] {
             let error = crate::project::ProjectExecutionError::from(
@@ -1998,15 +2105,17 @@ mod tests {
                 },
             );
 
-            let mapped = execution_app_error(error, Some(TerminalRunEvent::Errored));
+            let mapped = execution_command_error(error, Some(TerminalRunEvent::Errored));
 
-            assert_eq!(mapped.code, expected_code);
-            assert_eq!(mapped.message, expected_message);
-            assert!(!mapped.message.contains("sensitive detail"));
+            assert_eq!(mapped.code(), expected_code);
             assert_eq!(
-                mapped.details,
-                Some(serde_json::json!({ "terminalRunEventSent": true })),
+                mapped.details(),
+                serde_json::json!({ "terminalRunEventSent": true }).as_object(),
             );
+            let wire = serde_json::to_string(&mapped).unwrap();
+            assert!(!wire.contains("message"));
+            assert!(!wire.contains("sensitive detail"));
+            assert!(mapped.incident_id().is_some());
         }
     }
 
@@ -2106,9 +2215,63 @@ mod tests {
             parse_opaque_u64("resultId", &unsafe_id.to_string()).unwrap(),
             unsafe_id,
         );
+        for invalid in ["not-decimal", "0", "01", "+1", "-1"] {
+            assert_eq!(
+                parse_opaque_u64("runId", invalid).unwrap_err().code(),
+                "invalid_opaque_id",
+            );
+        }
+    }
+
+    #[test]
+    fn run_output_ipc_dto_uses_a_separate_exact_wire_shape() {
+        let run_id = RunId::new(9_007_199_254_740_993);
+        let source_graph_path = crate::node_system::document::GraphResourcePath(
+            "functions/output.yssbi-function".into(),
+        );
+        let source_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(2));
+        let output = ExecutionChannelEventDto::from(RunOutputMessage::Output(
+            crate::node_system::runtime::RunOutputEvent {
+                run_id,
+                sequence: 1,
+                stream: crate::node_system::runtime::RunOutputStream::Stdout,
+                text: "user-visible value".into(),
+                source_graph_path: source_graph_path.clone(),
+                source_node_id,
+            },
+        ));
+        let status = ExecutionChannelEventDto::from(RunOutputMessage::Status(
+            crate::node_system::runtime::RunOutputStatusEvent {
+                run_id,
+                sequence: 2,
+                stream: crate::node_system::runtime::RunOutputStream::Stdout,
+                status: crate::node_system::runtime::RunOutputStatus::Truncated,
+                source_graph_path,
+                source_node_id,
+            },
+        ));
+
         assert_eq!(
-            parse_opaque_u64("runId", "not-decimal").unwrap_err().code,
-            "invalid_opaque_id",
+            serde_json::to_value(output).unwrap(),
+            serde_json::json!({
+                "runId": "9007199254740993",
+                "sequence": 1,
+                "stream": "stdout",
+                "text": "user-visible value",
+                "sourceGraphPath": "functions/output.yssbi-function",
+                "sourceNodeId": "00000000-0000-0000-0000-000000000002",
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(status).unwrap(),
+            serde_json::json!({
+                "runId": "9007199254740993",
+                "sequence": 2,
+                "stream": "stdout",
+                "status": "truncated",
+                "sourceGraphPath": "functions/output.yssbi-function",
+                "sourceNodeId": "00000000-0000-0000-0000-000000000002",
+            })
         );
     }
 
@@ -2126,7 +2289,7 @@ mod tests {
 
         let error = get_localized_node_catalog_from_state(&state, stale, "en-US").unwrap_err();
 
-        assert_eq!(error.code, "catalog_project_stale");
+        assert_eq!(error.code(), "catalog_project_stale");
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -2392,7 +2555,7 @@ mod tests {
         ];
 
         for (code, expected_code) in cases {
-            let error = mutation_conflict_to_app_error(
+            let error = mutation_conflict_to_command_error(
                 MutationConflict::Editor(EditorMutationError {
                     code,
                     detail: detail.into(),
@@ -2401,11 +2564,13 @@ mod tests {
             );
             let serialized = serde_json::to_value(error).unwrap();
             assert_eq!(serialized["code"], expected_code);
-            assert_eq!(serialized["message"], "Graph mutation rejected");
+            assert_eq!(serialized.as_object().unwrap().len(), 3);
+            assert!(serialized.get("message").is_none());
             assert_eq!(
                 serialized["details"],
                 serde_json::json!({ "category": "graphMutation" })
             );
+            assert!(serialized["incidentId"].is_null());
             let wire = serialized.to_string();
             assert!(!wire.contains("00000000-0000-0000-0000-000000000123"));
             assert!(!wire.contains("events/Main"));
@@ -2415,7 +2580,7 @@ mod tests {
 
     #[test]
     fn phase1_error_protocol_stale_revision_is_safe_and_stable() {
-        let error = mutation_conflict_to_app_error(
+        let error = mutation_conflict_to_command_error(
             crate::node_system::document::MutationConflict::StaleRevision {
                 base_revision: ResourceRevision::new(4),
                 current_revision: ResourceRevision::new(5),
@@ -2427,8 +2592,8 @@ mod tests {
             serde_json::to_value(error).unwrap(),
             serde_json::json!({
                 "code": "graph_revision_conflict",
-                "message": "Graph revision changed",
-                "details": { "category": "graphMutation" }
+                "details": { "category": "graphMutation" },
+                "incidentId": null
             })
         );
     }
@@ -2444,25 +2609,26 @@ mod tests {
                 uuid::Uuid::from_u128(123),
             ))),
         ] {
-            let error = mutation_conflict_to_app_error(conflict, "graph_revision_conflict");
-            assert_eq!(error.code, "internal_error");
-            assert!(error.details.is_none());
+            let error = mutation_conflict_to_command_error(conflict, "graph_revision_conflict");
+            assert_eq!(error.code(), "internal_error");
+            assert!(error.details().is_none());
+            assert!(error.incident_id().is_some());
         }
     }
 
     #[test]
-    fn recovery_mutation_conflict_preserves_stable_app_error_code() {
-        let error = mutation_conflict_to_app_error(
+    fn recovery_mutation_conflict_preserves_stable_command_error_code() {
+        let error = mutation_conflict_to_command_error(
             crate::node_system::document::MutationConflict::RecoveryRequired(
                 "project requires recovery".into(),
             ),
             "graph_revision_conflict",
         );
 
-        assert_eq!(error.code, "project_recovery_required");
+        assert_eq!(error.code(), "project_recovery_required");
         assert_eq!(
-            error.details,
-            Some(serde_json::json!({ "recoveryRequired": true }))
+            error.details(),
+            serde_json::json!({ "recoveryRequired": true }).as_object()
         );
     }
 
@@ -2511,7 +2677,7 @@ mod tests {
 
         for request in [raw, malformed_descriptor] {
             let error = parse_editor_mutation_request(request).unwrap_err();
-            assert_eq!(error.code, "catalog_descriptor_invalid");
+            assert_eq!(error.code(), "catalog_descriptor_invalid");
         }
     }
 
@@ -2586,7 +2752,7 @@ mod tests {
 
         for raw in cases {
             let error = parse_editor_mutation_request(raw).unwrap_err();
-            assert_eq!(error.code, "invalid_editor_mutation");
+            assert_eq!(error.code(), "invalid_editor_mutation");
         }
     }
 
@@ -2636,7 +2802,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(error.code, "catalog_descriptor_invalid");
+        assert_eq!(error.code(), "catalog_descriptor_invalid");
         assert!(events.is_empty());
         assert_eq!(
             serde_json::to_value(state.get_data().unwrap()).unwrap(),
@@ -2648,7 +2814,7 @@ mod tests {
     }
 
     #[test]
-    fn catalog_mutation_conflicts_preserve_stable_app_error_codes() {
+    fn catalog_mutation_conflicts_preserve_stable_command_error_codes() {
         for (conflict, expected) in [
             (
                 crate::node_system::document::MutationConflict::CatalogResourceStale(
@@ -2663,8 +2829,8 @@ mod tests {
                 "catalog_descriptor_invalid",
             ),
         ] {
-            let error = mutation_conflict_to_app_error(conflict, "graph_revision_conflict");
-            assert_eq!(error.code, expected);
+            let error = mutation_conflict_to_command_error(conflict, "graph_revision_conflict");
+            assert_eq!(error.code(), expected);
         }
     }
 
@@ -2779,7 +2945,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(error.code, "stale_project_lifecycle");
+        assert_eq!(error.code(), "stale_project_lifecycle");
         assert!(events.is_empty());
         let _ = std::fs::remove_dir_all(root);
     }
@@ -2821,8 +2987,8 @@ mod tests {
         assert!(events.is_empty());
         assert!(root.join(old_path.as_str()).exists());
         assert!(!root.join("events/New.yssbi-event").exists());
-        assert_eq!(error.code, "stale_project_lifecycle");
-        assert!(error.message.contains("stale project lifecycle"));
+        assert_eq!(error.code(), "stale_project_lifecycle");
+        assert!(error.incident_id().is_none());
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -2862,10 +3028,10 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!(error.code, "project_recovery_required");
+        assert_eq!(error.code(), "project_recovery_required");
         assert_eq!(
-            error.details,
-            Some(serde_json::json!({ "recoveryRequired": true }))
+            error.details(),
+            serde_json::json!({ "recoveryRequired": true }).as_object()
         );
         assert!(events.is_empty());
         assert!(root.join(old_path.as_str()).exists());

@@ -23,6 +23,7 @@ mod resource;
 mod result;
 mod result_store;
 mod run;
+mod run_output;
 mod scheduler;
 mod scheduling;
 mod spill;
@@ -100,6 +101,13 @@ pub use result::{
     ResultFailure, ResultFailureCause, ResultId, ResultProgress, ResultProvenance, ResultState,
     ResultStateKind, ResultUsage, StoredResult,
 };
+#[cfg(test)]
+pub(crate) use run_output::NOOP_RUN_OUTPUT_SINK;
+pub use run_output::{
+    RUN_OUTPUT_EVENT_MAX_COUNT, RUN_OUTPUT_TEXT_MAX_BYTES, RunOutputEvent, RunOutputMessage,
+    RunOutputStatus, RunOutputStatusEvent, RunOutputStream,
+};
+pub(crate) use run_output::{RunOutputEmitter, RunOutputSink};
 
 pub use result_store::{ResultStore, ResultStoreError};
 #[cfg(test)]

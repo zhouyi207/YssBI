@@ -268,10 +268,14 @@ fn execute_variable_kernel(
     compiled
         .insert(params.clone(), BuiltinVariableParameters::new(resource))
         .unwrap();
+    let source_graph_path = GraphResourcePath("events/builtin-test.yssbi-event".into());
     let context = KernelContext {
         run_id: RunId::new(1),
         frame_id: FrameId::next(),
         activation_id: ActivationId::next().unwrap(),
+        source_graph_path: &source_graph_path,
+        source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+        run_output: &NOOP_RUN_OUTPUT_SINK,
         computation_settings: EffectiveComputationSettings::default(),
         params: &params,
         compiled_parameters: Some(&compiled),
@@ -376,10 +380,14 @@ fn execute_plot_kernel(
     )
     .unwrap();
     let params = handle("plot.test", CompiledParameterHandle::new);
+    let source_graph_path = GraphResourcePath("events/plot-test.yssbi-event".into());
     let context = KernelContext {
         run_id: RunId::new(1),
         frame_id: FrameId::next(),
         activation_id: ActivationId::next().unwrap(),
+        source_graph_path: &source_graph_path,
+        source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+        run_output: &NOOP_RUN_OUTPUT_SINK,
         computation_settings: EffectiveComputationSettings::default(),
         params: &params,
         compiled_parameters: None,
@@ -411,10 +419,14 @@ fn execute_kernel_direct_with_deadline(
         cancellation.clone(),
     )
     .unwrap();
+    let source_graph_path = GraphResourcePath("events/kernel-test.yssbi-event".into());
     let context = KernelContext {
         run_id: RunId::new(1),
         frame_id: FrameId::next(),
         activation_id: ActivationId::next().unwrap(),
+        source_graph_path: &source_graph_path,
+        source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
+        run_output: &NOOP_RUN_OUTPUT_SINK,
         computation_settings: EffectiveComputationSettings::default(),
         params,
         compiled_parameters,
@@ -2472,29 +2484,34 @@ fn do_sleep_print_and_view_scheduler_contracts() {
     .unwrap_err();
     assert_eq!(deadline_error.kind(), KernelErrorKind::DeadlineExceeded);
     assert!(started.elapsed() < std::time::Duration::from_millis(200));
-    crate::log::clear_test_logs();
+    use tracing_subscriber::layer::SubscriberExt;
+
+    let (diagnostics, _diagnostics_guard) = crate::diagnostics::dispatcher::DiagnosticsHub::start();
+    let subscriber = tracing_subscriber::registry()
+        .with(crate::diagnostics::recent_layer::RecentDiagnosticsLayer::new(diagnostics.clone()));
     assert!(
-        execute_kernel_direct(
-            "yssbi.debug.print",
-            &params,
-            None,
-            &[Value::String("fine".into()).into()],
-        )
+        tracing::subscriber::with_default(subscriber, || {
+            execute_kernel_direct(
+                "yssbi.debug.print",
+                &params,
+                None,
+                &[Value::String("fine".into()).into()],
+            )
+        })
         .unwrap()
         .is_empty()
     );
-    let print_log = crate::log::take_test_logs()
-        .into_iter()
-        .find(|log| log.message == "fine")
-        .expect("Print emits an application-visible execution log");
-    assert_eq!(print_log.level, crate::log::LogLevel::Info);
-    assert_eq!(print_log.log_type, crate::log::LogType::Execution);
+    let subscription = diagnostics.subscribe(|_| true).unwrap();
     assert!(
-        print_log
-            .source
-            .as_deref()
-            .is_some_and(|source| { source.starts_with("yssbi.debug.print activation=") })
+        subscription
+            .entries
+            .iter()
+            .all(|record| record.message != "fine"),
+        "Print output must not enter diagnostic recent storage"
     );
+    diagnostics
+        .unsubscribe(subscription.subscription_id)
+        .unwrap();
     let print_error = execute_kernel_direct(
         "yssbi.debug.print",
         &params,
@@ -2534,12 +2551,19 @@ fn do_sleep_print_and_view_scheduler_contracts() {
 }
 
 #[test]
-fn print_observer_and_trace_preserve_exact_first_second_third_order() {
+fn print_output_and_trace_preserve_exact_first_second_third_order() {
     #[derive(Default)]
-    struct Events(Mutex<Vec<RunEvent>>);
+    struct Events {
+        run_events: Mutex<Vec<RunEvent>>,
+        run_output: Mutex<Vec<RunOutputMessage>>,
+    }
     impl RunEventSink for Events {
         fn record(&self, event: RunEvent) {
-            self.0.lock().unwrap().push(event);
+            self.run_events.lock().unwrap().push(event);
+        }
+
+        fn record_run_output(&self, event: RunOutputMessage) {
+            self.run_output.lock().unwrap().push(event);
         }
     }
     #[derive(Default)]
@@ -2606,12 +2630,22 @@ fn print_observer_and_trace_preserve_exact_first_second_third_order() {
         _ => None,
     };
     let event_order = events
-        .0
+        .run_events
         .lock()
         .unwrap()
         .iter()
         .filter(|event| matches!(event.kind, RunEventKind::OperationCompleted { .. }))
         .filter_map(|event| event.correlation.node_id.and_then(label))
+        .collect::<Vec<_>>();
+    let output = events
+        .run_output
+        .lock()
+        .unwrap()
+        .iter()
+        .filter_map(|event| match event {
+            RunOutputMessage::Output(event) => Some(event.clone()),
+            RunOutputMessage::Status(_) => None,
+        })
         .collect::<Vec<_>>();
     let trace_order = trace
         .0
@@ -2624,6 +2658,32 @@ fn print_observer_and_trace_preserve_exact_first_second_third_order() {
         .filter_map(|event| event.correlation.node_id.and_then(label))
         .collect::<Vec<_>>();
     assert_eq!(event_order, ["First", "Second", "Third"]);
+    assert_eq!(
+        output
+            .iter()
+            .map(|event| event.text.as_ref())
+            .collect::<Vec<_>>(),
+        ["First", "Second", "Third"]
+    );
+    assert_eq!(
+        output
+            .iter()
+            .map(|event| event.sequence)
+            .collect::<Vec<_>>(),
+        [1, 2, 3]
+    );
+    assert_eq!(
+        output
+            .iter()
+            .map(|event| label(event.source_node_id))
+            .collect::<Vec<_>>(),
+        [Some("First"), Some("Second"), Some("Third")]
+    );
+    assert!(
+        output
+            .iter()
+            .all(|event| event.stream == RunOutputStream::Stdout)
+    );
     assert_eq!(trace_order, ["First", "Second", "Third"]);
 }
 

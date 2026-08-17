@@ -6,6 +6,7 @@ import type {
   PinHistoryProjection,
 } from '@/shared/types/ui';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import type { RunOutputChannelEvent } from '@/shared/types/dto/runEvent';
 import { flushLiveExecutionEventsNow } from './executionLiveFeed';
 import {
   clearExecutionVisual,
@@ -15,6 +16,7 @@ import {
 } from './executionVisualSession';
 import { clearedRunProjectionsPatch } from './graphRunArtifacts';
 import { pinHistoryCacheKey, pinPreviewCacheKey } from './pinResultIndex';
+import { appendRunOutput, emptyRunOutputProjection } from './runOutputProjection';
 
 const emptyGraphState = (): GraphExecutionState => ({
   status: "idle",
@@ -24,6 +26,7 @@ const emptyGraphState = (): GraphExecutionState => ({
   flowingConnections: new Set(),
   recording: [],
   graphDirty: false,
+  runOutput: emptyRunOutputProjection(),
   pinHistories: new Map(),
   pinPreviews: new Map(),
 });
@@ -97,6 +100,8 @@ interface ExecutionStore extends ExecutionState {
   /** Flush live/replay visual session into store (single React update). */
   commitExecutionVisual: (graphPath: string) => void;
   recordPinHistory: (projection: PinHistoryProjection) => void;
+  recordRunOutput: (graphPath: string, event: RunOutputChannelEvent) => void;
+  clearRunOutput: (graphPath: string) => void;
   beginPinPreview: (
     graphPath: string,
     port: PortAddressDto,
@@ -170,6 +175,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
     set((state) => updateGraph(state, graphPath, {
       ...clearedVisualPatch(),
       ...clearedRunProjectionsPatch(),
+      runOutput: emptyRunOutputProjection(),
       status: "running",
     }));
   },
@@ -207,6 +213,7 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       ...updateGraph(state, graphPath, {
         ...clearedVisualPatch(),
         ...clearedRunProjectionsPatch(),
+        runOutput: emptyRunOutputProjection(),
       }),
       ...stopPlaybackIfGraph(state, graphPath),
     }));
@@ -226,6 +233,20 @@ export const useExecutionStore = create<ExecutionStore>((set, get) => ({
       projection,
     );
     return updateGraph(state, projection.graphPath, { pinHistories });
+  }),
+
+  recordRunOutput: (graphPath, event) => set((state) => {
+    const graph = state.graphs[graphPath];
+    if (!graph || graph.status !== 'running') return state;
+    if (graph.runId !== null && graph.runId !== event.runId) return state;
+    const runOutput = appendRunOutput(graph.runOutput, event);
+    if (runOutput === graph.runOutput) return state;
+    return updateGraph(state, graphPath, { runOutput });
+  }),
+
+  clearRunOutput: (graphPath) => set((state) => {
+    if (!state.graphs[graphPath]) return state;
+    return updateGraph(state, graphPath, { runOutput: emptyRunOutputProjection() });
   }),
 
   beginPinPreview: (graphPath, port, generation) => {

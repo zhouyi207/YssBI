@@ -150,17 +150,23 @@ fn view_data_opens_exact_input_result_without_materialization() {
     }]);
     let results = ResultStore::new();
     let events = RecordingRunEvents::default();
-    crate::log::clear_test_logs();
-    let run = RunExecutor::new(
-        &kernels,
-        &no_resources(),
-        &NoFunctions,
-        ResultStore::new(),
-        Arc::new(SessionMemoization::new()),
-    )
-    .with_result_store(&results)
-    .with_event_sink(&events)
-    .run(&plan, CancellationToken::new())
+    use tracing_subscriber::layer::SubscriberExt;
+
+    let (diagnostics, _diagnostics_guard) = crate::diagnostics::dispatcher::DiagnosticsHub::start();
+    let subscriber = tracing_subscriber::registry()
+        .with(crate::diagnostics::recent_layer::RecentDiagnosticsLayer::new(diagnostics.clone()));
+    let run = tracing::subscriber::with_default(subscriber, || {
+        RunExecutor::new(
+            &kernels,
+            &no_resources(),
+            &NoFunctions,
+            ResultStore::new(),
+            Arc::new(SessionMemoization::new()),
+        )
+        .with_result_store(&results)
+        .with_event_sink(&events)
+        .run(&plan, CancellationToken::new())
+    })
     .unwrap();
 
     let source_history = results.pin_history(&source_output);
@@ -210,22 +216,24 @@ fn view_data_opens_exact_input_result_without_materialization() {
     };
     drop(recorded);
 
-    let notify_logs = crate::log::take_test_logs()
-        .into_iter()
-        .filter(|log| log.log_type == crate::log::LogType::Notify)
+    let subscription = diagnostics.subscribe(|_| true).unwrap();
+    let notify_logs = subscription
+        .entries
+        .iter()
+        .filter(|record| record.event.as_deref() == Some("openResultWindow"))
         .collect::<Vec<_>>();
     assert_eq!(notify_logs.len(), 1);
-    let notify = &notify_logs[0];
-    assert_eq!(notify.level, crate::log::LogLevel::Info);
+    let notify = notify_logs[0];
+    assert_eq!(notify.level, crate::diagnostics::DiagnosticLevel::Info);
+    assert_eq!(notify.domain, crate::diagnostics::DiagnosticDomain::Ui);
     assert_eq!(notify.source.as_deref(), Some("yssbi.debug.view"));
-    for field in [
-        format!("resultId={}", input_result_id.get()),
-        format!("runId={}", run.run_id.get()),
-        format!("activationId={view_activation_id}"),
-        format!("nodeId={}", view_node_id()),
-    ] {
-        assert!(notify.message.contains(&field), "missing log field {field}");
-    }
+    assert_eq!(notify.fields["result_id"], input_result_id.get());
+    assert_eq!(notify.fields["run_id"], run.run_id.get());
+    assert_eq!(notify.fields["activation_id"], view_activation_id);
+    assert_eq!(notify.fields["node_id"], view_node_id().to_string());
+    diagnostics
+        .unsubscribe(subscription.subscription_id)
+        .unwrap();
 
     assert_eq!(then_executions.load(Ordering::SeqCst), 1);
     assert_eq!(results.authoritative_result_count_for_test(), 1);
@@ -5471,8 +5479,10 @@ fn parallel_scheduler_io_has_a_separate_budget() {
     release_all(&gates);
     run.join().unwrap().unwrap();
 
-    assert_eq!(first, "parallel0");
-    assert_eq!(second.unwrap(), "parallel1");
+    assert_eq!(
+        BTreeSet::from([first, second.unwrap()]),
+        BTreeSet::from(["parallel0", "parallel1"])
+    );
     assert_eq!(maximum.load(Ordering::SeqCst), 2);
 }
 

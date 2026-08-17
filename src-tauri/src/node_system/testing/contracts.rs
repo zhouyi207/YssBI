@@ -1,14 +1,16 @@
 use crate::commands::command_node_system::ExecuteGraphResultDto;
-use crate::commands::command_trace::TraceSpanDto;
+use crate::commands::command_trace::{TraceBundleDto, TraceSpanDto};
 use crate::commands::node_system_execution_dto::{
-    EXECUTION_DEMAND_DTO_WIRE_TYPES, ExecutionDemandDto, RUN_EVENT_KIND_DTO_WIRE_TYPES, RunEventDto,
+    EXECUTION_DEMAND_DTO_WIRE_TYPES, ExecutionChannelEventDto, ExecutionDemandDto,
+    RUN_EVENT_KIND_DTO_WIRE_TYPES, RunEventDto,
 };
 use crate::event::{
     Event, EventProject, ProjectionStatusDto, ResourceMoveDto, ResourceMutationResultDto,
 };
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CorrelationContext, EditorGraphProjectionDto, MonotonicTimestamp,
-    ProjectSessionId, ResourceVersionSet, RunId, SpanId, SpanKind, SpanOutcome, TraceSpan,
+    ProjectSessionId, ResourceVersionSet, RunId, RunTraceBundle, SpanId, SpanKind, SpanOutcome,
+    TraceBundleMetadata, TraceProvenanceScope, TraceSpan,
 };
 use crate::node_system::catalog::{
     CatalogResourceEntry, CatalogResourcePath, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
@@ -28,7 +30,8 @@ use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::registry::{NodeRegistry, canonical_semantic_protocol_snapshot};
 use crate::node_system::runtime::{
     OrdinaryRunErrorCode, RUN_EVENT_KIND_VARIANT_COUNT, ResultId, RunErrorOutcome, RunEvent,
-    RunEventKind, RunPhase,
+    RunEventKind, RunOutputEvent, RunOutputMessage, RunOutputStatus, RunOutputStatusEvent,
+    RunOutputStream, RunPhase,
 };
 use crate::project::{
     GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectGraphIndexEntry,
@@ -258,7 +261,8 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
     ));
     let mut correlation = contract_correlation(registry);
     correlation.compile_id = CompileId::new(UNSAFE_ID);
-    correlation.run_id = Some(crate::node_system::analysis::RunId::new(UNSAFE_ID));
+    let run_id = crate::node_system::analysis::RunId::new(UNSAFE_ID);
+    correlation.run_id = Some(run_id);
     let basis = CompilationBasis {
         graph_revision: correlation.graph_revision,
         registry_fingerprint: correlation.registry_fingerprint.clone(),
@@ -357,6 +361,47 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
             .expect("production RunEvent DTO must serialize")
         })
         .collect::<Vec<_>>();
+    let source_graph_path = GraphResourcePath("functions/contract-output.yssbi-function".into());
+    let run_output_events = [
+        RunOutputMessage::Output(RunOutputEvent {
+            run_id,
+            sequence: 1,
+            stream: RunOutputStream::Stdout,
+            text: "stdout value".into(),
+            source_graph_path: source_graph_path.clone(),
+            source_node_id: node_id,
+        }),
+        RunOutputMessage::Output(RunOutputEvent {
+            run_id,
+            sequence: 2,
+            stream: RunOutputStream::Stderr,
+            text: "stderr value".into(),
+            source_graph_path: source_graph_path.clone(),
+            source_node_id: node_id,
+        }),
+        RunOutputMessage::Status(RunOutputStatusEvent {
+            run_id,
+            sequence: 3,
+            stream: RunOutputStream::Stdout,
+            status: RunOutputStatus::Truncated,
+            source_graph_path: source_graph_path.clone(),
+            source_node_id: node_id,
+        }),
+        RunOutputMessage::Status(RunOutputStatusEvent {
+            run_id,
+            sequence: 4,
+            stream: RunOutputStream::Stdout,
+            status: RunOutputStatus::Dropped,
+            source_graph_path,
+            source_node_id: node_id,
+        }),
+    ]
+    .into_iter()
+    .map(|event| {
+        serde_json::to_value(ExecutionChannelEventDto::from(event))
+            .expect("production run output DTO must serialize")
+    })
+    .collect::<Vec<_>>();
     let demands = [
         ExecutionDemand::Default,
         ExecutionDemand::Outputs {
@@ -383,6 +428,7 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
         "format": "yssbi.execution-wire.v1",
         "demands": demands,
         "runEvents": run_events,
+        "runOutputEvents": run_output_events,
         "executeGraphResult": execute_graph_result,
     })
 }
@@ -704,7 +750,7 @@ fn fingerprint_wire_from_production_encoders(
     })
 }
 
-fn trace_span_wire_contract(registry: &NodeRegistry) -> Value {
+fn trace_bundle_wire_contract(registry: &NodeRegistry) -> Value {
     let unsafe_id = 9_007_199_254_740_993_u64;
     let run_id = RunId::new(unsafe_id + 4);
     let correlation = contract_correlation(registry).for_run(run_id, None);
@@ -736,9 +782,23 @@ fn trace_span_wire_contract(registry: &NodeRegistry) -> Value {
             error_count: unsafe_id + 4,
             panicking: true,
         },
-        correlation,
+        correlation: correlation.clone(),
     };
-    json!([TraceSpanDto::from(run), TraceSpanDto::from(cleanup)])
+    serde_json::to_value(TraceBundleDto::from(RunTraceBundle {
+        run_id,
+        compile_id: correlation.compile_id,
+        graph_path: correlation.graph_path.clone(),
+        selection_digest: correlation.selection_digest.clone(),
+        incident_id: Some("contract-incident".into()),
+        metadata: TraceBundleMetadata {
+            provenance_scopes: vec![TraceProvenanceScope::from(&correlation)].into_boxed_slice(),
+            truncated: false,
+            dropped_span_count: 0,
+            estimated_bytes: unsafe_id + 6,
+        },
+        spans: vec![run, cleanup].into_boxed_slice(),
+    }))
+    .expect("production trace bundle DTO must serialize")
 }
 
 fn ols_summary_report_contract() -> Value {
@@ -805,7 +865,10 @@ fn contracts() -> BTreeMap<&'static str, Value> {
             function_editor_projection_contract(),
         ),
         ("fingerprint-wire.json", fingerprint_wire),
-        ("trace-span-wire.json", trace_span_wire_contract(&registry)),
+        (
+            "trace-bundle-wire.json",
+            trace_bundle_wire_contract(&registry),
+        ),
         ("project-events.json", project_events_contract()),
         ("execution-wire.json", execution_wire_contract(&registry)),
     ])
@@ -1005,6 +1068,24 @@ fn execution_and_project_event_contract_inventories_are_complete() {
             BTreeSet::from(["basis".into(), "correlation".into(), "kind".into()]),
         );
     }
+    let run_output_events = execution["runOutputEvents"].as_array().unwrap();
+    assert_eq!(run_output_events.len(), 4);
+    assert_eq!(
+        run_output_events
+            .iter()
+            .map(|event| event["sequence"].as_u64().unwrap())
+            .collect::<Vec<_>>(),
+        [1, 2, 3, 4]
+    );
+    assert!(run_output_events.iter().all(|event| {
+        event["runId"] == "9007199254740993"
+            && event["sourceGraphPath"] == "functions/contract-output.yssbi-function"
+            && event["sourceNodeId"] == "00000000-0000-0000-0000-000000000002"
+    }));
+    assert_eq!(run_output_events[0]["stream"], "stdout");
+    assert_eq!(run_output_events[1]["stream"], "stderr");
+    assert_eq!(run_output_events[2]["status"], "truncated");
+    assert_eq!(run_output_events[3]["status"], "dropped");
 
     let project_events = project_events_contract();
     let direct_results = project_events["resourceMutationResults"]
@@ -1097,6 +1178,20 @@ fn focused_catalog_search_wire_golden_matches_rust_and_is_catalog_only() {
 }
 
 #[test]
+fn checked_in_execution_wire_contract_matches_rust() {
+    let builtin = build_builtin_node_system().expect("built-in node system must validate");
+    let generated = execution_wire_contract(&builtin.registry);
+    let path = fixture_path("execution-wire.json");
+    let checked_in = fs::read_to_string(&path).unwrap_or_else(|error| {
+        panic!("missing execution wire fixture {}: {error}", path.display())
+    });
+    let checked_in: Value = serde_json::from_str(&checked_in)
+        .unwrap_or_else(|error| panic!("invalid JSON fixture {}: {error}", path.display()));
+
+    assert_eq!(checked_in, generated, "execution wire fixture differs");
+}
+
+#[test]
 fn checked_in_node_system_contracts_match_rust() {
     let update = std::env::var(UPDATE_ENV).as_deref() == Ok("1");
     let contracts = contracts();
@@ -1104,7 +1199,7 @@ fn checked_in_node_system_contracts_match_rust() {
         "catalog-search-wire.json",
         "project-events.json",
         "execution-wire.json",
-        "trace-span-wire.json",
+        "trace-bundle-wire.json",
     ] {
         assert!(
             contracts.contains_key(required),

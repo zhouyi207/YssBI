@@ -7,8 +7,9 @@ use crate::node_system::plan::{
 
 use crate::node_system::runtime::{
     DataSeriesMetadata, OrdinaryRunErrorCode, PinResultEntry, ResultFailureCause, ResultState,
-    ResultUsage, RunErrorCode, RunErrorOutcome, RunEvent, RunEventKind, RunPhase, StoredResult,
-    StoredValueKind,
+    ResultUsage, RunErrorCode, RunErrorOutcome, RunEvent, RunEventKind, RunOutputEvent,
+    RunOutputMessage, RunOutputStatus, RunOutputStatusEvent, RunOutputStream, RunPhase,
+    StoredResult, StoredValueKind,
 };
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
@@ -364,6 +365,109 @@ impl From<RunEvent> for RunEventDto {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub enum RunOutputStreamDto {
+    Stdout,
+    Stderr,
+}
+
+impl From<RunOutputStream> for RunOutputStreamDto {
+    fn from(stream: RunOutputStream) -> Self {
+        match stream {
+            RunOutputStream::Stdout => Self::Stdout,
+            RunOutputStream::Stderr => Self::Stderr,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunOutputEventDto {
+    run_id: String,
+    sequence: u64,
+    stream: RunOutputStreamDto,
+    text: Box<str>,
+    source_graph_path: String,
+    source_node_id: String,
+}
+
+impl From<RunOutputEvent> for RunOutputEventDto {
+    fn from(event: RunOutputEvent) -> Self {
+        Self {
+            run_id: event.run_id.get().to_string(),
+            sequence: event.sequence,
+            stream: event.stream.into(),
+            text: event.text,
+            source_graph_path: event.source_graph_path.0.into(),
+            source_node_id: event.source_node_id.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RunOutputStatusDto {
+    Truncated,
+    Dropped,
+}
+
+impl From<RunOutputStatus> for RunOutputStatusDto {
+    fn from(status: RunOutputStatus) -> Self {
+        match status {
+            RunOutputStatus::Truncated => Self::Truncated,
+            RunOutputStatus::Dropped => Self::Dropped,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunOutputStatusEventDto {
+    run_id: String,
+    sequence: u64,
+    stream: RunOutputStreamDto,
+    status: RunOutputStatusDto,
+    source_graph_path: String,
+    source_node_id: String,
+}
+
+impl From<RunOutputStatusEvent> for RunOutputStatusEventDto {
+    fn from(event: RunOutputStatusEvent) -> Self {
+        Self {
+            run_id: event.run_id.get().to_string(),
+            sequence: event.sequence,
+            stream: event.stream.into(),
+            status: event.status.into(),
+            source_graph_path: event.source_graph_path.0.into(),
+            source_node_id: event.source_node_id.to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+pub enum ExecutionChannelEventDto {
+    RunEvent(RunEventDto),
+    RunOutput(RunOutputEventDto),
+    RunOutputStatus(RunOutputStatusEventDto),
+}
+
+impl From<RunEvent> for ExecutionChannelEventDto {
+    fn from(event: RunEvent) -> Self {
+        Self::RunEvent(event.into())
+    }
+}
+
+impl From<RunOutputMessage> for ExecutionChannelEventDto {
+    fn from(message: RunOutputMessage) -> Self {
+        match message {
+            RunOutputMessage::Output(event) => Self::RunOutput(event.into()),
+            RunOutputMessage::Status(event) => Self::RunOutputStatus(event.into()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ResultStateKindDto {
     Pending,
     Ready,
@@ -404,7 +508,6 @@ pub enum ResultFailureCauseDto {
 #[serde(rename_all = "camelCase")]
 pub struct ResultFailureDto {
     code: &'static str,
-    message: Box<str>,
     cause: ResultFailureCauseDto,
     upstream_result_ids: Box<[String]>,
 }
@@ -442,14 +545,12 @@ impl From<&ResultState> for ResultStateDto {
             ResultState::Failed(failure) => Self::Failed {
                 failure: match failure.cause {
                     ResultFailureCause::Execution => ResultFailureDto {
-                        code: "executionFailed",
-                        message: failure.message.clone(),
+                        code: "execution_failed",
                         cause: ResultFailureCauseDto::Execution,
                         upstream_result_ids: Box::default(),
                     },
                     ResultFailureCause::Upstream { upstream_result_id } => ResultFailureDto {
-                        code: "upstreamFailed",
-                        message: failure.message.clone(),
+                        code: "upstream_failed",
                         cause: ResultFailureCauseDto::Upstream {
                             upstream_result_id: upstream_result_id.get().to_string(),
                         },
@@ -874,6 +975,9 @@ mod execution_demand_tests {
         let json = serde_json::to_value(ResultDescriptorDto::from(&result)).unwrap();
         assert_eq!(json["resultId"], "17");
         assert_eq!(json["state"]["kind"], "failed");
+        assert_eq!(json["state"]["failure"]["code"], "execution_failed");
+        assert!(json["state"]["failure"].get("message").is_none());
+        assert!(!json.to_string().contains("boom"));
         assert!(
             json["provenance"]["activationId"]
                 .as_str()
@@ -897,10 +1001,12 @@ mod execution_demand_tests {
         let json = serde_json::to_value(state).unwrap();
 
         assert_eq!(json["kind"], "failed");
-        assert_eq!(json["failure"]["code"], "upstreamFailed");
+        assert_eq!(json["failure"]["code"], "upstream_failed");
         assert_eq!(json["failure"]["cause"]["kind"], "upstream");
         assert_eq!(json["failure"]["cause"]["upstreamResultId"], "23");
         assert_eq!(json["failure"]["upstreamResultIds"], json!(["23"]));
+        assert!(json["failure"].get("message").is_none());
+        assert!(!json.to_string().contains("upstream failed"));
         assert!(json.to_string().find("sourceResultId").is_none());
     }
 

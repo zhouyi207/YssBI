@@ -61,6 +61,7 @@ export {
   isPinPreviewActionAvailable,
   requestAndOpenPinPreview,
   requestPinPreview,
+  type PinPreviewFailure,
   type PinPreviewRejectionReason,
   type PinPreviewRequestResult,
 } from './requestPinPreview';

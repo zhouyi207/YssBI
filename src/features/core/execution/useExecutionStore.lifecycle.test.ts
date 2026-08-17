@@ -121,6 +121,58 @@ describe('useExecutionStore pin result lifecycle', () => {
     expect(useExecutionStore.getState().getGraph(graphPath).runId).toBeNull();
   });
 
+  it('keeps ordered run output bounded to the active run lifecycle', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const store = useExecutionStore.getState();
+    store.startExecution(graphPath);
+    store.setActiveRunId(graphPath, '41');
+
+    store.recordRunOutput(graphPath, {
+      runId: 'stale-run',
+      sequence: 1,
+      stream: 'stdout',
+      text: 'stale',
+      sourceGraphPath: 'events/Main.yssbi-event',
+      sourceNodeId: '00000000-0000-0000-0000-000000000002',
+    });
+    store.recordRunOutput(graphPath, {
+      runId: '41',
+      sequence: 1,
+      stream: 'stdout',
+      text: 'value',
+      sourceGraphPath: 'functions/Nested.yssbi-function',
+      sourceNodeId: '00000000-0000-0000-0000-000000000002',
+    });
+    store.completeExecution(graphPath);
+
+    expect(useExecutionStore.getState().getGraph(graphPath).runOutput).toMatchObject({
+      runId: '41',
+      projectionDropped: false,
+      entries: [{
+        sequence: 1,
+        text: 'value',
+        sourceGraphPath: 'functions/Nested.yssbi-function',
+      }],
+    });
+
+    store.clearRunOutput(graphPath);
+    expect(useExecutionStore.getState().getGraph(graphPath).runOutput)
+      .toEqual({ runId: null, entries: [], projectionDropped: false });
+
+    store.recordPinHistory({
+      graphPath,
+      output: declaredOutput,
+      entries: [],
+      selectedResultId: null,
+    });
+    store.clearRunOutput(graphPath);
+    expect(useExecutionStore.getState().getGraph(graphPath).pinHistories.size).toBe(1);
+
+    store.clearGraphRunProjections(graphPath);
+    expect(useExecutionStore.getState().getGraph(graphPath).runOutput)
+      .toEqual({ runId: null, entries: [], projectionDropped: false });
+  });
+
   it('keeps history projections across graph-dirty visual invalidation', () => {
     const graphPath = 'events/Main.yssbi-event';
     const store = useExecutionStore.getState();

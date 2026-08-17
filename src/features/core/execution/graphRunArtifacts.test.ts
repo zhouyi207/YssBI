@@ -11,6 +11,7 @@ function graph(partial: Partial<GraphExecutionState>): GraphExecutionState {
     flowingConnections: new Set(),
     recording: [],
     graphDirty: false,
+    runOutput: { runId: null, entries: [], projectionDropped: false },
     pinHistories: new Map(),
     pinPreviews: new Map(),
     ...partial,
@@ -27,9 +28,23 @@ describe('graphHasClearableArtifacts', () => {
     expect(graphHasClearableArtifacts(graph({ status: 'running', pinHistories: new Map([['p', {} as never]]) }))).toBe(false);
   });
 
-  it('returns true when result projections or recording exist', () => {
+  it('returns true when result, recording, or run output projections exist', () => {
     expect(graphHasClearableArtifacts(graph({ pinHistories: new Map([['p', {} as never]]) }))).toBe(true);
     expect(graphHasClearableArtifacts(graph({ recording: [{ event: { event: 'executionStart' }, timestamp: 0 }] }))).toBe(true);
+    expect(graphHasClearableArtifacts(graph({
+      runOutput: {
+        runId: '41',
+        entries: [{
+          runId: '41',
+          sequence: 1,
+          stream: 'stdout',
+          text: 'value',
+          sourceGraphPath: 'events/Main.yssbi-event',
+          sourceNodeId: '00000000-0000-0000-0000-000000000002',
+        }],
+        projectionDropped: false,
+      },
+    }))).toBe(true);
   });
 
   it('returns true after completed or error status', () => {

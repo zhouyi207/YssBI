@@ -619,5 +619,39 @@
         "type": "openResultWindow"
       }
     }
+  ],
+  "runOutputEvents": [
+    {
+      "runId": "9007199254740993",
+      "sequence": 1,
+      "stream": "stdout",
+      "text": "stdout value",
+      "sourceGraphPath": "functions/contract-output.yssbi-function",
+      "sourceNodeId": "00000000-0000-0000-0000-000000000002"
+    },
+    {
+      "runId": "9007199254740993",
+      "sequence": 2,
+      "stream": "stderr",
+      "text": "stderr value",
+      "sourceGraphPath": "functions/contract-output.yssbi-function",
+      "sourceNodeId": "00000000-0000-0000-0000-000000000002"
+    },
+    {
+      "runId": "9007199254740993",
+      "sequence": 3,
+      "stream": "stdout",
+      "status": "truncated",
+      "sourceGraphPath": "functions/contract-output.yssbi-function",
+      "sourceNodeId": "00000000-0000-0000-0000-000000000002"
+    },
+    {
+      "runId": "9007199254740993",
+      "sequence": 4,
+      "stream": "stdout",
+      "status": "dropped",
+      "sourceGraphPath": "functions/contract-output.yssbi-function",
+      "sourceNodeId": "00000000-0000-0000-0000-000000000002"
+    }
   ]
 }

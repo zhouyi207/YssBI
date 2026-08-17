@@ -1,6 +1,10 @@
 import { Channel } from '@tauri-apps/api/core';
-import type { RunEvent } from '@/shared/types/dto/runEvent';
-import { parseRunEvent } from '@/shared/types/dto/runEventParser';
+import type {
+  ExecutionChannelEvent,
+  RunEvent,
+  RunOutputChannelEvent,
+} from '@/shared/types/dto/runEvent';
+import { parseExecutionChannelEvent } from '@/shared/types/dto/runEventParser';
 import { trackChannel } from '@/services/devHmrIpc';
 
 export class ExecutionChannelDisposedError extends Error {
@@ -47,9 +51,23 @@ function deliverRunEvent(
   }
 }
 
+function deliverExecutionChannelEvent(
+  event: ExecutionChannelEvent,
+  onEvent: ((event: RunEvent) => void) | undefined,
+  onOutput: ((event: RunOutputChannelEvent) => void) | undefined,
+  settle: (settlement: StreamSettlement) => void,
+): void {
+  if (!('kind' in event)) {
+    onOutput?.(event);
+    return;
+  }
+  deliverRunEvent(event, onEvent, settle);
+}
+
 /** Channel event handler + post-invoke drain (testable without Tauri Channel). */
 export function createExecutionStreamDrain(
   onEvent?: (event: RunEvent) => void,
+  onOutput?: (event: RunOutputChannelEvent) => void,
 ): ExecutionStreamDrain {
   let resolveEnd: ((settlement: StreamSettlement) => void) | undefined;
   let settled = false;
@@ -65,7 +83,12 @@ export function createExecutionStreamDrain(
   return {
     onmessage: (raw) => {
       try {
-        deliverRunEvent(parseRunEvent(raw), onEvent, settle);
+        deliverExecutionChannelEvent(
+          parseExecutionChannelEvent(raw),
+          onEvent,
+          onOutput,
+          settle,
+        );
       } catch (caught) {
         settle({ reason: 'invalid', caught });
       }
@@ -90,13 +113,14 @@ export type ExecutionChannelBinding = {
 };
 
 /**
- * `invoke("execute_graph_document")` can resolve before the webview drains the
+ * `invokeCommand("execute_graph_document")` can resolve before the webview drains the
  * Channel queue. Wait for a terminal run event so callers observe every queued event.
  */
 export function bindExecutionEventChannel(
   onEvent?: (event: RunEvent) => void,
+  onOutput?: (event: RunOutputChannelEvent) => void,
 ): ExecutionChannelBinding {
-  const drain = createExecutionStreamDrain(onEvent);
+  const drain = createExecutionStreamDrain(onEvent, onOutput);
   const channel = trackChannel(new Channel<unknown>(), drain.dispose);
   channel.onmessage = drain.onmessage;
   return { channel, waitForStreamEnd: drain.waitForStreamEnd };

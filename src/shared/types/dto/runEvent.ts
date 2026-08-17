@@ -158,6 +158,41 @@ export interface RunEvent {
   kind: RunEventKind;
 }
 
+export type RunOutputStream = 'stdout' | 'stderr';
+
+export const RUN_OUTPUT_STREAMS = {
+  stdout: true,
+  stderr: true,
+} as const satisfies Record<RunOutputStream, true>;
+
+export interface RunOutputEvent {
+  runId: string;
+  sequence: number;
+  stream: RunOutputStream;
+  text: string;
+  sourceGraphPath: string;
+  sourceNodeId: string;
+}
+
+export type RunOutputStatus = 'truncated' | 'dropped';
+
+export const RUN_OUTPUT_STATUSES = {
+  truncated: true,
+  dropped: true,
+} as const satisfies Record<RunOutputStatus, true>;
+
+export interface RunOutputStatusEvent {
+  runId: string;
+  sequence: number;
+  stream: RunOutputStream;
+  status: RunOutputStatus;
+  sourceGraphPath: string;
+  sourceNodeId: string;
+}
+
+export type RunOutputChannelEvent = RunOutputEvent | RunOutputStatusEvent;
+export type ExecutionChannelEvent = RunEvent | RunOutputChannelEvent;
+
 export interface ExecuteGraphResultDto {
   runId: string;
 }

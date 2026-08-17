@@ -13,12 +13,12 @@ fn register_print(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssembly
         id: ID,
         title: "Print",
         zh_title: "打印",
-        description: "Writes a string to the run log as an ordered effect.",
-        zh_description: "将字符串作为有序副作用写入运行日志。",
-        documentation: "The message is emitted through the runtime logging backend and is correlated with the current run and activation.",
-        zh_documentation: "消息通过运行时日志后端发出，并关联当前 run 与 activation。",
-        aliases: &["print", "log", "debug output", "message"],
-        zh_aliases: &["打印", "日志", "调试输出", "消息"],
+        description: "Writes a string to the ordered program Output channel.",
+        zh_description: "将字符串写入有序的程序输出通道。",
+        documentation: "The runtime sends the message to the Output panel with its run, source graph, and source node identity. Program output is kept separate from diagnostic logs.",
+        zh_documentation: "运行时将消息连同 run、来源图和来源节点标识发送到“输出”面板。程序输出与诊断日志相互独立。",
+        aliases: &["print", "output", "debug output", "message"],
+        zh_aliases: &["打印", "输出", "调试输出", "消息"],
     })?;
     add_port_messages(
         fragment,

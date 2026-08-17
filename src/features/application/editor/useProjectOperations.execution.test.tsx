@@ -130,6 +130,7 @@ describe('useProjectOperations execution demand', () => {
       graphPath,
       { type: 'default' },
       expect.any(Function),
+      expect.any(Function),
     );
   });
 
