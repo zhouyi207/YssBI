@@ -405,7 +405,6 @@ node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_r
 - [ ] Failed to install Juliaup: 找不到与输入条件匹配的程序包。安装不了 julia
 - [ ] 在这里似乎日志类的测试感觉没有必要，可以直接删掉
 
-
 函数和事件保持一致性的 API 重复层面：不影响编辑一致性，但维护成本高：
 
 useGraphManagement 里 addEvent / addFunction、deleteEvent / deleteFunction 几乎镜像，底层已是 createGraphResource(kind) / deleteGraphWithConfirm(kind)
