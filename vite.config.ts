@@ -21,10 +21,6 @@ export default defineConfig(async () => ({
     },
   },
 
-  test: {
-    exclude: [...configDefaults.exclude, "**/.claude/worktrees/**"],
-  },
-
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors
