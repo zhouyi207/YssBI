@@ -2482,6 +2482,47 @@ fn compiler_keeps_fully_materialized_ols_report_directly_connected_to_view_data(
 }
 
 #[test]
+fn compiler_keeps_rewindable_batches_fanout_directly_connected() {
+    let mut source_output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
+    source_output.production = Some(OutputProduction::Batches);
+    let source = test_protocol("batch_fanout_source", vec![source_output], vec![], vec![]);
+    let mut sink_input = data_port("in", PortDirection::Input, TypeExpr::Unknown, None);
+    sink_input.consumption = Some(InputConsumption::RewindableBatches);
+    let sink = test_protocol("batch_fanout_sink", vec![sink_input], vec![], vec![]);
+    let registry = TestRegistry::new(vec![source, sink]);
+    let mut graph = graph_with_nodes(&[
+        (1, "batch_fanout_source"),
+        (2, "batch_fanout_sink"),
+        (3, "batch_fanout_sink"),
+    ]);
+    connect(&mut graph, 10, 1, "out", 2, "in");
+    connect(&mut graph, 11, 1, "out", 3, "in");
+
+    let plan = GraphCompiler::new(&registry, &Resources)
+        .compile(&graph)
+        .plan
+        .expect("batch fanout graph should lower");
+    let source = &plan.operations[operation_index_for_node(&plan, 1).index()];
+    let first_sink = &plan.operations[operation_index_for_node(&plan, 2).index()];
+    let second_sink = &plan.operations[operation_index_for_node(&plan, 3).index()];
+
+    assert!(
+        plan.operations
+            .iter()
+            .all(|operation| !matches!(operation.kernel, PlannedKernel::Adapter(_))),
+        "an already rewindable batch source must not create a no-op fanout operation"
+    );
+    assert!(plan.value_dependencies.contains(&ValueDependency {
+        source: source.outputs[0].value,
+        destination: first_sink.inputs[0].value,
+    }));
+    assert!(plan.value_dependencies.contains(&ValueDependency {
+        source: source.outputs[0].value,
+        destination: second_sink.inputs[0].value,
+    }));
+}
+
+#[test]
 fn compiler_materializes_stream_once_before_same_contract_fanout() {
     let mut source_output = data_port("out", PortDirection::Output, TypeExpr::Unknown, None);
     source_output.production = Some(OutputProduction::Streaming);
@@ -2515,13 +2556,7 @@ fn compiler_materializes_stream_once_before_same_contract_fanout() {
             .count(),
         1
     );
-    assert_eq!(
-        adapters
-            .iter()
-            .filter(|(_, adapter)| matches!(adapter, PlannedAdapter::Identity))
-            .count(),
-        0
-    );
+
     let shared = adapters
         .iter()
         .find(|(_, adapter)| matches!(adapter, PlannedAdapter::Collect { .. }))
@@ -2684,16 +2719,6 @@ fn compiler_streaming_fanout_with_different_contracts_is_permutation_stable() {
                 ))
                 .count(),
             1
-        );
-        assert_eq!(
-            plan.operations
-                .iter()
-                .filter(|operation| matches!(
-                    operation.kernel,
-                    PlannedKernel::Adapter(PlannedAdapter::Identity)
-                ))
-                .count(),
-            0
         );
     }
 
@@ -4311,7 +4336,7 @@ fn compiler_inserts_explicit_materialization_adapter_for_relational_boundary() {
 
     let mut incompatible = plan.clone();
     incompatible.operations[adapter_index].kernel =
-        PlannedKernel::Adapter(PlannedAdapter::Identity);
+        PlannedKernel::Adapter(PlannedAdapter::Buffer { capacity: 1 });
     assert!(
         incompatible
             .validate()
@@ -4767,10 +4792,7 @@ fn semantically_identical_documents_serialize_identically() {
             .count(),
         2
     );
-    assert!(forward_plan.operations.iter().all(|operation| !matches!(
-        operation.kernel,
-        PlannedKernel::Adapter(PlannedAdapter::Identity)
-    )));
+
     assert_eq!(
         forward_plan.operations.as_ref(),
         reverse_plan.operations.as_ref()

@@ -323,7 +323,6 @@ pub enum StreamFormat {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PlannedAdapter {
-    Identity,
     Collect { limits: MaterializationLimits },
     Buffer { capacity: usize },
     Spill { memory_limit_bytes: u64 },
@@ -332,7 +331,7 @@ pub enum PlannedAdapter {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaterializationAdapterPlan {
-    pub adapter: PlannedAdapter,
+    pub adapter: Option<PlannedAdapter>,
     pub input_consumption: InputConsumption,
     pub output_production: OutputProduction,
 }
@@ -347,68 +346,63 @@ impl MaterializationAdapterPlan {
         };
         let (adapter, output_production) = match (production, consumption) {
             (OutputProduction::Streaming, InputConsumption::Streaming) => {
-                (PlannedAdapter::Identity, OutputProduction::Streaming)
+                (None, OutputProduction::Streaming)
             }
             (OutputProduction::Streaming, InputConsumption::SinglePassBatches) => (
-                PlannedAdapter::Buffer { capacity: 64 },
+                Some(PlannedAdapter::Buffer { capacity: 64 }),
                 OutputProduction::Batches,
             ),
             (OutputProduction::Streaming, InputConsumption::RewindableBatches) => (
-                PlannedAdapter::Collect {
+                Some(PlannedAdapter::Collect {
                     limits: MaterializationLimits {
                         max_values: 1_000_000,
                         max_bytes: MAX_BYTES,
                     },
-                },
+                }),
                 OutputProduction::Batches,
             ),
             (OutputProduction::Streaming, InputConsumption::RandomAccess) => (
-                PlannedAdapter::Spill {
+                Some(PlannedAdapter::Spill {
                     memory_limit_bytes: MAX_BYTES,
-                },
+                }),
                 OutputProduction::FullyMaterialized,
             ),
             (OutputProduction::Streaming, InputConsumption::FullyMaterialized) => (
-                PlannedAdapter::Collect {
+                Some(PlannedAdapter::Collect {
                     limits: MaterializationLimits {
                         max_values: 1_000_000,
                         max_bytes: MAX_BYTES,
                     },
-                },
+                }),
                 OutputProduction::FullyMaterialized,
             ),
             (OutputProduction::Batches, InputConsumption::Streaming)
             | (OutputProduction::FullyMaterialized, InputConsumption::Streaming) => (
-                PlannedAdapter::StreamBridge {
+                Some(PlannedAdapter::StreamBridge {
                     format: StreamFormat::Native,
-                },
+                }),
                 OutputProduction::Streaming,
             ),
-            (OutputProduction::Batches, InputConsumption::SinglePassBatches) => {
-                (PlannedAdapter::Identity, OutputProduction::Batches)
-            }
-            (OutputProduction::Batches, InputConsumption::RewindableBatches) => {
-                (PlannedAdapter::Identity, OutputProduction::Batches)
+            (OutputProduction::Batches, InputConsumption::SinglePassBatches)
+            | (OutputProduction::Batches, InputConsumption::RewindableBatches) => {
+                (None, OutputProduction::Batches)
             }
             (OutputProduction::Batches, InputConsumption::RandomAccess) => (
-                PlannedAdapter::Spill {
+                Some(PlannedAdapter::Spill {
                     memory_limit_bytes: MAX_BYTES,
-                },
+                }),
                 OutputProduction::FullyMaterialized,
             ),
             (OutputProduction::Batches, InputConsumption::FullyMaterialized) => (
-                PlannedAdapter::Collect {
+                Some(PlannedAdapter::Collect {
                     limits: MaterializationLimits {
                         max_values: 1_000_000,
                         max_bytes: MAX_BYTES,
                     },
-                },
+                }),
                 OutputProduction::FullyMaterialized,
             ),
-            (OutputProduction::FullyMaterialized, _) => (
-                PlannedAdapter::Identity,
-                OutputProduction::FullyMaterialized,
-            ),
+            (OutputProduction::FullyMaterialized, _) => (None, OutputProduction::FullyMaterialized),
         };
         Self {
             adapter,

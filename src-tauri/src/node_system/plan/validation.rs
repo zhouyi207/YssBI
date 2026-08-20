@@ -605,8 +605,9 @@ fn validate_materialization_adapters(plan: &ExecutionPlan, errors: &mut Vec<Plan
                 plan.operations[consumer.index()].kernel,
                 PlannedKernel::Adapter(_)
             )
-            && MaterializationAdapterPlan::for_contract(*production, *consumption).adapter
-                != PlannedAdapter::Identity
+            && MaterializationAdapterPlan::for_contract(*production, *consumption)
+                .adapter
+                .is_some()
         {
             errors.push(PlanValidationError::MissingMaterializationAdapter {
                 source: dependency.source,
@@ -705,10 +706,16 @@ fn validate_materialization_adapters(plan: &ExecutionPlan, errors: &mut Vec<Plan
             };
             let expected =
                 MaterializationAdapterPlan::for_contract(*production, shared_consumption);
-            if *actual != expected.adapter {
+            let Some(expected_adapter) = expected.adapter else {
+                errors.push(PlanValidationError::ExtraMaterializationAdapter {
+                    operation: operation_index,
+                });
+                continue;
+            };
+            if *actual != expected_adapter {
                 errors.push(PlanValidationError::IncompatibleMaterializationAdapter {
                     operation: operation_index,
-                    expected: expected.adapter,
+                    expected: expected_adapter,
                     actual: actual.clone(),
                 });
             }
@@ -757,13 +764,19 @@ fn validate_materialization_adapters(plan: &ExecutionPlan, errors: &mut Vec<Plan
             }
         }
         let expected = MaterializationAdapterPlan::for_contract(*production, *consumption);
-        if *actual != expected.adapter
+        let Some(expected_adapter) = expected.adapter else {
+            errors.push(PlanValidationError::ExtraMaterializationAdapter {
+                operation: operation_index,
+            });
+            continue;
+        };
+        if *actual != expected_adapter
             || operation.inputs[0].consumption != expected.input_consumption
             || operation.outputs[0].production != expected.output_production
         {
             errors.push(PlanValidationError::IncompatibleMaterializationAdapter {
                 operation: operation_index,
-                expected: expected.adapter,
+                expected: expected_adapter,
                 actual: actual.clone(),
             });
         }

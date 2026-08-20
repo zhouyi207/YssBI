@@ -1,8 +1,7 @@
 use crate::node_system::plan::{
-    CompiledRelationalPlan, MaterializationAdapterPlan, PlannedAdapter, RelationalBackendId,
-    RelationalFragmentId, RelationalFragmentRoot, RelationalOperator, RelationalOperatorIndex,
-    RelationalPushdownHint, RelationalSubplan, RelationalSubplanIndex,
-    infer_relational_pushdown_hints,
+    CompiledRelationalPlan, MaterializationAdapterPlan, RelationalBackendId, RelationalFragmentId,
+    RelationalFragmentRoot, RelationalOperator, RelationalOperatorIndex, RelationalPushdownHint,
+    RelationalSubplan, RelationalSubplanIndex, infer_relational_pushdown_hints,
 };
 use crate::node_system::protocol::{InputConsumption, OutputProduction};
 use std::collections::{BTreeMap, BTreeSet};
@@ -228,7 +227,7 @@ fn connected_components(
     for connection in connections {
         if MaterializationAdapterPlan::for_contract(connection.production, connection.consumption)
             .adapter
-            == PlannedAdapter::Identity
+            .is_none()
         {
             sets.union(
                 index_by_id[&connection.producer],
@@ -576,24 +575,24 @@ mod tests {
 
     #[test]
     fn materialization_adapter_matrix_covers_every_contract_pair() {
-        let stream = PlannedAdapter::StreamBridge {
+        let stream = Some(PlannedAdapter::StreamBridge {
             format: StreamFormat::Native,
-        };
-        let buffer = PlannedAdapter::Buffer { capacity: 64 };
-        let spill = PlannedAdapter::Spill {
+        });
+        let buffer = Some(PlannedAdapter::Buffer { capacity: 64 });
+        let spill = Some(PlannedAdapter::Spill {
             memory_limit_bytes: 64 * 1024 * 1024,
-        };
-        let collect = PlannedAdapter::Collect {
+        });
+        let collect = Some(PlannedAdapter::Collect {
             limits: MaterializationLimits {
                 max_values: 1_000_000,
                 max_bytes: 64 * 1024 * 1024,
             },
-        };
+        });
         let cases = [
             (
                 OutputProduction::Streaming,
                 InputConsumption::Streaming,
-                PlannedAdapter::Identity,
+                None,
             ),
             (
                 OutputProduction::Streaming,
@@ -623,12 +622,12 @@ mod tests {
             (
                 OutputProduction::Batches,
                 InputConsumption::SinglePassBatches,
-                PlannedAdapter::Identity,
+                None,
             ),
             (
                 OutputProduction::Batches,
                 InputConsumption::RewindableBatches,
-                PlannedAdapter::Identity,
+                None,
             ),
             (
                 OutputProduction::Batches,
@@ -648,22 +647,22 @@ mod tests {
             (
                 OutputProduction::FullyMaterialized,
                 InputConsumption::SinglePassBatches,
-                PlannedAdapter::Identity,
+                None,
             ),
             (
                 OutputProduction::FullyMaterialized,
                 InputConsumption::RewindableBatches,
-                PlannedAdapter::Identity,
+                None,
             ),
             (
                 OutputProduction::FullyMaterialized,
                 InputConsumption::RandomAccess,
-                PlannedAdapter::Identity,
+                None,
             ),
             (
                 OutputProduction::FullyMaterialized,
                 InputConsumption::FullyMaterialized,
-                PlannedAdapter::Identity,
+                None,
             ),
         ];
 

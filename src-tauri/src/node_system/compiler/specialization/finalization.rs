@@ -377,7 +377,9 @@ fn insert_materialization_adapters(
             production,
             shared_consumption,
         );
-        let adapter = adapter_plan.adapter;
+        let Some(adapter) = adapter_plan.adapter else {
+            continue;
+        };
         let input_consumption = adapter_plan.input_consumption;
         let output_production = adapter_plan.output_production;
         let source = boundaries[indices[0]].2;
@@ -527,13 +529,13 @@ fn insert_materialization_adapters(
             production,
             consumption,
         );
-        if adapter_plan.adapter == crate::node_system::plan::PlannedAdapter::Identity {
+        let Some(adapter) = adapter_plan.adapter else {
             dependencies.push(ValueDependency {
                 source,
                 destination,
             });
             continue;
-        }
+        };
         let contract = value_contracts.get(&source).cloned().ok_or_else(|| {
             DemandPlanError::InvalidDerivedPlan(
                 format!(
@@ -543,7 +545,6 @@ fn insert_materialization_adapters(
                 .into(),
             )
         })?;
-        let adapter = adapter_plan.adapter.clone();
         let adapter_input = ValueRef::new(*value_count);
         *value_count += 1;
         let adapter_output = ValueRef::new(*value_count);

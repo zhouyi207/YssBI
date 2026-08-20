@@ -84,7 +84,11 @@ fn adapter_operation(
         stable_id: OperationStableId::new(stable).unwrap(),
         source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
         source_node_type_id: NodeTypeId::new("yssbi.test.materialization_adapter").unwrap(),
-        kernel: PlannedKernel::Adapter(contract.adapter),
+        kernel: PlannedKernel::Adapter(
+            contract
+                .adapter
+                .expect("adapter operation helper requires a conversion"),
+        ),
         inputs: Box::new([PlannedInput {
             value: ValueRef::new(input),
             contract: crate::node_system::plan::PlannedValueContract::opaque(),
@@ -3283,7 +3287,7 @@ fn runtime_admission_rejects_sequence_artifact_for_data_series_contract() {
     source.outputs[0].contract = series_contract.clone();
     source.outputs[0].production = OutputProduction::Streaming;
     let mut adapter = adapter_operation(
-        "data_series_identity",
+        "data_series_collect",
         1,
         2,
         OutputProduction::Streaming,
@@ -8519,47 +8523,29 @@ fn external_stream_fanout_before_branch_executes_once_and_delivers_complete_data
             OutputProduction::Streaming,
             InputConsumption::FullyMaterialized,
         );
-        let then_adapter = adapter_operation(
-            "external.then.identity",
-            4,
-            5,
-            OutputProduction::FullyMaterialized,
-            InputConsumption::FullyMaterialized,
-        );
-        let else_adapter = adapter_operation(
-            "external.else.identity",
-            6,
-            7,
-            OutputProduction::FullyMaterialized,
-            InputConsumption::FullyMaterialized,
-        );
         let mut callee = plan(
             vec![
                 condition,
                 shared,
-                then_adapter,
-                else_adapter,
-                operation("then_stream_sink", &[8], &[9]),
-                operation("else_stream_sink", &[10], &[11]),
+                operation("then_stream_sink", &[4], &[5]),
+                operation("else_stream_sink", &[6], &[7]),
             ],
-            13,
+            9,
             StructuredControlRegion::Sequence(Box::new([
                 ControlStep::Operation(OperationIndex::new(1)),
-                ControlStep::Operation(OperationIndex::new(2)),
-                ControlStep::Operation(OperationIndex::new(3)),
                 ControlStep::Operation(OperationIndex::new(0)),
                 ControlStep::Region(Box::new(StructuredControlRegion::If {
                     condition: ValueRef::new(1),
                     then_region: Box::new(StructuredControlRegion::Sequence(Box::new([
-                        ControlStep::Operation(OperationIndex::new(4)),
+                        ControlStep::Operation(OperationIndex::new(2)),
                     ]))),
                     else_region: Box::new(StructuredControlRegion::Sequence(Box::new([
-                        ControlStep::Operation(OperationIndex::new(5)),
+                        ControlStep::Operation(OperationIndex::new(3)),
                     ]))),
                     results: Box::new([BranchResultBinding {
-                        destination: ValueRef::new(12),
-                        then_source: ValueRef::new(9),
-                        else_source: ValueRef::new(11),
+                        destination: ValueRef::new(8),
+                        then_source: ValueRef::new(5),
+                        else_source: ValueRef::new(7),
                         production: Some(OutputProduction::FullyMaterialized),
                     }]),
                 })),
@@ -8567,10 +8553,7 @@ fn external_stream_fanout_before_branch_executes_once_and_delivers_complete_data
         );
         callee.value_sources = Box::new([
             PlanValueSource::ExternalInput(ValueRef::new(0), OutputProduction::Streaming),
-            PlanValueSource::ControlProduced(
-                ValueRef::new(12),
-                OutputProduction::FullyMaterialized,
-            ),
+            PlanValueSource::ControlProduced(ValueRef::new(8), OutputProduction::FullyMaterialized),
         ]);
         callee.value_dependencies = Box::new([
             ValueDependency {
@@ -8584,14 +8567,6 @@ fn external_stream_fanout_before_branch_executes_once_and_delivers_complete_data
             ValueDependency {
                 source: ValueRef::new(3),
                 destination: ValueRef::new(6),
-            },
-            ValueDependency {
-                source: ValueRef::new(5),
-                destination: ValueRef::new(8),
-            },
-            ValueDependency {
-                source: ValueRef::new(7),
-                destination: ValueRef::new(10),
             },
         ]);
 
@@ -8609,7 +8584,7 @@ fn external_stream_fanout_before_branch_executes_once_and_delivers_complete_data
                         callee_destination: ValueRef::new(0),
                     }]),
                     results: Box::new([CallResultBinding {
-                        callee_source: ValueRef::new(12),
+                        callee_source: ValueRef::new(8),
                         caller_destination: ValueRef::new(1),
                         production: Some(OutputProduction::FullyMaterialized),
                     }]),
@@ -8628,7 +8603,7 @@ fn external_stream_fanout_before_branch_executes_once_and_delivers_complete_data
         }]);
         publish_graph_results(&mut caller);
 
-        let function = published_function(callee, "functions/external-branch", &[0], &[12]);
+        let function = published_function(callee, "functions/external-branch", &[0], &[8]);
         let result = RunExecutor::new(
             &kernels,
             &no_resources(),
@@ -8738,66 +8713,76 @@ fn shared_materialized_fanout_delivers_complete_data_to_same_and_different_consu
             InputConsumption::Streaming,
             OutputProduction::FullyMaterialized,
         );
-        let adapter_a = adapter_operation(
-            "fanout.adapter.a",
-            if different_contracts {
+        let (operations, steps, dependencies) = if different_contracts {
+            let adapter_a = adapter_operation(
+                "fanout.adapter.a",
                 PlannedAdapter::StreamBridge {
                     format: StreamFormat::Native,
-                }
-            } else {
-                PlannedAdapter::Identity
-            },
-            3,
-            4,
-            InputConsumption::FullyMaterialized,
-            if different_contracts {
-                OutputProduction::Streaming
-            } else {
-                OutputProduction::FullyMaterialized
-            },
-        );
-        let adapter_b = adapter_operation(
-            "fanout.adapter.b",
-            PlannedAdapter::Identity,
-            5,
-            6,
-            InputConsumption::FullyMaterialized,
-            OutputProduction::FullyMaterialized,
-        );
+                },
+                3,
+                4,
+                InputConsumption::FullyMaterialized,
+                OutputProduction::Streaming,
+            );
+            (
+                vec![source, sink_a, sink_b, shared, adapter_a],
+                vec![
+                    ControlStep::Operation(OperationIndex::new(0)),
+                    ControlStep::Operation(OperationIndex::new(3)),
+                    ControlStep::Operation(OperationIndex::new(4)),
+                    ControlStep::Operation(OperationIndex::new(1)),
+                    ControlStep::Operation(OperationIndex::new(2)),
+                ],
+                vec![
+                    ValueDependency {
+                        source: ValueRef::new(0),
+                        destination: ValueRef::new(1),
+                    },
+                    ValueDependency {
+                        source: ValueRef::new(2),
+                        destination: ValueRef::new(3),
+                    },
+                    ValueDependency {
+                        source: ValueRef::new(4),
+                        destination: ValueRef::new(7),
+                    },
+                    ValueDependency {
+                        source: ValueRef::new(2),
+                        destination: ValueRef::new(9),
+                    },
+                ],
+            )
+        } else {
+            (
+                vec![source, sink_a, sink_b, shared],
+                vec![
+                    ControlStep::Operation(OperationIndex::new(0)),
+                    ControlStep::Operation(OperationIndex::new(3)),
+                    ControlStep::Operation(OperationIndex::new(1)),
+                    ControlStep::Operation(OperationIndex::new(2)),
+                ],
+                vec![
+                    ValueDependency {
+                        source: ValueRef::new(0),
+                        destination: ValueRef::new(1),
+                    },
+                    ValueDependency {
+                        source: ValueRef::new(2),
+                        destination: ValueRef::new(7),
+                    },
+                    ValueDependency {
+                        source: ValueRef::new(2),
+                        destination: ValueRef::new(9),
+                    },
+                ],
+            )
+        };
         let mut execution_plan = plan(
-            vec![source, sink_a, sink_b, shared, adapter_a, adapter_b],
+            operations,
             11,
-            StructuredControlRegion::Sequence(Box::new([
-                ControlStep::Operation(OperationIndex::new(0)),
-                ControlStep::Operation(OperationIndex::new(3)),
-                ControlStep::Operation(OperationIndex::new(4)),
-                ControlStep::Operation(OperationIndex::new(1)),
-                ControlStep::Operation(OperationIndex::new(5)),
-                ControlStep::Operation(OperationIndex::new(2)),
-            ])),
+            StructuredControlRegion::Sequence(steps.into_boxed_slice()),
         );
-        execution_plan.value_dependencies = Box::new([
-            ValueDependency {
-                source: ValueRef::new(0),
-                destination: ValueRef::new(1),
-            },
-            ValueDependency {
-                source: ValueRef::new(2),
-                destination: ValueRef::new(3),
-            },
-            ValueDependency {
-                source: ValueRef::new(2),
-                destination: ValueRef::new(5),
-            },
-            ValueDependency {
-                source: ValueRef::new(4),
-                destination: ValueRef::new(7),
-            },
-            ValueDependency {
-                source: ValueRef::new(6),
-                destination: ValueRef::new(9),
-            },
-        ]);
+        execution_plan.value_dependencies = dependencies.into_boxed_slice();
         execution_plan.results = Box::new([
             PlanResult {
                 name: "a".into(),
@@ -8828,7 +8813,7 @@ fn shared_materialized_fanout_delivers_complete_data_to_same_and_different_consu
 }
 
 #[test]
-fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts() {
+fn materialization_matrix_represents_and_executes_all_fifteen_contract_cells() {
     let stream_owner = materialization_test_owner();
     #[derive(Clone, Copy)]
     enum Shape {
@@ -8836,15 +8821,24 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         Artifact(ArtifactKind),
     }
 
-    let identity = PlannedAdapter::Identity;
-    let stream_bridge = PlannedAdapter::StreamBridge {
+    let stream_bridge = Some(PlannedAdapter::StreamBridge {
         format: StreamFormat::Native,
-    };
+    });
+    let buffer = Some(PlannedAdapter::Buffer { capacity: 64 });
+    let collect = Some(PlannedAdapter::Collect {
+        limits: MaterializationLimits {
+            max_values: 1_000_000,
+            max_bytes: 64 * 1024 * 1024,
+        },
+    });
+    let spill = Some(PlannedAdapter::Spill {
+        memory_limit_bytes: 64 * 1024 * 1024,
+    });
     let cases = [
         (
             OutputProduction::Streaming,
             InputConsumption::Streaming,
-            identity.clone(),
+            None,
             InputConsumption::Streaming,
             OutputProduction::Streaming,
             Shape::Stream,
@@ -8852,7 +8846,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::Streaming,
             InputConsumption::SinglePassBatches,
-            PlannedAdapter::Buffer { capacity: 64 },
+            buffer,
             InputConsumption::Streaming,
             OutputProduction::Batches,
             Shape::Artifact(ArtifactKind::Buffered),
@@ -8860,12 +8854,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::Streaming,
             InputConsumption::RewindableBatches,
-            PlannedAdapter::Collect {
-                limits: MaterializationLimits {
-                    max_values: 1_000_000,
-                    max_bytes: 64 * 1024 * 1024,
-                },
-            },
+            collect.clone(),
             InputConsumption::Streaming,
             OutputProduction::Batches,
             Shape::Artifact(ArtifactKind::Collected),
@@ -8873,9 +8862,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::Streaming,
             InputConsumption::RandomAccess,
-            PlannedAdapter::Spill {
-                memory_limit_bytes: 64 * 1024 * 1024,
-            },
+            spill.clone(),
             InputConsumption::Streaming,
             OutputProduction::FullyMaterialized,
             Shape::Artifact(ArtifactKind::Spilled),
@@ -8883,12 +8870,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::Streaming,
             InputConsumption::FullyMaterialized,
-            PlannedAdapter::Collect {
-                limits: MaterializationLimits {
-                    max_values: 1_000_000,
-                    max_bytes: 64 * 1024 * 1024,
-                },
-            },
+            collect.clone(),
             InputConsumption::Streaming,
             OutputProduction::FullyMaterialized,
             Shape::Artifact(ArtifactKind::Collected),
@@ -8904,7 +8886,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::Batches,
             InputConsumption::SinglePassBatches,
-            identity.clone(),
+            None,
             InputConsumption::SinglePassBatches,
             OutputProduction::Batches,
             Shape::Artifact(ArtifactKind::Buffered),
@@ -8912,7 +8894,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::Batches,
             InputConsumption::RewindableBatches,
-            PlannedAdapter::Identity,
+            None,
             InputConsumption::SinglePassBatches,
             OutputProduction::Batches,
             Shape::Artifact(ArtifactKind::Buffered),
@@ -8920,9 +8902,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::Batches,
             InputConsumption::RandomAccess,
-            PlannedAdapter::Spill {
-                memory_limit_bytes: 64 * 1024 * 1024,
-            },
+            spill,
             InputConsumption::SinglePassBatches,
             OutputProduction::FullyMaterialized,
             Shape::Artifact(ArtifactKind::Spilled),
@@ -8930,12 +8910,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::Batches,
             InputConsumption::FullyMaterialized,
-            PlannedAdapter::Collect {
-                limits: MaterializationLimits {
-                    max_values: 1_000_000,
-                    max_bytes: 64 * 1024 * 1024,
-                },
-            },
+            collect,
             InputConsumption::SinglePassBatches,
             OutputProduction::FullyMaterialized,
             Shape::Artifact(ArtifactKind::Collected),
@@ -8951,7 +8926,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::FullyMaterialized,
             InputConsumption::SinglePassBatches,
-            identity.clone(),
+            None,
             InputConsumption::FullyMaterialized,
             OutputProduction::FullyMaterialized,
             Shape::Artifact(ArtifactKind::Collected),
@@ -8959,7 +8934,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::FullyMaterialized,
             InputConsumption::RewindableBatches,
-            identity.clone(),
+            None,
             InputConsumption::FullyMaterialized,
             OutputProduction::FullyMaterialized,
             Shape::Artifact(ArtifactKind::Collected),
@@ -8967,7 +8942,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::FullyMaterialized,
             InputConsumption::RandomAccess,
-            identity.clone(),
+            None,
             InputConsumption::FullyMaterialized,
             OutputProduction::FullyMaterialized,
             Shape::Artifact(ArtifactKind::Collected),
@@ -8975,7 +8950,7 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
         (
             OutputProduction::FullyMaterialized,
             InputConsumption::FullyMaterialized,
-            identity,
+            None,
             InputConsumption::FullyMaterialized,
             OutputProduction::FullyMaterialized,
             Shape::Artifact(ArtifactKind::Collected),
@@ -9004,13 +8979,13 @@ fn materialization_matrix_executes_all_fifteen_cells_with_declared_io_contracts(
             )),
         };
         let cancellation = CancellationToken::new();
-        let output = execute_planned_adapter(
-            &planned.adapter,
-            input,
-            stream_owner.as_ref(),
-            &cancellation,
-        )
-        .unwrap();
+        let output = match planned.adapter.as_ref() {
+            Some(adapter) => {
+                execute_planned_adapter(adapter, input, stream_owner.as_ref(), &cancellation)
+                    .unwrap()
+            }
+            None => input,
+        };
         match (shape, output) {
             (Shape::Stream, RuntimeValue::Stream(_)) => {}
             (Shape::Artifact(expected), RuntimeValue::Artifact(actual)) => {
@@ -10228,7 +10203,7 @@ fn deadline_adapter_io_uses_the_owner_deadline_without_a_local_timer() {
 
     assert_eq!(
         execute_planned_adapter(
-            &PlannedAdapter::Identity,
+            &PlannedAdapter::Buffer { capacity: 1 },
             Value::Integer(1).into(),
             &owner,
             &cancellation,

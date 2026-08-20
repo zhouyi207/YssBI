@@ -821,7 +821,6 @@ pub fn execute_planned_adapter(
 ) -> Result<RuntimeValue, RunError> {
     check_terminal(cancellation, owner.deadline, RunPhase::AdapterIo)?;
     let result = match adapter {
-        PlannedAdapter::Identity => Ok(value),
         PlannedAdapter::StreamBridge { .. } => match value {
             RuntimeValue::Stream(stream) => Ok(RuntimeValue::Stream(stream)),
             value => Ok(RuntimeValue::Stream(
