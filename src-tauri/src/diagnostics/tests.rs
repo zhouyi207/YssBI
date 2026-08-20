@@ -334,7 +334,7 @@ fn recent_layer_maps_structured_tracing_events_without_file_io() {
     let (hub, _guard) = DiagnosticsHub::start();
     let subscriber = tracing_subscriber::registry().with(RecentDiagnosticsLayer::new(hub.clone()));
 
-    let long_detail = "x".repeat(super::sanitizer::MAX_FIELD_STRING_BYTES + 100);
+    let long_detail = "x".repeat(super::limits::DiagnosticLimits::MAX_FIELD_STRING_BYTES + 100);
     tracing::subscriber::with_default(subscriber, || {
         tracing::warn!(
             target: "yssbi::node_system::runtime::cleanup",
@@ -369,7 +369,8 @@ fn recent_layer_maps_structured_tracing_events_without_file_io() {
         super::sanitizer::REDACTED_VALUE
     );
     assert!(
-        record.fields["detail"].as_str().unwrap().len() <= super::sanitizer::MAX_FIELD_STRING_BYTES
+        record.fields["detail"].as_str().unwrap().len()
+            <= super::limits::DiagnosticLimits::MAX_FIELD_STRING_BYTES
     );
     let encoded = serde_json::to_string(record).unwrap();
     assert!(!encoded.contains("trace-secret"));

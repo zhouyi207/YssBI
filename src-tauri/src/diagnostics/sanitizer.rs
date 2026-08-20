@@ -5,19 +5,12 @@ use regex::Regex;
 use serde_json::{Map, Value};
 
 use super::dto::DiagnosticFields;
+use super::limits::DiagnosticLimits;
 
-pub(crate) const MAX_TARGET_BYTES: usize = 256;
-pub(crate) const MAX_EVENT_BYTES: usize = 256;
-pub(crate) const MAX_MESSAGE_BYTES: usize = 16 * 1024;
-pub(crate) const MAX_SOURCE_BYTES: usize = 1024;
-pub(crate) const MAX_FIELD_STRING_BYTES: usize = 4 * 1024;
-pub(crate) const MAX_FIELD_KEY_BYTES: usize = 128;
-pub(crate) const MAX_FIELDS_BYTES: usize = 32 * 1024;
-pub(crate) const MAX_FIELD_COUNT: usize = 64;
-pub(crate) const MAX_JSON_DEPTH: usize = 8;
-pub(crate) const MAX_ARRAY_ENTRIES: usize = 64;
-pub(crate) const MAX_OBJECT_ENTRIES: usize = 64;
-pub(crate) const MAX_JSON_VALUES: usize = 1024;
+// Sanitization truncates each collection independently. Frontend validation
+// intentionally relies on the shared byte and total-value limits instead.
+const MAX_SANITIZED_ARRAY_ENTRIES: usize = 64;
+const MAX_SANITIZED_OBJECT_ENTRIES: usize = 64;
 
 pub(crate) const REDACTED_VALUE: &str = "[REDACTED]";
 const TRUNCATED_VALUE: &str = "[TRUNCATED]";
@@ -49,27 +42,27 @@ static PROHIBITED_CONTENT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 pub(crate) fn sanitize_target(value: &str) -> String {
-    sanitize_text(value, MAX_TARGET_BYTES, false)
+    sanitize_text(value, DiagnosticLimits::MAX_TARGET_BYTES, false)
 }
 
 pub(crate) fn sanitize_event(value: &str) -> String {
-    sanitize_text(value, MAX_EVENT_BYTES, false)
+    sanitize_text(value, DiagnosticLimits::MAX_EVENT_BYTES, false)
 }
 
 pub(crate) fn sanitize_message(value: &str) -> String {
-    sanitize_content_text(value, MAX_MESSAGE_BYTES)
+    sanitize_content_text(value, DiagnosticLimits::MAX_MESSAGE_BYTES)
 }
 
 pub(crate) fn sanitize_source(value: &str) -> String {
-    sanitize_text(value, MAX_SOURCE_BYTES, false)
+    sanitize_text(value, DiagnosticLimits::MAX_SOURCE_BYTES, false)
 }
 
 pub(crate) fn sanitize_field_string(value: &str) -> String {
-    sanitize_content_text(value, MAX_FIELD_STRING_BYTES)
+    sanitize_content_text(value, DiagnosticLimits::MAX_FIELD_STRING_BYTES)
 }
 
 pub(crate) fn sanitize_field_key(value: &str) -> String {
-    sanitize_text(value, MAX_FIELD_KEY_BYTES, false)
+    sanitize_text(value, DiagnosticLimits::MAX_FIELD_KEY_BYTES, false)
 }
 
 pub(crate) fn should_redact_field(name: &str) -> bool {
@@ -91,7 +84,7 @@ pub(crate) fn sanitize_fields(fields: DiagnosticFields) -> DiagnosticFields {
     let mut encoded_bytes = 2_usize;
 
     for (index, (raw_key, raw_value)) in fields.into_iter().enumerate() {
-        if index >= MAX_FIELD_COUNT {
+        if index >= DiagnosticLimits::MAX_FIELD_COUNT {
             context.truncated = true;
             break;
         }
@@ -111,7 +104,7 @@ pub(crate) fn sanitize_fields(fields: DiagnosticFields) -> DiagnosticFields {
         if encoded_bytes
             .saturating_add(separator_bytes)
             .saturating_add(entry_bytes)
-            > MAX_FIELDS_BYTES
+            > DiagnosticLimits::MAX_FIELDS_BYTES
         {
             context.truncated = true;
             continue;
@@ -128,7 +121,7 @@ pub(crate) fn sanitize_fields(fields: DiagnosticFields) -> DiagnosticFields {
         if encoded_bytes
             .saturating_add(separator_bytes)
             .saturating_add(entry_bytes)
-            <= MAX_FIELDS_BYTES
+            <= DiagnosticLimits::MAX_FIELDS_BYTES
         {
             sanitized.insert(TRUNCATED_FIELD.to_owned(), value);
         }
@@ -152,7 +145,9 @@ fn sanitize_json_value(
     if should_redact_field(key) {
         return redacted_json_value();
     }
-    if depth > MAX_JSON_DEPTH || context.values_seen >= MAX_JSON_VALUES {
+    if depth > DiagnosticLimits::MAX_FIELD_DEPTH
+        || context.values_seen >= DiagnosticLimits::MAX_FIELD_VALUES
+    {
         context.truncated = true;
         return Value::String(TRUNCATED_VALUE.to_owned());
     }
@@ -167,23 +162,23 @@ fn sanitize_json_value(
             Value::String(sanitized)
         }
         Value::Array(values) => {
-            if values.len() > MAX_ARRAY_ENTRIES {
+            if values.len() > MAX_SANITIZED_ARRAY_ENTRIES {
                 context.truncated = true;
             }
             Value::Array(
                 values
                     .into_iter()
-                    .take(MAX_ARRAY_ENTRIES)
+                    .take(MAX_SANITIZED_ARRAY_ENTRIES)
                     .map(|value| sanitize_json_value("", value, depth + 1, context))
                     .collect(),
             )
         }
         Value::Object(values) => {
-            if values.len() > MAX_OBJECT_ENTRIES {
+            if values.len() > MAX_SANITIZED_OBJECT_ENTRIES {
                 context.truncated = true;
             }
             let mut sanitized = Map::new();
-            for (raw_key, raw_value) in values.into_iter().take(MAX_OBJECT_ENTRIES) {
+            for (raw_key, raw_value) in values.into_iter().take(MAX_SANITIZED_OBJECT_ENTRIES) {
                 let key = sanitize_field_key(&raw_key);
                 if key != raw_key || sanitized.contains_key(&key) {
                     context.truncated = true;
@@ -394,13 +389,13 @@ mod tests {
 
     #[test]
     fn truncates_text_and_bounds_json_shape_and_encoded_size() {
-        let long = "x".repeat(MAX_FIELD_STRING_BYTES + 100);
+        let long = "x".repeat(DiagnosticLimits::MAX_FIELD_STRING_BYTES + 100);
         let fields = BTreeMap::from([
             ("long".into(), json!(long)),
             (
                 "array".into(),
                 Value::Array(
-                    (0..MAX_ARRAY_ENTRIES + 10)
+                    (0..MAX_SANITIZED_ARRAY_ENTRIES + 10)
                         .map(|value| json!(value))
                         .collect(),
                 ),
@@ -408,7 +403,7 @@ mod tests {
             (
                 "object".into(),
                 Value::Object(
-                    (0..MAX_OBJECT_ENTRIES + 10)
+                    (0..MAX_SANITIZED_OBJECT_ENTRIES + 10)
                         .map(|value| (format!("key-{value}"), json!(value)))
                         .collect(),
                 ),
@@ -416,20 +411,24 @@ mod tests {
         ]);
 
         let sanitized = sanitize_fields(fields);
-        assert!(sanitized["long"].as_str().unwrap().len() <= MAX_FIELD_STRING_BYTES);
+        assert!(
+            sanitized["long"].as_str().unwrap().len() <= DiagnosticLimits::MAX_FIELD_STRING_BYTES
+        );
         assert_eq!(
             sanitized["array"].as_array().unwrap().len(),
-            MAX_ARRAY_ENTRIES
+            MAX_SANITIZED_ARRAY_ENTRIES
         );
         assert_eq!(
             sanitized["object"].as_object().unwrap().len(),
-            MAX_OBJECT_ENTRIES
+            MAX_SANITIZED_OBJECT_ENTRIES
         );
         assert_eq!(sanitized[TRUNCATED_FIELD], true);
-        assert!(serde_json::to_vec(&sanitized).unwrap().len() <= MAX_FIELDS_BYTES);
+        assert!(
+            serde_json::to_vec(&sanitized).unwrap().len() <= DiagnosticLimits::MAX_FIELDS_BYTES
+        );
 
         let mut deep = json!("leaf");
-        for _ in 0..MAX_JSON_DEPTH + 2 {
+        for _ in 0..DiagnosticLimits::MAX_FIELD_DEPTH + 2 {
             deep = json!({ "nested": deep });
         }
         let deep = sanitize_fields(BTreeMap::from([("deep".into(), deep)]));
@@ -444,22 +443,24 @@ mod tests {
                 .map(|index| {
                     (
                         format!("field-{index:02}"),
-                        json!("x".repeat(MAX_FIELD_STRING_BYTES)),
+                        json!("x".repeat(DiagnosticLimits::MAX_FIELD_STRING_BYTES)),
                     )
                 })
                 .collect(),
         );
-        assert!(serde_json::to_vec(&oversized).unwrap().len() <= MAX_FIELDS_BYTES);
+        assert!(
+            serde_json::to_vec(&oversized).unwrap().len() <= DiagnosticLimits::MAX_FIELDS_BYTES
+        );
         assert_eq!(oversized[TRUNCATED_FIELD], true);
 
-        let message = sanitize_message(&"界".repeat(MAX_MESSAGE_BYTES));
-        let target = sanitize_target(&"界".repeat(MAX_TARGET_BYTES));
-        let event = sanitize_event(&"界".repeat(MAX_EVENT_BYTES));
-        let source = sanitize_source(&"界".repeat(MAX_SOURCE_BYTES));
-        assert!(message.len() <= MAX_MESSAGE_BYTES);
-        assert!(target.len() <= MAX_TARGET_BYTES);
-        assert!(event.len() <= MAX_EVENT_BYTES);
-        assert!(source.len() <= MAX_SOURCE_BYTES);
+        let message = sanitize_message(&"界".repeat(DiagnosticLimits::MAX_MESSAGE_BYTES));
+        let target = sanitize_target(&"界".repeat(DiagnosticLimits::MAX_TARGET_BYTES));
+        let event = sanitize_event(&"界".repeat(DiagnosticLimits::MAX_EVENT_BYTES));
+        let source = sanitize_source(&"界".repeat(DiagnosticLimits::MAX_SOURCE_BYTES));
+        assert!(message.len() <= DiagnosticLimits::MAX_MESSAGE_BYTES);
+        assert!(target.len() <= DiagnosticLimits::MAX_TARGET_BYTES);
+        assert!(event.len() <= DiagnosticLimits::MAX_EVENT_BYTES);
+        assert!(source.len() <= DiagnosticLimits::MAX_SOURCE_BYTES);
         assert!(message.is_char_boundary(message.len()));
     }
 }

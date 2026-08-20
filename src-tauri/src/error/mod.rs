@@ -6,6 +6,10 @@ use uuid::Uuid;
 
 use crate::project::{ProjectDatabaseError, ProjectError, ProjectFilesystemError};
 
+pub(crate) fn new_diagnostic_incident_id() -> String {
+    Uuid::new_v4().to_string()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphMutationErrorDetailsDto {
@@ -76,7 +80,7 @@ impl CommandError {
     }
 
     fn record_incident(code: &'static str, error: impl fmt::Display + fmt::Debug) -> Self {
-        let incident_id = Uuid::new_v4().to_string();
+        let incident_id = new_diagnostic_incident_id();
         tracing::error!(
             target: "yssbi::command_error",
             diagnostic_domain = "application",

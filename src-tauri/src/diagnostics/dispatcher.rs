@@ -75,6 +75,10 @@ impl PendingDiagnostic {
 #[error("diagnostics dispatcher is unavailable")]
 pub struct DiagnosticsUnavailable;
 
+#[derive(Debug, Error)]
+#[error("failed to start diagnostics dispatcher")]
+pub(crate) struct DiagnosticsDispatcherStartError(#[source] std::io::Error);
+
 #[derive(Clone)]
 pub(crate) struct DiagnosticsHub {
     sender: SyncSender<DispatcherCommand>,
@@ -134,19 +138,35 @@ impl DiagnosticsHub {
     #[cfg(test)]
     pub(crate) fn start() -> (Self, DiagnosticsDispatcherGuard) {
         Self::start_with_config(DispatcherConfig::production(), Vec::new(), None)
+            .expect("start diagnostics dispatcher")
     }
 
+    #[cfg(test)]
     pub(crate) fn start_with_record_sinks(
         record_sinks: Vec<RecordSink>,
     ) -> (Self, DiagnosticsDispatcherGuard) {
         Self::start_with_config(DispatcherConfig::production(), record_sinks, None)
+            .expect("start diagnostics dispatcher")
+    }
+
+    pub(crate) fn start_paused_with_record_sinks(
+        record_sinks: Vec<RecordSink>,
+    ) -> Result<(Self, DiagnosticsDispatcherGuard, mpsc::Sender<()>), DiagnosticsDispatcherStartError>
+    {
+        let (release, startup_gate) = mpsc::channel();
+        let (hub, guard) = Self::start_with_config(
+            DispatcherConfig::production(),
+            record_sinks,
+            Some(startup_gate),
+        )?;
+        Ok((hub, guard, release))
     }
 
     fn start_with_config(
         config: DispatcherConfig,
         record_sinks: Vec<RecordSink>,
         startup_gate: Option<Receiver<()>>,
-    ) -> (Self, DiagnosticsDispatcherGuard) {
+    ) -> Result<(Self, DiagnosticsDispatcherGuard), DiagnosticsDispatcherStartError> {
         let (sender, receiver) = mpsc::sync_channel(config.ingress_capacity.max(1));
         let dropped_records = Arc::new(AtomicU64::new(0));
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -164,10 +184,7 @@ impl DiagnosticsHub {
                     config,
                 );
             })
-            .map_err(|error| {
-                eprintln!("failed to start diagnostics dispatcher: {error}");
-            })
-            .ok();
+            .map_err(DiagnosticsDispatcherStartError)?;
         let hub = Self {
             sender: sender.clone(),
             dropped_records,
@@ -176,9 +193,9 @@ impl DiagnosticsHub {
         let guard = DiagnosticsDispatcherGuard {
             sender,
             shutdown,
-            worker,
+            worker: Some(worker),
         };
-        (hub, guard)
+        Ok((hub, guard))
     }
 
     #[cfg(test)]
@@ -196,6 +213,7 @@ impl DiagnosticsHub {
             record_sinks,
             None,
         )
+        .expect("start diagnostics dispatcher")
     }
 
     #[cfg(test)]
@@ -212,7 +230,8 @@ impl DiagnosticsHub {
             },
             record_sinks,
             Some(startup_gate),
-        );
+        )
+        .expect("start diagnostics dispatcher");
         (hub, guard, release)
     }
 
@@ -333,7 +352,14 @@ impl DispatcherState {
                     move |record: Arc<DiagnosticRecordDto>| sink(record.as_ref()),
                 )
                 .map_err(|error| {
-                    eprintln!("failed to start diagnostics output worker: {error}");
+                    tracing::warn!(
+                        target: "yssbi::diagnostics",
+                        diagnostic_domain = "system",
+                        diagnostic_event = "diagnosticsOutputWorkerUnavailable",
+                        output_index = index,
+                        error = %error,
+                        "Failed to start diagnostics output worker"
+                    );
                 })
                 .ok()
             })
@@ -353,7 +379,7 @@ impl DispatcherState {
 
     fn publish(&mut self, pending: PendingDiagnostic) {
         let Some(sequence) = self.latest_sequence.checked_add(1) else {
-            eprintln!("diagnostics sequence exhausted; dropping subsequent records");
+            self.truncated = true;
             return;
         };
         self.latest_sequence = sequence;

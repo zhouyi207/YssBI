@@ -15,18 +15,6 @@ pub enum DiagnosticLevel {
     Error,
 }
 
-impl DiagnosticLevel {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Trace => "trace",
-            Self::Debug => "debug",
-            Self::Info => "info",
-            Self::Warn => "warn",
-            Self::Error => "error",
-        }
-    }
-}
-
 impl From<&tracing::Level> for DiagnosticLevel {
     fn from(level: &tracing::Level) -> Self {
         match *level {
@@ -58,17 +46,6 @@ pub enum DiagnosticDomain {
 }
 
 impl DiagnosticDomain {
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Application => "application",
-            Self::Execution => "execution",
-            Self::System => "system",
-            Self::Graph => "graph",
-            Self::Data => "data",
-            Self::Ui => "ui",
-        }
-    }
-
     pub(crate) fn parse(value: &str) -> Option<Self> {
         match value {
             "application" => Some(Self::Application),

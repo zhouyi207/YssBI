@@ -10,8 +10,8 @@ use crate::window_state::{WindowKind, WindowState, WindowStateStore};
 #[tauri::command]
 pub fn get_window_states(store: State<WindowStateStore>) -> HashMap<String, WindowState> {
     let mut out = HashMap::new();
-    for kind in WindowKind::ALL {
-        out.insert(kind.as_str().to_string(), store.get(*kind));
+    for kind in WindowKind::all() {
+        out.insert(kind.as_str().to_string(), store.get(kind));
     }
     out
 }

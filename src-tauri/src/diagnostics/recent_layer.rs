@@ -9,8 +9,8 @@ use tracing_subscriber::layer::Context;
 
 use super::dispatcher::{DiagnosticsHub, PendingDiagnostic};
 use super::dto::{DiagnosticDomain, DiagnosticLevel, DiagnosticOrigin};
+use super::limits::DiagnosticLimits;
 use super::sanitizer::{
-    MAX_EVENT_BYTES, MAX_FIELD_STRING_BYTES, MAX_MESSAGE_BYTES, MAX_SOURCE_BYTES, MAX_TARGET_BYTES,
     redacted_json_value, sanitize_event, sanitize_field_string, sanitize_message, sanitize_source,
     sanitize_target, should_redact_field,
 };
@@ -113,11 +113,11 @@ impl DiagnosticVisitor {
 
     fn formatted_limit(field: &Field) -> usize {
         match field.name() {
-            TARGET_FIELD => MAX_TARGET_BYTES,
-            EVENT_FIELD => MAX_EVENT_BYTES,
-            SOURCE_FIELD => MAX_SOURCE_BYTES,
-            "message" => MAX_MESSAGE_BYTES,
-            _ => MAX_FIELD_STRING_BYTES,
+            TARGET_FIELD => DiagnosticLimits::MAX_TARGET_BYTES,
+            EVENT_FIELD => DiagnosticLimits::MAX_EVENT_BYTES,
+            SOURCE_FIELD => DiagnosticLimits::MAX_SOURCE_BYTES,
+            "message" => DiagnosticLimits::MAX_MESSAGE_BYTES,
+            _ => DiagnosticLimits::MAX_FIELD_STRING_BYTES,
         }
     }
 }

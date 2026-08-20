@@ -10,8 +10,8 @@ use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 
 use super::dispatcher::{
-    DiagnosticsDispatcherGuard, DiagnosticsHub, DiagnosticsUnavailable, PendingDiagnostic,
-    RecordSink,
+    DiagnosticsDispatcherGuard, DiagnosticsDispatcherStartError, DiagnosticsHub,
+    DiagnosticsUnavailable, PendingDiagnostic, RecordSink,
 };
 use super::dto::{
     DiagnosticBatchDto, DiagnosticOrigin, DiagnosticRecordDto, DiagnosticSubscriptionDto,
@@ -32,17 +32,32 @@ pub struct DiagnosticsRuntime {
 }
 
 impl DiagnosticsRuntime {
-    pub fn initialize(log_dir: Option<PathBuf>) -> Self {
+    pub(crate) fn initialize(
+        log_dir: Option<PathBuf>,
+    ) -> Result<Self, DiagnosticsInitializationError> {
         let mut record_sinks = vec![create_console_record_sink()];
-        if let Some(file_sink) = create_file_record_sink(log_dir.as_deref()) {
-            record_sinks.push(file_sink);
+        let file_sink_error = log_dir
+            .as_deref()
+            .and_then(|log_dir| match create_file_record_sink(log_dir) {
+                Ok(file_sink) => {
+                    record_sinks.push(file_sink);
+                    None
+                }
+                Err(error) => Some(error),
+            });
+        let (hub, dispatcher_guard, release_dispatcher) =
+            DiagnosticsHub::start_paused_with_record_sinks(record_sinks)?;
+        install_tracing(hub.clone())?;
+        release_dispatcher
+            .send(())
+            .map_err(|_| DiagnosticsInitializationError::DispatcherStartupAborted)?;
+        if let Some(error) = file_sink_error {
+            report_file_sink_unavailable(&error);
         }
-        let (hub, dispatcher_guard) = DiagnosticsHub::start_with_record_sinks(record_sinks);
-        install_tracing(hub.clone());
-        Self {
+        Ok(Self {
             hub,
             _dispatcher_guard: dispatcher_guard,
-        }
+        })
     }
 
     pub(crate) fn submit_frontend(
@@ -68,6 +83,52 @@ impl DiagnosticsRuntime {
         subscription_id: String,
     ) -> Result<(), DiagnosticsUnavailable> {
         self.hub.unsubscribe(subscription_id)
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum DiagnosticsInitializationError {
+    #[error(transparent)]
+    Dispatcher(#[from] DiagnosticsDispatcherStartError),
+    #[error("failed to install diagnostics tracing subscriber")]
+    TracingSubscriber(#[source] tracing::subscriber::SetGlobalDefaultError),
+    #[error("diagnostics dispatcher stopped during initialization")]
+    DispatcherStartupAborted,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum FileRecordSinkError {
+    #[error("failed to create diagnostics log directory '{}': {source}", path.display())]
+    CreateDirectory {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("failed to open diagnostics log '{}': {source}", path.display())]
+    OpenFile {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("diagnostics file sink initialization panicked for '{}'", path.display())]
+    InitializationPanicked { path: PathBuf },
+}
+
+impl FileRecordSinkError {
+    const fn stage(&self) -> &'static str {
+        match self {
+            Self::CreateDirectory { .. } => "create_directory",
+            Self::OpenFile { .. } => "open_file",
+            Self::InitializationPanicked { .. } => "initialize_rotation",
+        }
+    }
+
+    fn path(&self) -> &Path {
+        match self {
+            Self::CreateDirectory { path, .. }
+            | Self::OpenFile { path, .. }
+            | Self::InitializationPanicked { path } => path,
+        }
     }
 }
 
@@ -110,46 +171,48 @@ fn create_console_record_sink() -> RecordSink {
     })
 }
 
-fn create_file_record_sink(log_dir: Option<&Path>) -> Option<RecordSink> {
-    let Some(log_dir) = log_dir else {
-        eprintln!("application log directory is unavailable; file diagnostics are disabled");
-        return None;
-    };
-    if let Err(error) = std::fs::create_dir_all(log_dir) {
-        eprintln!(
-            "failed to create application log directory {}: {error}; file diagnostics are disabled",
-            log_dir.display()
-        );
-        return None;
-    }
+fn create_file_record_sink(log_dir: &Path) -> Result<RecordSink, FileRecordSinkError> {
+    std::fs::create_dir_all(log_dir).map_err(|source| FileRecordSinkError::CreateDirectory {
+        path: log_dir.to_path_buf(),
+        source,
+    })?;
 
     let log_path = log_dir.join(LOG_FILE_NAME);
-    if let Err(error) = OpenOptions::new().create(true).append(true).open(&log_path) {
-        eprintln!(
-            "failed to open diagnostics log {}: {error}; file diagnostics are disabled",
-            log_path.display()
-        );
-        return None;
-    }
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|source| FileRecordSinkError::OpenFile {
+            path: log_path.clone(),
+            source,
+        })?;
 
     let writer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         FileRotate::new(
-            log_path,
+            log_path.clone(),
             AppendCount::new(LOG_ROTATION_FILES),
             ContentLimit::BytesSurpassed(LOG_ROTATION_BYTES),
             Compression::None,
             None,
         )
-    }));
-    match writer {
-        Ok(mut writer) => Some(Box::new(move |record| {
-            write_json_record(&mut writer, record)
-        })),
-        Err(_) => {
-            eprintln!("failed to start diagnostics file sink; file diagnostics are disabled");
-            None
-        }
-    }
+    }))
+    .map_err(|_| FileRecordSinkError::InitializationPanicked { path: log_path })?;
+    let mut writer = writer;
+    Ok(Box::new(move |record| {
+        write_json_record(&mut writer, record)
+    }))
+}
+
+fn report_file_sink_unavailable(error: &FileRecordSinkError) {
+    tracing::warn!(
+        target: "yssbi::diagnostics",
+        diagnostic_domain = "system",
+        diagnostic_event = "diagnosticsFileSinkUnavailable",
+        failure_stage = error.stage(),
+        path = %error.path().display(),
+        error = %error,
+        "File diagnostics are disabled"
+    );
 }
 
 fn write_json_record(writer: &mut impl Write, record: &DiagnosticRecordDto) -> bool {
@@ -160,22 +223,42 @@ fn write_json_record(writer: &mut impl Write, record: &DiagnosticRecordDto) -> b
     writer.write_all(&line).is_ok()
 }
 
-fn install_tracing(hub: DiagnosticsHub) {
+fn install_tracing(hub: DiagnosticsHub) -> Result<(), DiagnosticsInitializationError> {
     let rust_log = std::env::var("RUST_LOG").ok();
-    let targets = diagnostics_filter(rust_log.as_deref(), cfg!(debug_assertions));
+    let filter = diagnostics_filter(rust_log.as_deref(), cfg!(debug_assertions));
     let subscriber = tracing_subscriber::registry()
-        .with(targets)
+        .with(filter.targets)
         .with(RecentDiagnosticsLayer::new(hub));
 
+    tracing::subscriber::set_global_default(subscriber)
+        .map_err(DiagnosticsInitializationError::TracingSubscriber)?;
     if let Err(error) = tracing_log::LogTracer::init() {
-        eprintln!("failed to install log-to-tracing bridge: {error}");
+        tracing::warn!(
+            target: "yssbi::diagnostics",
+            diagnostic_domain = "system",
+            diagnostic_event = "logTracingBridgeUnavailable",
+            error = %error,
+            "Failed to install log-to-tracing bridge"
+        );
     }
-    if let Err(error) = tracing::subscriber::set_global_default(subscriber) {
-        eprintln!("failed to install diagnostics tracing subscriber: {error}");
+    if let Some(error) = filter.parse_error {
+        tracing::warn!(
+            target: "yssbi::diagnostics",
+            diagnostic_domain = "system",
+            diagnostic_event = "rustLogFilterInvalid",
+            error = %error,
+            "Failed to parse RUST_LOG diagnostics target filter; using defaults"
+        );
     }
+    Ok(())
 }
 
-fn diagnostics_filter(rust_log: Option<&str>, debug_build: bool) -> Targets {
+struct DiagnosticsFilter {
+    targets: Targets,
+    parse_error: Option<String>,
+}
+
+fn diagnostics_filter(rust_log: Option<&str>, debug_build: bool) -> DiagnosticsFilter {
     let first_party = if debug_build {
         LevelFilter::DEBUG
     } else {
@@ -188,13 +271,22 @@ fn diagnostics_filter(rust_log: Option<&str>, debug_build: bool) -> Targets {
             .with_target("yssbi_lib", first_party)
     };
     let Some(directives) = rust_log.map(str::trim).filter(|value| !value.is_empty()) else {
-        return defaults();
+        return DiagnosticsFilter {
+            targets: defaults(),
+            parse_error: None,
+        };
     };
 
-    directives.parse::<Targets>().unwrap_or_else(|error| {
-        eprintln!("failed to parse RUST_LOG diagnostics target filter: {error}; using defaults");
-        defaults()
-    })
+    match directives.parse::<Targets>() {
+        Ok(targets) => DiagnosticsFilter {
+            targets,
+            parse_error: None,
+        },
+        Err(error) => DiagnosticsFilter {
+            targets: defaults(),
+            parse_error: Some(error.to_string()),
+        },
+    }
 }
 
 #[cfg(test)]
@@ -206,22 +298,25 @@ mod tests {
 
     use super::{DiagnosticsRuntime, LOG_FILE_NAME, create_file_record_sink, diagnostics_filter};
     use crate::diagnostics::dispatcher::{DiagnosticsHub, PendingDiagnostic};
-    use crate::diagnostics::sanitizer::{MAX_MESSAGE_BYTES, REDACTED_VALUE};
+    use crate::diagnostics::limits::DiagnosticLimits;
+    use crate::diagnostics::sanitizer::REDACTED_VALUE;
     use crate::diagnostics::{
         DiagnosticDomain, DiagnosticLevel, DiagnosticOrigin, FrontendDiagnosticEntryDto,
     };
 
     #[test]
-    fn file_sink_initialization_failure_is_non_fatal() {
+    fn file_sink_initialization_failure_is_structured() {
         let directory =
             std::env::temp_dir().join(format!("yssbi-diagnostics-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&directory).unwrap();
         let file_path = directory.join("not-a-directory");
         std::fs::write(&file_path, b"occupied").unwrap();
 
-        let result = std::panic::catch_unwind(|| create_file_record_sink(Some(&file_path)));
-        let writer = result.expect("file sink failures must not unwind into the app");
-        assert!(writer.is_none());
+        let error = match create_file_record_sink(&file_path) {
+            Ok(_) => panic!("invalid diagnostics log directory unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert_eq!(error.stage(), "create_directory");
 
         std::fs::remove_file(file_path).unwrap();
         std::fs::remove_dir(directory).unwrap();
@@ -265,17 +360,17 @@ mod tests {
 
     #[test]
     fn default_filter_is_first_party_and_requires_explicit_rust_log_for_trace() {
-        let release = diagnostics_filter(None, false);
+        let release = diagnostics_filter(None, false).targets;
         assert!(release.would_enable("yssbi", &tracing::Level::INFO));
         assert!(!release.would_enable("yssbi", &tracing::Level::DEBUG));
         assert!(!release.would_enable("dependency", &tracing::Level::WARN));
         assert!(!release.would_enable("dependency", &tracing::Level::ERROR));
 
-        let debug = diagnostics_filter(None, true);
+        let debug = diagnostics_filter(None, true).targets;
         assert!(debug.would_enable("yssbi_lib::runtime", &tracing::Level::DEBUG));
         assert!(!debug.would_enable("yssbi_lib", &tracing::Level::TRACE));
 
-        let explicit = diagnostics_filter(Some("yssbi=trace"), false);
+        let explicit = diagnostics_filter(Some("yssbi=trace"), false).targets;
         assert!(explicit.would_enable("yssbi::runtime", &tracing::Level::TRACE));
         assert!(!explicit.would_enable("other", &tracing::Level::TRACE));
     }
@@ -284,7 +379,7 @@ mod tests {
     fn recent_and_jsonl_file_share_redaction_and_truncation() {
         let directory =
             std::env::temp_dir().join(format!("yssbi-diagnostics-test-{}", uuid::Uuid::new_v4()));
-        let file_sink = create_file_record_sink(Some(&directory)).expect("test file sink");
+        let file_sink = create_file_record_sink(&directory).expect("test file sink");
         let (hub, dispatcher_guard) = DiagnosticsHub::start_with_record_sinks(vec![file_sink]);
         let secret = "never-write-this-secret";
         hub.publish(vec![PendingDiagnostic {
@@ -294,7 +389,7 @@ mod tests {
             domain: DiagnosticDomain::Data,
             target: "yssbi::database".into(),
             event: Some("queryFailed".into()),
-            message: "x".repeat(MAX_MESSAGE_BYTES + 100),
+            message: "x".repeat(DiagnosticLimits::MAX_MESSAGE_BYTES + 100),
             source: None,
             fields: BTreeMap::from([
                 ("database_url".into(), json!(secret)),
@@ -307,7 +402,7 @@ mod tests {
         let record = subscription.entries.last().unwrap().clone();
         assert_eq!(record.fields["database_url"], REDACTED_VALUE);
         assert_eq!(record.fields["nested"]["Authorization"], REDACTED_VALUE);
-        assert!(record.message.len() <= MAX_MESSAGE_BYTES);
+        assert!(record.message.len() <= DiagnosticLimits::MAX_MESSAGE_BYTES);
         hub.unsubscribe(subscription.subscription_id).unwrap();
 
         let log_path = directory.join(LOG_FILE_NAME);

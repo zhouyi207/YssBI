@@ -2,20 +2,13 @@ use serde_json::Value;
 use thiserror::Error;
 
 use super::dto::{DiagnosticDomain, DiagnosticFields, DiagnosticLevel, FrontendDiagnosticEntryDto};
+use super::limits::DiagnosticLimits;
 use super::sanitizer::{
     sanitize_event, sanitize_fields, sanitize_message, sanitize_source, sanitize_target,
 };
 
-pub const MAX_FRONTEND_DIAGNOSTIC_BATCH: usize = 256;
-const MAX_TARGET_BYTES: usize = 256;
-const MAX_EVENT_BYTES: usize = 256;
-const MAX_MESSAGE_BYTES: usize = 16 * 1024;
-const MAX_SOURCE_BYTES: usize = 1024;
-const MAX_FIELD_COUNT: usize = 64;
-const MAX_FIELD_KEY_BYTES: usize = 128;
-const MAX_FIELDS_BYTES: usize = 32 * 1024;
-const MAX_FIELD_DEPTH: usize = 8;
-const MAX_FIELD_VALUES: usize = 1024;
+// This transport-level batch policy is independent from per-record collection limits.
+pub(super) const MAX_FRONTEND_DIAGNOSTIC_BATCH: usize = 256;
 
 #[derive(Debug, Clone)]
 pub(crate) struct ValidatedFrontendDiagnostic {
@@ -74,20 +67,32 @@ fn validate_entry(
     index: usize,
     entry: FrontendDiagnosticEntryDto,
 ) -> Result<ValidatedFrontendDiagnostic, FrontendDiagnosticValidationError> {
-    validate_required_text(index, "target", &entry.target, MAX_TARGET_BYTES, false)?;
-    validate_required_text(index, "message", &entry.message, MAX_MESSAGE_BYTES, true)?;
+    validate_required_text(
+        index,
+        "target",
+        &entry.target,
+        DiagnosticLimits::MAX_TARGET_BYTES,
+        false,
+    )?;
+    validate_required_text(
+        index,
+        "message",
+        &entry.message,
+        DiagnosticLimits::MAX_MESSAGE_BYTES,
+        true,
+    )?;
     validate_optional_text(
         index,
         "event",
         entry.event.as_deref(),
-        MAX_EVENT_BYTES,
+        DiagnosticLimits::MAX_EVENT_BYTES,
         false,
     )?;
     validate_optional_text(
         index,
         "source",
         entry.source.as_deref(),
-        MAX_SOURCE_BYTES,
+        DiagnosticLimits::MAX_SOURCE_BYTES,
         false,
     )?;
     validate_fields(index, &entry.fields)?;
@@ -160,25 +165,37 @@ fn validate_fields(
     index: usize,
     fields: &DiagnosticFields,
 ) -> Result<(), FrontendDiagnosticValidationError> {
-    if fields.len() > MAX_FIELD_COUNT {
+    if fields.len() > DiagnosticLimits::MAX_FIELD_COUNT {
         return Err(FrontendDiagnosticValidationError::entry(
             index,
-            format!("fields exceeds the {MAX_FIELD_COUNT} field limit"),
+            format!(
+                "fields exceeds the {} field limit",
+                DiagnosticLimits::MAX_FIELD_COUNT
+            ),
         ));
     }
     let encoded = serde_json::to_vec(fields).map_err(|error| {
         FrontendDiagnosticValidationError::entry(index, format!("fields is not JSON: {error}"))
     })?;
-    if encoded.len() > MAX_FIELDS_BYTES {
+    if encoded.len() > DiagnosticLimits::MAX_FIELDS_BYTES {
         return Err(FrontendDiagnosticValidationError::entry(
             index,
-            format!("fields exceeds the {MAX_FIELDS_BYTES} byte limit"),
+            format!(
+                "fields exceeds the {} byte limit",
+                DiagnosticLimits::MAX_FIELDS_BYTES
+            ),
         ));
     }
 
     let mut value_count = 0;
     for (key, value) in fields {
-        validate_required_text(index, "field name", key, MAX_FIELD_KEY_BYTES, false)?;
+        validate_required_text(
+            index,
+            "field name",
+            key,
+            DiagnosticLimits::MAX_FIELD_KEY_BYTES,
+            false,
+        )?;
         validate_field_value(index, value, 1, &mut value_count)?;
     }
     Ok(())
@@ -191,16 +208,22 @@ fn validate_field_value(
     value_count: &mut usize,
 ) -> Result<(), FrontendDiagnosticValidationError> {
     *value_count += 1;
-    if *value_count > MAX_FIELD_VALUES {
+    if *value_count > DiagnosticLimits::MAX_FIELD_VALUES {
         return Err(FrontendDiagnosticValidationError::entry(
             index,
-            format!("fields exceeds the {MAX_FIELD_VALUES} value limit"),
+            format!(
+                "fields exceeds the {} value limit",
+                DiagnosticLimits::MAX_FIELD_VALUES
+            ),
         ));
     }
-    if depth > MAX_FIELD_DEPTH {
+    if depth > DiagnosticLimits::MAX_FIELD_DEPTH {
         return Err(FrontendDiagnosticValidationError::entry(
             index,
-            format!("fields exceeds the maximum nesting depth of {MAX_FIELD_DEPTH}"),
+            format!(
+                "fields exceeds the maximum nesting depth of {}",
+                DiagnosticLimits::MAX_FIELD_DEPTH
+            ),
         ));
     }
 
@@ -216,7 +239,7 @@ fn validate_field_value(
                     index,
                     "nested field name",
                     key,
-                    MAX_FIELD_KEY_BYTES,
+                    DiagnosticLimits::MAX_FIELD_KEY_BYTES,
                     false,
                 )?;
                 validate_field_value(index, value, depth + 1, value_count)?;

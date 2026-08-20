@@ -10,141 +10,24 @@
 //!
 //! 文件位置：`<app_config_dir>/window_state.json`。
 
-use serde::{Deserialize, Serialize};
+mod kind;
+mod persistence;
+#[cfg(test)]
+mod tests;
+
+pub use kind::{WindowKind, WindowState};
+
+use kind::PersistedWindowStates;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
 
-/// 受持久化管理的窗口种类。serde 上以 camelCase 形式与前端 `WindowKind` 对齐。
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash)]
-#[serde(rename_all = "camelCase")]
-pub enum WindowKind {
-    Main,
-    DatabaseEditor,
-    SourceInspector,
-    Logs,
-    Plot,
-    Info,
-    Bayes,
-}
-
-impl WindowKind {
-    pub const ALL: &'static [WindowKind] = &[
-        WindowKind::Main,
-        WindowKind::DatabaseEditor,
-        WindowKind::SourceInspector,
-        WindowKind::Logs,
-        WindowKind::Plot,
-        WindowKind::Info,
-        WindowKind::Bayes,
-    ];
-
-    /// 用于 HashMap key 的小驼峰字符串。
-    pub fn as_str(self) -> &'static str {
-        match self {
-            WindowKind::Main => "main",
-            WindowKind::DatabaseEditor => "databaseEditor",
-            WindowKind::SourceInspector => "sourceInspector",
-            WindowKind::Logs => "logs",
-            WindowKind::Plot => "plot",
-            WindowKind::Info => "info",
-            WindowKind::Bayes => "bayes",
-        }
-    }
-}
-
-/// 单窗口的几何状态。`x/y` 为物理像素坐标，`None` 表示尚未保存过位置。
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct WindowState {
-    pub width: u32,
-    pub height: u32,
-    pub x: Option<i32>,
-    pub y: Option<i32>,
-    pub is_maximized: bool,
-}
-
-impl WindowState {
-    fn default_for(kind: WindowKind) -> Self {
-        match kind {
-            WindowKind::Main => WindowState {
-                width: 1600,
-                height: 900,
-                x: None,
-                y: None,
-                is_maximized: false,
-            },
-            WindowKind::DatabaseEditor | WindowKind::Logs | WindowKind::SourceInspector => {
-                WindowState {
-                    width: 1000,
-                    height: 600,
-                    x: None,
-                    y: None,
-                    is_maximized: false,
-                }
-            }
-            WindowKind::Plot | WindowKind::Info | WindowKind::Bayes => WindowState {
-                width: 960,
-                height: 800,
-                x: None,
-                y: None,
-                is_maximized: false,
-            },
-        }
-    }
-}
-
-/// 文件中持久化的整体结构，缺省值用 `Option` 表示「尚未保存过」。
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-#[serde(rename_all = "camelCase")]
-struct PersistedWindowStates {
-    #[serde(default)]
-    main: Option<WindowState>,
-    #[serde(default)]
-    database_editor: Option<WindowState>,
-    #[serde(default)]
-    source_inspector: Option<WindowState>,
-    #[serde(default)]
-    logs: Option<WindowState>,
-    #[serde(default)]
-    plot: Option<WindowState>,
-    #[serde(default)]
-    info: Option<WindowState>,
-    #[serde(default)]
-    bayes: Option<WindowState>,
-}
-
-impl PersistedWindowStates {
-    fn get(&self, kind: WindowKind) -> Option<&WindowState> {
-        match kind {
-            WindowKind::Main => self.main.as_ref(),
-            WindowKind::DatabaseEditor => self.database_editor.as_ref(),
-            WindowKind::SourceInspector => self.source_inspector.as_ref(),
-            WindowKind::Logs => self.logs.as_ref(),
-            WindowKind::Plot => self.plot.as_ref(),
-            WindowKind::Info => self.info.as_ref(),
-            WindowKind::Bayes => self.bayes.as_ref(),
-        }
-    }
-
-    fn set(&mut self, kind: WindowKind, value: WindowState) {
-        match kind {
-            WindowKind::Main => self.main = Some(value),
-            WindowKind::DatabaseEditor => self.database_editor = Some(value),
-            WindowKind::SourceInspector => self.source_inspector = Some(value),
-            WindowKind::Logs => self.logs = Some(value),
-            WindowKind::Plot => self.plot = Some(value),
-            WindowKind::Info => self.info = Some(value),
-            WindowKind::Bayes => self.bayes = Some(value),
-        }
-    }
-}
-
 /// Tauri 状态：跨命令访问的窗口几何缓存 + 文件路径。
 pub struct WindowStateStore {
     file_path: PathBuf,
     states: Mutex<PersistedWindowStates>,
+    set_lock: Mutex<()>,
 }
 
 impl WindowStateStore {
@@ -153,7 +36,7 @@ impl WindowStateStore {
         let states = if file_path.exists() {
             fs::read_to_string(&file_path)
                 .ok()
-                .and_then(|s| serde_json::from_str::<PersistedWindowStates>(&s).ok())
+                .and_then(|content| serde_json::from_str::<PersistedWindowStates>(&content).ok())
                 .unwrap_or_default()
         } else {
             PersistedWindowStates::default()
@@ -161,33 +44,32 @@ impl WindowStateStore {
         Self {
             file_path,
             states: Mutex::new(states),
+            set_lock: Mutex::new(()),
         }
     }
 
     /// 读取某 kind 的几何状态，未保存过则返回该 kind 的内置默认值。
     pub fn get(&self, kind: WindowKind) -> WindowState {
-        let s = self.states.lock().unwrap();
-        s.get(kind)
+        let states = self.states.lock().unwrap();
+        states
+            .get(kind)
             .cloned()
             .unwrap_or_else(|| WindowState::default_for(kind))
     }
 
-    /// 写入并立即落盘。
+    /// 写入并立即落盘。只有 candidate snapshot 持久化成功后才提交内存状态。
     pub fn set(&self, kind: WindowKind, state: WindowState) -> Result<(), String> {
-        {
-            let mut s = self.states.lock().unwrap();
-            s.set(kind, state);
-        }
-        self.persist()
+        let _set_guard = self.set_lock.lock().unwrap();
+        let mut candidate = self.states.lock().unwrap().clone();
+        candidate.set(kind, state);
+
+        self.persist(&candidate)?;
+        *self.states.lock().unwrap() = candidate;
+        Ok(())
     }
 
-    fn persist(&self) -> Result<(), String> {
-        let snapshot = self.states.lock().unwrap().clone();
-        if let Some(parent) = self.file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        let json = serde_json::to_string_pretty(&snapshot).map_err(|e| e.to_string())?;
-        fs::write(&self.file_path, json).map_err(|e| e.to_string())
+    fn persist(&self, snapshot: &PersistedWindowStates) -> Result<(), String> {
+        persistence::write_json_atomically(&self.file_path, snapshot)
     }
 }
 
@@ -202,13 +84,13 @@ pub fn apply_main_window_state(app: &AppHandle, store: &WindowStateStore) -> Res
 
     if let (Some(x), Some(y)) = (state.x, state.y) {
         win.set_position(PhysicalPosition::new(x, y))
-            .map_err(|e| e.to_string())?;
+            .map_err(|error| error.to_string())?;
     }
     win.set_size(PhysicalSize::new(state.width, state.height))
-        .map_err(|e| e.to_string())?;
+        .map_err(|error| error.to_string())?;
     if state.is_maximized {
-        win.maximize().map_err(|e| e.to_string())?;
+        win.maximize().map_err(|error| error.to_string())?;
     }
-    win.show().map_err(|e| e.to_string())?;
+    win.show().map_err(|error| error.to_string())?;
     Ok(())
 }
