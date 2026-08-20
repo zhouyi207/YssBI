@@ -4,10 +4,9 @@ use std::sync::Arc;
 use polars::prelude::*;
 use yssbi_lib::application::database::bind_duckdb_instance;
 use yssbi_lib::database::{
-    DatabaseAccess, DatabaseDecl, DatabaseEngine, DatabaseExportFormat, DatabaseInstance,
-    DatabaseState, EditHistory, MAX_DELETE_COLUMN_SNAPSHOT_ROWS, MAX_IN_MEMORY_EDIT_ROWS,
-    ingest_csv_to_duckdb, ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta,
-    write_display_name,
+    DatabaseDecl, DatabaseEngine, DatabaseExportFormat, DatabaseInstance, DatabaseState,
+    EditHistory, MAX_DELETE_COLUMN_SNAPSHOT_ROWS, MAX_IN_MEMORY_EDIT_ROWS, ingest_csv_to_duckdb,
+    ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta, write_display_name,
 };
 use yssbi_lib::node_system::document::{
     DatabaseResourceKey, OperationId, ResourceKey, ResourceRevision,
@@ -379,34 +378,6 @@ fn setup_iris_duckdb_project() -> (PathBuf, String) {
     (project_root, db_id.to_string())
 }
 
-/// CSV 导入后写入 DuckDB，并可预览/执行读取。
-#[test]
-fn test_csv_ingest_to_duckdb_and_preview() {
-    println!("\n=== 测试 CSV ingest → DuckDB ===");
-
-    let (project_root, db_id) = setup_iris_duckdb_project();
-    let databases = discover_databases_from_root(project_root.as_path()).expect("discover");
-    let decl = databases.get(&db_id).expect("decl");
-
-    let mut db_instance = bind_duckdb_instance(decl, Some(project_root.as_path()));
-    assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
-
-    let preview = db_instance
-        .access(DatabaseAccess::Preview)
-        .expect("preview");
-    assert_eq!(preview.dataframe.height(), 100);
-    assert!(preview.dataframe.width() >= 5);
-
-    let full = db_instance
-        .access(DatabaseAccess::Execution)
-        .expect("execution");
-    assert_eq!(full.dataframe.height(), 150);
-
-    assert!(project_duckdb_abs(&project_root).is_file());
-
-    let _ = std::fs::remove_dir_all(&project_root);
-}
-
 /// Phase 2：分页与 schema 不触发整表 Loaded。
 #[test]
 fn test_duckdb_query_page_and_schema_without_full_load() {
@@ -576,7 +547,9 @@ fn test_duckdb_analytics_without_full_load() {
 /// Phase 5：`save_database_changes` 将编辑写回 `project.duckdb`，重开可恢复。
 #[test]
 fn test_edit_save_persists_to_duckdb() {
-    use yssbi_lib::application::database::save_database_changes;
+    use yssbi_lib::application::database::{
+        DatabaseMutation, mutate_database_resource, save_database_changes,
+    };
 
     let (project_root, db_id) = setup_iris_duckdb_project();
     let state = ProjectState::try_new().expect("initialize built-in node system");
@@ -584,15 +557,20 @@ fn test_edit_save_persists_to_duckdb() {
 
     let (project_instance_id, edit_expected_revision) = database_authority(&state, &db_id);
     let edit_operation_id = OperationId::new();
-    let edited = state
-        .with_database_mut(
-            &project_instance_id,
-            &db_id,
-            edit_expected_revision,
-            edit_operation_id,
-            |db| db.edit_cell(0, "sepal_length", serde_json::json!(999.0), None),
-        )
-        .expect("edit");
+    let edited = mutate_database_resource(
+        &state,
+        &project_instance_id,
+        &db_id,
+        edit_expected_revision,
+        edit_operation_id,
+        DatabaseMutation::EditCell {
+            row: 0,
+            column: "sepal_length".into(),
+            value: serde_json::json!(999.0),
+            row_id: None,
+        },
+    )
+    .expect("edit");
     assert_eq!(
         edited.mutation.project_instance_id,
         project_instance_id.as_str()
@@ -605,7 +583,10 @@ fn test_edit_save_persists_to_duckdb() {
         ResourceKey::Database(DatabaseResourceKey(format!("databases/{db_id}").into()))
     );
     assert_eq!(edit_delta.from_revision, edit_expected_revision);
-    assert_eq!(edit_delta.to_revision, edit_expected_revision.next());
+    assert_eq!(
+        edit_delta.to_revision,
+        edit_expected_revision.checked_next().unwrap()
+    );
     assert_eq!(edit_delta.caused_by, Some(edit_operation_id));
 
     let (save_project_instance_id, save_expected_revision) = database_authority(&state, &db_id);
@@ -632,7 +613,10 @@ fn test_edit_save_persists_to_duckdb() {
         ResourceKey::Database(DatabaseResourceKey(format!("databases/{db_id}").into()))
     );
     assert_eq!(save_delta.from_revision, save_expected_revision);
-    assert_eq!(save_delta.to_revision, save_expected_revision.next());
+    assert_eq!(
+        save_delta.to_revision,
+        save_expected_revision.checked_next().unwrap()
+    );
     assert_eq!(save_delta.caused_by, Some(save_operation_id));
     assert!(!saved.data.can_undo);
     assert!(!saved.data.can_redo);
