@@ -7,9 +7,17 @@ when they remain useful to the current architecture.
 ## Architecture
 
 - [System architecture](architecture/ARCHITECTURE.md)
-- [Design rules](architecture/DESIGN_RULE.md)
+
 - [Editor grid architecture](architecture/EDITOR_GRID_ARCHITECTURE.md)
-- [SCI architecture](architecture/SCI_ARCHITECTURE_ANALYSIS.md)
+- [SCI current architecture and closed issues](architecture/SCI_ARCHITECTURE_ANALYSIS.md)
+- [Diagnostics, errors, traces, and output](architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
+
+## Implementation notes
+
+- [Database module](../src-tauri/src/database/README.md)
+- [SCI application module](../src-tauri/src/sci/README.md)
+- [SCI backend adapters](../src-tauri/src/sci/backends/README.md)
+- [Julia Bayes worker protocol](../src-tauri/julia/README.md)
 
 ## Contracts
 
@@ -19,7 +27,7 @@ when they remain useful to the current architecture.
 
 ## Features
 
-- [Runtime source lifecycle](features/runtime-source-lifecycle.md)
+
 - [Workbench satellite windows](features/WORKBENCH_SATELLITE_WINDOWS.md)
 - [Deferred workbench items](features/WORKBENCH_P3_DEFERRED.md)
 

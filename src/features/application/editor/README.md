@@ -73,7 +73,8 @@ Do not rebuild a broad editor/group aggregate, spread unrelated values through
 a subtree, or mirror Dockview topology in a store. Add or reuse a named slice
 at the caller seam instead.
 
-See [DESIGN_RULE.md §2.12](../../../../docs/architecture/DESIGN_RULE.md#212-editor-caller-shaped-显式契约).
+Repository-wide dependency direction and Dockview authority rules are defined in
+[`AGENTS.md`](../../../../AGENTS.md).
 
 ## Related modules
 

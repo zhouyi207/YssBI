@@ -20,8 +20,11 @@ the architecture changes.
 ## Rust and Tauri
 
 - `ProjectState.project_data` is the authoritative project/graph/pin state.
-- `ProjectState::insert_graph` is the only graph insertion path; loading,
-  creation, duplication, import, and restore must preserve its runtime setup.
+- `ProjectState::install_validated_resident_graph` is the private canonical
+  resident-install primitive and the only path for installing a live graph
+  document. Loading and patches that make a graph resident must delegate to it.
+  Graph creation and duplication write disk resources and publish exactly one
+  unloaded `DeclareGraph`; they must never transiently load the new graph.
 - Tauri commands live under `src-tauri/src/commands/` and stay thin:
   parse/validate input, call domain/application code, map to DTOs, and emit
   events. Do not put long workflows, filesystem I/O, or duplicated validation
