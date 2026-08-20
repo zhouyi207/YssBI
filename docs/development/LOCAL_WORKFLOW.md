@@ -1,13 +1,14 @@
 # 本地开发工作流
 
-本项目不依赖 CI 作为开发期验证入口。所有命令都从仓库根目录
-`D:\Desktop\YssBI` 运行，并通过 `package.json` 脚本统一调用。
+本项目不依赖 CI 作为开发期验证入口。所有命令都从仓库根目录运行，并通过
+`package.json` 脚本统一调用。
 
 ## 开发环境
 
 - Node.js `22.22.0` 或更高版本
 - pnpm `11.20.0`
 - Rust `1.94.0` 或更高版本（Rust 2024 edition）
+- Julia `1.10` 或更高版本（仅 Julia-backed operations/tests 需要）
 
 Node.js 最低版本与 React Router 8 的运行时要求保持一致。
 
@@ -17,11 +18,8 @@ Node.js 最低版本与 React Router 8 的运行时要求保持一致。
 
 ## Cargo 产物目录
 
-根目录 `.cargo/config.toml` 固定 Rust workspace 的产物目录为：
-
-```text
-D:\Desktop\YssBI\target
-```
+根目录 `.cargo/config.toml` 将 Rust workspace 的产物统一放在仓库根目录的
+`target/`。
 
 不要为日常开发切换到 `src-tauri` 后直接运行 Cargo。请使用下列脚本，
 它们都会显式指向 `src-tauri/Cargo.toml`。这避免在仓库根目录和
@@ -34,6 +32,7 @@ D:\Desktop\YssBI\target
 
 | 目的 | 命令 |
 | --- | --- |
+| 安装或同步依赖 | `pnpm install` |
 | 启动前端开发服务器 | `pnpm dev` |
 | 启动 Tauri 桌面应用 | `pnpm tauri:dev` |
 | 构建前端 | `pnpm build` |
@@ -52,6 +51,9 @@ D:\Desktop\YssBI\target
 | 运行完整仓库回归 | `pnpm verify:full` |
 | 清除标准 Rust 构建产物 | `pnpm rust:clean` |
 
+仓库当前没有 ESLint 或 Prettier script；规范的静态检查入口是
+`pnpm typecheck`、`pnpm rust:fmt:check` 和 `pnpm rust:check`。
+
 `pnpm rust:test`、`pnpm rust:test:lib` 和 `pnpm rust:test:sci` 通过 Cargo
 `--jobs 1` 序列化 Rust 测试链接，以避免 Windows 链接器内存峰值。
 `pnpm rust:check` 和开发构建仍保留 Cargo 的正常并行度。
@@ -64,6 +66,26 @@ focused tests；`verify` 不会隐式运行全部 Rust runtime、integration 和
 `pnpm verify:full` 才执行完整主 Rust crate 与 SCI 测试。仅在发布前、执行
 引擎/Runtime 跨切面改动、或明确要求完整仓库回归时运行。两种验证命令都
 不会启动应用、打包安装包或修改项目状态。
+
+## 聚焦测试
+
+优先通过 `package.json` scripts 运行聚焦测试，使 Cargo 参数和产物目录保持
+一致：
+
+```sh
+pnpm test src/path/to/example.test.ts
+pnpm test src/path/to/example.test.ts -t "test name"
+pnpm rust:test:lib test_name -- --exact --nocapture
+pnpm rust:test --test database_test test_name -- --exact --nocapture
+pnpm rust:test:sci test_name -- --exact --nocapture
+julia --project=src-tauri/julia src-tauri/julia/tests/bayes_fit_tests.jl
+```
+
+首次运行 Julia-backed operations/tests 前安装项目环境：
+
+```sh
+julia --project=src-tauri/julia -e 'using Pkg; Pkg.instantiate()'
+```
 
 ## 按改动范围验证
 

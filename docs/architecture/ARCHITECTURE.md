@@ -6,7 +6,6 @@
 
 - [诊断、IPC 错误、Execution Trace 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 - [Dockview/Gridview 编辑器布局](./EDITOR_GRID_ARCHITECTURE.md)
-- [SCI 当前状态与已闭合问题](./SCI_ARCHITECTURE_ANALYSIS.md)
 - [Database 实现说明](../../src-tauri/src/database/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
 - [Julia Bayes worker protocol](../../src-tauri/julia/README.md)

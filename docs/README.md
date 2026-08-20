@@ -9,7 +9,6 @@ when they remain useful to the current architecture.
 - [System architecture](architecture/ARCHITECTURE.md)
 
 - [Editor grid architecture](architecture/EDITOR_GRID_ARCHITECTURE.md)
-- [SCI current architecture and closed issues](architecture/SCI_ARCHITECTURE_ANALYSIS.md)
 - [Diagnostics, errors, traces, and output](architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 
 ## Implementation notes
@@ -19,24 +18,13 @@ when they remain useful to the current architecture.
 - [SCI backend adapters](../src-tauri/src/sci/backends/README.md)
 - [Julia Bayes worker protocol](../src-tauri/julia/README.md)
 
-## Contracts
+## Development
 
-- [DTO analysis](contracts/DTO_ANALYSIS.md)
-- [DTO type mapping](contracts/DTO_TYPE_MAPPING.md)
-- [Frontend/backend interaction](contracts/FRONTEND_BACKEND_INTERACTION.md)
+- [Local development workflow](development/LOCAL_WORKFLOW.md)
 
-## Features
+## History
 
-
-- [Workbench satellite windows](features/WORKBENCH_SATELLITE_WINDOWS.md)
-- [Deferred workbench items](features/WORKBENCH_P3_DEFERRED.md)
-
-## Plans
-
-- [Node protocol and execution architecture](plan/node-architecture.md)
-- [Bayesian inference architecture](plan/bayesian-inference.md)
-- [Bayesian frontend UI](plan/bayesian-frontend-ui.md)
-- [Julia scientific backend](plan/julia.md)
+- [Version history](version/README.md)
 
 ## Maintenance
 

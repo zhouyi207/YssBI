@@ -41,7 +41,7 @@ interface ContextMenuProps {
   onClose: () => void;
 }
 
-/** Project density: tight menu shell (see .cursor/rules/context-menu-density.mdc). */
+/** Project-standard compact context-menu shell. */
 const menuShellClass =
   "fixed z-[1] w-max max-w-[min(13.5rem,calc(100vw-1rem))] overflow-hidden rounded-sm border border-border bg-popover py-0 text-[12px] text-popover-foreground shadow-2xl shadow-black/25 dark:shadow-black/45";
 

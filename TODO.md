@@ -79,7 +79,7 @@ src/app/appConfig/appLinks.ts
 
 ## 2026.03.07
 - [x] ~~关于动态和静态节点，我认为对数据处理操作都是可以预测的，其生成的形状和 pin 都是可以知道的，不需要计算，因此在数据处理层面我认为可以使用静态节点也应该使用静态节点；对于 predict 节点，其 model 的传入有两种方式，一种是自己配置另一种是连线，连线的 model 必然是 output 节点，那么其在形式上必然有 pin 的生成，我可以使用其上一个节点的 pin 来生成这里的 pin，一种是自己配置的，那么其在连接线的时候必然要解析这里的 model 可以动态生成节点；因此，动态节点在某种程度上必然是不现实的，其会造成卡顿等等一系列的问题？？又或者说在计算的时候对于 data pin 来一个即时使计算，而对于 exec pin 同时在前端出现等待样式；这样的话好像在打开项目节点的时候会很卡顿，不应该这样操作。**既然都可以预测，那么解决问题的最好的方法就是在流动的过程中添加信息层，这里的信息层取决于连接了什么？？？也就是在每次连接的时候进行链式更新，即一个信息的传输作用。例如 ts align 节点，其输入 dataframe 会传入一个 schema 信息给 ts align，在连接的时候其 output dataframe 就会拥有这个信息 schema，以便于 decompose dataframe 在连接 output dataframe 的时候会自动生成 output pin**~~
-- [x] Schema 与 Pin 解析架构原则（结构 / 信息 / 数据三层；connect 时链式传播 schema；schema 派生 pin 非 exec 动态）→ 见 [DESIGN_RULE.md §3.7](./docs/architecture/DESIGN_RULE.md#37-schema-与-pin-解析)
+- [x] Schema 与 Pin 解析架构原则（结构 / 信息 / 数据三层；connect 时链式传播 schema；schema 派生 pin 非 exec 动态）；历史设计已归档，当前实现见 [ARCHITECTURE.md](./docs/architecture/ARCHITECTURE.md)。
 - [x] `load_graph` 打开项目：保留 `propagate_schemas`，将全图 `resolve_all_dynamic_pins` 改为延迟/分帧物化（打开 tab 或视口内节点），避免大图首屏卡顿
 - [x] 审查各 dataframe / predict 节点是否均已注册 `output_schema_resolver` / `pin_resolver`，与 §3.7 一致（如 TS Align 输出 schema 是否完整）
 - [x] 完成 ols_summary 和 wls_summary 的测试编写方便后续重构检验正确性
@@ -287,7 +287,7 @@ src/app/appConfig/appLinks.ts
 
 ## 2026.08.06
 
-- [x] 完成 `node-architecture.md` 迁徙遗漏审计；当前仍存在以下协议、权威边界和运行平台收口项，全部完成前不应继续把对应 Phase 标记为 100%。
+- [x] 完成历史节点架构计划的迁徙遗漏审计；当前仍存在以下协议、权威边界和运行平台收口项，全部完成前不应继续把对应 Phase 标记为 100%。
 - [x] 修复数据库导入 publication delta 的资源 revision 错误：database mutation 不再误用项目级 `authority_generation` 作为 `toRevision`，改为按资源自身的 `fromRevision.next()` 连续推进，避免 CSV 导入已在后端提交却被前端以 `resource deltas are malformed` 拒绝。
 - [x] 补充数据库 revision 回归覆盖：验证项目已有多次 publication 后，新数据库仍从资源 revision `0 → 1`，同时保持项目级 publication revision 独立递增。
 - [x] 修复后创建独立 WebView 的项目 lifecycle 初始化：新增只读 `get_current_project_activation` bootstrap command，返回当前 `projectInstanceId`、`activationRevision` 与项目路径；`initProjectSync` 在本地 identity 为空时先接受真实 activation receipt，再加载权威项目快照。
@@ -304,7 +304,7 @@ src/app/appConfig/appLinks.ts
 - [x] **Phase 6：真正落实 demand-driven result publication。** Scheduler 当前为保留 operation 的全部 outputs 创建 result source 并发送 `ValueReady`，普通运行仍保留中间 Pin；仅显式 requested output/default result 可发布，Pin 预览继续走独立 demand。
 - [x] **Phase 6/运行平台：实现协议声明的 `CachePolicy` 和默认 per-run memoization，或删除无效声明。** 当前 Catalog 声明 `PerRun`，但 plan/runtime 不携带或消费 cache policy，现有 activation 重复执行保护不是结果 memoization。
 - [x] **Phase 7：补齐 relational island 与 native kernel 边界的 materialization adapter。** 按 `InputConsumption`/`OutputProduction` 插入 collect、buffer、spill、replay/stream bridge；当前 relational 输出统一转换为 fully-materialized scalar，consumer contract 尚未进入 scheduler/runtime。
-- [x] **Phase 8：对齐计划中的 bounded stream/backpressure 与调度契约。** 当前 TODO 将 stream transport、deadline 和并行调度列为后续能力，但 `node-architecture.md` Phase 8/运行平台完成标准包含 bounded stream、backpressure、workload-aware parallel scheduler、timeout/retry policy；需要实现，或明确修订计划和 Phase 完成度，不能同时标记 100%。
+- [x] **Phase 8：对齐计划中的 bounded stream/backpressure 与调度契约。** 当时的历史节点架构计划将 stream transport、deadline 和并行调度列为后续能力，但 Phase 8/运行平台完成标准包含 bounded stream、backpressure、workload-aware parallel scheduler、timeout/retry policy；需要实现，或明确修订计划和 Phase 完成度，不能同时标记 100%。
 - [x] **Phase 9：恢复完整 Catalog 搜索字段。** 前端搜索目前只索引 title/aliases，且测试明确排除 `technicalTerms`、稳定 `nodeTypeId`、后端 `searchText` 和可选 pinyin；应与计划一致支持当前 locale 标题、别名、技术词、资源名及可选拼音命中同一稳定 ID。
 - [x] **Phase 9：补齐可配对、可计时的性能 trace span。** `SpanEvent` 目前没有 span identity、parent/span pairing 或 timestamp/duration，operation span 也缺少稳定 operation/activation 字段，无法计算 snapshot、analysis、lowering、run、resource acquire、cleanup 各阶段耗时。
 - [x] **横切边界：移除第十个 `node_system/parameter_types/` 顶层目录。** 计划固定九个顶层所有权边界；将其中协议类型、codec 和 validation 归并到 `protocol/` 或明确领域模块，避免 analysis/catalog/compiler 共同拥有该边界。

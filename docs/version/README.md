@@ -10,8 +10,8 @@ When historical notes conflict with current behavior, use this order:
 
 1. `AGENTS.md` — project rules for agents and contributors.
 2. `docs/architecture/` — current architecture and design decisions.
-3. `docs/contracts/` — current IPC and DTO contracts.
-4. `docs/features/` — current feature-specific behavior.
+3. `docs/development/` — current toolchain and verification workflow.
+4. Module `README.md` files linked from `docs/README.md` — focused contracts.
 5. `docs/version/` — historical implementation timeline only.
 
 ## Files

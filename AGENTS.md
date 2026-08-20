@@ -1,8 +1,23 @@
 # YssBI Engineering Guide
 
-This file is the single project rule source for Codex agents. Keep project
-behavior and architecture consistent with these rules; update this file when
-the architecture changes.
+This file is the canonical repository-level instruction source for all coding
+agents and contributors. Tool-specific entry files must import or link to this
+file instead of duplicating project rules.
+
+YssBI is a Tauri 2 desktop data-analysis IDE. React owns interaction and
+frontend projections; Rust owns authoritative project state, persistence,
+graph compilation/execution, databases, results, and scientific orchestration.
+
+## Sources of truth
+
+- `AGENTS.md` owns repository rules and delivery policy.
+- `docs/architecture/ARCHITECTURE.md` owns the current implementation map.
+- `docs/development/LOCAL_WORKFLOW.md` owns toolchain, commands, and validation.
+- `docs/architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md` owns diagnostics, IPC
+  errors, execution traces, and program output details.
+- Treat `docs/version/` as history, not current implementation authority. If
+  maintained documentation and code disagree, verify behavior before editing
+  and update the stale documentation as part of the change.
 
 ## Architecture and boundaries
 
@@ -59,6 +74,8 @@ the architecture changes.
   interpolate raw internal error text.
 - Do not add toaster/Sonner, `logger.notify`, browser dialogs, native message
   dialogs, disk log pagination commands, or compatibility logging paths.
+- Never log secrets or payload content such as DataFrame rows/cells, document
+  or clipboard contents, SQL text, connection strings, or tokens.
 - Execution Trace remains runtime-authoritative and separate from diagnostics.
   Retain and evict complete run/compilation bundles; expose truncation and drop
   counts explicitly and never repair hierarchy silently during queries.
