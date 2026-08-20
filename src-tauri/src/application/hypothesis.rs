@@ -4,8 +4,7 @@ use ndarray::{Array1, Array2};
 use std::collections::HashMap;
 
 use crate::math::{
-    BinaryOp, ComparisonOp, MathExpr, MathRelation, ParseOptions, UnaryOp, ensure_relation_count,
-    parse_relations,
+    BinaryOp, ComparisonOp, MathExpr, MathRelation, ParseOptions, UnaryOp, parse_relations,
 };
 use crate::sci::api::stats::hypothesis::{
     Alternative as SciAlternative, LinearHypothesisTestInput, t_test, wald_test,
@@ -67,7 +66,6 @@ pub fn resolve_linear_hypothesis(
 ) -> Result<ResolvedLinearHypothesis, String> {
     let constraints = parse_relations(hypothesis, ParseOptions::plain(param_names))
         .map_err(|error| format!("解析假设失败: {error}"))?;
-    ensure_relation_count(constraints.len()).map_err(|error| format!("解析假设失败: {error}"))?;
     let kind = constraint_kind(&constraints)?;
     if constraints.len() > 1 && kind != LinearConstraintKind::Eq {
         return Err("Wald 检验仅支持等式约束 (Rβ = r)，请使用 = 而非 > 或 <".to_string());

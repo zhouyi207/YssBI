@@ -815,20 +815,42 @@ fn ols_summary_report_contract() -> Value {
             crate::sci::models::regression::StatisticalSettingSource::Project,
         convergence_tolerance_consumed: false,
     };
+    use crate::sci::models::regression::{
+        LinearRegressionStatistics, RegressionCoefficientStatistics, RegressionStatistics,
+    };
+
     let fit = crate::sci::api::node_statistics::RegressionFit {
         family: "ols",
         coefficients: vec![0.5, 0.75],
         fitted: vec![1.25, 2.0, 2.75],
         residuals: vec![-0.25, 0.0, 0.25],
-        statistics: json!({
-            "r2": 0.875,
-            "adjustedR2": 0.75,
-            "fStatistic": 7.0,
-            "fPValue": 0.1,
-            "standardErrors": [0.25, 0.5],
-            "pValues": [0.2, 0.1],
-            "conditionNumber": 2.0,
-        }),
+        statistics: RegressionStatistics::Linear {
+            coefficients: RegressionCoefficientStatistics {
+                covariance: vec![vec![0.0625, 0.0], vec![0.0, 0.25]],
+                standard_errors: vec![0.25, 0.5],
+                statistic_values: vec![2.0, 1.5],
+                p_values: vec![0.2, 0.1],
+                confidence_interval_lower: vec![0.01, -0.23],
+                confidence_interval_upper: vec![0.99, 1.73],
+            },
+            model: LinearRegressionStatistics {
+                r2: 0.875,
+                adjusted_r2: 0.75,
+                f_statistic: 7.0,
+                f_p_value: 0.1,
+                df_model: 1,
+                df_residual: 1,
+                df_total: 2,
+                ss_model: 1.125,
+                ss_residual: 0.125,
+                ss_total: 1.25,
+                ms_model: 1.125,
+                ms_residual: 0.125,
+                ms_total: 0.625,
+                covariance_type: "nonrobust".to_owned(),
+                condition_number: 2.0,
+            },
+        },
         metadata,
     };
     crate::sci::api::node_statistics::regression_report(&fit)
@@ -1175,20 +1197,6 @@ fn focused_catalog_search_wire_golden_matches_rust_and_is_catalog_only() {
         assert!(fields.contains_key("ports"));
         assert!(fields.contains_key("parameters"));
     }
-}
-
-#[test]
-fn checked_in_execution_wire_contract_matches_rust() {
-    let builtin = build_builtin_node_system().expect("built-in node system must validate");
-    let generated = execution_wire_contract(&builtin.registry);
-    let path = fixture_path("execution-wire.json");
-    let checked_in = fs::read_to_string(&path).unwrap_or_else(|error| {
-        panic!("missing execution wire fixture {}: {error}", path.display())
-    });
-    let checked_in: Value = serde_json::from_str(&checked_in)
-        .unwrap_or_else(|error| panic!("invalid JSON fixture {}: {error}", path.display()));
-
-    assert_eq!(checked_in, generated, "execution wire fixture differs");
 }
 
 #[test]

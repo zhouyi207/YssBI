@@ -1,11 +1,49 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+use crate::julia::worker::JuliaWorkerTaskDirectory;
+
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct InferenceResult {
     pub summaries: Vec<ParameterSummary>,
     pub diagnostics: InferenceDiagnostics,
     pub artifact_manifest: ResultArtifactManifest,
+    #[serde(skip)]
+    artifact_owner: Option<JuliaWorkerTaskDirectory>,
+}
+
+impl Clone for InferenceResult {
+    fn clone(&self) -> Self {
+        Self {
+            summaries: self.summaries.clone(),
+            diagnostics: self.diagnostics.clone(),
+            artifact_manifest: self.artifact_manifest.clone(),
+            artifact_owner: None,
+        }
+    }
+}
+
+impl InferenceResult {
+    pub fn new(
+        summaries: Vec<ParameterSummary>,
+        diagnostics: InferenceDiagnostics,
+        artifact_manifest: ResultArtifactManifest,
+    ) -> Self {
+        Self {
+            summaries,
+            diagnostics,
+            artifact_manifest,
+            artifact_owner: None,
+        }
+    }
+
+    pub(crate) fn set_artifact_owner(&mut self, owner: JuliaWorkerTaskDirectory) {
+        self.artifact_owner = Some(owner);
+    }
+
+    pub(crate) fn take_artifact_owner(&mut self) -> Option<JuliaWorkerTaskDirectory> {
+        self.artifact_owner.take()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

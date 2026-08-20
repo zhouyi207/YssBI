@@ -1,7 +1,6 @@
 //! Julia worker lifecycle and Arrow IPC task exchange.
 
 use std::collections::VecDeque;
-use std::fs;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Stdio};
@@ -13,23 +12,22 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use super::{JuliaRuntimeState, background_command, system_julia_executable};
+use super::{JuliaRuntimeState, background_command, get_runtime_status, system_julia_executable};
+
+mod assets;
+mod error;
+mod task_directory;
+
+use assets::ensure_worker_assets;
+#[cfg(test)]
+use assets::write_asset;
+pub use error::{JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerErrorDetails};
+pub use task_directory::JuliaWorkerTaskDirectory;
 
 const WORKER_DIR: &str = "julia-worker";
 const TASK_DIR: &str = "tasks";
 const RESPONSE_TIMEOUT: Duration = Duration::from_secs(300);
 const STDERR_BUFFER_LINES: usize = 100;
-const WORKER_PROJECT: &str = include_str!("../../julia/Project.toml");
-const WORKER_MANIFEST: &str = include_str!("../../julia/Manifest.toml");
-const WORKER_SCRIPT: &str = include_str!("../../julia/worker.jl");
-const WORKER_SCIENTIFIC_RUNTIME: &str = include_str!("../../julia/scientific_runtime.jl");
-const WORKER_ACF_PACF_OP: &str = include_str!("../../julia/ops/acf_pacf.jl");
-const WORKER_SERIAL_TESTS_OP: &str = include_str!("../../julia/ops/serial_tests.jl");
-const WORKER_BAYES_FIT_OP: &str = include_str!("../../julia/ops/bayes_fit.jl");
-const WORKER_BAYES_EXPRESSION_OP: &str = include_str!("../../julia/ops/bayes/expression.jl");
-const WORKER_BAYES_RUNTIME_OP: &str = include_str!("../../julia/ops/bayes/runtime.jl");
-const WORKER_BAYES_TURING_GENERIC_NORMAL_OP: &str =
-    include_str!("../../julia/ops/bayes/turing_generic_normal.jl");
 
 #[derive(Debug, Clone)]
 pub struct JuliaWorkerTask {
@@ -38,11 +36,18 @@ pub struct JuliaWorkerTask {
     pub parameters: Value,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct JuliaWorkerTaskOutput {
     pub task_id: String,
     pub output_path: PathBuf,
     pub metadata_path: PathBuf,
+    task_directory: Option<JuliaWorkerTaskDirectory>,
+}
+
+impl JuliaWorkerTaskOutput {
+    pub(crate) fn take_task_directory(&mut self) -> Option<JuliaWorkerTaskDirectory> {
+        self.task_directory.take()
+    }
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -116,6 +121,14 @@ impl JuliaWorkerManager {
     }
 
     pub fn status(&self, app_data_dir: &Path) -> JuliaWorkerStatus {
+        self.status_with_runtime_state(app_data_dir, get_runtime_status().state)
+    }
+
+    fn status_with_runtime_state(
+        &self,
+        app_data_dir: &Path,
+        runtime_state: JuliaRuntimeState,
+    ) -> JuliaWorkerStatus {
         let worker_dir = app_data_dir.join(WORKER_DIR);
         let startup = self
             .inner
@@ -123,46 +136,45 @@ impl JuliaWorkerManager {
             .lock()
             .map(|state| state.clone())
             .unwrap_or(JuliaWorkerStartupState::Failed);
-        if matches!(startup, JuliaWorkerStartupState::Preparing) {
-            return JuliaWorkerStatus {
-                runtime_state: JuliaRuntimeState::Ready,
-                environment_state: JuliaWorkerEnvironmentState::Missing,
-                process_state: JuliaWorkerProcessState::Starting,
-                project_dir: worker_dir.to_string_lossy().into_owned(),
+        let observed_process = self.process_state();
+        let (environment_state, process_state) =
+            if matches!(startup, JuliaWorkerStartupState::Preparing) {
+                (
+                    JuliaWorkerEnvironmentState::Missing,
+                    JuliaWorkerProcessState::Starting,
+                )
+            } else if observed_process == JuliaWorkerProcessState::Running {
+                (
+                    JuliaWorkerEnvironmentState::Ready,
+                    JuliaWorkerProcessState::Running,
+                )
+            } else {
+                match startup {
+                    JuliaWorkerStartupState::Failed => {
+                        (JuliaWorkerEnvironmentState::Invalid, observed_process)
+                    }
+                    JuliaWorkerStartupState::Idle => {
+                        (JuliaWorkerEnvironmentState::Missing, observed_process)
+                    }
+                    JuliaWorkerStartupState::Preparing => unreachable!(),
+                }
             };
-        }
-        if self.process_state() == JuliaWorkerProcessState::Running {
-            return JuliaWorkerStatus {
-                runtime_state: JuliaRuntimeState::Ready,
-                environment_state: JuliaWorkerEnvironmentState::Ready,
-                process_state: JuliaWorkerProcessState::Running,
-                project_dir: worker_dir.to_string_lossy().into_owned(),
-            };
-        }
 
-        match startup {
-            JuliaWorkerStartupState::Failed => JuliaWorkerStatus {
-                runtime_state: JuliaRuntimeState::Invalid,
-                environment_state: JuliaWorkerEnvironmentState::Invalid,
-                process_state: self.process_state(),
-                project_dir: worker_dir.to_string_lossy().into_owned(),
-            },
-            JuliaWorkerStartupState::Idle => JuliaWorkerStatus {
-                runtime_state: JuliaRuntimeState::Missing,
-                environment_state: JuliaWorkerEnvironmentState::Missing,
-                process_state: self.process_state(),
-                project_dir: worker_dir.to_string_lossy().into_owned(),
-            },
-            JuliaWorkerStartupState::Preparing => unreachable!(),
+        JuliaWorkerStatus {
+            runtime_state,
+            environment_state,
+            process_state,
+            project_dir: worker_dir.to_string_lossy().into_owned(),
         }
     }
 
-    pub fn warm_up(&self, app_data_dir: &Path) -> Result<(), String> {
-        let _request_guard = self
-            .inner
-            .request_gate
-            .lock()
-            .map_err(|_| "Julia worker request gate is unavailable.".to_string())?;
+    pub fn warm_up(&self, app_data_dir: &Path) -> Result<(), JuliaWorkerError> {
+        let _request_guard = self.inner.request_gate.lock().map_err(|_| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StateUnavailable,
+                "Julia worker request gate is unavailable.",
+            )
+        })?;
         self.set_startup_state(JuliaWorkerStartupState::Preparing);
         let result = self.prepare(app_data_dir).and_then(|()| {
             let worker = self.worker(app_data_dir)?;
@@ -181,9 +193,11 @@ impl JuliaWorkerManager {
         result
     }
 
-    pub fn prepare(&self, app_data_dir: &Path) -> Result<(), String> {
+    pub fn prepare(&self, app_data_dir: &Path) -> Result<(), JuliaWorkerError> {
         let worker_dir = ensure_worker_assets(app_data_dir)?;
-        let executable = system_julia_executable()?;
+        let executable = system_julia_executable().map_err(|error| {
+            JuliaWorkerError::new(JuliaWorkerErrorCode::RuntimeUnavailable, error)
+        })?;
         let status = background_command(executable)
             .arg(format!("--project={}", worker_dir.display()))
             .args(["--startup-file=no", "-e", "using Pkg; Pkg.instantiate()"])
@@ -191,12 +205,20 @@ impl JuliaWorkerManager {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output()
-            .map_err(|error| format!("Failed to prepare Julia worker packages: {error}"))?;
+            .map_err(|error| {
+                JuliaWorkerError::new(
+                    JuliaWorkerErrorCode::EnvironmentUnavailable,
+                    format!("Failed to prepare Julia worker packages: {error}"),
+                )
+            })?;
         if status.status.success() {
             Ok(())
         } else {
             let detail = String::from_utf8_lossy(&status.stderr).trim().to_string();
-            Err(format!("Failed to prepare Julia worker packages: {detail}"))
+            Err(JuliaWorkerError::new(
+                JuliaWorkerErrorCode::EnvironmentUnavailable,
+                format!("Failed to prepare Julia worker packages: {detail}"),
+            ))
         }
     }
 
@@ -206,21 +228,24 @@ impl JuliaWorkerManager {
         task: JuliaWorkerTask,
         write_input: impl FnOnce(&Path) -> Result<(), String>,
         progress: Option<JuliaWorkerProgressCallback>,
-    ) -> Result<JuliaWorkerTaskOutput, String> {
-        let _request_guard = self
-            .inner
-            .request_gate
-            .lock()
-            .map_err(|_| "Julia worker request gate is unavailable.".to_string())?;
+    ) -> Result<JuliaWorkerTaskOutput, JuliaWorkerError> {
+        let _request_guard = self.inner.request_gate.lock().map_err(|_| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StateUnavailable,
+                "Julia worker request gate is unavailable.",
+            )
+        })?;
 
         let task_id = task.task_id.unwrap_or_else(|| Uuid::new_v4().to_string());
-        let task_dir = create_task_dir(app_data_dir, &task_id)?;
-        let input_path = task_dir.join("input.arrow");
-        let output_path = task_dir.join("output.arrow");
-        let metadata_path = task_dir.join("metadata.json");
-        write_input(&input_path)?;
+        let task_directory = JuliaWorkerTaskDirectory::create(app_data_dir, &task_id)?;
+        let input_path = task_directory.path().join("input.arrow");
+        let output_path = task_directory.path().join("output.arrow");
+        let metadata_path = task_directory.path().join("metadata.json");
 
         let result = (|| {
+            write_input(&input_path).map_err(|error| {
+                JuliaWorkerError::new(JuliaWorkerErrorCode::InputWriteFailed, error)
+            })?;
             let worker = self.worker(app_data_dir)?;
             let request_id = Uuid::new_v4().to_string();
             self.set_active_task(Some(task_id.clone()))?;
@@ -240,26 +265,25 @@ impl JuliaWorkerManager {
                 }))
                 .and_then(|()| worker.await_response(&request_id, &task_id, progress.as_ref()));
             self.clear_active_task(&task_id);
-            response?;
-            Ok(JuliaWorkerTaskOutput {
-                task_id: task_id.clone(),
-                output_path,
-                metadata_path,
-            })
+            response
         })();
+        result?;
 
-        if result.is_err() {
-            let _ = fs::remove_dir_all(&task_dir);
-        }
-        result
+        Ok(JuliaWorkerTaskOutput {
+            task_id,
+            output_path,
+            metadata_path,
+            task_directory: Some(task_directory),
+        })
     }
 
-    pub fn cancel(&self, task_id: &str) -> Result<bool, String> {
-        let active_task_id = self
-            .inner
-            .active_task_id
-            .lock()
-            .map_err(|_| "Julia worker active task state is unavailable.".to_string())?;
+    pub fn cancel(&self, task_id: &str) -> Result<bool, JuliaWorkerError> {
+        let active_task_id = self.inner.active_task_id.lock().map_err(|_| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StateUnavailable,
+                "Julia worker active task state is unavailable.",
+            )
+        })?;
         if active_task_id.as_deref() != Some(task_id) {
             return Ok(false);
         }
@@ -267,7 +291,12 @@ impl JuliaWorkerManager {
             .inner
             .worker
             .lock()
-            .map_err(|_| "Julia worker state is unavailable.".to_string())?
+            .map_err(|_| {
+                JuliaWorkerError::new(
+                    JuliaWorkerErrorCode::StateUnavailable,
+                    "Julia worker state is unavailable.",
+                )
+            })?
             .clone();
         match worker {
             Some(worker) => {
@@ -282,12 +311,13 @@ impl JuliaWorkerManager {
         }
     }
 
-    pub fn restart_task(&self, task_id: &str) -> Result<bool, String> {
-        let mut active_task_id = self
-            .inner
-            .active_task_id
-            .lock()
-            .map_err(|_| "Julia worker active task state is unavailable.".to_string())?;
+    pub fn restart_task(&self, task_id: &str) -> Result<bool, JuliaWorkerError> {
+        let mut active_task_id = self.inner.active_task_id.lock().map_err(|_| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StateUnavailable,
+                "Julia worker active task state is unavailable.",
+            )
+        })?;
         if active_task_id.as_deref() != Some(task_id) {
             return Ok(false);
         }
@@ -295,7 +325,12 @@ impl JuliaWorkerManager {
             .inner
             .worker
             .lock()
-            .map_err(|_| "Julia worker state is unavailable.".to_string())?
+            .map_err(|_| {
+                JuliaWorkerError::new(
+                    JuliaWorkerErrorCode::StateUnavailable,
+                    "Julia worker state is unavailable.",
+                )
+            })?
             .take();
         *active_task_id = None;
         if let Some(worker) = worker {
@@ -304,12 +339,17 @@ impl JuliaWorkerManager {
         Ok(true)
     }
 
-    pub fn restart(&self) -> Result<(), String> {
+    pub fn restart(&self) -> Result<(), JuliaWorkerError> {
         let worker = self
             .inner
             .worker
             .lock()
-            .map_err(|_| "Julia worker state is unavailable.".to_string())?
+            .map_err(|_| {
+                JuliaWorkerError::new(
+                    JuliaWorkerErrorCode::StateUnavailable,
+                    "Julia worker state is unavailable.",
+                )
+            })?
             .take();
         if let Some(worker) = worker {
             worker.terminate();
@@ -323,12 +363,13 @@ impl JuliaWorkerManager {
         }
     }
 
-    fn set_active_task(&self, task_id: Option<String>) -> Result<(), String> {
-        *self
-            .inner
-            .active_task_id
-            .lock()
-            .map_err(|_| "Julia worker active task state is unavailable.".to_string())? = task_id;
+    fn set_active_task(&self, task_id: Option<String>) -> Result<(), JuliaWorkerError> {
+        *self.inner.active_task_id.lock().map_err(|_| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StateUnavailable,
+                "Julia worker active task state is unavailable.",
+            )
+        })? = task_id;
         Ok(())
     }
 
@@ -347,12 +388,13 @@ impl JuliaWorkerManager {
         })
     }
 
-    fn worker(&self, app_data_dir: &Path) -> Result<Arc<WorkerProcess>, String> {
-        let mut slot = self
-            .inner
-            .worker
-            .lock()
-            .map_err(|_| "Julia worker state is unavailable.".to_string())?;
+    fn worker(&self, app_data_dir: &Path) -> Result<Arc<WorkerProcess>, JuliaWorkerError> {
+        let mut slot = self.inner.worker.lock().map_err(|_| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StateUnavailable,
+                "Julia worker state is unavailable.",
+            )
+        })?;
         if let Some(worker) = slot.as_ref().filter(|worker| worker.is_running()) {
             return Ok(worker.clone());
         }
@@ -378,8 +420,10 @@ struct WorkerProcess {
 }
 
 impl WorkerProcess {
-    fn spawn(worker_dir: &Path) -> Result<Self, String> {
-        let executable = system_julia_executable()?;
+    fn spawn(worker_dir: &Path) -> Result<Self, JuliaWorkerError> {
+        let executable = system_julia_executable().map_err(|error| {
+            JuliaWorkerError::new(JuliaWorkerErrorCode::RuntimeUnavailable, error)
+        })?;
         let script = worker_dir.join("worker.jl");
         let mut child = background_command(executable)
             .arg(format!("--project={}", worker_dir.display()))
@@ -389,20 +433,31 @@ impl WorkerProcess {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|error| format!("Failed to start Julia worker: {error}"))?;
+            .map_err(|error| {
+                JuliaWorkerError::new(
+                    JuliaWorkerErrorCode::StartFailed,
+                    format!("Failed to start Julia worker: {error}"),
+                )
+            })?;
 
-        let stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| "Julia worker stdin is unavailable.".to_string())?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| "Julia worker stdout is unavailable.".to_string())?;
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| "Julia worker stderr is unavailable.".to_string())?;
+        let stdin = child.stdin.take().ok_or_else(|| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StartFailed,
+                "Julia worker stdin is unavailable.",
+            )
+        })?;
+        let stdout = child.stdout.take().ok_or_else(|| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StartFailed,
+                "Julia worker stdout is unavailable.",
+            )
+        })?;
+        let stderr = child.stderr.take().ok_or_else(|| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StartFailed,
+                "Julia worker stderr is unavailable.",
+            )
+        })?;
         let (sender, receiver) = mpsc::channel();
         let stderr_buffer = Arc::new(Mutex::new(VecDeque::new()));
 
@@ -452,17 +507,28 @@ impl WorkerProcess {
         }
     }
 
-    fn send(&self, message: Value) -> Result<(), String> {
-        let encoded = serde_json::to_string(&message).map_err(|error| error.to_string())?;
-        let mut stdin = self
-            .stdin
-            .lock()
-            .map_err(|_| "Julia worker stdin is unavailable.".to_string())?;
-        writeln!(stdin, "{encoded}")
-            .map_err(|error| format!("Failed to write Julia request: {error}"))?;
-        stdin
-            .flush()
-            .map_err(|error| format!("Failed to flush Julia request: {error}"))
+    fn send(&self, message: Value) -> Result<(), JuliaWorkerError> {
+        let encoded = serde_json::to_string(&message).map_err(|error| {
+            JuliaWorkerError::new(JuliaWorkerErrorCode::RequestFailed, error.to_string())
+        })?;
+        let mut stdin = self.stdin.lock().map_err(|_| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StateUnavailable,
+                "Julia worker stdin is unavailable.",
+            )
+        })?;
+        writeln!(stdin, "{encoded}").map_err(|error| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::RequestFailed,
+                format!("Failed to write Julia request: {error}"),
+            )
+        })?;
+        stdin.flush().map_err(|error| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::RequestFailed,
+                format!("Failed to flush Julia request: {error}"),
+            )
+        })
     }
 
     fn await_response(
@@ -470,15 +536,20 @@ impl WorkerProcess {
         request_id: &str,
         task_id: &str,
         progress: Option<&JuliaWorkerProgressCallback>,
-    ) -> Result<(), String> {
-        let receiver = self
-            .messages
-            .lock()
-            .map_err(|_| "Julia worker response channel is unavailable.".to_string())?;
+    ) -> Result<(), JuliaWorkerError> {
+        let receiver = self.messages.lock().map_err(|_| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::StateUnavailable,
+                "Julia worker response channel is unavailable.",
+            )
+        })?;
         loop {
-            let message = receiver
-                .recv_timeout(RESPONSE_TIMEOUT)
-                .map_err(|_| self.worker_failure("Julia worker did not return a response."))?;
+            let message = receiver.recv_timeout(RESPONSE_TIMEOUT).map_err(|_| {
+                JuliaWorkerError::new(
+                    JuliaWorkerErrorCode::ResponseTimeout,
+                    self.worker_failure("Julia worker did not return a response."),
+                )
+            })?;
             if message.get("method").and_then(Value::as_str) == Some("progress") {
                 if let Some(progress) = progress
                     && let Some(params) = message.get("params")
@@ -499,8 +570,9 @@ impl WorkerProcess {
             if message.get("result").is_some() {
                 return Ok(());
             }
-            return Err(format!(
-                "Julia worker returned an invalid response for task {task_id}."
+            return Err(JuliaWorkerError::new(
+                JuliaWorkerErrorCode::InvalidResponse,
+                format!("Julia worker returned an invalid response for task {task_id}."),
             ));
         }
     }
@@ -533,92 +605,169 @@ impl Drop for WorkerProcess {
     }
 }
 
-fn ensure_worker_assets(app_data_dir: &Path) -> Result<PathBuf, String> {
-    let worker_dir = app_data_dir.join(WORKER_DIR);
-    fs::create_dir_all(&worker_dir)
-        .map_err(|error| format!("Failed to create Julia worker directory: {error}"))?;
-    write_asset(&worker_dir.join("Project.toml"), WORKER_PROJECT)?;
-    write_asset(&worker_dir.join("Manifest.toml"), WORKER_MANIFEST)?;
-    write_asset(&worker_dir.join("worker.jl"), WORKER_SCRIPT)?;
-    write_asset(
-        &worker_dir.join("scientific_runtime.jl"),
-        WORKER_SCIENTIFIC_RUNTIME,
-    )?;
-    let ops_dir = worker_dir.join("ops");
-    fs::create_dir_all(&ops_dir)
-        .map_err(|error| format!("Failed to create Julia worker ops directory: {error}"))?;
-    write_asset(&ops_dir.join("acf_pacf.jl"), WORKER_ACF_PACF_OP)?;
-    write_asset(&ops_dir.join("serial_tests.jl"), WORKER_SERIAL_TESTS_OP)?;
-    write_asset(&ops_dir.join("bayes_fit.jl"), WORKER_BAYES_FIT_OP)?;
-    let bayes_ops_dir = ops_dir.join("bayes");
-    fs::create_dir_all(&bayes_ops_dir).map_err(|error| {
-        format!("Failed to create Julia Bayesian worker ops directory: {error}")
-    })?;
-    write_asset(
-        &bayes_ops_dir.join("expression.jl"),
-        WORKER_BAYES_EXPRESSION_OP,
-    )?;
-    write_asset(&bayes_ops_dir.join("runtime.jl"), WORKER_BAYES_RUNTIME_OP)?;
-    write_asset(
-        &bayes_ops_dir.join("turing_generic_normal.jl"),
-        WORKER_BAYES_TURING_GENERIC_NORMAL_OP,
-    )?;
-    Ok(worker_dir)
-}
-
-fn write_asset(path: &Path, contents: &str) -> Result<(), String> {
-    if fs::read_to_string(path).ok().as_deref() == Some(contents) {
-        return Ok(());
-    }
-    let temporary = path.with_extension("tmp");
-    fs::write(&temporary, contents)
-        .map_err(|error| format!("Failed to write Julia worker asset: {error}"))?;
-    fs::rename(&temporary, path)
-        .map_err(|error| format!("Failed to update Julia worker asset: {error}"))
-}
-
-fn create_task_dir(app_data_dir: &Path, task_id: &str) -> Result<PathBuf, String> {
-    let safe_task_id = task_id
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || character == '-' {
-                character
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
-    let task_dir = app_data_dir
-        .join(WORKER_DIR)
-        .join(TASK_DIR)
-        .join(safe_task_id);
-    fs::create_dir_all(&task_dir)
-        .map_err(|error| format!("Failed to create Julia task directory: {error}"))?;
-    Ok(task_dir)
-}
-
-fn worker_error(error: &Value) -> String {
-    let code = error
-        .get("code")
-        .and_then(Value::as_str)
-        .unwrap_or("internal_error");
-    let message = error
-        .get("message")
-        .and_then(Value::as_str)
-        .unwrap_or("Julia worker task failed.");
-    format!("{code}: {message}")
+fn worker_error(error: &Value) -> JuliaWorkerError {
+    JuliaWorkerError::from_json_rpc_error(error)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{JuliaWorkerManager, worker_error};
+    use std::cell::Cell;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use super::{
+        JuliaRuntimeState, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerStartupState,
+        JuliaWorkerTask, TASK_DIR, WORKER_DIR, worker_error, write_asset,
+    };
     use serde_json::json;
+    use uuid::Uuid;
+
+    struct TemporaryAppRoot {
+        path: PathBuf,
+    }
+
+    impl TemporaryAppRoot {
+        fn new(label: &str) -> Self {
+            let path = std::env::temp_dir().join(format!("yssbi-{label}-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path).expect("create temporary app root");
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TemporaryAppRoot {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
 
     #[test]
-    fn preserves_structured_worker_error_code() {
+    fn preserves_structured_worker_error_code_and_safe_details() {
+        let error = worker_error(&json!({
+            "code": "invalid_parameters",
+            "message": "private worker prose",
+            "data": {
+                "column": "predictor_x",
+                "row": 7,
+                "parameter": "beta",
+                "path": "parameters.beta"
+            }
+        }));
+
+        assert_eq!(error.code(), JuliaWorkerErrorCode::InvalidParameters);
+        let details = error.details().expect("safe worker error details");
+        assert_eq!(details.column.as_deref(), Some("predictor_x"));
+        assert_eq!(details.row, Some(7));
+        assert_eq!(details.parameter.as_deref(), Some("beta"));
+        assert_eq!(details.path.as_deref(), Some("parameters.beta"));
+        assert_eq!(error.diagnostic(), "private worker prose");
+        assert_eq!(error.to_string(), "julia_worker_invalid_parameters");
+    }
+
+    #[test]
+    fn replaces_existing_worker_asset_without_leaving_temporary_files() {
+        let app_root = TemporaryAppRoot::new("julia-asset-replace");
+        let worker_dir = app_root.path().join(WORKER_DIR);
+        fs::create_dir_all(&worker_dir).expect("create worker directory");
+        let target = worker_dir.join("worker.jl");
+        fs::write(&target, "old").expect("write existing worker asset");
+
+        write_asset(&target, "new").expect("replace existing worker asset");
+
+        assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+        assert_eq!(fs::read_dir(&worker_dir).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn removes_temporary_worker_asset_when_publication_fails() {
+        let app_root = TemporaryAppRoot::new("julia-asset-failure");
+        let worker_dir = app_root.path().join(WORKER_DIR);
+        fs::create_dir_all(&worker_dir).expect("create worker directory");
+        let target = worker_dir.join("worker.jl");
+        fs::create_dir(&target).expect("reserve target as a directory");
+
+        let error = write_asset(&target, "new").expect_err("asset publication must fail");
+
+        assert_eq!(error.code(), JuliaWorkerErrorCode::AssetUpdateFailed);
+        assert_eq!(fs::read_dir(&worker_dir).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn cleans_task_directory_when_input_write_fails() {
+        let app_root = TemporaryAppRoot::new("julia-input-failure");
+        let manager = JuliaWorkerManager::new();
+        let task_id = "input-failure";
+
+        let error = manager
+            .run_task(
+                app_root.path(),
+                JuliaWorkerTask {
+                    task_id: Some(task_id.to_string()),
+                    operation: "bayes_fit".to_string(),
+                    parameters: json!({}),
+                },
+                |_| Err("private input write failure".to_string()),
+                None,
+            )
+            .expect_err("input write must fail");
+
+        assert_eq!(error.code(), JuliaWorkerErrorCode::InputWriteFailed);
+        assert!(
+            !app_root
+                .path()
+                .join(WORKER_DIR)
+                .join(TASK_DIR)
+                .join(task_id)
+                .exists()
+        );
+    }
+
+    #[test]
+    fn rejects_noncanonical_task_id_before_writing_input() {
+        let app_root = TemporaryAppRoot::new("julia-invalid-task-id");
+        let manager = JuliaWorkerManager::new();
+        let wrote_input = Cell::new(false);
+
+        let error = manager
+            .run_task(
+                app_root.path(),
+                JuliaWorkerTask {
+                    task_id: Some("../escape".to_string()),
+                    operation: "bayes_fit".to_string(),
+                    parameters: json!({}),
+                },
+                |_| {
+                    wrote_input.set(true);
+                    Err("input writer must not run".to_string())
+                },
+                None,
+            )
+            .expect_err("noncanonical task id must be rejected");
+
+        assert_eq!(error.code(), JuliaWorkerErrorCode::TaskDirectoryInvalid);
+        assert!(!wrote_input.get());
+        assert!(!app_root.path().join(WORKER_DIR).join(TASK_DIR).exists());
+    }
+
+    #[test]
+    fn worker_startup_status_preserves_authoritative_runtime_probe() {
+        let app_root = TemporaryAppRoot::new("julia-worker-status");
+        let manager = JuliaWorkerManager::new();
+        manager.set_startup_state(JuliaWorkerStartupState::Preparing);
+
+        let status = manager.status_with_runtime_state(app_root.path(), JuliaRuntimeState::Invalid);
+
+        assert_eq!(status.runtime_state, JuliaRuntimeState::Invalid);
         assert_eq!(
-            worker_error(&json!({ "code": "invalid_parameters", "message": "bad column" })),
-            "invalid_parameters: bad column"
+            status.process_state,
+            super::JuliaWorkerProcessState::Starting
+        );
+        assert_eq!(
+            status.environment_state,
+            super::JuliaWorkerEnvironmentState::Missing
         );
     }
 

@@ -1089,6 +1089,8 @@ mod tests {
                 ScientificApi::Regression,
                 vec![linear_y.clone(), x.clone()],
                 "ols",
+                "linear",
+                None,
                 "r2",
             ),
             (
@@ -1096,6 +1098,8 @@ mod tests {
                 ScientificApi::Regression,
                 vec![linear_y.clone(), x.clone()],
                 "gls",
+                "linear",
+                None,
                 "standardErrors",
             ),
             (
@@ -1103,6 +1107,8 @@ mod tests {
                 ScientificApi::Regression,
                 vec![linear_y.clone(), x.clone(), weights],
                 "wls",
+                "linear",
+                None,
                 "standardErrors",
             ),
             (
@@ -1110,6 +1116,8 @@ mod tests {
                 ScientificApi::Regression,
                 vec![correlated_y, x.clone()],
                 "prais",
+                "prais",
+                None,
                 "rho",
             ),
             (
@@ -1117,6 +1125,8 @@ mod tests {
                 ScientificApi::DiscreteRegression,
                 vec![binary_y.clone(), x.clone()],
                 "logit",
+                "binary",
+                Some("logit"),
                 "logLikelihood",
             ),
             (
@@ -1124,11 +1134,13 @@ mod tests {
                 ScientificApi::DiscreteRegression,
                 vec![binary_y, x],
                 "probit",
+                "binary",
+                Some("probit"),
                 "logLikelihood",
             ),
         ];
         let mut coefficients = BTreeMap::new();
-        for (operation, api, inputs, family, statistic) in cases {
+        for (operation, api, inputs, family, statistics_kind, link, statistic) in cases {
             let outputs = execute_operation(
                 operation,
                 api,
@@ -1141,6 +1153,12 @@ mod tests {
             let Value::Object(statistics) = model.get("statistics").unwrap() else {
                 panic!("statistics must be an object")
             };
+            assert_eq!(
+                statistics.get("kind"),
+                Some(&Value::String(statistics_kind.into()))
+            );
+            let expected_link = link.map(|link| Value::String(link.into()));
+            assert_eq!(statistics.get("link"), expected_link.as_ref());
             assert!(
                 statistics.contains_key(statistic),
                 "{family} missing {statistic}"

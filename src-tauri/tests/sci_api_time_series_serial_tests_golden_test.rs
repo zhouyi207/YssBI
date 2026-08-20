@@ -1,13 +1,8 @@
-use std::fs;
-use std::path::PathBuf;
-
 use serde::Deserialize;
-use uuid::Uuid;
-use yssbi_lib::julia::worker::JuliaWorkerManager;
 use yssbi_lib::sci::api::time_series::serial_tests::{
     SerialTestsInput, SerialTestsOutput, compute_serial_tests,
 };
-use yssbi_lib::sci::engine::{SciContext, SciEngine};
+use yssbi_lib::sci::engine::SciContext;
 
 const SIMPLE_RESIDUALS: &str =
     include_str!("sci/fixtures/time_series/serial_tests/simple_residuals.json");
@@ -40,34 +35,6 @@ fn rust_serial_tests_match_golden_fixtures() {
             fixture.tolerance.absolute,
         );
     }
-}
-
-#[test]
-fn julia_serial_tests_match_golden_fixtures_when_enabled() {
-    if std::env::var_os("YSSBI_RUN_JULIA_TESTS").is_none() {
-        eprintln!("skipped: set YSSBI_RUN_JULIA_TESTS=1 to run Julia worker golden tests");
-        return;
-    }
-
-    let app_data_dir = temp_app_data_dir();
-    let worker = JuliaWorkerManager::new();
-    worker.prepare(&app_data_dir).expect("prepare Julia worker");
-
-    let context = SciContext::with_julia(&app_data_dir, &worker, SciEngine::Julia);
-
-    for fixture in fixtures() {
-        let result = compute_serial_tests(&context, fixture.input.clone())
-            .unwrap_or_else(|error| panic!("{} julia serial tests failed: {error}", fixture.name));
-
-        assert_output_close(
-            &fixture.name,
-            &result,
-            &fixture.expected,
-            fixture.tolerance.absolute,
-        );
-    }
-
-    let _ = fs::remove_dir_all(app_data_dir);
 }
 
 fn fixtures() -> Vec<SerialTestsGoldenFixture> {
@@ -139,10 +106,4 @@ fn assert_close(name: &str, metric: &str, actual: f64, expected: f64, tolerance:
         difference <= tolerance,
         "{name} {metric} differs: actual={actual}, expected={expected}, diff={difference}, tolerance={tolerance}"
     );
-}
-
-fn temp_app_data_dir() -> PathBuf {
-    let path = std::env::temp_dir().join(format!("yssbi-julia-test-{}", Uuid::new_v4()));
-    fs::create_dir_all(&path).expect("create temp app data dir");
-    path
 }

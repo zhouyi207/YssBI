@@ -23,6 +23,106 @@ pub struct StatisticalObservationMetadata {
     pub convergence_tolerance_source: StatisticalSettingSource,
     pub convergence_tolerance_consumed: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegressionCoefficientStatistics {
+    pub covariance: Vec<Vec<f64>>,
+    pub standard_errors: Vec<f64>,
+    pub statistic_values: Vec<f64>,
+    pub p_values: Vec<f64>,
+    pub confidence_interval_lower: Vec<f64>,
+    pub confidence_interval_upper: Vec<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinearRegressionStatistics {
+    pub r2: f64,
+    pub adjusted_r2: f64,
+    pub f_statistic: f64,
+    pub f_p_value: f64,
+    pub df_model: usize,
+    pub df_residual: usize,
+    pub df_total: usize,
+    pub ss_model: f64,
+    pub ss_residual: f64,
+    pub ss_total: f64,
+    pub ms_model: f64,
+    pub ms_residual: f64,
+    pub ms_total: f64,
+    pub covariance_type: String,
+    pub condition_number: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BinaryRegressionLink {
+    Logit,
+    Probit,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BinaryRegressionStatistics {
+    pub log_likelihood: f64,
+    pub null_log_likelihood: f64,
+    pub pseudo_r2: f64,
+    pub adjusted_pseudo_r2: f64,
+    pub lr_chi2: f64,
+    pub lr_p_value: f64,
+    pub aic: f64,
+    pub bic: f64,
+    pub iterations: usize,
+    pub converged: bool,
+    pub condition_number: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PraisRegressionStatistics {
+    #[serde(flatten)]
+    pub linear: LinearRegressionStatistics,
+    pub rho: f64,
+    pub durbin_watson_original: f64,
+    pub durbin_watson_transformed: f64,
+    pub iterations: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum RegressionStatistics {
+    Linear {
+        #[serde(flatten)]
+        coefficients: RegressionCoefficientStatistics,
+        #[serde(flatten)]
+        model: LinearRegressionStatistics,
+    },
+    Binary {
+        link: BinaryRegressionLink,
+        #[serde(flatten)]
+        coefficients: RegressionCoefficientStatistics,
+        #[serde(flatten)]
+        model: BinaryRegressionStatistics,
+    },
+    Prais {
+        #[serde(flatten)]
+        coefficients: RegressionCoefficientStatistics,
+        #[serde(flatten)]
+        model: PraisRegressionStatistics,
+    },
+}
+
+impl RegressionStatistics {
+    pub fn coefficient_statistics(&self) -> &RegressionCoefficientStatistics {
+        match self {
+            Self::Linear { coefficients, .. }
+            | Self::Binary { coefficients, .. }
+            | Self::Prais { coefficients, .. } => coefficients,
+        }
+    }
+}
+
 use std::f64::consts::PI;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -521,83 +621,6 @@ pub struct PanelFEInfo {
     pub chibar2: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prob_chibar2: Option<f64>,
-}
-
-/// Compute classification table for binary choice (Stata estat classification)
-pub fn compute_classification_table(
-    endog: &[f64],
-    fitted: &[f64],
-    cutoff: f64,
-) -> ClassificationTable {
-    let n = endog.len().min(fitted.len());
-    let mut tp = 0usize;
-    let mut fp = 0usize;
-    let mut fn_ = 0usize;
-    let mut tn = 0usize;
-    for i in 0..n {
-        let y = endog[i];
-        let pred_pos = fitted[i] >= cutoff;
-        let actual_pos = y > 0.5;
-        match (pred_pos, actual_pos) {
-            (true, true) => tp += 1,
-            (true, false) => fp += 1,
-            (false, true) => fn_ += 1,
-            (false, false) => tn += 1,
-        }
-    }
-    let total_d = tp + fn_;
-    let total_nd = tn + fp;
-    let total_pos = tp + fp;
-    let total_neg = tn + fn_;
-    let sensitivity = if total_d > 0 {
-        tp as f64 / total_d as f64
-    } else {
-        0.0
-    };
-    let specificity = if total_nd > 0 {
-        tn as f64 / total_nd as f64
-    } else {
-        0.0
-    };
-    let ppv = if total_pos > 0 {
-        tp as f64 / total_pos as f64
-    } else {
-        0.0
-    };
-    let npv = if total_neg > 0 {
-        tn as f64 / total_neg as f64
-    } else {
-        0.0
-    };
-    let false_pos_rate = if total_nd > 0 {
-        fp as f64 / total_nd as f64
-    } else {
-        0.0
-    };
-    let false_neg_rate = if total_d > 0 {
-        fn_ as f64 / total_d as f64
-    } else {
-        0.0
-    };
-    let pct_correct = if n > 0 {
-        (tp + tn) as f64 / n as f64 * 100.0
-    } else {
-        0.0
-    };
-    ClassificationTable {
-        tp,
-        fp,
-        fn_,
-        tn,
-        cutoff,
-        sensitivity,
-        specificity,
-        ppv,
-        npv,
-        false_pos_rate,
-        false_neg_rate,
-        pct_correct,
-    }
 }
 
 /// Classification table for binary choice models (Stata estat classification)

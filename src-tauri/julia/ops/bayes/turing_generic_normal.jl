@@ -19,7 +19,9 @@ function bayes_load_predictor(exchange, table, row_count::Int, task_id::String)
     columns = Matrix{Float64}(undef, row_count, length(column_names))
     for (column_index, column_name) in enumerate(column_names)
         values = bayes_numeric_vector(table, column_name, task_id)
-        length(values) == row_count || throw(ArgumentError("predictor column `$column_name` has an invalid length"))
+        length(values) == row_count || throw(invalid_parameters_error(
+            "predictor column `$column_name` has an invalid length"; column = column_name,
+        ))
         columns[:, column_index] = values
     end
     return (predictor = predictor, likelihood = likelihood, columns = columns)
@@ -47,7 +49,11 @@ function bayes_try_generic_normal_turing(model, exchange, table, input_rows::Int
     ]
     for row_index in 1:min(input_rows, 5)
         value = compiled_predictor.predictor(preview_parameters, compiled_predictor.columns, row_index)
-        isfinite(value) || throw(ArgumentError("predictor returned a non-finite value at row $row_index"))
+        isfinite(value) || throw(invalid_parameters_error(
+            "predictor returned a non-finite value at row $row_index";
+            row = row_index,
+            path = "model.predictor",
+        ))
     end
 
 
@@ -59,16 +65,25 @@ function bayes_try_generic_normal_turing(model, exchange, table, input_rows::Int
     parameter_names = String[]
     priors = Distribution{Univariate, Continuous}[]
     sigma_index = nothing
-    for parameter in parameter_specs
+    for (parameter_index, parameter) in enumerate(parameter_specs)
         name = require_string(field(parameter, "name"), "parameter.name")
-        prior = bayes_distribution_from_prior(field(parameter, "prior"), "parameter `$name`")
+        prior = bayes_distribution_from_prior(
+            field(parameter, "prior"),
+            "parameter `$name`";
+            parameter = name,
+            path = "model.parameters[$parameter_index].prior",
+        )
         push!(parameter_names, name)
         push!(priors, prior)
         if sigma_parameter !== nothing && name == sigma_parameter
             sigma_index = length(parameter_names)
         end
     end
-    likelihood_type == "normal" && sigma_index === nothing && throw(ArgumentError("sigma parameter `$sigma_parameter` was not found"))
+    likelihood_type == "normal" && sigma_index === nothing && throw(invalid_parameters_error(
+        "sigma parameter `$sigma_parameter` was not found";
+        parameter = sigma_parameter,
+        path = "model.likelihood.sigma.parameter",
+    ))
 
     sampler = field(model, "sampler", nothing)
     draws = Int(field(sampler, "samples", 1_000))

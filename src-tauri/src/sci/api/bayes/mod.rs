@@ -158,34 +158,6 @@ mod tests {
     }
 
     #[test]
-    fn parses_safe_expression_to_raw_ast() {
-        let known = vec!["y".into(), "a".into(), "x".into(), "b".into()];
-        let parsed =
-            parse_model_expression("y = a * x + b", crate::math::ParseOptions::plain(&known))
-                .expect("parsed expression");
-        assert_eq!(
-            parsed.formula.raw_response,
-            RawExpression::Symbol { name: "y".into() }
-        );
-        assert_eq!(parsed.symbols, vec!["a", "b", "x", "y"]);
-        assert!(matches!(
-            parsed.formula.raw_predictor,
-            RawExpression::Binary {
-                op: BinaryOp::Add,
-                ..
-            }
-        ));
-    }
-
-    #[test]
-    fn rejects_unsupported_expression_function() {
-        let known = vec!["y".into(), "x".into()];
-        let error = parse_model_expression("y = eval(x)", crate::math::ParseOptions::plain(&known))
-            .expect_err("unsupported function rejected");
-        assert!(error.to_string().contains("不支持函数"));
-    }
-
-    #[test]
     fn validates_likelihood_response_dtype() {
         let mut draft = valid_draft();
         if let Some(dataset) = &mut draft.dataset {

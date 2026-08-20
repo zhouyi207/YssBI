@@ -6,7 +6,10 @@ use polars::prelude::{Column, DataFrame};
 use serde_json::json;
 
 use super::predictor::compile_predictor;
-use crate::julia::worker::{JuliaWorkerManager, JuliaWorkerProgressCallback, JuliaWorkerTask};
+use crate::julia::worker::{
+    JuliaWorkerError, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerProgressCallback,
+    JuliaWorkerTask,
+};
 use crate::sci::api::bayes::{
     BayesBackend, BayesBackendError, BayesBackendRequest, BayesDataExchangeManifest,
     BayesExchangeColumn, BayesModelSpec, BayesProgressCallback, InferenceResult,
@@ -47,7 +50,7 @@ impl BayesBackend for JuliaBayesBackend {
                 });
             }) as JuliaWorkerProgressCallback
         });
-        let output = self
+        let mut output = self
             .worker
             .run_task(
                 &self.app_data_dir,
@@ -66,17 +69,33 @@ impl BayesBackend for JuliaBayesBackend {
             .map_err(map_worker_error)?;
 
         report_stage(&progress, "reading_result");
-        let result = read_inference_result(&output.metadata_path)?;
+        let mut result = read_inference_result(&output.metadata_path)?;
+        if result.artifact_manifest.task_id != output.task_id {
+            return Err(BayesBackendError::with_detail(
+                "julia_bayes_result_invalid",
+                "Julia Bayesian backend returned a mismatched result.",
+                format!(
+                    "worker task {} returned artifact manifest for task {}",
+                    output.task_id, result.artifact_manifest.task_id
+                ),
+            ));
+        }
+
         report_stage(&progress, "writing_artifacts");
-        if !result.artifact_manifest.artifacts.iter().any(|artifact| {
+        let retains_artifacts = result.artifact_manifest.artifacts.iter().any(|artifact| {
             matches!(
                 artifact.kind,
                 ResultArtifactKind::PosteriorSamples | ResultArtifactKind::PosteriorPredictive
             )
-        }) {
-            if let Some(task_dir) = output.output_path.parent() {
-                let _ = fs::remove_dir_all(task_dir);
-            }
+        });
+        if retains_artifacts {
+            let owner = output.take_task_directory().ok_or_else(|| {
+                BayesBackendError::new(
+                    "julia_bayes_result_invalid",
+                    "Julia Bayesian result has no artifact owner.",
+                )
+            })?;
+            result.set_artifact_owner(owner);
         }
         Ok(result)
     }
@@ -190,130 +209,75 @@ fn parse_inference_result(contents: &str) -> Result<InferenceResult, BayesBacken
     })
 }
 
-fn map_worker_error(message: String) -> BayesBackendError {
-    let lower = message.to_ascii_lowercase();
-    let (code, diagnostic_message) = if lower.contains("julia was not found")
-        || lower.contains("failed to start julia worker")
-    {
-        (
+fn map_worker_error(error: JuliaWorkerError) -> BayesBackendError {
+    let (code, diagnostic_message) = match error.code() {
+        JuliaWorkerErrorCode::RuntimeUnavailable | JuliaWorkerErrorCode::StartFailed => (
             "julia_bayes_runtime_unavailable",
-            "Julia is not available. Install Julia or fix the system Julia PATH, then try again.",
-        )
-    } else if lower.contains("unsupported capability:") {
-        (
-            "julia_bayes_model_unsupported",
-            "This Bayesian model is not supported by the current Julia backend.",
-        )
-    } else if lower.contains("package")
-        || lower.contains("turing")
-        || lower.contains("distributions")
-        || lower.contains("mcmcchains")
-        || lower.contains("failed to prepare julia worker packages")
-    {
-        (
-            "julia_bayes_package_unavailable",
-            "Julia Bayesian packages are not available. Prepare the Julia worker environment, then try again.",
-        )
-    } else if lower.contains("column")
-        || lower.contains("numeric")
-        || lower.contains("finite")
-        || lower.contains("observations")
-        || lower.contains("invalid_parameters")
-    {
-        (
+            "Julia runtime is unavailable for Bayesian inference.",
+        ),
+        JuliaWorkerErrorCode::EnvironmentUnavailable | JuliaWorkerErrorCode::PackageUnavailable => {
+            (
+                "julia_bayes_package_unavailable",
+                "Julia Bayesian packages are unavailable.",
+            )
+        }
+        JuliaWorkerErrorCode::InvalidParameters => (
             "julia_bayes_invalid_data",
-            "The selected data is not valid for Bayesian inference.",
-        )
-    } else if lower.contains("nuts")
-        || lower.contains("sampling")
-        || lower.contains("log density")
-        || lower.contains("domainerror")
-    {
-        (
+            "Julia Bayesian input validation failed.",
+        ),
+        JuliaWorkerErrorCode::UnsupportedCapability => (
+            "julia_bayes_model_unsupported",
+            "The Julia Bayesian backend does not support this model.",
+        ),
+        JuliaWorkerErrorCode::SamplingFailed => (
             "julia_bayes_sampling_failed",
             "Julia Bayesian sampling failed.",
-        )
-    } else {
-        (
+        ),
+        _ => (
             "julia_bayes_backend_failed",
             "Julia Bayesian backend failed.",
-        )
+        ),
     };
-
-    let details = TaskErrorDetails {
-        column: extract_quoted_detail(&message, "column `"),
-        parameter: extract_quoted_detail(&message, "parameter `"),
-        ..TaskErrorDetails::default()
-    };
-    BayesBackendError::with_detail(code, diagnostic_message, message).with_safe_details(details)
-}
-
-fn extract_quoted_detail(message: &str, marker: &str) -> Option<String> {
-    let lower = message.to_ascii_lowercase();
-    let start = lower.find(marker)? + marker.len();
-    let value = message.get(start..)?.split('`').next()?;
-    if value.is_empty() || value.len() > 256 || value.chars().any(char::is_control) {
-        return None;
-    }
-    Some(value.to_string())
+    let details = error
+        .details()
+        .map(|details| TaskErrorDetails {
+            column: details.column.clone(),
+            row: details.row,
+            parameter: details.parameter.clone(),
+            path: details.path.clone(),
+        })
+        .unwrap_or_default();
+    BayesBackendError::with_detail(code, diagnostic_message, error.diagnostic())
+        .with_safe_details(details)
 }
 
 #[cfg(test)]
 mod tests {
     use super::{map_worker_error, parse_inference_result};
+    use crate::julia::worker::JuliaWorkerError;
     use crate::sci::api::bayes::DiagnosticMetric;
 
     #[test]
-    fn maps_worker_errors_to_stable_codes() {
-        let cases = [
-            (
-                "Julia was not found on the system PATH.",
-                "julia_bayes_runtime_unavailable",
-            ),
-            (
-                "LoadError: ArgumentError: Package Turing not found",
-                "julia_bayes_package_unavailable",
-            ),
-            (
-                "invalid_parameters: column `x` must contain numeric values",
-                "julia_bayes_invalid_data",
-            ),
-            (
-                "UnsupportedBayesCapability: unsupported capability: model shape",
-                "julia_bayes_model_unsupported",
-            ),
-            (
-                "ArgumentError: unsupported value encountered while writing samples",
-                "julia_bayes_backend_failed",
-            ),
-            (
-                "Task failed: DomainError during NUTS sampling",
-                "julia_bayes_sampling_failed",
-            ),
-        ];
-
-        for (message, expected_code) in cases {
-            assert_eq!(map_worker_error(message.to_string()).code, expected_code);
-        }
-    }
-
-    #[test]
-    fn extracts_only_safe_domain_details_from_worker_errors() {
-        let column_error = map_worker_error(
-            "invalid_parameters: column `predictor_x` must contain numeric values".to_string(),
-        );
+    fn maps_stable_worker_codes_without_classifying_diagnostic_prose() {
+        let internal = JuliaWorkerError::from_json_rpc_error(&serde_json::json!({
+            "code": "internal_error",
+            "message": "column Turing DomainError unsupported capability"
+        }));
         assert_eq!(
-            column_error.details.and_then(|details| details.column),
+            map_worker_error(internal).code,
+            "julia_bayes_backend_failed"
+        );
+
+        let invalid_data = JuliaWorkerError::from_json_rpc_error(&serde_json::json!({
+            "code": "invalid_parameters",
+            "message": "opaque diagnostic",
+            "data": { "column": "predictor_x" }
+        }));
+        let mapped = map_worker_error(invalid_data);
+        assert_eq!(mapped.code, "julia_bayes_invalid_data");
+        assert_eq!(
+            mapped.details.and_then(|details| details.column),
             Some("predictor_x".to_string())
-        );
-
-        let parameter_error =
-            map_worker_error("Predictor parameter `beta` was not declared.".to_string());
-        assert_eq!(
-            parameter_error
-                .details
-                .and_then(|details| details.parameter),
-            Some("beta".to_string())
         );
     }
 

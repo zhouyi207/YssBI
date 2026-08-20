@@ -127,6 +127,46 @@ describe('parseRegressionResultData', () => {
     expect(parseRegressionResultData(MINIMAL_REGRESSION)?.title).toBe('OLS');
   });
 
+  it('preserves binary model statistics and hypothesis inputs', () => {
+    const parsed = parseRegressionResultData({
+      ...MINIMAL_REGRESSION,
+      title: 'LOGIT Summary',
+      betas: [0.25],
+      cov_beta: [[0.0625]],
+      model_statistics: {
+        kind: 'binary',
+        link: 'logit',
+        covariance: [[0.0625]],
+        standardErrors: [0.25],
+        statisticValues: [1],
+        pValues: [0.317],
+        confidenceIntervalLower: [-0.24],
+        confidenceIntervalUpper: [0.74],
+        logLikelihood: -8.5,
+        nullLogLikelihood: -10,
+        pseudoR2: 0.15,
+        adjustedPseudoR2: 0.1,
+        lrChi2: 3,
+        lrPValue: 0.083,
+        aic: 19,
+        bic: 20,
+        iterations: 6,
+        converged: true,
+        conditionNumber: 2.5,
+      },
+    });
+
+    expect(parsed?.betas).toEqual([0.25]);
+    expect(parsed?.cov_beta).toEqual([[0.0625]]);
+    expect(parsed?.model_statistics).toEqual(expect.objectContaining({
+      kind: 'binary',
+      link: 'logit',
+      covariance: [[0.0625]],
+      logLikelihood: -8.5,
+      converged: true,
+    }));
+  });
+
   it('parses backend leverage KDE points', () => {
     const parsed = parseRegressionResultData({
       ...MINIMAL_REGRESSION,

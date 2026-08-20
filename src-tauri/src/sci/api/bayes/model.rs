@@ -192,8 +192,4 @@ impl BayesModelSpec {
             .map(|parameter| parameter.name.as_str())
             .collect()
     }
-
-    pub fn data_variable_names(&self) -> BTreeSet<&str> {
-        self.data_variables.keys().map(String::as_str).collect()
-    }
 }

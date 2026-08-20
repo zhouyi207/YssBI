@@ -1,7 +1,7 @@
-//! ACF/PACF application API and engine orchestration.
+//! ACF/PACF application API and Rust backend orchestration.
 
-use crate::sci::backends::{julia, rust};
-use crate::sci::engine::{SciContext, SciEngine};
+use crate::sci::backends::rust;
+use crate::sci::engine::SciContext;
 use crate::sci::error::SciError;
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +10,6 @@ pub struct AcfPacfInput {
     /// Residual or time-series values.
     pub residuals: Vec<f64>,
     /// Requested maximum lag.
-    #[serde(alias = "maxLag")]
     pub max_lag: usize,
 }
 
@@ -24,32 +23,13 @@ pub struct AcfPacfOutput {
     pub n: usize,
 }
 
-/// Computes ACF/PACF through the selected scientific engine.
+/// Computes ACF/PACF through the Rust scientific backend.
 pub fn compute_acf_pacf(
-    context: &SciContext<'_>,
-    input: AcfPacfInput,
-) -> Result<AcfPacfOutput, SciError> {
-    match context.engine {
-        SciEngine::Rust => compute_with_rust(&input),
-        SciEngine::Julia => compute_with_julia(context, input),
-        SciEngine::JuliaWithRustFallback => {
-            let rust_input = input.clone();
-            compute_with_julia(context, input).or_else(|_| compute_with_rust(&rust_input))
-        }
-    }
-}
-
-fn compute_with_rust(input: &AcfPacfInput) -> Result<AcfPacfOutput, SciError> {
-    let max_lag = command_max_lag(input)?;
-    rust::time_series::acf_pacf::compute_at_lag(&input.residuals, max_lag)
-}
-
-fn compute_with_julia(
-    context: &SciContext<'_>,
+    _context: &SciContext,
     input: AcfPacfInput,
 ) -> Result<AcfPacfOutput, SciError> {
     let max_lag = command_max_lag(&input)?;
-    julia::time_series::acf_pacf::compute(context, input, max_lag)
+    rust::time_series::acf_pacf::compute_at_lag(&input.residuals, max_lag)
 }
 
 fn command_max_lag(input: &AcfPacfInput) -> Result<usize, SciError> {

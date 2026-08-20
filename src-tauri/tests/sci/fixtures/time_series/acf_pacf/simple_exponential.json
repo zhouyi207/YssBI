@@ -2,7 +2,7 @@
   "name": "simple_exponential",
   "input": {
     "residuals": [1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0, 128.0],
-    "maxLag": 3
+    "max_lag": 3
   },
   "expected": {
     "n": 8,

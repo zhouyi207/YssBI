@@ -1,10 +1,5 @@
 
 
-struct UnsupportedBayesCapability <: Exception
-    message::String
-end
-
-Base.showerror(io::IO, error::UnsupportedBayesCapability) = print(io, "unsupported capability: ", error.message)
 
 function run_bayes_fit(params, task_id::String)
     send_progress(task_id, "loading_data")
@@ -113,17 +108,19 @@ function bayes_sample_with_progress(model_instance, sampler, draws::Int, warmup:
         return nothing
     end
 
-    chain_with_warmup = with_logger(NullLogger()) do
-        sample(
-            model_instance,
-            sampler,
-            MCMCSerial(),
-            iterations_per_chain,
-            chains;
-            discard_adapt = false,
-            progress = false,
-            callback = callback,
-        )
+    chain_with_warmup = with_sampling_error() do
+        with_logger(NullLogger()) do
+            sample(
+                model_instance,
+                sampler,
+                MCMCSerial(),
+                iterations_per_chain,
+                chains;
+                discard_adapt = false,
+                progress = false,
+                callback = callback,
+            )
+        end
     end
     return chain_with_warmup[(warmup + 1):iterations_per_chain, :, :]
 end

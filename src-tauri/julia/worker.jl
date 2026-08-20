@@ -1,5 +1,6 @@
 #!/usr/bin/env julia
 
+include(joinpath(@__DIR__, "worker_protocol.jl"))
 include(joinpath(@__DIR__, "scientific_runtime.jl"))
 
 const CANCELLED_TASK_IDS = Set{String}()
@@ -8,9 +9,6 @@ const STDOUT_LOCK = ReentrantLock()
 const ACTIVE_TASKS = Task[]
 const ACTIVE_TASKS_LOCK = ReentrantLock()
 
-struct TaskCancelled <: Exception
-    task_id::String
-end
 
 function field(value, name::String, default = nothing)
     value === nothing && return default
@@ -64,16 +62,12 @@ function require_string(value, name::String)
     throw(ArgumentError("`$name` must be a non-empty string"))
 end
 
-include(joinpath(@__DIR__, "ops", "acf_pacf.jl"))
-include(joinpath(@__DIR__, "ops", "serial_tests.jl"))
 include(joinpath(@__DIR__, "ops", "bayes", "expression.jl"))
 include(joinpath(@__DIR__, "ops", "bayes_fit.jl"))
 include(joinpath(@__DIR__, "ops", "bayes", "runtime.jl"))
 include(joinpath(@__DIR__, "ops", "bayes", "turing_generic_normal.jl"))
 
 const OPERATIONS = Dict{String, Function}(
-    "acf_pacf" => run_acf_pacf,
-    "serial_tests" => run_serial_tests,
     "bayes_fit" => run_bayes_fit,
 )
 
@@ -93,18 +87,16 @@ function process_run(request, request_id, params)
         result = run_operation(String(operation), params, task_id)
         request_id !== nothing && send_message(Dict("jsonrpc" => "2.0", "id" => request_id, "result" => result))
     catch error
-        if error isa TaskCancelled
-            request_id !== nothing && send_error(request_id, "cancelled", "Task was cancelled";
-                data = Dict("taskId" => task_id))
-        elseif error isa ArgumentError
-            request_id !== nothing && send_error(request_id, "invalid_parameters", error.msg;
-                data = Dict("taskId" => task_id))
-        else
-            detail = sprint(showerror, error)
-            println(stderr, "Julia worker task $task_id failed: ", detail)
-            request_id !== nothing && send_error(request_id, "internal_error", "Task failed: $detail";
-                data = Dict("taskId" => task_id))
+        task_error = normalize_worker_error(error, task_id)
+        if task_error.code == WorkerInternal
+            println(stderr, "Julia worker task $task_id failed: ", task_error.diagnostic)
         end
+        request_id !== nothing && send_error(
+            request_id,
+            worker_error_code(task_error),
+            task_error.diagnostic;
+            data = task_error.data,
+        )
     finally
         lock(CANCEL_LOCK) do
             delete!(CANCELLED_TASK_IDS, task_id)

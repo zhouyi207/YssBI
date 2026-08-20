@@ -198,6 +198,28 @@ export interface DiagnosticInfo {
   omit_info?: OmitInfo;
 }
 
+export interface BinaryModelStatistics {
+  kind: 'binary';
+  link: 'logit' | 'probit';
+  covariance: number[][];
+  standardErrors: number[];
+  statisticValues: number[];
+  pValues: number[];
+  confidenceIntervalLower: number[];
+  confidenceIntervalUpper: number[];
+  logLikelihood: number;
+  nullLogLikelihood: number;
+  pseudoR2: number;
+  adjustedPseudoR2: number;
+  lrChi2: number;
+  lrPValue: number;
+  aic: number;
+  bic: number;
+  iterations: number;
+  converged: boolean;
+  conditionNumber: number;
+}
+
 export interface RegressionResultData {
   title: string;
   endog_name?: string;
@@ -206,6 +228,7 @@ export interface RegressionResultData {
   diagnostic_info: DiagnosticInfo;
   betas?: number[];
   cov_beta?: number[][];
+  model_statistics?: BinaryModelStatistics;
   executionTimeMs?: number;
 }
 

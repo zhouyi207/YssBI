@@ -1,11 +1,11 @@
-//! Serial-correlation test application API and engine orchestration.
+//! Serial-correlation test application API and Rust backend orchestration.
 //!
 //! Covers Durbin-Watson, Ljung-Box Q, and optional Breusch-Godfrey LM tests.
 
 use serde::{Deserialize, Serialize};
 
-use crate::sci::backends::{julia, rust};
-use crate::sci::engine::{SciContext, SciEngine};
+use crate::sci::backends::rust;
+use crate::sci::engine::SciContext;
 use crate::sci::error::SciError;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -18,7 +18,7 @@ pub struct SerialTestsInput {
     #[serde(default)]
     pub exog: Option<Vec<Vec<f64>>>,
     /// BG test mode: true = nomiss0; false = drop the first p observations.
-    #[serde(default = "default_bg_nomiss0", alias = "bgNomiss0")]
+    #[serde(default = "default_bg_nomiss0")]
     pub bg_nomiss0: bool,
 }
 
@@ -48,35 +48,16 @@ pub struct SerialTestsOutput {
 }
 
 pub fn compute_serial_tests(
-    context: &SciContext<'_>,
+    _context: &SciContext,
     input: SerialTestsInput,
 ) -> Result<SerialTestsOutput, SciError> {
-    match context.engine {
-        SciEngine::Rust => compute_with_rust(&input),
-        SciEngine::Julia => compute_with_julia(context, input),
-        SciEngine::JuliaWithRustFallback => {
-            let rust_input = input.clone();
-            compute_with_julia(context, input).or_else(|_| compute_with_rust(&rust_input))
-        }
-    }
-}
-
-fn compute_with_rust(input: &SerialTestsInput) -> Result<SerialTestsOutput, SciError> {
-    let lags = normalized_lags(input)?;
+    let lags = normalized_lags(&input)?;
     Ok(rust::time_series::serial_tests::compute(
         &input.residuals,
         input.exog.as_deref(),
         lags,
         input.bg_nomiss0,
     ))
-}
-
-fn compute_with_julia(
-    context: &SciContext<'_>,
-    input: SerialTestsInput,
-) -> Result<SerialTestsOutput, SciError> {
-    let lags = normalized_lags(&input)?;
-    julia::time_series::serial_tests::compute(context, input, lags)
 }
 
 fn normalized_lags(input: &SerialTestsInput) -> Result<usize, SciError> {

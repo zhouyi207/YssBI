@@ -4,15 +4,25 @@
 
 function bayes_numeric_vector(table, column_name::String, task_id::String)
     column_symbol = Symbol(column_name)
-    hasproperty(table, column_symbol) || throw(ArgumentError("column `$column_name` was not found"))
+    hasproperty(table, column_symbol) || throw(invalid_parameters_error(
+        "column `$column_name` was not found"; column = column_name,
+    ))
     column = getproperty(table, column_symbol)
     values = Vector{Float64}(undef, length(column))
     for index in eachindex(column)
         check_cancelled(task_id)
         value = column[index]
-        value isa Real && !(value isa Bool) || throw(ArgumentError("column `$column_name` must contain numeric values"))
+        value isa Real && !(value isa Bool) || throw(invalid_parameters_error(
+            "column `$column_name` must contain numeric values";
+            column = column_name,
+            row = index,
+        ))
         numeric_value = Float64(value)
-        isfinite(numeric_value) || throw(ArgumentError("column `$column_name` must contain finite values"))
+        isfinite(numeric_value) || throw(invalid_parameters_error(
+            "column `$column_name` must contain finite values";
+            column = column_name,
+            row = index,
+        ))
         values[index] = numeric_value
     end
     return values
@@ -20,7 +30,12 @@ end
 
 
 
-function bayes_distribution_from_prior(prior, role::String)
+function bayes_distribution_from_prior(
+    prior,
+    role::String;
+    parameter = nothing,
+    path = nothing,
+)
     distribution = String(field(prior, "distribution", ""))
     args = field(prior, "args", Any[])
 
@@ -44,7 +59,11 @@ function bayes_distribution_from_prior(prior, role::String)
         return truncated(Normal(0.0, Float64(args[1])); lower = 0.0)
     end
 
-    throw(UnsupportedBayesCapability("$role prior `$distribution` is not supported by the Julia Bayesian engine"))
+    throw(UnsupportedBayesCapability(
+        "$role prior `$distribution` is not supported by the Julia Bayesian engine";
+        parameter = parameter,
+        path = path,
+    ))
 end
 
 

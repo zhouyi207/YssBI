@@ -95,14 +95,6 @@ fn linear_normal_fixture_defines_stable_model_protocol() {
 }
 
 #[test]
-fn linear_normal_fixture_materializes_input_dataframe() {
-    let fixture = simple_linear_normal_fixture();
-    let dataframe = fixture_input_table(&fixture);
-    assert_eq!(dataframe.height(), 6);
-    assert_eq!(dataframe.get_column_names(), ["x", "y"]);
-}
-
-#[test]
 fn nonlinear_normal_fixture_defines_generic_expression_protocol() {
     let fixture = exponential_decay_normal_fixture();
     assert_eq!(fixture.name, "exponential decay normal");

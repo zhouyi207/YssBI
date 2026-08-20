@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 
 use crate::math::{
     BinaryOp as MathBinaryOp, ComparisonOp, MathExpr, ParseOptions, UnaryOp as MathUnaryOp,
-    parse_expression, parse_relations,
+    parse_relations,
 };
 
 use super::model::{BinaryOp, MathFunction, UnaryOp};
@@ -110,14 +110,6 @@ pub fn parse_model_expression(
         },
         symbols: symbols.into_iter().collect(),
     })
-}
-
-pub fn parse_predictor_expression(
-    input: &str,
-    options: ParseOptions<'_>,
-) -> Result<RawExpression, ExpressionParseError> {
-    let expression = parse_expression(input, options).map_err(math_error)?;
-    math_expr_to_raw(&expression)
 }
 
 pub fn collect_raw_symbols(expression: &RawExpression, symbols: &mut BTreeSet<String>) {

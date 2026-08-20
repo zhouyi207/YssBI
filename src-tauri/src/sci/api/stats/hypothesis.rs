@@ -1,9 +1,9 @@
-//! Linear hypothesis-test application API and engine orchestration.
+//! Linear hypothesis-test application API and Rust backend orchestration.
 
 use ndarray::{Array1, Array2};
 
 use crate::sci::backends::rust;
-use crate::sci::engine::{SciContext, SciEngine};
+use crate::sci::engine::SciContext;
 use crate::sci::error::SciError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,27 +43,15 @@ pub struct WaldTestOutput {
 }
 
 pub fn t_test(
-    context: &SciContext<'_>,
+    _context: &SciContext,
     input: LinearHypothesisTestInput<'_>,
 ) -> Result<TTestOutput, SciError> {
-    match context.engine {
-        SciEngine::Rust => rust::stats::hypothesis::t_test(input),
-        SciEngine::Julia => Err(SciError::julia_unavailable(
-            "Hypothesis-test Julia backend is not implemented",
-        )),
-        SciEngine::JuliaWithRustFallback => rust::stats::hypothesis::t_test(input),
-    }
+    rust::stats::hypothesis::t_test(input)
 }
 
 pub fn wald_test(
-    context: &SciContext<'_>,
+    _context: &SciContext,
     input: LinearHypothesisTestInput<'_>,
 ) -> Result<WaldTestOutput, SciError> {
-    match context.engine {
-        SciEngine::Rust => rust::stats::hypothesis::wald_test(input),
-        SciEngine::Julia => Err(SciError::julia_unavailable(
-            "Hypothesis-test Julia backend is not implemented",
-        )),
-        SciEngine::JuliaWithRustFallback => rust::stats::hypothesis::wald_test(input),
-    }
+    rust::stats::hypothesis::wald_test(input)
 }

@@ -1,5 +1,6 @@
 using Test
 
+include(joinpath(@__DIR__, "..", "worker_protocol.jl"))
 include(joinpath(@__DIR__, "..", "scientific_runtime.jl"))
 include(joinpath(@__DIR__, "..", "ops", "bayes", "expression.jl"))
 include(joinpath(@__DIR__, "..", "ops", "bayes_fit.jl"))

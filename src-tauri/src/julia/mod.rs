@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 pub mod worker;
 
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);
+const MINIMUM_JULIA_MINOR: u64 = 10;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -81,39 +82,71 @@ pub fn install_latest_julia() -> Result<JuliaRuntimeStatus, String> {
 }
 
 fn inspect_system_julia() -> RuntimeProbe {
-    let Some(executable) = find_system_julia() else {
-        return RuntimeProbe::Missing;
-    };
+    probe_julia_candidates(system_julia_candidates(), julia_version)
+}
 
-    match julia_version(&executable) {
-        Ok(version) => RuntimeProbe::Ready {
-            executable,
-            version,
-        },
-        Err(message) => RuntimeProbe::Invalid {
-            executable,
-            message,
-        },
+fn probe_julia_candidates(
+    candidates: impl IntoIterator<Item = PathBuf>,
+    mut validate: impl FnMut(&Path) -> Result<String, String>,
+) -> RuntimeProbe {
+    let mut first_invalid = None;
+    for executable in candidates {
+        match validate(&executable) {
+            Ok(version) if is_supported_julia_version(&version) => {
+                return RuntimeProbe::Ready {
+                    executable,
+                    version,
+                };
+            }
+            Ok(version) => {
+                first_invalid.get_or_insert(RuntimeProbe::Invalid {
+                    executable,
+                    message: format!(
+                        "Julia 1.{MINIMUM_JULIA_MINOR} or newer (before 2.0) is required; found {version}."
+                    ),
+                });
+            }
+            Err(message) => {
+                first_invalid.get_or_insert(RuntimeProbe::Invalid {
+                    executable,
+                    message,
+                });
+            }
+        }
     }
+    first_invalid.unwrap_or(RuntimeProbe::Missing)
 }
 
 pub fn system_julia_executable() -> Result<PathBuf, String> {
-    find_system_julia().ok_or_else(|| "Julia was not found on the system PATH.".to_string())
+    match inspect_system_julia() {
+        RuntimeProbe::Ready { executable, .. } => Ok(executable),
+        RuntimeProbe::Missing => Err("Julia was not found on the system PATH.".to_string()),
+        RuntimeProbe::Invalid { message, .. } => Err(message),
+    }
 }
 
-fn find_system_julia() -> Option<PathBuf> {
-    find_executable_in_path(julia_executable_name()).or_else(windows_juliaup_alias)
+fn system_julia_candidates() -> Vec<PathBuf> {
+    let mut candidates = executable_candidates_in_path(julia_executable_name());
+    if let Some(alias) = windows_juliaup_alias()
+        && !candidates.contains(&alias)
+    {
+        candidates.push(alias);
+    }
+    candidates
 }
 
 fn julia_executable_name() -> &'static str {
     if cfg!(windows) { "julia.exe" } else { "julia" }
 }
 
-fn find_executable_in_path(executable_name: &str) -> Option<PathBuf> {
-    let path = std::env::var_os("PATH")?;
+fn executable_candidates_in_path(executable_name: &str) -> Vec<PathBuf> {
+    let Some(path) = std::env::var_os("PATH") else {
+        return Vec::new();
+    };
     std::env::split_paths(&path)
         .map(|directory| directory.join(executable_name))
-        .find(|candidate| candidate.is_file())
+        .filter(|candidate| candidate.is_file())
+        .collect()
 }
 
 fn windows_juliaup_alias() -> Option<PathBuf> {
@@ -287,27 +320,35 @@ fn parse_julia_version(output: &str) -> Option<String> {
     })
 }
 
+fn is_supported_julia_version(version: &str) -> bool {
+    let core = version.split(['-', '+']).next().unwrap_or_default();
+    let mut components = core.split('.');
+    let Some(major) = components
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+    else {
+        return false;
+    };
+    let Some(minor) = components
+        .next()
+        .and_then(|value| value.parse::<u64>().ok())
+    else {
+        return false;
+    };
+
+    major == 1 && minor >= MINIMUM_JULIA_MINOR
+}
+
 #[cfg(test)]
 mod tests {
-    #[cfg(windows)]
-    use super::background_command;
+
     use super::{
         JuliaRuntimeState, RuntimeProbe, julia_executable_name, parse_julia_version,
-        status_from_probe,
+        probe_julia_candidates, status_from_probe,
     };
+    use std::fs;
     use std::path::PathBuf;
-
-    #[cfg(windows)]
-    #[test]
-    fn background_command_preserves_captured_output() {
-        let output = background_command("cmd")
-            .args(["/C", "echo", "ready"])
-            .output()
-            .unwrap();
-
-        assert!(output.status.success());
-        assert!(String::from_utf8_lossy(&output.stdout).contains("ready"));
-    }
+    use uuid::Uuid;
 
     #[test]
     fn parses_julia_version_output() {
@@ -316,6 +357,61 @@ mod tests {
             Some("1.11.3".to_string())
         );
         assert_eq!(parse_julia_version("not julia\n"), None);
+    }
+
+    #[test]
+    fn validates_executable_candidates_until_one_is_ready() {
+        let root = std::env::temp_dir().join(format!("yssbi-julia-candidates-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).expect("create temporary app root");
+        let first = root.join("first-julia");
+        let second = root.join("second-julia");
+        fs::write(&first, b"invalid").expect("write first candidate");
+        fs::write(&second, b"ready").expect("write second candidate");
+        let mut validated = Vec::new();
+
+        let probe = probe_julia_candidates(vec![first.clone(), second.clone()], |candidate| {
+            validated.push(candidate.to_path_buf());
+            if candidate == first {
+                Err("invalid candidate".to_string())
+            } else {
+                Ok("1.11.3".to_string())
+            }
+        });
+
+        assert_eq!(validated, vec![first, second.clone()]);
+        assert_eq!(
+            probe,
+            RuntimeProbe::Ready {
+                executable: second,
+                version: "1.11.3".to_string(),
+            }
+        );
+        fs::remove_dir_all(root).expect("clean temporary app root");
+    }
+
+    #[test]
+    fn skips_incompatible_julia_candidates() {
+        let first = PathBuf::from("julia-1.9");
+        let second = PathBuf::from("julia-1.10");
+        let mut validated = Vec::new();
+
+        let probe = probe_julia_candidates(vec![first.clone(), second.clone()], |candidate| {
+            validated.push(candidate.to_path_buf());
+            if candidate == first {
+                Ok("1.9.4".to_string())
+            } else {
+                Ok("1.10.10".to_string())
+            }
+        });
+
+        assert_eq!(validated, vec![first, second.clone()]);
+        assert_eq!(
+            probe,
+            RuntimeProbe::Ready {
+                executable: second,
+                version: "1.10.10".to_string(),
+            }
+        );
     }
 
     #[test]

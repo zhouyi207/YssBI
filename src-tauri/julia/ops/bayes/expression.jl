@@ -29,11 +29,21 @@ end
 
 function bayes_column_value(table, column_name::String, row_index::Int)
     column_symbol = Symbol(column_name)
-    hasproperty(table, column_symbol) || throw(ArgumentError("column `$column_name` was not found"))
+    hasproperty(table, column_symbol) || throw(invalid_parameters_error(
+        "column `$column_name` was not found"; column = column_name,
+    ))
     value = getproperty(table, column_symbol)[row_index]
-    value isa Real && !(value isa Bool) || throw(ArgumentError("column `$column_name` must contain numeric values"))
+    value isa Real && !(value isa Bool) || throw(invalid_parameters_error(
+        "column `$column_name` must contain numeric values";
+        column = column_name,
+        row = row_index,
+    ))
     numeric_value = Float64(value)
-    isfinite(numeric_value) || throw(ArgumentError("column `$column_name` must contain finite values"))
+    isfinite(numeric_value) || throw(invalid_parameters_error(
+        "column `$column_name` must contain finite values";
+        column = column_name,
+        row = row_index,
+    ))
     return numeric_value
 end
 
@@ -125,7 +135,11 @@ function bayes_response_vector(table, response, likelihood_type::String, task_id
         for row_index in 1:row_count
             row_index % 256 == 1 && check_cancelled(task_id)
             value = bayes_evaluate_response_expression(expression, table, data_variables, row_index, task_id)
-            isfinite(value) || throw(ArgumentError("response expression returned a non-finite value at row $row_index"))
+            isfinite(value) || throw(invalid_parameters_error(
+                "response expression returned a non-finite value at row $row_index";
+                row = row_index,
+                path = "model.response.expression",
+            ))
             values[row_index] = Float64(value)
         end
         return values
@@ -134,7 +148,9 @@ function bayes_response_vector(table, response, likelihood_type::String, task_id
     symbol = require_string(field(expression, "name"), "response.expression.name")
     column_name = require_string(field(data_variables, symbol), "response.dataVariables.$symbol")
     column_symbol = Symbol(column_name)
-    hasproperty(table, column_symbol) || throw(ArgumentError("column `$column_name` was not found"))
+    hasproperty(table, column_symbol) || throw(invalid_parameters_error(
+        "column `$column_name` was not found"; column = column_name,
+    ))
     column = getproperty(table, column_symbol)
     values = Vector{Int}(undef, length(column))
     for index in eachindex(column)
@@ -146,12 +162,24 @@ function bayes_response_vector(table, response, likelihood_type::String, task_id
             elseif value isa Real && !(value isa Bool) && isfinite(Float64(value)) && Float64(value) in (0.0, 1.0)
                 values[index] = Int(Float64(value))
             else
-                throw(ArgumentError("BernoulliLogit response column `$column_name` must contain boolean or 0/1 values"))
+                throw(invalid_parameters_error(
+                    "BernoulliLogit response column `$column_name` must contain boolean or 0/1 values";
+                    column = column_name,
+                    row = index,
+                ))
             end
         elseif likelihood_type == "poisson_log"
-            value isa Real && !(value isa Bool) || throw(ArgumentError("PoissonLog response column `$column_name` must contain non-negative integer counts"))
+            value isa Real && !(value isa Bool) || throw(invalid_parameters_error(
+                "PoissonLog response column `$column_name` must contain non-negative integer counts";
+                column = column_name,
+                row = index,
+            ))
             numeric = Float64(value)
-            isfinite(numeric) && numeric >= 0.0 && numeric == floor(numeric) || throw(ArgumentError("PoissonLog response column `$column_name` must contain non-negative integer counts"))
+            isfinite(numeric) && numeric >= 0.0 && numeric == floor(numeric) || throw(invalid_parameters_error(
+                "PoissonLog response column `$column_name` must contain non-negative integer counts";
+                column = column_name,
+                row = index,
+            ))
             values[index] = Int(numeric)
         else
             throw(ArgumentError("unsupported response likelihood `$likelihood_type`"))
