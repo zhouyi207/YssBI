@@ -5,11 +5,7 @@ use super::{ProjectFilesystemError, ProjectState};
 #[cfg(test)]
 use crate::graph::value::{DataType, DataValue};
 
-#[cfg(test)]
-use crate::tabular::remove_variable_cache;
-use crate::tabular::{
-    VariableTabularCache, build_variable_cache_entry, normalize_variable_tabular, variable_handle,
-};
+use crate::tabular::normalize_variable_tabular;
 use crate::variable::VariableId;
 use crate::variable::VariableInstance;
 #[cfg(test)]
@@ -18,57 +14,10 @@ use crate::variable::VariableScope;
 impl ProjectState {
     pub(super) fn stage_variable(
         mut variable: VariableInstance,
-    ) -> Result<(VariableInstance, Option<VariableTabularCache>), ProjectFilesystemError> {
+    ) -> Result<VariableInstance, ProjectFilesystemError> {
         normalize_variable_tabular(&mut variable)
             .map_err(|message| ProjectFilesystemError::TransactionCommitFailed { message })?;
-        let cache = variable
-            .tabular
-            .as_ref()
-            .map(build_variable_cache_entry)
-            .transpose()
-            .map_err(|message| ProjectFilesystemError::TransactionCommitFailed { message })?;
-        Ok((variable, cache))
-    }
-
-    pub(super) fn publish_variable_cache(
-        store: &mut crate::project::ProjectStore,
-        variable_id: &VariableId,
-        cache: Option<VariableTabularCache>,
-    ) {
-        let handle = variable_handle(variable_id);
-        if let Some(cache) = cache {
-            store.variable_tabular.insert(handle, cache);
-        } else {
-            store.variable_tabular.remove(&handle);
-        }
-    }
-
-    pub fn sync_all_variable_tabular(&self) -> Result<(), ProjectFilesystemError> {
-        self.ensure_project_operational()?;
-        let (basis, variables) = {
-            let publication = self.mutation_publication.lock().unwrap();
-            let basis = self.capture_variable_staging_basis(&publication)?;
-            let data = self.project_data.read().unwrap();
-            (basis, data.variables.values().cloned().collect::<Vec<_>>())
-        };
-        self.run_variable_staging_test_hook();
-        let staged = variables
-            .into_iter()
-            .map(Self::stage_variable)
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let mut publication = self.mutation_publication.lock().unwrap();
-        self.validate_variable_staging_basis(&publication, &basis)?;
-        let mut data = self.project_data.write().unwrap();
-        let mut store = self.project_store.write().unwrap();
-        self.ensure_project_operational()?;
-        for (variable, cache) in staged {
-            let id = variable.id;
-            data.variables.insert(id, variable);
-            Self::publish_variable_cache(&mut store, &id, cache);
-        }
-        publication.advance_authority_generation();
-        Ok(())
+        Ok(variable)
     }
 
     #[cfg(test)]
@@ -82,7 +31,7 @@ impl ProjectState {
         tags: Vec<String>,
     ) -> Result<VariableInstance, ProjectFilesystemError> {
         self.ensure_project_operational()?;
-        let (basis, committed, cache) = {
+        let (basis, committed) = {
             let publication = self.mutation_publication.lock().unwrap();
             let basis = self.capture_variable_staging_basis(&publication)?;
             let data = self.project_data.read().unwrap();
@@ -104,19 +53,17 @@ impl ProjectState {
             drop(data);
             drop(publication);
             self.run_variable_staging_test_hook();
-            let (variable, cache) = Self::stage_variable(variable)?;
-            (basis, variable, cache)
+            let variable = Self::stage_variable(variable)?;
+            (basis, variable)
         };
 
         let mut publication = self.mutation_publication.lock().unwrap();
         self.validate_variable_staging_basis(&publication, &basis)?;
         let mut data = self.project_data.write().unwrap();
-        let mut store = self.project_store.write().unwrap();
         let mut revisions = self.variable_revisions.write().unwrap();
         self.ensure_project_operational()?;
         let id = committed.id;
         data.variables.insert(id, committed.clone());
-        Self::publish_variable_cache(&mut store, &id, cache);
         revisions.insert(
             id,
             crate::project::project_state::VariableRevisionEntry::present(
@@ -135,7 +82,6 @@ impl ProjectState {
         self.ensure_project_operational()?;
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
-        let mut store = self.project_store.write().unwrap();
         let mut revisions = self.variable_revisions.write().unwrap();
         self.ensure_project_operational()?;
         let removed = data.variables.remove(variable_id);
@@ -149,7 +95,6 @@ impl ProjectState {
                 *variable_id,
                 crate::project::project_state::VariableRevisionEntry::deleted(revision),
             );
-            remove_variable_cache(&mut store, variable_id);
             publication.advance_authority_generation();
         }
         Ok(removed)
@@ -216,19 +161,17 @@ impl ProjectState {
         if let Some(t) = tags {
             variable.tags = t;
         }
-        let (updated, cache) = Self::stage_variable(variable)?;
+        let updated = Self::stage_variable(variable)?;
 
         let mut publication = self.mutation_publication.lock().unwrap();
         self.validate_variable_staging_basis(&publication, &basis)?;
         let mut data = self.project_data.write().unwrap();
-        let mut store = self.project_store.write().unwrap();
         let mut revisions = self.variable_revisions.write().unwrap();
         self.ensure_project_operational()?;
         if !data.variables.contains_key(variable_id) {
             return Ok(None);
         }
         data.variables.insert(*variable_id, updated.clone());
-        Self::publish_variable_cache(&mut store, variable_id, cache);
         let revision = revisions
             .get(variable_id)
             .map(|entry| entry.revision)
@@ -249,8 +192,6 @@ mod tests {
     use crate::graph::value::DataSeriesValue;
     use crate::node_system::document::ResourceRevision;
     use crate::project::ProjectData;
-    use crate::tabular::{TabularSnapshot, variable_handle};
-    use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex, mpsc};
 
     fn add_int_variable(state: &ProjectState) -> VariableInstance {
@@ -271,28 +212,11 @@ mod tests {
     ) -> (
         serde_json::Value,
         std::collections::HashMap<VariableId, crate::project::project_state::VariableRevisionEntry>,
-        Vec<(String, serde_json::Value, usize)>,
         u64,
     ) {
-        let mut caches = state
-            .project_store
-            .read()
-            .unwrap()
-            .variable_tabular
-            .iter()
-            .map(|(handle, cache)| {
-                (
-                    handle.clone(),
-                    serde_json::to_value(&cache.schema).unwrap(),
-                    Arc::as_ptr(&cache.dataframe) as usize,
-                )
-            })
-            .collect::<Vec<_>>();
-        caches.sort_by(|left, right| left.0.cmp(&right.0));
         (
             serde_json::to_value(state.get_data().unwrap()).unwrap(),
             state.variable_revisions.read().unwrap().clone(),
-            caches,
             state.authority_generation_for_test(),
         )
     }
@@ -436,37 +360,6 @@ mod tests {
     }
 
     #[test]
-    fn stale_sync_all_variable_tabular_rejects_reactivated_project() {
-        let state = ProjectState::new();
-        let root = same_root("sync");
-        state.activate_project_fixture(
-            root.clone(),
-            project_with_variable(tabular_variable(VariableId::new(), "project a", "[1,2]")),
-        );
-        assert_eq!(state.authority_generation_for_test(), 0);
-        let (captured_rx, resume_tx) = install_staging_barrier(&state);
-        let worker_state = state.clone();
-        let worker = std::thread::spawn(move || worker_state.sync_all_variable_tabular());
-        captured_rx.recv().unwrap();
-
-        state.activate_project_fixture(
-            root,
-            project_with_variable(tabular_variable(
-                VariableId::new(),
-                "project b",
-                "[40,41,42]",
-            )),
-        );
-        assert_eq!(state.authority_generation_for_test(), 0);
-        let before = authority_snapshot(&state);
-        resume_tx.send(()).unwrap();
-
-        let error = worker.join().unwrap().unwrap_err();
-        assert_eq!(error.code(), "stale_project_lifecycle");
-        assert_eq!(authority_snapshot(&state), before);
-    }
-
-    #[test]
     fn failed_add_variable_has_zero_authority_effects() {
         let state = active_state("failed-add");
         let before = authority_snapshot(&state);
@@ -506,54 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn failed_sync_all_variable_tabular_has_zero_authority_effects() {
-        let state = active_state("failed-sync");
-        let variable = add_int_variable(&state);
-        let handle = variable_handle(&variable.id);
-        let valid = crate::tabular::build_variable_cache_entry(
-            &TabularSnapshot::from_json(r#"{"value":[1,2]}"#).unwrap(),
-        )
-        .unwrap();
-        state
-            .project_store
-            .write()
-            .unwrap()
-            .variable_tabular
-            .insert(handle.clone(), valid);
-        let mut columns = BTreeMap::new();
-        columns.insert("a".into(), vec![serde_json::json!(1)]);
-        columns.insert("b".into(), vec![serde_json::json!(2), serde_json::json!(3)]);
-        {
-            let mut data = state.project_data.write().unwrap();
-            let variable = data.variables.get_mut(&variable.id).unwrap();
-            variable.data_type = DataType::DataFrame;
-            variable.data_value = DataValue::DataFrame("var:other".into());
-            variable.tabular = Some(TabularSnapshot { columns });
-        }
-        let before = authority_snapshot(&state);
-        let before_cache = state
-            .project_store
-            .read()
-            .unwrap()
-            .variable_tabular
-            .get(&handle)
-            .unwrap()
-            .dataframe
-            .clone();
-
-        let result = state.sync_all_variable_tabular();
-
-        assert!(result.is_err());
-        assert_eq!(authority_snapshot(&state), before);
-        let store = state.project_store.read().unwrap();
-        assert!(Arc::ptr_eq(
-            &store.variable_tabular.get(&handle).unwrap().dataframe,
-            &before_cache,
-        ));
-    }
-
-    #[test]
-    fn successful_variable_operations_advance_generation_exactly_once() {
+    fn successful_variable_mutations_advance_generation_exactly_once() {
         let state = active_state("successful-generation");
         let initial = state.authority_generation_for_test();
 
@@ -564,9 +410,6 @@ mod tests {
             .update_variable(&variable.id, Some("updated".into()), None, None, None, None)
             .unwrap();
         assert_eq!(state.authority_generation_for_test(), initial + 2);
-
-        state.sync_all_variable_tabular().unwrap();
-        assert_eq!(state.authority_generation_for_test(), initial + 3);
     }
 
     #[test]

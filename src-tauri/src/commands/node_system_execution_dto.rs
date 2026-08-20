@@ -642,13 +642,6 @@ impl From<&StoredResult> for ResultDescriptorDto {
     }
 }
 
-pub(crate) fn canonical_report_title(result: &StoredResult) -> Option<&'static str> {
-    match result.presentation {
-        ResultPresentation::Report { report } => Some(report.canonical_title()),
-        _ => None,
-    }
-}
-
 fn result_title(result: &StoredResult) -> Box<str> {
     match result.presentation {
         ResultPresentation::Inspector => result

@@ -7,8 +7,7 @@ struct RootLeaseState {
     reserved: BTreeSet<NormalizedProjectRoot>,
     lifecycle_closed: BTreeSet<NormalizedProjectRoot>,
     admitted: BTreeMap<NormalizedProjectRoot, usize>,
-    #[cfg(test)]
-    release_trace: Vec<NormalizedProjectRoot>,
+
     #[cfg(test)]
     next_wait_observer: Option<std::sync::mpsc::Sender<()>>,
     #[cfg(test)]
@@ -270,11 +269,6 @@ impl ProjectFilesystemCoordinator {
     pub(crate) fn is_reserved_for_test(&self, root: &NormalizedProjectRoot) -> bool {
         self.lock_state().reserved.contains(root)
     }
-
-    #[cfg(test)]
-    pub(super) fn release_trace(&self) -> Vec<NormalizedProjectRoot> {
-        self.lock_state().release_trace.clone()
-    }
 }
 
 pub struct ProjectFilesystemLeaseSet {
@@ -331,8 +325,6 @@ impl Drop for ProjectFilesystemLeaseSet {
                     }
                 }
             }
-            #[cfg(test)]
-            state.release_trace.push(root.clone());
         }
         drop(state);
         self.coordinator.registry.available.notify_all();

@@ -17,7 +17,7 @@ use crate::project::{NumericTolerance, StatisticalMissingValuePolicy};
 use std::any::Any;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::num::{NonZeroU32, NonZeroU64, NonZeroUsize};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Condvar, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -1740,7 +1740,7 @@ fn spill_backed_adapter_value_supports_two_independent_passes() {
     let RuntimeValue::Artifact(artifact) = spilled else {
         panic!("reusable storage must remain an artifact kernel view");
     };
-    let stored = StoredValue::from_artifact(artifact);
+    let stored = artifact.into_stored_value();
 
     let first = stored.open_reader().unwrap();
     let second = stored.open_reader().unwrap();
@@ -2803,10 +2803,8 @@ fn data_series_artifact_survives_memoization() {
         unreachable!();
     };
     assert!(
-        ValueFingerprint::from_stored_value(&StoredValue::from_artifact(spilled_artifact.clone()))
-            == ValueFingerprint::from_stored_value(&StoredValue::from_artifact(
-                spilled_artifact.clone(),
-            )),
+        ValueFingerprint::from_stored_value(&spilled_artifact.clone().into_stored_value())
+            == ValueFingerprint::from_stored_value(&spilled_artifact.clone().into_stored_value(),),
         "spill-backed logical contents and metadata are fingerprintable"
     );
 
@@ -2876,8 +2874,7 @@ fn spill_artifacts_enter_session_memoization_by_logical_value() {
     let RuntimeValue::Artifact(spilled_artifact) = &spilled else {
         unreachable!();
     };
-    let first =
-        ValueFingerprint::from_stored_value(&StoredValue::from_artifact(spilled_artifact.clone()));
+    let first = ValueFingerprint::from_stored_value(&spilled_artifact.clone().into_stored_value());
     let second = ValueFingerprint::from_stored_value(&StoredValue::sequence(
         vec![Value::Integer(1), Value::Integer(2)].into_boxed_slice(),
     ));
@@ -6617,6 +6614,27 @@ fn activation_allocator_exhaustion_is_typed_without_global_contamination() {
 }
 
 #[test]
+fn frame_allocator_exhaustion_is_a_typed_runtime_failure() {
+    let allocator = AtomicU64::new(u64::MAX);
+    let execution_plan = plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([])));
+    let kernels = KernelRegistry::new();
+    let resources = no_resources();
+    let executor = RunExecutor::new(
+        &kernels,
+        &resources,
+        &NoFunctions,
+        crate::node_system::runtime::ResultStore::new(),
+        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+    )
+    .with_frame_allocator_for_test(&allocator);
+
+    assert_eq!(
+        executor.run(&execution_plan, CancellationToken::new()),
+        Err(RunError::RuntimeIdExhausted)
+    );
+}
+
+#[test]
 fn retry_backoff_is_exponential_capped_and_overflow_safe() {
     let policy = RetryPolicy::new(
         NonZeroU32::new(10).unwrap(),
@@ -9019,7 +9037,7 @@ fn per_run_memo_key(inputs: &[RuntimeValue], resource_revision: &str) -> Operati
                 ValueFingerprint::from_stored_value(&StoredValue::scalar(value))
             }
             RuntimeValue::Artifact(artifact) => {
-                ValueFingerprint::from_stored_value(&StoredValue::from_artifact(artifact))
+                ValueFingerprint::from_stored_value(&artifact.into_stored_value())
             }
             RuntimeValue::Stream(_) => panic!("materialized inputs are cacheable"),
         })

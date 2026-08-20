@@ -261,9 +261,15 @@ fn set_input_state(
 
 impl GraphDocument {
     pub fn apply_patch(&mut self, patch: &GraphDocumentPatch) -> Result<(), DocumentError> {
+        let next_revision =
+            self.revision
+                .checked_next()
+                .map_err(|error| DocumentError::RevisionExhausted {
+                    retained: error.retained,
+                })?;
         let mut staged = self.clone();
         patch.apply_without_revision(&mut staged)?;
-        staged.revision = self.revision.next();
+        staged.revision = next_revision;
         *self = staged;
         Ok(())
     }

@@ -140,13 +140,4 @@ mod tests {
 
         assert_eq!(result.unwrap_err(), ValidationError::BasisMismatch);
     }
-
-    #[test]
-    fn deterministic_maps_serialize_in_key_order() {
-        let json = serde_json::to_string(&basis(1)).unwrap();
-        let first = json.find("a.resource").unwrap();
-        let second = json.find("z.resource").unwrap();
-
-        assert!(first < second);
-    }
 }

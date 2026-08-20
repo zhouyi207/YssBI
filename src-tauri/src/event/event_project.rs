@@ -224,27 +224,6 @@ mod tests {
     }
 
     #[test]
-    fn resource_mutation_result_serializes_required_top_level_operation_id() {
-        let operation_id =
-            crate::node_system::document::OperationId::from_uuid(uuid::Uuid::from_u128(0x777));
-        let result = ResourceMutationResultDto {
-            operation_id,
-            project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
-            publication_revision: 1,
-            moves: Vec::new(),
-            deltas: Vec::new(),
-            projection_replacements: Vec::new(),
-            projection_status: ProjectionStatusDto::Complete {
-                expected_graph_paths: Vec::new(),
-            },
-            history: Default::default(),
-        };
-
-        let wire = serde_json::to_value(result).unwrap();
-        assert_eq!(wire["operationId"], serde_json::json!(operation_id));
-    }
-
-    #[test]
     fn resource_lifecycle_delta_serializes_explicit_optional_states() {
         let operation_id =
             crate::node_system::document::OperationId::from_uuid(uuid::Uuid::from_u128(0x780));

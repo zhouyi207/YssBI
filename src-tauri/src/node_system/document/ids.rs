@@ -50,6 +50,19 @@ uuid_id!(HistoryEntryId);
 #[serde(transparent)]
 pub struct GraphRevision(u64);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RevisionExhausted {
+    pub retained: u64,
+}
+
+impl std::fmt::Display for RevisionExhausted {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "revision is exhausted at {}", self.retained)
+    }
+}
+
+impl std::error::Error for RevisionExhausted {}
+
 impl GraphRevision {
     pub const INITIAL: Self = Self(0);
 
@@ -61,12 +74,16 @@ impl GraphRevision {
         self.0
     }
 
-    pub(crate) fn advance(&mut self) {
-        self.0 = self.0.saturating_add(1);
+    pub const fn checked_next(self) -> Result<Self, RevisionExhausted> {
+        match self.0.checked_add(1) {
+            Some(next) => Ok(Self(next)),
+            None => Err(RevisionExhausted { retained: self.0 }),
+        }
     }
 
-    pub const fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
+    #[cfg(test)]
+    pub fn next(self) -> Self {
+        self.checked_next().expect("test revision is available")
     }
 }
 
@@ -89,12 +106,17 @@ impl ProjectRevision {
         self.0
     }
 
-    pub(crate) fn advance(&mut self) {
-        self.0 = self.0.saturating_add(1);
+    pub const fn checked_next(self) -> Result<Self, RevisionExhausted> {
+        match self.0.checked_add(1) {
+            Some(next) => Ok(Self(next)),
+            None => Err(RevisionExhausted { retained: self.0 }),
+        }
     }
 
-    pub const fn next(self) -> Self {
-        Self(self.0.saturating_add(1))
+    #[cfg(test)]
+    pub fn next(self) -> Self {
+        self.checked_next()
+            .expect("test project revision is available")
     }
 }
 

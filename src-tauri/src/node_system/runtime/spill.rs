@@ -123,16 +123,8 @@ impl SpillStorage {
         self._reservation.is_some()
     }
 
-    pub const fn bytes(&self) -> u64 {
-        self.bytes
-    }
-
     pub const fn len(&self) -> usize {
         self.count
-    }
-
-    pub const fn is_empty(&self) -> bool {
-        self.count == 0
     }
 
     pub fn cursor(&self) -> Result<SpillCursor, RunError> {
@@ -266,6 +258,7 @@ impl SpillCursor {
         })
     }
 
+    #[cfg(test)]
     pub fn close(&mut self) -> Result<(), RunError> {
         self.reader.take();
         if Arc::strong_count(&self.file) == 1 {
@@ -486,6 +479,7 @@ fn spill_io_error(error: std::io::Error) -> RunError {
     RunError::Stream(format!("spill I/O failed: {error}").into())
 }
 
+#[cfg(test)]
 fn spill_delete_error(error: std::io::Error) -> RunError {
     RunError::Stream(format!("spill deletion failed: {error}").into())
 }

@@ -101,18 +101,8 @@ pub(crate) enum MaterializedArtifact {
     Spilled(Arc<super::spill::SpillStorage>),
 }
 
+#[cfg(test)]
 impl MaterializedArtifact {
-    pub fn len(&self) -> usize {
-        match self {
-            Self::InMemory(storage) => storage.values().len(),
-            Self::Spilled(storage) => storage.len(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
     pub(crate) fn promote(
         &self,
         cancellation: &CancellationToken,
@@ -122,10 +112,6 @@ impl MaterializedArtifact {
             Self::InMemory(_) => Ok(()),
             Self::Spilled(storage) => storage.promote(cancellation, deadline),
         }
-    }
-
-    pub const fn is_memoization_complete(&self) -> bool {
-        matches!(self, Self::InMemory(_))
     }
 }
 
@@ -193,12 +179,9 @@ impl Artifact {
         self.stored.data_series_metadata()
     }
 
+    #[cfg(test)]
     pub(crate) fn materialized(&self) -> &MaterializedArtifact {
         &self.materialized
-    }
-
-    pub(crate) fn shares_storage_with(&self, other: &Self) -> bool {
-        self.stored.ptr_eq(&other.stored)
     }
 
     pub fn in_memory_values(&self) -> Option<&[Value]> {
@@ -220,16 +203,13 @@ impl Artifact {
         self.stored
     }
 
+    #[cfg(test)]
     pub(crate) fn promote(
         &self,
         cancellation: &CancellationToken,
         deadline: Option<RunDeadline>,
     ) -> Result<(), RunError> {
         self.materialized.promote(cancellation, deadline)
-    }
-
-    pub(crate) fn is_memoization_complete(&self) -> bool {
-        self.materialized.is_memoization_complete()
     }
 }
 
@@ -271,14 +251,6 @@ pub struct StreamValue {
 }
 
 impl StreamValue {
-    #[cfg(test)]
-    pub(crate) fn from_receiver(receiver: BoundedStreamReceiver<Value>) -> Self {
-        Self {
-            receiver,
-            producer_error: Arc::new(Mutex::new(None)),
-        }
-    }
-
     pub(crate) fn from_receiver_with_error(
         receiver: BoundedStreamReceiver<Value>,
         producer_error: Arc<Mutex<Option<Box<str>>>>,
@@ -339,14 +311,6 @@ pub enum RuntimeValue {
     Stream(StreamValue),
 }
 
-impl RuntimeValue {
-    pub fn close_stream(&self) {
-        if let Self::Stream(stream) = self {
-            stream.close();
-        }
-    }
-}
-
 impl From<Value> for RuntimeValue {
     fn from(value: Value) -> Self {
         Self::Scalar(value)
@@ -371,7 +335,7 @@ runtime_id!(FrameId);
 
 pub(crate) static ACTIVATION_IDS: LazyLock<ActivationIdAllocator> =
     LazyLock::new(|| ActivationIdAllocator::new(NonZeroU64::MIN));
-static NEXT_FRAME_ID: AtomicU64 = AtomicU64::new(1);
+pub(crate) static FRAME_IDS: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug)]
 pub(crate) struct ActivationIdAllocator {
@@ -398,6 +362,7 @@ impl ActivationIdAllocator {
     }
 }
 
+#[cfg(test)]
 impl ActivationId {
     pub(crate) fn next() -> Result<Self, RunError> {
         ACTIVATION_IDS.allocate()
@@ -405,8 +370,15 @@ impl ActivationId {
 }
 
 impl FrameId {
-    pub(crate) fn next() -> Self {
-        Self(NEXT_FRAME_ID.fetch_add(1, Ordering::Relaxed))
+    pub(crate) fn allocate(allocator: &AtomicU64) -> Result<Self, RunError> {
+        crate::node_system::allocate_nonzero_id(allocator)
+            .map(|id| Self(id.get()))
+            .map_err(|_| RunError::RuntimeIdExhausted)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn next() -> Result<Self, RunError> {
+        Self::allocate(&FRAME_IDS)
     }
 }
 
@@ -565,6 +537,7 @@ pub enum RunError {
     MemoizationRetry,
     Cancelled,
     ActivationIdExhausted,
+    RuntimeIdExhausted,
     DeadlineExceeded {
         phase: RunPhase,
     },
@@ -667,6 +640,7 @@ impl fmt::Display for RunError {
             Self::MemoizationRetry => formatter.write_str("memoization flight must be retried"),
             Self::Cancelled => formatter.write_str("run was cancelled"),
             Self::ActivationIdExhausted => formatter.write_str("activation ID space is exhausted"),
+            Self::RuntimeIdExhausted => formatter.write_str("runtime ID space is exhausted"),
             Self::DeadlineExceeded { phase } => {
                 write!(formatter, "run deadline exceeded during {phase:?}")
             }

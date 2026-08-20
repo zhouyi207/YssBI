@@ -1,8 +1,8 @@
-use super::CancellationToken;
+use super::{CancellationToken, RunError};
 use crate::node_system::analysis::{ProjectSessionId, RunId};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Condvar, Mutex};
 
 #[derive(Default)]
@@ -10,14 +10,23 @@ struct ProjectRuns {
     active: BTreeMap<ProjectSessionId, BTreeMap<RunId, CancellationToken>>,
     preparing: BTreeMap<ProjectSessionId, BTreeMap<u64, CancellationToken>>,
     finalizing: BTreeMap<ProjectSessionId, BTreeMap<u64, CancellationToken>>,
-    draining: BTreeMap<ProjectSessionId, usize>,
+    draining: BTreeMap<ProjectSessionId, BTreeSet<uuid::Uuid>>,
 }
 
-#[derive(Default)]
 pub struct ProjectRunRegistry {
     next_pre_run_id: AtomicU64,
     runs: Mutex<ProjectRuns>,
     drained: Condvar,
+}
+
+impl Default for ProjectRunRegistry {
+    fn default() -> Self {
+        Self {
+            next_pre_run_id: AtomicU64::new(1),
+            runs: Mutex::new(ProjectRuns::default()),
+            drained: Condvar::new(),
+        }
+    }
 }
 
 impl ProjectRunRegistry {
@@ -35,7 +44,12 @@ impl ProjectRunRegistry {
             cancellation.cancel();
             return Err(ProjectRunRegistrationError::ProjectDraining(project));
         }
-        let registration_id = self.next_pre_run_id.fetch_add(1, Ordering::Relaxed) + 1;
+        let registration_id = crate::node_system::allocate_nonzero_id(&self.next_pre_run_id)
+            .map_err(|_| {
+                cancellation.cancel();
+                ProjectRunRegistrationError::RuntimeIdExhausted
+            })?
+            .get();
         runs.preparing
             .entry(project.clone())
             .or_default()
@@ -88,10 +102,11 @@ impl ProjectRunRegistry {
 
     pub fn begin_drain(self: &Arc<Self>, project: &ProjectSessionId) -> ProjectRunDrainGuard {
         let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
-        let drain_count = runs.draining.entry(project.clone()).or_default();
-        *drain_count = drain_count
-            .checked_add(1)
-            .expect("project run drain guard count overflowed");
+        let drain_id = uuid::Uuid::new_v4();
+        runs.draining
+            .entry(project.clone())
+            .or_default()
+            .insert(drain_id);
         if let Some(preparing) = runs.preparing.get(project) {
             for cancellation in preparing.values() {
                 cancellation.cancel();
@@ -125,6 +140,7 @@ impl ProjectRunRegistry {
         ProjectRunDrainGuard {
             registry: Arc::clone(self),
             project: project.clone(),
+            drain_id,
         }
     }
 
@@ -163,7 +179,7 @@ impl ProjectRunRegistry {
             .unwrap_or_else(|error| error.into_inner())
             .draining
             .get(project)
-            .copied()
+            .map(BTreeSet::len)
             .unwrap_or_default()
     }
 
@@ -242,11 +258,11 @@ impl ProjectRunRegistry {
         }
     }
 
-    fn release_drain(&self, project: &ProjectSessionId) {
+    fn release_drain(&self, project: &ProjectSessionId, drain_id: uuid::Uuid) {
         let mut runs = self.runs.lock().unwrap_or_else(|error| error.into_inner());
-        let remove_project = if let Some(drain_count) = runs.draining.get_mut(project) {
-            *drain_count -= 1;
-            *drain_count == 0
+        let remove_project = if let Some(drain_ids) = runs.draining.get_mut(project) {
+            drain_ids.remove(&drain_id);
+            drain_ids.is_empty()
         } else {
             false
         };
@@ -259,11 +275,12 @@ impl ProjectRunRegistry {
 pub struct ProjectRunDrainGuard {
     registry: Arc<ProjectRunRegistry>,
     project: ProjectSessionId,
+    drain_id: uuid::Uuid,
 }
 
 impl Drop for ProjectRunDrainGuard {
     fn drop(&mut self) {
-        self.registry.release_drain(&self.project);
+        self.registry.release_drain(&self.project, self.drain_id);
     }
 }
 
@@ -318,6 +335,7 @@ impl Drop for ProjectRunRegistration<'_> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProjectRunRegistrationError {
     ProjectDraining(ProjectSessionId),
+    RuntimeIdExhausted,
 }
 
 impl fmt::Display for ProjectRunRegistrationError {
@@ -330,16 +348,51 @@ impl fmt::Display for ProjectRunRegistrationError {
                     project.as_str()
                 )
             }
+            Self::RuntimeIdExhausted => {
+                formatter.write_str("project pre-run registration ID space is exhausted")
+            }
         }
     }
 }
 
 impl std::error::Error for ProjectRunRegistrationError {}
 
+impl From<ProjectRunRegistrationError> for RunError {
+    fn from(error: ProjectRunRegistrationError) -> Self {
+        match error {
+            ProjectRunRegistrationError::ProjectDraining(project) => {
+                Self::ProjectDraining(project.as_str().into())
+            }
+            ProjectRunRegistrationError::RuntimeIdExhausted => Self::RuntimeIdExhausted,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Arc;
+
+    #[test]
+    fn pre_run_registration_exhaustion_is_typed_and_permanent() {
+        let registry = ProjectRunRegistry {
+            next_pre_run_id: AtomicU64::new(u64::MAX - 1),
+            ..ProjectRunRegistry::default()
+        };
+        let session = ProjectSessionId::new("pre-run-id-exhaustion");
+        let _last_registration = registry
+            .track_pre_run(session.clone(), CancellationToken::new())
+            .unwrap();
+
+        for _ in 0..2 {
+            assert_eq!(
+                registry
+                    .track_pre_run(session.clone(), CancellationToken::new())
+                    .err(),
+                Some(ProjectRunRegistrationError::RuntimeIdExhausted)
+            );
+        }
+    }
 
     #[test]
     fn cancel_run_targets_only_the_requested_project_run() {
@@ -465,16 +518,6 @@ mod tests {
         ));
         drop(pre_run);
         drain.join().unwrap();
-    }
-
-    #[test]
-    fn wait_until_draining_for_test_times_out_when_project_is_not_draining() {
-        let registry = ProjectRunRegistry::new();
-        let session = ProjectSessionId::new("not-draining");
-
-        assert!(
-            !registry.wait_until_draining_for_test(&session, std::time::Duration::from_millis(10),)
-        );
     }
 
     #[test]

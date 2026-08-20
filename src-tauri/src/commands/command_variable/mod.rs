@@ -502,6 +502,49 @@ mod tests {
     }
 
     #[test]
+    fn update_tabular_variable_rejects_invalid_value_without_reusing_snapshot() {
+        let (root, state, project_instance_id) = active_state("invalid-tabular-update");
+        let created = create_variable_with_emitter(
+            &state,
+            "table",
+            DataType::DataFrame,
+            DataValue::DataFrame(r#"{"value":[1,2]}"#.into()),
+            "",
+            VariableScope::Global,
+            vec![],
+            project_instance_id.clone(),
+            0,
+            OperationId::new(),
+            |_| {},
+        )
+        .unwrap();
+        let before = command_snapshot(&state);
+        let mut events = Vec::new();
+
+        let error = update_variable_with_emitter(
+            &state,
+            VariableId::from(
+                uuid::Uuid::parse_str(&created.variable_id).expect("created variable UUID"),
+            ),
+            None,
+            None,
+            Some(DataValue::DataFrame("not-json".into())),
+            None,
+            None,
+            project_instance_id,
+            ResourceRevision::new(1),
+            OperationId::new(),
+            |event| events.push(event),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), "transaction_commit_failed");
+        assert_eq!(command_snapshot(&state), before);
+        assert!(events.is_empty());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn global_variable_commands_publish_contiguous_revisions_history_and_events() {
         let (root, state, project_instance_id) = active_state("success");
         let mut events = Vec::new();

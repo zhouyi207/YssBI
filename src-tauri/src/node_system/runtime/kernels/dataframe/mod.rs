@@ -915,7 +915,7 @@ mod tests {
         let source_graph_path = GraphResourcePath("events/dataframe-test.yssbi-event".into());
         let context = KernelContext {
             run_id: RunId::new(1),
-            frame_id: FrameId::next(),
+            frame_id: FrameId::next().unwrap(),
             activation_id: ActivationId::next().unwrap(),
             source_graph_path: &source_graph_path,
             source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),

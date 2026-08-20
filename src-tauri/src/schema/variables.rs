@@ -2,7 +2,7 @@
 
 use crate::graph::value::{DataType, DataValue};
 use crate::tabular::display_data_value;
-use crate::variable::{VariableId, VariableInstance, VariableScope};
+use crate::variable::{VariableInstance, VariableScope};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -27,21 +27,6 @@ impl From<&VariableInstance> for VariableInstanceDTO {
             description: value.description.clone(),
             scope: value.scope.clone(),
             tags: value.tags.clone(),
-        }
-    }
-}
-
-impl From<VariableInstanceDTO> for VariableInstance {
-    fn from(value: VariableInstanceDTO) -> Self {
-        Self {
-            id: VariableId::new(),
-            name: value.name,
-            data_type: value.data_type,
-            data_value: value.data_value,
-            tabular: None,
-            description: value.description,
-            scope: value.scope,
-            tags: value.tags,
         }
     }
 }

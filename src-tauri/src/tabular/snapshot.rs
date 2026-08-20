@@ -1,7 +1,6 @@
 //! 列式 tabular 快照：`{ "col_a": [1,2], "col_b": [3,4] }`
 
-use crate::database::{json_to_anyvalue, polars_dtype_to_data_type};
-use crate::graph::node::{ColumnSchema, DataSchema};
+use crate::database::json_to_anyvalue;
 use polars::prelude::{AnyValue, Column, DataFrame, DataType as PDataType, PlSmallStr, Series};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -36,11 +35,6 @@ impl TabularSnapshot {
 
     pub fn to_json(&self) -> Result<String, String> {
         serde_json::to_string(&self.columns).map_err(|e| format!("Tabular JSON encode error: {e}"))
-    }
-
-    pub fn to_json_pretty(&self) -> Result<String, String> {
-        serde_json::to_string_pretty(&self.columns)
-            .map_err(|e| format!("Tabular JSON encode error: {e}"))
     }
 
     pub fn column_names(&self) -> Vec<String> {
@@ -78,19 +72,6 @@ impl TabularSnapshot {
         }
         let columns: Vec<Column> = series_vec.into_iter().map(Column::from).collect();
         DataFrame::new(height, columns).map_err(|e| format!("Failed to build DataFrame: {e}"))
-    }
-
-    pub fn to_schema(&self) -> Result<DataSchema, String> {
-        let df = self.to_dataframe()?;
-        let columns = df
-            .columns()
-            .iter()
-            .map(|series| ColumnSchema {
-                name: series.name().to_string(),
-                data_type: polars_dtype_to_data_type(series.dtype()),
-            })
-            .collect();
-        Ok(DataSchema { columns })
     }
 }
 
@@ -152,55 +133,15 @@ pub fn is_json_literal(s: &str) -> bool {
     t.starts_with('[') || t.starts_with('{')
 }
 
-pub fn dataframe_from_json(json: &str) -> Result<DataFrame, String> {
-    TabularSnapshot::from_json(json)?.to_dataframe()
-}
-
-pub fn series_from_json(json: &str) -> Result<Series, String> {
-    let snapshot = TabularSnapshot::from_json(json)?;
-    if snapshot.width() != 1 {
-        return Err(format!(
-            "DataSeries JSON: expected exactly one column, got {}",
-            snapshot.width()
-        ));
-    }
-    let df = snapshot.to_dataframe()?;
-    df.select_at_idx(0)
-        .ok_or_else(|| "DataSeries JSON: failed to read column".to_string())
-        .map(|col| col.clone().take_materialized_series())
-}
-
-pub fn dataframe_schema_from_json(json: &str) -> Result<DataSchema, String> {
-    TabularSnapshot::from_json(json)?.to_schema()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::DataType;
 
     #[test]
     fn parses_column_map_dataframe() {
-        let json = r#"{"a":[1,2],"b":[3,4]}"#;
-        let df = dataframe_from_json(json).unwrap();
-        assert_eq!(df.height(), 2);
-        assert_eq!(df.width(), 2);
-    }
-
-    #[test]
-    fn infers_schema_from_column_map() {
-        let json = r#"{"a":[1,2],"b":[1.5,2.5]}"#;
-        let schema = dataframe_schema_from_json(json).unwrap();
-        assert_eq!(schema.columns.len(), 2);
-        assert_eq!(schema.columns[0].data_type, DataType::Int64);
-        assert_eq!(schema.columns[1].data_type, DataType::Float64);
-    }
-
-    #[test]
-    fn parses_dataseries_single_column() {
-        let json = r#"{"price":[1,2,3]}"#;
-        let s = series_from_json(json).unwrap();
-        assert_eq!(s.len(), 3);
-        assert_eq!(s.name(), "price");
+        let snapshot = TabularSnapshot::from_json(r#"{"a":[1,2],"b":[3,4]}"#).unwrap();
+        let dataframe = snapshot.to_dataframe().unwrap();
+        assert_eq!(dataframe.height(), 2);
+        assert_eq!(dataframe.width(), 2);
     }
 }

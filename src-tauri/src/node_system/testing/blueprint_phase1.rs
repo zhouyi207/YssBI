@@ -200,18 +200,6 @@ impl BlueprintPhase1Fixture {
         self.request(3, self.current_revision().next(), success_payload(kind))
     }
 
-    pub(crate) fn competing_requests(
-        &self,
-        kind: Phase1ComplexMutation,
-    ) -> [MutationRequest<EditorGraphMutationDto>; 2] {
-        self.assert_kind(kind);
-        let revision = self.current_revision();
-        [
-            self.request(4, revision, success_payload(kind)),
-            self.request(5, revision, success_payload(kind)),
-        ]
-    }
-
     pub(crate) fn empty_derived_disconnect_request(
         &self,
     ) -> MutationRequest<EditorGraphMutationDto> {

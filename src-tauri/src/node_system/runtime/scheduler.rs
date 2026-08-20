@@ -3,14 +3,15 @@ use super::scheduling::ClassScheduler;
 use super::{
     ACTIVATION_IDS, ActivationId, ActivationIdAllocator, ActivationProvenance,
     ActivationResultGroup, CancellationToken, CompiledParameterStore, DemandFingerprint,
-    EffectiveComputationSettings, FrameId, KernelContext, KernelErrorKind, KernelRegistry,
-    NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey, PendingOutputDescriptor,
-    ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider, RelationalContext,
-    ResourceErrorKind, ResourceProvider, ResultFailure, ResultId, ResultState, ResultStore,
-    ResultUsage, RunDeadline, RunError, RunErrorOutcome, RunEvent, RunEventKind, RunEventSink,
-    RunOptions, RunOutputEmitter, RunOutputSink, RunPhase, RunResourceBudgets, RunResourceOwner,
-    RunResourceSet, RunResult, RuntimeValue, SchedulingPolicy, SessionMemoization, StoredValue,
-    check_terminal, execute_planned_adapter, validate_data_series_type_expr,
+    EffectiveComputationSettings, FRAME_IDS, FrameId, KernelContext, KernelErrorKind,
+    KernelRegistry, NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey,
+    PendingOutputDescriptor, ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider,
+    RelationalContext, ResourceErrorKind, ResourceProvider, ResultFailure, ResultId, ResultState,
+    ResultStore, ResultUsage, RunDeadline, RunError, RunErrorOutcome, RunEvent, RunEventKind,
+    RunEventSink, RunOptions, RunOutputEmitter, RunOutputSink, RunPhase, RunResourceBudgets,
+    RunResourceOwner, RunResourceSet, RunResult, RuntimeValue, SchedulingPolicy,
+    SessionMemoization, StoredValue, check_terminal, execute_planned_adapter,
+    validate_data_series_type_expr,
 };
 use crate::node_system::analysis::{
     CorrelationContext, NOOP_TRACE_SINK, ParentCallId, ResourceVersionSet, RunId,
@@ -26,13 +27,18 @@ use crate::node_system::protocol::{CachePolicy, RetryPolicy, Value};
 use std::cell::Cell;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::num::NonZeroU64;
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
 const DEFAULT_RECURSION_LIMIT: usize = 64;
 static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_PARENT_CALL_ID: AtomicU64 = AtomicU64::new(1);
+
+fn allocate_runtime_id(allocator: &AtomicU64) -> Result<NonZeroU64, RunError> {
+    crate::node_system::allocate_nonzero_id(allocator).map_err(|_| RunError::RuntimeIdExhausted)
+}
 
 #[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -215,7 +221,7 @@ struct OperationWorkerContext<'a> {
     results: &'a ResultStore,
     cancellation: &'a CancellationToken,
     deadline: Option<RunDeadline>,
-    run_parent_span_id: SpanId,
+    run_parent_span_id: Option<SpanId>,
     parent_call: Option<ParentCallId>,
     #[cfg(test)]
     checkpoint:
@@ -230,7 +236,7 @@ struct WorkerCompletion {
 }
 
 struct SchedulerSignal {
-    generation: Mutex<u64>,
+    notified: Mutex<bool>,
     ready: Arc<Condvar>,
 }
 
@@ -239,18 +245,18 @@ impl SchedulerSignal {
         let ready = Arc::new(Condvar::new());
         cancellation.register_waiter(&ready);
         Self {
-            generation: Mutex::new(0),
+            notified: Mutex::new(false),
             ready,
         }
     }
 
     fn notify(&self) {
-        let mut generation = self
-            .generation
+        let mut notified = self
+            .notified
             .lock()
             .unwrap_or_else(|error| error.into_inner());
-        *generation = generation.saturating_add(1);
-        drop(generation);
+        *notified = true;
+        drop(notified);
         self.ready.notify_all();
     }
 }
@@ -640,6 +646,7 @@ pub struct RunExecutor<'a> {
     >,
     options: RunOptions,
     activation_ids: &'a ActivationIdAllocator,
+    frame_ids: &'a AtomicU64,
     #[cfg(test)]
     spill_root: Option<std::path::PathBuf>,
     #[cfg(test)]
@@ -674,6 +681,7 @@ impl<'a> RunExecutor<'a> {
             atomic_success_finalizer: None,
             options: RunOptions::default(),
             activation_ids: &ACTIVATION_IDS,
+            frame_ids: &FRAME_IDS,
             #[cfg(test)]
             spill_root: None,
             #[cfg(test)]
@@ -748,17 +756,18 @@ impl<'a> RunExecutor<'a> {
         self
     }
 
-    pub fn with_options(mut self, options: RunOptions) -> Self {
-        self.options = options;
-        self
-    }
-
     #[cfg(test)]
     pub(crate) fn with_activation_allocator_for_test(
         mut self,
         allocator: &'a ActivationIdAllocator,
     ) -> Self {
         self.activation_ids = allocator;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_frame_allocator_for_test(mut self, allocator: &'a AtomicU64) -> Self {
+        self.frame_ids = allocator;
         self
     }
 
@@ -777,18 +786,6 @@ impl<'a> RunExecutor<'a> {
         ) -> Result<(), RunError>,
     ) -> Self {
         self.success_finalizer = Some(finalizer);
-        self
-    }
-
-    pub fn with_atomic_success_finalizer(
-        mut self,
-        finalizer: &'a dyn Fn(
-            &mut RunResult,
-            &CancellationToken,
-            Option<RunDeadline>,
-        ) -> Result<(), RunError>,
-    ) -> Self {
-        self.atomic_success_finalizer = Some(finalizer);
         self
     }
 
@@ -835,8 +832,7 @@ impl<'a> RunExecutor<'a> {
         plan: &ExecutionPlan,
         cancellation: CancellationToken,
     ) -> Result<RunResult, RunError> {
-        let run_id = RunId::try_new(NEXT_RUN_ID.fetch_add(1, Ordering::Relaxed))
-            .map_err(|_| RunError::InvalidPlan("run identity space exhausted".into()))?;
+        let run_id = allocate_runtime_id(&NEXT_RUN_ID).map(|id| RunId::new(id.get()))?;
         let _registration = self
             .run_registry
             .map(|registry| {
@@ -866,7 +862,9 @@ impl<'a> RunExecutor<'a> {
                 correlation: correlation.clone(),
             },
         );
-        correlation = correlation.with_trace_parent(run_span.span_id());
+        if let Some(span_id) = run_span.span_id() {
+            correlation = correlation.with_trace_parent(span_id);
+        }
         let trace_coverage = RunTraceCoverage::new(self.trace, correlation.clone());
         #[cfg(test)]
         let resource_owner = match &self.spill_root {
@@ -1091,7 +1089,7 @@ impl<'a> RunExecutor<'a> {
             &resource_set,
             &cancellation,
         )?;
-        let mut frame = Frame::new(plan.value_count);
+        let mut frame = Frame::new(plan.value_count, self.frame_ids)?;
         self.bind_internal_values(run_id, plan, &mut frame, &plan.bound_values)?;
         let run_memoization = SessionMemoization::new();
         let memoization = MemoTables {
@@ -1113,9 +1111,7 @@ impl<'a> RunExecutor<'a> {
                 &root_demand,
                 &cancellation,
                 1,
-                correlation
-                    .trace_parent_span_id
-                    .expect("run span parent is set"),
+                correlation.trace_parent_span_id,
                 None,
             )?;
             cancellation.check()?;
@@ -1376,7 +1372,7 @@ impl<'a> RunExecutor<'a> {
         demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         frame_depth: usize,
-        run_parent_span_id: SpanId,
+        run_parent_span_id: Option<SpanId>,
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
         cancellation.check()?;
@@ -1499,13 +1495,14 @@ impl<'a> RunExecutor<'a> {
                     .ok_or_else(|| RunError::FunctionPlanNotFound(target.as_str().into()))?;
                 validate_published_call(plan, target, arguments, results, &published)?;
                 let callee = Arc::clone(&published.plan);
-                let call_id =
-                    ParentCallId::new(NEXT_PARENT_CALL_ID.fetch_add(1, Ordering::Relaxed));
+                let call_id = allocate_runtime_id(&NEXT_PARENT_CALL_ID)
+                    .map(|id| ParentCallId::new(id.get()))?;
                 let mut correlation =
                     CorrelationContext::compile(&callee.provenance).for_run(run_id, Some(call_id));
                 let call_parent_span_id = (callee.provenance.graph_path
                     == plan.provenance.graph_path)
-                    .then_some(run_parent_span_id);
+                    .then_some(run_parent_span_id)
+                    .flatten();
                 let mut call_span = start_span_safely(
                     self.trace,
                     SpanSpec {
@@ -1518,7 +1515,9 @@ impl<'a> RunExecutor<'a> {
                         correlation: correlation.clone(),
                     },
                 );
-                correlation = correlation.with_trace_parent(call_span.span_id());
+                if let Some(span_id) = call_span.span_id() {
+                    correlation = correlation.with_trace_parent(span_id);
+                }
                 let call_trace_coverage = RunTraceCoverage::new(self.trace, correlation.clone());
                 let call_result = (|| {
                     callee
@@ -1540,7 +1539,7 @@ impl<'a> RunExecutor<'a> {
                         &callee_resources,
                         cancellation,
                     )?;
-                    let mut callee_frame = Frame::new(callee.value_count);
+                    let mut callee_frame = Frame::new(callee.value_count, self.frame_ids)?;
                     self.bind_internal_values(
                         run_id,
                         &callee,
@@ -1566,9 +1565,7 @@ impl<'a> RunExecutor<'a> {
                             &callee_demand,
                             cancellation,
                             frame_depth + 1,
-                            correlation
-                                .trace_parent_span_id
-                                .expect("callee run span parent is set"),
+                            correlation.trace_parent_span_id,
                             Some(call_id),
                         )?;
                         for binding in results {
@@ -1610,7 +1607,7 @@ impl<'a> RunExecutor<'a> {
         demand: &DemandFingerprint,
         cancellation: &CancellationToken,
         frame_depth: usize,
-        run_parent_span_id: SpanId,
+        run_parent_span_id: Option<SpanId>,
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
         let activation_id = self.activation_ids.allocate()?;
@@ -1694,7 +1691,7 @@ impl<'a> RunExecutor<'a> {
         memoization: &MemoTables,
         demand: &DemandFingerprint,
         cancellation: &CancellationToken,
-        run_parent_span_id: SpanId,
+        run_parent_span_id: Option<SpanId>,
         parent_call: Option<ParentCallId>,
     ) -> Result<(), RunError> {
         self.propagate_value_dependencies(plan, frame)?;
@@ -2237,13 +2234,13 @@ impl<'a> RunExecutor<'a> {
                             continue;
                         }
 
-                        let generation = scheduler_signal
-                            .generation
+                        let mut notified = scheduler_signal
+                            .notified
                             .lock()
                             .unwrap_or_else(|error| error.into_inner());
-                        let observed = *generation;
                         if let Ok(completion) = completion_receiver.try_recv() {
-                            drop(generation);
+                            *notified = false;
+                            drop(notified);
                             self.finish_operation_completion(
                                 plan,
                                 frame,
@@ -2266,23 +2263,25 @@ impl<'a> RunExecutor<'a> {
                             continue;
                         }
                         if cancellation.is_cancelled() {
-                            drop(generation);
+                            drop(notified);
                             continue;
                         }
                         if let Some(timeout) = timeout {
-                            let _ = scheduler_signal
+                            let (mut notified, _) = scheduler_signal
                                 .ready
-                                .wait_timeout_while(generation, timeout, |generation| {
-                                    *generation == observed && !cancellation.is_cancelled()
+                                .wait_timeout_while(notified, timeout, |notified| {
+                                    !*notified && !cancellation.is_cancelled()
                                 })
                                 .unwrap_or_else(|error| error.into_inner());
+                            *notified = false;
                         } else {
-                            let _guard = scheduler_signal
+                            let mut notified = scheduler_signal
                                 .ready
-                                .wait_while(generation, |generation| {
-                                    *generation == observed && !cancellation.is_cancelled()
+                                .wait_while(notified, |notified| {
+                                    !*notified && !cancellation.is_cancelled()
                                 })
                                 .unwrap_or_else(|error| error.into_inner());
+                            *notified = false;
                         }
                         continue;
                     }
@@ -3427,7 +3426,7 @@ fn execute_operation_worker(
     let mut span = start_span_safely(
         trace,
         SpanSpec {
-            parent_span_id: Some(context.run_parent_span_id),
+            parent_span_id: context.run_parent_span_id,
             run_id: Some(context.run_id),
             operation_id: Some(planned.stable_id.clone()),
             activation_id: Some(activation),
@@ -3451,7 +3450,7 @@ fn execute_operation_worker_inner(
     context: &OperationWorkerContext<'_>,
     job: PreparedOperation,
     trace: &dyn TraceSink,
-    operation_span_id: SpanId,
+    operation_span_id: Option<SpanId>,
 ) -> Result<Box<[StoredValue]>, RunError> {
     check_terminal(context.cancellation, context.deadline, RunPhase::Kernel)?;
     let operation = &context.plan.operations[job.operation.index()];
@@ -3588,7 +3587,7 @@ fn execute_operation_worker_inner(
                 let mut adapter_span = start_span_safely(
                     trace,
                     SpanSpec {
-                        parent_span_id: Some(operation_span_id),
+                        parent_span_id: operation_span_id,
                         run_id: Some(context.run_id),
                         operation_id: Some(operation.stable_id.clone()),
                         activation_id: Some(job.activation),
@@ -3628,7 +3627,7 @@ fn execute_operation_worker_inner(
                 let mut adapter_span = start_span_safely(
                     trace,
                     SpanSpec {
-                        parent_span_id: Some(operation_span_id),
+                        parent_span_id: operation_span_id,
                         run_id: Some(context.run_id),
                         operation_id: Some(operation.stable_id.clone()),
                         activation_id: Some(job.activation),
@@ -3773,15 +3772,15 @@ struct Frame {
 }
 
 impl Frame {
-    fn new(value_count: u32) -> Self {
-        Self {
-            id: FrameId::next(),
+    fn new(value_count: u32, frame_ids: &AtomicU64) -> Result<Self, RunError> {
+        Ok(Self {
+            id: FrameId::allocate(frame_ids)?,
             bindings: vec![None; value_count as usize],
 
             attempted: BTreeMap::new(),
             completed: BTreeSet::new(),
             completion_counts: BTreeMap::new(),
-        }
+        })
     }
 
     fn clear_region_values(&mut self, plan: &ExecutionPlan, region: &StructuredControlRegion) {
@@ -3895,6 +3894,19 @@ mod result_id_frame_tests {
     use crate::node_system::plan::GraphOutputRef;
 
     #[test]
+    fn runtime_id_exhaustion_is_not_classified_as_an_invalid_plan() {
+        let allocator = AtomicU64::new(u64::MAX);
+
+        let error = allocate_runtime_id(&allocator).unwrap_err();
+
+        assert_eq!(error, RunError::RuntimeIdExhausted);
+        assert_eq!(
+            crate::node_system::runtime::RunErrorCode::from(&error),
+            crate::node_system::runtime::RunErrorCode::RuntimeIdExhausted
+        );
+    }
+
+    #[test]
     fn scheduler_uses_current_frame_binding_not_latest_pin_history() {
         let store = ResultStore::new();
         let graph_path = crate::node_system::document::GraphResourcePath("events/test".into());
@@ -3938,7 +3950,8 @@ mod result_id_frame_tests {
         };
         let current = create_ready(1);
         let latest = create_ready(2);
-        let mut frame = Frame::new(1);
+        let frame_ids = AtomicU64::new(1);
+        let mut frame = Frame::new(1, &frame_ids).unwrap();
         frame.bind_result(ValueRef::new(0), current).unwrap();
 
         assert_eq!(frame.result_id(ValueRef::new(0)).unwrap(), current);

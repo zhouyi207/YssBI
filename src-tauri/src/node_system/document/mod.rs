@@ -24,7 +24,7 @@ pub use history::{
 };
 pub use ids::{
     ConnectionId, GraphRevision, HistoryEntryId, NodeId, OperationId, PortInstanceId,
-    ProjectRevision, ProjectTransactionRevision, ResourceRevision,
+    ProjectRevision, ProjectTransactionRevision, ResourceRevision, RevisionExhausted,
 };
 pub use materialization::{
     CompilationBasisToken, CompilationRegistryFingerprint, CompilationResourceKey,

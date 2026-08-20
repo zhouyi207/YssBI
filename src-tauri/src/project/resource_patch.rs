@@ -10,6 +10,11 @@ pub enum ResourceDocumentPatch {
         path: GraphResourcePath,
         resource: GraphResourceDocument,
     },
+    /// Publish an on-disk graph declaration without installing a resident document.
+    DeclareGraph {
+        path: GraphResourcePath,
+        revision: crate::node_system::document::ResourceRevision,
+    },
     RemoveGraph {
         path: GraphResourcePath,
         revision: crate::node_system::document::ResourceRevision,

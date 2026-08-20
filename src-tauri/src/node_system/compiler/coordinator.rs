@@ -63,6 +63,7 @@ pub struct CompilationTask {
 pub enum ScheduleOutcome {
     Start(CompilationTask),
     Coalesced { compile_id: CompileId },
+    Exhausted,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -486,7 +487,10 @@ impl<Analysis, Plan> CompileCoordinator<Analysis, Plan> {
         graph_path: GraphResourcePath,
         basis: CompilationBasis<GraphRevision>,
     ) -> ScheduleOutcome {
-        let compile_id = CompileId::new(self.next_compile_id.fetch_add(1, Ordering::Relaxed));
+        let Ok(compile_id) = crate::node_system::allocate_nonzero_id(&self.next_compile_id) else {
+            return ScheduleOutcome::Exhausted;
+        };
+        let compile_id = CompileId::new(compile_id.get());
         let outcome = self
             .slots
             .lock()
@@ -817,7 +821,24 @@ mod tests {
         match outcome {
             ScheduleOutcome::Start(task) => task,
             ScheduleOutcome::Coalesced { .. } => panic!("expected task to start"),
+            ScheduleOutcome::Exhausted => panic!("compile ID unexpectedly exhausted"),
         }
+    }
+
+    #[test]
+    fn compile_id_exhaustion_rejects_scheduling_without_creating_a_slot() {
+        let coordinator = CompileCoordinator::<(), ()>::new();
+        coordinator
+            .next_compile_id
+            .store(u64::MAX, Ordering::Relaxed);
+
+        for _ in 0..2 {
+            assert!(matches!(
+                coordinator.request(path(), basis(1, 1, "1")),
+                ScheduleOutcome::Exhausted
+            ));
+        }
+        assert!(!coordinator.contains_slot_for_test(&path()));
     }
 
     #[test]
@@ -835,12 +856,12 @@ mod tests {
         let first = started(coordinator.request(path(), basis(1, 1, "1")));
         let second_id = match coordinator.request(path(), basis(2, 1, "1")) {
             ScheduleOutcome::Coalesced { compile_id } => compile_id,
-            ScheduleOutcome::Start(_) => panic!("second task must wait for cancelled active task"),
+            _ => panic!("second task must wait for cancelled active task"),
         };
         let third_basis = basis(3, 1, "1");
         let third_id = match coordinator.request(path(), third_basis.clone()) {
             ScheduleOutcome::Coalesced { compile_id } => compile_id,
-            ScheduleOutcome::Start(_) => panic!("third task must replace pending task"),
+            _ => panic!("third task must replace pending task"),
         };
 
         let report = coordinator.publish(
@@ -1153,7 +1174,7 @@ mod tests {
 
         let joined_id = match coordinator.request(path(), current) {
             ScheduleOutcome::Coalesced { compile_id } => compile_id,
-            ScheduleOutcome::Start(_) => panic!("same-basis request must join active work"),
+            _ => panic!("same-basis request must join active work"),
         };
 
         assert_eq!(joined_id, active.compile_id);
@@ -1167,16 +1188,16 @@ mod tests {
         let active = started(coordinator.request(path(), basis(1, 1, "1")));
         let replaced_id = match coordinator.request(path(), basis(2, 1, "1")) {
             ScheduleOutcome::Coalesced { compile_id } => compile_id,
-            ScheduleOutcome::Start(_) => panic!("different basis must wait behind active work"),
+            _ => panic!("different basis must wait behind active work"),
         };
         let latest_basis = basis(3, 1, "1");
         let latest_id = match coordinator.request(path(), latest_basis.clone()) {
             ScheduleOutcome::Coalesced { compile_id } => compile_id,
-            ScheduleOutcome::Start(_) => panic!("latest basis must replace pending work"),
+            _ => panic!("latest basis must replace pending work"),
         };
         let joined_latest_id = match coordinator.request(path(), latest_basis.clone()) {
             ScheduleOutcome::Coalesced { compile_id } => compile_id,
-            ScheduleOutcome::Start(_) => panic!("same pending basis must join pending work"),
+            _ => panic!("same pending basis must join pending work"),
         };
 
         assert!(active.cancellation.is_cancelled());
@@ -1333,7 +1354,7 @@ mod tests {
         let new_basis = basis(2, 1, "1");
         let new_id = match coordinator.request(path(), new_basis.clone()) {
             ScheduleOutcome::Coalesced { compile_id } => compile_id,
-            ScheduleOutcome::Start(_) => panic!("new basis must wait behind active work"),
+            _ => panic!("new basis must wait behind active work"),
         };
         let new = coordinator.finish(&path(), old.compile_id).unwrap();
         assert_eq!(new.compile_id, new_id);

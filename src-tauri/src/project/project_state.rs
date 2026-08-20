@@ -20,7 +20,7 @@ use crate::project::{
     ResourceLifecycleOperation, ResourceLifecycleRegistry, ResourceRenameOwnershipLease,
     StagedFilesystemMutation, WorksheetResourcePath, load_project_graph_from_file,
 };
-use crate::tabular::{normalize_variable_tabular, sync_variable_cache};
+use crate::tabular::normalize_variable_tabular;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -394,7 +394,6 @@ type PreparedVariableEffectAuthority<'a> = Box<
 struct VariableAuthorityPriorState {
     data: ProjectData,
     revisions: std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
-    variable_tabular: std::collections::HashMap<String, crate::tabular::VariableTabularCache>,
     history: ProjectHistory,
     publication_revision: u64,
     authority_generation: u64,
@@ -404,8 +403,6 @@ struct VariableAuthorityInstallGuard<'a> {
     data: &'a mut ProjectData,
     revisions:
         &'a mut std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
-    variable_tabular:
-        &'a mut std::collections::HashMap<String, crate::tabular::VariableTabularCache>,
     history: &'a mut ProjectHistory,
     publication: &'a mut MutationPublication,
     prior: Option<VariableAuthorityPriorState>,
@@ -419,10 +416,6 @@ impl<'a> VariableAuthorityInstallGuard<'a> {
             crate::variable::VariableId,
             VariableRevisionEntry,
         >,
-        variable_tabular: &'a mut std::collections::HashMap<
-            String,
-            crate::tabular::VariableTabularCache,
-        >,
         history: &'a mut ProjectHistory,
         publication: &'a mut MutationPublication,
         prior: VariableAuthorityPriorState,
@@ -430,7 +423,6 @@ impl<'a> VariableAuthorityInstallGuard<'a> {
         Self {
             data,
             revisions,
-            variable_tabular,
             history,
             publication,
             prior: Some(prior),
@@ -445,10 +437,6 @@ impl<'a> VariableAuthorityInstallGuard<'a> {
             crate::variable::VariableId,
             VariableRevisionEntry,
         >,
-        next_variable_tabular: std::collections::HashMap<
-            String,
-            crate::tabular::VariableTabularCache,
-        >,
         next_history: ProjectHistory,
         publication_revision: u64,
         authority_generation: u64,
@@ -460,11 +448,6 @@ impl<'a> VariableAuthorityInstallGuard<'a> {
             panic_hook();
         }
         *self.revisions = next_revisions;
-        #[cfg(test)]
-        if let Some(panic_hook) = panic_hook {
-            panic_hook();
-        }
-        *self.variable_tabular = next_variable_tabular;
         #[cfg(test)]
         if let Some(panic_hook) = panic_hook {
             panic_hook();
@@ -502,7 +485,6 @@ impl Drop for VariableAuthorityInstallGuard<'_> {
         self.publication.resource_revision = prior.publication_revision;
         self.publication.authority_generation = prior.authority_generation;
         *self.history = prior.history;
-        *self.variable_tabular = prior.variable_tabular;
         *self.revisions = prior.revisions;
         *self.data = prior.data;
     }
@@ -518,6 +500,14 @@ pub(super) struct MutationPublication {
 pub(super) struct VariableStagingBasis {
     session: ProjectSession,
     authority_generation: u64,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PreparedPublicationAdvance {
+    previous_resource_revision: u64,
+    next_resource_revision: u64,
+    previous_authority_generation: u64,
+    next_authority_generation: u64,
 }
 
 impl Default for MutationPublication {
@@ -536,20 +526,63 @@ impl MutationPublication {
         self.authority_generation
     }
 
-    pub(super) fn advance_authority_generation(&mut self) {
-        self.authority_generation = self
+    pub(super) fn prepare_authority_generation(
+        &self,
+    ) -> Result<PreparedPublicationAdvance, ProjectFilesystemError> {
+        let next_authority_generation = self
             .authority_generation
             .checked_add(1)
-            .expect("project authority generation overflowed");
+            .ok_or(ProjectFilesystemError::AuthorityGenerationExhausted)?;
+        Ok(PreparedPublicationAdvance {
+            previous_resource_revision: self.resource_revision,
+            next_resource_revision: self.resource_revision,
+            previous_authority_generation: self.authority_generation,
+            next_authority_generation,
+        })
     }
 
-    pub(super) fn allocate_resource_revision(&mut self) -> u64 {
-        self.resource_revision = self
+    pub(super) fn prepare_resource_revision(
+        &self,
+    ) -> Result<PreparedPublicationAdvance, ProjectFilesystemError> {
+        let next_resource_revision = self
             .resource_revision
             .checked_add(1)
-            .expect("resource publication revision overflowed");
-        self.advance_authority_generation();
-        self.resource_revision
+            .ok_or(ProjectFilesystemError::PublicationRevisionExhausted)?;
+        let next_authority_generation = self
+            .authority_generation
+            .checked_add(1)
+            .ok_or(ProjectFilesystemError::AuthorityGenerationExhausted)?;
+        Ok(PreparedPublicationAdvance {
+            previous_resource_revision: self.resource_revision,
+            next_resource_revision,
+            previous_authority_generation: self.authority_generation,
+            next_authority_generation,
+        })
+    }
+
+    pub(super) fn commit_prepared(&mut self, prepared: PreparedPublicationAdvance) -> u64 {
+        debug_assert_eq!(self.resource_revision, prepared.previous_resource_revision);
+        debug_assert_eq!(
+            self.authority_generation,
+            prepared.previous_authority_generation
+        );
+        self.resource_revision = prepared.next_resource_revision;
+        self.authority_generation = prepared.next_authority_generation;
+        prepared.next_resource_revision
+    }
+
+    #[cfg(test)]
+    pub(super) fn advance_authority_generation(&mut self) {
+        let prepared = self
+            .prepare_authority_generation()
+            .expect("test authority generation is available");
+        self.commit_prepared(prepared);
+    }
+
+    #[cfg(test)]
+    pub(super) fn allocate_resource_revision(&mut self) -> Result<u64, ProjectFilesystemError> {
+        let prepared = self.prepare_resource_revision()?;
+        Ok(self.commit_prepared(prepared))
     }
 
     fn reset_to(&mut self, project_instance_id: String) -> String {
@@ -573,15 +606,18 @@ impl ActivationGenerationTransition {
         use std::sync::atomic::Ordering;
 
         let current = generation.load(Ordering::Acquire);
-        let Some(changing) = current.checked_add(1) else {
+        if current % 2 != 0 {
             return Err(ProjectFilesystemError::FilesystemTransactionBusy {
-                message: "project activation generation exhausted".into(),
+                message: "project activation publication is already in progress".into(),
             });
-        };
-        if current % 2 != 0
-            || generation
-                .compare_exchange(current, changing, Ordering::AcqRel, Ordering::Acquire)
-                .is_err()
+        }
+        let changing = current
+            .checked_add(1)
+            .filter(|_| current.checked_add(2).is_some())
+            .ok_or(ProjectFilesystemError::ActivationGenerationExhausted)?;
+        if generation
+            .compare_exchange(current, changing, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
         {
             return Err(ProjectFilesystemError::FilesystemTransactionBusy {
                 message: "project activation publication is already in progress".into(),
@@ -594,17 +630,34 @@ impl ActivationGenerationTransition {
     }
 
     fn complete(mut self) {
-        self.generation
-            .fetch_add(1, std::sync::atomic::Ordering::Release);
+        self.finish_generation();
         self.armed = false;
+    }
+
+    fn finish_generation(&self) {
+        if self
+            .generation
+            .fetch_update(
+                std::sync::atomic::Ordering::Release,
+                std::sync::atomic::Ordering::Relaxed,
+                |current| (current % 2 != 0).then(|| current.checked_add(1)).flatten(),
+            )
+            .is_err()
+        {
+            tracing::error!(
+                target: "yssbi::project::activation",
+                diagnostic_domain = "system",
+                diagnostic_event = "activationGenerationTransitionInvalid",
+                "Project activation generation transition could not be completed"
+            );
+        }
     }
 }
 
 impl Drop for ActivationGenerationTransition {
     fn drop(&mut self) {
         if self.armed {
-            self.generation
-                .fetch_add(1, std::sync::atomic::Ordering::Release);
+            self.finish_generation();
             self.armed = false;
         }
     }
@@ -772,6 +825,18 @@ fn validate_worksheet_path_insertion(
     Ok(())
 }
 
+pub(super) fn checked_resource_revision(
+    resource: impl Into<String>,
+    retained: ResourceRevision,
+) -> Result<ResourceRevision, ProjectFilesystemError> {
+    retained
+        .checked_next()
+        .map_err(|error| ProjectFilesystemError::ResourceRevisionOverflow {
+            resource: resource.into(),
+            retained: error.retained,
+        })
+}
+
 fn authoritative_function_revision(
     path: &GraphResourcePath,
     incoming: crate::node_system::document::ResourceRevision,
@@ -780,16 +845,8 @@ fn authoritative_function_revision(
     let Some(retained) = retained else {
         return Ok(incoming);
     };
-    let next = retained.get().checked_add(1).ok_or_else(|| {
-        ProjectFilesystemError::ResourceRevisionOverflow {
-            path: path.clone(),
-            retained: retained.get(),
-        }
-    })?;
-    Ok(std::cmp::max(
-        incoming,
-        crate::node_system::document::ResourceRevision::new(next),
-    ))
+    let next = checked_resource_revision(path.as_str(), retained)?;
+    Ok(std::cmp::max(incoming, next))
 }
 
 fn normalize_loaded_function_resource_revision(
@@ -845,6 +902,23 @@ fn normalize_function_patch_revisions(
                 resource,
                 graph_revisions.get(path).copied(),
             )?;
+        }
+        ResourceDocumentPatch::DeclareGraph { path, revision } => {
+            if matches!(path.kind(), Ok(crate::project::GraphDocumentKind::Function)) {
+                let canonical = authoritative_function_revision(
+                    path,
+                    *revision,
+                    graph_revisions.get(path).copied(),
+                )?;
+                if canonical != *revision {
+                    return Err(ProjectFilesystemError::ResourceRevisionConflict {
+                        message: format!(
+                            "declared function '{}' revision changed before publication",
+                            path
+                        ),
+                    });
+                }
+            }
         }
         ResourceDocumentPatch::RemoveGraph { path, revision } => {
             if data.graphs.get(path).is_some_and(|resource| {
@@ -932,9 +1006,10 @@ fn worksheet_history_publication(
         ResourceDocumentPatch::UpsertWorksheet { path, document } => {
             let before = data.worksheets.get(path);
             let retained = revisions.get(path).copied();
-            let revision = retained
-                .map(ResourceRevision::next)
-                .unwrap_or(ResourceRevision::INITIAL);
+            let revision = match retained {
+                Some(retained) => checked_resource_revision(path.as_str(), retained)?,
+                None => ResourceRevision::INITIAL,
+            };
             let mut after = document.clone();
             after.revision = revision;
             let (from_revision, payload, transaction) = if let Some(before) = before {
@@ -1000,7 +1075,7 @@ fn worksheet_history_publication(
                 vec![crate::node_system::document::ResourceDeltaEvent {
                     resource: worksheet_key(path),
                     from_revision: *revision,
-                    to_revision: revision.next(),
+                    to_revision: checked_resource_revision(path.as_str(), *revision)?,
                     caused_by: Some(operation_id),
                     payload: crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
                         forward.clone(),
@@ -1046,7 +1121,7 @@ fn canonical_resource_lifecycle_events(
         GraphResourcePath,
         crate::node_system::document::ResourceRevision,
     >,
-) -> Vec<crate::node_system::document::ResourceDeltaEvent> {
+) -> Result<Vec<crate::node_system::document::ResourceDeltaEvent>, ProjectFilesystemError> {
     let graph_key = |path: &GraphResourcePath| {
         ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
             path.as_str().into(),
@@ -1083,39 +1158,48 @@ fn canonical_resource_lifecycle_events(
     match patch {
         ResourceDocumentPatch::InsertGraph { path, resource } => {
             let revision = resource.document.revision;
-            return vec![lifecycle_delta(
+            return Ok(vec![lifecycle_delta(
                 path,
                 graph_revisions.get(path).copied().unwrap_or(revision),
                 revision,
                 None,
                 Some(lifecycle_state(path, revision)),
-            )];
+            )]);
+        }
+        ResourceDocumentPatch::DeclareGraph { path, revision } => {
+            return Ok(vec![lifecycle_delta(
+                path,
+                graph_revisions.get(path).copied().unwrap_or(*revision),
+                *revision,
+                None,
+                Some(lifecycle_state(path, *revision)),
+            )]);
         }
         ResourceDocumentPatch::UnloadGraph { path } => {
             let revision = context.expected_revisions[&graph_key(path)];
-            return vec![lifecycle_delta(
+            return Ok(vec![lifecycle_delta(
                 path,
                 revision,
                 revision,
                 None,
                 Some(lifecycle_state(path, revision)),
-            )];
+            )]);
         }
         ResourceDocumentPatch::RemoveGraph { path, revision } => {
             let revision = *revision;
-            return vec![lifecycle_delta(
+            return Ok(vec![lifecycle_delta(
                 path,
                 revision,
-                revision.next(),
+                checked_resource_revision(path.as_str(), revision)?,
                 Some(lifecycle_state(path, revision)),
                 None,
-            )];
+            )]);
         }
         ResourceDocumentPatch::MoveGraph { .. } => {}
         ResourceDocumentPatch::PatchVariables { .. }
         | ResourceDocumentPatch::UpsertWorksheet { .. }
         | ResourceDocumentPatch::RemoveWorksheet { .. }
-        | ResourceDocumentPatch::MoveWorksheet { .. } => return Vec::new(),
+        | ResourceDocumentPatch::MoveWorksheet { .. } => return Ok(Vec::new()),
     }
     let ResourceDocumentPatch::MoveGraph {
         from,
@@ -1154,31 +1238,37 @@ fn canonical_resource_lifecycle_events(
             payload: graph_move_patch(),
         }
     }));
-    deltas.extend(referenced_variables.keys().map(|id| {
-        let key = ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
-            format!("variables/{id}").into(),
-        ));
-        let from_revision = context.expected_revisions[&key];
-        crate::node_system::document::ResourceDeltaEvent {
-            resource: key,
-            from_revision,
-            to_revision: from_revision.next(),
-            caused_by: Some(context.operation_id),
-            payload: crate::node_system::document::ResourceDocumentPatch::VariableScopeMove(
-                crate::node_system::document::ResourcePathMovePatch {
-                    from: from.as_str().into(),
-                    to: to.as_str().into(),
-                },
-            ),
-        }
-    }));
-    deltas
+    let variable_deltas = referenced_variables
+        .keys()
+        .map(|id| {
+            let resource_path = format!("variables/{id}");
+            let key = ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
+                resource_path.clone().into(),
+            ));
+            let from_revision = context.expected_revisions[&key];
+            Ok(crate::node_system::document::ResourceDeltaEvent {
+                resource: key,
+                from_revision,
+                to_revision: checked_resource_revision(resource_path, from_revision)?,
+                caused_by: Some(context.operation_id),
+                payload: crate::node_system::document::ResourceDocumentPatch::VariableScopeMove(
+                    crate::node_system::document::ResourcePathMovePatch {
+                        from: from.as_str().into(),
+                        to: to.as_str().into(),
+                    },
+                ),
+            })
+        })
+        .collect::<Result<Vec<_>, ProjectFilesystemError>>()?;
+    deltas.extend(variable_deltas);
+    Ok(deltas)
 }
 
 fn patch_projection_paths(patch: &ResourceDocumentPatch, data: &ProjectData) -> Vec<String> {
     let mut paths = std::collections::BTreeSet::new();
     match patch {
         ResourceDocumentPatch::InsertGraph { path, .. }
+        | ResourceDocumentPatch::DeclareGraph { path, .. }
         | ResourceDocumentPatch::RemoveGraph { path, .. }
         | ResourceDocumentPatch::UnloadGraph { path } => {
             paths.insert(path.as_str().to_string());
@@ -1208,33 +1298,22 @@ fn patch_projection_paths(patch: &ResourceDocumentPatch, data: &ProjectData) -> 
 
 fn compile_product_invalidation_for_resource_patch(
     patch: &ResourceDocumentPatch,
-    data: &ProjectData,
 ) -> CompileProductInvalidation {
     match patch {
-        ResourceDocumentPatch::InsertGraph { path, .. } => {
+        ResourceDocumentPatch::InsertGraph { path, .. }
+        | ResourceDocumentPatch::DeclareGraph { path, .. } => {
             CompileProductInvalidation::Graphs(vec![path.clone()])
         }
         ResourceDocumentPatch::RemoveGraph { path, .. }
         | ResourceDocumentPatch::UnloadGraph { path } => {
-            let removes_function = data.graphs.get(path).is_some_and(|resource| {
-                resource.kind == crate::project::GraphDocumentKind::Function
-            });
-            let removes_variables = data
-                .variables
-                .values()
-                .any(|variable| variable_scope_references_path(&variable.scope, path.as_str()));
-            let _ = (removes_function, removes_variables);
             CompileProductInvalidation::Graphs(vec![path.clone()])
         }
         ResourceDocumentPatch::MoveGraph {
             from,
             to,
-            moved,
             referenced_graphs,
-            referenced_variables,
             ..
         } => {
-            let _ = (moved, referenced_variables);
             let mut paths = vec![from.clone(), to.clone()];
             paths.extend(referenced_graphs.keys().cloned());
             CompileProductInvalidation::Graphs(paths)
@@ -1276,7 +1355,8 @@ fn preflight_resource_patch_graphs(
                 validate_graph_resource(path, resource)?;
             }
         }
-        ResourceDocumentPatch::RemoveGraph { .. }
+        ResourceDocumentPatch::DeclareGraph { .. }
+        | ResourceDocumentPatch::RemoveGraph { .. }
         | ResourceDocumentPatch::UnloadGraph { .. }
         | ResourceDocumentPatch::PatchVariables { .. }
         | ResourceDocumentPatch::UpsertWorksheet { .. }
@@ -1497,8 +1577,7 @@ pub struct ProjectState {
     activation_publication_panic_test_hook: Arc<RwLock<Option<ActivationPublicationTestHook>>>,
     #[cfg(test)]
     activation_preparation_after_read_test_hook: Arc<RwLock<Option<ActivationPublicationTestHook>>>,
-    #[cfg(test)]
-    activation_final_rebuild_test_hook: Arc<RwLock<Option<ActivationPublicationTestHook>>>,
+
     #[cfg(test)]
     computation_settings_publication_test_hook:
         Arc<RwLock<Option<ComputationSettingsPublicationTestHook>>>,
@@ -1516,27 +1595,58 @@ mod startup_tests {
     use super::*;
 
     #[test]
-    fn project_state_stops_before_construction_on_store_failure() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
+    fn activation_generation_exhaustion_never_enters_or_reuses_a_transition() {
+        let generation = Arc::new(std::sync::atomic::AtomicU64::new(u64::MAX - 1));
 
-        let later_constructions = AtomicUsize::new(0);
-        let source = crate::node_system::protocol::NodeTypeId::new("Bad State ID").unwrap_err();
-        let expected = crate::node_system::catalog::BuiltinInitializationError::Assembly(
-            crate::node_system::catalog::BuiltinAssemblyError::InvalidSemanticId {
-                value: "Bad State ID".into(),
-                source,
-            },
+        let error = match ActivationGenerationTransition::begin(&generation) {
+            Ok(_) => panic!("exhausted activation generation unexpectedly started"),
+            Err(error) => error,
+        };
+
+        assert!(matches!(
+            error,
+            ProjectFilesystemError::ActivationGenerationExhausted
+        ));
+        assert_eq!(
+            generation.load(std::sync::atomic::Ordering::Acquire),
+            u64::MAX - 1
         );
-        let result = ProjectState::try_with_store_factory_and_constructor(
-            || Err(expected.clone()),
-            |_, _| {
-                later_constructions.fetch_add(1, Ordering::SeqCst);
-                unreachable!("state construction must not run after store failure")
-            },
+    }
+
+    #[test]
+    fn publication_counter_exhaustion_has_zero_effects() {
+        let mut publication = MutationPublication {
+            project_instance_id: "project".into(),
+            resource_revision: 7,
+            authority_generation: u64::MAX,
+            computation_settings_revision: 3,
+        };
+
+        assert_eq!(
+            publication.allocate_resource_revision(),
+            Err(ProjectFilesystemError::AuthorityGenerationExhausted)
+        );
+        assert_eq!(
+            (
+                publication.resource_revision,
+                publication.authority_generation()
+            ),
+            (7, u64::MAX)
         );
 
-        assert!(matches!(result, Err(error) if error == expected));
-        assert_eq!(later_constructions.load(Ordering::SeqCst), 0);
+        publication.resource_revision = u64::MAX;
+        publication.authority_generation = 11;
+        assert_eq!(
+            publication.allocate_resource_revision(),
+            Err(ProjectFilesystemError::PublicationRevisionExhausted)
+        );
+        assert_eq!(
+            (
+                publication.resource_revision,
+                publication.authority_generation()
+            ),
+            (u64::MAX, 11)
+        );
     }
 
     #[test]
@@ -1623,18 +1733,6 @@ impl ProjectState {
     #[cfg(test)]
     pub fn new() -> Self {
         Self::try_new().expect("test built-ins are valid")
-    }
-
-    #[cfg(test)]
-    fn try_with_store_factory_and_constructor(
-        factory: impl FnOnce() -> Result<
-            ProjectStore,
-            crate::node_system::catalog::BuiltinInitializationError,
-        >,
-        constructor: impl FnOnce(ProjectStore, ProjectFilesystemCoordinator) -> Self,
-    ) -> Result<Self, crate::node_system::catalog::BuiltinInitializationError> {
-        let store = factory()?;
-        Ok(constructor(store, ProjectFilesystemCoordinator::default()))
     }
 
     fn try_with_filesystem(
@@ -1744,8 +1842,7 @@ impl ProjectState {
             activation_publication_panic_test_hook: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             activation_preparation_after_read_test_hook: Arc::new(RwLock::new(None)),
-            #[cfg(test)]
-            activation_final_rebuild_test_hook: Arc::new(RwLock::new(None)),
+
             #[cfg(test)]
             computation_settings_publication_test_hook: Arc::new(RwLock::new(None)),
         }
@@ -1865,11 +1962,13 @@ impl ProjectState {
                     });
                 }
             }
-            data.computation_settings = request.settings.clone();
-            publication.computation_settings_revision = current_revision
+            let next_settings_revision = current_revision
                 .checked_add(1)
-                .expect("computation settings revision overflowed");
-            let publication_revision = publication.allocate_resource_revision();
+                .ok_or(ProjectFilesystemError::ComputationSettingsRevisionExhausted)?;
+            let publication_advance = publication.prepare_resource_revision()?;
+            data.computation_settings = request.settings.clone();
+            publication.computation_settings_revision = next_settings_revision;
+            let publication_revision = publication.commit_prepared(publication_advance);
             Ok(crate::project::ComputationSettingsMutationReceipt {
                 project_instance_id: request.project_instance_id.clone(),
                 operation_id: request.operation_id,
@@ -1916,6 +2015,7 @@ impl ProjectState {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn validate_variable_staging_basis(
         &self,
         publication: &MutationPublication,
@@ -2381,9 +2481,6 @@ impl ProjectState {
         }
     }
 
-    #[cfg(not(test))]
-    pub(super) fn run_variable_staging_test_hook(&self) {}
-
     #[cfg(test)]
     pub(super) fn run_activation_preparation_after_read_test_hook(&self) {
         if let Some(hook) = self
@@ -2398,21 +2495,6 @@ impl ProjectState {
 
     #[cfg(not(test))]
     pub(super) fn run_activation_preparation_after_read_test_hook(&self) {}
-
-    #[cfg(test)]
-    pub(super) fn run_activation_final_rebuild_test_hook(&self) {
-        if let Some(hook) = self
-            .activation_final_rebuild_test_hook
-            .read()
-            .unwrap()
-            .clone()
-        {
-            hook();
-        }
-    }
-
-    #[cfg(not(test))]
-    pub(super) fn run_activation_final_rebuild_test_hook(&self) {}
 
     #[cfg(test)]
     pub(crate) fn set_production_relational_observer(
@@ -2520,17 +2602,6 @@ impl ProjectState {
     ) {
         *self
             .catalog_mutation_before_publication_test_hook
-            .write()
-            .unwrap() = Some(hook);
-    }
-
-    #[cfg(test)]
-    pub(super) fn set_compile_capture_after_environment_test_hook(
-        &self,
-        hook: CompilePublicationTestHook,
-    ) {
-        *self
-            .compile_capture_after_environment_test_hook
             .write()
             .unwrap() = Some(hook);
     }
@@ -2761,14 +2832,6 @@ impl ProjectState {
             .activation_preparation_after_read_test_hook
             .write()
             .unwrap() = Some(hook);
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_activation_final_rebuild_test_hook(
-        &self,
-        hook: ActivationPublicationTestHook,
-    ) {
-        *self.activation_final_rebuild_test_hook.write().unwrap() = Some(hook);
     }
 
     #[cfg(test)]
@@ -3390,21 +3453,21 @@ impl ProjectState {
             &mut resource,
             graph_revisions.get(&path).copied(),
         )?;
-        let inserted = Self::insert_graph_locked(&mut data, path.clone(), resource)?;
+        let publication_advance = publication.prepare_authority_generation()?;
+        let inserted = Self::install_validated_resident_graph(&mut data, path.clone(), resource);
         graph_revisions.insert(path, revision);
-        publication.advance_authority_generation();
+        publication.commit_prepared(publication_advance);
         self.apply_compile_product_invalidation(invalidation);
         Ok(inserted)
     }
 
-    fn insert_graph_locked(
+    fn install_validated_resident_graph(
         data: &mut ProjectData,
         path: GraphResourcePath,
         resource: GraphResourceDocument,
-    ) -> Result<GraphResourceDocument, ProjectFilesystemError> {
-        validate_graph_resource(&path, &resource)?;
+    ) -> GraphResourceDocument {
         data.graphs.insert(path, resource.clone());
-        Ok(resource)
+        resource
     }
 
     pub fn apply_resource_document_patch(
@@ -3482,7 +3545,9 @@ impl ProjectState {
                 &data,
                 &worksheet_revisions,
             )?;
-            let mut deltas = canonical_resource_lifecycle_events(context, &patch, &graph_revisions);
+            let publication_advance = publication.prepare_resource_revision()?;
+            let mut deltas =
+                canonical_resource_lifecycle_events(context, &patch, &graph_revisions)?;
             deltas.extend(worksheet_deltas);
             let moves = match &patch {
                 ResourceDocumentPatch::MoveGraph {
@@ -3544,8 +3609,7 @@ impl ProjectState {
                 _ => worksheet_history,
             };
             let projection_paths = patch_projection_paths(&patch, &data);
-            let compile_invalidation =
-                compile_product_invalidation_for_resource_patch(&patch, &data);
+            let compile_invalidation = compile_product_invalidation_for_resource_patch(&patch);
             if let Some((undo, expected_history_id)) = &history_head {
                 let current = if *undo {
                     history.next_undo()
@@ -3566,26 +3630,28 @@ impl ProjectState {
             match patch {
                 ResourceDocumentPatch::InsertGraph { path, resource } => {
                     let revision = resource.document.revision;
-                    Self::insert_graph_locked(&mut data, path.clone(), resource)?;
+                    Self::install_validated_resident_graph(&mut data, path.clone(), resource);
+                    graph_revisions.insert(path, revision);
+                }
+                ResourceDocumentPatch::DeclareGraph { path, revision } => {
                     graph_revisions.insert(path, revision);
                 }
                 ResourceDocumentPatch::RemoveGraph { path, .. } => {
-                    let removed = data.graphs.remove(&path);
-                    if removed.as_ref().is_some_and(|resource| {
+                    let existing = data.graphs.get(&path);
+                    let retained_function_revision = if existing.is_some_and(|resource| {
                         resource.kind == crate::project::GraphDocumentKind::Function
                     }) {
-                        let retained = graph_revisions.get(&path).copied().or_else(|| {
-                            removed.as_ref().map(|resource| resource.document.revision)
-                        });
-                        let incoming = removed
-                            .as_ref()
+                        let retained = graph_revisions
+                            .get(&path)
+                            .copied()
+                            .or_else(|| existing.map(|resource| resource.document.revision));
+                        let incoming = existing
                             .map(|resource| resource.document.revision)
                             .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
-                        let revision = authoritative_function_revision(&path, incoming, retained)?;
-                        graph_revisions.insert(path.clone(), revision);
+                        Some(authoritative_function_revision(&path, incoming, retained)?)
                     } else {
-                        graph_revisions.remove(&path);
-                    }
+                        None
+                    };
                     let removed_ids = data
                         .variables
                         .iter()
@@ -3594,13 +3660,26 @@ impl ProjectState {
                         })
                         .map(|(id, _)| *id)
                         .collect::<Vec<_>>();
-                    for id in removed_ids {
+                    let removed_revisions = removed_ids
+                        .iter()
+                        .map(|id| {
+                            let retained = variable_revisions
+                                .get(id)
+                                .map(|entry| entry.revision)
+                                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                            checked_resource_revision(format!("variables/{id}"), retained)
+                                .map(|revision| (*id, revision))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+
+                    data.graphs.remove(&path);
+                    if let Some(revision) = retained_function_revision {
+                        graph_revisions.insert(path.clone(), revision);
+                    } else {
+                        graph_revisions.remove(&path);
+                    }
+                    for (id, revision) in removed_revisions {
                         data.variables.remove(&id);
-                        let revision = variable_revisions
-                            .get(&id)
-                            .map(|entry| entry.revision)
-                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
-                            .next();
                         variable_revisions.insert(id, VariableRevisionEntry::deleted(revision));
                     }
                 }
@@ -3619,67 +3698,91 @@ impl ProjectState {
                     referenced_variables,
                     ..
                 } => {
+                    let existing = data.graphs.get(&from);
+                    let retained_function_revision =
+                        if moved.kind == crate::project::GraphDocumentKind::Function {
+                            let retained = graph_revisions
+                                .get(&from)
+                                .copied()
+                                .or_else(|| existing.map(|resource| resource.document.revision));
+                            let incoming = existing
+                                .map(|resource| resource.document.revision)
+                                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                            Some(authoritative_function_revision(&from, incoming, retained)?)
+                        } else {
+                            None
+                        };
+                    let referenced_variable_revisions = referenced_variables
+                        .keys()
+                        .map(|id| {
+                            let retained = variable_revisions
+                                .get(id)
+                                .map(|entry| entry.revision)
+                                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                            checked_resource_revision(format!("variables/{id}"), retained)
+                                .map(|revision| (*id, revision))
+                        })
+                        .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
+
                     let removed = data.graphs.remove(&from);
                     let was_loaded = removed.is_some();
-                    if moved.kind == crate::project::GraphDocumentKind::Function {
-                        let retained = graph_revisions.get(&from).copied().or_else(|| {
-                            removed.as_ref().map(|resource| resource.document.revision)
-                        });
-                        let incoming = removed
-                            .as_ref()
-                            .map(|resource| resource.document.revision)
-                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
-                        let revision = authoritative_function_revision(&from, incoming, retained)?;
+                    if let Some(revision) = retained_function_revision {
                         graph_revisions.insert(from.clone(), revision);
                     } else {
                         graph_revisions.remove(&from);
                     }
                     graph_revisions.insert(to.clone(), moved.document.revision);
                     if was_loaded {
-                        Self::insert_graph_locked(&mut data, to, moved)?;
+                        Self::install_validated_resident_graph(&mut data, to, moved);
                     }
                     for (path, resource) in referenced_graphs {
                         graph_revisions.insert(path.clone(), resource.document.revision);
                         if loaded_referenced_graphs.contains(&path) {
-                            Self::insert_graph_locked(&mut data, path, resource)?;
+                            Self::install_validated_resident_graph(&mut data, path, resource);
                         }
                     }
                     for (id, variable) in referenced_variables {
                         data.variables.insert(id, variable);
-                        let revision = variable_revisions
-                            .get(&id)
-                            .map(|entry| entry.revision)
-                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
-                            .next();
-                        variable_revisions.insert(id, VariableRevisionEntry::present(revision));
+                        variable_revisions.insert(
+                            id,
+                            VariableRevisionEntry::present(referenced_variable_revisions[&id]),
+                        );
                     }
                 }
                 ResourceDocumentPatch::PatchVariables { updates, removals } => {
+                    let mut next_revisions = variable_revisions.clone();
+                    for id in &removals {
+                        let retained = next_revisions
+                            .get(id)
+                            .map(|entry| entry.revision)
+                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                        let revision =
+                            checked_resource_revision(format!("variables/{id}"), retained)?;
+                        next_revisions.insert(*id, VariableRevisionEntry::deleted(revision));
+                    }
+                    for id in updates.keys() {
+                        let retained = next_revisions
+                            .get(id)
+                            .map(|entry| entry.revision)
+                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                        let revision =
+                            checked_resource_revision(format!("variables/{id}"), retained)?;
+                        next_revisions.insert(*id, VariableRevisionEntry::present(revision));
+                    }
+
                     for id in removals {
                         data.variables.remove(&id);
-                        let revision = variable_revisions
-                            .get(&id)
-                            .map(|entry| entry.revision)
-                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
-                            .next();
-                        variable_revisions.insert(id, VariableRevisionEntry::deleted(revision));
                     }
-                    for (id, variable) in updates {
-                        data.variables.insert(id, variable);
-                        let revision = variable_revisions
-                            .get(&id)
-                            .map(|entry| entry.revision)
-                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
-                            .next();
-                        variable_revisions.insert(id, VariableRevisionEntry::present(revision));
-                    }
+                    data.variables.extend(updates);
+                    *variable_revisions = next_revisions;
                 }
                 ResourceDocumentPatch::UpsertWorksheet { path, mut document } => {
                     validate_worksheet_path_insertion(&data, &path)?;
                     let retained_revision = worksheet_revisions.get(&path).copied();
-                    let revision = retained_revision
-                        .map(ResourceRevision::next)
-                        .unwrap_or(ResourceRevision::INITIAL);
+                    let revision = match retained_revision {
+                        Some(retained) => checked_resource_revision(path.as_str(), retained)?,
+                        None => ResourceRevision::INITIAL,
+                    };
                     if document.revision != revision && Some(document.revision) != retained_revision
                     {
                         return Err(ProjectFilesystemError::ResourceRevisionConflict {
@@ -3696,8 +3799,9 @@ impl ProjectState {
                     worksheet_revisions.insert(path, revision);
                 }
                 ResourceDocumentPatch::RemoveWorksheet { path, revision } => {
+                    let next_revision = checked_resource_revision(path.as_str(), revision)?;
                     data.worksheets.remove(&path);
-                    worksheet_revisions.insert(path, revision.next());
+                    worksheet_revisions.insert(path, next_revision);
                 }
                 ResourceDocumentPatch::MoveWorksheet {
                     from,
@@ -3753,7 +3857,7 @@ impl ProjectState {
                 );
             }
             let history = history.status();
-            let publication_revision = publication.allocate_resource_revision();
+            let publication_revision = publication.commit_prepared(publication_advance);
             self.apply_compile_product_invalidation(compile_invalidation);
             let projection_source = self.projection_source_snapshot(
                 &data,
@@ -3901,6 +4005,22 @@ impl ProjectState {
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
         self.ensure_project_operational()?;
+        let will_change = data.graphs.contains_key(graph_path)
+            || data
+                .variables
+                .values()
+                .any(|variable| match &variable.scope {
+                    crate::variable::VariableScope::Global => false,
+                    crate::variable::VariableScope::Event { event_path } => {
+                        event_path == graph_path_text
+                    }
+                    crate::variable::VariableScope::Function { function_path } => {
+                        function_path == graph_path_text
+                    }
+                });
+        let publication_advance = will_change
+            .then(|| publication.prepare_authority_generation())
+            .transpose()?;
         let removed = data.graphs.remove(graph_path);
         let graph_removed = removed.is_some();
         let variable_count = data.variables.len();
@@ -3913,8 +4033,9 @@ impl ProjectState {
         });
         let variables_removed = data.variables.len() != variable_count;
         let changed = graph_removed || variables_removed;
-        if changed {
-            publication.advance_authority_generation();
+        if let Some(publication_advance) = publication_advance {
+            debug_assert!(changed);
+            publication.commit_prepared(publication_advance);
             self.invalidate_graph_compile_products(graph_path);
         }
         Ok(())
@@ -4020,7 +4141,7 @@ impl ProjectState {
             });
         }
         moved.name = unique_name;
-        moved.document.revision = source_revision.next();
+        moved.document.revision = checked_resource_revision(graph_path.as_str(), source_revision)?;
         crate::project::resource_mutations::remap_graph_document_references(
             &mut moved.document,
             graph_path.as_str(),
@@ -4063,7 +4184,8 @@ impl ProjectState {
                     graph_path.as_str(),
                     target.as_str(),
                 );
-                changed.document.revision = changed.document.revision.next();
+                changed.document.revision =
+                    checked_resource_revision(path.as_str(), changed.document.revision)?;
                 let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
                     path.as_str().into(),
                 ));
@@ -4303,7 +4425,9 @@ impl ProjectState {
                 .get(&entry.path)
                 .copied()
                 .unwrap_or(before.document.revision);
-            after.document.revision = before_revision.next();
+            after.document.revision =
+                checked_resource_revision(entry.path.as_str(), before_revision)
+                    .map_err(|error| error.to_string())?;
             let mut before_document = before.document;
             before_document.revision = before_revision;
             plan.referenced_graphs_before.insert(
@@ -4411,13 +4535,6 @@ impl ProjectState {
         Ok(ResourceRenameOwnershipLease::new(operation, guard))
     }
 
-    fn validate_graph_lifecycle_operation(
-        &self,
-        operation: &ResourceLifecycleOperation,
-    ) -> Result<(), ProjectFilesystemError> {
-        self.validate_resource_lifecycle_operation(operation)
-    }
-
     pub(super) fn validate_resource_lifecycle_operation(
         &self,
         operation: &ResourceLifecycleOperation,
@@ -4478,6 +4595,7 @@ impl ProjectState {
         include_projection: bool,
     ) -> Result<CommittedGraphLoad, ProjectFilesystemError> {
         self.ensure_project_operational()?;
+        validate_graph_resource(operation.owner.graph_path(), &resource)?;
         let projection_environment = if include_projection {
             let expected = self
                 .projection_environment_expectation_for_identity(
@@ -4514,10 +4632,6 @@ impl ProjectState {
         let mut lifecycle = self.resource_lifecycle.boundary();
         lifecycle.validate(&operation.owner)?;
         self.ensure_project_operational()?;
-        let invalidate_all = resource.kind == crate::project::GraphDocumentKind::Function
-            || local_variables
-                .as_ref()
-                .is_some_and(|variables| !variables.is_empty());
         let mut data = self.project_data.write().unwrap();
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         let mut variable_revisions = self.variable_revisions.write().unwrap();
@@ -4526,8 +4640,13 @@ impl ProjectState {
             &mut resource,
             graph_revisions.get(operation.owner.graph_path()).copied(),
         )?;
-        let inserted =
-            Self::insert_graph_locked(&mut data, operation.owner.graph_path().clone(), resource)?;
+        let publication_advance = publication.prepare_authority_generation()?;
+        lifecycle.commit_guard(guard, ResourceLifecycleIntent::Load)?;
+        let inserted = Self::install_validated_resident_graph(
+            &mut data,
+            operation.owner.graph_path().clone(),
+            resource,
+        );
         graph_revisions.insert(operation.owner.graph_path().clone(), revision);
         if let Some(local_variables) = local_variables {
             for (id, variable) in local_variables {
@@ -4548,9 +4667,7 @@ impl ProjectState {
                 }
             }
         }
-        lifecycle.commit_guard(guard, ResourceLifecycleIntent::Load)?;
-        publication.advance_authority_generation();
-        let _ = invalidate_all;
+        publication.commit_prepared(publication_advance);
         self.invalidate_graph_compile_products(operation.owner.graph_path());
         let projection_source = include_projection.then(|| {
             self.projection_source_snapshot(
@@ -4801,6 +4918,23 @@ impl ProjectState {
         self.ensure_project_operational()?;
         let graph_path_text = graph_path.as_str();
         let mut data = self.project_data.write().unwrap();
+        let will_change = data.graphs.contains_key(graph_path)
+            || data
+                .variables
+                .values()
+                .any(|variable| match &variable.scope {
+                    crate::variable::VariableScope::Global => false,
+                    crate::variable::VariableScope::Event { event_path } => {
+                        event_path == graph_path_text
+                    }
+                    crate::variable::VariableScope::Function { function_path } => {
+                        function_path == graph_path_text
+                    }
+                });
+        let publication_advance = will_change
+            .then(|| publication.prepare_authority_generation())
+            .transpose()?;
+        lifecycle.commit_guard(&mut guard, ResourceLifecycleIntent::Unload)?;
         let removed = data.graphs.remove(graph_path);
         let graph_removed = removed.is_some();
         let variable_count = data.variables.len();
@@ -4811,11 +4945,11 @@ impl ProjectState {
                 function_path != graph_path_text
             }
         });
-        lifecycle.commit_guard(&mut guard, ResourceLifecycleIntent::Unload)?;
         let variables_removed = data.variables.len() != variable_count;
         let changed = graph_removed || variables_removed;
-        if changed {
-            publication.advance_authority_generation();
+        if let Some(publication_advance) = publication_advance {
+            debug_assert!(changed);
+            publication.commit_prepared(publication_advance);
             self.invalidate_graph_compile_products(graph_path);
         }
         Ok(changed)
@@ -5086,15 +5220,14 @@ impl ProjectState {
                         current_revision: request.base_revision,
                     });
                 }
-                let candidates: Vec<(
-                    crate::node_system::document::PortAddress,
-                    &crate::node_system::compiler::ValidatedProjectedMember,
-                )> = [output.clone(), input.clone()]
+                let candidates: Vec<_> = [output.clone(), input.clone()]
                     .into_iter()
                     .filter_map(|address| {
                         projection
-                            .materialization_candidate(&address)
-                            .map(|candidate| (address, candidate))
+                            .authorize_materialization_candidate(&node_path, &address)
+                            .map(|(candidate, member, authorization)| {
+                                (address, candidate, member, authorization)
+                            })
                     })
                     .collect();
                 if candidates.len() > 1 {
@@ -5118,22 +5251,18 @@ impl ProjectState {
                         ));
                     }
                 }
-                let plan = candidates.into_iter().next().map(|(address, candidate)| {
-                    let direction = candidate.direction();
-                    let kind = candidate.kind();
-                    let connections = candidate.connections();
-                    let (member, authorization) = projection
-                        .authorize_materialization_candidate(node_path.clone(), &address)
-                        .expect("the selected current candidate remains authorizable");
-                    crate::node_system::document::ProjectedConnectPlan {
-                        projection_address: address,
-                        direction,
-                        kind,
-                        connections,
-                        member,
-                        authorization,
-                    }
-                });
+                let plan = candidates.into_iter().next().map(
+                    |(address, candidate, member, authorization)| {
+                        crate::node_system::document::ProjectedConnectPlan {
+                            projection_address: address,
+                            direction: candidate.direction(),
+                            kind: candidate.kind(),
+                            connections: candidate.connections(),
+                            member,
+                            authorization,
+                        }
+                    },
+                );
                 let authority_generation = plan.as_ref().map(|_| source.authority_generation);
                 (plan, authority_generation)
             } else {
@@ -5243,6 +5372,7 @@ impl ProjectState {
             .map(|committed| committed.delta)
     }
 
+    #[cfg(test)]
     fn commit_graph_patch(
         &self,
         graph_path: &GraphResourcePath,
@@ -5487,6 +5617,9 @@ impl ProjectState {
                 history,
             });
         }
+        let publication_advance = publication
+            .prepare_authority_generation()
+            .map_err(|error| MutationConflict::Projection(error.to_string().into()))?;
         let mut documents = ProjectDocumentState::new(
             data.graphs
                 .iter()
@@ -5520,7 +5653,7 @@ impl ProjectState {
             .document = updated;
         graph_revisions.insert(graph_path.clone(), to_revision);
         let history = history.status();
-        publication.advance_authority_generation();
+        publication.commit_prepared(publication_advance);
         self.invalidate_graph_compile_products(graph_path);
         Ok(CommittedGraphMutation {
             project_instance_id: publication.project_instance_id.clone(),
@@ -5624,6 +5757,9 @@ impl ProjectState {
                 "function patch before-state does not match the current signature".into(),
             ));
         }
+        let publication_advance = publication
+            .prepare_resource_revision()
+            .map_err(|error| MutationConflict::Projection(error.to_string().into()))?;
         let from_revision = function.revision;
         let mut graph_revisions = self.graph_revisions.write().unwrap();
         let mut revisions = self.variable_revisions.write().unwrap();
@@ -5660,7 +5796,7 @@ impl ProjectState {
             payload: crate::node_system::document::ResourceDocumentPatch::Function(request.payload),
         }];
         let expected_graph_paths = affected_projection_paths(&deltas, &data);
-        let publication_revision = publication.allocate_resource_revision();
+        let publication_revision = publication.commit_prepared(publication_advance);
         let projection_source = self.projection_source_snapshot(
             &data,
             projection_environment,
@@ -6012,6 +6148,9 @@ impl ProjectState {
                     .into(),
             ));
         }
+        let publication_advance = publication
+            .prepare_resource_revision()
+            .map_err(history_project_error)?;
         let transaction = if undo {
             history.undo(&mut documents)
         } else {
@@ -6043,7 +6182,7 @@ impl ProjectState {
             graph_revisions.insert(path.clone(), graph.document.revision);
         }
         let expected_graph_paths = affected_projection_paths(&deltas, &data);
-        let publication_revision = publication.allocate_resource_revision();
+        let publication_revision = publication.commit_prepared(publication_advance);
         let projection_source = self.projection_source_snapshot(
             &data,
             projection_environment,
@@ -6170,7 +6309,8 @@ impl ProjectState {
             .basis
             .authority_generation
             .checked_add(1)
-            .expect("project authority generation overflowed");
+            .ok_or(ProjectFilesystemError::AuthorityGenerationExhausted)
+            .map_err(history_project_error)?;
         let history_status = prepared.proposed_history.status();
         #[cfg(test)]
         let completion_test_hook = self
@@ -6328,6 +6468,9 @@ impl ProjectState {
                 }
             }
 
+            let publication_advance = publication
+                .prepare_resource_revision()
+                .map_err(history_project_error)?;
             *data = prepared.loaded_after_data;
             for (path, revision) in graph_revision_updates {
                 graph_revisions.insert(path, revision);
@@ -6335,7 +6478,7 @@ impl ProjectState {
             *variable_revisions = prepared.after_variable_revisions;
             *worksheet_revisions = prepared.after_worksheet_revisions;
             *history = prepared.proposed_history;
-            let publication_revision = publication.allocate_resource_revision();
+            let publication_revision = publication.commit_prepared(publication_advance);
             debug_assert_eq!(publication.authority_generation(), projected_generation);
             let projection_source = self.projection_source_snapshot(
                 &data,
@@ -6461,8 +6604,6 @@ impl ProjectState {
         );
         let ids = install_variable_effect_snapshots(&mut proposed_data, &transaction, undo)
             .map_err(|error| MutationConflict::History(error.into()))?;
-        let _cache_updates = variable_cache_updates(&proposed_data, &ids)
-            .map_err(|error| MutationConflict::History(error.into()))?;
 
         let mut expected_revisions = BTreeMap::new();
         for change in &transaction.changes {
@@ -6527,7 +6668,6 @@ impl ProjectState {
                 ));
             }
             let mut data = self.project_data.write().unwrap();
-            let mut store = self.project_store.write().unwrap();
             let graph_revisions = self.graph_revisions.read().unwrap();
             let mut revisions = self.variable_revisions.write().unwrap();
             validate_context_revisions(
@@ -6576,10 +6716,7 @@ impl ProjectState {
                 &mut next_revisions,
                 current_documents.clone(),
             );
-            let installed_ids =
-                install_variable_effect_snapshots(&mut next_data, &transaction, undo)
-                    .map_err(|error| MutationConflict::History(error.into()))?;
-            let cache_updates = variable_cache_updates(&next_data, &installed_ids)
+            install_variable_effect_snapshots(&mut next_data, &transaction, undo)
                 .map_err(|error| MutationConflict::History(error.into()))?;
             let deltas = transaction
                 .changes
@@ -6597,13 +6734,14 @@ impl ProjectState {
                 })
                 .collect::<Vec<_>>();
             let expected_graph_paths = affected_projection_paths(&deltas, &next_data);
+            let publication_advance = publication
+                .prepare_resource_revision()
+                .map_err(history_project_error)?;
             *data = next_data;
             *revisions = next_revisions;
-            apply_variable_cache_updates(&mut store, cache_updates);
             let history_status = next_history.status();
             *self.history.write().unwrap() = next_history;
-            drop(store);
-            let publication_revision = publication.allocate_resource_revision();
+            let publication_revision = publication.commit_prepared(publication_advance);
             let projection_source = self.projection_source_snapshot(
                 &data,
                 projection_environment,
@@ -6734,7 +6872,8 @@ impl ProjectState {
             });
         }
         let mut moved = document;
-        moved.revision = current_revision.next();
+        moved.revision = checked_resource_revision(source.as_str(), current_revision)
+            .map_err(history_project_error)?;
         let context = ProjectTransactionContext {
             session,
             operation_id: request.operation_id,
@@ -6899,7 +7038,9 @@ impl ProjectState {
                 current_revision,
             });
         }
-        desired_moved.document.revision = current_revision.next();
+        desired_moved.document.revision =
+            checked_resource_revision(source.as_str(), current_revision)
+                .map_err(history_project_error)?;
 
         let mut referenced_graphs_before = BTreeMap::new();
         let mut referenced_graphs = BTreeMap::new();
@@ -6922,7 +7063,9 @@ impl ProjectState {
                     continue;
                 };
                 let mut next = desired;
-                next.document.revision = current.document.revision.next();
+                next.document.revision =
+                    checked_resource_revision(path.as_str(), current.document.revision)
+                        .map_err(history_project_error)?;
                 let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
                     path.as_str().into(),
                 ));
@@ -7310,7 +7453,7 @@ impl ProjectState {
         let runs = Arc::clone(&store.runs);
         let preparation = runs
             .track_pre_run(session_id.clone(), cancellation.clone())
-            .map_err(|error| error.to_string())?;
+            .map_err(crate::node_system::runtime::RunError::from)?;
         drop(store);
         drop(publication);
 
@@ -7477,7 +7620,7 @@ impl ProjectState {
             execution
                 .runs
                 .track_pre_run(execution.session_id.clone(), cancellation.clone())
-                .map_err(|error| error.to_string())?
+                .map_err(crate::node_system::runtime::RunError::from)?
         };
         let prepared_authority = std::cell::RefCell::new(None);
         let prepare =
@@ -7491,9 +7634,9 @@ impl ProjectState {
                         crate::node_system::runtime::RunPhase::ResultPublication,
                     )?;
                 }
-                let finalization = pre_run.begin_finalization(cancellation).map_err(|error| {
-                    crate::node_system::runtime::RunError::ProjectDraining(error.to_string().into())
-                })?;
+                let finalization = pre_run
+                    .begin_finalization(cancellation)
+                    .map_err(crate::node_system::runtime::RunError::from)?;
                 let terminal = Some((cancellation, deadline));
                 let effects = resources.snapshot().variable_effects();
                 let authority = self
@@ -7536,6 +7679,7 @@ impl ProjectState {
         .map_err(ProjectExecutionError::from)
     }
 
+    #[cfg(test)]
     pub(super) fn commit_variable_effects(
         &self,
         expected_session_id: &crate::node_system::analysis::ProjectSessionId,
@@ -7546,6 +7690,7 @@ impl ProjectState {
         prepared(None)
     }
 
+    #[cfg(test)]
     pub(super) fn commit_variable_effects_for_run(
         &self,
         expected_session_id: &crate::node_system::analysis::ProjectSessionId,
@@ -7780,7 +7925,7 @@ impl ProjectState {
         );
         install_variable_effect_snapshots(&mut proposed_data, &transaction, false)
             .map_err(variable_effect_invalid_error)?;
-        let mut validation_store = {
+        {
             let store = self.project_store.read().unwrap();
             if store.project_session_id != expected_session_id {
                 return Err(VariableEffectCommitError::SessionChanged {
@@ -7788,19 +7933,14 @@ impl ProjectState {
                     current: store.project_session_id.clone(),
                 });
             }
-            store.validation_scratch()
-        };
-        let prior_variable_tabular = validation_store.variable_tabular.clone();
+        }
         for id in &ids {
             let variable = proposed_data
                 .variables
                 .get_mut(id)
                 .expect("effect variable exists");
             normalize_variable_tabular(variable).map_err(variable_effect_invalid_error)?;
-            sync_variable_cache(&mut validation_store, variable)
-                .map_err(variable_effect_invalid_error)?;
         }
-        let proposed_variable_tabular = validation_store.variable_tabular.clone();
 
         let mut mutations = Vec::new();
         if writes_globals {
@@ -7933,12 +8073,10 @@ impl ProjectState {
         let mut resource_mutation = resource_mutation;
         let mut proposed_data = Some(proposed_data);
         let mut proposed_revisions = Some(proposed_revisions);
-        let mut proposed_variable_tabular = Some(proposed_variable_tabular);
         let mut proposed_history = Some(proposed_history);
         let mut prior_state = Some(VariableAuthorityPriorState {
             data: data_snapshot,
             revisions: variable_revisions,
-            variable_tabular: prior_variable_tabular,
             history: history_snapshot,
             publication_revision: publication_revision_basis,
             authority_generation: authority_generation_basis,
@@ -7950,7 +8088,7 @@ impl ProjectState {
                 let mut publication = self.mutation_publication.lock().unwrap();
                 let path = self.project_path.read().unwrap();
                 let mut data = self.project_data.write().unwrap();
-                let mut store = self.project_store.write().unwrap();
+                let store = self.project_store.read().unwrap();
                 let graph_revisions = self.graph_revisions.read().unwrap();
                 let mut revisions = self.variable_revisions.write().unwrap();
                 let worksheet_revisions = self.worksheet_revisions.read().unwrap();
@@ -7975,6 +8113,7 @@ impl ProjectState {
                         current: store.project_session_id.clone(),
                     });
                 }
+                drop(store);
                 validate_context_revisions(
                     &context,
                     &data,
@@ -7991,7 +8130,6 @@ impl ProjectState {
                 let mut install = VariableAuthorityInstallGuard::new(
                     &mut data,
                     &mut revisions,
-                    &mut store.variable_tabular,
                     &mut history,
                     &mut publication,
                     prior_state
@@ -8006,9 +8144,6 @@ impl ProjectState {
                         proposed_revisions
                             .take()
                             .expect("prepared variable revisions install once"),
-                        proposed_variable_tabular
-                            .take()
-                            .expect("prepared variable cache installs once"),
                         proposed_history
                             .take()
                             .expect("prepared variable history installs once"),
@@ -8024,7 +8159,6 @@ impl ProjectState {
                     drop(worksheet_revisions);
                     drop(revisions);
                     drop(graph_revisions);
-                    drop(store);
                     drop(data);
                     drop(path);
                     drop(publication);
@@ -8139,36 +8273,6 @@ fn install_variable_effect_snapshots(
         ids.push(id);
     }
     Ok(ids)
-}
-
-fn variable_cache_updates(
-    data: &ProjectData,
-    ids: &[crate::variable::VariableId],
-) -> Result<Vec<(String, Option<crate::tabular::VariableTabularCache>)>, String> {
-    ids.iter()
-        .map(|id| {
-            let entry = data
-                .variables
-                .get(id)
-                .and_then(|variable| variable.tabular.as_ref())
-                .map(crate::tabular::build_variable_cache_entry)
-                .transpose()?;
-            Ok((crate::tabular::variable_handle(id), entry))
-        })
-        .collect()
-}
-
-fn apply_variable_cache_updates(
-    store: &mut ProjectStore,
-    updates: Vec<(String, Option<crate::tabular::VariableTabularCache>)>,
-) {
-    for (handle, entry) in updates {
-        if let Some(entry) = entry {
-            store.variable_tabular.insert(handle, entry);
-        } else {
-            store.variable_tabular.remove(&handle);
-        }
-    }
 }
 
 fn variable_effect_id(
@@ -8620,7 +8724,8 @@ fn candidate_projection_replacement(
         source.environment.project_session_id.clone(),
         source.environment.trace_sink.as_ref(),
     );
-    let snapshot = compiler.snapshot(
+    let snapshot = compiler.snapshot_with_compile_id(
+        crate::node_system::analysis::CompileId::new(source.authority_generation),
         crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
         document,
     );
@@ -9295,6 +9400,9 @@ pub(super) fn publish_function_plans(
         crate::node_system::compiler::build_builtin_interface_resolvers(),
     )
     .with_observability(session_id, trace_sink);
+    let compile_id = root_plan
+        .map(|plan| plan.provenance.compile_id)
+        .unwrap_or_else(|| crate::node_system::analysis::CompileId::new(0));
     let mut entries = Vec::with_capacity(resources.function_graphs.len());
     let mut pending = root_plan
         .map(|plan| function_targets(&plan.root_region))
@@ -9311,7 +9419,8 @@ pub(super) fn publish_function_plans(
             .function_graphs
             .get(&document_path)
             .ok_or_else(|| format!("required function '{}' is unavailable", document_path.0))?;
-        let snapshot = compiler.snapshot(document_path.clone(), document);
+        let snapshot =
+            compiler.snapshot_with_compile_id(compile_id, document_path.clone(), document);
         let products = compiler
             .compile_snapshot(&snapshot, cancellation)
             .map_err(|error| error.to_string())?;

@@ -8,16 +8,12 @@ pub mod database;
 pub mod diagnostics;
 pub mod error;
 pub mod event;
-#[allow(dead_code, unused_imports)]
-mod execution;
 
-#[allow(dead_code, unused_imports)]
 mod graph;
 pub mod julia;
 pub mod math;
 pub mod node_system;
 pub mod project;
-#[allow(dead_code, unused_imports)]
 mod schema;
 pub mod sci;
 pub mod tabular;
@@ -32,19 +28,6 @@ use tauri::Manager;
 fn initialize_project_state()
 -> Result<project::ProjectState, node_system::catalog::BuiltinInitializationError> {
     project::ProjectState::try_new()
-}
-
-#[cfg(test)]
-fn initialize_project_state_before_manage(
-    initialize: impl FnOnce() -> Result<
-        project::ProjectState,
-        node_system::catalog::BuiltinInitializationError,
-    >,
-    manage: impl FnOnce(project::ProjectState),
-) -> Result<(), node_system::catalog::BuiltinInitializationError> {
-    let project_state = initialize()?;
-    manage(project_state);
-    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -62,14 +45,20 @@ pub fn run() {
         .manage(project::ProjectPickerTaskCancelRegistry::new())
         .manage(julia_worker)
         .setup(move |app| {
-            let log_dir = match app.path().app_log_dir() {
-                Ok(path) => Some(path),
-                Err(error) => {
-                    eprintln!("failed to resolve application log directory: {error}");
-                    None
-                }
-            };
-            app.manage(diagnostics::DiagnosticsRuntime::initialize(log_dir));
+            let log_dir = app.path().app_log_dir();
+            let diagnostics =
+                diagnostics::DiagnosticsRuntime::initialize(log_dir.as_ref().ok().cloned())
+                    .map_err(Box::<dyn std::error::Error>::from)?;
+            app.manage(diagnostics);
+            if let Err(error) = log_dir {
+                tracing::error!(
+                    target: "yssbi::diagnostics",
+                    diagnostic_domain = "system",
+                    diagnostic_event = "appLogDirectoryUnavailable",
+                    error = %error,
+                    "Failed to resolve application log directory; file diagnostics are disabled"
+                );
+            }
 
             let project_state =
                 initialize_project_state().map_err(Box::<dyn std::error::Error>::from)?;
@@ -251,31 +240,4 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-#[cfg(test)]
-mod startup_tests {
-    use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    #[test]
-    fn project_state_failure_prevents_tauri_manage() {
-        let manage_calls = AtomicUsize::new(0);
-        let source = node_system::protocol::NodeTypeId::new("Bad Managed ID").unwrap_err();
-        let expected = node_system::catalog::BuiltinInitializationError::Assembly(
-            node_system::catalog::BuiltinAssemblyError::InvalidSemanticId {
-                value: "Bad Managed ID".into(),
-                source,
-            },
-        );
-        let result = initialize_project_state_before_manage(
-            || Err(expected.clone()),
-            |_| {
-                manage_calls.fetch_add(1, Ordering::SeqCst);
-            },
-        );
-
-        assert!(matches!(result, Err(error) if error == expected));
-        assert_eq!(manage_calls.load(Ordering::SeqCst), 0);
-    }
 }

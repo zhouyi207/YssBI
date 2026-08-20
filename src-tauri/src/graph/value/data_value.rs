@@ -66,16 +66,6 @@ impl DataSeriesValue {
             time_series_state: None,
         }
     }
-
-    pub fn with_dummy_info(mut self, dummy_info: DummyInfo) -> Self {
-        self.dummy_info = Some(dummy_info);
-        self
-    }
-
-    pub fn with_time_series_state(mut self, state: TimeSeriesState) -> Self {
-        self.time_series_state = Some(state);
-        self
-    }
 }
 
 impl Serialize for DataSeriesValue {
@@ -218,15 +208,6 @@ impl DataValue {
         }
     }
 
-    pub fn as_i32(&self) -> Option<i32> {
-        match self {
-            DataValue::Int64(i) => Some(*i as i32),
-            DataValue::Float64(f) => Some(*f as i32),
-            DataValue::Boolean(b) => Some(if *b { i32::one() } else { i32::zero() }),
-            _ => None,
-        }
-    }
-
     pub fn as_i64(&self) -> Option<i64> {
         match self {
             DataValue::Int64(i) => Some(*i),
@@ -236,43 +217,11 @@ impl DataValue {
         }
     }
 
-    pub fn as_f32(&self) -> Option<f32> {
-        match self {
-            DataValue::Float64(f) => Some(*f as f32),
-            DataValue::Int64(i) => Some(*i as f32),
-            DataValue::Boolean(b) => Some(if *b { f32::one() } else { f32::zero() }),
-            _ => None,
-        }
-    }
-
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             DataValue::Float64(f) => Some(*f),
             DataValue::Int64(i) => Some(*i as f64),
             DataValue::Boolean(b) => Some(if *b { f64::one() } else { f64::zero() }),
-            _ => None,
-        }
-    }
-
-    /// 创建一个 Struct 句柄值
-    pub fn new_struct(type_key: impl Into<String>, handle_id: impl Into<String>) -> Self {
-        DataValue::Struct {
-            type_key: type_key.into(),
-            handle_id: handle_id.into(),
-        }
-    }
-
-    /// 获取 Struct 句柄 ID（仅 Struct 变体）
-    pub fn as_handle_id(&self) -> Option<&str> {
-        match self {
-            DataValue::Struct { handle_id, .. } => Some(handle_id),
-            _ => None,
-        }
-    }
-
-    pub fn as_string(&self) -> Option<&str> {
-        match self {
-            DataValue::String(s) => Some(s),
             _ => None,
         }
     }

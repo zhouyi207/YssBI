@@ -11,8 +11,9 @@ impl GraphDocument {
         if self.nodes.contains_key(&node.id) {
             return Err(DocumentError::DuplicateNode(node.id));
         }
+        let next_revision = checked_document_revision(self.revision)?;
         self.nodes.insert(node.id, node);
-        self.revision.advance();
+        self.revision = next_revision;
         Ok(())
     }
 
@@ -20,6 +21,7 @@ impl GraphDocument {
         if !self.nodes.contains_key(&node_id) {
             return Err(DocumentError::NodeNotFound(node_id));
         }
+        let next_revision = checked_document_revision(self.revision)?;
 
         let node = self.nodes.remove(&node_id).expect("node existence checked");
         self.connections.retain(|_, connection| {
@@ -29,7 +31,7 @@ impl GraphDocument {
             .retain(|address, _| address.node_id != node_id);
         self.input_states
             .retain(|address, _| address.node_id != node_id);
-        self.revision.advance();
+        self.revision = next_revision;
         Ok(node)
     }
 
@@ -45,8 +47,9 @@ impl GraphDocument {
         if self.port_bindings.contains_key(&address) {
             return Err(DocumentError::DuplicatePortBinding(address));
         }
+        let next_revision = checked_document_revision(self.revision)?;
         self.port_bindings.insert(address, binding);
-        self.revision.advance();
+        self.revision = next_revision;
         Ok(())
     }
 
@@ -58,6 +61,7 @@ impl GraphDocument {
     ) -> Result<ConnectionId, DocumentError> {
         self.validate_address(&output)?;
         self.validate_address(&input)?;
+        let next_revision = checked_document_revision(self.revision)?;
 
         let id = ConnectionId::new();
         self.connections.insert(
@@ -69,7 +73,7 @@ impl GraphDocument {
                 order,
             },
         );
-        self.revision.advance();
+        self.revision = next_revision;
         Ok(id)
     }
 
@@ -77,11 +81,15 @@ impl GraphDocument {
         &mut self,
         connection_id: ConnectionId,
     ) -> Result<DocumentConnection, DocumentError> {
+        if !self.connections.contains_key(&connection_id) {
+            return Err(DocumentError::ConnectionNotFound(connection_id));
+        }
+        let next_revision = checked_document_revision(self.revision)?;
         let connection = self
             .connections
             .remove(&connection_id)
-            .ok_or(DocumentError::ConnectionNotFound(connection_id))?;
-        self.revision.advance();
+            .expect("connection existence checked");
+        self.revision = next_revision;
         Ok(connection)
     }
 
@@ -91,6 +99,7 @@ impl GraphDocument {
         literal: Option<TypedValue>,
     ) -> Result<(), DocumentError> {
         self.validate_address(&address)?;
+        let next_revision = checked_document_revision(self.revision)?;
         match literal {
             Some(value) => {
                 self.input_states.insert(
@@ -104,9 +113,20 @@ impl GraphDocument {
                 self.input_states.remove(&address);
             }
         }
-        self.revision.advance();
+        self.revision = next_revision;
         Ok(())
     }
+}
+
+#[cfg(test)]
+fn checked_document_revision(
+    revision: super::GraphRevision,
+) -> Result<super::GraphRevision, DocumentError> {
+    revision
+        .checked_next()
+        .map_err(|error| DocumentError::RevisionExhausted {
+            retained: error.retained,
+        })
 }
 
 impl GraphDocument {

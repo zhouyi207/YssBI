@@ -8,6 +8,7 @@ use crate::node_system::protocol::Value;
 use std::fs;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
+#[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, mpsc};
 use std::thread::{self, JoinHandle};
@@ -136,7 +137,6 @@ pub struct RunResourceOwner {
     deadline: Option<RunDeadline>,
     spill_root: PathBuf,
     remove_root: bool,
-    next_spill: AtomicU64,
     spill_bytes: Arc<Mutex<u64>>,
     memory_bytes: Arc<Mutex<u64>>,
     lifecycle: Mutex<OwnerLifecycle>,
@@ -223,7 +223,6 @@ impl RunResourceOwner {
             deadline,
             spill_root,
             remove_root,
-            next_spill: AtomicU64::new(1),
             spill_bytes: Arc::new(Mutex::new(0)),
             memory_bytes: Arc::new(Mutex::new(0)),
             lifecycle: Mutex::new(OwnerLifecycle {
@@ -668,11 +667,10 @@ impl PendingValueWriter<'_> {
     }
 
     fn begin_spill(&mut self, value: Value) -> Result<(), RunError> {
-        let sequence = self.owner.next_spill.fetch_add(1, Ordering::Relaxed);
         let path = self
             .owner
             .spill_root
-            .join(format!("pending-{sequence}.jsonf"));
+            .join(format!("pending-{}.jsonf", uuid::Uuid::new_v4()));
         let values = self.values.drain(..).chain(std::iter::once(value));
         let reservation = self
             .spill_reservation

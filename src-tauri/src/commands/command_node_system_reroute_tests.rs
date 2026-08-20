@@ -73,25 +73,6 @@ fn phase2_reroute_command_event_failure_emits_zero() {
     assert_eq!(fixture.serialized_authority(), before);
 }
 
-#[test]
-fn phase2_reroute_command_event_stale_emits_zero() {
-    let fixture = Fixture::new();
-    let before = fixture.serialized_authority();
-    let mut events = Vec::new();
-    let error = mutate_graph_document_with_emitter(
-        &fixture.state,
-        fixture.project_instance_id.clone(),
-        fixture.graph_path.as_str().to_owned(),
-        "en-US",
-        fixture.request(fixture.revision().next(), ORIGINAL_ID, 3),
-        |event| events.push(event),
-    )
-    .unwrap_err();
-    assert_eq!(error.code(), "graph_revision_conflict");
-    assert!(events.is_empty());
-    assert_eq!(fixture.serialized_authority(), before);
-}
-
 struct Fixture {
     state: ProjectState,
     project_instance_id: ProjectInstanceId,

@@ -51,7 +51,7 @@ fn record_run(
         kind: SpanKind::Run,
         correlation: correlation(graph_path, run_id.get()),
     });
-    let root_id = root.span_id();
+    let root_id = root.span_id().expect("test span ID");
     let mut last = None;
     for _ in 0..child_count {
         let mut child = sink.start_span(SpanSpec {
@@ -63,7 +63,7 @@ fn record_run(
             kind: SpanKind::Run,
             correlation: correlation(graph_path, run_id.get()),
         });
-        last = Some(child.span_id());
+        last = child.span_id();
         child.finish(SpanOutcome::Success);
     }
     root.finish(SpanOutcome::Success);

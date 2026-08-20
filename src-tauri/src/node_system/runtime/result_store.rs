@@ -420,53 +420,6 @@ impl ResultStore {
     }
 
     #[cfg(test)]
-    pub(crate) fn result_count_for_node(
-        &self,
-        node_id: crate::node_system::document::NodeId,
-    ) -> usize {
-        self.registry()
-            .results
-            .values()
-            .filter(|result| result.provenance.node_id == node_id)
-            .count()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn group_count_for_node(
-        &self,
-        node_id: crate::node_system::document::NodeId,
-    ) -> usize {
-        let registry = self.registry();
-        registry
-            .groups
-            .values()
-            .filter(|group| {
-                group.output_result_ids.first().is_some_and(|result_id| {
-                    registry
-                        .results
-                        .get(result_id)
-                        .is_some_and(|result| result.provenance.node_id == node_id)
-                })
-            })
-            .count()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn materialized_result_count_for_node(
-        &self,
-        node_id: crate::node_system::document::NodeId,
-    ) -> usize {
-        self.registry()
-            .results
-            .values()
-            .filter(|result| {
-                result.provenance.node_id == node_id
-                    && matches!(result.state, ResultState::Ready(_))
-            })
-            .count()
-    }
-
-    #[cfg(test)]
     pub(crate) fn results_for_run(&self, run_id: RunId) -> Box<[Arc<StoredResult>]> {
         self.registry()
             .results

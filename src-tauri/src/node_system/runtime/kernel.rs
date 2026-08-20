@@ -119,15 +119,6 @@ impl KernelContext<'_> {
         );
     }
 
-    pub fn emit_stderr(&self, text: &str) {
-        self.run_output.emit(
-            RunOutputStream::Stderr,
-            text,
-            self.source_graph_path,
-            self.source_node_id,
-        );
-    }
-
     pub fn computation_settings(&self) -> EffectiveComputationSettings {
         self.computation_settings
     }

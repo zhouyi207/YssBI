@@ -176,9 +176,7 @@ impl TypeRegistry {
     pub fn constructor(&self, id: &TypeConstructorId) -> Option<&TypeConstructorRegistration> {
         self.constructors.get(id)
     }
-    pub fn contains_class(&self, id: &TypeClassId) -> bool {
-        self.classes.contains(id)
-    }
+
     pub fn iter(&self) -> impl ExactSizeIterator<Item = (&TypeId, &TypeRegistration)> {
         self.types.iter()
     }

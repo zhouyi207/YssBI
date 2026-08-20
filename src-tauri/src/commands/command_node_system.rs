@@ -1,3 +1,10 @@
+use crate::application::catalog_compatibility::{
+    CatalogCompatibilityError, CatalogCompatibilityRequest,
+};
+use crate::application::graph_execution::{
+    GraphExecutionDeliveryReport, GraphExecutionRequest, GraphExecutionStreamEvent,
+    TerminalRunEventKind,
+};
 use crate::commands::node_system_execution_dto::{
     ExecutionChannelEventDto, ExecutionDemandDto, PinResultEntryDto, ResultDescriptorDto,
     ResultPageDto, ResultValueDto,
@@ -12,14 +19,10 @@ use crate::node_system::document::{
     ClipboardSubgraphDto, EditorGraphMutationDto, HistoryMutation, HistoryStatusDto,
     MutationRequest, NodeId, OperationId, PortAddressDto, ResourceRevision,
 };
-use crate::node_system::runtime::{
-    ResultId, ResultState, RunEvent, RunEventSink, RunOutputMessage, StoredValueKind,
-};
+use crate::node_system::runtime::{ResultId, ResultState, StoredValueKind};
 use crate::project::project_writers::ProjectSaveResultDto;
 use crate::project::{GraphResourcePath, ProjectFilesystemError, ProjectInstanceId, ProjectState};
 use serde::Serialize;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use tauri::{AppHandle, State, ipc::Channel};
 
 #[cfg(test)]
@@ -141,48 +144,20 @@ pub fn get_localized_node_catalog(
     get_localized_node_catalog_from_state(state.inner(), project_instance_id, &locale)
 }
 
-fn get_compatible_node_catalog_from_state(
-    state: &ProjectState,
-    project_instance_id: ProjectInstanceId,
-    graph_path: GraphResourcePath,
-    graph_revision: ResourceRevision,
-    source_port: PortAddressDto,
-    locale: &str,
-) -> Result<LocalizedCatalogDto, CommandError> {
-    let snapshot = state.catalog_snapshot(&project_instance_id)?;
-    let projection =
-        state.graph_projection_for_project(&project_instance_id, &graph_path, locale)?;
-    if projection.basis.graph_revision != graph_revision.get() {
-        return Err(CommandError::expected("graph_revision_conflict"));
+fn catalog_compatibility_command_error(error: CatalogCompatibilityError) -> CommandError {
+    match error {
+        CatalogCompatibilityError::GraphRevisionConflict => {
+            CommandError::expected("graph_revision_conflict")
+        }
+        CatalogCompatibilityError::CatalogProjectStale => {
+            CommandError::expected("catalog_project_stale")
+        }
+        CatalogCompatibilityError::CompatibleSourceInvalid => {
+            CommandError::expected("compatible_source_invalid")
+        }
+        CatalogCompatibilityError::GraphNotLoaded => CommandError::expected("graph_not_loaded"),
+        CatalogCompatibilityError::Project(error) => CommandError::from(error),
     }
-    if projection.basis.registry_fingerprint != *snapshot.registry.fingerprint() {
-        return Err(CommandError::expected("catalog_project_stale"));
-    }
-    let mut source = crate::node_system::compatibility::source_from_projection(
-        &projection,
-        snapshot.registry.as_ref(),
-        source_port,
-    )
-    .map_err(|_| CommandError::expected("compatible_source_invalid"))?;
-    let document = state
-        .get_data()?
-        .graphs
-        .get(&graph_path)
-        .map(|resource| resource.document.clone())
-        .ok_or_else(|| CommandError::expected("graph_not_loaded"))?;
-    crate::node_system::compatibility::refine_source_type(
-        &mut source,
-        &document,
-        snapshot.registry.as_ref(),
-        &snapshot.validation,
-    );
-    state.validate_catalog_snapshot_current(&snapshot)?;
-    Ok(crate::node_system::compatibility::compatible_catalog(
-        &snapshot,
-        &crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
-        &source,
-        locale,
-    ))
 }
 
 #[tauri::command]
@@ -194,14 +169,17 @@ pub fn get_compatible_node_catalog(
     source_port: PortAddressDto,
     locale: String,
 ) -> Result<LocalizedCatalogDto, CommandError> {
-    get_compatible_node_catalog_from_state(
+    crate::application::catalog_compatibility::get_compatible_node_catalog(
         state.inner(),
-        project_instance_id,
-        parse_graph_path(graph_path)?,
-        graph_revision,
-        source_port,
-        &locale,
+        CatalogCompatibilityRequest {
+            project_instance_id,
+            graph_path: parse_graph_path(graph_path)?,
+            graph_revision,
+            source_port,
+            locale,
+        },
     )
+    .map_err(catalog_compatibility_command_error)
 }
 
 trait EmitOutcome {
@@ -643,17 +621,6 @@ pub fn get_project_history_status(
     get_project_history_status_from_state(state.inner(), project_instance_id)
 }
 
-fn publish_run_resource_mutation(
-    resource_mutation: Option<&ResourceMutationResultDto>,
-    mut emit: impl FnMut(Event),
-) {
-    if let Some(result) = resource_mutation {
-        emit(Event::Project(EventProject::ResourceMutationCommitted {
-            result: result.clone(),
-        }));
-    }
-}
-
 fn undo_graph_document_with_emitter<R: EmitOutcome>(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -716,74 +683,55 @@ pub fn redo_graph_document(
     )
 }
 
-#[derive(Clone, Copy)]
-enum TerminalRunEvent {
-    Errored = 1,
-    Cancelled = 2,
-}
-
-impl TerminalRunEvent {
-    fn from_state(state: u8) -> Option<Self> {
-        match state {
-            1 => Some(Self::Errored),
-            2 => Some(Self::Cancelled),
-            _ => None,
-        }
-    }
-}
-
-struct ChannelRunEvents {
+struct TauriExecutionChannelAdapter {
     channel: Channel<ExecutionChannelEventDto>,
-    terminal: Arc<AtomicU8>,
-    terminal_run_id: Arc<AtomicU64>,
-    delivery_failed: Arc<AtomicBool>,
 }
 
-impl ChannelRunEvents {
-    fn send(&self, event: ExecutionChannelEventDto) -> bool {
-        if self.channel.send(event).is_ok() {
-            return true;
-        }
-        if !self.delivery_failed.swap(true, Ordering::AcqRel) {
-            tracing::warn!(
-                target: "yssbi::execution::channel",
-                diagnostic_domain = "execution",
-                diagnostic_event = "executionChannelDeliveryFailed",
-                "Execution channel rejected a streamed event"
-            );
-        }
-        false
+impl TauriExecutionChannelAdapter {
+    fn deliver(&self, event: GraphExecutionStreamEvent) -> bool {
+        self.channel
+            .send(execution_channel_event_dto(event))
+            .is_ok()
     }
 }
 
-impl RunEventSink for ChannelRunEvents {
-    fn record(&self, event: RunEvent) {
-        let terminal = match &event.kind {
-            crate::node_system::runtime::RunEventKind::RunErrored { .. } => {
-                Some(TerminalRunEvent::Errored)
-            }
-            crate::node_system::runtime::RunEventKind::RunCancelled => {
-                Some(TerminalRunEvent::Cancelled)
-            }
-            _ => None,
-        };
-        let is_terminal = terminal.is_some()
-            || matches!(
-                &event.kind,
-                crate::node_system::runtime::RunEventKind::RunCompleted
-            );
-        if is_terminal && let Some(run_id) = event.correlation.run_id {
-            self.terminal_run_id.store(run_id.get(), Ordering::Release);
+fn execution_channel_event_dto(event: GraphExecutionStreamEvent) -> ExecutionChannelEventDto {
+    match event {
+        GraphExecutionStreamEvent::RunEvent(event) => {
+            ExecutionChannelEventDto::RunEvent(event.into())
         }
-        if self.send(ExecutionChannelEventDto::RunEvent(event.into()))
-            && let Some(terminal) = terminal
-        {
-            self.terminal.store(terminal as u8, Ordering::Release);
-        }
+        GraphExecutionStreamEvent::RunOutput(event) => event.into(),
     }
+}
 
-    fn record_run_output(&self, event: RunOutputMessage) {
-        self.send(event.into());
+fn execution_channel_command_error() -> CommandError {
+    CommandError::diagnosed(
+        "execution_channel_failed",
+        "execution channel rejected a streamed event",
+    )
+}
+
+fn associate_execution_incident(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    delivery: &GraphExecutionDeliveryReport,
+    error: &CommandError,
+) {
+    let (Some(incident_id), Some(run_id)) = (error.incident_id(), delivery.terminal_run_id())
+    else {
+        return;
+    };
+    if !state
+        .associate_run_trace_incident(project_instance_id, run_id, incident_id)
+        .is_ok_and(|associated| associated)
+    {
+        tracing::warn!(
+            target: "yssbi::execution_trace",
+            diagnostic_domain = "execution",
+            diagnostic_event = "traceIncidentAssociationMissed",
+            run_id = run_id.get(),
+            "Run trace incident could not be associated"
+        );
     }
 }
 
@@ -809,7 +757,7 @@ struct TerminalRunEventDetails {
 
 fn execution_command_error(
     error: crate::project::ProjectExecutionError,
-    terminal: Option<TerminalRunEvent>,
+    delivery: &GraphExecutionDeliveryReport,
 ) -> CommandError {
     use crate::project::ProjectExecutionErrorKind;
 
@@ -845,18 +793,18 @@ fn execution_command_error(
         }
         ProjectExecutionErrorKind::Internal => CommandError::internal(error),
         ProjectExecutionErrorKind::Run => {
-            let Some(terminal) = terminal else {
-                return CommandError::internal(error);
-            };
-            let command_error = match terminal {
-                TerminalRunEvent::Cancelled => CommandError::expected("run_cancelled"),
-                TerminalRunEvent::Errored => {
+            let command_error = match delivery.delivered_terminal_kind() {
+                Some(TerminalRunEventKind::Cancelled) => CommandError::expected("run_cancelled"),
+                Some(TerminalRunEventKind::Errored) => {
                     let code = error
                         .run_error()
                         .map(crate::node_system::runtime::RunErrorCode::from)
                         .and_then(relational_run_command_error_code)
                         .unwrap_or("run_failed");
                     CommandError::diagnosed(code, error)
+                }
+                Some(TerminalRunEventKind::Completed) | None => {
+                    return CommandError::internal(error);
                 }
             };
             command_error.with_details(TerminalRunEventDetails {
@@ -1147,73 +1095,47 @@ pub async fn execute_graph_document(
         .map_err(|_| CommandError::expected("invalid_execution_demand"))?;
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let terminal = Arc::new(AtomicU8::new(0));
-        let terminal_run_id = Arc::new(AtomicU64::new(0));
-        let delivery_failed = Arc::new(AtomicBool::new(false));
-        let events = ChannelRunEvents {
-            channel: on_event,
-            terminal: Arc::clone(&terminal),
-            terminal_run_id: Arc::clone(&terminal_run_id),
-            delivery_failed: Arc::clone(&delivery_failed),
+        let channel = TauriExecutionChannelAdapter { channel: on_event };
+        let execution = crate::application::graph_execution::execute_graph(
+            &state,
+            GraphExecutionRequest {
+                project_instance_id: project_instance_id.clone(),
+                graph_path,
+                demand,
+            },
+            |event| channel.deliver(event),
+        );
+        let delivery = match &execution {
+            Ok(outcome) => outcome.delivery.clone(),
+            Err(error) => error.delivery.clone(),
         };
-        let execution = state.execute_graph(&project_instance_id, &graph_path, &demand, &events);
-        if execution.is_ok() && delivery_failed.load(Ordering::Acquire) {
-            let command_error = CommandError::diagnosed(
-                "execution_channel_failed",
-                "execution channel rejected a streamed event",
+        if let Ok(outcome) = &execution
+            && let Some(result) = &outcome.resource_mutation
+        {
+            emit_project_event(
+                &app,
+                Event::Project(EventProject::ResourceMutationCommitted {
+                    result: result.clone(),
+                }),
             );
-            if let Some(incident_id) = command_error.incident_id()
-                && let Ok(run_id) = crate::node_system::analysis::RunId::try_new(
-                    terminal_run_id.load(Ordering::Acquire),
-                )
-                && !state
-                    .associate_run_trace_incident(&project_instance_id, run_id, incident_id)
-                    .is_ok_and(|associated| associated)
-            {
-                tracing::warn!(
-                    target: "yssbi::execution_trace",
-                    diagnostic_domain = "execution",
-                    diagnostic_event = "traceIncidentAssociationMissed",
-                    run_id = run_id.get(),
-                    "Run trace incident could not be associated"
-                );
-            }
-            return Err(command_error);
         }
-        execution
-            .map(|result| {
-                publish_run_resource_mutation(result.resource_mutation.as_ref(), |event| {
-                    emit_project_event(&app, event)
-                });
-                ExecuteGraphResultDto {
-                    run_id: result.run_id.get().to_string(),
-                }
-            })
-            .map_err(|error| {
-                let command_error = execution_command_error(
-                    error,
-                    TerminalRunEvent::from_state(terminal.load(Ordering::Acquire)),
-                );
-                if let Some(incident_id) = command_error.incident_id()
-                    && let Ok(run_id) = crate::node_system::analysis::RunId::try_new(
-                        terminal_run_id.load(Ordering::Acquire),
-                    )
-                {
-                    if !state
-                        .associate_run_trace_incident(&project_instance_id, run_id, incident_id)
-                        .is_ok_and(|associated| associated)
-                    {
-                        tracing::warn!(
-                            target: "yssbi::execution_trace",
-                            diagnostic_domain = "execution",
-                            diagnostic_event = "traceIncidentAssociationMissed",
-                            run_id = run_id.get(),
-                            "Run trace incident could not be associated"
-                        );
-                    }
-                }
-                command_error
-            })
+        let result = if delivery.delivery_failed() {
+            Err(execution_channel_command_error())
+        } else {
+            match execution {
+                Ok(outcome) => Ok(ExecuteGraphResultDto {
+                    run_id: outcome.run_id.get().to_string(),
+                }),
+                Err(error) => Err(execution_command_error(
+                    error.project_error,
+                    &error.delivery,
+                )),
+            }
+        };
+        if let Err(error) = &result {
+            associate_execution_incident(&state, &project_instance_id, &delivery, error);
+        }
+        result
     })
     .await
     .map_err(CommandError::internal)?
@@ -1222,23 +1144,24 @@ pub async fn execute_graph_document(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::graph_execution::{DeliveryDisposition, TerminalRunEventDelivery};
     use crate::commands::node_system_execution_dto::ResultStateKindDto;
     use crate::node_system::analysis::{
         CompilationBasis, CompileId, CorrelationContext, ParentCallId, ProjectSessionId, RunId,
     };
     use crate::node_system::catalog::NodeCreationDescriptor;
     use crate::node_system::document::{
-        FunctionDocumentPatch, FunctionResourceKey, ResourceDeltaEvent, ResourceDocumentPatch,
-        ResourceKey, ResourceRevision, VariableDocumentPatch, VariableResourceKey,
+        FunctionDocumentPatch, FunctionResourceKey, ResourceKey, ResourceRevision,
     };
     use crate::node_system::registry::RegistryFingerprint;
     use crate::node_system::runtime::{
         ActivationId, ActivationProvenance, PendingOutputDescriptor, ResultId, ResultStore,
-        ResultUsage, RunEventKind, StoredValue,
+        ResultUsage, RunEvent, RunEventKind, RunOutputMessage, StoredValue,
     };
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, fixtures,
     };
+    use std::sync::Arc;
 
     #[test]
     fn pin_preview_generation_dto_serializes_as_a_safe_number() {
@@ -1332,12 +1255,18 @@ mod tests {
         )
     }
 
-    #[derive(Default)]
-    struct RecordingRunEvents(std::sync::Mutex<Vec<crate::node_system::runtime::RunEvent>>);
-
-    impl crate::node_system::runtime::RunEventSink for RecordingRunEvents {
-        fn record(&self, event: crate::node_system::runtime::RunEvent) {
-            self.0.lock().unwrap().push(event);
+    fn terminal_delivery_report(
+        kind: TerminalRunEventKind,
+        disposition: DeliveryDisposition,
+    ) -> GraphExecutionDeliveryReport {
+        GraphExecutionDeliveryReport {
+            delivered_event_count: usize::from(disposition == DeliveryDisposition::Delivered),
+            rejected_event_count: usize::from(disposition == DeliveryDisposition::Rejected),
+            terminal: Some(TerminalRunEventDelivery {
+                kind,
+                run_id: Some(RunId::new(1)),
+                disposition,
+            }),
         }
     }
 
@@ -1659,42 +1588,6 @@ mod tests {
     }
 
     #[test]
-    fn execute_graph_rejects_stale_project_before_run_registration() {
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-stale-execution-command-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&root).unwrap();
-        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
-        let state = ProjectState::new();
-        state.activate_project_fixture(
-            root.to_string_lossy().into_owned(),
-            graph_project(&graph_path),
-        );
-        let stale_id = state.capture_project_session().unwrap().instance_id;
-        state.activate_project_fixture(
-            root.to_string_lossy().into_owned(),
-            graph_project(&graph_path),
-        );
-        let events = RecordingRunEvents::default();
-
-        let error = state
-            .execute_graph(
-                &stale_id,
-                &graph_path,
-                &crate::node_system::plan::ExecutionDemand::Default,
-                &events,
-            )
-            .map_err(|error| execution_command_error(error, None))
-            .unwrap_err();
-
-        assert_eq!(error.code(), "stale_project_lifecycle");
-        assert!(error.details().is_none());
-        assert!(events.0.lock().unwrap().is_empty());
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
     fn history_commands_reject_stale_project_identity_with_zero_effects() {
         let root = std::env::temp_dir().join(format!(
             "yssbi-history-command-stale-{}",
@@ -2010,32 +1903,47 @@ mod tests {
     }
 
     #[test]
-    fn execution_errors_report_terminal_delivery_and_stable_codes() {
+    fn execution_errors_report_actual_terminal_delivery_and_stable_codes() {
+        let no_delivery = GraphExecutionDeliveryReport::default();
+        let cancelled_delivery = terminal_delivery_report(
+            TerminalRunEventKind::Cancelled,
+            DeliveryDisposition::Delivered,
+        );
+        let failed_delivery = terminal_delivery_report(
+            TerminalRunEventKind::Errored,
+            DeliveryDisposition::Delivered,
+        );
         let cancelled = execution_command_error(
             crate::project::ProjectExecutionError::from(
                 crate::node_system::runtime::RunError::Cancelled,
             ),
-            Some(TerminalRunEvent::Cancelled),
+            &cancelled_delivery,
         );
         let failed = execution_command_error(
             crate::project::ProjectExecutionError::from(
                 crate::node_system::runtime::RunError::InvalidPlan("operation failed".into()),
             ),
-            Some(TerminalRunEvent::Errored),
+            &failed_delivery,
+        );
+        let rejected_terminal = execution_command_error(
+            crate::project::ProjectExecutionError::from(
+                crate::node_system::runtime::RunError::InvalidPlan("operation failed".into()),
+            ),
+            &terminal_delivery_report(TerminalRunEventKind::Errored, DeliveryDisposition::Rejected),
         );
         let pre_run = execution_command_error(
             crate::project::ProjectExecutionError::internal("compile failed"),
-            None,
+            &no_delivery,
         );
         let invalid_demand = execution_command_error(
             crate::project::ProjectExecutionError::invalid_demand(
                 "requested output node is missing",
             ),
-            None,
+            &no_delivery,
         );
         let recovery_required = execution_command_error(
             crate::project::ProjectExecutionError::recovery_required("project requires recovery"),
-            None,
+            &no_delivery,
         );
         let internal_failure = execution_command_error(
             crate::project::ProjectExecutionError::internal_compilation(
@@ -2047,11 +1955,17 @@ mod tests {
                     )),
                 },
             ),
-            None,
+            &no_delivery,
         );
+        let channel_failure = execution_channel_command_error();
 
         assert_eq!(cancelled.code(), "run_cancelled");
         assert_eq!(failed.code(), "run_failed");
+        assert_eq!(rejected_terminal.code(), "internal_error");
+        assert!(rejected_terminal.details().is_none());
+        assert_eq!(channel_failure.code(), "execution_channel_failed");
+        assert!(channel_failure.details().is_none());
+        assert!(channel_failure.incident_id().is_some());
         assert_eq!(pre_run.code(), "internal_error");
         assert_eq!(invalid_demand.code(), "invalid_execution_demand");
         assert_eq!(recovery_required.code(), "project_recovery_required");
@@ -2105,7 +2019,13 @@ mod tests {
                 },
             );
 
-            let mapped = execution_command_error(error, Some(TerminalRunEvent::Errored));
+            let mapped = execution_command_error(
+                error,
+                &terminal_delivery_report(
+                    TerminalRunEventKind::Errored,
+                    DeliveryDisposition::Delivered,
+                ),
+            );
 
             assert_eq!(mapped.code(), expected_code);
             assert_eq!(
@@ -2120,7 +2040,7 @@ mod tests {
     }
 
     #[test]
-    fn execution_ipc_dto_serializes_opaque_ids_as_decimal_strings() {
+    fn execution_channel_adapter_serializes_opaque_ids_as_decimal_strings() {
         let unsafe_id = 9_007_199_254_740_993_u64;
         let basis = CompilationBasis {
             graph_revision: crate::node_system::document::GraphRevision::new(unsafe_id),
@@ -2142,25 +2062,26 @@ mod tests {
             parent_call: Some(ParentCallId::new(unsafe_id)),
             trace_parent_span_id: None,
         };
-        let operation = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
-            correlation: correlation.clone(),
-            basis: basis.clone(),
-            kind: RunEventKind::OperationStarted {
-                operation_index: 3,
-                activation_id: unsafe_id,
-                attempt_id: unsafe_id,
-            },
-        });
-        let preview = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
+        let operation =
+            execution_channel_event_dto(GraphExecutionStreamEvent::RunEvent(RunEvent {
+                correlation: correlation.clone(),
+                basis: basis.clone(),
+                kind: RunEventKind::OperationStarted {
+                    operation_index: 3,
+                    activation_id: unsafe_id,
+                    attempt_id: unsafe_id,
+                },
+            }));
+        let preview = execution_channel_event_dto(GraphExecutionStreamEvent::RunEvent(RunEvent {
             correlation: CorrelationContext {
                 selection_digest: Some("demand-selection-b".into()),
                 ..correlation.clone()
             },
             basis: basis.clone(),
             kind: RunEventKind::RunStarted,
-        });
+        }));
 
-        let result = crate::commands::node_system_execution_dto::RunEventDto::from(RunEvent {
+        let result = execution_channel_event_dto(GraphExecutionStreamEvent::RunEvent(RunEvent {
             correlation,
             basis,
             kind: RunEventKind::ResultGroupChanged {
@@ -2168,7 +2089,7 @@ mod tests {
                 result_ids: vec![ResultId::new(unsafe_id)].into_boxed_slice(),
                 state: crate::node_system::runtime::ResultStateKind::Ready,
             },
-        });
+        }));
 
         let operation = serde_json::to_value(operation).unwrap();
         assert_eq!(
@@ -2224,31 +2145,31 @@ mod tests {
     }
 
     #[test]
-    fn run_output_ipc_dto_uses_a_separate_exact_wire_shape() {
+    fn run_output_channel_adapter_uses_a_separate_exact_wire_shape() {
         let run_id = RunId::new(9_007_199_254_740_993);
         let source_graph_path = crate::node_system::document::GraphResourcePath(
             "functions/output.yssbi-function".into(),
         );
         let source_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(2));
-        let output = ExecutionChannelEventDto::from(RunOutputMessage::Output(
-            crate::node_system::runtime::RunOutputEvent {
+        let output = execution_channel_event_dto(GraphExecutionStreamEvent::RunOutput(
+            RunOutputMessage::Output(crate::node_system::runtime::RunOutputEvent {
                 run_id,
                 sequence: 1,
                 stream: crate::node_system::runtime::RunOutputStream::Stdout,
                 text: "user-visible value".into(),
                 source_graph_path: source_graph_path.clone(),
                 source_node_id,
-            },
+            }),
         ));
-        let status = ExecutionChannelEventDto::from(RunOutputMessage::Status(
-            crate::node_system::runtime::RunOutputStatusEvent {
+        let status = execution_channel_event_dto(GraphExecutionStreamEvent::RunOutput(
+            RunOutputMessage::Status(crate::node_system::runtime::RunOutputStatusEvent {
                 run_id,
                 sequence: 2,
                 stream: crate::node_system::runtime::RunOutputStream::Stdout,
                 status: crate::node_system::runtime::RunOutputStatus::Truncated,
                 source_graph_path,
                 source_node_id,
-            },
+            }),
         ));
 
         assert_eq!(
@@ -2290,58 +2211,6 @@ mod tests {
         let error = get_localized_node_catalog_from_state(&state, stale, "en-US").unwrap_err();
 
         assert_eq!(error.code(), "catalog_project_stale");
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn compatible_catalog_command_filters_against_current_analyzed_source() {
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-compatible-catalog-command-{}",
-            uuid::Uuid::new_v4()
-        ));
-        std::fs::create_dir_all(&root).unwrap();
-        let graph_path = GraphResourcePath::new("events/Main.yssbi-event").unwrap();
-        let source_node = crate::node_system::document::NodeId::new();
-        let mut project = graph_project(&graph_path);
-        project
-            .graphs
-            .get_mut(&graph_path)
-            .unwrap()
-            .document
-            .create_node(crate::node_system::document::DocumentNode {
-                id: source_node,
-                node_type: crate::node_system::protocol::NodeTypeId::new("yssbi.constant.int64")
-                    .unwrap(),
-                position: crate::node_system::document::NodePosition { x: 0.0, y: 0.0 },
-                parameters: crate::node_system::document::ParameterValues::new(),
-                user_label: None,
-            })
-            .unwrap();
-        fixtures::write_project(&project, root.to_string_lossy().as_ref()).unwrap();
-        let state = ProjectState::new();
-        state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
-        let project_instance_id = state.capture_project_session().unwrap().instance_id;
-
-        let catalog = get_compatible_node_catalog_from_state(
-            &state,
-            project_instance_id,
-            graph_path,
-            ResourceRevision::new(1),
-            PortAddressDto::Declared {
-                node_id: source_node.to_string().into(),
-                port_key: "value".into(),
-            },
-            "en-US",
-        )
-        .unwrap();
-        let ids = catalog
-            .items
-            .iter()
-            .map(|item| item.node_type_id.as_ref())
-            .collect::<std::collections::BTreeSet<_>>();
-
-        assert!(ids.contains("yssbi.numeric.add.int64"));
-        assert!(!ids.contains("yssbi.logic.not"));
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -2832,48 +2701,6 @@ mod tests {
             let error = mutation_conflict_to_command_error(conflict, "graph_revision_conflict");
             assert_eq!(error.code(), expected);
         }
-    }
-
-    #[test]
-    fn run_variable_effects_publish_only_resource_mutation_committed() {
-        let delta = ResourceDeltaEvent {
-            resource: ResourceKey::Variable(VariableResourceKey(
-                "variables/00000000-0000-0000-0000-000000000701".into(),
-            )),
-            from_revision: ResourceRevision::INITIAL,
-            to_revision: ResourceRevision::new(1),
-            caused_by: None,
-            payload: ResourceDocumentPatch::Variable(VariableDocumentPatch::new(
-                Some(serde_json::json!({ "Int64": 1 })),
-                Some(serde_json::json!({ "Int64": 2 })),
-            )),
-        };
-        let mut events = Vec::new();
-
-        let result = ResourceMutationResultDto {
-            operation_id: OperationId::new(),
-            project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
-            publication_revision: 7,
-            moves: Vec::new(),
-            deltas: vec![delta],
-            projection_replacements: Vec::new(),
-            projection_status: crate::event::ProjectionStatusDto::Complete {
-                expected_graph_paths: Vec::new(),
-            },
-            history: HistoryStatusDto {
-                can_undo: true,
-                can_redo: false,
-            },
-        };
-        publish_run_resource_mutation(Some(&result), |event| events.push(event));
-
-        assert_eq!(events.len(), 1);
-        let Event::Project(EventProject::ResourceMutationCommitted { result: emitted }) =
-            &events[0]
-        else {
-            panic!("run publication must emit one canonical resource mutation");
-        };
-        assert_eq!(emitted, &result);
     }
 
     #[test]

@@ -134,6 +134,7 @@ function parseRunErrorCode(value: unknown): RunErrorCode {
     case 'invalidPlan':
     case 'cancelled':
     case 'activationIdExhausted':
+    case 'runtimeIdExhausted':
     case 'deadlineExceeded':
     case 'kernelNotFound':
     case 'kernelFailed':

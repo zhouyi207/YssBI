@@ -84,15 +84,6 @@ impl ProjectResourceSnapshot {
             .collect()
     }
 
-    pub fn with_variable_access(
-        mut self,
-        id: ResourceId,
-        variable: Arc<dyn ProjectVariableAccess>,
-    ) -> Self {
-        self.variables.insert(id, variable);
-        self
-    }
-
     pub fn with_plot_sink(mut self, sink: Arc<dyn PlotSink>) -> Self {
         self.plot_sink = Some(sink);
         self

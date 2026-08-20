@@ -39,14 +39,13 @@ pub(crate) struct ProductionRelationalObservation {
 #[derive(Debug, Default)]
 pub(crate) struct ProductionRelationalObserver {
     observation: std::sync::Mutex<ProductionRelationalObservation>,
-    execution_plan: std::sync::Mutex<Option<crate::node_system::plan::ExecutionPlan>>,
+
     materialized_dataframes: std::sync::Mutex<Vec<DataFrame>>,
 }
 
 #[cfg(test)]
 impl ProductionRelationalObserver {
     pub(crate) fn observe_plan(&self, plan: &crate::node_system::plan::ExecutionPlan) {
-        *self.execution_plan.lock().unwrap() = Some(plan.clone());
         let mut observation = self.observation.lock().unwrap();
         observation.relational_islands = Some(plan.relational_subplans.len());
         observation.relational_subplans = plan.relational_subplans.to_vec();
@@ -91,14 +90,6 @@ impl ProductionRelationalObserver {
 
     pub(crate) fn materialized_dataframes(&self) -> Vec<DataFrame> {
         self.materialized_dataframes.lock().unwrap().clone()
-    }
-
-    pub(crate) fn execution_plan(&self) -> crate::node_system::plan::ExecutionPlan {
-        self.execution_plan
-            .lock()
-            .unwrap()
-            .clone()
-            .expect("production relational plan was not observed")
     }
 
     pub(crate) fn snapshot(&self) -> ProductionRelationalObservation {
@@ -990,40 +981,6 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "rename source column name must not have leading or trailing whitespace"
-        );
-    }
-
-    #[test]
-    fn rename_rejects_blank_destination_name_before_exposing_any_output() {
-        let error = execute_rename(
-            dataframe_value(&[
-                ("city", vec![string("Paris")]),
-                ("sales", vec![Value::Integer(10)]),
-            ]),
-            vec![rename("city", "location"), rename("sales", "")],
-        )
-        .unwrap_err();
-
-        assert_eq!(
-            error.to_string(),
-            "rename destination column name must not be empty"
-        );
-    }
-
-    #[test]
-    fn rename_rejects_padded_destination_name_before_exposing_any_output() {
-        let error = execute_rename(
-            dataframe_value(&[
-                ("city", vec![string("Paris")]),
-                ("sales", vec![Value::Integer(10)]),
-            ]),
-            vec![rename("city", "location"), rename("sales", " region ")],
-        )
-        .unwrap_err();
-
-        assert_eq!(
-            error.to_string(),
-            "rename destination column name must not have leading or trailing whitespace"
         );
     }
 

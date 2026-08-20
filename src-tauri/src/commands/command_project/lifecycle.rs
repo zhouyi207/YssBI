@@ -1,23 +1,29 @@
+use crate::application::project_lifecycle::{self, ProjectLifecycleError};
 use crate::error::CommandError;
 use crate::event::{
-    Event, EventProject, LifecycleInvalidationDto, LifecycleMutationKindDto,
-    LifecycleMutationOutcomeDto, LifecycleMutationPhaseDto, LifecycleMutationResultDto,
-    LifecycleRecoveryDto, ProjectActivationResultDto, emit_project_event,
-    emit_project_event_result,
+    Event, EventProject, LifecycleMutationOutcomeDto, LifecycleMutationResultDto,
+    ProjectActivationResultDto, emit_project_event, emit_project_event_result,
 };
-
 use crate::node_system::document::OperationId;
 use crate::project::project_writers::ProjectSaveResultDto;
-use crate::project::{
-    PreparedProjectActivation, ProjectFilesystemError, ProjectInstanceId, ProjectRecord,
-    ProjectRegistry, ProjectSession, ProjectState, ProjectWatcherState, normalize_existing_path,
-};
-use std::future::Future;
+use crate::project::{ProjectInstanceId, ProjectRegistry, ProjectState, ProjectWatcherState};
 use std::path::Path;
 use tauri::{AppHandle, State};
 
 fn emit_project_loaded(app: &AppHandle, result: ProjectActivationResultDto) {
     emit_project_event(app, Event::Project(EventProject::ProjectLoaded { result }));
+}
+
+pub(crate) fn map_project_lifecycle_error(error: ProjectLifecycleError) -> CommandError {
+    match error {
+        ProjectLifecycleError::InvalidPath => CommandError::expected("invalid_path"),
+        ProjectLifecycleError::ProjectNotFound => CommandError::expected("project_not_found"),
+        ProjectLifecycleError::LoadFailed(source) => {
+            CommandError::diagnosed("load_project_failed", source)
+        }
+        ProjectLifecycleError::AuthorityFailed(source) => CommandError::from(source),
+        ProjectLifecycleError::RegistryLookupFailed(source) => CommandError::internal(source),
+    }
 }
 
 fn start_project_watcher(
@@ -52,114 +58,21 @@ pub fn load_project(
         "Loading project"
     );
 
-    let path =
-        normalize_existing_path(&path).map_err(|_| CommandError::expected("invalid_path"))?;
-
-    let session = state
-        .activate_project_from_path(std::path::Path::new(&path))
-        .map_err(|error| CommandError::diagnosed("load_project_failed", error))?;
-    let project_data = state
-        .get_data()
-        .map_err(|error| CommandError::diagnosed("load_project_failed", error))?;
+    let result = project_lifecycle::load_project(state.inner(), &path)
+        .map_err(map_project_lifecycle_error)?;
 
     tracing::info!(
         target: "yssbi::commands::project",
         diagnostic_domain = "application",
         diagnostic_event = "projectLoaded",
-        project = %project_data.info(),
+        project_instance_id = result.project_instance_id.as_str(),
         "Project loaded"
     );
 
-    start_project_watcher(&app, &watcher, &path, &session.instance_id);
-    let result = ProjectActivationResultDto {
-        path,
-        project_instance_id: session.instance_id.to_string(),
-        activation_revision: state.activation_revision(),
-    };
+    let project_instance_id = ProjectInstanceId::from_existing(result.project_instance_id.clone());
+    start_project_watcher(&app, &watcher, &result.path, &project_instance_id);
     emit_project_loaded(&app, result.clone());
     Ok(result)
-}
-
-async fn save_project_as_workflow<Register, RegisterFuture, Activate, Emit>(
-    state: &ProjectState,
-    destination: &Path,
-    project_instance_id: ProjectInstanceId,
-    operation_id: OperationId,
-    register: Register,
-    activate: Activate,
-    emit: Emit,
-) -> Result<LifecycleMutationResultDto, CommandError>
-where
-    Register: FnOnce(String, String) -> RegisterFuture,
-    RegisterFuture: Future<Output = Result<ProjectRecord, String>>,
-    Activate: FnOnce(PreparedProjectActivation) -> Result<ProjectSession, ProjectFilesystemError>,
-    Emit: FnOnce(&Event) -> Result<(), String>,
-{
-    let prepared =
-        state.save_project_as_transaction(&project_instance_id, destination, operation_id)?;
-    let metadata_path = prepared.metadata_path.to_string_lossy().into_owned();
-    let project_name = prepared
-        .prepared_activation
-        .data
-        .metadata
-        .project_name
-        .clone();
-    let record = match register(project_name, metadata_path.clone()).await {
-        Ok(record) => record,
-        Err(_) => {
-            return Ok(publish_lifecycle_result_with(
-                lifecycle_failure_result(
-                    operation_id,
-                    LifecycleMutationKindDto::SaveAs,
-                    Some(project_instance_id.to_string()),
-                    LifecycleMutationPhaseDto::DestinationCommitted,
-                    LifecycleMutationOutcomeDto::RegistryFailed,
-                    None,
-                    metadata_path,
-                    "registerDestination",
-                    false,
-                ),
-                emit,
-            ));
-        }
-    };
-    let session = match activate(prepared.prepared_activation) {
-        Ok(session) => session,
-        Err(_) => {
-            return Ok(publish_lifecycle_result_with(
-                lifecycle_failure_result(
-                    operation_id,
-                    LifecycleMutationKindDto::SaveAs,
-                    Some(project_instance_id.to_string()),
-                    LifecycleMutationPhaseDto::RegistryCommitted,
-                    LifecycleMutationOutcomeDto::ActivationFailed,
-                    Some(record),
-                    metadata_path,
-                    "activateDestination",
-                    true,
-                ),
-                emit,
-            ));
-        }
-    };
-    Ok(publish_lifecycle_result_with(
-        LifecycleMutationResultDto {
-            operation_id,
-            kind: LifecycleMutationKindDto::SaveAs,
-            old_project_instance_id: Some(project_instance_id.to_string()),
-            new_project_instance_id: Some(session.instance_id.to_string()),
-            phase: LifecycleMutationPhaseDto::AuthorityCommitted,
-            outcome: LifecycleMutationOutcomeDto::Committed,
-            record: Some(record),
-            path: Some(metadata_path),
-            recovery: None,
-            invalidation: LifecycleInvalidationDto {
-                project: true,
-                registry: true,
-            },
-        },
-        emit,
-    ))
 }
 
 /// 将当前项目另存为新目录（完整复制 events/functions/database 等）。
@@ -181,16 +94,16 @@ pub async fn save_project_as(
         "Saving project copy"
     );
 
-    let result = save_project_as_workflow(
+    let result = project_lifecycle::save_project_as(
         state.inner(),
+        registry.inner(),
         Path::new(&path),
         project_instance_id,
         operation_id,
-        |name, metadata_path| async move { registry.register_project(&name, &metadata_path).await },
-        |prepared| state.activate_prepared_project(prepared),
-        |event| emit_project_event_result(&app, event),
     )
-    .await?;
+    .await
+    .map_err(map_project_lifecycle_error)?;
+    publish_lifecycle_result(&app, &result);
     if result.outcome == LifecycleMutationOutcomeDto::Committed {
         if let (Some(metadata_path), Some(project_instance_id)) = (
             result.path.as_deref(),
@@ -212,91 +125,30 @@ pub async fn create_project(
     path: String,
     operation_id: OperationId,
 ) -> Result<LifecycleMutationResultDto, CommandError> {
-    let created =
-        state.create_project_transaction(&name, std::path::Path::new(&path), operation_id)?;
-    let metadata_path = created.metadata_path.to_string_lossy().into_owned();
-    let result = match registry
-        .register_project(&created.project_name, &metadata_path)
-        .await
-    {
-        Ok(record) => LifecycleMutationResultDto {
-            operation_id,
-            kind: LifecycleMutationKindDto::Create,
-            old_project_instance_id: None,
-            new_project_instance_id: None,
-            phase: LifecycleMutationPhaseDto::RegistryCommitted,
-            outcome: LifecycleMutationOutcomeDto::Committed,
-            record: Some(record),
-            path: Some(metadata_path),
-            recovery: None,
-            invalidation: LifecycleInvalidationDto {
-                project: false,
-                registry: true,
-            },
-        },
-        Err(_) => lifecycle_failure_result(
-            operation_id,
-            LifecycleMutationKindDto::Create,
-            None,
-            LifecycleMutationPhaseDto::DestinationCommitted,
-            LifecycleMutationOutcomeDto::RegistryFailed,
-            None,
-            metadata_path,
-            "registerDestination",
-            false,
-        ),
-    };
-    Ok(publish_lifecycle_result(&app, result))
-}
-
-fn lifecycle_failure_result(
-    operation_id: OperationId,
-    kind: LifecycleMutationKindDto,
-    old_project_instance_id: Option<String>,
-    phase: LifecycleMutationPhaseDto,
-    outcome: LifecycleMutationOutcomeDto,
-    record: Option<ProjectRecord>,
-    path: String,
-    action: &str,
-    project_invalidation: bool,
-) -> LifecycleMutationResultDto {
-    LifecycleMutationResultDto {
+    let result = project_lifecycle::create_project(
+        state.inner(),
+        registry.inner(),
+        &name,
+        Path::new(&path),
         operation_id,
-        kind,
-        old_project_instance_id,
-        new_project_instance_id: None,
-        phase,
-        outcome,
-        record,
-        path: Some(path.clone()),
-        recovery: Some(LifecycleRecoveryDto {
-            required: true,
-            action: action.into(),
-            path: Some(path),
-            identity: None,
-        }),
-        invalidation: LifecycleInvalidationDto {
-            project: project_invalidation,
-            registry: true,
-        },
-    }
+    )
+    .await
+    .map_err(map_project_lifecycle_error)?;
+    publish_lifecycle_result(&app, &result);
+    Ok(result)
 }
 
 pub(crate) fn publish_lifecycle_result_with(
-    result: LifecycleMutationResultDto,
+    result: &LifecycleMutationResultDto,
     emit: impl FnOnce(&Event) -> Result<(), String>,
-) -> LifecycleMutationResultDto {
+) {
     let event = Event::Project(EventProject::ProjectLifecycleCommitted {
         result: result.clone(),
     });
     let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| emit(&event)));
-    result
 }
 
-pub(crate) fn publish_lifecycle_result(
-    app: &AppHandle,
-    result: LifecycleMutationResultDto,
-) -> LifecycleMutationResultDto {
+pub(crate) fn publish_lifecycle_result(app: &AppHandle, result: &LifecycleMutationResultDto) {
     publish_lifecycle_result_with(result, |event| {
         emit_project_event_result(app, event).inspect_err(|error| {
             tracing::error!(
@@ -357,7 +209,7 @@ pub fn new_project(
         "Creating new project"
     );
 
-    state.clear_project()?;
+    project_lifecycle::clear_project(state.inner()).map_err(map_project_lifecycle_error)?;
     watcher.stop();
     emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     Ok(())
@@ -366,240 +218,77 @@ pub fn new_project(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::event::{
+        LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationPhaseDto,
+        LifecycleRecoveryDto,
+    };
     use crate::node_system::document::OperationId;
-    use crate::project::ProjectData;
+    use crate::project::{ProjectData, ProjectFilesystemError};
 
-    #[test]
-    fn save_as_registry_failure_preserves_source_and_disk_with_exact_receipt() {
-        tauri::async_runtime::block_on(async {
-            let source = std::env::temp_dir().join(format!(
-                "yssbi-save-as-workflow-source-{}",
-                uuid::Uuid::new_v4()
-            ));
-            let destination = std::env::temp_dir().join(format!(
-                "yssbi-save-as-workflow-destination-{}",
-                uuid::Uuid::new_v4()
-            ));
-            std::fs::create_dir_all(&source).unwrap();
-            let mut data = ProjectData::new();
-            data.metadata.project_name = "Workflow".into();
-            crate::project::fixtures::write_project(&data, source.to_string_lossy().as_ref())
-                .unwrap();
-            let state = ProjectState::new();
-            state.activate_project_fixture(source.to_string_lossy().into_owned(), data);
-            let source_session = state.capture_project_session().unwrap();
-            let operation_id = OperationId::new();
-            let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-            let emitted = std::sync::Arc::clone(&events);
-
-            let result = save_project_as_workflow(
-                &state,
-                &destination,
-                source_session.instance_id.clone(),
-                operation_id,
-                |_name, _metadata_path| async { Err("injected registry failure".into()) },
-                |prepared| state.activate_prepared_project(prepared),
-                move |event| {
-                    emitted.lock().unwrap().push(event.clone());
-                    Ok(())
-                },
-            )
-            .await
-            .unwrap();
-
-            assert_eq!(result.operation_id, operation_id);
-            assert_eq!(result.outcome, LifecycleMutationOutcomeDto::RegistryFailed);
-            assert!(
-                destination
-                    .join(crate::project::PROJECT_METADATA_FILE)
-                    .is_file()
-            );
-            assert_eq!(state.capture_project_session().unwrap(), source_session);
-            assert!(source.join(crate::project::PROJECT_METADATA_FILE).is_file());
-            assert!(matches!(
-                events.lock().unwrap().as_slice(),
-                [Event::Project(EventProject::ProjectLifecycleCommitted { result: emitted })]
-                    if emitted == &result
-            ));
-            let _ = std::fs::remove_dir_all(source);
-            let _ = std::fs::remove_dir_all(destination);
-        });
-    }
-
-    #[test]
-    fn save_as_activation_failure_and_event_failure_return_exact_direct_receipts() {
-        tauri::async_runtime::block_on(async {
-            for fail_activation in [true, false] {
-                let source = std::env::temp_dir().join(format!(
-                    "yssbi-save-as-boundary-source-{}",
-                    uuid::Uuid::new_v4()
-                ));
-                let destination = std::env::temp_dir().join(format!(
-                    "yssbi-save-as-boundary-destination-{}",
-                    uuid::Uuid::new_v4()
-                ));
-                std::fs::create_dir_all(&source).unwrap();
-                let mut data = ProjectData::new();
-                data.metadata.project_name = "Boundary".into();
-                crate::project::fixtures::write_project(&data, source.to_string_lossy().as_ref())
-                    .unwrap();
-                let state = ProjectState::new();
-                state.activate_project_fixture(source.to_string_lossy().into_owned(), data);
-                let source_session = state.capture_project_session().unwrap();
-                let identity = crate::project::ProjectRootBinding::for_existing(&destination).err();
-                assert!(identity.is_some());
-                let emitted = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-                let emit_count = std::sync::Arc::clone(&emitted);
-                let register_path = destination
-                    .join(crate::project::PROJECT_METADATA_FILE)
-                    .to_string_lossy()
-                    .into_owned();
-
-                let result = save_project_as_workflow(
-                    &state,
-                    &destination,
-                    source_session.instance_id.clone(),
-                    OperationId::new(),
-                    move |_name, _metadata_path| {
-                        let register_path = register_path.clone();
-                        async move {
-                            let binding =
-                                crate::project::ProjectRootBinding::for_existing(&register_path)
-                                    .unwrap();
-                            Ok(ProjectRecord {
-                                id: "registered".into(),
-                                name: "Boundary".into(),
-                                path: register_path,
-                                created_at: "2026-01-01T00:00:00Z".into(),
-                                last_opened_at: None,
-                                is_favorite: false,
-                                root_identity: binding.identity().unwrap().clone(),
-                                root_identity_state:
-                                    crate::project::ProjectRootIdentityState::Valid,
-                            })
-                        }
-                    },
-                    |prepared| {
-                        if fail_activation {
-                            Err(ProjectFilesystemError::StaleProjectLifecycle {
-                                message: "injected activation failure".into(),
-                            })
-                        } else {
-                            state.activate_prepared_project(prepared)
-                        }
-                    },
-                    move |_event| {
-                        emit_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                        if fail_activation {
-                            Ok(())
-                        } else {
-                            Err("event transport unavailable".into())
-                        }
-                    },
-                )
-                .await
-                .unwrap();
-
-                assert_eq!(emitted.load(std::sync::atomic::Ordering::SeqCst), 1);
-                assert!(
-                    destination
-                        .join(crate::project::PROJECT_METADATA_FILE)
-                        .is_file()
-                );
-                assert_eq!(result.record.as_ref().unwrap().id, "registered");
-                if fail_activation {
-                    assert_eq!(
-                        result.outcome,
-                        LifecycleMutationOutcomeDto::ActivationFailed
-                    );
-                    assert_eq!(state.capture_project_session().unwrap(), source_session);
-                } else {
-                    assert_eq!(result.outcome, LifecycleMutationOutcomeDto::Committed);
-                    assert_ne!(state.capture_project_session().unwrap(), source_session);
-                }
-                let _ = std::fs::remove_dir_all(source);
-                let _ = std::fs::remove_dir_all(destination);
-            }
-        });
-    }
-
-    #[test]
-    fn registry_failure_reports_preserved_created_project() {
-        let root = std::env::temp_dir().join(format!(
-            "yssbi-create-registry-failure-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let state = ProjectState::new();
-        let created = state
-            .create_project_transaction("Preserved", &root, OperationId::new())
-            .unwrap();
-        let metadata_path = created.metadata_path.to_string_lossy().into_owned();
-
-        let operation_id = OperationId::new();
-        let result = lifecycle_failure_result(
-            operation_id,
-            LifecycleMutationKindDto::Create,
-            None,
-            LifecycleMutationPhaseDto::DestinationCommitted,
-            LifecycleMutationOutcomeDto::RegistryFailed,
-            None,
-            metadata_path.clone(),
-            "registerDestination",
-            false,
-        );
-
-        assert_eq!(result.operation_id, operation_id);
-        assert_eq!(result.outcome, LifecycleMutationOutcomeDto::RegistryFailed);
-        assert_eq!(result.path.as_deref(), Some(metadata_path.as_str()));
-        assert_eq!(
-            result.recovery.as_ref().unwrap().action,
-            "registerDestination"
-        );
-        assert!(created.metadata_path.is_file());
-        assert!(root.join(crate::project::DATABASE_DIR).is_dir());
-        let _ = std::fs::remove_dir_all(root);
+    fn lifecycle_result(
+        outcome: LifecycleMutationOutcomeDto,
+        recovery_action: &str,
+    ) -> LifecycleMutationResultDto {
+        LifecycleMutationResultDto {
+            operation_id: OperationId::new(),
+            kind: LifecycleMutationKindDto::Delete,
+            old_project_instance_id: Some("old-project".into()),
+            new_project_instance_id: None,
+            phase: LifecycleMutationPhaseDto::AuthorityCommitted,
+            outcome,
+            record: None,
+            path: Some("C:/project".into()),
+            recovery: Some(LifecycleRecoveryDto {
+                required: true,
+                action: recovery_action.into(),
+                path: Some("C:/project".into()),
+                identity: None,
+            }),
+            invalidation: LifecycleInvalidationDto {
+                project: true,
+                registry: true,
+            },
+        }
     }
 
     #[test]
     fn lifecycle_event_panic_preserves_direct_committed_receipt() {
-        let result = lifecycle_failure_result(
-            OperationId::new(),
-            LifecycleMutationKindDto::Delete,
-            Some("old-project".into()),
-            LifecycleMutationPhaseDto::AuthorityCommitted,
+        let result = lifecycle_result(
             LifecycleMutationOutcomeDto::RegistryPending,
-            None,
-            "C:/project".into(),
             "removeRegistryRecord",
-            true,
         );
+        let direct = result.clone();
 
-        let direct = publish_lifecycle_result_with(result.clone(), |_| {
-            panic!("injected lifecycle emitter panic")
-        });
+        publish_lifecycle_result_with(&result, |_| panic!("injected lifecycle emitter panic"));
 
         assert_eq!(direct, result);
     }
 
     #[test]
-    fn lifecycle_event_failure_preserves_direct_committed_receipt() {
-        let result = lifecycle_failure_result(
-            OperationId::new(),
-            LifecycleMutationKindDto::Delete,
-            Some("old-project".into()),
-            LifecycleMutationPhaseDto::AuthorityCommitted,
-            LifecycleMutationOutcomeDto::CleanupPending,
-            None,
-            "C:/project".into(),
-            "cleanupTombstone",
-            true,
-        );
+    fn lifecycle_errors_map_to_expected_or_diagnosed_command_errors() {
+        let invalid_path = map_project_lifecycle_error(ProjectLifecycleError::InvalidPath);
+        assert_eq!(invalid_path.code(), "invalid_path");
+        assert!(invalid_path.incident_id().is_none());
 
-        let direct = publish_lifecycle_result_with(result.clone(), |_| {
-            Err("event transport unavailable".to_string())
-        });
+        let not_found = map_project_lifecycle_error(ProjectLifecycleError::ProjectNotFound);
+        assert_eq!(not_found.code(), "project_not_found");
+        assert!(not_found.incident_id().is_none());
 
-        assert_eq!(direct, result);
+        let authority = map_project_lifecycle_error(ProjectLifecycleError::AuthorityFailed(
+            ProjectFilesystemError::StaleProjectLifecycle {
+                message: "test authority failure".into(),
+            },
+        ));
+        assert_eq!(authority.code(), "stale_project_lifecycle");
+        assert!(authority.incident_id().is_none());
+
+        let diagnosed = map_project_lifecycle_error(ProjectLifecycleError::LoadFailed(
+            ProjectFilesystemError::TransactionPrepareFailed {
+                message: "test load failure".into(),
+            },
+        ));
+        assert_eq!(diagnosed.code(), "load_project_failed");
+        assert!(diagnosed.incident_id().is_some());
     }
 
     #[test]

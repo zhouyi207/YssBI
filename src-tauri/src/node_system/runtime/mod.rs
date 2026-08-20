@@ -112,7 +112,7 @@ pub(crate) use run_output::{RunOutputEmitter, RunOutputSink};
 pub use result_store::{ResultStore, ResultStoreError};
 #[cfg(test)]
 pub(crate) use run::MaterializedArtifact;
-pub(crate) use run::{ACTIVATION_IDS, ActivationIdAllocator, check_terminal};
+pub(crate) use run::{ACTIVATION_IDS, ActivationIdAllocator, FRAME_IDS, check_terminal};
 pub use run::{
     ActivationId, Artifact, ArtifactKind, ArtifactValueKind, CancellationToken, FrameId,
     RunDeadline, RunError, RunOptions, RunPhase, RunResult, RuntimeValue, StreamValue,

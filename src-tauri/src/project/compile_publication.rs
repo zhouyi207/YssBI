@@ -172,6 +172,9 @@ impl ProjectState {
                         }
                     }
                 }
+                ScheduleOutcome::Exhausted => {
+                    return Err("compiler identity space is exhausted".into());
+                }
             }
         }
     }

@@ -1096,7 +1096,7 @@ fn narrow_graph_move_patch_preserves_unrelated_concurrent_mutation() {
     let to = GraphResourcePath::new("events/After.yssbi-event").unwrap();
     let mut moved = GraphResourceDocument::new("After", GraphDocumentKind::Event);
     let original = GraphResourceDocument::new("Before", GraphDocumentKind::Event);
-    state.insert_graph(from.clone(), original.clone());
+    state.insert_graph(from.clone(), original.clone()).unwrap();
     let session = state.capture_project_session().unwrap();
     let resource = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
         from.as_str().into(),
@@ -1192,7 +1192,7 @@ fn destination_appearance_rejects_graph_move_without_authoritative_effects() {
     let from = GraphResourcePath::new("events/Source.yssbi-event").unwrap();
     let to = GraphResourcePath::new("events/Destination.yssbi-event").unwrap();
     let source = GraphResourceDocument::new("Source", GraphDocumentKind::Event);
-    state.insert_graph(from.clone(), source.clone());
+    state.insert_graph(from.clone(), source.clone()).unwrap();
     let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
         from.as_str().into(),
     ));
@@ -1207,10 +1207,12 @@ fn destination_appearance_rejects_graph_move_without_authoritative_effects() {
         expected_absent_resources: [destination_key].into_iter().collect(),
         recovery_marker: Some(state.project_recovery_marker()),
     };
-    state.insert_graph(
-        to.clone(),
-        GraphResourceDocument::new("Concurrent", GraphDocumentKind::Event),
-    );
+    state
+        .insert_graph(
+            to.clone(),
+            GraphResourceDocument::new("Concurrent", GraphDocumentKind::Event),
+        )
+        .unwrap();
 
     let error = state
         .apply_resource_document_patch(
@@ -1611,14 +1613,18 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
     let state = ProjectState::new();
     let event = GraphResourcePath::new("events/Recovery.yssbi-event").unwrap();
     let function = GraphResourcePath::new("functions/Recovery.yssbi-function").unwrap();
-    state.insert_graph(
-        event.clone(),
-        GraphResourceDocument::new("Recovery", GraphDocumentKind::Event),
-    );
-    state.insert_graph(
-        function.clone(),
-        GraphResourceDocument::new("Recovery", GraphDocumentKind::Function),
-    );
+    state
+        .insert_graph(
+            event.clone(),
+            GraphResourceDocument::new("Recovery", GraphDocumentKind::Event),
+        )
+        .unwrap();
+    state
+        .insert_graph(
+            function.clone(),
+            GraphResourceDocument::new("Recovery", GraphDocumentKind::Function),
+        )
+        .unwrap();
     state.project_recovery_marker().mark("rollback failed");
     let mut observed = 0;
 
@@ -1728,12 +1734,12 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
     );
     assert_eq!(
         state
-            .with_database_mut(
+            .with_database_writer(
                 &crate::project::ProjectInstanceId::from_existing("blocked".into()),
                 "missing",
                 GraphRevision::INITIAL,
                 OperationId::new(),
-                |_| Ok(()),
+                |_, _| Ok(()),
             )
             .unwrap_err()
             .command_code(),
@@ -2778,14 +2784,6 @@ fn assert_empty_replacement_authority(state: &ProjectState, stale_project: &Proj
     let publication = state.publication_state_for_test();
     assert_ne!(publication.0, stale_project.as_str());
     assert_eq!((publication.1, publication.2), (0, 0));
-    assert!(
-        state
-            .project_store
-            .read()
-            .unwrap()
-            .variable_tabular
-            .is_empty()
-    );
 }
 
 fn history_request(
@@ -5807,7 +5805,7 @@ fn normalized_resource_lifecycle_routes_every_insert_through_project_state() {
     let loaded = load_graph(&state, &created).unwrap();
     assert_eq!(loaded.name, "Lifecycle");
     crate::project::fixtures::write_state_graph(&state, &created).unwrap();
-    state.unload_graph_resource(&created);
+    state.unload_graph_resource(&created).unwrap();
 
     let duplicated = state.duplicate_graph_resource_fixture(&created).unwrap();
     assert_ne!(duplicated, created);
@@ -8686,16 +8684,18 @@ fn tabular_variable(
     variable
 }
 
-fn cached_i64_column(state: &ProjectState, variable_id: crate::variable::VariableId) -> Vec<i64> {
-    let handle = crate::tabular::variable_handle(&variable_id);
-    state.project_store.read().unwrap().variable_tabular[&handle]
-        .dataframe
-        .column("value")
+fn authoritative_tabular_json(
+    state: &ProjectState,
+    variable_id: crate::variable::VariableId,
+) -> String {
+    state
+        .get_variable(&variable_id)
         .unwrap()
-        .i64()
         .unwrap()
-        .into_no_null_iter()
-        .collect()
+        .tabular
+        .unwrap()
+        .to_json()
+        .unwrap()
 }
 
 fn commit_tabular_effect(
@@ -8977,7 +8977,7 @@ fn durable_variable_history_conflict_rolls_disk_back_without_authority_transfer(
 }
 
 #[test]
-fn tabular_variable_effect_success_updates_global_and_local_authority_and_cache() {
+fn tabular_variable_effect_updates_global_and_local_authority() {
     for (label, scope, graph_path) in [
         ("global", crate::variable::VariableScope::Global, None),
         (
@@ -9006,7 +9006,10 @@ fn tabular_variable_effect_success_updates_global_and_local_authority_and_cache(
         crate::project::fixtures::write_project(&project, &root_text).unwrap();
         let state = ProjectState::new();
         state.activate_project_fixture(root_text, project);
-        assert_eq!(cached_i64_column(&state, variable.id), vec![1, 2]);
+        assert_eq!(
+            authoritative_tabular_json(&state, variable.id),
+            r#"{"value":[1,2]}"#
+        );
 
         commit_tabular_effect(&state, &variable, r#"{"value":[7,8,9]}"#).unwrap();
 
@@ -9021,7 +9024,6 @@ fn tabular_variable_effect_success_updates_global_and_local_authority_and_cache(
             canonical.tabular.unwrap().to_json().unwrap(),
             r#"{"value":[7,8,9]}"#
         );
-        assert_eq!(cached_i64_column(&state, variable.id), vec![7, 8, 9]);
         assert_eq!(
             state.variable_revisions.read().unwrap()[&variable.id].revision,
             GraphRevision::new(1)
@@ -9042,7 +9044,10 @@ fn tabular_variable_effect_success_updates_global_and_local_authority_and_cache(
                 |_| {},
             )
             .unwrap();
-        assert_eq!(cached_i64_column(&state, variable.id), vec![1, 2]);
+        assert_eq!(
+            authoritative_tabular_json(&state, variable.id),
+            r#"{"value":[1,2]}"#
+        );
         state
             .redo_last_transaction_observed(
                 &current_project_instance_id(&state),
@@ -9056,7 +9061,10 @@ fn tabular_variable_effect_success_updates_global_and_local_authority_and_cache(
                 |_| {},
             )
             .unwrap();
-        assert_eq!(cached_i64_column(&state, variable.id), vec![7, 8, 9]);
+        assert_eq!(
+            authoritative_tabular_json(&state, variable.id),
+            r#"{"value":[7,8,9]}"#
+        );
         let disk_variable = if let Some(path) = &graph_path {
             let document: crate::project::project_io::GraphDocument =
                 serde_json::from_slice(&std::fs::read(root.join(path.as_str())).unwrap()).unwrap();
@@ -9076,7 +9084,7 @@ fn tabular_variable_effect_success_updates_global_and_local_authority_and_cache(
 }
 
 #[test]
-fn failed_tabular_variable_effect_changes_neither_authority_disk_nor_cache() {
+fn failed_tabular_variable_effect_changes_neither_authority_nor_disk() {
     let root = std::env::temp_dir().join(format!(
         "yssbi-failed-tabular-variable-effect-{}",
         uuid::Uuid::new_v4()
@@ -9102,7 +9110,6 @@ fn failed_tabular_variable_effect_changes_neither_authority_disk_nor_cache() {
     let state = ProjectState::new();
     state.activate_project_fixture(root_text, project);
     let authority_before = state.get_variable(&variable.id).unwrap().unwrap();
-    let cache_before = cached_i64_column(&state, variable.id);
 
     state.set_project_filesystem_fault(Some(
         crate::project::ProjectFilesystemFaultPoint::StagedSerialization,
@@ -9113,7 +9120,6 @@ fn failed_tabular_variable_effect_changes_neither_authority_disk_nor_cache() {
         serde_json::to_value(state.get_variable(&variable.id).unwrap().unwrap()).unwrap(),
         serde_json::to_value(authority_before).unwrap()
     );
-    assert_eq!(cached_i64_column(&state, variable.id), cache_before);
     assert_eq!(
         std::fs::read(root.join(graph_path.as_str())).unwrap(),
         disk_before
@@ -9357,14 +9363,6 @@ fn variable_effect_authority_assignment_panic_restores_every_authoritative_proje
         .project_session_id
         .clone();
     let data_before = serde_json::to_value(state.get_data().unwrap()).unwrap();
-    let cache_before = state
-        .project_store
-        .read()
-        .unwrap()
-        .variable_tabular
-        .keys()
-        .cloned()
-        .collect::<std::collections::BTreeSet<_>>();
     let history_before = state.history_status();
     let history_lengths_before = state.history_lengths_for_test();
     let revisions_before = state.revision_state_for_test();
@@ -9404,17 +9402,6 @@ fn variable_effect_authority_assignment_panic_restores_every_authoritative_proje
     assert_eq!(
         serde_json::to_value(state.get_data().unwrap()).unwrap(),
         data_before
-    );
-    assert_eq!(
-        state
-            .project_store
-            .read()
-            .unwrap()
-            .variable_tabular
-            .keys()
-            .cloned()
-            .collect::<std::collections::BTreeSet<_>>(),
-        cache_before
     );
     assert_eq!(state.history_status(), history_before);
     assert_eq!(state.history_lengths_for_test(), history_lengths_before);
@@ -9747,7 +9734,8 @@ fn unrelated_resource_mutation_preserves_published_compilation() {
         );
         let task = match coordinator.request(document_path(), request_basis.clone()) {
             crate::node_system::compiler::ScheduleOutcome::Start(task) => task,
-            crate::node_system::compiler::ScheduleOutcome::Coalesced { .. } => unreachable!(),
+            crate::node_system::compiler::ScheduleOutcome::Coalesced { .. }
+            | crate::node_system::compiler::ScheduleOutcome::Exhausted => unreachable!(),
         };
         let dependency_key = crate::node_system::analysis::ResourceKey::new(dependency);
         let unrelated_key = crate::node_system::analysis::ResourceKey::new("variables/unrelated");
@@ -9797,7 +9785,8 @@ fn unrelated_resource_mutation_preserves_published_compilation() {
         );
         let replacement = match coordinator.request(document_path(), request_basis.clone()) {
             crate::node_system::compiler::ScheduleOutcome::Start(task) => task,
-            crate::node_system::compiler::ScheduleOutcome::Coalesced { .. } => unreachable!(),
+            crate::node_system::compiler::ScheduleOutcome::Coalesced { .. }
+            | crate::node_system::compiler::ScheduleOutcome::Exhausted => unreachable!(),
         };
         assert_ne!(replacement.compile_id, task.compile_id);
     }

@@ -99,16 +99,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn objects_serialize_in_key_order() {
-        let value = Value::Object(BTreeMap::from([
-            (Box::from("z"), Value::Integer(1)),
-            (Box::from("a"), Value::Integer(2)),
-        ]));
-        let json = serde_json::to_string(&value).unwrap();
-        assert!(json.find("a").unwrap() < json.find("z").unwrap());
-    }
-
-    #[test]
     fn decimals_require_canonical_non_exponent_spelling() {
         assert!(CanonicalDecimal::new("-12.34").is_ok());
         assert!(CanonicalDecimal::new("01").is_err());

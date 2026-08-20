@@ -262,41 +262,47 @@ pub struct ValidatedInterfaceProjection {
 }
 
 impl ValidatedInterfaceProjection {
-    pub fn materialization_candidate(
+    fn find_materialization_candidate(
         &self,
         projection_address: &PortAddress,
-    ) -> Option<&ValidatedProjectedMember> {
+    ) -> Option<(usize, &ValidatedProjectedMember)> {
         self.nodes
             .get(&projection_address.node_id)?
             .available_members
             .iter()
-            .find(|candidate| {
+            .enumerate()
+            .find(|(_, candidate)| {
                 candidate.projection_address == *projection_address
                     && candidate.bound_address.is_none()
                     && candidate.member.identity.permits_persistent_state()
             })
     }
 
+    #[cfg(test)]
+    pub(crate) fn materialization_candidate(
+        &self,
+        projection_address: &PortAddress,
+    ) -> Option<&ValidatedProjectedMember> {
+        self.find_materialization_candidate(projection_address)
+            .map(|(_, candidate)| candidate)
+    }
+
     pub(crate) fn authorize_materialization_candidate(
         &self,
-        graph_path: crate::node_system::document::GraphResourcePath,
+        graph_path: &crate::node_system::document::GraphResourcePath,
         projection_address: &PortAddress,
-    ) -> Option<(ProjectedMemberRef, MaterializationAuthorization)> {
-        let node = self.nodes.get(&projection_address.node_id)?;
-        let (index, candidate) =
-            node.available_members
-                .iter()
-                .enumerate()
-                .find(|(_, candidate)| {
-                    candidate.projection_address == *projection_address
-                        && candidate.bound_address.is_none()
-                        && candidate.member.identity.permits_persistent_state()
-                })?;
-        Some(candidate.authorize_materialization(
-            graph_path,
+    ) -> Option<(
+        &ValidatedProjectedMember,
+        ProjectedMemberRef,
+        MaterializationAuthorization,
+    )> {
+        let (index, candidate) = self.find_materialization_candidate(projection_address)?;
+        let (member, authorization) = candidate.authorize_materialization(
+            graph_path.clone(),
             &self.basis,
             OrderKey(format!("{index:05}").into()),
-        ))
+        );
+        Some((candidate, member, authorization))
     }
 }
 
@@ -592,9 +598,16 @@ impl<'a> MaterializationState<'a> {
                 .find_binding(spec, &member.locator)
                 .map(|(address, binding)| (address.clone(), binding.clone()));
             let bound_address = binding.as_ref().map(|(address, _)| address.clone());
-            let projection_address = bound_address
-                .clone()
-                .unwrap_or_else(|| self.unbound_projection_address(basis, spec, &member.locator));
+            let projection_address = match bound_address.clone() {
+                Some(address) => address,
+                None => self
+                    .unbound_projection_address(basis, spec, &member.locator)
+                    .ok_or_else(|| {
+                        InterfaceResolverError::new(
+                            "dynamic port projection identity space is exhausted",
+                        )
+                    })?,
+            };
             if let Some((address, binding)) = binding {
                 self.add_current_instance(spec, address, &binding, &member);
             } else {
@@ -820,17 +833,13 @@ impl<'a> MaterializationState<'a> {
         basis: &CompilationBasis<GraphRevision>,
         spec: &PortSpec,
         locator: &DynamicMemberLocator,
-    ) -> PortAddress {
-        let mut salt = 0u32;
-        loop {
+    ) -> Option<PortAddress> {
+        (0..=u32::MAX).find_map(|salt| {
             let address = projected_address(basis, self.node_id, &spec.key, locator, salt);
-            if !self.ports.contains_key(&address)
-                && !self.document.port_bindings.contains_key(&address)
-            {
-                return address;
-            }
-            salt = salt.wrapping_add(1);
-        }
+            (!self.ports.contains_key(&address)
+                && !self.document.port_bindings.contains_key(&address))
+            .then_some(address)
+        })
     }
 
     fn diagnose_forbidden_state(&mut self, address: &PortAddress) {

@@ -1,4 +1,4 @@
-use crate::application::database_schema::enriched_database_dtos;
+use crate::application::database_schema::project_databases_variables;
 use crate::error::CommandError;
 use crate::event::ProjectActivationResultDto;
 use crate::node_system::analysis::EditorGraphProjectionDto;
@@ -6,7 +6,7 @@ use crate::project::{
     ProjectIndex, ProjectState, RevealProjectResourceRequest, format_path_for_user_path,
     normalize_existing_path, resolve_reveal_path,
 };
-use crate::schema::{DatabasesVariablesDTO, VariableInstanceDTO};
+use crate::schema::DatabasesVariablesDTO;
 use tauri::State;
 
 /// 分阶段加载第一步：获取 databases + variables（含 schema）
@@ -14,8 +14,6 @@ use tauri::State;
 pub fn get_project_databases_variables(
     state: State<ProjectState>,
 ) -> Result<DatabasesVariablesDTO, CommandError> {
-    let data = state.get_data().map_err(CommandError::from)?;
-
     tracing::info!(
         target: "yssbi::commands::project",
         diagnostic_domain = "data",
@@ -23,18 +21,7 @@ pub fn get_project_databases_variables(
         "Loading project databases and variables"
     );
 
-    let store = state.project_store.read().unwrap();
-    let databases = enriched_database_dtos(&data.databases, &store);
-    let variables = data
-        .variables
-        .iter()
-        .map(|(k, v)| (k.to_string(), VariableInstanceDTO::from(v)))
-        .collect();
-
-    Ok(DatabasesVariablesDTO {
-        databases,
-        variables,
-    })
+    project_databases_variables(state.inner()).map_err(CommandError::from)
 }
 
 fn current_project_activation(
@@ -490,5 +477,103 @@ mod tests {
         assert_eq!(index.project_instance_id, previous_identity);
         assert_eq!(index.variables.len(), 1);
         assert_eq!(index.variables[0].name, "project_a_global");
+    }
+
+    fn project_resources(label: &str) -> ProjectData {
+        let mut data = ProjectData::new();
+        data.databases.insert(
+            "shared".into(),
+            crate::database::DatabaseDecl {
+                id: "shared".into(),
+                engine: crate::database::DatabaseEngine::InMemory {
+                    name: format!("{label} engine"),
+                },
+                schema_version: 1,
+                required: false,
+                name: format!("{label} database"),
+            },
+        );
+        let variable = crate::variable::VariableInstance {
+            id: crate::variable::VariableId::new(),
+            name: format!("{label} variable"),
+            data_type: DataType::Int64,
+            data_value: DataValue::Int64(1),
+            tabular: None,
+            description: String::new(),
+            scope: VariableScope::Global,
+            tags: Vec::new(),
+        };
+        data.variables.insert(variable.id, variable);
+        data
+    }
+
+    #[test]
+    fn project_resource_query_during_activation_never_mixes_authority_and_runtime() {
+        let project = crate::project::fixtures::TempProject::activate(
+            "query-resource-snapshot-old",
+            project_resources("old"),
+        );
+        let state = project.state().clone();
+        let old_snapshot = state.project_resource_snapshot().unwrap();
+        assert_eq!(
+            old_snapshot.project_instance_id.as_str(),
+            state.project_instance_id()
+        );
+        assert_eq!(
+            old_snapshot.authority_generation,
+            state.authority_generation_for_test()
+        );
+
+        let (store_replaced_tx, store_replaced_rx) = std::sync::mpsc::channel();
+        let (release_activation_tx, release_activation_rx) = std::sync::mpsc::channel();
+        let release_activation_rx = std::sync::Mutex::new(release_activation_rx);
+        state.set_activation_store_replaced_test_hook(std::sync::Arc::new(move || {
+            store_replaced_tx.send(()).unwrap();
+            release_activation_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+        }));
+
+        let activation_state = state.clone();
+        let activation = std::thread::spawn(move || {
+            activation_state.activate_project_fixture(
+                "query-resource-snapshot-new".into(),
+                project_resources("new"),
+            );
+        });
+        store_replaced_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+
+        let old_resources =
+            crate::application::database_schema::databases_variables_from_snapshot(old_snapshot);
+        assert_eq!(
+            old_resources.databases["shared"].name.as_deref(),
+            Some("old database")
+        );
+        assert_eq!(
+            old_resources.variables.values().next().unwrap().name,
+            "old variable"
+        );
+
+        let query_state = state.clone();
+        let (query_started_tx, query_started_rx) = std::sync::mpsc::channel();
+        let query = std::thread::spawn(move || {
+            query_started_tx.send(()).unwrap();
+            crate::application::database_schema::project_databases_variables(&query_state)
+        });
+        query_started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap();
+        release_activation_tx.send(()).unwrap();
+
+        activation.join().unwrap();
+        let resources = query.join().unwrap().unwrap();
+        let database = &resources.databases["shared"];
+        let variable = resources.variables.values().next().unwrap();
+        assert_eq!(database.name.as_deref(), Some("new database"));
+        assert_eq!(variable.name, "new variable");
     }
 }

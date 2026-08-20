@@ -61,16 +61,6 @@ pub struct GraphDeltaEvent<T> {
     pub payload: T,
 }
 
-impl<T> GraphDeltaEvent<T> {
-    pub fn revision_gap_after(&self, applied_revision: ResourceRevision) -> Option<RevisionGap> {
-        detect_revision_gap(applied_revision, self)
-    }
-
-    pub fn has_monotonic_revision(&self) -> bool {
-        self.to_revision == self.from_revision.next()
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RevisionGap {
     pub expected_before_revision: ResourceRevision,
@@ -460,6 +450,7 @@ impl EditorGraphMutationDto {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn into_patch_with_editor_validation(
         self,
         graph_path: &GraphResourcePath,
@@ -1466,6 +1457,7 @@ pub(super) fn validate_parameters_with_registry(
     validate_shared_parameters(protocol, parameters, &nominal)
 }
 
+#[cfg(test)]
 pub(super) fn validate_parameters(
     protocol: &NodeProtocol,
     parameters: &ParameterValues,
@@ -2543,19 +2535,11 @@ fn user_created_instance_count(
 /// The projected-member variant intentionally has no `PortInstanceId` field:
 /// its durable instance identity is allocated while the store builds the
 /// atomic materialize-and-connect patch.
+#[cfg(test)]
 #[derive(Debug)]
 pub enum GraphMutation {
     CreateNode {
         node: DocumentNode,
-    },
-    Connect {
-        output: PortAddress,
-        input: PortAddress,
-        order: Option<OrderKey>,
-    },
-    SetLiteral {
-        address: PortAddress,
-        literal: Option<TypedValue>,
     },
     MaterializeProjectedMemberAndConnect {
         member: ProjectedMemberRef,
@@ -2565,6 +2549,7 @@ pub enum GraphMutation {
     },
 }
 
+#[cfg(test)]
 impl GraphMutation {
     fn into_patch(
         self,
@@ -2575,28 +2560,7 @@ impl GraphMutation {
             Self::CreateNode { node } => {
                 vec![GraphDocumentOperation::InsertNode { node }]
             }
-            Self::Connect {
-                output,
-                input,
-                order,
-            } => vec![GraphDocumentOperation::InsertConnection {
-                connection: DocumentConnection {
-                    id: ConnectionId::new(),
-                    output,
-                    input,
-                    order,
-                },
-            }],
-            Self::SetLiteral { address, literal } => {
-                let before = document.input_states.get(&address).cloned();
-                vec![GraphDocumentOperation::SetInputState {
-                    address,
-                    before,
-                    after: literal.map(|value| super::InputState {
-                        literal_override: Some(value),
-                    }),
-                }]
-            }
+
             Self::MaterializeProjectedMemberAndConnect {
                 member,
                 authorization,
@@ -2668,12 +2632,14 @@ fn materialize_projected_member_operations(
 ///
 /// Mutation planning and patch application are pure in-memory operations, so
 /// callers never need to hold this authority across filesystem or network I/O.
+#[cfg(test)]
 #[derive(Debug, Clone)]
 pub struct RevisionedGraphStore {
     graph_path: GraphResourcePath,
     document: GraphDocument,
 }
 
+#[cfg(test)]
 impl RevisionedGraphStore {
     pub fn new(graph_path: GraphResourcePath, document: GraphDocument) -> Self {
         Self {
@@ -2682,20 +2648,12 @@ impl RevisionedGraphStore {
         }
     }
 
-    pub const fn graph_path(&self) -> &GraphResourcePath {
-        &self.graph_path
-    }
-
     pub const fn document(&self) -> &GraphDocument {
         &self.document
     }
 
     pub const fn revision(&self) -> ResourceRevision {
         self.document.revision
-    }
-
-    pub fn into_document(self) -> GraphDocument {
-        self.document
     }
 
     pub fn apply_mutation(

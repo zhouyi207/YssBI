@@ -54,6 +54,7 @@ pub use project_metadata::*;
 pub use project_picker_task::*;
 pub use project_reads::{
     CatalogMutationResource, CatalogMutationValidationSnapshot, CatalogProjectSnapshot,
+    ProjectResourceSnapshot,
 };
 pub use project_registry::*;
 pub use project_scan::*;

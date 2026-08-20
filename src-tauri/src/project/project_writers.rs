@@ -10,7 +10,6 @@ use crate::project::{
     ProjectTransactionContext, ResourceDocumentPatch, ResourceName, StagedFilesystemMutation,
     WorksheetDocument, WorksheetResourcePath, allocate_unique_resource_name,
 };
-use crate::tabular::VariableTabularCache;
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -81,7 +80,7 @@ fn worksheet_resource_delta(
     retained_revision: Option<ResourceRevision>,
     before: Option<&WorksheetDocument>,
     after: Option<&WorksheetDocument>,
-) -> crate::node_system::document::ResourceDeltaEvent {
+) -> Result<crate::node_system::document::ResourceDeltaEvent, ProjectFilesystemError> {
     let (from_revision, to_revision, payload) = match (before, after) {
         (Some(before), Some(after)) => (
             before.revision,
@@ -105,7 +104,7 @@ fn worksheet_resource_delta(
         ),
         (Some(before), None) => (
             before.revision,
-            before.revision.next(),
+            super::project_state::checked_resource_revision(path.as_str(), before.revision)?,
             crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
                 crate::node_system::document::ResourceLifecyclePatch {
                     before: Some(worksheet_lifecycle_state(path, before.revision)),
@@ -115,13 +114,13 @@ fn worksheet_resource_delta(
         ),
         (None, None) => unreachable!("a worksheet resource delta must change a document"),
     };
-    crate::node_system::document::ResourceDeltaEvent {
+    Ok(crate::node_system::document::ResourceDeltaEvent {
         resource: worksheet_key(path),
         from_revision,
         to_revision,
         caused_by: Some(operation_id),
         payload,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -145,6 +144,7 @@ struct WriterSnapshot {
 
 enum GlobalVariableMutation {
     Create {
+        scope: VariableScope,
         name: String,
         data_type: DataType,
         data_value: DataValue,
@@ -153,6 +153,7 @@ enum GlobalVariableMutation {
     },
     Update {
         id: VariableId,
+        expected_revision: ResourceRevision,
         name: Option<String>,
         data_type: Option<DataType>,
         data_value: Option<DataValue>,
@@ -161,23 +162,71 @@ enum GlobalVariableMutation {
     },
     Delete {
         id: VariableId,
+        expected_revision: ResourceRevision,
     },
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum GlobalVariableMutationKind {
-    Create,
-    Update,
-    Delete,
+enum StagedGlobalVariableMutation {
+    Create {
+        variable: VariableInstance,
+        history_patch: crate::node_system::document::ResourcePatch,
+    },
+    Update {
+        variable: VariableInstance,
+        expected_revision: ResourceRevision,
+        history_patch: crate::node_system::document::ResourcePatch,
+    },
+    Delete {
+        variable: VariableInstance,
+        expected_revision: ResourceRevision,
+        history_patch: crate::node_system::document::ResourcePatch,
+    },
 }
 
-struct StagedGlobalVariableMutation {
-    kind: GlobalVariableMutationKind,
+impl StagedGlobalVariableMutation {
+    fn variable(&self) -> &VariableInstance {
+        match self {
+            Self::Create { variable, .. }
+            | Self::Update { variable, .. }
+            | Self::Delete { variable, .. } => variable,
+        }
+    }
 
-    variable: VariableInstance,
-    cache: Option<VariableTabularCache>,
-    expected_revision: Option<ResourceRevision>,
-    history_patch: Option<crate::node_system::document::ResourcePatch>,
+    fn expected_revision(&self) -> Option<ResourceRevision> {
+        match self {
+            Self::Create { .. } => None,
+            Self::Update {
+                expected_revision, ..
+            }
+            | Self::Delete {
+                expected_revision, ..
+            } => Some(*expected_revision),
+        }
+    }
+
+    fn history_patch(&self) -> &crate::node_system::document::ResourcePatch {
+        match self {
+            Self::Create { history_patch, .. }
+            | Self::Update { history_patch, .. }
+            | Self::Delete { history_patch, .. } => history_patch,
+        }
+    }
+
+    fn is_create(&self) -> bool {
+        matches!(self, Self::Create { .. })
+    }
+
+    fn is_delete(&self) -> bool {
+        matches!(self, Self::Delete { .. })
+    }
+
+    fn into_variable(self) -> VariableInstance {
+        match self {
+            Self::Create { variable, .. }
+            | Self::Update { variable, .. }
+            | Self::Delete { variable, .. } => variable,
+        }
+    }
 }
 
 struct CommittedProjectSave {
@@ -569,7 +618,6 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         expected_collection_revision: Option<u64>,
-        expected_revision: Option<ResourceRevision>,
         operation_id: OperationId,
         mutation: GlobalVariableMutation,
     ) -> Result<GlobalVariableMutationResult, ProjectFilesystemError> {
@@ -613,6 +661,7 @@ impl ProjectState {
         };
         let staged = match mutation {
             GlobalVariableMutation::Create {
+                scope,
                 name,
                 data_type,
                 data_value,
@@ -629,10 +678,10 @@ impl ProjectState {
                     data_value,
                     tabular: None,
                     description,
-                    scope: VariableScope::Global,
+                    scope,
                     tags,
                 };
-                let (variable, cache) = Self::stage_variable(variable)?;
+                let variable = Self::stage_variable(variable)?;
                 let history_patch = crate::node_system::document::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{}", variable.id).into()),
                     ResourceRevision::INITIAL,
@@ -641,16 +690,14 @@ impl ProjectState {
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
                 );
-                StagedGlobalVariableMutation {
-                    kind: GlobalVariableMutationKind::Create,
+                StagedGlobalVariableMutation::Create {
                     variable,
-                    cache,
-                    expected_revision: None,
-                    history_patch: Some(history_patch),
+                    history_patch,
                 }
             }
             GlobalVariableMutation::Update {
                 id,
+                expected_revision,
                 name,
                 data_type,
                 data_value,
@@ -685,8 +732,6 @@ impl ProjectState {
                     .get(&id)
                     .map(|entry| entry.revision)
                     .unwrap_or(ResourceRevision::INITIAL);
-                let expected_revision =
-                    expected_revision.expect("update command requires revision");
                 if actual_revision != expected_revision {
                     return Err(ProjectFilesystemError::ResourceRevisionConflict {
                         message: format!(
@@ -704,16 +749,17 @@ impl ProjectState {
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
                 );
-                let (variable, cache) = Self::stage_variable(variable)?;
-                StagedGlobalVariableMutation {
-                    kind: GlobalVariableMutationKind::Update,
+                let variable = Self::stage_variable(variable)?;
+                StagedGlobalVariableMutation::Update {
                     variable,
-                    cache,
-                    expected_revision: Some(expected_revision),
-                    history_patch: Some(history_patch),
+                    expected_revision,
+                    history_patch,
                 }
             }
-            GlobalVariableMutation::Delete { id } => {
+            GlobalVariableMutation::Delete {
+                id,
+                expected_revision,
+            } => {
                 let variable = globals
                     .get(&id)
                     .cloned()
@@ -722,8 +768,6 @@ impl ProjectState {
                     .get(&id)
                     .map(|entry| entry.revision)
                     .unwrap_or(ResourceRevision::INITIAL);
-                let expected_revision =
-                    expected_revision.expect("delete command requires revision");
                 if actual_revision != expected_revision {
                     return Err(ProjectFilesystemError::ResourceRevisionConflict {
                         message: format!(
@@ -741,26 +785,24 @@ impl ProjectState {
                         None,
                     ),
                 );
-                StagedGlobalVariableMutation {
-                    kind: GlobalVariableMutationKind::Delete,
+                StagedGlobalVariableMutation::Delete {
                     variable,
-                    cache: None,
-                    expected_revision: Some(expected_revision),
-                    history_patch: Some(history_patch),
+                    expected_revision,
+                    history_patch,
                 }
             }
         };
-        if staged.kind == GlobalVariableMutationKind::Delete {
-            globals.remove(&staged.variable.id);
+        if staged.is_delete() {
+            globals.remove(&staged.variable().id);
         } else {
-            globals.insert(staged.variable.id, staged.variable.clone());
+            globals.insert(staged.variable().id, staged.variable().clone());
         }
-        let key = variable_key(&staged.variable.id);
+        let key = variable_key(&staged.variable().id);
         let expected_revisions = staged
-            .expected_revision
+            .expected_revision()
             .map(|revision| BTreeMap::from([(key.clone(), revision)]))
             .unwrap_or_default();
-        let expected_absent_resources = if staged.kind == GlobalVariableMutationKind::Create {
+        let expected_absent_resources = if staged.is_create() {
             BTreeSet::from([key])
         } else {
             BTreeSet::new()
@@ -816,7 +858,7 @@ impl ProjectState {
             };
         committed.finalize();
         Ok(GlobalVariableMutationResult {
-            variable: staged.variable,
+            variable: staged.into_variable(),
             result: save,
         })
     }
@@ -836,7 +878,6 @@ impl ProjectState {
             });
         }
         let mut data = self.project_data.write().unwrap();
-        let mut store = self.project_store.write().unwrap();
         let graph_revisions = self.graph_revisions.read().unwrap();
         let mut variable_revisions = self.variable_revisions.write().unwrap();
         let worksheet_revisions = self.worksheet_revisions.read().unwrap();
@@ -848,11 +889,11 @@ impl ProjectState {
             &variable_revisions,
             &worksheet_revisions,
         )?;
-        let id = staged.variable.id;
-        match staged.kind {
-            GlobalVariableMutationKind::Create => {
-                data.variables.insert(id, staged.variable.clone());
-                Self::publish_variable_cache(&mut store, &id, staged.cache.clone());
+        let publication_advance = publication.prepare_resource_revision()?;
+        match staged {
+            StagedGlobalVariableMutation::Create { variable, .. } => {
+                let id = variable.id;
+                data.variables.insert(id, variable.clone());
                 variable_revisions.insert(
                     id,
                     crate::project::project_state::VariableRevisionEntry::present(
@@ -860,28 +901,41 @@ impl ProjectState {
                     ),
                 );
             }
-            GlobalVariableMutationKind::Update => {
-                data.variables.insert(id, staged.variable.clone());
-                Self::publish_variable_cache(&mut store, &id, staged.cache.clone());
+            StagedGlobalVariableMutation::Update {
+                variable,
+                expected_revision,
+                ..
+            } => {
+                let id = variable.id;
+                let revision = super::project_state::checked_resource_revision(
+                    format!("variables/{id}"),
+                    *expected_revision,
+                )?;
+                data.variables.insert(id, variable.clone());
                 variable_revisions.insert(
                     id,
-                    crate::project::project_state::VariableRevisionEntry::present(
-                        staged.expected_revision.unwrap().next(),
-                    ),
+                    crate::project::project_state::VariableRevisionEntry::present(revision),
                 );
             }
-            GlobalVariableMutationKind::Delete => {
+            StagedGlobalVariableMutation::Delete {
+                variable,
+                expected_revision,
+                ..
+            } => {
+                let id = variable.id;
+                let revision = super::project_state::checked_resource_revision(
+                    format!("variables/{id}"),
+                    *expected_revision,
+                )?;
                 data.variables.remove(&id);
                 variable_revisions.insert(
                     id,
-                    crate::project::project_state::VariableRevisionEntry::deleted(
-                        staged.expected_revision.unwrap().next(),
-                    ),
+                    crate::project::project_state::VariableRevisionEntry::deleted(revision),
                 );
-                crate::tabular::remove_variable_cache(&mut store, &id);
             }
         }
-        if let Some(patch) = staged.history_patch.clone() {
+        let patch = staged.history_patch().clone();
+        {
             let crate::node_system::document::ResourceDocumentPatch::Variable(document_patch) =
                 &patch.forward
             else {
@@ -905,11 +959,8 @@ impl ProjectState {
             );
         }
         let history = history.status();
-        let publication_revision = publication.allocate_resource_revision();
-        let history_patch = staged
-            .history_patch
-            .as_ref()
-            .expect("global mutations record history");
+        let publication_revision = publication.commit_prepared(publication_advance);
+        let history_patch = staged.history_patch();
         Ok(ResourceMutationResultDto {
             operation_id: context.operation_id,
             project_instance_id: publication.project_instance_id.clone(),
@@ -934,10 +985,8 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         expected_collection_revision: Option<u64>,
-        expected_revision: Option<ResourceRevision>,
         operation_id: OperationId,
         mutation: GlobalVariableMutation,
-        scope: Option<VariableScope>,
     ) -> Result<GlobalVariableMutationResult, ProjectFilesystemError> {
         let session = self.capture_project_session()?;
         if &session.instance_id != expected_project_instance_id {
@@ -967,7 +1016,7 @@ impl ProjectState {
             let current = match &mutation {
                 GlobalVariableMutation::Create { .. } => None,
                 GlobalVariableMutation::Update { id, .. }
-                | GlobalVariableMutation::Delete { id } => data.variables.get(id).cloned(),
+                | GlobalVariableMutation::Delete { id, .. } => data.variables.get(id).cloned(),
             };
             (
                 publication.authority_generation(),
@@ -982,6 +1031,7 @@ impl ProjectState {
 
         let staged = match mutation {
             GlobalVariableMutation::Create {
+                scope,
                 name,
                 data_type,
                 data_value,
@@ -998,10 +1048,10 @@ impl ProjectState {
                     data_value,
                     tabular: None,
                     description,
-                    scope: scope.expect("local create requires scope"),
+                    scope,
                     tags,
                 };
-                let (variable, cache) = Self::stage_variable(variable)?;
+                let variable = Self::stage_variable(variable)?;
                 let patch = crate::node_system::document::ResourcePatch::variable(
                     VariableResourceKey(format!("variables/{}", variable.id).into()),
                     ResourceRevision::INITIAL,
@@ -1010,16 +1060,14 @@ impl ProjectState {
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
                 );
-                StagedGlobalVariableMutation {
-                    kind: GlobalVariableMutationKind::Create,
+                StagedGlobalVariableMutation::Create {
                     variable,
-                    cache,
-                    expected_revision: None,
-                    history_patch: Some(patch),
+                    history_patch: patch,
                 }
             }
             GlobalVariableMutation::Update {
                 id,
+                expected_revision,
                 name,
                 data_type,
                 data_value,
@@ -1035,7 +1083,6 @@ impl ProjectState {
                     .get(&id)
                     .map(|entry| entry.revision)
                     .unwrap_or(ResourceRevision::INITIAL);
-                let expected_revision = expected_revision.expect("update requires revision");
                 if actual_revision != expected_revision {
                     return Err(ProjectFilesystemError::ResourceRevisionConflict {
                         message: format!(
@@ -1073,16 +1120,17 @@ impl ProjectState {
                         Some(serde_json::to_value(&variable).map_err(prepare_error)?),
                     ),
                 );
-                let (variable, cache) = Self::stage_variable(variable)?;
-                StagedGlobalVariableMutation {
-                    kind: GlobalVariableMutationKind::Update,
+                let variable = Self::stage_variable(variable)?;
+                StagedGlobalVariableMutation::Update {
                     variable,
-                    cache,
-                    expected_revision: Some(expected_revision),
-                    history_patch: Some(patch),
+                    expected_revision,
+                    history_patch: patch,
                 }
             }
-            GlobalVariableMutation::Delete { id } => {
+            GlobalVariableMutation::Delete {
+                id,
+                expected_revision,
+            } => {
                 let variable =
                     current.ok_or_else(|| prepare_error(format!("variable '{id}' not found")))?;
                 if matches!(variable.scope, VariableScope::Global) {
@@ -1092,7 +1140,6 @@ impl ProjectState {
                     .get(&id)
                     .map(|entry| entry.revision)
                     .unwrap_or(ResourceRevision::INITIAL);
-                let expected_revision = expected_revision.expect("delete requires revision");
                 if actual_revision != expected_revision {
                     return Err(ProjectFilesystemError::ResourceRevisionConflict {
                         message: format!(
@@ -1110,25 +1157,23 @@ impl ProjectState {
                         None,
                     ),
                 );
-                StagedGlobalVariableMutation {
-                    kind: GlobalVariableMutationKind::Delete,
+                StagedGlobalVariableMutation::Delete {
                     variable,
-                    cache: None,
-                    expected_revision: Some(expected_revision),
-                    history_patch: Some(patch),
+                    expected_revision,
+                    history_patch: patch,
                 }
             }
         };
-        let key = variable_key(&staged.variable.id);
+        let key = variable_key(&staged.variable().id);
         let context = context(
             self,
             session,
             operation_id,
             staged
-                .expected_revision
+                .expected_revision()
                 .map(|revision| BTreeMap::from([(key.clone(), revision)]))
                 .unwrap_or_default(),
-            if staged.kind == GlobalVariableMutationKind::Create {
+            if staged.is_create() {
                 BTreeSet::from([key])
             } else {
                 BTreeSet::new()
@@ -1138,7 +1183,7 @@ impl ProjectState {
             self.publish_global_variable_mutation(&context, authority_generation, &staged)?;
         reservation.complete();
         Ok(GlobalVariableMutationResult {
-            variable: staged.variable,
+            variable: staged.into_variable(),
             result,
         })
     }
@@ -1158,16 +1203,15 @@ impl ProjectState {
         self.commit_local_variable_mutation(
             expected_project_instance_id,
             Some(expected_collection_revision),
-            None,
             operation_id,
             GlobalVariableMutation::Create {
+                scope,
                 name,
                 data_type,
                 data_value,
                 description,
                 tags,
             },
-            Some(scope),
         )
     }
 
@@ -1186,17 +1230,16 @@ impl ProjectState {
         self.commit_local_variable_mutation(
             expected_project_instance_id,
             None,
-            Some(expected_revision),
             operation_id,
             GlobalVariableMutation::Update {
                 id,
+                expected_revision,
                 name,
                 data_type,
                 data_value,
                 description,
                 tags,
             },
-            None,
         )
     }
 
@@ -1210,10 +1253,11 @@ impl ProjectState {
         self.commit_local_variable_mutation(
             expected_project_instance_id,
             None,
-            Some(expected_revision),
             operation_id,
-            GlobalVariableMutation::Delete { id },
-            None,
+            GlobalVariableMutation::Delete {
+                id,
+                expected_revision,
+            },
         )
     }
 
@@ -1231,9 +1275,9 @@ impl ProjectState {
         self.stage_global_variable_mutation(
             expected_project_instance_id,
             Some(expected_collection_revision),
-            None,
             operation_id,
             GlobalVariableMutation::Create {
+                scope: VariableScope::Global,
                 name,
                 data_type,
                 data_value,
@@ -1258,10 +1302,10 @@ impl ProjectState {
         self.stage_global_variable_mutation(
             expected_project_instance_id,
             None,
-            Some(expected_revision),
             operation_id,
             GlobalVariableMutation::Update {
                 id,
+                expected_revision,
                 name,
                 data_type,
                 data_value,
@@ -1281,9 +1325,11 @@ impl ProjectState {
         self.stage_global_variable_mutation(
             expected_project_instance_id,
             None,
-            Some(expected_revision),
             operation_id,
-            GlobalVariableMutation::Delete { id },
+            GlobalVariableMutation::Delete {
+                id,
+                expected_revision,
+            },
         )
     }
 
@@ -1319,14 +1365,18 @@ impl ProjectState {
                 .or_else(|| current.databases.keys().min().cloned())
                 .unwrap_or_default(),
         );
-        document.revision = self
+        document.revision = match self
             .worksheet_revisions
             .read()
             .unwrap()
             .get(&worksheet_path)
             .copied()
-            .map(ResourceRevision::next)
-            .unwrap_or(ResourceRevision::INITIAL);
+        {
+            Some(retained) => {
+                super::project_state::checked_resource_revision(worksheet_path.as_str(), retained)?
+            }
+            None => ResourceRevision::INITIAL,
+        };
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -1373,14 +1423,18 @@ impl ProjectState {
         let unique = allocate_unique_resource_name(source.display_name(), existing);
         let target = WorksheetResourcePath::from_name(&unique);
         let mut duplicate = source_document;
-        duplicate.revision = self
+        duplicate.revision = match self
             .worksheet_revisions
             .read()
             .unwrap()
             .get(&target)
             .copied()
-            .map(ResourceRevision::next)
-            .unwrap_or(ResourceRevision::INITIAL);
+        {
+            Some(retained) => {
+                super::project_state::checked_resource_revision(target.as_str(), retained)?
+            }
+            None => ResourceRevision::INITIAL,
+        };
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -1452,7 +1506,7 @@ impl ProjectState {
             retained_revision,
             before.as_ref(),
             Some(&document),
-        )];
+        )?];
         Ok(result)
     }
 
@@ -1478,7 +1532,10 @@ impl ProjectState {
             .ok_or_else(|| ProjectFilesystemError::WorksheetNotFound {
                 path: worksheet_path.clone(),
             })?;
-        document.revision = expected_revision.next();
+        document.revision = super::project_state::checked_resource_revision(
+            worksheet_path.as_str(),
+            expected_revision,
+        )?;
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -1547,7 +1604,10 @@ impl ProjectState {
                 message: format!("a worksheet named '{}' already exists", new_name.as_str()),
             });
         }
-        moved.revision = expected_revision.next();
+        moved.revision = super::project_state::checked_resource_revision(
+            worksheet_path.as_str(),
+            expected_revision,
+        )?;
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -1621,6 +1681,13 @@ impl ProjectState {
             .ok_or_else(|| ProjectFilesystemError::WorksheetNotFound {
                 path: worksheet_path.clone(),
             })?;
+        let delta = worksheet_resource_delta(
+            worksheet_path,
+            operation_id,
+            Some(document.revision),
+            Some(&document),
+            None,
+        )?;
         let mutation_context = context(
             self,
             snapshot.session.clone(),
@@ -1659,13 +1726,7 @@ impl ProjectState {
             }
         };
         committed.finalize();
-        result.deltas = vec![worksheet_resource_delta(
-            worksheet_path,
-            operation_id,
-            Some(document.revision),
-            Some(&document),
-            None,
-        )];
+        result.deltas = vec![delta];
         reservation.complete();
         Ok(result)
     }

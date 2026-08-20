@@ -29,7 +29,6 @@ pub(super) struct HistoryPreparationBasis {
     pub residency: BTreeMap<GraphResourcePath, HistoryGraphResidency>,
 }
 
-#[allow(dead_code)]
 pub(super) struct PreparedHistoryDocuments {
     pub lease: ProjectFilesystemLeaseSet,
     pub basis: HistoryPreparationBasis,
@@ -47,14 +46,6 @@ pub(super) struct PreparedHistoryDocuments {
     pub proposed_history: ProjectHistory,
     pub touched_graphs: BTreeSet<GraphResourcePath>,
     pub contains_unloaded_graph: bool,
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-pub(super) fn history_basis_matches(
-    expected: &HistoryPreparationBasis,
-    current: &HistoryPreparationBasis,
-) -> bool {
-    expected == current
 }
 
 pub(super) struct HistoryPreparationSnapshot {
@@ -337,7 +328,16 @@ pub(super) fn hydrate_history_preparation(
                     format!("Worksheet '{}' has no revision authority", key.0).into(),
                 )
             })?
-            .next();
+            .checked_next()
+            .map_err(|error| {
+                MutationConflict::History(
+                    format!(
+                        "Worksheet '{}' revision is exhausted at {}",
+                        key.0, error.retained
+                    )
+                    .into(),
+                )
+            })?;
         after_worksheet_revisions.insert(path, revision);
         if let Some(document) = after.worksheets.get_mut(key) {
             document.revision = revision;
@@ -931,20 +931,16 @@ fn insert_local_variable_owner(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        HistoryGraphResidency, HistoryPreparationBasis, discover_touched_resources,
-        history_basis_matches,
-    };
+    use super::{HistoryGraphResidency, discover_touched_resources};
     use crate::graph::value::{DataType, DataValue};
     use crate::node_system::document::{
         FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, GraphDocumentOperation,
-        GraphDocumentPatch, GraphResourcePath as DocumentGraphResourcePath, HistoryEntryId,
-        OperationId, ProjectHistoryTransaction, ResourceKey, ResourcePatch, ResourceRevision,
-        VariableDocumentPatch, VariableResourceKey,
+        GraphDocumentPatch, GraphResourcePath as DocumentGraphResourcePath, OperationId,
+        ProjectHistoryTransaction, ResourcePatch, ResourceRevision, VariableDocumentPatch,
+        VariableResourceKey,
     };
     use crate::project::{
-        GraphDocumentKind, GraphResourceDocument, GraphResourcePath, NormalizedProjectRoot,
-        ProjectData, ProjectInstanceId, ProjectSession,
+        GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
     };
     use crate::variable::{VariableId, VariableInstance, VariableScope};
     use std::collections::{BTreeMap, BTreeSet};
@@ -1106,83 +1102,6 @@ mod tests {
             touched.graphs,
             BTreeMap::from([(function_path(), HistoryGraphResidency::Unloaded)])
         );
-    }
-
-    fn basis() -> HistoryPreparationBasis {
-        let graph = ResourceKey::Graph(document_graph_path(&event_path()));
-        let function = ResourceKey::Function(FunctionResourceKey(FUNCTION_PATH.into()));
-        let variable = ResourceKey::Variable(variable_key());
-        HistoryPreparationBasis {
-            session: ProjectSession {
-                instance_id: ProjectInstanceId::from_existing("stable-project-instance".into()),
-                root: NormalizedProjectRoot::from_project_path(".").unwrap(),
-            },
-            authority_generation: 17,
-            history_id: HistoryEntryId::new(),
-            persistence: crate::node_system::document::HistoryPersistencePolicy::InMemoryUntilSave,
-            undo: true,
-            expected_revisions: BTreeMap::from([
-                (graph, ResourceRevision::new(3)),
-                (function, ResourceRevision::new(5)),
-                (variable, ResourceRevision::new(7)),
-            ]),
-            expected_graph_revisions: BTreeMap::from([
-                (event_path(), ResourceRevision::new(3)),
-                (function_path(), ResourceRevision::new(5)),
-            ]),
-            residency: BTreeMap::from([
-                (event_path(), HistoryGraphResidency::Unloaded),
-                (function_path(), HistoryGraphResidency::Loaded),
-            ]),
-        }
-    }
-
-    #[test]
-    fn basis_comparison_detects_every_preparation_authority_change() {
-        let expected = basis();
-        assert!(history_basis_matches(&expected, &expected));
-
-        let mut changed = expected.clone();
-        changed.history_id = HistoryEntryId::new();
-        assert!(!history_basis_matches(&expected, &changed));
-
-        let mut changed = expected.clone();
-        changed.persistence =
-            crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects;
-        assert!(!history_basis_matches(&expected, &changed));
-
-        for resource in [
-            ResourceKey::Graph(document_graph_path(&event_path())),
-            ResourceKey::Function(FunctionResourceKey(FUNCTION_PATH.into())),
-            ResourceKey::Variable(variable_key()),
-        ] {
-            let mut changed = expected.clone();
-            changed
-                .expected_revisions
-                .insert(resource, ResourceRevision::new(99));
-            assert!(!history_basis_matches(&expected, &changed));
-        }
-
-        let mut changed = expected.clone();
-        changed
-            .expected_graph_revisions
-            .insert(function_path(), ResourceRevision::new(99));
-        assert!(!history_basis_matches(&expected, &changed));
-
-        let mut changed = expected.clone();
-        changed.authority_generation += 1;
-        assert!(!history_basis_matches(&expected, &changed));
-
-        let mut changed = expected.clone();
-        changed.session.instance_id =
-            ProjectInstanceId::from_existing("replacement-project-instance".into());
-        assert!(!history_basis_matches(&expected, &changed));
-
-        let mut changed = expected.clone();
-        changed
-            .residency
-            .insert(event_path(), HistoryGraphResidency::Loaded);
-        assert!(!history_basis_matches(&expected, &changed));
     }
 
     #[test]

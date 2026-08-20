@@ -4,7 +4,7 @@ use crate::node_system::protocol::NodeTypeId;
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU64;
 use std::sync::LazyLock;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 
 #[cfg(test)]
 use std::collections::BTreeMap;
@@ -258,14 +258,11 @@ impl SpanId {
         self.0.get()
     }
 
-    fn next() -> Self {
+    fn next() -> Option<Self> {
         static NEXT_SPAN_ID: AtomicU64 = AtomicU64::new(1);
-        let id = NEXT_SPAN_ID
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
-                current.checked_add(1)
-            })
-            .expect("process span ID space exhausted");
-        Self::new(id).expect("span ID allocator starts at one")
+        crate::node_system::allocate_nonzero_id(&NEXT_SPAN_ID)
+            .ok()
+            .map(Self)
     }
 }
 
@@ -456,12 +453,12 @@ impl<'a> SpanGuard<'a> {
         Self {
             sink,
             clock,
-            pending: Some((SpanId::next(), spec, clock.now())),
+            pending: SpanId::next().map(|span_id| (span_id, spec, clock.now())),
         }
     }
 
-    pub fn span_id(&self) -> SpanId {
-        self.pending.as_ref().expect("finished span guard").0
+    pub fn span_id(&self) -> Option<SpanId> {
+        self.pending.as_ref().map(|pending| pending.0)
     }
 
     pub fn finish(&mut self, outcome: SpanOutcome) {
@@ -469,11 +466,9 @@ impl<'a> SpanGuard<'a> {
     }
 
     pub fn replace_correlation(&mut self, correlation: CorrelationContext) {
-        self.pending
-            .as_mut()
-            .expect("finished span guard")
-            .1
-            .correlation = correlation;
+        if let Some((_, spec, _)) = self.pending.as_mut() {
+            spec.correlation = correlation;
+        }
     }
 
     fn complete(&mut self, outcome: SpanOutcome) {

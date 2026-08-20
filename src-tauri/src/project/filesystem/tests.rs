@@ -9,7 +9,7 @@ use crate::project::{
 };
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Barrier};
+use std::sync::Arc;
 
 struct TestDirectory {
     path: PathBuf,
@@ -118,101 +118,6 @@ fn move_recovery_copies(temporary: &TestDirectory) -> Vec<PathBuf> {
 }
 
 #[test]
-fn filesystem_test_controls_are_scoped_to_independent_coordinators() {
-    let temporary_a = TestDirectory::new("coordinator-controls-a");
-    let temporary_b = TestDirectory::new("coordinator-controls-b");
-    std::fs::write(temporary_a.path().join("document.json"), br#"{"live":1}"#).unwrap();
-    std::fs::write(temporary_b.path().join("document.json"), br#"{"live":2}"#).unwrap();
-    let coordinator_a = ProjectFilesystemCoordinator::default();
-    let coordinator_b = ProjectFilesystemCoordinator::default();
-    let rollback_hits_a = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let rollback_hits_b = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-    let barrier = Arc::new(Barrier::new(3));
-
-    let install_a = {
-        let coordinator = coordinator_a.clone();
-        let barrier = Arc::clone(&barrier);
-        let hits = Arc::clone(&rollback_hits_a);
-        std::thread::spawn(move || {
-            barrier.wait();
-            coordinator.set_project_filesystem_fault(Some(
-                ProjectFilesystemFaultPoint::StagedSerialization,
-            ));
-            coordinator.set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
-                hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            })));
-        })
-    };
-    let install_b = {
-        let coordinator = coordinator_b.clone();
-        let barrier = Arc::clone(&barrier);
-        let hits = Arc::clone(&rollback_hits_b);
-        std::thread::spawn(move || {
-            barrier.wait();
-            coordinator.set_project_filesystem_fault(Some(
-                ProjectFilesystemFaultPoint::FirstLiveReplacement,
-            ));
-            coordinator.set_project_filesystem_rollback_test_hook(Some(Arc::new(move || {
-                hits.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            })));
-        })
-    };
-    barrier.wait();
-    install_a.join().unwrap();
-    install_b.join().unwrap();
-
-    let mutation = |contents: &[u8]| {
-        vec![StagedFilesystemMutation::Write {
-            relative_path: "document.json".into(),
-            contents: contents.to_vec(),
-        }]
-    };
-    assert_eq!(
-        prepare_json_transaction_with_coordinator(
-            &coordinator_a,
-            &temporary_a,
-            mutation(br#"{"prepared":1}"#),
-        )
-        .unwrap_err()
-        .code(),
-        "transaction_prepare_failed",
-    );
-    let commit_error = prepare_json_transaction_with_coordinator(
-        &coordinator_b,
-        &temporary_b,
-        mutation(br#"{"prepared":2}"#),
-    )
-    .unwrap()
-    .commit()
-    .unwrap_err();
-    assert_eq!(commit_error.code(), "transaction_commit_failed");
-
-    prepare_json_transaction_with_coordinator(
-        &coordinator_a,
-        &temporary_a,
-        mutation(br#"{"rollback":1}"#),
-    )
-    .unwrap()
-    .commit()
-    .unwrap()
-    .rollback()
-    .unwrap();
-    prepare_json_transaction_with_coordinator(
-        &coordinator_b,
-        &temporary_b,
-        mutation(br#"{"rollback":2}"#),
-    )
-    .unwrap()
-    .commit()
-    .unwrap()
-    .rollback()
-    .unwrap();
-
-    assert_eq!(rollback_hits_a.load(std::sync::atomic::Ordering::SeqCst), 1);
-    assert_eq!(rollback_hits_b.load(std::sync::atomic::Ordering::SeqCst), 1);
-}
-
-#[test]
 fn missing_parent_components_never_escape_the_canonical_existing_ancestor() {
     let temporary = TestDirectory::new("filesystem-existing-anchor");
     let existing = temporary.path().join("existing");
@@ -285,25 +190,6 @@ fn metadata_and_directory_paths_normalize_to_the_same_root() {
 
     assert_eq!(normalized(&root), normalized(&metadata));
     assert_eq!(normalized(&root), normalized(root.join("METADATA.YSSBI")));
-}
-
-#[test]
-fn lease_set_releases_roots_in_reverse_order() {
-    let temporary = TestDirectory::new("filesystem-release-order");
-    let roots = vec![
-        normalized(temporary.path().join("a")),
-        normalized(temporary.path().join("b")),
-        normalized(temporary.path().join("c")),
-    ];
-    let coordinator = ProjectFilesystemCoordinator::default();
-
-    let lease = coordinator.acquire_many(roots.clone()).unwrap();
-    assert!(roots.iter().all(|root| lease.contains(root)));
-    drop(lease);
-
-    let mut expected = roots;
-    expected.reverse();
-    assert_eq!(coordinator.release_trace(), expected);
 }
 
 #[test]

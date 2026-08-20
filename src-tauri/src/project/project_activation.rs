@@ -5,7 +5,7 @@ use crate::project::{
     GraphResourcePath, NormalizedProjectRoot, ProjectData, ProjectFilesystemError,
     ProjectInstanceId, ProjectSession, ProjectState, ProjectStore, WorksheetResourcePath,
 };
-use crate::tabular::{normalize_variable_tabular, sync_variable_cache};
+use crate::tabular::normalize_variable_tabular;
 use crate::variable::VariableId;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -113,9 +113,7 @@ impl PreparedProjectActivation {
             store.databases.insert(id.clone(), instance);
         }
         for variable in data.variables.values_mut() {
-            if normalize_variable_tabular(variable).is_ok() {
-                let _ = sync_variable_cache(&mut store, variable);
-            }
+            let _ = normalize_variable_tabular(variable);
         }
         let graph_revisions = data
             .graphs
@@ -205,7 +203,7 @@ impl ProjectState {
                 true,
             )?;
         }
-        self.run_activation_final_rebuild_test_hook();
+
         let published = self.publish_project_activation(prepared)?;
         drop(lease);
         let instance_id = published.dispose();
@@ -873,8 +871,13 @@ mod tests {
 
         state.activate_prepared_project(prepared).unwrap();
 
-        let metadata =
-            crate::application::database::get_database_meta(&state, &imported.id).unwrap();
+        let project_instance_id = state.capture_project_session().unwrap().instance_id;
+        let metadata = crate::application::database::read_database_meta(
+            &state,
+            &project_instance_id,
+            &imported.id,
+        )
+        .unwrap();
         assert_eq!(metadata.row_count, 2);
         assert_eq!(metadata.column_count, 2);
         assert!(metadata.columns.iter().any(|column| column.name == "extra"));

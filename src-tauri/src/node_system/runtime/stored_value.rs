@@ -118,10 +118,6 @@ impl StoredValue {
         }
     }
 
-    pub(crate) fn from_artifact(artifact: Artifact) -> Self {
-        artifact.into_stored_value()
-    }
-
     pub(crate) fn prepare(
         value: RuntimeValue,
         owner: &super::RunResourceOwner,
@@ -268,6 +264,7 @@ impl StoredValue {
         Arc::ptr_eq(&self.backing, &other.backing)
     }
 
+    #[cfg(test)]
     pub(crate) fn is_spill_backed(&self) -> bool {
         matches!(self.backing.as_ref(), StoredValueBacking::SpillBacked(_))
     }

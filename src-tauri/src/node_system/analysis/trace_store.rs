@@ -475,8 +475,9 @@ impl TraceSink for BoundedTraceSink {
             && spec.kind == SpanKind::Snapshot
             && spec.parent_span_id.is_none();
         let guard = SpanGuard::new(self, spec, self.clock.as_ref());
-        if run_root.is_some() || compilation_root {
-            let root_span_id = guard.span_id();
+        if (run_root.is_some() || compilation_root)
+            && let Some(root_span_id) = guard.span_id()
+        {
             let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());
             if let Some(run_id) = run_root {
                 state

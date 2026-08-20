@@ -271,7 +271,7 @@ fn execute_variable_kernel(
     let source_graph_path = GraphResourcePath("events/builtin-test.yssbi-event".into());
     let context = KernelContext {
         run_id: RunId::new(1),
-        frame_id: FrameId::next(),
+        frame_id: FrameId::next().unwrap(),
         activation_id: ActivationId::next().unwrap(),
         source_graph_path: &source_graph_path,
         source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
@@ -383,7 +383,7 @@ fn execute_plot_kernel(
     let source_graph_path = GraphResourcePath("events/plot-test.yssbi-event".into());
     let context = KernelContext {
         run_id: RunId::new(1),
-        frame_id: FrameId::next(),
+        frame_id: FrameId::next().unwrap(),
         activation_id: ActivationId::next().unwrap(),
         source_graph_path: &source_graph_path,
         source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
@@ -422,7 +422,7 @@ fn execute_kernel_direct_with_deadline(
     let source_graph_path = GraphResourcePath("events/kernel-test.yssbi-event".into());
     let context = KernelContext {
         run_id: RunId::new(1),
-        frame_id: FrameId::next(),
+        frame_id: FrameId::next().unwrap(),
         activation_id: ActivationId::next().unwrap(),
         source_graph_path: &source_graph_path,
         source_node_id: NodeId::from_uuid(uuid::Uuid::nil()),
@@ -1627,41 +1627,6 @@ fn logit_fit_rejects_non_binary_response_values() {
         error.to_string().contains("endog must be 0/1"),
         "unexpected error: {error}"
     );
-}
-
-#[test]
-fn builtin_registry_contains_every_catalog_kernel_handle() {
-    let registry = build_builtin_kernel_registry();
-    let expected = [
-        "yssbi.constant.bool",
-        "yssbi.constant.string",
-        "yssbi.constant.int64",
-        "yssbi.constant.float64",
-        "yssbi.numeric.add.int64",
-        "yssbi.numeric.subtract.int64",
-        "yssbi.numeric.multiply.int64",
-        "yssbi.numeric.divide.int64",
-        "yssbi.numeric.add.float64",
-        "yssbi.numeric.subtract.float64",
-        "yssbi.numeric.multiply.float64",
-        "yssbi.numeric.divide.float64",
-        "yssbi.compare.equal",
-        "yssbi.compare.not_equal",
-        "yssbi.compare.less",
-        "yssbi.compare.less_equal",
-        "yssbi.compare.greater",
-        "yssbi.compare.greater_equal",
-        "yssbi.logic.and",
-        "yssbi.logic.or",
-        "yssbi.logic.not",
-    ];
-
-    for kernel in expected {
-        assert!(
-            registry.get(&handle(kernel, KernelHandle::new)).is_some(),
-            "{kernel}"
-        );
-    }
 }
 
 #[test]

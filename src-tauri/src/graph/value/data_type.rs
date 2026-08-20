@@ -84,11 +84,6 @@ impl DataType {
     pub fn number() -> DataType {
         DataType::OneOf(vec![DataType::Int64, DataType::Float64])
     }
-
-    /// "任意数值的 DataSeries"：`DataSeries<OneOf([Int64, Float64])>`。
-    pub fn number_series() -> DataType {
-        DataType::DataSeries(Box::new(DataType::number()))
-    }
 }
 
 #[cfg(test)]
@@ -349,22 +344,6 @@ impl DataType {
             DataType::Array(_) | DataType::String | DataType::DataSeries(_) => true,
             DataType::OneOf(types) => !types.is_empty() && types.iter().all(|t| t.is_iterable()),
             _ => false,
-        }
-    }
-
-    /// Array 的元素类型，非 Array 返回 None
-    pub fn array_inner(&self) -> Option<&DataType> {
-        match self {
-            DataType::Array(inner) => Some(inner),
-            _ => None,
-        }
-    }
-
-    /// DataSeries 的元素类型，非 DataSeries 返回 None
-    pub fn data_series_inner(&self) -> Option<&DataType> {
-        match self {
-            DataType::DataSeries(inner) => Some(inner),
-            _ => None,
         }
     }
 

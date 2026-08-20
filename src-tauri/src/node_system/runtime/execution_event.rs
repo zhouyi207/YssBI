@@ -60,6 +60,7 @@ pub enum OrdinaryRunErrorCode {
     InvalidPlan,
     Cancelled,
     ActivationIdExhausted,
+    RuntimeIdExhausted,
 
     KernelNotFound,
     KernelFailed,
@@ -90,6 +91,7 @@ impl OrdinaryRunErrorCode {
             Self::InvalidPlan => "execution plan is invalid",
             Self::Cancelled => "run was cancelled",
             Self::ActivationIdExhausted => "activation identity space is exhausted",
+            Self::RuntimeIdExhausted => "runtime identity space is exhausted",
 
             Self::KernelNotFound => "required kernel is unavailable",
             Self::KernelFailed => "operation failed",
@@ -122,6 +124,7 @@ pub enum RunErrorCode {
     InvalidPlan,
     Cancelled,
     ActivationIdExhausted,
+    RuntimeIdExhausted,
     DeadlineExceeded,
     KernelNotFound,
     KernelFailed,
@@ -154,6 +157,7 @@ impl From<&RunError> for RunErrorCode {
                 OrdinaryRunErrorCode::InvalidPlan => Self::InvalidPlan,
                 OrdinaryRunErrorCode::Cancelled => Self::Cancelled,
                 OrdinaryRunErrorCode::ActivationIdExhausted => Self::ActivationIdExhausted,
+                OrdinaryRunErrorCode::RuntimeIdExhausted => Self::RuntimeIdExhausted,
                 OrdinaryRunErrorCode::KernelNotFound => Self::KernelNotFound,
                 OrdinaryRunErrorCode::KernelFailed => Self::KernelFailed,
                 OrdinaryRunErrorCode::RelationalBackendNotFound => Self::RelationalBackendNotFound,
@@ -199,6 +203,7 @@ impl RunErrorOutcome {
                 OrdinaryRunErrorCode::InvalidPlan => RunErrorCode::InvalidPlan,
                 OrdinaryRunErrorCode::Cancelled => RunErrorCode::Cancelled,
                 OrdinaryRunErrorCode::ActivationIdExhausted => RunErrorCode::ActivationIdExhausted,
+                OrdinaryRunErrorCode::RuntimeIdExhausted => RunErrorCode::RuntimeIdExhausted,
                 OrdinaryRunErrorCode::KernelNotFound => RunErrorCode::KernelNotFound,
                 OrdinaryRunErrorCode::KernelFailed => RunErrorCode::KernelFailed,
                 OrdinaryRunErrorCode::RelationalBackendNotFound => {
@@ -263,6 +268,7 @@ impl From<&RunError> for OrdinaryRunErrorCode {
             }
             RunError::Cancelled => Self::Cancelled,
             RunError::ActivationIdExhausted => Self::ActivationIdExhausted,
+            RunError::RuntimeIdExhausted => Self::RuntimeIdExhausted,
             RunError::DeadlineExceeded { .. } => {
                 unreachable!("deadline errors use RunErrorOutcome::DeadlineExceeded")
             }

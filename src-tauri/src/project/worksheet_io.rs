@@ -117,15 +117,6 @@ pub(crate) fn load_worksheets_from_root(
     Ok(scan_worksheet_documents(root)?.into_iter().collect())
 }
 
-pub fn worksheet_absolute_path(
-    root: &Path,
-    worksheet_path: &WorksheetResourcePath,
-) -> Result<Option<PathBuf>, ProjectError> {
-    Ok(scan_worksheet_documents(root)?
-        .into_iter()
-        .find_map(|(path, _)| (path == *worksheet_path).then(|| root.join(path.relative_path()))))
-}
-
 fn scan_worksheet_documents(
     root: &Path,
 ) -> Result<Vec<(WorksheetResourcePath, WorksheetDocument)>, ProjectError> {

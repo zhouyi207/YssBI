@@ -5,6 +5,7 @@ export type RunErrorCode =
   | 'invalidPlan'
   | 'cancelled'
   | 'activationIdExhausted'
+  | 'runtimeIdExhausted'
   | 'deadlineExceeded'
   | 'kernelNotFound'
   | 'kernelFailed'
@@ -34,6 +35,7 @@ export const RUN_ERROR_CODES = {
   invalidPlan: true,
   cancelled: true,
   activationIdExhausted: true,
+  runtimeIdExhausted: true,
   deadlineExceeded: true,
   kernelNotFound: true,
   kernelFailed: true,

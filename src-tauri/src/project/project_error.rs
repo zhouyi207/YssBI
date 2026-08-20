@@ -24,15 +24,11 @@ pub enum ProjectFilesystemError {
     StaleResourceLifecycle { message: String },
     #[error("catalog resource stale: {message}")]
     CatalogResourceStale { message: String },
-    #[error("database access failed: {message}")]
-    DatabaseAccessFailed { message: String },
+
     #[error("result source read failed: {message}")]
     ResultSourceReadFailed { message: String },
-    #[error("resource revision overflow for '{path}' at {retained}")]
-    ResourceRevisionOverflow {
-        path: super::GraphResourcePath,
-        retained: u64,
-    },
+    #[error("resource revision overflow for '{resource}' at {retained}")]
+    ResourceRevisionOverflow { resource: String, retained: u64 },
     #[error("resource name conflict: {message}")]
     ResourceNameConflict { message: String },
     #[error("worksheet resource '{}' was not found", path.as_str())]
@@ -45,6 +41,14 @@ pub enum ProjectFilesystemError {
     FilesystemTransactionBusy { message: String },
     #[error("project lifecycle admission is closed: {message}")]
     ProjectLifecycleAdmissionClosed { message: String },
+    #[error("project activation generation is exhausted")]
+    ActivationGenerationExhausted,
+    #[error("project authority generation is exhausted")]
+    AuthorityGenerationExhausted,
+    #[error("resource publication revision is exhausted")]
+    PublicationRevisionExhausted,
+    #[error("computation settings revision is exhausted")]
+    ComputationSettingsRevisionExhausted,
     #[error("project requires recovery before mutations can continue: {message}")]
     ProjectRecoveryRequired { message: String },
     #[error("failed to prepare project filesystem transaction: {message}")]
@@ -74,7 +78,7 @@ impl ProjectFilesystemError {
             Self::StaleProjectLifecycle { .. } => "stale_project_lifecycle",
             Self::StaleResourceLifecycle { .. } => "stale_resource_lifecycle",
             Self::CatalogResourceStale { .. } => "catalog_resource_stale",
-            Self::DatabaseAccessFailed { .. } => "database_access_failed",
+
             Self::ResultSourceReadFailed { .. } => "result_source_read_failed",
             Self::ResourceRevisionOverflow { .. } => "resource_revision_overflow",
             Self::ResourceNameConflict { .. } => "resource_name_conflict",
@@ -83,6 +87,10 @@ impl ProjectFilesystemError {
             Self::DuplicateOperation { .. } => "duplicate_operation",
             Self::FilesystemTransactionBusy { .. } => "filesystem_transaction_busy",
             Self::ProjectLifecycleAdmissionClosed { .. } => "project_lifecycle_admission_closed",
+            Self::ActivationGenerationExhausted => "project_activation_generation_exhausted",
+            Self::AuthorityGenerationExhausted => "project_authority_generation_exhausted",
+            Self::PublicationRevisionExhausted => "publication_revision_exhausted",
+            Self::ComputationSettingsRevisionExhausted => "computation_settings_revision_exhausted",
             Self::ProjectRecoveryRequired { .. } => "project_recovery_required",
             Self::TransactionPrepareFailed { .. } => "transaction_prepare_failed",
             Self::TransactionCommitFailed { .. } => "transaction_commit_failed",

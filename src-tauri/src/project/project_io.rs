@@ -12,7 +12,7 @@ use super::{
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
 
-use crate::node_system::document::{GraphDocument as NodeGraphDocument, NodeId};
+use crate::node_system::document::GraphDocument as NodeGraphDocument;
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 
 pub const SCHEMA_VERSION: u32 = 3;
@@ -388,48 +388,6 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
     })
 }
 
-/// 轻量 Call 扫描结果：仅 node id + 目标函数 id，不构建运行图。
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GraphCallSiteStub {
-    pub node_id: NodeId,
-    pub target_function_path: Option<String>,
-}
-
-/// 从图文件读取 Call Function 节点 stub（跳过 pins / connections / localVariables 物化）。
-pub fn read_graph_call_sites_from_file(
-    path: &Path,
-) -> Result<Vec<GraphCallSiteStub>, ProjectError> {
-    let scan: GraphCallSiteScanDocument = read_json(path)?;
-    Ok(scan
-        .document
-        .nodes
-        .into_values()
-        .filter(|node| node.node_type.as_str() == "yssbi.project.function.call")
-        .map(|node| GraphCallSiteStub {
-            node_id: node.id,
-            target_function_path: node
-                .parameters
-                .values()
-                .find_map(|value| value.as_str())
-                .and_then(|path| GraphResourcePath::new(path).ok())
-                .map(|path| path.as_str().to_string()),
-        })
-        .collect())
-}
-
-/// 从项目磁盘读取某张图的 Call stub（图未加载时使用）。
-pub fn read_graph_call_sites_from_project(
-    project_path: &str,
-    graph_path: &GraphResourcePath,
-) -> Result<Vec<GraphCallSiteStub>, ProjectError> {
-    let root = project_root_from_path(project_path);
-    let graph_resources = load_graph_resource_index(root.as_path())?;
-    let Some(resource) = graph_resources.get_by_path(graph_path.as_str()) else {
-        return Ok(Vec::new());
-    };
-    read_graph_call_sites_from_file(root.join(resource.path.as_str()).as_path())
-}
-
 pub(crate) fn load_project_graph_document_from_file(
     path: &str,
     graph_path: &GraphResourcePath,
@@ -597,12 +555,6 @@ fn bind_graph_document_scope_by_path(
         variable.scope = scope.clone();
     }
     document
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct GraphCallSiteScanDocument {
-    document: NodeGraphDocument,
 }
 
 #[derive(Deserialize)]

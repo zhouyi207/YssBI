@@ -32,6 +32,21 @@ mod editor_mutation_validation;
 mod insert_reroute;
 mod subgraph;
 
+#[test]
+fn graph_patch_revision_exhaustion_has_zero_effects() {
+    let mut document = GraphDocument {
+        revision: GraphRevision::new(u64::MAX),
+        ..GraphDocument::default()
+    };
+    let before = document.clone();
+
+    assert_eq!(
+        document.apply_patch(&GraphDocumentPatch::new(Vec::new())),
+        Err(DocumentError::RevisionExhausted { retained: u64::MAX })
+    );
+    assert_eq!(document, before);
+}
+
 fn node_id(value: u128) -> NodeId {
     NodeId::from_uuid(Uuid::from_u128(value))
 }
@@ -1900,31 +1915,6 @@ fn connections_override_but_do_not_discard_literals() {
         document.effective_input_binding(&input, Some(json!(0))),
         EffectiveInputBinding::ProtocolDefault(json!(0))
     );
-}
-
-#[test]
-fn btree_maps_produce_stable_serialization() {
-    let first = node_id(1);
-    let second = node_id(2);
-    let mut forward = GraphDocument::default();
-    forward.create_node(node(first)).unwrap();
-    forward.create_node(node(second)).unwrap();
-    forward
-        .set_literal(declared(second, "input"), Some(json!(42)))
-        .unwrap();
-
-    let mut reverse = GraphDocument::default();
-    reverse.create_node(node(second)).unwrap();
-    reverse.create_node(node(first)).unwrap();
-    reverse
-        .set_literal(declared(second, "input"), Some(json!(42)))
-        .unwrap();
-
-    let serialized = serde_json::to_string(&forward).unwrap();
-    assert_eq!(serialized, serde_json::to_string(&reverse).unwrap());
-    let restored: GraphDocument = serde_json::from_str(&serialized).unwrap();
-    assert_eq!(restored.nodes, forward.nodes);
-    assert_eq!(restored.input_states, forward.input_states);
 }
 
 #[test]

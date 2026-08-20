@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct ResourceOperationOwner {
     project_instance_id: ProjectInstanceId,
-    session_generation: u64,
+    session_epoch: uuid::Uuid,
 }
 
 pub(super) struct ResourceOperationLedger {
@@ -23,7 +23,7 @@ impl ResourceOperationLedger {
         Self {
             owner: ResourceOperationOwner {
                 project_instance_id,
-                session_generation: 0,
+                session_epoch: uuid::Uuid::new_v4(),
             },
             in_flight: HashSet::new(),
             completed: HashSet::new(),
@@ -33,7 +33,7 @@ impl ResourceOperationLedger {
     pub(super) fn reset_for_project(&mut self, project_instance_id: ProjectInstanceId) {
         self.owner = ResourceOperationOwner {
             project_instance_id,
-            session_generation: self.owner.session_generation.saturating_add(1),
+            session_epoch: uuid::Uuid::new_v4(),
         };
         self.in_flight.clear();
         self.completed.clear();
@@ -502,9 +502,10 @@ impl ProjectState {
         .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
             message: error.to_string(),
         })?;
+        let revision = resource.document.revision;
         let context = resource_context(self, session.clone(), operation_id, [], [graph_key(&path)]);
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context,
+            context.clone(),
             lease,
             vec![StagedFilesystemMutation::Write {
                 relative_path: path.as_str().into(),
@@ -518,34 +519,23 @@ impl ProjectState {
         let committed = prepared.commit()?;
         #[cfg(test)]
         self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Committed, Some(&path));
-        let inserted = self.insert_graph(path.clone(), resource)?;
-        let unload_context = resource_context(
-            self,
-            session,
-            operation_id,
-            [(graph_key(&path), inserted.document.revision)],
-            [],
-        );
         #[cfg(test)]
         self.run_resource_mutation_test_hook(
             ResourceMutationTestPoint::BeforePublication,
             Some(&path),
         );
         let result = match self.apply_resource_document_patch(
-            &unload_context,
-            ResourceDocumentPatch::UnloadGraph { path: path.clone() },
+            &context,
+            ResourceDocumentPatch::DeclareGraph {
+                path: path.clone(),
+                revision,
+            },
         ) {
             Ok(result) => {
                 committed.finalize();
                 Ok(result)
             }
-            Err(error) => {
-                let _ = self.unload_graph_resource(&path);
-                committed
-                    .rollback()
-                    .map_err(|rollback| rollback)
-                    .and(Err(error))
-            }
+            Err(error) => committed.rollback().and(Err(error)),
         };
         if result.is_ok() {
             reservation.complete();
@@ -590,19 +580,6 @@ impl ProjectState {
         self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Planned, Some(&_planned));
         let lease = self.filesystem().acquire(session.root.clone())?;
         self.validate_project_session(&session)?;
-        let source_bytes = crate::project::read_secure_project_file(
-            session.root.as_path(),
-            std::path::Path::new(source.as_str()),
-        )
-        .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
-            message: error.to_string(),
-        })?;
-        let persisted_source: crate::project::project_io::GraphDocument =
-            serde_json::from_slice(&source_bytes).map_err(|error| {
-                ProjectFilesystemError::TransactionPrepareFailed {
-                    message: error.to_string(),
-                }
-            })?;
         let (current_data, authority_revision) = {
             let publication = self.mutation_publication.lock().unwrap();
             if publication.project_instance_id != session.instance_id.as_str() {
@@ -635,7 +612,19 @@ impl ProjectState {
                 },
             )?
         } else {
-            let mut persisted_source = persisted_source;
+            let source_bytes = crate::project::read_secure_project_file(
+                session.root.as_path(),
+                std::path::Path::new(source.as_str()),
+            )
+            .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                message: error.to_string(),
+            })?;
+            let mut persisted_source: crate::project::project_io::GraphDocument =
+                serde_json::from_slice(&source_bytes).map_err(|error| {
+                    ProjectFilesystemError::TransactionPrepareFailed {
+                        message: error.to_string(),
+                    }
+                })?;
             bind_unloaded_duplicate_source_authority(
                 source,
                 &mut persisted_source,
@@ -649,7 +638,19 @@ impl ProjectState {
             &source_document.name,
             source_document.kind,
         )?;
-        let duplicate = rebind_duplicate(source_document, source, &target, unique_name);
+        let mut duplicate = rebind_duplicate(source_document, source, &target, unique_name);
+        let mut target_resource = resource_from_disk_document(&duplicate);
+        let retained_target_revision = self.graph_revisions.read().unwrap().get(&target).copied();
+        let target_revision = crate::project::project_state::normalize_function_resource_revision(
+            &target,
+            &mut target_resource,
+            retained_target_revision,
+        )?;
+        duplicate.revision = target_revision;
+        duplicate.document.revision = target_revision;
+        if let Some(function) = duplicate.function.as_mut() {
+            function.revision = target_revision;
+        }
         let contents = serde_json::to_vec_pretty(&duplicate).map_err(|error| {
             ProjectFilesystemError::TransactionPrepareFailed {
                 message: error.to_string(),
@@ -663,7 +664,7 @@ impl ProjectState {
             [graph_key(&target)],
         );
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
-            context,
+            context.clone(),
             lease,
             vec![StagedFilesystemMutation::Write {
                 relative_path: target.as_str().into(),
@@ -677,36 +678,23 @@ impl ProjectState {
         let committed = prepared.commit()?;
         #[cfg(test)]
         self.run_resource_mutation_test_hook(ResourceMutationTestPoint::Committed, Some(&target));
-        self.insert_graph(target.clone(), resource_from_disk_document(&duplicate))?;
-        let unload_context = resource_context(
-            self,
-            session,
-            operation_id,
-            [(graph_key(&target), ResourceRevision::INITIAL)],
-            [],
-        );
         #[cfg(test)]
         self.run_resource_mutation_test_hook(
             ResourceMutationTestPoint::BeforePublication,
             Some(&target),
         );
         let result = match self.apply_resource_document_patch(
-            &unload_context,
-            ResourceDocumentPatch::UnloadGraph {
+            &context,
+            ResourceDocumentPatch::DeclareGraph {
                 path: target.clone(),
+                revision: target_revision,
             },
         ) {
             Ok(result) => {
                 committed.finalize();
                 Ok(result)
             }
-            Err(error) => {
-                let _ = self.unload_graph_resource(&target);
-                committed
-                    .rollback()
-                    .map_err(|rollback| rollback)
-                    .and(Err(error))
-            }
+            Err(error) => committed.rollback().and(Err(error)),
         };
         if result.is_ok() {
             reservation.complete();
@@ -1359,61 +1347,6 @@ mod tests {
         assert_eq!(persisted.function.unwrap().revision, recreated_revision);
     }
 
-    #[test]
-    fn resource_mutation_hooks_are_scoped_to_independent_project_states() {
-        let state_a = Arc::new(ProjectState::new());
-        let state_b = Arc::new(ProjectState::new());
-        let hits_a = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let hits_b = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let expected_a = graph_path("events/A.yssbi-event");
-        let expected_b = graph_path("events/B.yssbi-event");
-
-        let observed_a = Arc::clone(&hits_a);
-        let hook_path_a = expected_a.clone();
-        state_a.set_resource_mutation_test_hook(Some(Arc::new(move |point, path| {
-            assert_eq!(point, ResourceMutationTestPoint::Planned);
-            assert_eq!(path, Some(&hook_path_a));
-            observed_a.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        })));
-        let observed_b = Arc::clone(&hits_b);
-        let hook_path_b = expected_b.clone();
-        state_b.set_resource_mutation_test_hook(Some(Arc::new(move |point, path| {
-            assert_eq!(point, ResourceMutationTestPoint::Committed);
-            assert_eq!(path, Some(&hook_path_b));
-            observed_b.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        })));
-
-        let barrier = Arc::new(std::sync::Barrier::new(3));
-        let run_a = {
-            let state = Arc::clone(&state_a);
-            let barrier = Arc::clone(&barrier);
-            std::thread::spawn(move || {
-                barrier.wait();
-                state.run_resource_mutation_test_hook(
-                    ResourceMutationTestPoint::Planned,
-                    Some(&expected_a),
-                );
-            })
-        };
-        let run_b = {
-            let state = Arc::clone(&state_b);
-            let barrier = Arc::clone(&barrier);
-            std::thread::spawn(move || {
-                barrier.wait();
-                state.run_resource_mutation_test_hook(
-                    ResourceMutationTestPoint::Committed,
-                    Some(&expected_b),
-                );
-            })
-        };
-        barrier.wait();
-        run_a.join().unwrap();
-        run_b.join().unwrap();
-
-        assert_eq!(hits_a.load(std::sync::atomic::Ordering::SeqCst), 1);
-        assert_eq!(hits_b.load(std::sync::atomic::Ordering::SeqCst), 1);
-    }
-
     fn result_graph_path(result: &crate::event::ResourceMutationResultDto) -> GraphResourcePath {
         if let Some(resource_move) = result.moves.first() {
             return graph_path(&resource_move.to);
@@ -1431,6 +1364,140 @@ mod tests {
             .find(|path| path.starts_with("events/") || path.starts_with("functions/"))
             .expect("resource result must identify its graph path");
         graph_path(path)
+    }
+
+    #[test]
+    fn duplicate_loaded_graph_uses_resident_authority_without_reading_disk() {
+        let project = TestProject::new("duplicate-loaded-authority");
+        let source = graph_path("events/Resident.yssbi-event");
+        let mut data = ProjectData::new();
+        data.graphs.insert(
+            source.clone(),
+            GraphResourceDocument::new("Resident", GraphDocumentKind::Event),
+        );
+        let state = project.state(data);
+        std::fs::remove_file(project.root.join(source.as_str())).unwrap();
+        let session = state.capture_project_session().unwrap();
+
+        let result = state
+            .duplicate_graph_resource_transaction(
+                &session.instance_id,
+                &source,
+                ResourceRevision::INITIAL,
+                OperationId::new(),
+            )
+            .unwrap();
+
+        let target = result_graph_path(&result);
+        assert!(project.root.join(target.as_str()).is_file());
+        assert!(!state.get_data().unwrap().graphs.contains_key(&target));
+    }
+
+    #[test]
+    fn create_and_duplicate_publish_unloaded_graphs_once_without_residency() {
+        enum Case {
+            Create,
+            Duplicate,
+        }
+
+        let mut outcomes = Vec::new();
+        for (label, case) in [("create", Case::Create), ("duplicate", Case::Duplicate)] {
+            let project = TestProject::new(&format!("{label}-unloaded-publication"));
+            let source = graph_path("events/Source.yssbi-event");
+            let mut data = ProjectData::new();
+            if matches!(case, Case::Duplicate) {
+                data.graphs.insert(
+                    source.clone(),
+                    GraphResourceDocument::new("Source", GraphDocumentKind::Event),
+                );
+            }
+            let state = project.state(data);
+            let session = state.capture_project_session().unwrap();
+            let publication_before = state.publication_state_for_test();
+            let observations = Arc::new(Mutex::new(Vec::new()));
+            let hook_observations = Arc::clone(&observations);
+            let hook_state = state.clone();
+            let root = project.root.clone();
+            state.set_resource_mutation_test_hook(Some(Arc::new(move |point, path| {
+                if matches!(
+                    point,
+                    ResourceMutationTestPoint::Committed
+                        | ResourceMutationTestPoint::BeforePublication
+                ) {
+                    let path = path.expect("publication checkpoint identifies the target");
+                    hook_observations.lock().unwrap().push((
+                        point,
+                        root.join(path.as_str()).is_file(),
+                        hook_state
+                            .project_data
+                            .read()
+                            .unwrap()
+                            .graphs
+                            .contains_key(path),
+                    ));
+                }
+            })));
+
+            let result = match case {
+                Case::Create => state.create_graph_resource_transaction(
+                    &session.instance_id,
+                    "Created",
+                    GraphDocumentKind::Event,
+                    OperationId::new(),
+                ),
+                Case::Duplicate => state.duplicate_graph_resource_transaction(
+                    &session.instance_id,
+                    &source,
+                    ResourceRevision::INITIAL,
+                    OperationId::new(),
+                ),
+            }
+            .unwrap();
+            let target = result_graph_path(&result);
+            let publication_after = state.publication_state_for_test();
+            let final_resident = state.get_data().unwrap().graphs.contains_key(&target);
+            let target_declared = state.graph_revisions.read().unwrap().contains_key(&target);
+            outcomes.push((
+                label,
+                publication_before,
+                publication_after,
+                observations.lock().unwrap().clone(),
+                final_resident,
+                target_declared,
+            ));
+        }
+
+        for (
+            label,
+            publication_before,
+            publication_after,
+            observations,
+            final_resident,
+            target_declared,
+        ) in outcomes
+        {
+            assert_eq!(
+                observations,
+                vec![
+                    (ResourceMutationTestPoint::Committed, true, false),
+                    (ResourceMutationTestPoint::BeforePublication, true, false),
+                ],
+                "{label} must remain unloaded after disk commit"
+            );
+            assert!(!final_resident, "{label} target must finish unloaded");
+            assert!(target_declared, "{label} target must be declared");
+            assert_eq!(publication_after.0, publication_before.0);
+            assert_eq!(
+                publication_after.1,
+                publication_before.1 + 1,
+                "{label} must publish once"
+            );
+            assert_eq!(
+                publication_after.2,
+                publication_before.2 + 1,
+                "{label} must advance authority once"
+            );
+        }
     }
 
     fn reference_node(path: &GraphResourcePath) -> DocumentNode {

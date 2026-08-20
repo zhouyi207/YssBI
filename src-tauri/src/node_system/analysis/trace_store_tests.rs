@@ -48,7 +48,7 @@ fn finish_run(
         kind: SpanKind::Run,
         correlation: correlation(graph_path, Some(run_id.get())),
     });
-    let root_id = root.span_id();
+    let root_id = root.span_id().expect("test span ID");
     for _ in 0..child_count {
         let mut child = sink.start_span(SpanSpec {
             parent_span_id: Some(root_id),
@@ -90,7 +90,7 @@ fn compilation_bundle_commits_only_when_snapshot_root_completes() {
         correlation: correlation("events/compiler", None),
     });
     let mut analysis = sink.start_span(SpanSpec {
-        parent_span_id: Some(root.span_id()),
+        parent_span_id: root.span_id(),
         run_id: None,
         operation_id: None,
         activation_id: None,
@@ -130,8 +130,8 @@ fn concurrent_compilations_with_the_same_compile_id_do_not_mix_bundles() {
         kind: SpanKind::Snapshot,
         correlation: correlation_with_compile("events/second", 7, None),
     });
-    let first_root_id = first_root.span_id();
-    let second_root_id = second_root.span_id();
+    let first_root_id = first_root.span_id().expect("test span ID");
+    let second_root_id = second_root.span_id().expect("test span ID");
     let mut first_analysis = sink.start_span(SpanSpec {
         parent_span_id: Some(first_root_id),
         run_id: None,
@@ -198,7 +198,7 @@ fn active_run_survives_completed_bundle_eviction_and_commits_atomically() {
         kind: SpanKind::Run,
         correlation: correlation("events/active", Some(1)),
     });
-    let root_id = active_root.span_id();
+    let root_id = active_root.span_id().expect("test span ID");
     let mut child = sink.start_span(SpanSpec {
         parent_span_id: Some(root_id),
         run_id: Some(run_id),
@@ -247,7 +247,7 @@ fn active_collection_enforces_span_and_byte_budgets_and_commits_drops() {
         kind: SpanKind::Run,
         correlation: correlation("events/span-budget", Some(run_id.get())),
     });
-    let root_id = root.span_id();
+    let root_id = root.span_id().expect("test span ID");
     for _ in 0..16 {
         let mut child = span_sink.start_span(SpanSpec {
             parent_span_id: Some(root_id),
@@ -286,7 +286,7 @@ fn active_collection_enforces_span_and_byte_budgets_and_commits_drops() {
         kind: SpanKind::Run,
         correlation: correlation("events/byte-budget", Some(byte_run_id.get())),
     });
-    let byte_root_id = byte_root.span_id();
+    let byte_root_id = byte_root.span_id().expect("test span ID");
     for _ in 0..16 {
         let mut child = byte_sink.start_span(SpanSpec {
             parent_span_id: Some(byte_root_id),
@@ -324,7 +324,7 @@ fn late_spans_do_not_reopen_completed_active_entries() {
         correlation: correlation("events/late-run", Some(run_id.get())),
     });
     let mut late_run_child = sink.start_span(SpanSpec {
-        parent_span_id: Some(run_root.span_id()),
+        parent_span_id: run_root.span_id(),
         run_id: Some(run_id),
         operation_id: None,
         activation_id: None,
@@ -345,7 +345,7 @@ fn late_spans_do_not_reopen_completed_active_entries() {
         correlation: correlation("events/late-compilation", None),
     });
     let mut late_analysis = sink.start_span(SpanSpec {
-        parent_span_id: Some(compilation_root.span_id()),
+        parent_span_id: compilation_root.span_id(),
         run_id: None,
         operation_id: None,
         activation_id: None,

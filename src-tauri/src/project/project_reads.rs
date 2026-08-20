@@ -1,3 +1,4 @@
+use crate::database::{DatabaseDecl, DatabaseInstance};
 use crate::node_system::catalog::{
     BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgsDto,
 };
@@ -8,9 +9,18 @@ use crate::project::{
     ProjectData, ProjectFilesystemError, ProjectIndex, ProjectInstanceId, ProjectSession,
     ProjectState, WorksheetDocument, WorksheetResourcePath,
 };
-use crate::variable::VariableScope;
-use std::collections::{BTreeMap, BTreeSet};
+use crate::variable::{VariableId, VariableInstance, VariableScope};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct ProjectResourceSnapshot {
+    pub project_instance_id: ProjectInstanceId,
+    pub authority_generation: u64,
+    pub databases: HashMap<String, DatabaseDecl>,
+    pub variables: HashMap<VariableId, VariableInstance>,
+    pub runtime_databases: HashMap<String, DatabaseInstance>,
+}
 
 #[derive(Debug)]
 pub struct CatalogProjectSnapshot {
@@ -69,6 +79,28 @@ struct CatalogCapture {
 }
 
 impl ProjectState {
+    pub fn project_resource_snapshot(
+        &self,
+    ) -> Result<ProjectResourceSnapshot, ProjectFilesystemError> {
+        self.ensure_project_operational()?;
+        let publication = self.mutation_publication.lock().unwrap();
+        self.ensure_project_operational()?;
+        let (databases, variables) = {
+            let data = self.project_data.read().unwrap();
+            (data.databases.clone(), data.variables.clone())
+        };
+        let runtime_databases = self.project_store.read().unwrap().databases.clone();
+        Ok(ProjectResourceSnapshot {
+            project_instance_id: ProjectInstanceId::from_existing(
+                publication.project_instance_id.clone(),
+            ),
+            authority_generation: publication.authority_generation(),
+            databases,
+            variables,
+            runtime_databases,
+        })
+    }
+
     pub fn read_project_index(
         &self,
         expected_project_instance_id: &ProjectInstanceId,
@@ -85,6 +117,31 @@ impl ProjectState {
         catalog_snapshot_with_reader(self, expected_project_instance_id, |root| {
             crate::project::project_io::read_project_index_from_root(root).map_err(read_error)
         })
+    }
+
+    pub fn loaded_graph_document_for_catalog(
+        &self,
+        snapshot: &CatalogProjectSnapshot,
+        graph_path: &crate::project::GraphResourcePath,
+    ) -> Result<Option<crate::node_system::document::GraphDocument>, ProjectFilesystemError> {
+        self.ensure_project_operational()?;
+        let publication = self.mutation_publication.lock().unwrap();
+        if publication.project_instance_id != snapshot.project_instance_id.as_str()
+            || publication.authority_generation() != snapshot.authority_generation
+        {
+            return Err(stale_catalog(
+                "catalog authority changed before loaded graph capture",
+            ));
+        }
+        let document = self
+            .project_data
+            .read()
+            .unwrap()
+            .graphs
+            .get(graph_path)
+            .map(|resource| resource.document.clone());
+        self.ensure_project_operational()?;
+        Ok(document)
     }
 
     pub fn catalog_mutation_validation_snapshot(
@@ -917,7 +974,7 @@ mod tests {
             database.schema_version = 9;
             database.required = true;
             database.name = "After generation".into();
-            publication.allocate_resource_revision();
+            publication.allocate_resource_revision().unwrap();
             revisions.insert("sales".into(), publication.authority_generation());
             mutated_tx.send(()).unwrap();
         });

@@ -154,7 +154,6 @@ pub struct MaterializationAuthorization {
 }
 
 impl MaterializationAuthorization {
-    #[allow(dead_code)]
     pub(crate) fn new(member: ProjectedMemberRef, order: OrderKey) -> Self {
         Self { member, order }
     }

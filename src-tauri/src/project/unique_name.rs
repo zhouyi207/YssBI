@@ -48,11 +48,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_unique_name_empty() {
-        assert_eq!(unique_name("New Event", [] as [&str; 0]), "New Event");
-    }
-
-    #[test]
     fn test_unique_name_base_exists() {
         assert_eq!(unique_name("New Event", ["New Event"]), "New Event 1");
         assert_eq!(

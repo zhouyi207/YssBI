@@ -41,16 +41,6 @@ impl KernelFragment {
             .map(|registration| &registration.handle)
     }
 
-    #[cfg(test)]
-    pub(crate) fn len(&self) -> usize {
-        self.registrations.len()
-    }
-
-    #[cfg(test)]
-    pub(crate) fn is_empty(&self) -> bool {
-        self.registrations.is_empty()
-    }
-
     pub(crate) fn install(
         self,
         registry: &mut KernelRegistry,

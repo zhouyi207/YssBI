@@ -8,6 +8,16 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+fn checked_document_revision(
+    revision: ResourceRevision,
+) -> Result<ResourceRevision, DocumentError> {
+    revision
+        .checked_next()
+        .map_err(|error| DocumentError::RevisionExhausted {
+            retained: error.retained,
+        })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ResourceKind {
@@ -80,9 +90,11 @@ impl FunctionDocument {
         }
     }
 
-    fn apply_patch(&mut self, patch: &FunctionDocumentPatch) {
+    fn apply_patch(&mut self, patch: &FunctionDocumentPatch) -> Result<(), DocumentError> {
+        let next_revision = checked_document_revision(self.revision)?;
         self.signature = patch.after.clone();
-        self.revision.advance();
+        self.revision = next_revision;
+        Ok(())
     }
 }
 
@@ -116,9 +128,11 @@ impl VariableDocument {
         }
     }
 
-    fn apply_patch(&mut self, patch: &VariableDocumentPatch) {
+    fn apply_patch(&mut self, patch: &VariableDocumentPatch) -> Result<(), DocumentError> {
+        let next_revision = checked_document_revision(self.revision)?;
         self.value = patch.after.clone();
-        self.revision.advance();
+        self.revision = next_revision;
+        Ok(())
     }
 }
 
@@ -271,6 +285,10 @@ pub struct ResourcePatch {
     pub inverse: ResourceDocumentPatch,
 }
 
+fn candidate_after_revision(before: ResourceRevision) -> ResourceRevision {
+    before.checked_next().unwrap_or(before)
+}
+
 impl ResourcePatch {
     pub fn graph(
         graph_path: GraphResourcePath,
@@ -281,7 +299,7 @@ impl ResourcePatch {
         Self {
             resource: ResourceKey::Graph(graph_path),
             before_revision,
-            after_revision: before_revision.next(),
+            after_revision: candidate_after_revision(before_revision),
             forward: ResourceDocumentPatch::Graph(forward),
             inverse: ResourceDocumentPatch::Graph(inverse),
         }
@@ -296,7 +314,7 @@ impl ResourcePatch {
         Self {
             resource: ResourceKey::Function(function_key),
             before_revision,
-            after_revision: before_revision.next(),
+            after_revision: candidate_after_revision(before_revision),
             forward: ResourceDocumentPatch::Function(forward),
             inverse: ResourceDocumentPatch::Function(inverse),
         }
@@ -311,7 +329,7 @@ impl ResourcePatch {
         Self {
             resource: ResourceKey::Variable(variable_key),
             before_revision,
-            after_revision: before_revision.next(),
+            after_revision: candidate_after_revision(before_revision),
             forward: ResourceDocumentPatch::Variable(forward),
             inverse: ResourceDocumentPatch::Variable(inverse),
         }
@@ -326,7 +344,7 @@ impl ResourcePatch {
         Self {
             resource: ResourceKey::Worksheet(worksheet_key),
             before_revision,
-            after_revision: before_revision.next(),
+            after_revision: candidate_after_revision(before_revision),
             forward: ResourceDocumentPatch::Worksheet(forward),
             inverse: ResourceDocumentPatch::Worksheet(inverse),
         }
@@ -576,6 +594,10 @@ pub enum HistoryError {
         before: ResourceRevision,
         after: ResourceRevision,
     },
+    RevisionExhausted {
+        resource: Option<ResourceKey>,
+        retained: u64,
+    },
     InvalidInverse(ResourceKey),
     Patch {
         resource: ResourceKey,
@@ -624,9 +646,24 @@ impl fmt::Display for HistoryError {
                 formatter,
                 "resource {resource:?} revision must advance from {} to {}, found {}",
                 before.get(),
-                before.next().get(),
+                before
+                    .checked_next()
+                    .map(ResourceRevision::get)
+                    .unwrap_or(before.get()),
                 after.get()
             ),
+            Self::RevisionExhausted { resource, retained } => match resource {
+                Some(resource) => {
+                    write!(
+                        formatter,
+                        "resource {resource:?} revision is exhausted at {retained}"
+                    )
+                }
+                None => write!(
+                    formatter,
+                    "project history revision is exhausted at {retained}"
+                ),
+            },
             Self::InvalidInverse(resource) => {
                 write!(
                     formatter,
@@ -680,12 +717,6 @@ impl ProjectHistory {
     pub fn clear(&mut self) {
         self.undo.clear();
         self.redo.clear();
-    }
-
-    #[cfg(test)]
-    pub(crate) fn move_undo_head_to_redo_for_test(&mut self) {
-        let transaction = self.undo.pop().expect("test History has an undo head");
-        self.redo.push(transaction);
     }
 
     pub fn reload(&mut self, state: &mut ProjectDocumentState, replacement: ProjectDocumentState) {
@@ -807,7 +838,13 @@ fn validate_new_transaction(
         if change.inverse != change.forward.inverse() {
             return Err(HistoryError::InvalidInverse(change.resource.clone()));
         }
-        if change.after_revision != change.before_revision.next() {
+        let expected_after = change.before_revision.checked_next().map_err(|error| {
+            HistoryError::RevisionExhausted {
+                resource: Some(change.resource.clone()),
+                retained: error.retained,
+            }
+        })?;
+        if change.after_revision != expected_after {
             return Err(HistoryError::NonMonotonicRevision {
                 resource: change.resource.clone(),
                 before: change.before_revision,
@@ -845,7 +882,14 @@ fn apply_changes<'a>(
         };
         apply_resource_patch(&mut staged, &change.resource, patch)?;
     }
-    staged.revision.advance();
+    staged.revision =
+        staged
+            .revision
+            .checked_next()
+            .map_err(|error| HistoryError::RevisionExhausted {
+                resource: None,
+                retained: error.retained,
+            })?;
     Ok(staged)
 }
 
@@ -874,7 +918,11 @@ fn apply_specialized_history(
             .copied()
             .or_else(|| state.worksheets.get(&key).map(|document| document.revision))
             .unwrap_or(lifecycle_state.revision)
-            .next();
+            .checked_next()
+            .map_err(|error| HistoryError::RevisionExhausted {
+                resource: Some(ResourceKey::Worksheet(key.clone())),
+                retained: error.retained,
+            })?;
         if patch.after.is_some() {
             let mut restored = document.clone();
             restored.revision = revision;
@@ -905,7 +953,11 @@ fn apply_specialized_history(
                     .map(|document| document.revision)
             })
             .ok_or_else(|| HistoryError::ResourceNotFound(ResourceKey::Worksheet(from.clone())))?
-            .next();
+            .checked_next()
+            .map_err(|error| HistoryError::RevisionExhausted {
+                resource: Some(ResourceKey::Worksheet(from.clone())),
+                retained: error.retained,
+            })?;
         state.worksheets.remove(&from);
         let mut moved = document.clone();
         moved.revision = revision;
@@ -938,22 +990,24 @@ fn apply_resource_patch(
                 resource: resource.clone(),
                 source,
             }),
-        (ResourceKey::Function(key), ResourceDocumentPatch::Function(patch)) => {
-            state
-                .functions
-                .get_mut(key)
-                .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone()))?
-                .apply_patch(patch);
-            Ok(())
-        }
-        (ResourceKey::Variable(key), ResourceDocumentPatch::Variable(patch)) => {
-            state
-                .variables
-                .get_mut(key)
-                .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone()))?
-                .apply_patch(patch);
-            Ok(())
-        }
+        (ResourceKey::Function(key), ResourceDocumentPatch::Function(patch)) => state
+            .functions
+            .get_mut(key)
+            .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone()))?
+            .apply_patch(patch)
+            .map_err(|source| HistoryError::Patch {
+                resource: resource.clone(),
+                source,
+            }),
+        (ResourceKey::Variable(key), ResourceDocumentPatch::Variable(patch)) => state
+            .variables
+            .get_mut(key)
+            .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone()))?
+            .apply_patch(patch)
+            .map_err(|source| HistoryError::Patch {
+                resource: resource.clone(),
+                source,
+            }),
         (ResourceKey::Worksheet(key), ResourceDocumentPatch::Worksheet(patch)) => {
             let revision = state
                 .worksheet_revisions
@@ -961,7 +1015,11 @@ fn apply_resource_patch(
                 .copied()
                 .or_else(|| state.worksheets.get(key).map(|document| document.revision))
                 .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone()))?
-                .next();
+                .checked_next()
+                .map_err(|error| HistoryError::RevisionExhausted {
+                    resource: Some(resource.clone()),
+                    retained: error.retained,
+                })?;
             let document = state
                 .worksheets
                 .get_mut(key)

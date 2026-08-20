@@ -55,6 +55,7 @@ use crate::node_system::registry::{
     StructuralNodeRole, TransparentNodeRole, hash_canonical,
 };
 use std::collections::{BTreeMap, BTreeSet};
+#[cfg(test)]
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub type CompilerAnalysis = AnalysisSnapshot<
@@ -464,6 +465,7 @@ pub struct GraphCompiler<'a, R, S> {
     trace: &'a dyn TraceSink,
 }
 
+#[cfg(test)]
 static NEXT_ADHOC_COMPILE_ID: AtomicU64 = AtomicU64::new(1);
 #[cfg(test)]
 static COMPILE_SNAPSHOT_INVOCATIONS: AtomicU64 = AtomicU64::new(0);
@@ -544,12 +546,17 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
     /// Captures every input identity needed to decide whether a result is still current.
     /// Callers should invoke this while holding their project read transaction, then release
     /// that lock before calling `compile_snapshot`.
+    #[cfg(test)]
     pub fn snapshot(
         &self,
         graph_path: GraphResourcePath,
         document: &GraphDocument,
     ) -> CompilationSnapshot {
-        let compile_id = CompileId::new(NEXT_ADHOC_COMPILE_ID.fetch_add(1, Ordering::Relaxed));
+        let compile_id = CompileId::new(
+            crate::node_system::allocate_nonzero_id(&NEXT_ADHOC_COMPILE_ID)
+                .expect("process compile ID space exhausted")
+                .get(),
+        );
         self.snapshot_with_compile_id(compile_id, graph_path, document)
     }
 
@@ -616,7 +623,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         &self,
         snapshot: &CompilationSnapshot,
         cancellation: &CompileCancellationToken,
-        snapshot_trace_span_id: SpanId,
+        snapshot_trace_span_id: Option<SpanId>,
     ) -> Result<CompileResult, CompileCancelled> {
         #[cfg(test)]
         COMPILE_SNAPSHOT_INVOCATIONS.fetch_add(1, Ordering::Relaxed);
@@ -624,7 +631,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         let mut analysis_span = start_span_safely(
             self.trace,
             SpanSpec {
-                parent_span_id: Some(snapshot_trace_span_id),
+                parent_span_id: snapshot_trace_span_id,
                 run_id: None,
                 operation_id: None,
                 activation_id: None,
@@ -668,15 +675,18 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 None
             }
         };
-        let closure =
-            match self.function_abis_for_calls(&provisional_semantic, &mut resources, cancellation)
-            {
-                Ok(closure) => closure,
-                Err(error) => {
-                    analysis_span.finish(SpanOutcome::Cancellation);
-                    return Err(error);
-                }
-            };
+        let closure = match self.function_abis_for_calls(
+            &provisional_semantic,
+            snapshot.provenance.compile_id,
+            &mut resources,
+            cancellation,
+        ) {
+            Ok(closure) => closure,
+            Err(error) => {
+                analysis_span.finish(SpanOutcome::Cancellation);
+                return Err(error);
+            }
+        };
         state.diagnostics.extend(closure.diagnostics);
         let mut function_abis = closure.abis;
         state.basis.resource_versions = resources.reads().clone();
@@ -738,7 +748,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         let mut lowering_span = start_span_safely(
             self.trace,
             SpanSpec {
-                parent_span_id: Some(snapshot_trace_span_id),
+                parent_span_id: snapshot_trace_span_id,
                 run_id: None,
                 operation_id: None,
                 activation_id: None,
@@ -838,6 +848,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
     fn function_abis_for_calls(
         &self,
         graph: &CompilerSemanticGraph,
+        compile_id: CompileId,
         resources: &mut dyn AnalysisResourceResolver,
         cancellation: &CompileCancellationToken,
     ) -> Result<CallClosureAnalysis, CompileCancelled> {
@@ -856,6 +867,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             let (node, resolution_failed) = self.analyze_call_dependency(
                 &target,
                 root_sites,
+                compile_id,
                 resources,
                 cancellation,
                 &mut closure.diagnostics,
@@ -1027,6 +1039,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         &self,
         target: &GraphResourcePath,
         root_sites: Option<&[NodeId]>,
+        compile_id: CompileId,
         resources: &mut dyn AnalysisResourceResolver,
         cancellation: &CompileCancellationToken,
         diagnostics: &mut Vec<CompilerNodeDiagnostic>,
@@ -1059,7 +1072,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                 resource_versions: ResourceVersionSet::new(),
                 resource_observations: ResourceObservationSet::new(),
             },
-            compile_id: CompileId::new(NEXT_ADHOC_COMPILE_ID.fetch_add(1, Ordering::Relaxed)),
+            compile_id,
         };
         let mut state = AnalysisState::new(&document, target.clone(), provenance.basis.clone());
         state.analyze(
@@ -1172,6 +1185,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         }));
     }
 
+    #[cfg(test)]
     pub fn compile(&self, document: &GraphDocument) -> CompileResult {
         let snapshot = self.snapshot(GraphResourcePath(Box::from("")), document);
         self.compile_snapshot(&snapshot, &CompileCancellationToken::new())
