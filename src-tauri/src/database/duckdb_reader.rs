@@ -2,7 +2,7 @@
 //!
 //! Categorical 列通过 DuckDB `ENUM`（类型名 `_yssbi_enum_*`）持久化；读写 Arrow 物理类型不对称，
 //! 详见 [`README.md`](./README.md) 中「Categorical / ENUM 类型映射」一节。
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use duckdb::Connection;
 use duckdb::arrow::array::{Array, make_array};
@@ -17,6 +17,8 @@ use polars_arrow::ffi::{
     import_field_from_c,
 };
 use polars_dtype::categorical::{CatSize, FrozenCategories};
+
+use super::{quote_duckdb_identifier, quote_duckdb_string_literal};
 
 pub const DEFAULT_DUCKDB_TABLE: &str = "data";
 pub const YSSBI_META_TABLE: &str = "_yssbi_meta";
@@ -33,9 +35,9 @@ fn open_project_duckdb(duckdb_path: &Path) -> Result<Connection, String> {
 }
 
 fn ensure_meta_table(conn: &Connection) -> Result<(), String> {
-    let table = sql_escape_literal(YSSBI_META_TABLE);
+    let table = quote_duckdb_identifier(YSSBI_META_TABLE);
     conn.execute_batch(&format!(
-        r#"CREATE TABLE IF NOT EXISTS "{table}" (
+        r#"CREATE TABLE IF NOT EXISTS {table} (
             table_id VARCHAR PRIMARY KEY,
             display_name VARCHAR NOT NULL
         );"#
@@ -44,8 +46,8 @@ fn ensure_meta_table(conn: &Connection) -> Result<(), String> {
 }
 
 fn drop_user_table(conn: &Connection, table: &str) -> Result<(), String> {
-    let table_literal = sql_escape_literal(table);
-    conn.execute_batch(&format!(r#"DROP TABLE IF EXISTS "{table_literal}";"#))
+    let table_sql = quote_duckdb_identifier(table);
+    conn.execute_batch(&format!("DROP TABLE IF EXISTS {table_sql};"))
         .map_err(|e| format!("Failed to drop table '{table}': {e}"))
 }
 
@@ -85,10 +87,10 @@ pub fn drop_data_table(duckdb_path: &Path, table: &str) -> Result<(), String> {
     }
     let conn = Connection::open(duckdb_path).map_err(|e| e.to_string())?;
     drop_user_table(&conn, table)?;
-    let meta = sql_escape_literal(YSSBI_META_TABLE);
-    let table_id = sql_escape_literal(table);
+    let meta = quote_duckdb_identifier(YSSBI_META_TABLE);
+    let table_id = quote_duckdb_string_literal(table);
     conn.execute(
-        &format!(r#"DELETE FROM "{meta}" WHERE table_id = '{table_id}'"#),
+        &format!("DELETE FROM {meta} WHERE table_id = {table_id}"),
         [],
     )
     .map_err(|e| format!("Failed to remove meta for table '{table}': {e}"))?;
@@ -107,18 +109,14 @@ pub struct DuckDbTableMeta {
     pub columns: Vec<DuckDbColumnMeta>,
 }
 
-pub fn sql_escape_literal(value: &str) -> String {
-    value.replace('\\', "\\\\").replace('\'', "''")
-}
-
 pub fn duckdb_path_literal(path: &Path) -> String {
-    sql_escape_literal(&path.to_string_lossy().replace('\\', "/"))
+    quote_duckdb_string_literal(&path.to_string_lossy().replace('\\', "/"))
 }
 
 /// 将 DuckDB `DESCRIBE` / `information_schema` 中的列类型映射为 Polars 逻辑类型名（schema 展示用）。
 ///
 /// - 存储为 `ENUM` 或 `_yssbi_enum_*` → `"Categorical"`
-/// - 多数整型统一为 `"Int64"`（读侧尚未做细粒度 Arrow 整数对齐）
+/// - 固定宽度整数保留其有符号性与宽度
 pub fn duckdb_type_to_raw_string(duckdb_type: &str) -> String {
     if is_duckdb_enum_storage_type(duckdb_type) {
         return "Categorical".to_string();
@@ -130,16 +128,20 @@ pub fn duckdb_type_to_raw_string(duckdb_type: &str) -> String {
     }
     match upper.as_str() {
         "BOOLEAN" | "BOOL" => "Boolean".to_string(),
-        "TINYINT" | "SMALLINT" | "INTEGER" | "INT" | "BIGINT" | "HUGEINT" => "Int64".to_string(),
-        "UTINYINT" | "USMALLINT" | "UINTEGER" | "UBIGINT" => "Int64".to_string(),
+        "TINYINT" => "Int8".to_string(),
+        "SMALLINT" => "Int16".to_string(),
+        "INTEGER" | "INT" => "Int32".to_string(),
+        "BIGINT" | "HUGEINT" => "Int64".to_string(),
+        "UTINYINT" => "UInt8".to_string(),
+        "USMALLINT" => "UInt16".to_string(),
+        "UINTEGER" => "UInt32".to_string(),
+        "UBIGINT" => "UInt64".to_string(),
         "FLOAT" | "REAL" => "Float32".to_string(),
         "DOUBLE" => "Float64".to_string(),
         "VARCHAR" | "TEXT" | "STRING" | "UUID" => "String".to_string(),
         "DATE" => "Date".to_string(),
         "TIME" => "Time".to_string(),
-        "TIMESTAMP" | "TIMESTAMP WITH TIME ZONE" | "TIMESTAMPTZ" => {
-            "Datetime(Microseconds, None)".to_string()
-        }
+        "TIMESTAMP" | "TIMESTAMP WITH TIME ZONE" | "TIMESTAMPTZ" => "DateTime".to_string(),
         other => other.to_string(),
     }
 }
@@ -298,8 +300,8 @@ fn describe_table_storage_types(
     conn: &Connection,
     table: &str,
 ) -> Result<Vec<(String, String)>, String> {
-    let table_literal = sql_escape_literal(table);
-    let describe_sql = format!(r#"DESCRIBE "{}""#, table_literal);
+    let table_sql = quote_duckdb_identifier(table);
+    let describe_sql = format!("DESCRIBE {table_sql}");
     let mut stmt = conn
         .prepare(&describe_sql)
         .map_err(|e| format!("Failed to describe table '{table}': {e}"))?;
@@ -319,8 +321,8 @@ fn drop_table_enum_types(conn: &Connection, table: &str) -> Result<(), String> {
     let columns = describe_table_storage_types(conn, table).unwrap_or_default();
     for (_, storage_type) in columns {
         if is_yssbi_enum_type(&storage_type) {
-            let type_literal = sql_escape_literal(&storage_type);
-            conn.execute_batch(&format!(r#"DROP TYPE IF EXISTS "{type_literal}" CASCADE;"#))
+            let type_sql = quote_duckdb_identifier(&storage_type);
+            conn.execute_batch(&format!("DROP TYPE IF EXISTS {type_sql} CASCADE;"))
                 .map_err(|e| format!("Failed to drop enum type '{storage_type}': {e}"))?;
         }
     }
@@ -333,24 +335,23 @@ fn drop_user_table_and_enum_types(conn: &Connection, table: &str) -> Result<(), 
 }
 
 fn create_enum_type(conn: &Connection, spec: &EnumColumnSpec) -> Result<(), String> {
-    let type_literal = sql_escape_literal(&spec.type_name);
+    let type_sql = quote_duckdb_identifier(&spec.type_name);
     let values = spec
         .categories
         .iter()
-        .map(|value| format!("'{}'", sql_escape_literal(value)))
+        .map(|value| quote_duckdb_string_literal(value))
         .collect::<Vec<_>>()
         .join(", ");
     let sql = format!(
-        r#"DROP TYPE IF EXISTS "{type_literal}" CASCADE;
-           CREATE TYPE "{type_literal}" AS ENUM ({values});"#
+        "DROP TYPE IF EXISTS {type_sql} CASCADE;\nCREATE TYPE {type_sql} AS ENUM ({values});"
     );
     conn.execute_batch(&sql)
         .map_err(|e| format!("Failed to create enum type '{}': {e}", spec.type_name))
 }
 
 fn fetch_enum_categories(conn: &Connection, enum_type: &str) -> Result<Vec<String>, String> {
-    let type_literal = sql_escape_literal(enum_type);
-    let sql = format!(r#"SELECT unnest(enum_range(NULL::"{type_literal}"))"#);
+    let type_sql = quote_duckdb_identifier(enum_type);
+    let sql = format!("SELECT unnest(enum_range(NULL::{type_sql}))");
     let mut stmt = conn
         .prepare(&sql)
         .map_err(|e| format!("Failed to read enum categories for '{enum_type}': {e}"))?;
@@ -371,23 +372,6 @@ fn string_series_to_categorical(series: &Series, categories: &[String]) -> Resul
             series.name()
         )
     })
-}
-
-/// 加载后根据 DuckDB 存储类型，将 ENUM / `_yssbi_enum_*` 列从 String 恢复为 Polars Categorical。
-///
-/// 读路径：`query_arrow` 可能已是 Dictionary，经 Polars 导入后常为 String；此处用 `DESCRIBE` 识别
-/// ENUM 并用 `FrozenCategories` 重建 `DataType::Enum`。
-pub fn restore_categorical_columns(
-    duckdb_path: &Path,
-    table: &str,
-    df: &mut DataFrame,
-) -> Result<(), String> {
-    if !duckdb_path.is_file() {
-        return Ok(());
-    }
-
-    let conn = Connection::open(duckdb_path).map_err(|e| e.to_string())?;
-    restore_categorical_columns_with_conn(&conn, table, df)
 }
 
 fn restore_categorical_columns_with_conn(
@@ -449,13 +433,10 @@ pub fn ingest_csv_to_duckdb(
         .map(|n| n.to_string())
         .unwrap_or_else(|| "-1".to_string());
 
+    let table_sql = quote_duckdb_identifier(table);
+    let delimiter_literal = quote_duckdb_string_literal(&delimiter.to_string());
     let sql = format!(
-        r#"CREATE TABLE "{}" AS SELECT * FROM read_csv('{}', header={}, delim='{}', auto_detect=true, sample_size={})"#,
-        sql_escape_literal(table),
-        csv_literal,
-        header,
-        sql_escape_literal(&delimiter.to_string()),
-        sample_size,
+        "CREATE TABLE {table_sql} AS SELECT * FROM read_csv({csv_literal}, header={header}, delim={delimiter_literal}, auto_detect=true, sample_size={sample_size})"
     );
 
     conn.execute_batch(&sql)
@@ -487,20 +468,19 @@ pub fn ingest_parquet_to_duckdb(
     drop_user_table(&conn, table)?;
 
     let parquet_literal = duckdb_path_literal(parquet_path);
-    let table_literal = sql_escape_literal(table);
+    let table_sql = quote_duckdb_identifier(table);
 
     let select_list = match columns {
         None | Some([]) => "*".to_string(),
         Some(cols) => cols
             .iter()
-            .map(|c| format!(r#""{}""#, sql_escape_literal(c)))
+            .map(|column| quote_duckdb_identifier(column))
             .collect::<Vec<_>>()
             .join(", "),
     };
 
     let sql = format!(
-        r#"CREATE TABLE "{}" AS SELECT {} FROM read_parquet('{}')"#,
-        table_literal, select_list, parquet_literal
+        "CREATE TABLE {table_sql} AS SELECT {select_list} FROM read_parquet({parquet_literal})"
     );
 
     conn.execute_batch(&sql)
@@ -571,7 +551,7 @@ fn create_table_for_ingest(
     df: &DataFrame,
     enum_by_column: &std::collections::HashMap<String, EnumColumnSpec>,
 ) -> Result<(), String> {
-    let table_literal = sql_escape_literal(table);
+    let table_sql = quote_duckdb_identifier(table);
     let column_defs = df
         .columns()
         .iter()
@@ -579,23 +559,19 @@ fn create_table_for_ingest(
             let series = col.as_materialized_series();
             let col_name = series.name().to_string();
             let sql_type = if let Some(spec) = enum_by_column.get(&col_name) {
-                format!(r#""{}""#, sql_escape_literal(&spec.type_name))
+                quote_duckdb_identifier(&spec.type_name)
             } else {
                 let arrow_array = polars_series_to_arrow_array(series, false)?;
                 arrow_dtype_to_create_table_sql(arrow_array.data_type())?
             };
             Ok(format!(
-                r#""{}" {}"#,
-                sql_escape_literal(series.name().as_str()),
-                sql_type
+                "{} {sql_type}",
+                quote_duckdb_identifier(series.name().as_str())
             ))
         })
         .collect::<Result<Vec<_>, String>>()?;
 
-    let sql = format!(
-        r#"CREATE TABLE "{table_literal}" ({})"#,
-        column_defs.join(", ")
-    );
+    let sql = format!("CREATE TABLE {table_sql} ({})", column_defs.join(", "));
     conn.execute_batch(&sql)
         .map_err(|e| format!("Failed to create table '{table}': {e}"))
 }
@@ -746,10 +722,10 @@ pub fn read_table_meta(duckdb_path: &Path, table: &str) -> Result<DuckDbTableMet
     }
 
     let conn = Connection::open(duckdb_path).map_err(|e| e.to_string())?;
-    let table_literal = sql_escape_literal(table);
+    let table_sql = quote_duckdb_identifier(table);
 
     let mut columns = Vec::new();
-    let describe_sql = format!(r#"DESCRIBE "{}""#, table_literal);
+    let describe_sql = format!("DESCRIBE {table_sql}");
     let mut stmt = conn
         .prepare(&describe_sql)
         .map_err(|e| format!("Failed to describe table '{table}': {e}"))?;
@@ -767,7 +743,7 @@ pub fn read_table_meta(duckdb_path: &Path, table: &str) -> Result<DuckDbTableMet
         columns.push(row.map_err(|e| e.to_string())?);
     }
 
-    let count_sql = format!(r#"SELECT COUNT(*) FROM "{}""#, table_literal);
+    let count_sql = format!("SELECT COUNT(*) FROM {table_sql}");
     let row_count: i64 = conn
         .query_row(&count_sql, [], |row| row.get(0))
         .map_err(|e| format!("Failed to count rows in '{table}': {e}"))?;
@@ -781,12 +757,11 @@ pub fn read_table_meta(duckdb_path: &Path, table: &str) -> Result<DuckDbTableMet
 pub fn write_display_name(duckdb_path: &Path, table_id: &str, name: &str) -> Result<(), String> {
     let conn = open_project_duckdb(duckdb_path)?;
     ensure_meta_table(&conn)?;
-    let meta = sql_escape_literal(YSSBI_META_TABLE);
-    let table_key = sql_escape_literal(table_id);
-    let value = sql_escape_literal(name);
+    let meta = quote_duckdb_identifier(YSSBI_META_TABLE);
+    let table_key = quote_duckdb_string_literal(table_id);
+    let value = quote_duckdb_string_literal(name);
     let sql = format!(
-        r#"DELETE FROM "{meta}" WHERE table_id = '{table_key}';
-           INSERT INTO "{meta}" (table_id, display_name) VALUES ('{table_key}', '{value}');"#
+        "DELETE FROM {meta} WHERE table_id = {table_key};\nINSERT INTO {meta} (table_id, display_name) VALUES ({table_key}, {value});"
     );
     conn.execute_batch(&sql)
         .map_err(|e| format!("Failed to write display name: {e}"))
@@ -797,9 +772,9 @@ pub fn read_display_name(duckdb_path: &Path, table_id: &str) -> Option<String> {
         return None;
     }
     let conn = Connection::open(duckdb_path).ok()?;
-    let meta = sql_escape_literal(YSSBI_META_TABLE);
-    let table_key = sql_escape_literal(table_id);
-    let sql = format!(r#"SELECT display_name FROM "{meta}" WHERE table_id = '{table_key}'"#);
+    let meta = quote_duckdb_identifier(YSSBI_META_TABLE);
+    let table_key = quote_duckdb_string_literal(table_id);
+    let sql = format!("SELECT display_name FROM {meta} WHERE table_id = {table_key}");
     conn.query_row(&sql, [], |row| row.get(0)).ok()
 }
 
@@ -890,7 +865,7 @@ fn arrow_rs_array_to_series(name: &str, array: &dyn Array) -> Result<Series, Str
 }
 
 pub fn duckdb_table_sql(table: &str) -> String {
-    format!(r#""{}""#, sql_escape_literal(table))
+    quote_duckdb_identifier(table)
 }
 
 pub fn query_columns_to_dataframe(
@@ -908,7 +883,7 @@ pub fn query_columns_to_dataframe(
 
     let select_list = columns
         .iter()
-        .map(|c| format!(r#""{}""#, sql_escape_literal(c)))
+        .map(|column| quote_duckdb_identifier(column))
         .collect::<Vec<_>>()
         .join(", ");
     let sql = format!("SELECT {} FROM {}", select_list, duckdb_table_sql(table));
@@ -936,13 +911,13 @@ pub fn query_page_with_rowids(
     offset: usize,
     limit: usize,
 ) -> Result<PageQueryResult, String> {
-    use super::duckdb_editing::DUCKDB_ROWID_SQL;
+    use super::duckdb_sql::DUCKDB_ROWID_SQL;
 
     let meta = read_table_meta(duckdb_path, table)?;
     let user_cols = meta
         .columns
         .iter()
-        .map(|c| format!(r#""{}""#, sql_escape_literal(&c.name)))
+        .map(|column| quote_duckdb_identifier(&column.name))
         .collect::<Vec<_>>();
     let table_sql = duckdb_table_sql(table);
 
@@ -981,13 +956,10 @@ pub fn query_page_with_rowids(
     })
 }
 
-pub fn resolve_duckdb_file(project_root: &Path, relative_path: &str) -> PathBuf {
-    project_root.join(relative_path)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn iris_page_rowids_are_stable() {

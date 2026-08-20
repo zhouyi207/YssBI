@@ -5,10 +5,10 @@ import type {
     DatasetOverview,
     EditState,
 } from "@/shared/types/domain/dataframe";
-import type { DatabaseRow, LoadDatabaseEngineSpec, LoadDatabaseResult } from "@/shared/types/dto/database";
+import type { DatabaseImportSourceDTO, DatabaseRow, LoadDatabaseResult } from "@/shared/types/dto/database";
 import type { ResourceMutationResultDto } from "@/shared/types/dto/editorMutation";
 
-export type { LoadDatabaseEngineSpec } from "@/shared/types/dto/database";
+export type { DatabaseImportSourceDTO } from "@/shared/types/dto/database";
 
 /** 分页行数据（含稳定 rowIds） */
 export interface DatabaseRowsResult {
@@ -32,7 +32,7 @@ export class DatabaseService {
     static async loadDatabase(
         projectInstanceId: string,
         operationId: string,
-        engine: LoadDatabaseEngineSpec,
+        engine: DatabaseImportSourceDTO,
     ): Promise<DatabaseMutationCommandResult<LoadDatabaseResult>> {
         return await invokeCommand("load_database", { projectInstanceId, operationId, engine });
     }

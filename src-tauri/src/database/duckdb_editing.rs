@@ -5,13 +5,14 @@ use std::path::Path;
 
 use duckdb::Connection;
 
-use super::{
-    DuckDbColumnMeta, EditOperation, EditState, duckdb_table_sql, read_table_meta,
-    sql_escape_literal,
+use super::duckdb_column_snapshot::{duckdb_storage_type, user_column_names};
+use super::duckdb_sql::{
+    DUCKDB_ROWID_SQL, editable_dtype_to_duckdb_sql, quote_duckdb_identifier,
+    quote_duckdb_string_literal,
 };
-
-/// DuckDB `rowid` 伪列（SQL 关键字，不加引号）。
-pub const DUCKDB_ROWID_SQL: &str = "rowid";
+use super::{
+    DuckDbColumnMeta, EditOperation, duckdb_table_sql, read_table_meta, restore_deleted_column,
+};
 
 pub const MAX_IN_MEMORY_EDIT_ROWS: usize = 50_000;
 pub const INGEST_CHUNK_ROWS: usize = 50_000;
@@ -23,24 +24,6 @@ pub fn should_use_in_memory_editing(row_count: usize) -> bool {
 
 fn open_conn(duckdb_path: &Path) -> Result<Connection, String> {
     Connection::open(duckdb_path).map_err(|e| e.to_string())
-}
-
-fn quote_ident(name: &str) -> String {
-    format!(r#""{}""#, sql_escape_literal(name))
-}
-
-fn user_column_names(conn: &Connection, table: &str) -> Result<Vec<String>, String> {
-    conn.prepare(&format!(
-        "SELECT column_name FROM information_schema.columns \
-             WHERE table_schema = 'main' AND table_name = '{}' \
-             ORDER BY ordinal_position",
-        sql_escape_literal(table),
-    ))
-    .map_err(|e| e.to_string())?
-    .query_map([], |row| row.get::<_, String>(0))
-    .map_err(|e| e.to_string())?
-    .collect::<Result<Vec<_>, _>>()
-    .map_err(|e| e.to_string())
 }
 
 pub fn refresh_duckdb_meta(
@@ -78,20 +61,6 @@ pub fn resolve_row_ids_by_indices(
         .collect()
 }
 
-fn duckdb_storage_type(conn: &Connection, table: &str, col: &str) -> Result<String, String> {
-    conn.query_row(
-        &format!(
-            "SELECT data_type FROM information_schema.columns \
-                  WHERE table_schema = 'main' AND table_name = '{}' AND column_name = '{}'",
-            sql_escape_literal(table),
-            sql_escape_literal(col)
-        ),
-        [],
-        |row| row.get(0),
-    )
-    .map_err(|e| format!("Failed to read storage type for column '{col}': {e}"))
-}
-
 fn json_to_sql_literal(
     conn: &Connection,
     table: &str,
@@ -109,7 +78,7 @@ fn json_to_sql_literal(
         let s = value
             .as_str()
             .ok_or_else(|| format!("ENUM column '{col}' requires string value"))?;
-        return Ok(format!("'{}'", sql_escape_literal(s)));
+        return Ok(quote_duckdb_string_literal(s));
     }
 
     match value {
@@ -127,7 +96,7 @@ fn json_to_sql_literal(
                 Err(format!("Invalid number for column '{col}'"))
             }
         }
-        serde_json::Value::String(s) => Ok(format!("'{}'", sql_escape_literal(s))),
+        serde_json::Value::String(s) => Ok(quote_duckdb_string_literal(s)),
         _ => Err(format!("Unsupported JSON value for column '{col}'")),
     }
 }
@@ -139,7 +108,7 @@ pub fn fetch_cell_json(
     col: &str,
 ) -> Result<serde_json::Value, String> {
     let table_sql = duckdb_table_sql(table);
-    let col_sql = quote_ident(col);
+    let col_sql = quote_duckdb_identifier(col);
     let sql =
         format!("SELECT CAST({col_sql} AS VARCHAR) FROM {table_sql} WHERE {DUCKDB_ROWID_SQL} = ?");
     let raw: Option<String> = conn
@@ -170,7 +139,7 @@ pub fn sql_edit_cell(
     value: &serde_json::Value,
 ) -> Result<(), String> {
     let table_sql = duckdb_table_sql(table);
-    let col_sql = quote_ident(col);
+    let col_sql = quote_duckdb_identifier(col);
     let literal = json_to_sql_literal(conn, table, col, value)?;
     let sql = format!("UPDATE {table_sql} SET {col_sql} = {literal} WHERE {DUCKDB_ROWID_SQL} = ?");
     conn.execute(&sql, [row_id])
@@ -209,7 +178,7 @@ pub fn sql_add_row(conn: &Connection, table: &str) -> Result<i64, String> {
     } else {
         let col_list = user_cols
             .iter()
-            .map(|c| quote_ident(c))
+            .map(|column| quote_duckdb_identifier(column))
             .collect::<Vec<_>>()
             .join(", ");
         let val_list = user_cols
@@ -241,7 +210,7 @@ fn row_data_predicate(
         .iter()
         .enumerate()
         .map(|(idx, col)| {
-            let col_sql = quote_ident(col);
+            let col_sql = quote_duckdb_identifier(col);
             match data.get(idx).unwrap_or(&serde_json::Value::Null) {
                 serde_json::Value::Null => Ok(format!("{col_sql} IS NULL")),
                 value => {
@@ -331,8 +300,8 @@ pub fn apply_edit_on_duckdb(
             Ok(())
         }
         EditOperation::AddColumn { name, dtype } => {
-            let col_sql = quote_ident(name);
-            let sql_type = polars_dtype_to_duckdb_sql(dtype);
+            let col_sql = quote_duckdb_identifier(name);
+            let sql_type = editable_dtype_to_duckdb_sql(dtype)?;
             conn.execute_batch(&format!(
                 "ALTER TABLE {} ADD COLUMN {} {};",
                 duckdb_table_sql(table),
@@ -345,23 +314,23 @@ pub fn apply_edit_on_duckdb(
             .execute_batch(&format!(
                 "ALTER TABLE {} DROP COLUMN {};",
                 duckdb_table_sql(table),
-                quote_ident(name)
+                quote_duckdb_identifier(name)
             ))
             .map_err(|e| format!("Failed to drop column: {e}")),
         EditOperation::RenameColumn { old_name, new_name } => conn
             .execute_batch(&format!(
                 "ALTER TABLE {} RENAME COLUMN {} TO {};",
                 duckdb_table_sql(table),
-                quote_ident(old_name),
-                quote_ident(new_name)
+                quote_duckdb_identifier(old_name),
+                quote_duckdb_identifier(new_name)
             ))
             .map_err(|e| format!("Failed to rename column: {e}")),
         EditOperation::CastColumn { col, new_dtype, .. } => {
-            let sql_type = polars_dtype_to_duckdb_sql(new_dtype);
+            let sql_type = editable_dtype_to_duckdb_sql(new_dtype)?;
             conn.execute_batch(&format!(
                 "ALTER TABLE {} ALTER COLUMN {} TYPE {};",
                 duckdb_table_sql(table),
-                quote_ident(col),
+                quote_duckdb_identifier(col),
                 sql_type
             ))
             .map_err(|e| format!("Failed to cast column: {e}"))
@@ -423,25 +392,30 @@ pub fn reverse_edit_on_duckdb(
         EditOperation::AddColumn { name, .. } => {
             let mut temp = EditOperation::DeleteColumn {
                 name: name.clone(),
+                dtype: "String".to_string(),
+                row_ids: vec![],
+                row_fingerprints: vec![],
                 data: vec![],
             };
             apply_edit_on_duckdb(duckdb_path, table, &mut temp)
         }
-        EditOperation::DeleteColumn { name, data } => {
-            let sql_type = polars_dtype_to_duckdb_sql("String");
-            conn.execute_batch(&format!(
-                "ALTER TABLE {} ADD COLUMN {} {};",
-                duckdb_table_sql(table),
-                quote_ident(name),
-                sql_type
-            ))
-            .map_err(|e| format!("Failed to restore column: {e}"))?;
-            for (row_idx, val) in data.iter().enumerate() {
-                if let Ok(rid) = resolve_row_id_by_index(&conn, table, row_idx) {
-                    let _ = sql_edit_cell(&conn, table, rid, name, val);
-                }
-            }
-            Ok(())
+        EditOperation::DeleteColumn {
+            name,
+            dtype,
+            row_ids,
+            row_fingerprints,
+            data,
+        } => {
+            drop(conn);
+            restore_deleted_column(
+                duckdb_path,
+                table,
+                name,
+                dtype,
+                row_ids,
+                row_fingerprints,
+                data,
+            )
         }
         EditOperation::RenameColumn { old_name, new_name } => {
             let mut temp = EditOperation::RenameColumn {
@@ -459,35 +433,5 @@ pub fn reverse_edit_on_duckdb(
             };
             apply_edit_on_duckdb(duckdb_path, table, &mut temp)
         }
-    }
-}
-
-fn polars_dtype_to_duckdb_sql(dtype: &str) -> &'static str {
-    match dtype {
-        "Boolean" => "BOOLEAN",
-        "Int8" => "TINYINT",
-        "Int16" => "SMALLINT",
-        "Int32" => "INTEGER",
-        "Int64" => "BIGINT",
-        "UInt8" => "UTINYINT",
-        "UInt16" => "USMALLINT",
-        "UInt32" => "UINTEGER",
-        "UInt64" => "UBIGINT",
-        "Float32" => "REAL",
-        "Float64" => "DOUBLE",
-        "Date" => "DATE",
-        "DateTime" => "TIMESTAMP",
-        "Categorical" | "String" => "VARCHAR",
-        _ => "VARCHAR",
-    }
-}
-
-pub fn empty_edit_state() -> EditState {
-    EditState {
-        can_undo: false,
-        can_redo: false,
-        is_modified: false,
-        undo_count: 0,
-        redo_count: 0,
     }
 }

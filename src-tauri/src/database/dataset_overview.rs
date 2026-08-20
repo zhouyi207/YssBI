@@ -6,8 +6,8 @@ use serde::Serialize;
 pub struct SizeShape {
     pub n_rows: usize,
     pub n_columns: usize,
-    pub memory_size: usize,
-    pub duplicated_rows: usize,
+    pub estimated_dataframe_memory_bytes: Option<usize>,
+    pub duplicated_rows: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -76,12 +76,12 @@ pub fn compute_dataset_overview(df: &DataFrame) -> DatasetOverview {
     let n_rows = df.height();
     let n_columns = df.width();
 
-    let memory_size = df.estimated_size();
+    let estimated_dataframe_memory_bytes = Some(df.estimated_size());
 
     let duplicated_rows = df
         .is_duplicated()
-        .map(|mask| mask.sum().unwrap_or(0) as usize)
-        .unwrap_or(0);
+        .ok()
+        .map(|mask| mask.sum().unwrap_or(0) as usize);
 
     let schema = df.schema();
     let mut numeric_cols = 0usize;
@@ -126,7 +126,7 @@ pub fn compute_dataset_overview(df: &DataFrame) -> DatasetOverview {
         size_shape: SizeShape {
             n_rows,
             n_columns,
-            memory_size,
+            estimated_dataframe_memory_bytes,
             duplicated_rows,
         },
         schema_overview: SchemaOverview {

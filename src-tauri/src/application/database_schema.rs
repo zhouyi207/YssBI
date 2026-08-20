@@ -3,7 +3,8 @@ use polars::prelude::Schema;
 use crate::database::{
     DatabaseInstance, DatabaseState, DuckDbColumnMeta, database_schema::polars_dtype_to_raw_string,
 };
-use crate::schema::{ColumnInfoDTO, DatabaseDeclDTO};
+use crate::project::{ProjectFilesystemError, ProjectResourceSnapshot, ProjectState};
+use crate::schema::{ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, VariableInstanceDTO};
 
 pub fn name_from_path(path: &str) -> String {
     std::path::Path::new(path)
@@ -114,17 +115,40 @@ pub fn enrich_database_decl_dto(dto: &mut DatabaseDeclDTO, instance: &DatabaseIn
 
 pub fn enriched_database_dtos(
     databases: &std::collections::HashMap<String, crate::database::DatabaseDecl>,
-    store: &crate::project::ProjectStore,
+    runtime_databases: &std::collections::HashMap<String, DatabaseInstance>,
 ) -> std::collections::HashMap<String, DatabaseDeclDTO> {
     let mut enriched = std::collections::HashMap::new();
     for (id, decl) in databases.iter() {
         let mut db_dto = DatabaseDeclDTO::from(decl);
-        if let Some(instance) = store.databases.get(id) {
+        if let Some(instance) = runtime_databases.get(id) {
             enrich_database_decl_dto(&mut db_dto, instance);
         }
         enriched.insert(id.clone(), db_dto);
     }
     enriched
+}
+
+pub fn databases_variables_from_snapshot(
+    snapshot: ProjectResourceSnapshot,
+) -> DatabasesVariablesDTO {
+    let databases = enriched_database_dtos(&snapshot.databases, &snapshot.runtime_databases);
+    let variables = snapshot
+        .variables
+        .iter()
+        .map(|(id, variable)| (id.to_string(), VariableInstanceDTO::from(variable)))
+        .collect();
+    DatabasesVariablesDTO {
+        databases,
+        variables,
+    }
+}
+
+pub fn project_databases_variables(
+    state: &ProjectState,
+) -> Result<DatabasesVariablesDTO, ProjectFilesystemError> {
+    state
+        .project_resource_snapshot()
+        .map(databases_variables_from_snapshot)
 }
 
 #[cfg(test)]

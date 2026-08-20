@@ -31,6 +31,11 @@ pub enum EditOperation {
     },
     DeleteColumn {
         name: String,
+        dtype: String,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        row_ids: Vec<i64>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        row_fingerprints: Vec<u64>,
         data: Vec<serde_json::Value>,
     },
     RenameColumn {
@@ -124,25 +129,59 @@ pub fn json_to_anyvalue(
                 ))
             }
         }
-        serde_json::Value::Number(n) => {
-            let f = n.as_f64().ok_or_else(|| "Invalid number".to_string())?;
-            let i = n.as_i64();
-            let u = n.as_u64();
-            match dtype {
-                DataType::Int8 => Ok(AnyValue::Int8(i.unwrap_or(f as i64) as i8)),
-                DataType::Int16 => Ok(AnyValue::Int16(i.unwrap_or(f as i64) as i16)),
-                DataType::Int32 => Ok(AnyValue::Int32(i.unwrap_or(f as i64) as i32)),
-                DataType::Int64 => Ok(AnyValue::Int64(i.unwrap_or(f as i64))),
-                DataType::UInt8 => Ok(AnyValue::UInt8(u.unwrap_or(f as u64) as u8)),
-                DataType::UInt16 => Ok(AnyValue::UInt16(u.unwrap_or(f as u64) as u16)),
-                DataType::UInt32 => Ok(AnyValue::UInt32(u.unwrap_or(f as u64) as u32)),
-                DataType::UInt64 => Ok(AnyValue::UInt64(u.unwrap_or(f as u64))),
-                DataType::Float32 => Ok(AnyValue::Float32(f as f32)),
-                DataType::Float64 => Ok(AnyValue::Float64(f)),
-                DataType::String => Ok(AnyValue::StringOwned(n.to_string().into())),
-                _ => Ok(AnyValue::Float64(f)),
-            }
-        }
+        serde_json::Value::Number(n) => match dtype {
+            DataType::Int8 => n
+                .as_i64()
+                .and_then(|value| i8::try_from(value).ok())
+                .map(AnyValue::Int8)
+                .ok_or_else(|| format!("Number {n} is not a valid Int8")),
+            DataType::Int16 => n
+                .as_i64()
+                .and_then(|value| i16::try_from(value).ok())
+                .map(AnyValue::Int16)
+                .ok_or_else(|| format!("Number {n} is not a valid Int16")),
+            DataType::Int32 => n
+                .as_i64()
+                .and_then(|value| i32::try_from(value).ok())
+                .map(AnyValue::Int32)
+                .ok_or_else(|| format!("Number {n} is not a valid Int32")),
+            DataType::Int64 => n
+                .as_i64()
+                .map(AnyValue::Int64)
+                .ok_or_else(|| format!("Number {n} is not a valid Int64")),
+            DataType::UInt8 => n
+                .as_u64()
+                .and_then(|value| u8::try_from(value).ok())
+                .map(AnyValue::UInt8)
+                .ok_or_else(|| format!("Number {n} is not a valid UInt8")),
+            DataType::UInt16 => n
+                .as_u64()
+                .and_then(|value| u16::try_from(value).ok())
+                .map(AnyValue::UInt16)
+                .ok_or_else(|| format!("Number {n} is not a valid UInt16")),
+            DataType::UInt32 => n
+                .as_u64()
+                .and_then(|value| u32::try_from(value).ok())
+                .map(AnyValue::UInt32)
+                .ok_or_else(|| format!("Number {n} is not a valid UInt32")),
+            DataType::UInt64 => n
+                .as_u64()
+                .map(AnyValue::UInt64)
+                .ok_or_else(|| format!("Number {n} is not a valid UInt64")),
+            DataType::Float32 => n
+                .as_f64()
+                .filter(|value| *value >= f32::MIN as f64 && *value <= f32::MAX as f64)
+                .map(|value| AnyValue::Float32(value as f32))
+                .ok_or_else(|| format!("Number {n} is not a valid Float32")),
+            DataType::Float64 => n
+                .as_f64()
+                .map(AnyValue::Float64)
+                .ok_or_else(|| format!("Number {n} is not a valid Float64")),
+            DataType::String => Ok(AnyValue::StringOwned(n.to_string().into())),
+            _ => Err(format!(
+                "Numeric JSON values are not supported for column type {dtype:?}"
+            )),
+        },
         serde_json::Value::String(s) => {
             if s.is_empty() {
                 return Ok(AnyValue::Null);
@@ -201,7 +240,9 @@ pub fn json_to_anyvalue(
                         ))
                     }
                 }
-                DataType::String => Ok(AnyValue::StringOwned(s.clone().into())),
+                DataType::String | DataType::Categorical(_, _) => {
+                    Ok(AnyValue::StringOwned(s.clone().into()))
+                }
                 DataType::Date => NaiveDate::parse_from_str(s, "%Y-%m-%d")
                     .map(|d| {
                         let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
@@ -223,7 +264,9 @@ pub fn json_to_anyvalue(
                     })
                     .map_err(|e| format!("Cannot parse \"{}\" as DateTime: {}", s, e))
                 }
-                _ => Ok(AnyValue::StringOwned(s.clone().into())),
+                _ => Err(format!(
+                    "String JSON values are not supported for column type {dtype:?}"
+                )),
             }
         }
         _ => Err("Unsupported JSON value type".to_string()),
@@ -338,8 +381,8 @@ fn owned_anyvalue(v: AnyValue<'_>) -> AnyValue<'static> {
     }
 }
 
-pub fn dtype_from_string(s: &str) -> DataType {
-    match s.to_lowercase().as_str() {
+pub fn dtype_from_string(s: &str) -> Result<DataType, String> {
+    let dtype = match s.to_lowercase().as_str() {
         "int8" | "i8" => DataType::Int8,
         "int16" | "i16" => DataType::Int16,
         "int32" | "i32" => DataType::Int32,
@@ -358,12 +401,13 @@ pub fn dtype_from_string(s: &str) -> DataType {
             use polars_dtype::categorical::Categories;
             DataType::from_categories(Categories::global())
         }
-        _ => DataType::String,
-    }
+        _ => return Err(format!("Unknown database dtype '{s}'")),
+    };
+    Ok(dtype)
 }
 
-pub fn dtype_to_string(dt: &DataType) -> String {
-    match dt {
+pub fn dtype_to_string(dt: &DataType) -> Result<String, String> {
+    let dtype = match dt {
         DataType::Int8 => "Int8".into(),
         DataType::Int16 => "Int16".into(),
         DataType::Int32 => "Int32".into(),
@@ -379,8 +423,9 @@ pub fn dtype_to_string(dt: &DataType) -> String {
         DataType::Categorical(_, _) => "Categorical".into(),
         DataType::Date => "Date".into(),
         DataType::Datetime(_, _) => "DateTime".into(),
-        _ => "String".into(),
-    }
+        _ => return Err(format!("Unsupported database dtype {dt:?}")),
+    };
+    Ok(dtype)
 }
 
 pub fn apply_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), String> {
@@ -432,9 +477,9 @@ pub fn apply_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), Str
             Ok(())
         }
         EditOperation::AddColumn { name, dtype } => {
-            let dt = dtype_from_string(dtype);
+            let dt = dtype_from_string(dtype)?;
             let s = Series::new_null(PlSmallStr::from(name.as_str()), df.height());
-            let casted = s.cast(&dt).unwrap_or(s);
+            let casted = s.cast(&dt).map_err(|e| e.to_string())?;
             df.with_column(Column::from(casted))
                 .map_err(|e| e.to_string())?;
             Ok(())
@@ -486,27 +531,30 @@ pub fn reverse_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), S
             }
             Ok(())
         }
-        EditOperation::AddColumn { name, .. } => {
+        EditOperation::AddColumn { name, dtype } => {
             let del_op = EditOperation::DeleteColumn {
                 name: name.clone(),
+                dtype: dtype.clone(),
+                row_ids: vec![],
+                row_fingerprints: vec![],
                 data: vec![],
             };
             apply_operation(df, &del_op)
         }
-        EditOperation::DeleteColumn { name, data } => {
-            let s = if data.is_empty() {
-                Series::new_null(PlSmallStr::from(name.as_str()), df.height())
-            } else {
-                let values: Vec<AnyValue<'static>> = data
-                    .iter()
-                    .map(|v| json_to_anyvalue(v, &DataType::String).unwrap_or(AnyValue::Null))
-                    .collect();
-                Series::from_any_values(PlSmallStr::from(name.as_str()), &values, false)
-                    .unwrap_or_else(|_| {
-                        Series::new_null(PlSmallStr::from(name.as_str()), df.height())
-                    })
-            };
-            df.with_column(Column::from(s)).map_err(|e| e.to_string())?;
+        EditOperation::DeleteColumn {
+            name, dtype, data, ..
+        } => {
+            let dtype = dtype_from_string(dtype)?;
+            let values: Vec<AnyValue<'static>> = data
+                .iter()
+                .map(|value| json_to_anyvalue(value, &dtype))
+                .collect::<Result<_, _>>()?;
+            let restored = Series::from_any_values(PlSmallStr::from(name.as_str()), &values, false)
+                .map_err(|e| e.to_string())?
+                .cast(&dtype)
+                .map_err(|e| e.to_string())?;
+            df.with_column(Column::from(restored))
+                .map_err(|e| e.to_string())?;
             Ok(())
         }
         EditOperation::RenameColumn { old_name, new_name } => {
@@ -525,14 +573,17 @@ pub fn reverse_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), S
             let col_idx = df
                 .get_column_index(col)
                 .ok_or_else(|| format!("Column '{}' not found", col))?;
-            let dt = dtype_from_string(old_dtype);
+            let dt = dtype_from_string(old_dtype)?;
             let values: Vec<AnyValue<'static>> = old_data
                 .iter()
-                .map(|v| json_to_anyvalue(v, &dt).unwrap_or(AnyValue::Null))
-                .collect();
+                .map(|v| json_to_anyvalue(v, &dt))
+                .collect::<Result<_, _>>()?;
             let name = df.columns()[col_idx].name().clone();
-            let s = Series::from_any_values(name, &values, false).map_err(|e| e.to_string())?;
-            df.replace_column(col_idx, Column::from(s))
+            let restored = Series::from_any_values(name, &values, false)
+                .map_err(|e| e.to_string())?
+                .cast(&dt)
+                .map_err(|e| e.to_string())?;
+            df.replace_column(col_idx, Column::from(restored))
                 .map_err(|e| e.to_string())?;
             Ok(())
         }
@@ -552,7 +603,7 @@ pub fn cast_column(
         .get_column_index(col_name)
         .ok_or_else(|| format!("Column '{}' not found", col_name))?;
     let series = df.columns()[col_idx].as_materialized_series();
-    let target_dtype = dtype_from_string(new_dtype_str);
+    let target_dtype = dtype_from_string(new_dtype_str)?;
 
     let casted = if force {
         series

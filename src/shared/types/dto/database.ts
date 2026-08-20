@@ -26,6 +26,20 @@ export type DatabaseEngineSqlDTO =
   | { postgres: { ssl?: boolean } }
   | { mysql: { charset?: string } };
 
+export type DatabaseImportSqlEngineDTO = 'sqlite' | 'postgres' | 'mysql';
+
+export type DatabaseImportSourceDTO =
+  | {
+      sql: {
+        engine: DatabaseImportSqlEngineDTO;
+        connectionString: string;
+        table: string;
+      };
+    }
+  | { csv: CsvEngineConfig }
+  | { parquet: ParquetEngineConfig }
+  | { excel: ExcelEngineConfig };
+
 export type DatabaseEngineDTO =
   | { sql: SqlEngineConfig }
   | { csv: CsvEngineConfig }
@@ -51,8 +65,6 @@ export type ExcelEngineConfig = { path: string; sheet: string };
 export type DuckDbEngineConfig = { path: string; table: string };
 export type InMemoryEngineConfig = { name: string };
 
-/** `load_database` IPC 入参（不含 inMemory） */
-export type LoadDatabaseEngineSpec = Exclude<DatabaseEngineDTO, { inMemory: InMemoryEngineConfig }>;
 
 /** 后端 `DatabaseDeclDTO` + 前端 store 富元数据（列统计、加载状态等） */
 export interface DatabaseDeclDTO {
@@ -181,10 +193,10 @@ export function normalizeDatabases(
   return result;
 }
 
-/** 加载结果 + 引擎 → store 记录（import 路径写入 engine，供 Detail 展示 sourcePath） */
+/** 将加载结果并入 store；若 mutation event 已投影 authoritative engine，则保留它。 */
 export function databaseRecordFromLoad(
   meta: Pick<DatabaseDeclDTO, 'id' | 'name' | 'rowCount' | 'columnCount' | 'columns'>,
-  engine: LoadDatabaseEngineSpec,
+  existing?: DatabaseRecord,
 ): DatabaseRecord {
-  return normalizeDatabaseRecord(meta.id, { ...meta, engine });
+  return normalizeDatabaseRecord(meta.id, meta, existing);
 }

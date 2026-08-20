@@ -3,7 +3,6 @@ use crate::database::*;
 use crate::project::{
     ProjectFilesystemError, ProjectFilesystemLeaseSet, ProjectInstanceId, ProjectSession,
 };
-use polars::prelude::*;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ProjectDatabaseError {
@@ -56,25 +55,7 @@ pub(crate) struct DatabaseAuthorityToken {
     database_revision: u64,
 }
 
-/// let preview = project_state
-///    .access_database("sales", DatabaseAccess::Preview)?;
 impl ProjectState {
-    pub fn access_database(&self, id: &str, access: DatabaseAccess) -> PolarsResult<DatabaseView> {
-        self.ensure_project_operational().map_err(|error| {
-            PolarsError::ComputeError(format!("{}: {error}", error.code()).into())
-        })?;
-        let mut database = self
-            .project_store
-            .read()
-            .unwrap()
-            .databases
-            .get(id)
-            .cloned()
-            .ok_or_else(|| PolarsError::NoData("nodata".into()))?;
-
-        database.access(access)
-    }
-
     pub(crate) fn reserve_database_operation(
         &self,
         project_instance_id: &crate::project::ProjectInstanceId,
@@ -86,28 +67,6 @@ impl ProjectState {
         self.ensure_project_operational()?;
         self.reserve_resource_operation(project_instance_id, operation_id)
             .map_err(Into::into)
-    }
-
-    /// Runs and commits an authoritative database mutation against an exact
-    /// caller-issued project and database revision.
-    pub fn with_database_mut<F, R>(
-        &self,
-        project_instance_id: &crate::project::ProjectInstanceId,
-        id: &str,
-        expected_revision: crate::node_system::document::ResourceRevision,
-        operation_id: crate::node_system::document::OperationId,
-        f: F,
-    ) -> Result<crate::event::ResourceMutationCommandResultDto<R>, ProjectDatabaseError>
-    where
-        F: FnOnce(&mut DatabaseInstance) -> Result<R, String>,
-    {
-        self.with_database_writer(
-            project_instance_id,
-            id,
-            expected_revision,
-            operation_id,
-            |database, _| f(database),
-        )
     }
 
     /// Runs a read/query operation against a detached database snapshot.
@@ -294,13 +253,28 @@ impl ProjectState {
         Ok(())
     }
 
+    fn next_database_revision(
+        id: &str,
+        retained: crate::node_system::document::ResourceRevision,
+    ) -> Result<crate::node_system::document::ResourceRevision, ProjectDatabaseError> {
+        retained.checked_next().map_err(|error| {
+            ProjectFilesystemError::ResourceRevisionOverflow {
+                resource: format!("databases/{id}"),
+                retained: error.retained,
+            }
+            .into()
+        })
+    }
+
     fn publish_database_delta(
         &self,
         publication: &mut super::project_state::MutationPublication,
         revisions: &mut std::collections::HashMap<String, u64>,
         id: &str,
         from_revision: crate::node_system::document::ResourceRevision,
+        to_revision: crate::node_system::document::ResourceRevision,
         operation_id: crate::node_system::document::OperationId,
+        publication_advance: super::project_state::PreparedPublicationAdvance,
         before: Option<DatabaseDecl>,
         after: Option<DatabaseDecl>,
     ) -> crate::event::ResourceMutationResultDto {
@@ -309,8 +283,7 @@ impl ProjectState {
             ResourceKey,
         };
 
-        let publication_revision = publication.allocate_resource_revision();
-        let to_revision = from_revision.next();
+        let publication_revision = publication.commit_prepared(publication_advance);
         revisions.insert(id.to_string(), to_revision.get());
         crate::event::ResourceMutationResultDto {
             operation_id,
@@ -362,6 +335,10 @@ impl ProjectState {
         if !store.databases.contains_key(id) {
             return Err(ProjectDatabaseError::DatabaseNotFound);
         }
+        let publication_advance = publication.prepare_resource_revision()?;
+        let from_revision =
+            crate::node_system::document::ResourceRevision::new(token.database_revision);
+        let to_revision = Self::next_database_revision(id, from_revision)?;
         let after = instance.decl.clone();
         data.databases.insert(id.to_string(), after.clone());
         store.databases.insert(id.to_string(), instance);
@@ -369,8 +346,10 @@ impl ProjectState {
             &mut publication,
             &mut revisions,
             id,
-            crate::node_system::document::ResourceRevision::new(token.database_revision),
+            from_revision,
+            to_revision,
             operation_id,
+            publication_advance,
             Some(before),
             Some(after),
         );
@@ -419,19 +398,23 @@ impl ProjectState {
         if data.databases.contains_key(&id) || store.databases.contains_key(&id) {
             return Err(ProjectDatabaseError::DatabaseAlreadyExists);
         }
-        data.databases.insert(id.clone(), decl.clone());
-        store.databases.insert(id.clone(), instance);
+        let publication_advance = publication.prepare_resource_revision()?;
         let from_revision = revisions
             .get(&id)
             .copied()
             .map(crate::node_system::document::ResourceRevision::new)
             .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+        let to_revision = Self::next_database_revision(&id, from_revision)?;
+        data.databases.insert(id.clone(), decl.clone());
+        store.databases.insert(id.clone(), instance);
         let mutation = self.publish_database_delta(
             &mut publication,
             &mut revisions,
             &id,
             from_revision,
+            to_revision,
             operation_id,
+            publication_advance,
             None,
             Some(decl),
         );
@@ -467,6 +450,10 @@ impl ProjectState {
             .databases
             .get_mut(id)
             .ok_or(ProjectDatabaseError::DatabaseNotFound)?;
+        let publication_advance = publication.prepare_resource_revision()?;
+        let from_revision =
+            crate::node_system::document::ResourceRevision::new(token.database_revision);
+        let to_revision = Self::next_database_revision(id, from_revision)?;
         declaration.name = name.to_string();
         instance.decl.name = name.to_string();
         let after = declaration.clone();
@@ -474,8 +461,10 @@ impl ProjectState {
             &mut publication,
             &mut revisions,
             id,
-            crate::node_system::document::ResourceRevision::new(token.database_revision),
+            from_revision,
+            to_revision,
             operation_id,
+            publication_advance,
             Some(before),
             Some(after),
         );
@@ -527,6 +516,10 @@ impl ProjectState {
             token,
             id,
         )?;
+        let publication_advance = publication.prepare_resource_revision()?;
+        let from_revision =
+            crate::node_system::document::ResourceRevision::new(token.database_revision);
+        let to_revision = Self::next_database_revision(id, from_revision)?;
         let before = data
             .databases
             .remove(id)
@@ -539,8 +532,10 @@ impl ProjectState {
             &mut publication,
             &mut revisions,
             id,
-            crate::node_system::document::ResourceRevision::new(token.database_revision),
+            from_revision,
+            to_revision,
             operation_id,
+            publication_advance,
             Some(before),
             None,
         );
@@ -551,7 +546,7 @@ impl ProjectState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Arc, Barrier};
+    use std::sync::Arc;
 
     fn project_root(label: &str) -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!(
@@ -662,107 +657,6 @@ mod tests {
     }
 
     #[test]
-    fn execution_access_during_activation_is_detached_and_failure_has_zero_effects() {
-        let root = project_root("detached-execution");
-        let csv = root.join("execution.csv");
-        std::fs::write(&csv, "value\n1\n").unwrap();
-        let state = ProjectState::new();
-        state.activate_project_from_path(&root).unwrap();
-        let imported = load_database_fixture(
-            &state,
-            crate::schema::DatabaseEngineDTO::Csv {
-                path: csv.to_string_lossy().into_owned(),
-                delimiter: ',',
-                has_header: true,
-                infer_schema_length: None,
-            },
-        )
-        .unwrap();
-        let prepared = state.prepare_project_activation(Some(&root)).unwrap();
-        let entered = Arc::new(Barrier::new(2));
-        let release = Arc::new(Barrier::new(2));
-        let entered_for_hook = Arc::clone(&entered);
-        let release_for_hook = Arc::clone(&release);
-        state.set_activation_final_rebuild_test_hook(Arc::new(move || {
-            entered_for_hook.wait();
-            release_for_hook.wait();
-        }));
-        let activation_state = state.clone();
-        let activation =
-            std::thread::spawn(move || activation_state.activate_prepared_project(prepared));
-        entered.wait();
-
-        let generation_before_access = state.authority_generation_for_test();
-        let execution = state.access_database(&imported.id, DatabaseAccess::Execution);
-        let shared_remained_duckdb = matches!(
-            state
-                .project_store
-                .read()
-                .unwrap()
-                .databases
-                .get(&imported.id)
-                .unwrap()
-                .state,
-            DatabaseState::DuckDb { .. }
-        );
-        let generation_after_access = state.authority_generation_for_test();
-        release.wait();
-        activation.join().unwrap().unwrap();
-
-        assert!(execution.is_ok());
-        assert!(shared_remained_duckdb);
-        assert_eq!(generation_after_access, generation_before_access);
-
-        let missing_id = "missing-execution".to_string();
-        add_database_fixture(
-            &state,
-            DatabaseInstance {
-                decl: DatabaseDecl {
-                    id: missing_id.clone(),
-                    engine: DatabaseEngine::InMemory {
-                        name: "missing".into(),
-                    },
-                    schema_version: 1,
-                    required: false,
-                    name: "missing".into(),
-                },
-                state: DatabaseState::DuckDb {
-                    duckdb_path: root.join("missing.duckdb").to_string_lossy().into_owned(),
-                    table: "missing".into(),
-                    row_count: 1,
-                    columns: Vec::new(),
-                    history: EditHistory::new(),
-                },
-            },
-        )
-        .unwrap();
-        let generation_before_failure = state.authority_generation_for_test();
-
-        assert!(
-            state
-                .access_database(&missing_id, DatabaseAccess::Execution)
-                .is_err()
-        );
-        assert_eq!(
-            state.authority_generation_for_test(),
-            generation_before_failure
-        );
-        assert!(matches!(
-            state
-                .project_store
-                .read()
-                .unwrap()
-                .databases
-                .get(&missing_id)
-                .unwrap()
-                .state,
-            DatabaseState::DuckDb { .. }
-        ));
-
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
     fn database_mutation_commits_authority_and_errors_have_zero_effects() {
         let root = project_root("authoritative-mutation");
         let state = ProjectState::new();
@@ -807,12 +701,12 @@ mod tests {
         let (project_instance_id, expected_revision, operation_id) =
             database_basis(&state, database_id);
         let closure_had_no_store_lock = state
-            .with_database_mut(
+            .with_database_writer(
                 &project_instance_id,
                 database_id,
                 expected_revision,
                 operation_id,
-                |database| {
+                |database, _| {
                     let store_lock = state.project_store.try_write();
                     let lock_available = store_lock.is_ok();
                     drop(store_lock);
@@ -842,12 +736,12 @@ mod tests {
         let (project_instance_id, expected_revision, operation_id) =
             database_basis(&state, database_id);
         let error = state
-            .with_database_mut(
+            .with_database_writer(
                 &project_instance_id,
                 database_id,
                 expected_revision,
                 operation_id,
-                |database| {
+                |database, _| {
                     database.decl.name = "Rejected".into();
                     Err::<(), _>("reject mutation".into())
                 },
@@ -1006,8 +900,12 @@ mod tests {
             state.database_authority_revisions.read().unwrap()[&imported.id],
             edited.mutation.deltas[0].to_revision.get()
         );
-        let metadata =
-            crate::application::database::get_database_meta(&state, &imported.id).unwrap();
+        let metadata = crate::application::database::read_database_meta(
+            &state,
+            &project_instance_id,
+            &imported.id,
+        )
+        .unwrap();
         assert!(metadata.columns.iter().any(|column| column.name == "added"));
 
         let (project_instance_id, expected_revision, operation_id) =
@@ -1244,12 +1142,12 @@ mod tests {
         let (project_instance_id, expected_revision, operation_id) =
             database_basis(&state, "writer");
         state
-            .with_database_mut(
+            .with_database_writer(
                 &project_instance_id,
                 "writer",
                 expected_revision,
                 operation_id,
-                |database| {
+                |database, _| {
                     database.decl.name = "Committed B".into();
                     Ok(())
                 },
@@ -1604,12 +1502,12 @@ mod tests {
         let (project_instance_id, expected_revision, operation_id) =
             database_basis(&state, "writer");
         state
-            .with_database_mut(
+            .with_database_writer(
                 &project_instance_id,
                 "writer",
                 expected_revision,
                 operation_id,
-                |database| {
+                |database, _| {
                     database.decl.name = "New Authority".into();
                     Ok(())
                 },
@@ -1637,12 +1535,12 @@ mod tests {
         let (project_instance_id, expected_revision, operation_id) =
             database_basis(&state, "writer");
         state
-            .with_database_mut(
+            .with_database_writer(
                 &project_instance_id,
                 "writer",
                 expected_revision,
                 operation_id,
-                |database| {
+                |database, _| {
                     database.decl.required = true;
                     Ok(())
                 },

@@ -55,8 +55,8 @@ export type ColumnDistribution = NumericDistribution | StringDistribution;
 export interface SizeShape {
   nRows: number;
   nColumns: number;
-  memorySize: number;
-  duplicatedRows: number;
+  estimatedDataframeMemoryBytes: number | null;
+  duplicatedRows: number | null;
 }
 
 export interface SchemaOverview {

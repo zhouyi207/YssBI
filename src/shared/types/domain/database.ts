@@ -11,7 +11,7 @@ export type {
   DatabaseDeclDTO,
   DatabaseDeclDTO as DatabaseDecl,
   DatabaseEngineDTO,
-  LoadDatabaseEngineSpec,
+  DatabaseImportSourceDTO,
   DatabaseRecord,
 } from '../dto/database';
 

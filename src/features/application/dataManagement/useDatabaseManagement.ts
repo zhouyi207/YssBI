@@ -8,7 +8,7 @@ import { DatabaseService } from '@/services/database/databaseService';
 import { normalizeIpcError } from '@/services/ipc';
 import type { LoadDatabaseResult } from '@/shared/types/dto/database';
 import { databaseRecordFromLoad } from '@/shared/types/dto/database';
-import type { DatabaseRecord, LoadDatabaseEngineSpec } from '@/shared/types/dto/database';
+import type { DatabaseImportSourceDTO, DatabaseRecord } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';
 import { runWithDataOperationProgress } from './dataOperationProgress';
 import { executeDatabaseCreate, executeDatabaseMutation } from './databaseMutation';
@@ -38,17 +38,17 @@ function showDataOperationError(
   });
 }
 
-function commitLoadedDatabase(result: LoadDatabaseResult, engine: LoadDatabaseEngineSpec) {
+function commitLoadedDatabase(result: LoadDatabaseResult) {
   const store = useDatabaseStore.getState();
-  const record = databaseRecordFromLoad(result, engine);
+  const record = databaseRecordFromLoad(result, store.databases[result.id]);
   if (store.databases[result.id]) store.updateDatabase(result.id, record);
   else store.addDatabase(result.id, record);
 }
 
 async function loadSqliteTable(dbPath: string, table: string) {
-  const engine: LoadDatabaseEngineSpec = {
+  const engine: DatabaseImportSourceDTO = {
     sql: {
-      engine: { sqlite: { autoCreate: false } },
+      engine: 'sqlite',
       connectionString: dbPath,
       table,
     },
@@ -62,7 +62,7 @@ async function loadSqliteTable(dbPath: string, table: string) {
       engine,
     )),
   );
-  commitLoadedDatabase(result, engine);
+  commitLoadedDatabase(result);
 }
 
 type SqlRemoteEngine = 'postgres' | 'mysql' | 'mariadb';
@@ -70,10 +70,13 @@ type SqlRemoteEngine = 'postgres' | 'mysql' | 'mariadb';
 async function loadSqlRemoteTable(engine: SqlRemoteEngine, connectionString: string, table: string) {
   const label =
     engine === 'postgres' ? 'PostgreSQL' : engine === 'mysql' ? 'MySQL' : 'MariaDB';
-  const loadEngine: LoadDatabaseEngineSpec =
-    engine === 'postgres'
-      ? { sql: { engine: { postgres: { ssl: true } }, connectionString, table } }
-      : { sql: { engine: { mysql: { charset: 'utf8mb4' } }, connectionString, table } };
+  const loadEngine: DatabaseImportSourceDTO = {
+    sql: {
+      engine: engine === 'postgres' ? 'postgres' : 'mysql',
+      connectionString,
+      table,
+    },
+  };
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingRemote', { label, table }),
@@ -83,11 +86,11 @@ async function loadSqlRemoteTable(engine: SqlRemoteEngine, connectionString: str
       loadEngine,
     )),
   );
-  commitLoadedDatabase(result, loadEngine);
+  commitLoadedDatabase(result);
 }
 
 async function loadExcelSheet(filePath: string, sheet: string) {
-  const engine: LoadDatabaseEngineSpec = { excel: { path: filePath, sheet } };
+  const engine: DatabaseImportSourceDTO = { excel: { path: filePath, sheet } };
   const result = await runWithDataOperationProgress(
     i18n.t('dataOperation.importing'),
     i18n.t('dataOperation.importingExcel', { sheet }),
@@ -97,11 +100,11 @@ async function loadExcelSheet(filePath: string, sheet: string) {
       engine,
     )),
   );
-  commitLoadedDatabase(result, engine);
+  commitLoadedDatabase(result);
 }
 
 async function loadCsv(path: string) {
-  const engine: LoadDatabaseEngineSpec = {
+  const engine: DatabaseImportSourceDTO = {
     csv: {
       path,
       delimiter: ',',
@@ -118,7 +121,7 @@ async function loadCsv(path: string) {
       engine,
     )),
   );
-  commitLoadedDatabase(result, engine);
+  commitLoadedDatabase(result);
 }
 
 /** 触发导入数据弹窗（与菜单栏 Data > Import Data 相同逻辑） */

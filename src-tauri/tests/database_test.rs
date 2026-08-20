@@ -1,9 +1,13 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use polars::prelude::*;
 use yssbi_lib::application::database::bind_duckdb_instance;
 use yssbi_lib::database::{
-    DatabaseAccess, DatabaseState, ingest_csv_to_duckdb, ingest_parquet_to_duckdb,
-    query_page_to_dataframe, write_display_name,
+    DatabaseAccess, DatabaseDecl, DatabaseEngine, DatabaseExportFormat, DatabaseInstance,
+    DatabaseState, EditHistory, MAX_DELETE_COLUMN_SNAPSHOT_ROWS, MAX_IN_MEMORY_EDIT_ROWS,
+    ingest_csv_to_duckdb, ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta,
+    write_display_name,
 };
 use yssbi_lib::node_system::document::{
     DatabaseResourceKey, OperationId, ResourceKey, ResourceRevision,
@@ -30,6 +34,321 @@ fn database_authority(
         .expect("database authority")
         .revision;
     (session.instance_id, revision)
+}
+
+fn loaded_instance(dataframe: DataFrame) -> DatabaseInstance {
+    DatabaseInstance {
+        decl: DatabaseDecl {
+            id: "test".into(),
+            engine: DatabaseEngine::InMemory {
+                name: "test".into(),
+            },
+            schema_version: 1,
+            required: false,
+            name: "Test".into(),
+        },
+        state: DatabaseState::Loaded {
+            original: Arc::new(dataframe.clone()),
+            dataframe: Arc::new(dataframe),
+            history: EditHistory::new(),
+        },
+    }
+}
+
+fn duckdb_instance(duckdb_path: &PathBuf, table: &str) -> DatabaseInstance {
+    let meta = read_table_meta(duckdb_path, table).unwrap();
+    DatabaseInstance {
+        decl: DatabaseDecl {
+            id: table.into(),
+            engine: DatabaseEngine::DuckDb {
+                path: duckdb_path.to_string_lossy().into_owned(),
+                table: table.into(),
+            },
+            schema_version: 1,
+            required: false,
+            name: table.into(),
+        },
+        state: DatabaseState::DuckDb {
+            duckdb_path: duckdb_path.to_string_lossy().into_owned(),
+            table: table.into(),
+            row_count: meta.row_count,
+            columns: meta.columns,
+            history: EditHistory::new(),
+        },
+    }
+}
+
+#[test]
+fn add_column_rejects_unknown_dtype_without_history() {
+    let mut database = loaded_instance(df!("value" => [1_i64]).unwrap());
+
+    let error = database.add_column("invalid", "Mystery").unwrap_err();
+
+    assert!(error.contains("Mystery"));
+    assert_eq!(database.list_column_names().unwrap(), vec!["value"]);
+    assert!(!database.edit_state().can_undo);
+}
+
+#[test]
+fn edit_cell_rejects_lossy_integer_json_numbers() {
+    let mut database = loaded_instance(
+        df!(
+            "signed" => [7_i8],
+            "unsigned" => [9_u8],
+        )
+        .unwrap(),
+    );
+
+    for (column, value) in [
+        ("signed", serde_json::json!(1.5)),
+        ("signed", serde_json::json!(128)),
+        ("unsigned", serde_json::json!(-1)),
+    ] {
+        assert!(database.edit_cell(0, column, value, None).is_err());
+        assert!(!database.edit_state().can_undo);
+    }
+
+    let page = database.query_page(0, 1).unwrap();
+    assert_eq!(page.column("signed").unwrap().i8().unwrap().get(0), Some(7));
+    assert_eq!(
+        page.column("unsigned").unwrap().u8().unwrap().get(0),
+        Some(9)
+    );
+}
+
+#[test]
+fn polars_delete_column_undo_restores_dtype_and_data() {
+    let mut database = loaded_instance(
+        df!(
+            "keep" => [10_i64, 20, 30],
+            "removed" => [Some(1_i32), None, Some(-2)],
+        )
+        .unwrap(),
+    );
+
+    database.delete_column("removed").unwrap();
+    database.undo_edit().unwrap();
+
+    let page = database.query_page(0, 3).unwrap();
+    let restored = page.column("removed").unwrap();
+    assert_eq!(restored.dtype(), &DataType::Int32);
+    assert_eq!(
+        restored.i32().unwrap().into_iter().collect::<Vec<_>>(),
+        vec![Some(1), None, Some(-2)]
+    );
+}
+
+#[test]
+fn duckdb_edit_quotes_identifiers_separately_from_string_literals() {
+    let duckdb_path = PathBuf::from(format!(
+        "target/test_database_quotes_{}.duckdb",
+        uuid::Uuid::new_v4()
+    ));
+    let table = "table\"with'quotes";
+    let column = "value\"with'quotes";
+    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
+    conn.execute_batch(
+        r#"CREATE TABLE "table""with'quotes" ("value""with'quotes" VARCHAR);
+           INSERT INTO "table""with'quotes" VALUES ('before');"#,
+    )
+    .unwrap();
+    drop(conn);
+
+    let mut database = duckdb_instance(&duckdb_path, table);
+
+    database
+        .edit_cell(0, column, serde_json::json!("O'Reilly\\path"), None)
+        .unwrap();
+
+    let page = database.query_page(0, 1).unwrap();
+    assert_eq!(
+        page.column(column).unwrap().str().unwrap().get(0),
+        Some("O'Reilly\\path")
+    );
+
+    let _ = std::fs::remove_file(duckdb_path);
+}
+
+#[test]
+fn duckdb_force_cast_is_rejected_without_mutation() {
+    let duckdb_path = PathBuf::from(format!(
+        "target/test_database_force_{}.duckdb",
+        uuid::Uuid::new_v4()
+    ));
+    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE force_cast (value VARCHAR); INSERT INTO force_cast VALUES ('1');",
+    )
+    .unwrap();
+    drop(conn);
+
+    let mut database = duckdb_instance(&duckdb_path, "force_cast");
+
+    let error = database.cast_column("value", "Int64", true).unwrap_err();
+
+    assert!(error.to_lowercase().contains("force"));
+    assert!(!database.edit_state().can_undo);
+    let page = database.query_page(0, 1).unwrap();
+    assert_eq!(page.column("value").unwrap().dtype(), &DataType::String);
+    assert_eq!(
+        page.column("value").unwrap().str().unwrap().get(0),
+        Some("1")
+    );
+
+    let _ = std::fs::remove_file(duckdb_path);
+}
+
+#[test]
+fn duckdb_delete_column_undo_restores_dtype_and_data() {
+    let duckdb_path = PathBuf::from(format!(
+        "target/test_database_delete_column_{}.duckdb",
+        uuid::Uuid::new_v4()
+    ));
+    let table = "delete_column";
+    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE delete_column (keep BIGINT, removed INTEGER);\n\
+         INSERT INTO delete_column VALUES (1, 7), (2, NULL), (3, -2);",
+    )
+    .unwrap();
+    drop(conn);
+
+    let mut database = duckdb_instance(&duckdb_path, table);
+
+    database.delete_column("removed").unwrap();
+    database.undo_edit().unwrap();
+
+    let page = database.query_page(0, 3).unwrap();
+    let restored = page.column("removed").unwrap();
+    assert_eq!(restored.dtype(), &DataType::Int32);
+    assert_eq!(
+        restored.i32().unwrap().into_iter().collect::<Vec<_>>(),
+        vec![Some(7), None, Some(-2)]
+    );
+
+    let _ = std::fs::remove_file(duckdb_path);
+}
+
+#[test]
+fn duckdb_delete_column_over_snapshot_limit_is_rejected_without_history() {
+    let duckdb_path = PathBuf::from(format!(
+        "target/test_database_delete_limit_{}.duckdb",
+        uuid::Uuid::new_v4()
+    ));
+    let table = "delete_limit";
+    let row_count = MAX_DELETE_COLUMN_SNAPSHOT_ROWS + 1;
+    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
+    conn.execute_batch(&format!(
+        "CREATE TABLE {table} AS \
+         SELECT i::BIGINT AS keep, i::INTEGER AS removed \
+         FROM range({row_count}) AS rows(i);"
+    ))
+    .unwrap();
+    drop(conn);
+
+    let mut database = duckdb_instance(&duckdb_path, table);
+
+    let error = database.delete_column("removed").unwrap_err();
+
+    assert!(error.to_lowercase().contains("limit"));
+    assert!(!database.edit_state().can_undo);
+    assert!(
+        database
+            .list_column_names()
+            .unwrap()
+            .contains(&"removed".to_string())
+    );
+
+    let _ = std::fs::remove_file(duckdb_path);
+}
+
+#[test]
+fn duckdb_storage_export_supports_large_quoted_tables_without_loading() {
+    let duckdb_path = PathBuf::from(format!(
+        "target/test_database_export_{}.duckdb",
+        uuid::Uuid::new_v4()
+    ));
+    let table = "export\"table";
+    let row_count = MAX_IN_MEMORY_EDIT_ROWS + 1;
+    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
+    conn.execute_batch(&format!(
+        "CREATE TABLE \"export\"\"table\" AS \
+         SELECT i::BIGINT AS id FROM range({row_count}) AS rows(i);"
+    ))
+    .unwrap();
+    drop(conn);
+
+    let database = duckdb_instance(&duckdb_path, table);
+    let csv_path = PathBuf::from(format!(
+        "target/test_database_export_'_{}.csv",
+        uuid::Uuid::new_v4()
+    ));
+    let parquet_path = csv_path.with_extension("parquet");
+    std::fs::write(&csv_path, b"reserved").unwrap();
+    std::fs::write(&parquet_path, b"reserved").unwrap();
+
+    database
+        .export_to_path(&csv_path, DatabaseExportFormat::Csv)
+        .unwrap();
+    database
+        .export_to_path(&parquet_path, DatabaseExportFormat::Parquet)
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read_to_string(&csv_path).unwrap().lines().count(),
+        row_count + 1
+    );
+    let conn = duckdb::Connection::open_in_memory().unwrap();
+    let parquet_rows: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM read_parquet(?)",
+            [parquet_path.to_string_lossy().as_ref()],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(parquet_rows as usize, row_count);
+    assert!(matches!(database.state, DatabaseState::DuckDb { .. }));
+
+    let _ = std::fs::remove_file(csv_path);
+    let _ = std::fs::remove_file(parquet_path);
+    let _ = std::fs::remove_file(duckdb_path);
+}
+
+#[test]
+fn duckdb_delete_column_failed_undo_is_atomic_and_keeps_history() {
+    let duckdb_path = PathBuf::from(format!(
+        "target/test_database_delete_atomic_{}.duckdb",
+        uuid::Uuid::new_v4()
+    ));
+    let table = "delete_atomic";
+    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
+    conn.execute_batch(
+        "CREATE TABLE delete_atomic (keep BIGINT, removed INTEGER);\n\
+         INSERT INTO delete_atomic VALUES (1, 7), (2, 8), (3, 9);",
+    )
+    .unwrap();
+    drop(conn);
+
+    let mut database = duckdb_instance(&duckdb_path, table);
+    database.delete_column("removed").unwrap();
+
+    let conn = duckdb::Connection::open(&duckdb_path).unwrap();
+    conn.execute_batch(
+        "DELETE FROM delete_atomic WHERE rowid = 1;\n\
+         INSERT INTO delete_atomic (keep) VALUES (4);",
+    )
+    .unwrap();
+    drop(conn);
+
+    let error = database.undo_edit().unwrap_err();
+
+    assert!(error.contains("rowid 1"));
+    assert!(database.edit_state().can_undo);
+    assert!(!database.edit_state().can_redo);
+    let meta = read_table_meta(&duckdb_path, table).unwrap();
+    assert!(meta.columns.iter().all(|column| column.name != "removed"));
+
+    let _ = std::fs::remove_file(duckdb_path);
 }
 
 fn setup_iris_duckdb_project() -> (PathBuf, String) {
@@ -247,6 +566,8 @@ fn test_duckdb_analytics_without_full_load() {
     let overview = db_instance.compute_dataset_overview().expect("overview");
     assert_eq!(overview.size_shape.n_rows, 150);
     assert!(overview.size_shape.n_columns >= 5);
+    assert_eq!(overview.size_shape.estimated_dataframe_memory_bytes, None);
+    assert_eq!(overview.size_shape.duplicated_rows, None);
     assert!(matches!(db_instance.state, DatabaseState::DuckDb { .. }));
 
     let _ = std::fs::remove_dir_all(&project_root);

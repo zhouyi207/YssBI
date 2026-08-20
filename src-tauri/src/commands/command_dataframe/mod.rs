@@ -1,3 +1,4 @@
+use crate::application::database::{self, DatabaseApplicationError, DatabaseMutation};
 #[cfg(test)]
 use crate::application::database::{
     cleanup_export_temporary_file, export_database_for_project_with_before_publish,
@@ -6,11 +7,13 @@ use crate::error::CommandError;
 use crate::event::{Event, EventProject, ResourceMutationCommandResultDto, emit_project_event};
 use crate::node_system::document::{OperationId, ResourceRevision};
 use crate::project::{ProjectInstanceId, ProjectState};
-use crate::schema::DatabaseEngineDTO;
+use crate::schema::DatabaseImportSourceDTO;
 use tauri::{AppHandle, State};
 
+mod error;
 mod types;
 
+use error::database_command_error;
 use types::dataframe_to_row_matrix;
 
 fn emit_database_result<T>(
@@ -26,44 +29,46 @@ fn load_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
-    engine: DatabaseEngineDTO,
+    engine: DatabaseImportSourceDTO,
     emit: impl FnMut(Event),
 ) -> Result<
     ResourceMutationCommandResultDto<crate::application::database::LoadDatabaseResult>,
     CommandError,
 > {
-    let result = crate::application::database::load_database(
-        state,
-        &project_instance_id,
-        operation_id,
-        engine,
-    )
-    .map_err(CommandError::from)?;
+    let result = database::load_database(state, &project_instance_id, operation_id, engine.into())
+        .map_err(|error| {
+            DatabaseApplicationError::from_project_database(
+                error,
+                database::DatabaseApplicationOperation::Load,
+                &project_instance_id,
+                None,
+                None,
+                None,
+            )
+        })
+        .map_err(database_command_error)?;
     emit_database_result(&result, emit);
     Ok(result)
 }
 
-fn mutate_database_with_emitter<T>(
+fn mutate_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
     id: &str,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
-    mutate: impl FnOnce(
-        &mut crate::database::DatabaseInstance,
-        &crate::project::ProjectSession,
-    ) -> Result<T, String>,
+    mutation: DatabaseMutation,
     emit: impl FnMut(Event),
-) -> Result<ResourceMutationCommandResultDto<T>, CommandError> {
-    let result = state
-        .with_database_writer(
-            &project_instance_id,
-            id,
-            expected_revision,
-            operation_id,
-            mutate,
-        )
-        .map_err(CommandError::from)?;
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+    let result = database::mutate_database_resource(
+        state,
+        &project_instance_id,
+        id,
+        expected_revision,
+        operation_id,
+        mutation,
+    )
+    .map_err(database_command_error)?;
     emit_database_result(&result, emit);
     Ok(result)
 }
@@ -76,14 +81,24 @@ fn save_database_with_emitter(
     operation_id: OperationId,
     emit: impl FnMut(Event),
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    let result = crate::application::database::save_database_changes(
+    let result = database::save_database_changes(
         state,
         &project_instance_id,
         id,
         expected_revision,
         operation_id,
     )
-    .map_err(CommandError::from)?;
+    .map_err(|error| {
+        DatabaseApplicationError::from_project_database(
+            error,
+            database::DatabaseApplicationOperation::Save,
+            &project_instance_id,
+            Some(id),
+            Some(expected_revision),
+            None,
+        )
+    })
+    .map_err(database_command_error)?;
     emit_database_result(&result, emit);
     Ok(result)
 }
@@ -98,7 +113,17 @@ fn delete_database_with_emitter(
 ) -> Result<ResourceMutationCommandResultDto<()>, CommandError> {
     let result = state
         .delete_database(&project_instance_id, id, expected_revision, operation_id)
-        .map_err(CommandError::from)?;
+        .map_err(|error| {
+            DatabaseApplicationError::from_project_database(
+                error,
+                database::DatabaseApplicationOperation::Delete,
+                &project_instance_id,
+                Some(id),
+                Some(expected_revision),
+                None,
+            )
+        })
+        .map_err(database_command_error)?;
     emit_database_result(&result, emit);
     Ok(result)
 }
@@ -127,26 +152,13 @@ fn serialize_database_value<T: serde::Serialize>(
         .map_err(|error| CommandError::diagnosed("database_serialization_failed", error))
 }
 
-fn with_database_read_for_project<R>(
-    state: &ProjectState,
-    project_instance_id: &ProjectInstanceId,
-    id: &str,
-    read: impl FnOnce(&mut crate::database::DatabaseInstance) -> Result<R, String>,
-) -> Result<R, CommandError> {
-    state
-        .with_database_snapshot_for_project(project_instance_id, id, read)
-        .map_err(CommandError::from)?
-        .map_err(|error| CommandError::diagnosed("database_computation_failed", error))
-}
-
 fn get_database_meta_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
     id: &str,
 ) -> Result<serde_json::Value, CommandError> {
-    let result = with_database_read_for_project(state, project_instance_id, id, |database| {
-        crate::application::database::get_database_meta_from_instance(id, database)
-    })?;
+    let result = database::read_database_meta(state, project_instance_id, id)
+        .map_err(database_command_error)?;
     serialize_database_value(result)
 }
 
@@ -157,11 +169,8 @@ fn get_database_rows_for_project(
     offset: usize,
     limit: usize,
 ) -> Result<serde_json::Value, CommandError> {
-    let page = with_database_read_for_project(state, project_instance_id, id, |database| {
-        database
-            .query_page_with_rowids(offset, limit)
-            .map_err(|error| format!("Failed to query database page: {error}"))
-    })?;
+    let page = database::read_database_rows(state, project_instance_id, id, offset, limit)
+        .map_err(database_command_error)?;
     serialize_database_value(DatabaseRowsPayload {
         rows: dataframe_to_row_matrix(&page.dataframe),
         row_ids: page.row_ids,
@@ -173,11 +182,8 @@ fn get_column_stats_for_project(
     project_instance_id: &ProjectInstanceId,
     id: &str,
 ) -> Result<serde_json::Value, CommandError> {
-    let stats = with_database_read_for_project(state, project_instance_id, id, |database| {
-        database
-            .compute_column_stats()
-            .map_err(|error| error.to_string())
-    })?;
+    let stats = database::read_column_statistics(state, project_instance_id, id)
+        .map_err(database_command_error)?;
     serialize_database_value(stats)
 }
 
@@ -186,12 +192,8 @@ fn get_column_distribution_for_project(
     project_instance_id: &ProjectInstanceId,
     id: &str,
 ) -> Result<serde_json::Value, CommandError> {
-    let distributions =
-        with_database_read_for_project(state, project_instance_id, id, |database| {
-            database
-                .compute_column_distributions()
-                .map_err(|error| error.to_string())
-        })?;
+    let distributions = database::read_column_distributions(state, project_instance_id, id)
+        .map_err(database_command_error)?;
     serialize_database_value(distributions)
 }
 
@@ -200,11 +202,8 @@ fn get_dataset_overview_for_project(
     project_instance_id: &ProjectInstanceId,
     id: &str,
 ) -> Result<serde_json::Value, CommandError> {
-    let overview = with_database_read_for_project(state, project_instance_id, id, |database| {
-        database
-            .compute_dataset_overview()
-            .map_err(|error| error.to_string())
-    })?;
+    let overview = database::read_dataset_overview(state, project_instance_id, id)
+        .map_err(database_command_error)?;
     serialize_database_value(overview)
 }
 
@@ -213,9 +212,8 @@ fn get_edit_state_for_project(
     project_instance_id: &ProjectInstanceId,
     id: &str,
 ) -> Result<serde_json::Value, CommandError> {
-    let edit_state = with_database_read_for_project(state, project_instance_id, id, |database| {
-        Ok(database.edit_state())
-    })?;
+    let edit_state = database::read_database_edit_state(state, project_instance_id, id)
+        .map_err(database_command_error)?;
     serialize_database_value(edit_state)
 }
 
@@ -225,7 +223,7 @@ pub async fn load_database(
     state: State<'_, ProjectState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
-    engine: DatabaseEngineDTO,
+    engine: DatabaseImportSourceDTO,
 ) -> Result<
     ResourceMutationCommandResultDto<crate::application::database::LoadDatabaseResult>,
     CommandError,
@@ -242,12 +240,7 @@ pub async fn load_database(
 #[tauri::command]
 pub async fn list_sqlite_tables(db_path: String) -> Result<Vec<String>, CommandError> {
     run_on_blocking_pool(move || {
-        use crate::database::DatabaseEngineSql;
-        crate::database::sql_reader::list_tables(
-            &DatabaseEngineSql::Sqlite { auto_create: false },
-            &db_path,
-        )
-        .map_err(|error| CommandError::diagnosed("database_table_list_failed", error))
+        database::list_sqlite_tables(&db_path).map_err(database_command_error)
     })
     .await
 }
@@ -258,16 +251,7 @@ pub async fn list_sql_tables(
     connection_string: String,
 ) -> Result<Vec<String>, CommandError> {
     run_on_blocking_pool(move || {
-        use crate::database::DatabaseEngineSql;
-        let engine_enum = match engine.as_str() {
-            "postgres" | "postgresql" => DatabaseEngineSql::Postgres { ssl: true },
-            "mysql" | "mariadb" => DatabaseEngineSql::Mysql {
-                charset: "utf8mb4".to_string(),
-            },
-            _ => return Err(CommandError::expected("unsupported_sql_engine")),
-        };
-        crate::database::sql_reader::list_tables(&engine_enum, &connection_string)
-            .map_err(|error| CommandError::diagnosed("database_table_list_failed", error))
+        database::list_sql_tables(&engine, &connection_string).map_err(database_command_error)
     })
     .await
 }
@@ -275,8 +259,7 @@ pub async fn list_sql_tables(
 #[tauri::command]
 pub async fn list_excel_sheets(file_path: String) -> Result<Vec<String>, CommandError> {
     run_on_blocking_pool(move || {
-        crate::database::excel_reader::list_sheets(&file_path)
-            .map_err(|error| CommandError::diagnosed("database_sheet_list_failed", error))
+        database::list_excel_sheets(&file_path).map_err(database_command_error)
     })
     .await
 }
@@ -322,7 +305,7 @@ fn rename_database_with_emitter(
     operation_id: OperationId,
     emit: impl FnMut(Event),
 ) -> Result<ResourceMutationCommandResultDto<()>, CommandError> {
-    let result = crate::application::database::rename_database(
+    let result = database::rename_database(
         state,
         &project_instance_id,
         id,
@@ -330,7 +313,17 @@ fn rename_database_with_emitter(
         name,
         operation_id,
     )
-    .map_err(CommandError::from)?;
+    .map_err(|error| {
+        DatabaseApplicationError::from_project_database(
+            error,
+            database::DatabaseApplicationOperation::Rename,
+            &project_instance_id,
+            Some(id),
+            Some(expected_revision),
+            Some(name.trim()),
+        )
+    })
+    .map_err(database_command_error)?;
     emit_database_result(&result, emit);
     Ok(result)
 }
@@ -425,7 +418,12 @@ pub fn edit_cell(
         &id,
         expected_revision,
         operation_id,
-        |db, _| db.edit_cell(row, &col_name, value, row_id),
+        DatabaseMutation::EditCell {
+            row,
+            column: col_name,
+            value,
+            row_id,
+        },
         |event| emit_project_event(&app, event),
     )
 }
@@ -446,7 +444,7 @@ pub fn add_row(
         &id,
         expected_revision,
         operation_id,
-        |db, _| db.add_row(index),
+        DatabaseMutation::AddRow { index },
         |event| emit_project_event(&app, event),
     )
 }
@@ -468,7 +466,7 @@ pub fn delete_rows(
         &id,
         expected_revision,
         operation_id,
-        |db, _| db.delete_rows(&indices, row_ids.as_deref()),
+        DatabaseMutation::DeleteRows { indices, row_ids },
         |event| emit_project_event(&app, event),
     )
 }
@@ -490,7 +488,7 @@ pub fn add_column(
         &id,
         expected_revision,
         operation_id,
-        |db, _| db.add_column(&name, &dtype),
+        DatabaseMutation::AddColumn { name, dtype },
         |event| emit_project_event(&app, event),
     )
 }
@@ -511,7 +509,7 @@ pub fn delete_column(
         &id,
         expected_revision,
         operation_id,
-        |db, _| db.delete_column(&name),
+        DatabaseMutation::DeleteColumn { name },
         |event| emit_project_event(&app, event),
     )
 }
@@ -534,7 +532,11 @@ pub fn cast_column(
         &id,
         expected_revision,
         operation_id,
-        |db, _| db.cast_column(&col_name, &new_dtype, force.unwrap_or(false)),
+        DatabaseMutation::CastColumn {
+            column: col_name,
+            dtype: new_dtype,
+            force: force.unwrap_or(false),
+        },
         |event| emit_project_event(&app, event),
     )
 }
@@ -556,7 +558,7 @@ pub fn rename_column(
         &id,
         expected_revision,
         operation_id,
-        |db, _| db.rename_column(&old_name, &new_name),
+        DatabaseMutation::RenameColumn { old_name, new_name },
         |event| emit_project_event(&app, event),
     )
 }
@@ -576,7 +578,7 @@ pub fn undo_edit(
         &id,
         expected_revision,
         operation_id,
-        |db, _| db.undo_edit(),
+        DatabaseMutation::Undo,
         |event| emit_project_event(&app, event),
     )
 }
@@ -596,7 +598,7 @@ pub fn redo_edit(
         &id,
         expected_revision,
         operation_id,
-        |db, _| db.redo_edit(),
+        DatabaseMutation::Redo,
         |event| emit_project_event(&app, event),
     )
 }
@@ -632,13 +634,8 @@ pub async fn export_database(
 ) -> Result<(), CommandError> {
     let state = state.inner().clone();
     run_on_blocking_pool(move || {
-        crate::application::database::export_database_for_project(
-            &state,
-            &project_instance_id,
-            &id,
-            &path,
-            &format,
-        )
+        database::export_database_for_project(&state, &project_instance_id, &id, &path, &format)
+            .map_err(database_command_error)
     })
     .await
 }
@@ -675,6 +672,37 @@ mod tests {
     fn database_serialization_errors_are_typed() {
         let error = serialize_database_value(FailingSerialize).unwrap_err();
         assert_eq!(error.code(), "database_serialization_failed");
+    }
+
+    #[test]
+    fn database_application_errors_map_to_safe_wire_contract() {
+        let expected = database_command_error(DatabaseApplicationError::RowLimitExceeded {
+            database_id: "sales".into(),
+            operation: database::DatabaseApplicationOperation::ReadRows,
+            requested_rows: 500_001,
+            max_rows: 500_000,
+        });
+        assert_eq!(expected.code(), "database_row_limit_exceeded");
+        assert_eq!(
+            expected.details(),
+            serde_json::json!({
+                "databaseId": "sales",
+                "operation": "readRows",
+                "requestedRows": 500_001,
+                "maxRows": 500_000,
+            })
+            .as_object(),
+        );
+        assert!(expected.incident_id().is_none());
+
+        let internal = database_command_error(DatabaseApplicationError::internal_for_test(
+            database::DatabaseApplicationOperation::ExportSerialize,
+            "sensitive backend failure",
+        ));
+        let wire = serde_json::to_value(&internal).unwrap();
+        assert_eq!(internal.code(), "database_export_serialization_failed");
+        assert!(internal.incident_id().is_some());
+        assert!(!wire.to_string().contains("sensitive backend failure"));
     }
 
     fn assert_exact_event<T>(
@@ -769,7 +797,10 @@ mod tests {
             |_| {},
             |_| {},
         );
-        assert_eq!(before_entry.unwrap_err().code(), "stale_project_lifecycle");
+        assert_eq!(
+            database_command_error(before_entry.unwrap_err()).code(),
+            "stale_project_lifecycle"
+        );
         assert_eq!(std::fs::read(&destination).unwrap(), b"sentinel");
         assert_only_destination_exists(&root, &destination);
 
@@ -787,7 +818,7 @@ mod tests {
             |_| {},
         );
         assert_eq!(
-            before_publication.unwrap_err().code(),
+            database_command_error(before_publication.unwrap_err()).code(),
             "stale_project_lifecycle"
         );
         assert_eq!(std::fs::read(&destination).unwrap(), b"sentinel");
@@ -852,30 +883,34 @@ mod tests {
         let current = install_export_database(&state, "export-errors");
         let destination = root.join("sales.csv");
 
-        let serialization = export_database_for_project_with_before_publish(
-            &state,
-            &current,
-            "sales",
-            destination.to_string_lossy().as_ref(),
-            "unsupported",
-            |_| {},
-            |_| {},
-        )
-        .unwrap_err();
-        assert_eq!(serialization.code(), "database_export_serialization_failed");
+        let serialization = database_command_error(
+            export_database_for_project_with_before_publish(
+                &state,
+                &current,
+                "sales",
+                destination.to_string_lossy().as_ref(),
+                "unsupported",
+                |_| {},
+                |_| {},
+            )
+            .unwrap_err(),
+        );
+        assert_eq!(serialization.code(), "database_export_unsupported");
         assert!(std::fs::read_dir(&root).unwrap().next().is_none());
 
         let missing_parent = root.join("missing").join("sales.csv");
-        let reservation = export_database_for_project_with_before_publish(
-            &state,
-            &current,
-            "sales",
-            missing_parent.to_string_lossy().as_ref(),
-            "csv",
-            |_| {},
-            |_| {},
-        )
-        .unwrap_err();
+        let reservation = database_command_error(
+            export_database_for_project_with_before_publish(
+                &state,
+                &current,
+                "sales",
+                missing_parent.to_string_lossy().as_ref(),
+                "csv",
+                |_| {},
+                |_| {},
+            )
+            .unwrap_err(),
+        );
         assert_eq!(
             reservation.code(),
             "database_export_temp_reservation_failed"
@@ -883,16 +918,18 @@ mod tests {
 
         let blocked_destination = root.join("blocked.csv");
         std::fs::create_dir(&blocked_destination).unwrap();
-        let publication = export_database_for_project_with_before_publish(
-            &state,
-            &current,
-            "sales",
-            blocked_destination.to_string_lossy().as_ref(),
-            "csv",
-            |_| {},
-            |_| {},
-        )
-        .unwrap_err();
+        let publication = database_command_error(
+            export_database_for_project_with_before_publish(
+                &state,
+                &current,
+                "sales",
+                blocked_destination.to_string_lossy().as_ref(),
+                "csv",
+                |_| {},
+                |_| {},
+            )
+            .unwrap_err(),
+        );
         assert_eq!(publication.code(), "database_export_publication_failed");
         assert_eq!(std::fs::read_dir(&root).unwrap().count(), 1);
 
@@ -906,22 +943,25 @@ mod tests {
             .state = DatabaseState::Failed {
             error: "broken".into(),
         };
-        let computation = export_database_for_project_with_before_publish(
-            &state,
-            &current,
-            "sales",
-            destination.to_string_lossy().as_ref(),
-            "csv",
-            |_| {},
-            |_| {},
-        )
-        .unwrap_err();
-        assert_eq!(computation.code(), "database_computation_failed");
+        let computation = database_command_error(
+            export_database_for_project_with_before_publish(
+                &state,
+                &current,
+                "sales",
+                destination.to_string_lossy().as_ref(),
+                "csv",
+                |_| {},
+                |_| {},
+            )
+            .unwrap_err(),
+        );
+        assert_eq!(computation.code(), "database_access_failed");
 
         let cleanup_target = root.join("cleanup-target");
         std::fs::create_dir(&cleanup_target).unwrap();
         std::fs::write(cleanup_target.join("child"), b"keep").unwrap();
-        let cleanup = cleanup_export_temporary_file(&cleanup_target).unwrap_err();
+        let cleanup =
+            database_command_error(cleanup_export_temporary_file(&cleanup_target).unwrap_err());
         assert_eq!(cleanup.code(), "database_export_cleanup_failed");
 
         let _ = std::fs::remove_dir_all(root);
@@ -1016,7 +1056,7 @@ mod tests {
             &state,
             project_instance_id.clone(),
             import_operation,
-            DatabaseEngineDTO::Csv {
+            DatabaseImportSourceDTO::Csv {
                 path: csv.to_string_lossy().into_owned(),
                 delimiter: ',',
                 has_header: true,
@@ -1036,7 +1076,7 @@ mod tests {
             &state,
             project_instance_id.clone(),
             import_operation,
-            DatabaseEngineDTO::Csv {
+            DatabaseImportSourceDTO::Csv {
                 path: replay_csv.to_string_lossy().into_owned(),
                 delimiter: ',',
                 has_header: true,
@@ -1081,7 +1121,10 @@ mod tests {
             &database_id,
             renamed_revision,
             rejected_operation,
-            |_, _| Err::<crate::database::EditState, _>("rejected edit".into()),
+            DatabaseMutation::AddColumn {
+                name: "rejected".into(),
+                dtype: "Mystery".into(),
+            },
             |event| events.push(event),
         );
         assert!(rejected.is_err());
@@ -1093,7 +1136,10 @@ mod tests {
             &database_id,
             renamed_revision,
             rejected_operation,
-            |database, _| database.add_column("added", "Int64"),
+            DatabaseMutation::AddColumn {
+                name: "added".into(),
+                dtype: "Int64".into(),
+            },
             |event| events.push(event),
         )
         .unwrap();
@@ -1138,8 +1184,11 @@ mod tests {
             &state,
             state.capture_project_session().unwrap().instance_id,
             retry_operation,
-            DatabaseEngineDTO::InMemory {
-                name: "unsupported".into(),
+            DatabaseImportSourceDTO::Csv {
+                path: root.join("missing.csv").to_string_lossy().into_owned(),
+                delimiter: ',',
+                has_header: true,
+                infer_schema_length: None,
             },
             |event| events.push(event),
         );
@@ -1152,7 +1201,7 @@ mod tests {
             &state,
             state.capture_project_session().unwrap().instance_id,
             retry_operation,
-            DatabaseEngineDTO::Csv {
+            DatabaseImportSourceDTO::Csv {
                 path: retry_csv.to_string_lossy().into_owned(),
                 delimiter: ',',
                 has_header: true,

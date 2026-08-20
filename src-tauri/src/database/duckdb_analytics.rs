@@ -36,7 +36,7 @@ fn is_datetime_dtype_str(dtype: &str) -> bool {
 }
 
 fn quote_column(name: &str) -> String {
-    format!(r#""{}""#, super::sql_escape_literal(name))
+    super::quote_duckdb_identifier(name)
 }
 
 fn open_conn(duckdb_path: &Path) -> Result<Connection, String> {
@@ -376,10 +376,6 @@ pub fn compute_dataset_overview_duckdb(
     let table_sql = duckdb_table_sql(table);
     let n_columns = columns.len();
 
-    let memory_size = std::fs::metadata(duckdb_path)
-        .map(|m| m.len() as usize)
-        .unwrap_or(0);
-
     let mut numeric_cols = 0usize;
     let mut categorical_cols = 0usize;
     let mut string_cols = 0usize;
@@ -431,7 +427,7 @@ pub fn compute_dataset_overview_duckdb(
     };
 
     // Full-row duplicate detection is intentionally skipped for DuckDB-backed tables.
-    let duplicated_rows = 0usize;
+    let duplicated_rows = None;
     let rows_with_nulls = if total_nulls == 0 {
         0
     } else {
@@ -453,7 +449,7 @@ pub fn compute_dataset_overview_duckdb(
         size_shape: SizeShape {
             n_rows: row_count,
             n_columns,
-            memory_size,
+            estimated_dataframe_memory_bytes: None,
             duplicated_rows,
         },
         schema_overview: SchemaOverview {

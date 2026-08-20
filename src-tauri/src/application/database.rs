@@ -1,16 +1,21 @@
 use std::path::{Path, PathBuf};
 
+mod error;
+
+pub use self::error::{
+    DatabaseApplicationError, DatabaseApplicationInternalError, DatabaseApplicationOperation,
+};
 pub use crate::application::database_schema::name_from_path;
 use crate::application::database_schema::{
     DatabaseSchemaSnapshot, column_info_from_duckdb, database_display_name, extract_database_schema,
 };
 use crate::database::{
-    DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseInstance, DatabaseState,
-    drop_data_table, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
-    ingest_parquet_to_duckdb, read_table_meta, sql_reader, write_display_name,
+    DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseExportFormat, DatabaseInstance,
+    DatabaseState, drop_data_table, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb,
+    ingest_excel_to_duckdb, ingest_parquet_to_duckdb, read_table_meta, sql_reader,
+    write_display_name,
 };
 use crate::database::{EditHistory, EditState};
-use crate::error::CommandError;
 use crate::project::{
     ProjectDatabaseError, ProjectFilesystemError, ProjectInstanceId, ProjectSession, ProjectState,
     relative_project_duckdb_path, unique_name,
@@ -328,6 +333,43 @@ fn load_sql_via_duckdb(
     )
 }
 
+pub fn list_sqlite_tables(path: &str) -> Result<Vec<String>, DatabaseApplicationError> {
+    sql_reader::list_tables(&DatabaseEngineSql::Sqlite { auto_create: false }, path).map_err(
+        |error| {
+            DatabaseApplicationError::internal_message(
+                DatabaseApplicationOperation::ListTables,
+                error,
+            )
+        },
+    )
+}
+
+pub fn list_sql_tables(
+    engine: &str,
+    connection_string: &str,
+) -> Result<Vec<String>, DatabaseApplicationError> {
+    let engine = match engine {
+        "postgres" | "postgresql" => DatabaseEngineSql::Postgres { ssl: true },
+        "mysql" | "mariadb" => DatabaseEngineSql::Mysql {
+            charset: "utf8mb4".to_string(),
+        },
+        engine => {
+            return Err(DatabaseApplicationError::SqlEngineUnsupported {
+                engine: engine.to_owned(),
+            });
+        }
+    };
+    sql_reader::list_tables(&engine, connection_string).map_err(|error| {
+        DatabaseApplicationError::internal_message(DatabaseApplicationOperation::ListTables, error)
+    })
+}
+
+pub fn list_excel_sheets(path: &str) -> Result<Vec<String>, DatabaseApplicationError> {
+    crate::database::excel_reader::list_sheets(path).map_err(|error| {
+        DatabaseApplicationError::internal_message(DatabaseApplicationOperation::ListSheets, error)
+    })
+}
+
 pub fn bind_duckdb_instance(decl: &DatabaseDecl, project_root: Option<&Path>) -> DatabaseInstance {
     let DatabaseEngine::DuckDb { path, table, .. } = &decl.engine else {
         unreachable!("bind_duckdb_instance expects DuckDb engine");
@@ -358,15 +400,6 @@ pub fn bind_duckdb_instance(decl: &DatabaseDecl, project_root: Option<&Path>) ->
     }
 }
 
-pub fn get_database_meta(state: &ProjectState, id: &str) -> Result<DatabaseMetaResult, String> {
-    state
-        .ensure_project_operational()
-        .map_err(|error| format!("{}: {error}", error.code()))?;
-    let store = state.project_store.read().unwrap();
-    let db = store.databases.get(id).ok_or("Database not found")?;
-    get_database_meta_from_instance(id, db)
-}
-
 pub(crate) fn get_database_meta_from_instance(
     id: &str,
     db: &DatabaseInstance,
@@ -390,17 +423,168 @@ pub(crate) fn get_database_meta_from_instance(
     }
 }
 
-fn database_project_error(error: crate::project::ProjectFilesystemError) -> CommandError {
-    CommandError::from(error)
+fn with_database_read_for_project<R>(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+    operation: DatabaseApplicationOperation,
+    require_ready: bool,
+    read: impl FnOnce(&mut DatabaseInstance) -> Result<R, DatabaseApplicationError>,
+) -> Result<R, DatabaseApplicationError> {
+    state
+        .with_database_snapshot_for_project(project_instance_id, id, |database| {
+            if require_ready && matches!(&database.state, DatabaseState::Failed { .. }) {
+                return Err(DatabaseApplicationError::InvalidAccess {
+                    database_id: id.to_owned(),
+                    operation,
+                });
+            }
+            read(database)
+        })
+        .map_err(|error| {
+            DatabaseApplicationError::from_project_database(
+                error,
+                operation,
+                project_instance_id,
+                Some(id),
+                None,
+                None,
+            )
+        })?
 }
 
-fn reserve_export_temporary_file(destination: &Path) -> Result<PathBuf, CommandError> {
+pub fn read_database_meta(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+) -> Result<DatabaseMetaResult, DatabaseApplicationError> {
+    let operation = DatabaseApplicationOperation::ReadMetadata;
+    with_database_read_for_project(
+        state,
+        project_instance_id,
+        id,
+        operation,
+        true,
+        |database| {
+            get_database_meta_from_instance(id, database)
+                .map_err(|error| DatabaseApplicationError::internal_message(operation, error))
+        },
+    )
+}
+
+pub fn read_database_rows(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<crate::database::PageQueryResult, DatabaseApplicationError> {
+    let operation = DatabaseApplicationOperation::ReadRows;
+    if limit > crate::database::MAX_GET_DATAFRAME_ROWS {
+        return Err(DatabaseApplicationError::RowLimitExceeded {
+            database_id: id.to_owned(),
+            operation,
+            requested_rows: limit,
+            max_rows: crate::database::MAX_GET_DATAFRAME_ROWS,
+        });
+    }
+
+    with_database_read_for_project(
+        state,
+        project_instance_id,
+        id,
+        operation,
+        true,
+        |database| {
+            database
+                .query_page_with_rowids(offset, limit)
+                .map_err(|error| DatabaseApplicationError::internal(operation, error))
+        },
+    )
+}
+
+pub fn read_column_statistics(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+) -> Result<Vec<crate::database::ColumnStats>, DatabaseApplicationError> {
+    let operation = DatabaseApplicationOperation::ColumnStatistics;
+    with_database_read_for_project(
+        state,
+        project_instance_id,
+        id,
+        operation,
+        true,
+        |database| {
+            database
+                .compute_column_stats()
+                .map_err(|error| DatabaseApplicationError::internal(operation, error))
+        },
+    )
+}
+
+pub fn read_column_distributions(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+) -> Result<Vec<crate::database::ColumnDistribution>, DatabaseApplicationError> {
+    let operation = DatabaseApplicationOperation::ColumnDistribution;
+    with_database_read_for_project(
+        state,
+        project_instance_id,
+        id,
+        operation,
+        true,
+        |database| {
+            database
+                .compute_column_distributions()
+                .map_err(|error| DatabaseApplicationError::internal(operation, error))
+        },
+    )
+}
+
+pub fn read_dataset_overview(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+) -> Result<crate::database::DatasetOverview, DatabaseApplicationError> {
+    let operation = DatabaseApplicationOperation::DatasetOverview;
+    with_database_read_for_project(
+        state,
+        project_instance_id,
+        id,
+        operation,
+        true,
+        |database| {
+            database
+                .compute_dataset_overview()
+                .map_err(|error| DatabaseApplicationError::internal(operation, error))
+        },
+    )
+}
+
+pub fn read_database_edit_state(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+) -> Result<EditState, DatabaseApplicationError> {
+    with_database_read_for_project(
+        state,
+        project_instance_id,
+        id,
+        DatabaseApplicationOperation::ReadEditState,
+        false,
+        |database| Ok(database.edit_state()),
+    )
+}
+
+fn reserve_export_temporary_file(destination: &Path) -> Result<PathBuf, DatabaseApplicationError> {
     let parent = destination
         .parent()
-        .ok_or_else(|| CommandError::expected("database_export_temp_reservation_failed"))?;
+        .ok_or(DatabaseApplicationError::InvalidExportDestination)?;
     let file_name = destination
         .file_name()
-        .ok_or_else(|| CommandError::expected("database_export_temp_reservation_failed"))?;
+        .ok_or(DatabaseApplicationError::InvalidExportDestination)?;
     for _ in 0..8 {
         let temporary = parent.join(format!(
             ".{}.{}.tmp",
@@ -418,72 +602,42 @@ fn reserve_export_temporary_file(destination: &Path) -> Result<PathBuf, CommandE
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => {
-                return Err(CommandError::diagnosed(
-                    "database_export_temp_reservation_failed",
+                return Err(DatabaseApplicationError::internal(
+                    DatabaseApplicationOperation::ExportReserve,
                     error,
                 ));
             }
         }
     }
-    Err(CommandError::diagnosed(
-        "database_export_temp_reservation_failed",
+    Err(DatabaseApplicationError::internal_message(
+        DatabaseApplicationOperation::ExportReserve,
         "unable to reserve a unique sibling export path",
     ))
 }
 
-pub(crate) fn cleanup_export_temporary_file(temporary: &Path) -> Result<(), CommandError> {
+pub(crate) fn cleanup_export_temporary_file(
+    temporary: &Path,
+) -> Result<(), DatabaseApplicationError> {
     match std::fs::remove_file(temporary) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(CommandError::diagnosed(
-            "database_export_cleanup_failed",
+        Err(error) => Err(DatabaseApplicationError::internal(
+            DatabaseApplicationOperation::ExportCleanup,
             error,
         )),
     }
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CommandErrorSummary {
-    code: &'static str,
-    incident_id: Option<String>,
-}
-
-impl CommandErrorSummary {
-    fn from_error(error: &CommandError) -> Self {
-        Self {
-            code: error.code(),
-            incident_id: error.incident_id().map(str::to_owned),
-        }
-    }
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CleanupErrorDetails {
-    cleanup_error: CommandErrorSummary,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PrimaryErrorDetails {
-    primary_error: CommandErrorSummary,
-}
-
-fn cleanup_after_export_error(temporary: &Path, primary: CommandError) -> CommandError {
+fn cleanup_after_export_error(
+    temporary: &Path,
+    primary: DatabaseApplicationError,
+) -> DatabaseApplicationError {
     let Err(cleanup) = cleanup_export_temporary_file(temporary) else {
         return primary;
     };
-    if primary.code() == "stale_project_lifecycle" {
-        let details = CleanupErrorDetails {
-            cleanup_error: CommandErrorSummary::from_error(&cleanup),
-        };
-        primary.with_details(details)
-    } else {
-        let details = PrimaryErrorDetails {
-            primary_error: CommandErrorSummary::from_error(&primary),
-        };
-        cleanup.with_details(details)
+    DatabaseApplicationError::CleanupAfterFailure {
+        primary: Box::new(primary),
+        cleanup: Box::new(cleanup),
     }
 }
 
@@ -531,32 +685,58 @@ pub(crate) fn export_database_for_project_with_before_publish(
     format: &str,
     before_authority: impl FnOnce(&Path),
     at_final_publication: impl FnOnce(&Path),
-) -> Result<(), CommandError> {
-    let mut dataframe = state
-        .with_database_snapshot_for_project(project_instance_id, id, |database| {
-            database
-                .access(crate::database::DatabaseAccess::Execution)
-                .map(|view| view.dataframe)
-                .map_err(|error| error.to_string())
-        })
-        .map_err(CommandError::from)?
-        .map_err(|error| CommandError::diagnosed("database_computation_failed", error))?;
+) -> Result<(), DatabaseApplicationError> {
+    let export_format = DatabaseExportFormat::parse(format).ok_or_else(|| {
+        DatabaseApplicationError::ExportUnsupported {
+            format: format.to_owned(),
+        }
+    })?;
+    let read_operation = DatabaseApplicationOperation::ExportRead;
     let destination = Path::new(path);
     let temporary = reserve_export_temporary_file(destination)?;
     let result = (|| {
-        crate::database::export_dataframe(
-            &mut dataframe,
-            temporary.to_string_lossy().as_ref(),
-            format,
-        )
-        .map_err(|error| CommandError::diagnosed("database_export_serialization_failed", error))?;
+        state
+            .with_database_snapshot_for_project(project_instance_id, id, |database| {
+                if matches!(&database.state, DatabaseState::Failed { .. }) {
+                    return Err(DatabaseApplicationError::InvalidAccess {
+                        database_id: id.to_owned(),
+                        operation: read_operation,
+                    });
+                }
+                database
+                    .export_to_path(&temporary, export_format)
+                    .map_err(|error| {
+                        DatabaseApplicationError::internal_message(
+                            DatabaseApplicationOperation::ExportSerialize,
+                            error,
+                        )
+                    })
+            })
+            .map_err(|error| {
+                DatabaseApplicationError::from_project_database(
+                    error,
+                    read_operation,
+                    project_instance_id,
+                    Some(id),
+                    None,
+                    None,
+                )
+            })??;
         before_authority(&temporary);
         let _authority = state
             .acquire_database_publication_authority(project_instance_id)
-            .map_err(database_project_error)?;
+            .map_err(|error| {
+                DatabaseApplicationError::from_project_filesystem(
+                    error,
+                    DatabaseApplicationOperation::ExportPublish,
+                    project_instance_id,
+                    Some(id),
+                )
+            })?;
         at_final_publication(&temporary);
-        atomic_replace_export(&temporary, destination)
-            .map_err(|error| CommandError::diagnosed("database_export_publication_failed", error))
+        atomic_replace_export(&temporary, destination).map_err(|error| {
+            DatabaseApplicationError::internal(DatabaseApplicationOperation::ExportPublish, error)
+        })
     })();
     match result {
         Ok(()) => Ok(()),
@@ -564,13 +744,13 @@ pub(crate) fn export_database_for_project_with_before_publish(
     }
 }
 
-pub(crate) fn export_database_for_project(
+pub fn export_database_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
     id: &str,
     path: &str,
     format: &str,
-) -> Result<(), CommandError> {
+) -> Result<(), DatabaseApplicationError> {
     export_database_for_project_with_before_publish(
         state,
         project_instance_id,
@@ -668,4 +848,220 @@ pub fn save_database_changes(
         operation_id,
         |db, session| db.save_changes(Some(session.root.as_path())),
     )
+}
+
+pub enum DatabaseMutation {
+    EditCell {
+        row: usize,
+        column: String,
+        value: serde_json::Value,
+        row_id: Option<i64>,
+    },
+    AddRow {
+        index: Option<usize>,
+    },
+    DeleteRows {
+        indices: Vec<usize>,
+        row_ids: Option<Vec<i64>>,
+    },
+    AddColumn {
+        name: String,
+        dtype: String,
+    },
+    DeleteColumn {
+        name: String,
+    },
+    CastColumn {
+        column: String,
+        dtype: String,
+        force: bool,
+    },
+    RenameColumn {
+        old_name: String,
+        new_name: String,
+    },
+    Undo,
+    Redo,
+}
+
+impl DatabaseMutation {
+    pub fn operation(&self) -> DatabaseApplicationOperation {
+        match self {
+            Self::EditCell { .. } => DatabaseApplicationOperation::EditCell,
+            Self::AddRow { .. } => DatabaseApplicationOperation::AddRow,
+            Self::DeleteRows { .. } => DatabaseApplicationOperation::DeleteRows,
+            Self::AddColumn { .. } => DatabaseApplicationOperation::AddColumn,
+            Self::DeleteColumn { .. } => DatabaseApplicationOperation::DeleteColumn,
+            Self::CastColumn { .. } => DatabaseApplicationOperation::CastColumn,
+            Self::RenameColumn { .. } => DatabaseApplicationOperation::RenameColumn,
+            Self::Undo => DatabaseApplicationOperation::UndoEdit,
+            Self::Redo => DatabaseApplicationOperation::RedoEdit,
+        }
+    }
+}
+
+fn validate_database_mutation(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+    mutation: &DatabaseMutation,
+) -> Result<(), DatabaseApplicationError> {
+    let operation = mutation.operation();
+    if let DatabaseMutation::DeleteRows {
+        indices,
+        row_ids: Some(row_ids),
+    } = mutation
+    {
+        let mut distinct_indices = indices.clone();
+        distinct_indices.sort_unstable();
+        distinct_indices.dedup();
+        if row_ids.len() != distinct_indices.len() {
+            return Err(DatabaseApplicationError::InvalidInput {
+                database_id: id.to_owned(),
+                operation,
+                field: "rowIds",
+            });
+        }
+    }
+
+    with_database_read_for_project(
+        state,
+        project_instance_id,
+        id,
+        operation,
+        true,
+        |database| {
+            match (mutation, &database.state) {
+                (
+                    DatabaseMutation::DeleteColumn { .. },
+                    DatabaseState::DuckDb { row_count, .. },
+                ) if *row_count > crate::database::MAX_DELETE_COLUMN_SNAPSHOT_ROWS => {
+                    return Err(DatabaseApplicationError::RowLimitExceeded {
+                        database_id: id.to_owned(),
+                        operation,
+                        requested_rows: *row_count,
+                        max_rows: crate::database::MAX_DELETE_COLUMN_SNAPSHOT_ROWS,
+                    });
+                }
+                (
+                    DatabaseMutation::CastColumn { force: true, .. },
+                    DatabaseState::DuckDb { .. },
+                ) => {
+                    return Err(DatabaseApplicationError::OperationUnsupported {
+                        database_id: Some(id.to_owned()),
+                        operation,
+                    });
+                }
+                _ => {}
+            }
+            Ok(())
+        },
+    )
+}
+
+pub fn mutate_database_resource(
+    state: &ProjectState,
+    project_instance_id: &ProjectInstanceId,
+    id: &str,
+    expected_revision: crate::node_system::document::ResourceRevision,
+    operation_id: crate::node_system::document::OperationId,
+    mutation: DatabaseMutation,
+) -> Result<crate::event::ResourceMutationCommandResultDto<EditState>, DatabaseApplicationError> {
+    let operation = mutation.operation();
+    validate_database_mutation(state, project_instance_id, id, &mutation)?;
+    state
+        .with_database_writer(
+            project_instance_id,
+            id,
+            expected_revision,
+            operation_id,
+            move |database, _| match mutation {
+                DatabaseMutation::EditCell {
+                    row,
+                    column,
+                    value,
+                    row_id,
+                } => database.edit_cell(row, &column, value, row_id),
+                DatabaseMutation::AddRow { index } => database.add_row(index),
+                DatabaseMutation::DeleteRows { indices, row_ids } => {
+                    database.delete_rows(&indices, row_ids.as_deref())
+                }
+                DatabaseMutation::AddColumn { name, dtype } => database.add_column(&name, &dtype),
+                DatabaseMutation::DeleteColumn { name } => database.delete_column(&name),
+                DatabaseMutation::CastColumn {
+                    column,
+                    dtype,
+                    force,
+                } => database.cast_column(&column, &dtype, force),
+                DatabaseMutation::RenameColumn { old_name, new_name } => {
+                    database.rename_column(&old_name, &new_name)
+                }
+                DatabaseMutation::Undo => database.undo_edit(),
+                DatabaseMutation::Redo => database.redo_edit(),
+            },
+        )
+        .map_err(|error| {
+            DatabaseApplicationError::from_project_database(
+                error,
+                operation,
+                project_instance_id,
+                Some(id),
+                Some(expected_revision),
+                None,
+            )
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::project::ProjectData;
+
+    fn install_loaded_database(state: &ProjectState) -> ProjectInstanceId {
+        let mut project = ProjectData::new();
+        let decl = DatabaseDecl {
+            id: "sales".into(),
+            engine: DatabaseEngine::InMemory {
+                name: "sales".into(),
+            },
+            schema_version: 1,
+            required: false,
+            name: "Sales".into(),
+        };
+        project.databases.insert("sales".into(), decl.clone());
+        state.activate_project_fixture("database-application".into(), project);
+        let dataframe = polars::df!("amount" => &[1_i64, 2_i64]).unwrap();
+        state.project_store.write().unwrap().databases.insert(
+            "sales".into(),
+            DatabaseInstance {
+                decl,
+                state: DatabaseState::Loaded {
+                    dataframe: std::sync::Arc::new(dataframe.clone()),
+                    original: std::sync::Arc::new(dataframe),
+                    history: EditHistory::new(),
+                },
+            },
+        );
+        state.capture_project_session().unwrap().instance_id
+    }
+
+    #[test]
+    fn public_rows_use_case_reports_typed_row_limit() {
+        let state = ProjectState::new();
+        let project_instance_id = install_loaded_database(&state);
+        let requested_rows = crate::database::MAX_GET_DATAFRAME_ROWS + 1;
+
+        let error = read_database_rows(&state, &project_instance_id, "sales", 0, requested_rows)
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            DatabaseApplicationError::RowLimitExceeded {
+                database_id,
+                operation: DatabaseApplicationOperation::ReadRows,
+                requested_rows: actual,
+                max_rows: crate::database::MAX_GET_DATAFRAME_ROWS,
+            } if database_id == "sales" && actual == requested_rows
+        ));
+    }
 }

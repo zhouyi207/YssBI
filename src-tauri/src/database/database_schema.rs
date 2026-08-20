@@ -1,6 +1,6 @@
 use crate::graph::node::{ColumnSchema, DataSchema};
 use crate::graph::value::DataType;
-use polars::prelude::{DataFrame, Schema};
+use polars::prelude::DataFrame;
 
 use super::DuckDbColumnMeta;
 
@@ -11,20 +11,6 @@ pub fn duckdb_columns_to_schema(columns: &[DuckDbColumnMeta]) -> DataSchema {
             .map(|col| ColumnSchema {
                 name: col.name.clone(),
                 data_type: polars_type_string_to_data_type(&col.dtype),
-            })
-            .collect(),
-    }
-}
-
-pub fn polars_schema_to_data_schema(schema: &Schema) -> DataSchema {
-    DataSchema {
-        columns: schema
-            .iter_names()
-            .filter_map(|name| {
-                schema.get(name).map(|dt| ColumnSchema {
-                    name: name.to_string(),
-                    data_type: polars_dtype_to_data_type(dt),
-                })
             })
             .collect(),
     }

@@ -52,13 +52,50 @@ impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
     }
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DatabaseImportSqlEngineDTO {
+    Sqlite,
+    Postgres,
+    Mysql,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DatabaseImportSourceDTO {
+    Sql {
+        engine: DatabaseImportSqlEngineDTO,
+        #[serde(rename = "connectionString")]
+        connection_string: String,
+        table: String,
+    },
+    Csv {
+        path: String,
+        #[serde(default = "default_csv_delimiter")]
+        delimiter: char,
+        #[serde(default = "default_true", rename = "hasHeader")]
+        has_header: bool,
+        #[serde(default, rename = "inferSchemaLength")]
+        infer_schema_length: Option<usize>,
+    },
+    Parquet {
+        path: String,
+        #[serde(default)]
+        columns: Option<Vec<String>>,
+    },
+    Excel {
+        path: String,
+        sheet: String,
+    },
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DatabaseEngineDTO {
     /// SQLite（本地文件），table 为选中的表名
     Sql {
         engine: DatabaseEngineSqlDTO,
-        #[serde(rename = "connectionString", alias = "connection_string")]
+        #[serde(rename = "connectionString")]
         connection_string: String,
         table: String,
     },
@@ -89,6 +126,48 @@ pub enum DatabaseEngineDTO {
     /// In-memory DataFrame (not serializable, runtime only)
     /// Will be ignored or converted during serialization
     InMemory { name: String },
+}
+
+impl From<DatabaseImportSourceDTO> for DatabaseEngineDTO {
+    fn from(value: DatabaseImportSourceDTO) -> Self {
+        match value {
+            DatabaseImportSourceDTO::Sql {
+                engine,
+                connection_string,
+                table,
+            } => {
+                let engine = match engine {
+                    DatabaseImportSqlEngineDTO::Sqlite => {
+                        DatabaseEngineSqlDTO::Sqlite { auto_create: false }
+                    }
+                    DatabaseImportSqlEngineDTO::Postgres => {
+                        DatabaseEngineSqlDTO::Postgres { ssl: true }
+                    }
+                    DatabaseImportSqlEngineDTO::Mysql => DatabaseEngineSqlDTO::Mysql {
+                        charset: "utf8mb4".into(),
+                    },
+                };
+                Self::Sql {
+                    engine,
+                    connection_string,
+                    table,
+                }
+            }
+            DatabaseImportSourceDTO::Csv {
+                path,
+                delimiter,
+                has_header,
+                infer_schema_length,
+            } => Self::Csv {
+                path,
+                delimiter,
+                has_header,
+                infer_schema_length,
+            },
+            DatabaseImportSourceDTO::Parquet { path, columns } => Self::Parquet { path, columns },
+            DatabaseImportSourceDTO::Excel { path, sheet } => Self::Excel { path, sheet },
+        }
+    }
 }
 
 impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
@@ -139,7 +218,7 @@ impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
 #[serde(rename_all = "camelCase")]
 pub enum DatabaseEngineSqlDTO {
     Sqlite {
-        #[serde(default, rename = "autoCreate", alias = "auto_create")]
+        #[serde(default, rename = "autoCreate")]
         auto_create: bool,
     },
     Postgres {
@@ -226,6 +305,45 @@ impl TryFrom<DatabaseEngineDTO> for crate::database::DatabaseEngine {
             DatabaseEngineDTO::InMemory { name } => {
                 Ok(crate::database::DatabaseEngine::InMemory { name })
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn database_import_source_wire_contains_only_effective_inputs() {
+        let source = serde_json::from_value::<DatabaseImportSourceDTO>(json!({
+            "sql": {
+                "engine": "sqlite",
+                "connectionString": "C:/data/source.sqlite",
+                "table": "sales"
+            }
+        }))
+        .unwrap();
+        assert!(matches!(
+            source,
+            DatabaseImportSourceDTO::Sql {
+                engine: DatabaseImportSqlEngineDTO::Sqlite,
+                ..
+            }
+        ));
+
+        for invalid in [
+            json!({ "duckDb": { "path": "database/project.duckdb", "table": "sales" } }),
+            json!({ "inMemory": { "name": "sales" } }),
+            json!({
+                "sql": {
+                    "engine": { "sqlite": { "autoCreate": false } },
+                    "connectionString": "C:/data/source.sqlite",
+                    "table": "sales"
+                }
+            }),
+        ] {
+            assert!(serde_json::from_value::<DatabaseImportSourceDTO>(invalid).is_err());
         }
     }
 }
