@@ -349,9 +349,9 @@ src/app/appConfig/appLinks.ts
 
 ## 2026.08.17
 
+架构，不要你中有我我中有你，最好组件化？是这个意思吧？即下面的分析
 
 - [ ] snapshot 有必要吗？？？？ 还有 run id，以及每次允许之后会在 details 中出现的 developer trace 中记录的历史数据，打开会很卡。
-
 
 - [ ] 在更改 graph 的时候 tabbar 中的样式并没有其他变化，如果在更改后不保存关闭，那么下次打开打开的时候还是更改前的状态，这里明显是不符合逻辑的，除此之外还有其他的需要检查；同时磁盘上以及更新的符号和标签我感觉可以去掉，可以学习 vscode 的 tabbar 处理
 - [ ] 在前端中的 graph 中的 data pin 的类别都是 unknown，导致节点没有颜色，同时在 pin 的时候不会筛选节点，更不会自动连接节点，这个是需要修复的，可能需要完整的从后端发送类型过来避免字符串解析？这样会更加完整？这里需要仔细考虑
@@ -556,3 +556,1082 @@ deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感
 - 灵活，但第一阶段复杂度更高。
 
 请选择 **A、B 或 C**。我推荐 **A**。
+
+
+## 项目分析
+
+我看了你这个仓库当前的 `shadcn` 分支，包括 README、前后端目录、Cargo 依赖、services、features、commands、execution、TODO 和 CI。整体上我认为 **方向是对的，而且已经明显超过普通 Tauri CRUD 项目**：你实际上在做一个「节点式统计分析 IDE / 桌面 BI 工作台」。README 里已经覆盖数据管理、节点工作流、计量经济学、时间序列、因果推断和可视化。([GitHub][1])
+
+但现在确实到了一个很关键的阶段：**接下来最应该做的是收敛架构，而不是继续堆功能。**
+
+我会把优化优先级排成下面这样。
+
+### P0：先把后端真正拆成“宿主层”和“计算层”
+
+你现在已经有：
+
+```text
+src-tauri/
+├── src/
+│   ├── application
+│   ├── commands
+│   ├── database
+│   ├── execution
+│   ├── graph
+│   ├── node_system
+│   ├── project
+│   ├── sci
+│   └── ...
+│
+└── sci/
+    └── 独立 yss-sci crate
+```
+
+这说明你已经开始做正确的拆分。([GitHub][2])
+
+但是主 `yssbi` crate 依然直接依赖：
+
+```text
+ndarray
+polars
+polars-arrow
+polars-dtype
+statrs
+sqlx
+duckdb
+calamine
+rand
+...
+```
+
+而 `yss-sci` 又已经存在。([GitHub][3])
+
+我建议继续收敛成：
+
+```text
+Tauri / Host
+        │
+        ▼
+Application
+        │
+        ▼
+Execution Engine
+        │
+        ├───────────────┐
+        ▼               ▼
+Data Engine         Compute Engine
+Polars/DuckDB       Rust / Julia
+                        │
+                        ▼
+                     yss-sci
+```
+
+也就是说：
+
+```text
+yssbi
+负责：
+Tauri
+窗口
+IPC
+项目
+Graph
+Executor
+数据生命周期
+任务调度
+
+yss-sci
+负责：
+OLS
+GLS
+WLS
+IV
+Panel
+VAR
+VECM
+DID
+Hypothesis Test
+统计量
+线性代数
+```
+
+尤其应该避免：
+
+```rust
+commands -> 统计实现
+```
+
+而变成：
+
+```text
+command
+   ↓
+application/use-case
+   ↓
+execution
+   ↓
+compute backend
+   ↓
+yss-sci / Julia
+```
+
+你自己的 TODO 已经提到“Rust 保留宿主、数据层和必要 fallback；科学计算逐步迁移 Julia”，这个总体思想是合理的。([GitHub][4])
+
+---
+
+## P0：把 Execution Engine 做成整个 YssBI 的核心
+
+我认为 **YssBI 最值钱的代码将来可能不是 OLS，也不是 UI，而是 execution engine。**
+
+README 已经显示你的核心交互是：
+
+```text
+Node
+ ↓
+Pin
+ ↓
+Connection
+ ↓
+Graph
+ ↓
+Execution
+```
+
+并且你已经有独立：
+
+```text
+execution/
+graph/
+node_system/
+```
+
+目录。([GitHub][2])
+
+建议进一步明确一个非常重要的边界：
+
+```text
+Graph ≠ Execution
+```
+
+Graph 只描述：
+
+```text
+节点是什么
+连接是什么
+参数是什么
+依赖是什么
+```
+
+Execution 才负责：
+
+```text
+拓扑排序
+dependency resolution
+dirty propagation
+cache
+task scheduling
+cancellation
+progress
+error propagation
+parallel execution
+```
+
+最终可以形成：
+
+```rust
+ExecutionPlan
+    ↓
+TaskGraph
+    ↓
+Scheduler
+    ↓
+Executor
+    ↓
+Backend
+```
+
+类似：
+
+```rust
+trait ExecutionBackend {
+    async fn execute(
+        &self,
+        task: &ExecutionTask,
+        ctx: &ExecutionContext,
+    ) -> Result<TaskOutput, ExecutionError>;
+}
+```
+
+backend 可以有：
+
+```text
+PolarsBackend
+DuckDbBackend
+RustSciBackend
+JuliaBackend
+AIBackend
+```
+
+这样以后加 Python、R、GPU 都不会重新设计节点系统。
+
+---
+
+# P0：解决“计算导致 UI 卡死”
+
+你 TODO 里自己已经发现了：
+
+> 按下按钮涉及大量计算的时候，页面会卡死。([GitHub][5])
+
+这个千万不要简单理解成：
+
+> `spawn 一个 thread`
+
+真正应该做的是 **Task System**。
+
+例如：
+
+```text
+ExecutionTask
+├── id
+├── node_id
+├── state
+│   ├── queued
+│   ├── running
+│   ├── completed
+│   ├── failed
+│   └── cancelled
+├── progress
+├── cancellation_token
+└── result
+```
+
+前端：
+
+```text
+Run Node
+   ↓
+invoke start_execution
+   ↓
+立即返回 task_id
+   ↓
+Rust 后台执行
+   ↓
+event:
+execution:started
+execution:progress
+execution:completed
+execution:failed
+```
+
+而不是：
+
+```text
+React
+ ↓
+invoke()
+ ↓
+等 20 秒
+ ↓
+Result
+```
+
+这对：
+
+```text
+VAR
+VECM
+Bayes
+大数据聚合
+数据库 import
+未来 AI
+```
+
+全部有用。
+
+以后还可以自然支持：
+
+```text
+Cancel
+Retry
+Pause
+Parallel
+Queue
+Execution history
+```
+
+---
+
+# P1：你现在的前端目录有一点“重复架构”
+
+目前前端同时存在：
+
+```text
+src/
+├── app
+├── components
+├── features
+├── lib
+├── services
+├── shared
+├── utils
+├── views
+```
+
+而 `features` 内部又已经定义：
+
+```text
+core
+domain
+application
+```
+
+并且明确规定依赖关系。([GitHub][4])
+
+这个思想本身很好。
+
+问题是：
+
+```text
+services/
+features/
+views/
+components/
+shared/
+lib/
+utils/
+```
+
+长期非常容易产生归属不明确：
+
+> “这个函数到底放 services、shared、utils 还是 feature？”
+
+你现在 `services` 已经包含：
+
+```text
+bayes
+clipboard
+database
+graph
+ipc
+julia
+log
+nodeSystem
+project
+result
+stats
+variable
+window
+worksheet
+```
+
+([GitHub][6])
+
+这里已经有一点明显的“横向 service 大目录”趋势。
+
+我更推荐：
+
+```text
+src/
+├── app/
+│
+├── features/
+│   ├── graph/
+│   ├── project/
+│   ├── dataframe/
+│   ├── statistics/
+│   ├── worksheet/
+│   ├── visualization/
+│   └── workbench/
+│
+├── platform/
+│   ├── tauri/
+│   ├── ipc/
+│   └── window/
+│
+└── shared/
+    ├── ui/
+    ├── hooks/
+    ├── types/
+    └── utils/
+```
+
+然后例如：
+
+```text
+features/project
+├── api
+├── model
+├── store
+├── ui
+└── lib
+```
+
+这样：
+
+```text
+ProjectService
+ProjectStore
+ProjectView
+ProjectDTO
+```
+
+全部围绕 `project` 放置。
+
+这比现在：
+
+```text
+services/project
+features/...
+views/...
+```
+
+更适合一个越来越大的应用。
+
+---
+
+# P1：你现在正在做的 AppError 非常值得完成
+
+TODO 里这一条，我非常赞同：
+
+> 绝大多数 `#[tauri::command]` 仍然是 `Result<_, String>`，准备统一成结构化 `AppError`。([GitHub][5])
+
+应该尽快做完。
+
+不要：
+
+```rust
+Result<T, String>
+```
+
+而应该：
+
+```rust
+struct AppError {
+    code: ErrorCode,
+    message: String,
+    details: Option<Value>,
+}
+```
+
+例如：
+
+```json
+{
+  "code": "DATAFRAME_COLUMN_NOT_FOUND",
+  "message": "Column `age` does not exist",
+  "details": {
+    "column": "age"
+  }
+}
+```
+
+前端：
+
+```ts
+switch (error.code) {
+  case "PROJECT_NOT_FOUND":
+  case "NODE_EXECUTION_FAILED":
+  case "DATABASE_CONNECTION_FAILED":
+}
+```
+
+这件事情收益非常高。
+
+因为以后 AI Agent 调用 YssBI 工具时，也可以直接理解：
+
+```text
+code
+message
+details
+```
+
+而不是解析字符串。
+
+---
+
+# P1：DTO 自动生成，我建议直接做
+
+TODO 里你也已经意识到了：
+
+> Rust DTO 和 TypeScript 手写 types.ts 容易漂移，考虑 typeshare / ts-rs。([GitHub][5])
+
+我的答案是：
+
+**做。**
+
+你这个项目非常适合。
+
+因为数据类型本身已经很多：
+
+```text
+GraphInstanceDTO
+DatabaseDecl
+DatabaseEngine
+DataType
+Pin
+Node
+Variable
+ExecutionResult
+RegressionResult
+```
+
+手动：
+
+```text
+Rust struct
++
+TypeScript interface
+```
+
+迟早出错。
+
+可以变成：
+
+```rust
+#[derive(Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct RegressionResult {
+    ...
+}
+```
+
+然后：
+
+```text
+cargo xtask bindings
+```
+
+自动产生：
+
+```text
+src/generated/api/
+```
+
+甚至再进一步：
+
+```text
+Rust Command
+       ↓
+generated TS binding
+       ↓
+typed invoke()
+```
+
+最终让：
+
+```ts
+invoke<any>()
+```
+
+基本消失。
+
+---
+
+# P1：数据库层需要选一个明确主战略
+
+你现在同时有：
+
+```text
+Polars
+DuckDB
+SQLx
+Arrow
+Excel
+```
+
+Cargo 已经明确体现出来。([GitHub][3])
+
+这不是坏事。
+
+但必须定义谁干什么。
+
+我推荐非常明确地规定：
+
+```text
+DuckDB
+= 项目内持久化 + SQL analytics
+
+Polars
+= DataFrame / LazyFrame transformation
+
+Arrow
+= 数据交换格式
+
+SQLx
+= 外部数据库连接
+
+yss-sci / Julia
+= Statistics
+```
+
+不要让：
+
+```text
+DuckDB
+Polars
+Julia DataFrame
+Rust Vec
+JSON
+```
+
+互相随意转换。
+
+理想数据通道应该是：
+
+```text
+External DB
+    ↓
+Arrow
+    ↓
+Polars / DuckDB
+    ↓
+Arrow
+    ↓
+Statistics
+```
+
+也就是把 **Arrow 当成 YssBI 的数据 ABI**。
+
+这会让你以后接：
+
+```text
+Julia
+Python
+GPU
+Remote Executor
+```
+
+都简单很多。
+
+---
+
+# P1：不要把 DataFrame 本体放 Zustand
+
+你已经使用 Zustand。package.json 里目前是 Zustand 5。([GitHub][7])
+
+Zustand 很适合：
+
+```text
+activeProjectId
+selectedNodeId
+openedTabs
+layout
+theme
+selection
+panel state
+```
+
+但是不应该存：
+
+```text
+1,000,000 rows DataFrame
+```
+
+或者：
+
+```text
+大型 RegressionResult 原始数据
+```
+
+应该遵循：
+
+```text
+Frontend = references
+Backend = actual data
+```
+
+例如：
+
+```ts
+{
+  dataframeId: "df_123",
+  rowCount: 12_000_000,
+  schema: [...]
+}
+```
+
+真正的数据：
+
+```text
+Rust / DuckDB / Polars
+```
+
+前端 DataGrid 请求：
+
+```text
+rows 1000..1100
+```
+
+你 README 已经明确说 DataView 面向大数据量优化并用了虚拟化，这个方向是正确的。([GitHub][1])
+
+---
+
+# P1：测试现在有点过度“Architecture Contract 化”
+
+我注意到已经存在：
+
+```text
+architecture.test.ts
+observabilityArchitectureContract.test.ts
+userFeedbackArchitectureContract.test.ts
+```
+
+同时 Rust commands 目录里面还有：
+
+```text
+command_*_tests.rs
+command_blueprint_graph_phase1_tests.rs
+command_node_system_reroute_tests.rs
+...
+```
+
+([GitHub][8])
+
+这里我建议稍微控制。
+
+特别是 AI 辅助开发很容易生成：
+
+```text
+ArchitectureContractTest
+RegressionContractTest
+ModuleBoundaryTest
+...
+```
+
+最后导致：
+
+> 改文件路径 → 一堆测试挂了
+
+而不是：
+
+> 行为错了 → 测试挂了
+
+我建议测试比例更接近：
+
+```text
+60% domain / calculation tests
+25% integration tests
+10% regression tests
+5% architecture tests
+```
+
+对于统计软件尤其应该重视：
+
+```text
+Golden Tests
+```
+
+例如：
+
+```text
+OLS:
+YssBI
+vs
+Stata
+vs
+R
+```
+
+验证：
+
+```text
+coef
+std error
+t
+p
+R²
+F
+CI
+```
+
+而不是大量测试：
+
+```text
+某文件必须 import 某路径
+```
+
+你已经计划 Rust/Julia golden fixture，这其实是非常好的方向。([GitHub][4])
+
+---
+
+# P1：CI 需要比现在再强一点
+
+当前 `.github/workflows` 里只有：
+
+```text
+publish.yml
+```
+
+([GitHub][9])
+
+而 package.json 已经有很完整的：
+
+```text
+verify
+verify:frontend
+verify:rust
+verify:full
+```
+
+([GitHub][7])
+
+所以非常适合增加：
+
+```text
+ci.yml
+```
+
+PR 至少跑：
+
+```text
+pnpm install --frozen-lockfile
+pnpm typecheck
+pnpm test
+
+cargo fmt --check
+cargo check
+cargo clippy
+cargo test -p yss-sci
+```
+
+其中建议加上的关键一项是：
+
+```text
+cargo clippy
+```
+
+目前你的 `verify:rust` 只有：
+
+```text
+fmt
+check
+```
+
+没有 clippy。([GitHub][7])
+
+---
+
+# P2：Cargo 编译时间可以进一步优化
+
+你后端现在依赖很重：
+
+```text
+Polars
+DuckDB bundled
+SQLx
+ndarray
+faer
+statrs
+Tauri
+```
+
+([GitHub][3])
+
+这个组合在 Windows 上编译会非常重。
+
+而你现在：
+
+```text
+cargo test --jobs 1
+```
+
+已经说明你可能是在主动控制内存。([GitHub][7])
+
+建议逐渐拆 workspace：
+
+```text
+crates/
+├── yss-core
+├── yss-graph
+├── yss-execution
+├── yss-data
+├── yss-sci
+└── yss-app
+```
+
+不一定现在一次性拆完。
+
+第一步我只建议：
+
+```text
+yss-sci
+yss-data
+yss-execution
+```
+
+三个真正稳定的边界。
+
+好处是：
+
+```text
+改 React/Tauri
+不会重新编整个 science stack
+
+改 OLS
+不用影响 graph
+
+改数据库
+不用重新编统计模型
+```
+
+---
+
+# P2：README 对外展示还有非常大的提升空间
+
+这个项目技术内容其实比 README 表现出来的成熟很多。
+
+目前 README 相对短，而且还有：
+
+```text
+数据采集？
+报告输出？
+```
+
+这样的问号。([GitHub][1])
+
+如果准备开放给别人用，我建议 README 首页直接变成：
+
+```text
+YssBI
+Visual Statistical Computing Environment
+
+[Screenshot]
+
+Why YssBI
+• Visual workflow
+• Econometrics
+• Large datasets
+• Native desktop
+• Reproducible analysis
+
+Architecture
+
+Node → Graph → Execution Engine → Data/Compute Backend
+
+Features
+
+Screenshots
+
+Roadmap
+
+Contributing
+```
+
+尤其是你已经有非常多：
+
+```text
+OLS
+WLS
+GLS
+2SLS
+LIML
+FE
+RE
+VAR
+VEC
+DID
+Diagnostics
+```
+
+([GitHub][1])
+
+对一个 2-star 项目来说，**代码能力明显比项目包装强。**
+
+---
+
+# 我认为目前架构最大的潜在风险
+
+不是性能。
+
+也不是 React。
+
+也不是 Rust。
+
+而是：
+
+```text
+Node System
+Graph
+Execution
+Data
+Statistics
+Project
+UI State
+```
+
+逐渐互相知道太多东西。
+
+你需要强制变成：
+
+```text
+                  ┌──────────────┐
+                  │      UI      │
+                  └──────┬───────┘
+                         │
+                  Application
+                         │
+           ┌─────────────┴────────────┐
+           │                          │
+        Graph                     Project
+           │
+           ▼
+    Execution Engine
+           │
+      ┌────┼────┬─────────┐
+      ▼    ▼    ▼         ▼
+   Polars DuckDB RustSci Julia
+```
+
+其中非常关键：
+
+```text
+Graph 不知道 UI
+Graph 不知道 Tauri
+Sci 不知道 Graph
+Sci 不知道 Tauri
+DuckDB 不知道 React
+Execution 不知道具体 UI
+```
+
+这就是我认为 YssBI 接下来最值得守住的东西。
+
+---
+
+## 如果让我给当前项目打一个“下一阶段优先级”
+
+| 优先级    | 工作                            | 收益    |
+| ------ | ----------------------------- | ----- |
+| **P0** | Execution Task System         | ★★★★★ |
+| **P0** | 锁定 Graph / Execution / Sci 边界 | ★★★★★ |
+| **P0** | 长计算后台化 + cancel/progress      | ★★★★★ |
+| **P1** | 统一 AppError                   | ★★★★★ |
+| **P1** | Rust → TS DTO 自动生成            | ★★★★★ |
+| **P1** | Arrow 作为数据交换 ABI              | ★★★★★ |
+| **P1** | 收敛前端 features/services 结构     | ★★★★☆ |
+| **P1** | Golden statistical tests      | ★★★★★ |
+| **P1** | CI + clippy                   | ★★★★☆ |
+| **P2** | workspace 进一步拆 crate          | ★★★☆☆ |
+| **P2** | README / docs 重构              | ★★★★☆ |
+| **P3** | 再增加新的统计模型                     | ★★☆☆☆ |
+
+所以我反而建议你 **暂时少加几个统计节点**。
+
+你现在已经有足够多功能证明项目方向了。([GitHub][1])
+
+接下来应该花一轮开发周期，把：
+
+**Graph → ExecutionPlan → Task → Backend → Result**
+
+这一条链做成整个 YssBI 的“脊柱”。
+
+如果这一层设计得好，之后无论你加 **LLM Agent、Julia、Python、GPU、远程计算、多核并行**，都只是增加新的 Backend，而不用重新推翻 YssBI。
+
+[1]: https://github.com/zhouyi207/YssBI "GitHub - zhouyi207/YssBI: YssBI 是一个基于 Blueprint 的桌面数据分析与可视化应用 · GitHub"
+[2]: https://github.com/zhouyi207/YssBI/tree/shadcn/src-tauri/src "YssBI/src-tauri/src at shadcn · zhouyi207/YssBI · GitHub"
+[3]: https://github.com/zhouyi207/YssBI/blob/shadcn/src-tauri/Cargo.toml "YssBI/src-tauri/Cargo.toml at shadcn · zhouyi207/YssBI · GitHub"
+[4]: https://github.com/zhouyi207/YssBI/tree/shadcn/src "YssBI/src at shadcn · zhouyi207/YssBI · GitHub"
+[5]: https://github.com/zhouyi207/YssBI/blob/shadcn/TODO.md "YssBI/TODO.md at shadcn · zhouyi207/YssBI · GitHub"
+[6]: https://github.com/zhouyi207/YssBI/tree/shadcn/src/services "YssBI/src/services at shadcn · zhouyi207/YssBI · GitHub"
+[7]: https://github.com/zhouyi207/YssBI/blob/shadcn/package.json "YssBI/package.json at shadcn · zhouyi207/YssBI · GitHub"
+[8]: https://github.com/zhouyi207/YssBI/tree/shadcn/src/features "YssBI/src/features at shadcn · zhouyi207/YssBI · GitHub"
+[9]: https://github.com/zhouyi207/YssBI/tree/shadcn/.github/workflows "YssBI/.github/workflows at shadcn · zhouyi207/YssBI · GitHub"
