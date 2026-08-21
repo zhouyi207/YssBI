@@ -189,7 +189,6 @@ describe('editor projection architecture', () => {
     'src/shared/types/dto/editorMutation.ts',
     'src/shared/types/dto/runEvent.ts',
     'src/shared/types/dto/executionDemand.ts',
-    'src/shared/types/dto/trace.ts',
     'src/shared/types/dto/dataType.ts',
     'src/shared/types/dto/dataValue.ts',
     'src/shared/types/dto/variable.ts',

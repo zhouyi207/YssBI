@@ -22,7 +22,6 @@ export interface DetailPanelResolveInput extends DetailCatalogSnapshot {
 }
 
 export type FunctionDetailModel = {
-  path: string;
   name: string;
   inputs: FunctionPinSpec[];
   outputs: FunctionPinSpec[];
@@ -34,7 +33,7 @@ export type DetailPanelModel =
   | { kind: 'node'; nodeId: string; graphPath: string }
   | { kind: 'nodeDefinition'; nodeType: string }
   | { kind: 'variable'; id: string; variable: Variable }
-  | { kind: 'event'; path: string; event: { path: string; name: string } }
+  | { kind: 'event'; path: string; event: { name: string } }
   | { kind: 'function'; path: string; fn: FunctionDetailModel }
   | { kind: 'worksheet'; document: WorksheetDocument }
   | { kind: 'data'; id: string; dataframe: DatabaseRecord };
@@ -67,7 +66,7 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
     case 'event': {
       const event = events[target.path];
       return event
-        ? { kind: 'event', path: target.path, event: { path: target.path, name: event.name } }
+        ? { kind: 'event', path: target.path, event: { name: event.name } }
         : { kind: 'empty' };
     }
     case 'function': {
@@ -77,7 +76,6 @@ export function resolveDetailPanelModel(input: DetailPanelResolveInput): DetailP
         kind: 'function',
         path: target.path,
         fn: {
-          path: fnRecord.id,
           name: fnRecord.name,
           inputs: fnRecord.functionInputs,
           outputs: fnRecord.functionOutputs,

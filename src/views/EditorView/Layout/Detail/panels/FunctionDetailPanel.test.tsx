@@ -3,7 +3,6 @@ import { createDataSignaturePin } from '@/shared/types/domain/functionSignatureP
 import { describe, expect, it, vi } from 'vitest';
 import { PinEditor } from '../shared/PinEditor';
 import { DetailNameField } from '../shared/DetailForm';
-import { GraphTraceDetails } from '../observability/GraphTraceDetails';
 import { FunctionDetailPanel } from './FunctionDetailPanel';
 
 vi.mock('react-i18next', () => ({
@@ -26,24 +25,11 @@ function findAllByType(root: ReactElement, type: unknown): ReactElement[] {
 }
 
 describe('FunctionDetailPanel', () => {
-  it('embeds read-only developer traces for the function graph', () => {
-    const element = FunctionDetailPanel({
-      fn: { path: 'functions/Compute.yssbi-function', name: 'Compute' },
-      onRename: vi.fn(),
-      onSignatureChange: vi.fn(),
-    }) as ReactElement;
-
-    const traceDetails = findAllByType(element, GraphTraceDetails);
-    expect(traceDetails).toHaveLength(1);
-    expect(traceDetails[0].props).toMatchObject({ graphPath: 'functions/Compute.yssbi-function' });
-  });
-
   it('routes rename and signature edits through separate callbacks', () => {
     const onRename = vi.fn();
     const onSignatureChange = vi.fn();
     const element = FunctionDetailPanel({
       fn: {
-        path: 'function-1',
         name: 'Compute',
         inputs: [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })],
         outputs: [createDataSignaturePin('output-1', 'Result', { kind: 'Float64' })],

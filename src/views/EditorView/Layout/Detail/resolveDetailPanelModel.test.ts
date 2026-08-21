@@ -101,7 +101,6 @@ describe('resolveDetailPanelModel', () => {
       kind: 'function',
       path: 'fn-1',
       fn: {
-        path: 'fn-1',
         name: 'Add',
         inputs: [createDataSignaturePin('in-1', 'A', { kind: 'Float64' })],
         outputs: [createDataSignaturePin('out-1', 'R', { kind: 'Float64' })],
