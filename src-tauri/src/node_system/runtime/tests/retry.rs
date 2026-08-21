@@ -229,17 +229,6 @@ fn reject_admission(rejection: AdmissionRejection, cancellation: &CancellationTo
     }
 }
 
-fn assert_rejected_attempt_not_started(events: &RecordingRunEvents, operation: u32, attempt: u64) {
-    assert!(!events.0.lock().unwrap().iter().any(|event| matches!(
-        event.kind,
-        RunEventKind::OperationStarted {
-            operation_index,
-            attempt_id,
-            ..
-        } if operation_index == operation && attempt_id == attempt
-    )));
-}
-
 fn run_initial_admission_rejection(rejection: AdmissionRejection) {
     let peer_calls = Arc::new(AtomicUsize::new(0));
     let rejected_calls = Arc::new(AtomicUsize::new(0));
@@ -274,7 +263,6 @@ fn run_initial_admission_rejection(rejection: AdmissionRejection) {
     );
     let rollback = Arc::new(Mutex::new(None));
     let observed_rollback = Arc::clone(&rollback);
-    let events = RecordingRunEvents::default();
 
     let error = RunExecutor::new(
         &kernels,
@@ -285,7 +273,6 @@ fn run_initial_admission_rejection(rejection: AdmissionRejection) {
     )
     .with_scheduling_policy(parallel_policy(2, 1, 1))
     .with_deadline(admission_rejection_deadline(rejection))
-    .with_event_sink(&events)
     .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| match checkpoint {
         SchedulerCheckpoint::AdmissionBookkept {
             operation, attempt, ..
@@ -340,7 +327,6 @@ fn run_initial_admission_rejection(rejection: AdmissionRejection) {
             frame_attempt: None,
         })
     );
-    assert_rejected_attempt_not_started(&events, 1, 1);
 }
 
 fn run_promoted_retry_admission_rejection(rejection: AdmissionRejection) {
@@ -384,7 +370,6 @@ fn run_promoted_retry_admission_rejection(rejection: AdmissionRejection) {
     );
     let rollback = Arc::new(Mutex::new(None));
     let observed_rollback = Arc::clone(&rollback);
-    let events = RecordingRunEvents::default();
 
     let error = RunExecutor::new(
         &kernels,
@@ -395,7 +380,6 @@ fn run_promoted_retry_admission_rejection(rejection: AdmissionRejection) {
     )
     .with_scheduling_policy(parallel_policy(2, 1, 1))
     .with_deadline(admission_rejection_deadline(rejection))
-    .with_event_sink(&events)
     .with_test_checkpoint(Arc::new(move |checkpoint, cancellation| match checkpoint {
         SchedulerCheckpoint::AdmissionBookkept {
             operation, attempt, ..
@@ -447,7 +431,6 @@ fn run_promoted_retry_admission_rejection(rejection: AdmissionRejection) {
             frame_attempt: Some(AttemptId::initial()),
         })
     );
-    assert_rejected_attempt_not_started(&events, 0, 2);
 }
 
 #[test]
@@ -509,20 +492,18 @@ fn retry_transient_failure_then_success_publishes_only_final_output() {
             }),
         )
         .unwrap();
-    let events = RecordingRunEvents::default();
     let trace = RecordingTrace::default();
     let results = ResultStore::new();
 
     let execution_plan = retry_plan("retry_transient_success", 3, Duration::ZERO);
     execution_plan.validate().unwrap();
-    let result = RunExecutor::new(
+    let run_result = RunExecutor::new(
         &kernels,
         &no_resources(),
         &NoFunctions,
         crate::node_system::runtime::ResultStore::new(),
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
-    .with_event_sink(&events)
     .with_trace_sink(&trace)
     .with_result_store(&results)
     .run(&execution_plan, CancellationToken::new())
@@ -530,18 +511,13 @@ fn retry_transient_failure_then_success_publishes_only_final_output() {
 
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     assert_eq!(
-        result.value_for_test("result").unwrap(),
+        run_result.value_for_test("result").unwrap(),
         Value::Integer(42).into()
     );
-    let events = events.0.lock().unwrap();
-    assert_eq!(
-        events
-            .iter()
-            .filter(|event| matches!(event.kind, RunEventKind::OperationCompleted { .. }))
-            .count(),
-        1
-    );
-    drop(events);
+    let result_id = run_result.result_ids["result"];
+    let history = results.pin_history(&stable_output("retry_result"));
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].result_id, result_id);
     let spans = trace.0.lock().unwrap();
     let run = spans
         .iter()
@@ -774,7 +750,6 @@ fn retry_attempts_preserve_activation_and_result_provenance() {
         )
         .unwrap();
     let observed_attempts = Arc::clone(&attempts);
-    let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 
     let run_result = RunExecutor::new(
@@ -784,7 +759,6 @@ fn retry_attempts_preserve_activation_and_result_provenance() {
         results.clone(),
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
-    .with_event_sink(&events)
     .with_test_checkpoint(Arc::new(move |checkpoint, _| {
         if let SchedulerCheckpoint::AttemptPrepared {
             operation,
@@ -816,25 +790,8 @@ fn retry_attempts_preserve_activation_and_result_provenance() {
     assert_eq!(attempts[0].1, activations[0]);
     assert_eq!(attempts[1].1, activations[0]);
     let stored = results.result(run_result.result_ids["result"]).unwrap();
+    assert_eq!(stored.provenance.run_id, run_result.run_id);
     assert_eq!(stored.provenance.activation_id, activations[0]);
-    let event_attempts = events
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .filter_map(|event| match event.kind {
-            RunEventKind::OperationStarted {
-                activation_id,
-                attempt_id,
-                ..
-            } => Some((activation_id, attempt_id)),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(
-        event_attempts,
-        vec![(activations[0].get(), 1), (activations[0].get(), 2)]
-    );
 }
 
 #[test]

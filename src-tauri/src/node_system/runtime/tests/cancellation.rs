@@ -318,7 +318,10 @@ fn assert_production_source_cancellation(
     assert_eq!(error, RunError::Cancelled);
     assert_eq!(observed.lock().unwrap().as_slice(), expected_checkpoints);
     assert_eq!(scan_limits.lock().unwrap().as_slice(), expected_scan_limits);
-    assert_cancelled_without_completion(&events, ResultStateKind::Cancelled);
+    let run_id = assert_cancelled_without_completion(&events);
+    let stored_results = results.results_for_run(run_id);
+    assert_eq!(stored_results.len(), 1);
+    assert!(matches!(stored_results[0].state, ResultState::Cancelled));
     assert_eq!(lease_observer.acquired(), lease_observer.dropped());
     assert_eq!(lease_observer.active(), 0);
 }

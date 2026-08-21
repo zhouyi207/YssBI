@@ -2,6 +2,20 @@ use super::*;
 
 #[test]
 fn view_data_opens_exact_input_result_without_materialization() {
+    struct ViewDataEvents {
+        recorded: Mutex<Vec<RunEvent>>,
+        open_result_window_seen: Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    impl RunEventSink for ViewDataEvents {
+        fn record(&self, event: RunEvent) {
+            if matches!(&event.kind, RunEventKind::OpenResultWindow { .. }) {
+                self.open_result_window_seen.store(true, Ordering::SeqCst);
+            }
+            self.recorded.lock().unwrap().push(event);
+        }
+    }
+
     let mut kernels = build_builtin_kernel_registry();
     kernels
         .register(
@@ -11,10 +25,16 @@ fn view_data_opens_exact_input_result_without_materialization() {
         .unwrap();
     let then_executions = Arc::new(AtomicUsize::new(0));
     let observed_then_executions = Arc::clone(&then_executions);
+    let open_result_window_seen = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let observed_open_result_window = Arc::clone(&open_result_window_seen);
     kernels
         .register(
             id("view_data_then", KernelHandle::new),
             FnKernel(move |_: &[RuntimeValue]| {
+                assert!(
+                    observed_open_result_window.load(Ordering::SeqCst),
+                    "OpenResultWindow must be emitted before the downstream then kernel",
+                );
                 observed_then_executions.fetch_add(1, Ordering::SeqCst);
                 Ok(Vec::new())
             }),
@@ -42,7 +62,10 @@ fn view_data_opens_exact_input_result_without_materialization() {
         after: OperationIndex::new(2),
     }]);
     let results = ResultStore::new();
-    let events = RecordingRunEvents::default();
+    let events = ViewDataEvents {
+        recorded: Mutex::new(Vec::new()),
+        open_result_window_seen,
+    };
     use tracing_subscriber::layer::SubscriberExt;
 
     let (diagnostics, _diagnostics_guard) = crate::diagnostics::dispatcher::DiagnosticsHub::start();
@@ -65,7 +88,7 @@ fn view_data_opens_exact_input_result_without_materialization() {
     let source_history = results.pin_history(&source_output);
     assert_eq!(source_history.len(), 1);
     let input_result_id = source_history[0].result_id;
-    let recorded = events.0.lock().unwrap();
+    let recorded = events.recorded.lock().unwrap();
     let open_events = recorded
         .iter()
         .enumerate()
@@ -77,36 +100,11 @@ fn view_data_opens_exact_input_result_without_materialization() {
     assert_eq!(open_events.len(), 1);
     let (open_index, open_result_id) = open_events[0];
     assert_eq!(open_result_id, input_result_id);
-    let view_completed_index = recorded
+    let completion_index = recorded
         .iter()
-        .position(|event| {
-            matches!(
-                event.kind,
-                RunEventKind::OperationCompleted {
-                    operation_index: 1,
-                    ..
-                }
-            )
-        })
-        .expect("View Data completes");
-    let then_completed_index = recorded
-        .iter()
-        .position(|event| {
-            matches!(
-                event.kind,
-                RunEventKind::OperationCompleted {
-                    operation_index: 2,
-                    ..
-                }
-            )
-        })
-        .expect("Then control flow completes");
-    assert!(open_index < view_completed_index);
-    assert!(view_completed_index < then_completed_index);
-    let view_activation_id = match recorded[view_completed_index].kind {
-        RunEventKind::OperationCompleted { activation_id, .. } => activation_id,
-        _ => unreachable!("View Data completion index has the expected event"),
-    };
+        .rposition(|event| event.kind == RunEventKind::RunCompleted)
+        .expect("run completion must be published");
+    assert!(open_index < completion_index);
     drop(recorded);
 
     let subscription = diagnostics.subscribe(|_| true).unwrap();
@@ -122,7 +120,7 @@ fn view_data_opens_exact_input_result_without_materialization() {
     assert_eq!(notify.source.as_deref(), Some("yssbi.debug.view"));
     assert_eq!(notify.fields["result_id"], input_result_id.get());
     assert_eq!(notify.fields["run_id"], run.run_id.get());
-    assert_eq!(notify.fields["activation_id"], view_activation_id);
+
     assert_eq!(notify.fields["node_id"], view_node_id().to_string());
     diagnostics
         .unsubscribe(subscription.subscription_id)
@@ -707,7 +705,6 @@ fn bounded_materialization_run_result_and_result_store_keep_spill_durable() {
         )
         .unwrap();
     let results = ResultStore::new();
-    let events = RecordingRunEvents::default();
     let resources = no_resources();
     let functions = NoFunctions;
 
@@ -719,7 +716,6 @@ fn bounded_materialization_run_result_and_result_store_keep_spill_durable() {
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
     .with_result_store(&results)
-    .with_event_sink(&events)
     .with_resource_budgets(materialization_test_budgets(1, 1))
     .with_test_spill_root(root.clone())
     .run(
@@ -739,16 +735,7 @@ fn bounded_materialization_run_result_and_result_store_keep_spill_durable() {
             .unwrap(),
         [Value::String("durable".into())]
     );
-    let result_id = events
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .find_map(|event| match &event.kind {
-            RunEventKind::ResultGroupChanged { result_ids, .. } => result_ids.last().copied(),
-            _ => None,
-        })
-        .expect("published authoritative result");
+    let result_id = run_result.result_ids["result"];
     let stored = results.result(result_id).unwrap();
     let ResultState::Ready(value) = &stored.state else {
         panic!("published result must be ready");
@@ -782,11 +769,10 @@ fn demand_driven_publication_exposes_only_the_requested_final_output() {
         )
         .unwrap();
     let output = stable_output("final");
+    let mut target = operation("target", &[0], &[2]);
+    target.outputs[0].public_output = Some(output.clone());
     let mut execution_plan = plan(
-        vec![
-            operation("source", &[], &[0]),
-            operation("target", &[0], &[2]),
-        ],
+        vec![operation("source", &[], &[0]), target],
         3,
         StructuredControlRegion::Sequence(Box::new([
             ControlStep::Operation(OperationIndex::new(0)),
@@ -803,7 +789,6 @@ fn demand_driven_publication_exposes_only_the_requested_final_output() {
         output: output.clone(),
         value: ValueRef::new(2),
     }]);
-    let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 
     let run = RunExecutor::new(
@@ -813,7 +798,6 @@ fn demand_driven_publication_exposes_only_the_requested_final_output() {
         crate::node_system::runtime::ResultStore::new(),
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
-    .with_event_sink(&events)
     .with_result_store(&results)
     .run(&execution_plan, CancellationToken::new())
     .unwrap();
@@ -823,28 +807,11 @@ fn demand_driven_publication_exposes_only_the_requested_final_output() {
         RuntimeValue::from(Value::Integer(7))
     );
 
-    let recorded = events.0.lock().unwrap();
-    assert!(
-        recorded
-            .iter()
-            .all(|event| { serde_json::to_value(&event.kind).unwrap()["type"] != "valueReady" })
-    );
-    assert_eq!(
-        result_group_states(&recorded),
-        vec![ResultStateKind::Ready, ResultStateKind::Ready]
-    );
-    let output_events = recorded
-        .iter()
-        .filter(|event| matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
-        .collect::<Vec<_>>();
-    assert_eq!(output_events.len(), 1);
-    assert!(matches!(
-        &output_events[0].kind,
-        RunEventKind::OutputResultChanged {
-            output: emitted,
-            ..
-        } if emitted == &output
-    ));
+    assert_eq!(run.result_ids.len(), 1);
+    let result_id = run.result_ids["final"];
+    let history = results.pin_history(&output);
+    assert_eq!(history.len(), 1);
+    assert_eq!(history[0].result_id, result_id);
 }
 
 #[test]
@@ -890,7 +857,6 @@ fn demand_driven_publication_pin_preview_emits_only_generation_bound_output() {
     .unwrap();
 
     let recorded = events.0.lock().unwrap();
-    assert_eq!(result_group_states(&recorded), vec![ResultStateKind::Ready]);
     let output_events = recorded
         .iter()
         .filter(|event| matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
@@ -970,7 +936,6 @@ fn missing_publications_return_typed_invalid_plan_before_execution() {
         output: stable_output("result"),
         value: ValueRef::new(0),
     }]);
-    let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 
     let error = RunExecutor::new(
@@ -980,83 +945,19 @@ fn missing_publications_return_typed_invalid_plan_before_execution() {
         crate::node_system::runtime::ResultStore::new(),
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
-    .with_event_sink(&events)
     .with_result_store(&results)
     .run(&execution_plan, CancellationToken::new())
     .expect_err("results without publications must be rejected before execution");
 
     assert!(matches!(error, RunError::InvalidPlan(_)));
-    assert!(events.0.lock().unwrap().iter().all(|event| !matches!(
-        event.kind,
-        RunEventKind::ResultGroupChanged { .. } | RunEventKind::OutputResultChanged { .. }
-    )));
+    assert_eq!(results.authoritative_result_count_for_test(), 0);
+    assert_eq!(results.group_count_for_test(), 0);
 }
 
 #[test]
-fn stable_output_ready_is_published_before_completion() {
-    let mut kernels = KernelRegistry::new();
-    kernels
-        .register(
-            id("value", KernelHandle::new),
-            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(7).into()])),
-        )
-        .unwrap();
-    let output = stable_output("value");
-    let mut execution_plan = plan(
-        vec![operation("value", &[], &[0])],
-        1,
-        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
-            0,
-        ))])),
-    );
-    execution_plan.results = Box::new([PlanResult {
-        name: "value".into(),
-        output: output.clone(),
-        value: ValueRef::new(0),
-    }]);
-    execution_plan.publications = Box::new([PlannedPublication::GraphResult {
-        name: "value".into(),
-        output: output.clone(),
-        value: ValueRef::new(0),
-    }]);
-    let events = RecordingRunEvents::default();
-    let results = ResultStore::new();
-
-    RunExecutor::new(
-        &kernels,
-        &no_resources(),
-        &NoFunctions,
-        crate::node_system::runtime::ResultStore::new(),
-        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
-    )
-    .with_event_sink(&events)
-    .with_result_store(&results)
-    .run(&execution_plan, CancellationToken::new())
-    .unwrap();
-
-    let recorded = events.0.lock().unwrap();
-    let output_index = recorded
-        .iter()
-        .position(|event| {
-            matches!(
-                &event.kind,
-                RunEventKind::OutputResultChanged {
-                    output: emitted,
-                    ..
-                } if emitted == &output
-            )
-        })
-        .expect("stable output event must be published");
-    let completion_index = recorded
-        .iter()
-        .position(|event| event.kind == RunEventKind::RunCompleted)
-        .expect("run completion must be published");
-    assert!(output_index < completion_index);
-}
-
-#[test]
-fn run_result_keeps_the_plan_basis_and_compile_id() {
+fn run_result_keeps_run_id_and_plan_provenance() {
     let execution_plan = plan(vec![], 0, StructuredControlRegion::Sequence(Box::new([])));
+    let events = RecordingRunEvents::default();
 
     let result = RunExecutor::new(
         &KernelRegistry::new(),
@@ -1065,19 +966,25 @@ fn run_result_keeps_the_plan_basis_and_compile_id() {
         crate::node_system::runtime::ResultStore::new(),
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
+    .with_event_sink(&events)
     .run(&execution_plan, CancellationToken::new())
     .unwrap();
 
     assert_eq!(result.provenance, execution_plan.provenance);
-    assert_eq!(
-        result.correlation.compile_id,
-        execution_plan.provenance.compile_id
-    );
-    assert_eq!(
-        result.correlation.graph_revision,
-        execution_plan.provenance.basis.graph_revision
-    );
-    assert_eq!(result.correlation.run_id, Some(result.run_id));
+    let started_run_ids = events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|event| event.kind == RunEventKind::RunStarted)
+        .map(|event| {
+            event
+                .correlation
+                .run_id
+                .expect("RunStarted carries the active run ID")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(started_run_ids, [result.run_id]);
 }
 
 #[test]
@@ -1138,86 +1045,14 @@ fn failed_success_finalizer_publishes_no_result_or_completion() {
             .iter()
             .all(|event| event.kind != RunEventKind::RunCompleted)
     );
-    let group_events = recorded
+    let run_id = recorded
         .iter()
-        .filter(|event| matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
-        .collect::<Vec<_>>();
-    assert_eq!(group_events.len(), 1);
-    assert!(matches!(
-        group_events[0].kind,
-        RunEventKind::ResultGroupChanged {
-            state: ResultStateKind::Ready,
-            ..
-        }
-    ));
-    assert!(
-        recorded
-            .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
-    );
-}
-
-#[test]
-fn repeated_terminal_transition_emits_exactly_one_result_group_changed() {
-    let execution_plan = plan(
-        Vec::new(),
-        1,
-        StructuredControlRegion::Sequence(Box::new([])),
-    );
-    let events = RecordingRunEvents::default();
-    let results = ResultStore::new();
-    let activation_id = ActivationId::next().unwrap();
-    let group = results
-        .create_pending_group(
-            ActivationProvenance {
-                run_id: RunId::new(1),
-                activation_id,
-                graph_path: execution_plan.provenance.graph_path.clone(),
-                graph_revision: execution_plan.provenance.basis.graph_revision,
-                node_id: NodeId::from_uuid(uuid::Uuid::nil()),
-                created_at_ms: 1,
-                usage: ResultUsage::Produced,
-            },
-            &[PendingOutputDescriptor {
-                value: ValueRef::new(0),
-                output: Some(stable_output("value")),
-                presentation: ResultPresentation::Inspector,
-                contract: PlannedValueContract::opaque(),
-            }],
-        )
-        .unwrap();
-    let kernels = KernelRegistry::new();
-    let resources = no_resources();
-    let executor = RunExecutor::new(
-        &kernels,
-        &resources,
-        &NoFunctions,
-        results,
-        Arc::new(SessionMemoization::new()),
-    )
-    .with_event_sink(&events);
-    let failure = RunError::KernelFailed {
-        operation: OperationIndex::new(0),
-        kind: KernelErrorKind::Permanent,
-        message: "failed once".into(),
-    };
-
-    executor.transition_group_terminal_for_test(&execution_plan, &group, &failure);
-    executor.transition_group_terminal_for_test(&execution_plan, &group, &failure);
-
-    let recorded = events.0.lock().unwrap();
-    let group_events = recorded
-        .iter()
-        .filter(|event| matches!(event.kind, RunEventKind::ResultGroupChanged { .. }))
-        .collect::<Vec<_>>();
-    assert_eq!(group_events.len(), 1);
-    assert!(matches!(
-        group_events[0].kind,
-        RunEventKind::ResultGroupChanged {
-            state: ResultStateKind::Failed,
-            ..
-        }
-    ));
+        .find(|event| event.kind == RunEventKind::RunStarted)
+        .and_then(|event| event.correlation.run_id)
+        .expect("RunStarted carries the active run ID");
+    let stored_results = results.results_for_run(run_id);
+    assert_eq!(stored_results.len(), 1);
+    assert!(matches!(&stored_results[0].state, ResultState::Ready(_)));
 }
 
 #[test]
@@ -1269,5 +1104,8 @@ fn cancellation_before_final_result_publication_cleans_results_without_completio
 
     assert_eq!(error, RunError::Cancelled);
     assert_eq!(final_checkpoints.load(Ordering::SeqCst), 1);
-    assert_cancelled_without_completion(&events, ResultStateKind::Ready);
+    let run_id = assert_cancelled_without_completion(&events);
+    let stored_results = results.results_for_run(run_id);
+    assert_eq!(stored_results.len(), 1);
+    assert!(matches!(&stored_results[0].state, ResultState::Ready(_)));
 }

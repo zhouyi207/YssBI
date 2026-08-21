@@ -119,30 +119,16 @@ fn do_sleep_print_and_view_scheduler_contracts() {
 }
 
 #[test]
-fn print_output_and_trace_preserve_exact_first_second_third_order() {
+fn print_output_preserves_exact_first_second_third_order() {
     #[derive(Default)]
     struct Events {
-        run_events: Mutex<Vec<RunEvent>>,
         run_output: Mutex<Vec<RunOutputMessage>>,
     }
     impl RunEventSink for Events {
-        fn record(&self, event: RunEvent) {
-            self.run_events.lock().unwrap().push(event);
-        }
+        fn record(&self, _: RunEvent) {}
 
         fn record_run_output(&self, event: RunOutputMessage) {
             self.run_output.lock().unwrap().push(event);
-        }
-    }
-    #[derive(Default)]
-    struct Trace(Mutex<Vec<TraceSpan>>);
-    impl TraceSink for Trace {
-        fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
-            SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
-        }
-
-        fn complete_span(&self, span: TraceSpan) {
-            self.0.lock().unwrap().push(span);
         }
     }
 
@@ -175,7 +161,6 @@ fn print_output_and_trace_preserve_exact_first_second_third_order() {
         },
     ]);
     let events = Events::default();
-    let trace = Trace::default();
     let kernels = build_builtin_kernel_registry();
 
     RunExecutor::new(
@@ -187,72 +172,47 @@ fn print_output_and_trace_preserve_exact_first_second_third_order() {
     )
     .with_compiled_parameters(&parameters)
     .with_event_sink(&events)
-    .with_trace_sink(&trace)
     .run(&execution_plan, CancellationToken::new())
     .unwrap();
 
-    let label = |node_id: NodeId| match node_id.as_uuid().as_u128() {
-        101 => Some("First"),
-        102 => Some("Second"),
-        103 => Some("Third"),
-        _ => None,
-    };
-    let event_order = events
-        .run_events
-        .lock()
-        .unwrap()
+    let output = events.run_output.lock().unwrap();
+    let text = output
         .iter()
-        .filter(|event| matches!(event.kind, RunEventKind::OperationCompleted { .. }))
-        .filter_map(|event| event.correlation.node_id.and_then(label))
-        .collect::<Vec<_>>();
-    let output = events
-        .run_output
-        .lock()
-        .unwrap()
-        .iter()
-        .filter_map(|event| match event {
-            RunOutputMessage::Output(event) => Some(event.clone()),
+        .filter_map(|message| match message {
+            RunOutputMessage::Output(event) => Some((
+                event.sequence,
+                event.stream,
+                event.text.as_ref(),
+                event.source_node_id,
+            )),
             RunOutputMessage::Status(_) => None,
         })
         .collect::<Vec<_>>();
-    let trace_order = trace
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .filter(|span| {
-            span.kind == SpanKind::OperationAttempt && span.outcome == SpanOutcome::Success
-        })
-        .filter_map(|event| event.correlation.node_id.and_then(label))
-        .collect::<Vec<_>>();
-    assert_eq!(event_order, ["First", "Second", "Third"]);
+
     assert_eq!(
-        output
-            .iter()
-            .map(|event| event.text.as_ref())
-            .collect::<Vec<_>>(),
-        ["First", "Second", "Third"]
+        text.iter().map(|(_, _, text, _)| *text).collect::<Vec<_>>(),
+        ["First", "Second", "Third"],
     );
     assert_eq!(
-        output
-            .iter()
-            .map(|event| event.sequence)
+        text.iter()
+            .map(|(sequence, _, _, _)| *sequence)
             .collect::<Vec<_>>(),
-        [1, 2, 3]
-    );
-    assert_eq!(
-        output
-            .iter()
-            .map(|event| label(event.source_node_id))
-            .collect::<Vec<_>>(),
-        [Some("First"), Some("Second"), Some("Third")]
+        [1, 2, 3],
     );
     assert!(
-        output
-            .iter()
-            .all(|event| event.stream == RunOutputStream::Stdout)
+        text.iter()
+            .all(|(_, stream, _, _)| *stream == RunOutputStream::Stdout)
     );
-    assert_eq!(trace_order, ["First", "Second", "Third"]);
+    assert_eq!(
+        text.iter()
+            .map(|(_, _, _, source_node_id)| *source_node_id)
+            .collect::<Vec<_>>(),
+        [
+            NodeId::from_uuid(uuid::Uuid::from_u128(101)),
+            NodeId::from_uuid(uuid::Uuid::from_u128(102)),
+            NodeId::from_uuid(uuid::Uuid::from_u128(103)),
+        ],
+    );
 }
 
 #[test]

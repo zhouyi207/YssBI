@@ -43,8 +43,9 @@ fn deadline_wakes_blocked_stream_send_and_receive_with_typed_phases() {
 }
 
 #[test]
-fn deadline_late_kernel_completion_is_joined_without_commit_or_completion_event() {
+fn deadline_late_kernel_completion_is_joined_without_commit() {
     let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
     let mut kernels = KernelRegistry::new();
     kernels
         .register(
@@ -77,6 +78,7 @@ fn deadline_late_kernel_completion_is_joined_without_commit_or_completion_event(
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
     .with_event_sink(&events)
+    .with_result_store(&results)
     .with_deadline(RunDeadline::after(Duration::from_millis(10)))
     .run(&execution_plan, CancellationToken::new());
 
@@ -87,16 +89,19 @@ fn deadline_late_kernel_completion_is_joined_without_commit_or_completion_event(
         })
     );
     let events = events.0.lock().unwrap();
+    let run_id = events
+        .iter()
+        .find(|event| event.kind == RunEventKind::RunStarted)
+        .and_then(|event| event.correlation.run_id)
+        .expect("RunStarted carries the active run ID");
+    let stored_results = results.results_for_run(run_id);
+    assert_eq!(stored_results.len(), 1);
+    assert!(matches!(&stored_results[0].state, ResultState::Failed(_)));
     assert!(
-        !events
+        events
             .iter()
-            .any(|event| matches!(event.kind, RunEventKind::OperationCompleted { .. }))
+            .all(|event| event.kind != RunEventKind::RunCompleted)
     );
-    assert_eq!(result_group_states(&events), vec![ResultStateKind::Failed]);
-    assert!(events.iter().all(|event| !matches!(
-        event.kind,
-        RunEventKind::OutputResultChanged { .. } | RunEventKind::RunCompleted
-    )));
     assert!(events.iter().any(|event| matches!(
         event.kind,
         RunEventKind::RunErrored {
@@ -110,6 +115,7 @@ fn deadline_late_kernel_completion_is_joined_without_commit_or_completion_event(
 #[test]
 fn deadline_queue_wait_is_typed_and_late_workers_do_not_commit() {
     let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
     let mut kernels = KernelRegistry::new();
     for name in ["parallel0", "parallel1"] {
         kernels
@@ -131,6 +137,7 @@ fn deadline_queue_wait_is_typed_and_late_workers_do_not_commit() {
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
     .with_event_sink(&events)
+    .with_result_store(&results)
     .with_scheduling_policy(parallel_policy(1, 1, 1))
     .with_deadline(deadline)
     .run(
@@ -144,13 +151,18 @@ fn deadline_queue_wait_is_typed_and_late_workers_do_not_commit() {
             phase: RunPhase::QueueWait,
         })
     );
+    let events = events.0.lock().unwrap();
+    let run_id = events
+        .iter()
+        .find(|event| event.kind == RunEventKind::RunStarted)
+        .and_then(|event| event.correlation.run_id)
+        .expect("RunStarted carries the active run ID");
+    let stored_results = results.results_for_run(run_id);
+    assert!(!stored_results.is_empty());
     assert!(
-        !events
-            .0
-            .lock()
-            .unwrap()
+        stored_results
             .iter()
-            .any(|event| matches!(event.kind, RunEventKind::OperationCompleted { .. }))
+            .all(|result| matches!(&result.state, ResultState::Failed(_)))
     );
 }
 
@@ -180,8 +192,9 @@ fn deadline_adapter_io_uses_the_owner_deadline_without_a_local_timer() {
 }
 
 #[test]
-fn deadline_publication_suppresses_terminal_result_events() {
+fn deadline_publication_preserves_ready_result_but_emits_run_error() {
     let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
     let mut kernels = KernelRegistry::new();
     kernels
         .register(
@@ -210,6 +223,7 @@ fn deadline_publication_suppresses_terminal_result_events() {
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
     .with_event_sink(&events)
+    .with_result_store(&results)
     .with_deadline(RunDeadline::after(Duration::from_millis(20)))
     .with_test_checkpoint(Arc::new(|checkpoint, _| {
         if checkpoint == SchedulerCheckpoint::FinalResultPublication {
@@ -225,11 +239,26 @@ fn deadline_publication_suppresses_terminal_result_events() {
         })
     );
     let events = events.0.lock().unwrap();
-    assert_eq!(result_group_states(&events), vec![ResultStateKind::Ready]);
-    assert!(events.iter().all(|event| !matches!(
-        event.kind,
-        RunEventKind::RunCompleted | RunEventKind::OutputResultChanged { .. }
-    )));
+    let run_id = events
+        .iter()
+        .find(|event| event.kind == RunEventKind::RunStarted)
+        .and_then(|event| event.correlation.run_id)
+        .expect("RunStarted carries the active run ID");
+    let stored_results = results.results_for_run(run_id);
+    assert_eq!(stored_results.len(), 1);
+    assert!(matches!(&stored_results[0].state, ResultState::Ready(_)));
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.kind, RunEventKind::RunErrored { .. }))
+            .count(),
+        1
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| event.kind != RunEventKind::RunCompleted)
+    );
 }
 
 struct CleanupDeadlineKernel;

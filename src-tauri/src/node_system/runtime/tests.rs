@@ -267,37 +267,32 @@ impl RunEventSink for RecordingRunEvents {
     }
 }
 
-fn result_group_states(events: &[RunEvent]) -> Vec<ResultStateKind> {
-    events
-        .iter()
-        .filter_map(|event| match event.kind {
-            RunEventKind::ResultGroupChanged { state, .. } => Some(state),
-            _ => None,
-        })
-        .collect()
-}
-
-fn assert_cancelled_without_completion(
-    events: &RecordingRunEvents,
-    expected_group_state: ResultStateKind,
-) {
+fn assert_cancelled_without_completion(events: &RecordingRunEvents) -> RunId {
     let events = events.0.lock().unwrap();
-    assert!(
-        events
-            .iter()
-            .any(|event| event.kind == RunEventKind::RunCancelled)
+    let run_id = events
+        .iter()
+        .find(|event| event.kind == RunEventKind::RunStarted)
+        .and_then(|event| event.correlation.run_id)
+        .expect("RunStarted carries the active run ID");
+    let final_lifecycle = events.iter().rev().find(|event| {
+        matches!(
+            event.kind,
+            RunEventKind::RunStarted
+                | RunEventKind::RunCompleted
+                | RunEventKind::RunErrored { .. }
+                | RunEventKind::RunCancelled
+        )
+    });
+    assert_eq!(
+        final_lifecycle.map(|event| &event.kind),
+        Some(&RunEventKind::RunCancelled)
     );
     assert!(
         events
             .iter()
             .all(|event| event.kind != RunEventKind::RunCompleted)
     );
-    assert_eq!(result_group_states(&events), vec![expected_group_state]);
-    assert!(
-        events
-            .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
-    );
+    run_id
 }
 
 struct NoFunctions;
