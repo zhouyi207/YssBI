@@ -22,7 +22,7 @@ fn export_graph_subgraph_is_a_read_only_authoritative_query_and_emits_zero_event
     )
     .unwrap();
 
-    let command_source = include_str!("command_node_system.rs");
+    let command_source = include_str!("command_node_system/editor.rs");
     let export_command_source = command_source
         .split_once("pub(crate) fn export_graph_subgraph_from_state")
         .unwrap()
