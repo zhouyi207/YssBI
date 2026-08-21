@@ -7,17 +7,12 @@ import type { StatusBarRenderContext } from "@/features/core/statusBar";
 
 const ctx: StatusBarRenderContext = {
   t: ((key: string) => key) as StatusBarRenderContext["t"],
-  projectStatus: "ready",
-  projectFileName: "demo.yss",
-  activeTitle: "Graph A",
-  activeType: "event",
   activeTabId: "graph/a",
   activeEditorGroupId: "editor",
   selectedCount: 2,
   nodeCount: 5,
   connectionCount: 3,
   executionStatus: "idle",
-  colorTheme: "Dark Modern (Default)",
   juliaWorkerState: "ready",
   juliaWorkerLabel: "Julia ready",
   juliaWorkerTooltip: "Julia worker is ready",
@@ -26,9 +21,7 @@ const ctx: StatusBarRenderContext = {
 const noopActions = {
   openLogsPanel: () => {},
   resetCanvasViewport: () => {},
-  cycleColorTheme: () => {},
   executionTooltip: "execution",
-  themeTooltip: "theme",
   viewportTooltip: "viewport",
   renderViewportStatus: () => "X 0 Y 0 100%",
 };
@@ -37,11 +30,7 @@ describe("built-in status bar items", () => {
   it("orders built-in items by alignment and priority", () => {
     const snapshot = buildStatusBarItems(ctx, createBuiltInStatusBarItems(noopActions));
 
-    expect(snapshot.left.map((item) => item.id)).toEqual([
-      "project-status",
-      "project-file",
-      "active-tab",
-    ]);
+    expect(snapshot.left).toEqual([]);
     expect(snapshot.right.map((item) => item.id)).toEqual([
       "julia-worker",
       "node-count",
@@ -49,7 +38,6 @@ describe("built-in status bar items", () => {
       "selected-nodes",
       "execution-status",
       "viewport-status",
-      "theme-mode",
     ]);
   });
 

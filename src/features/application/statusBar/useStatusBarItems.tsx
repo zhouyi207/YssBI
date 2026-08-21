@@ -2,20 +2,14 @@ import { useEffect, useMemo, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useTranslation } from "react-i18next";
 import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
-import { useProjectIOStore } from "@/features/core/dataStore/projectIOStore";
-import type { ErrorReference } from "@/services/ipc";
 import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
 import {
   editorDockviewPort,
   useDockviewPortSnapshot,
   useEditorPaneStateStore,
 } from "@/features/core/dockview";
-import { layoutTabResourceRef } from "@/features/core/layout/layoutTabModel";
-import { resolveTabDisplayName } from "@/features/application/editor/resolveTabDisplayName";
-import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { getViewport, subscribeToViewport, editorViewportScope, type ViewportScope } from "@/features/core/viewport";
-import { LoadStatus, type LayoutTab } from "@/shared/types/ui";
-import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
+import type { LayoutTab } from "@/shared/types/ui";
 import {
   createBuiltInStatusBarItems,
   useStatusBarSnapshot,
@@ -25,29 +19,6 @@ import {
 import { useStatusBarActions } from "./useStatusBarActions";
 import { useJuliaWorkerStatus } from "./useJuliaWorkerStatus";
 
-function fileNameFromPath(path: string | null) {
-  if (!path) return null;
-  const displayPath = formatDisplayPath(path);
-  return displayPath.replace(/\\/g, "/").split("/").pop() || displayPath;
-}
-
-export function projectStatusLabel(
-  status: LoadStatus,
-  error: ErrorReference | null,
-  t: StatusBarRenderContext["t"],
-) {
-  if (status === LoadStatus.Error) {
-    const genericText = t("bottomBar.projectError");
-    if (!error) return genericText;
-    const codeText = `[${error.code}]`;
-    return error.incidentId
-      ? `${genericText} ${codeText} · ${t("common.incidentId")}: ${error.incidentId}`
-      : `${genericText} ${codeText}`;
-  }
-  if (status === LoadStatus.Loading) return t("bottomBar.loadingProject");
-  if (status === LoadStatus.Ready) return t("common.ready");
-  return t("common.idle");
-}
 
 function formatViewportStatus(scope: ViewportScope | null) {
   if (!scope) return "X 0 Y 0 100%";
@@ -86,13 +57,9 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
     return {
       activeEditorGroupId: activePanel?.groupId ?? null,
       activeTabId: activeTab?.id ?? null,
-      activeTitle: activeTab
-        ? resolveTabDisplayName(layoutTabResourceRef(activeTab), activeTab.id)
-        : t("bottomBar.noActiveGraph"),
-      activeType: activeTab?.type ?? null,
       selectedCount: selectedNodeIds?.length ?? 0,
     };
-  }, [activePanel, selectedNodeIds, t]);
+  }, [activePanel, selectedNodeIds]);
 
   const graphStats = useGraphDataStore(
     useShallow((state) => {
@@ -115,38 +82,25 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
     }),
   );
 
-  const project = useProjectIOStore(
-    useShallow((state) => ({
-      status: state.status,
-      error: state.error,
-      fileName: fileNameFromPath(state.currentPath) ?? t("bottomBar.untitledProject"),
-    })),
-  );
 
   const executionStatus = useExecutionStore((state) =>
     editor.activeTabId ? state.graphs[editor.activeTabId]?.status ?? "idle" : "idle",
   );
-  const colorTheme = useSettingsStore((state) => state.appearance.colorTheme);
 
   const ctx = useMemo<StatusBarRenderContext>(
     () => ({
       t,
-      projectStatus: projectStatusLabel(project.status, project.error, t),
-      projectFileName: project.fileName,
-      activeTitle: editor.activeTitle,
-      activeType: editor.activeType,
       activeTabId: editor.activeTabId,
       activeEditorGroupId: editor.activeEditorGroupId,
       selectedCount: editor.selectedCount,
       nodeCount: graphStats.nodeCount,
       connectionCount: graphStats.connectionCount,
       executionStatus,
-      colorTheme,
       juliaWorkerState: juliaWorker.state,
       juliaWorkerLabel: juliaWorker.label,
       juliaWorkerTooltip: juliaWorker.tooltip,
     }),
-    [t, project, editor, graphStats, executionStatus, colorTheme, juliaWorker],
+    [t, editor, graphStats, executionStatus, juliaWorker],
   );
 
   const builtIn = useMemo(
@@ -154,9 +108,7 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
       createBuiltInStatusBarItems({
         openLogsPanel: actions.openLogsPanel,
         resetCanvasViewport: actions.resetCanvasViewport,
-        cycleColorTheme: actions.cycleColorTheme,
         executionTooltip: actions.executionTooltip,
-        themeTooltip: actions.themeTooltip,
         viewportTooltip: actions.viewportTooltip,
         renderViewportStatus: (groupId, graphPath) => (
           <ViewportStatus
@@ -167,9 +119,7 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
     [
       actions.openLogsPanel,
       actions.resetCanvasViewport,
-      actions.cycleColorTheme,
       actions.executionTooltip,
-      actions.themeTooltip,
       actions.viewportTooltip,
     ],
   );

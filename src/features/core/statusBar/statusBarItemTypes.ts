@@ -5,17 +5,12 @@ export type StatusBarAlignment = "left" | "right";
 
 export interface StatusBarRenderContext {
   t: TFunction;
-  projectStatus: string;
-  projectFileName: string;
-  activeTitle: string;
-  activeType: string | null;
   activeTabId: string | null;
   activeEditorGroupId: string | null;
   selectedCount: number;
   nodeCount: number;
   connectionCount: number;
   executionStatus: string;
-  colorTheme: string;
   juliaWorkerState: "checking" | "starting" | "ready" | "unavailable";
   juliaWorkerLabel: string;
   juliaWorkerTooltip: string;

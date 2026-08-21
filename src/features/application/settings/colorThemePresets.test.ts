@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { getColorThemeForMode, getNextColorThemePreset, getRememberedColorTheme, getThemeModeForPreset } from './colorThemePresets';
+import { getColorThemeForMode, getRememberedColorTheme, getThemeModeForPreset } from './colorThemePresets';
 
 describe('color theme presets', () => {
-  it('cycles unknown and known presets through the canonical order', () => {
-    expect(getNextColorThemePreset('Dark Modern (Default)')).toBe('OLED Black');
-    expect(getNextColorThemePreset('OLED Black')).toBe('Light Modern');
-    expect(getNextColorThemePreset('Light Modern')).toBe('Dark Modern (Default)');
-    expect(getNextColorThemePreset('custom')).toBe('Dark Modern (Default)');
-  });
 
   it('maps header light/dark mode actions to canonical presets', () => {
     expect(getColorThemeForMode('light')).toBe('Light Modern');

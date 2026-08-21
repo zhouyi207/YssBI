@@ -4,26 +4,10 @@ import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
 import { editorDockviewPort } from '@/features/core/dockview';
 import { showPanelView } from '@/features/core/layout/workbenchLayoutService';
 import { setViewportLive, editorViewportScope } from '@/features/core/viewport';
-import { useSettingsStore } from '@/features/core/settings/settingsStore';
-
-import { syncColorThemePreset } from '@/features/application/settings/appearanceRuntime';
-import { getNextColorThemePreset, getThemeModeForPreset } from '@/features/application/settings/colorThemePresets';
 
 /** Bottom bar command handlers — keeps BottomBar presentational. */
 export function useStatusBarActions() {
   const { t } = useTranslation();
-  const updateTheme = useSettingsStore((s) => s.updateTheme);
-  const appearance = useSettingsStore((s) => s.appearance);
-  const colorTheme = appearance.colorTheme;
-
-  const selectColorTheme = useCallback((next: string) => {
-    const mode = getThemeModeForPreset(next);
-    useSettingsStore.getState().updateAppearance({
-      colorTheme: next,
-      ...(mode === 'light' ? { lastLightColorTheme: next } : { lastDarkColorTheme: next }),
-    });
-    syncColorThemePreset(next, updateTheme);
-  }, [updateTheme]);
 
   const openLogsPanel = useCallback(() => {
     showPanelView('logs');
@@ -38,17 +22,11 @@ export function useStatusBarActions() {
     setViewportLive(editorViewportScope(panel.groupId, graphPath), { ...DEFAULT_VIEWPORT });
   }, []);
 
-  const cycleColorTheme = useCallback(() => {
-    const next = getNextColorThemePreset(colorTheme);
-    selectColorTheme(next);
-  }, [colorTheme, selectColorTheme]);
 
   return {
     openLogsPanel,
     resetCanvasViewport,
-    cycleColorTheme,
     executionTooltip: t('bottomBar.openLogsPanel'),
-    themeTooltip: t('bottomBar.cycleTheme'),
     viewportTooltip: t('bottomBar.resetViewport'),
   };
 }

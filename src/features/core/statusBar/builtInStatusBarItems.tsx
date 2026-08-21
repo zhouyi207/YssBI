@@ -1,22 +1,13 @@
 import {
   VscCircleFilled,
-  VscFile,
-  VscGitPullRequest,
   VscGraph,
   VscRadioTower,
   VscServerProcess,
-  VscSymbolEvent,
-  VscSymbolMethod,
   VscZoomIn,
 } from "react-icons/vsc";
 import { cn } from "@/lib/utils";
 import type { StatusBarItemRegistration, StatusBarRenderContext } from "./statusBarItemTypes";
 
-function typeIcon(type: string | null) {
-  if (type === "event") return <VscSymbolEvent size={13} />;
-  if (type === "function") return <VscSymbolMethod size={13} />;
-  return <VscGraph size={13} />;
-}
 
 function executionDotClass(status: string): string {
   return cn(
@@ -52,51 +43,13 @@ function executionLabel(status: string, ctx: StatusBarRenderContext): string {
 export type BuiltInStatusBarActions = {
   openLogsPanel: () => void;
   resetCanvasViewport: () => void;
-  cycleColorTheme: () => void;
   executionTooltip: string;
-  themeTooltip: string;
   viewportTooltip: string;
   renderViewportStatus: (groupId: string, graphPath: string | null) => React.ReactNode;
 };
 
 export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): StatusBarItemRegistration[] {
   return [
-    {
-      id: "project-status",
-      alignment: "left",
-      priority: 10,
-      className: "bg-[var(--hover-bg)] text-foreground",
-      render: (ctx) => (
-        <>
-          <VscGitPullRequest size={13} className="text-[var(--accent-color)]" />
-          <span>{ctx.projectStatus}</span>
-        </>
-      ),
-    },
-    {
-      id: "project-file",
-      alignment: "left",
-      priority: 20,
-      className: "min-w-0",
-      render: (ctx) => (
-        <>
-          <VscFile size={13} className="shrink-0 text-[var(--accent-color)]" />
-          <span className="truncate">{ctx.projectFileName}</span>
-        </>
-      ),
-    },
-    {
-      id: "active-tab",
-      alignment: "left",
-      priority: 30,
-      className: "min-w-0 border-l border-[var(--strong-border)]",
-      render: (ctx) => (
-        <>
-          <span className="text-[var(--accent-color)]">{typeIcon(ctx.activeType)}</span>
-          <span className="truncate">{ctx.activeTitle}</span>
-        </>
-      ),
-    },
     {
       id: "julia-worker",
       alignment: "right",
@@ -175,16 +128,6 @@ export function createBuiltInStatusBarItems(actions: BuiltInStatusBarActions): S
           {actions.renderViewportStatus(ctx.activeEditorGroupId ?? '', ctx.activeTabId)}
         </>
       ),
-    },
-    {
-      id: "theme-mode",
-      alignment: "right",
-      priority: 60,
-      className: "capitalize text-foreground",
-      ariaLabel: () => actions.themeTooltip,
-      tooltip: () => actions.themeTooltip,
-      onClick: () => actions.cycleColorTheme(),
-      render: (ctx) => ctx.colorTheme,
     },
   ];
 }

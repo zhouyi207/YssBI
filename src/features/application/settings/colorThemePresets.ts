@@ -26,10 +26,6 @@ export const COLOR_THEME_PRESET_IDS = [
 
 export type ColorThemePresetId = (typeof COLOR_THEME_PRESET_IDS)[number];
 
-export function getNextColorThemePreset(colorTheme: string): ColorThemePresetId {
-  const index = COLOR_THEME_PRESET_IDS.indexOf(colorTheme as ColorThemePresetId);
-  return COLOR_THEME_PRESET_IDS[(index + 1) % COLOR_THEME_PRESET_IDS.length];
-}
 
 export function getColorThemeForMode(mode: 'light' | 'dark'): ColorThemePresetId {
   return mode === 'light' ? 'Light Modern' : 'Dark Modern (Default)';

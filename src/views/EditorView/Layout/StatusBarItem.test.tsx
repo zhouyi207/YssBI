@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StatusBarItem } from './StatusBarItem';
 import type { StatusBarItemViewModel } from '@/features/core/statusBar';
 
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
 function interactiveItem(overrides: Partial<StatusBarItemViewModel> = {}): StatusBarItemViewModel {
   return {
     id: 'execution-status',
@@ -58,16 +60,16 @@ describe('StatusBarItem', () => {
       root.render(
         <StatusBarItem
           item={{
-            id: 'project-status',
-            alignment: 'left',
+            id: 'node-count',
+            alignment: 'right',
             priority: 10,
-            content: 'Ready',
+            content: '5 Nodes',
           }}
         />,
       );
     });
 
     expect(host.querySelector('[role="button"]')).toBeNull();
-    expect(host.textContent).toContain('Ready');
+    expect(host.textContent).toContain('5 Nodes');
   });
 });

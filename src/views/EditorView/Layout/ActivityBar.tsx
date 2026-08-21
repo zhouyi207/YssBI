@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { PiGraph } from "react-icons/pi";
 import { HiVariable } from "react-icons/hi2";
-import { VscDatabase, VscGraphLine, VscLibrary, VscTerminal } from "react-icons/vsc";
+import { VscDatabase, VscGraphLine, VscLibrary, VscSettingsGear, VscTerminal } from "react-icons/vsc";
 import { useWorkbenchStore, type SidebarTabId } from '@/features/core/workbench';
 import { toggleSidebarTab as persistToggleSidebarTab } from "@/features/core/layout/workbenchLayoutService";
 import { Button } from "@/components/ui/button";
@@ -10,41 +10,42 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn } from "@/lib/utils";
 
 interface ActivityIconProps {
-  active: boolean;
+  active?: boolean;
   onClick: () => void;
   children: ReactNode;
   title: string;
   id: string;
   side: 'left' | 'right';
+  hasPopup?: 'dialog';
 }
 
-const ActivityIcon = ({ active, onClick, children, title, id, side }: ActivityIconProps) => (
+const ActivityIcon = ({ active, onClick, children, title, id, side, hasPopup }: ActivityIconProps) => (
   <Tooltip>
     <TooltipTrigger asChild>
       <Button
         type="button"
         variant="ghost"
+        size="icon"
         onClick={onClick}
-        data-tab-id={id}
+        data-activity-id={id}
+        data-tab-id={active === undefined ? undefined : id}
         aria-label={title}
         aria-pressed={active}
-        className={cn(
-          "relative size-10 rounded-md border border-transparent transition-[color,background-color,border-color]",
-          active
-            ? "border-[var(--accent-color)]/15 bg-[var(--accent-color)]/12 text-[var(--accent-color)] shadow-sm"
-            : "text-muted-foreground hover:bg-[var(--interactive-hover)] hover:text-foreground",
-        )}
+        aria-haspopup={hasPopup}
+        className="size-10 bg-transparent p-0 hover:bg-transparent dark:hover:bg-transparent"
       >
-        {children}
-        {active ? (
-          <span
-            aria-hidden="true"
-            className={cn(
-              "absolute top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[var(--accent-color)]",
-              side === 'left' ? "-left-1" : "-right-1",
-            )}
-          />
-        ) : null}
+        <span
+          data-slot="activity-icon-surface"
+          aria-hidden="true"
+          className={cn(
+            "flex size-9 items-center justify-center rounded-md border border-transparent transition-[color,background-color,border-color]",
+            active
+              ? "border-(--accent-color)/15 bg-(--accent-color)/12 text-(--accent-color)"
+              : "text-muted-foreground group-hover/button:bg-(--interactive-hover) group-hover/button:text-foreground",
+          )}
+        >
+          {children}
+        </span>
       </Button>
     </TooltipTrigger>
     <TooltipContent side={side === 'left' ? 'right' : 'left'}>{title}</TooltipContent>
@@ -55,6 +56,7 @@ export function ActivityBar({ side = 'left' }: { side?: 'left' | 'right' }) {
   const { t } = useTranslation();
   const sidebarCurrentTab = useWorkbenchStore((state) => state.sidebarCurrentTab);
   const sidebarHidden = useWorkbenchStore((state) => state.sidebarUserHidden);
+  const openSettings = useWorkbenchStore((state) => state.openSettings);
   const activeTab = sidebarHidden ? null : sidebarCurrentTab;
   const toggleTab = (tab: SidebarTabId) => persistToggleSidebarTab(tab);
   const iconProps = (id: SidebarTabId, title: string) => ({
@@ -92,6 +94,17 @@ export function ActivityBar({ side = 'left' }: { side?: 'left' | 'right' }) {
       <ActivityIcon {...iconProps("commands", t("activityBar.commands"))}>
         <VscTerminal size={20} />
       </ActivityIcon>
+      <div className="mt-auto">
+        <ActivityIcon
+          id="settings"
+          title={t("menubar.settings")}
+          side={side}
+          hasPopup="dialog"
+          onClick={openSettings}
+        >
+          <VscSettingsGear size={20} />
+        </ActivityIcon>
+      </div>
     </nav>
   );
 }

@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { useState } from "react";
 import { useEditorSessionCommandsContext, useEditorHistoryAvailability } from "@/features/application/editor";
-import { VscLayoutSidebarRight, VscLayoutSidebarRightOff, VscSettingsGear } from "react-icons/vsc";
+import { VscLayoutSidebarRight, VscLayoutSidebarRightOff } from "react-icons/vsc";
 import { useMenubar } from "@/features/application/menubar";
 import { buildViewMenuItems } from "@/features/application/menubar/menubarViewItems";
 import { useActiveProjectPath } from "@/features/core/dataStore";
@@ -266,15 +266,6 @@ export function Menubar() {
           aria-label={isDetailVisible ? t("menubar.hideSecondarySideBar") : t("menubar.showSecondarySideBar")}
         >
           {isDetailVisible ? <VscLayoutSidebarRight size={14} /> : <VscLayoutSidebarRightOff size={14} />}
-        </ToolbarIconButton>
-        <ToolbarIconButton
-          variant="ghost"
-          size="icon-lg"
-          onClick={() => openSettings()}
-          className="self-center text-muted-foreground"
-          tooltip={t("menubar.settings")}
-        >
-          <VscSettingsGear size={14} />
         </ToolbarIconButton>
         </>
       }
