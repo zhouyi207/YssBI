@@ -152,7 +152,7 @@ fn deadline_before_envelope_receive_does_not_commit_completed_worker_output() {
     )]);
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
-        output: stable_output("deadline-before-receive"),
+        output: stable_output("deadline_before_receive"),
         value: ValueRef::new(0),
     }]);
     publish_graph_results(&mut execution_plan);
