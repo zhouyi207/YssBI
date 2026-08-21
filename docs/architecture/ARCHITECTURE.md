@@ -4,7 +4,7 @@
 
 专项文档：
 
-- [诊断、IPC 错误、Execution Trace 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
+- [诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 - [Dockview/Gridview 编辑器布局](./EDITOR_GRID_ARCHITECTURE.md)
 - [Database 实现说明](../../src-tauri/src/database/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
@@ -52,7 +52,7 @@ flowchart TD
 | `src-tauri/src/commands/` | Tauri transport、DTO 转换、错误映射、event/channel 交付 |
 | `src-tauri/src/application/` | 跨 module 用例编排 |
 | `src-tauri/src/project/` | 项目 authority、资源事务、持久化、session 与一致性快照 |
-| `src-tauri/src/node_system/` | graph document、catalog/registry、compiler、plan、runtime、trace |
+| `src-tauri/src/node_system/` | graph document、catalog/registry、analysis、compiler、plan 与 runtime |
 | `src-tauri/src/database/` | DuckDB 数据资产、查询、编辑、统计概览与导出 |
 | `src-tauri/src/sci/` | 主应用的科学计算 interface、typed models 与 backend adapters |
 | `src-tauri/sci/` | 独立 `yss-sci` Rust 数值算法 crate |
@@ -160,11 +160,10 @@ ProjectStore
 ├─ ResultStore
 ├─ SessionMemoization
 ├─ ProjectRunRegistry
-├─ BoundedTraceSink
 └─ ProjectSessionId
 ```
 
-`ProjectStore` 不替代 `ProjectData`。它提供不能或不应直接序列化的 runtime implementation。切换 project session 会替换这组 runtime objects，从而隔离旧 result、memo、run 和 trace authority。
+`ProjectStore` 不替代 `ProjectData`。它提供不能或不应直接序列化的 runtime implementation。切换 project session 会替换这组 runtime objects，从而隔离旧 result、memo 和 run state。
 
 Graph resource 文件位于 `events/...` 与 `functions/...`。对未驻留 graph，磁盘文件和 graph revision ledger/index 仍声明资源存在；`ProjectData.graphs` 中缺失表示 unloaded，而不是资源不存在。
 
@@ -235,10 +234,9 @@ Graph load 先注册 resource lifecycle owner，在锁外读取/解析磁盘，�
 ```text
 document + protocol
   → registry + catalog
-  → compiler
+  → semantic analysis + compiler
   → immutable plan
   → runtime
-analysis observes compilation/runtime
 ```
 
 - `document/`：authoritative graph document、mutation、history 和 resource revision。
@@ -248,7 +246,7 @@ analysis observes compilation/runtime
 - `compiler/`：deterministic analysis、dynamic interface/schema resolution、specialization 和 lowering。
 - `plan/`：immutable execution plan、demand selection 与 presentation contract。
 - `runtime/`：plan-only synchronous executor、kernels、resources、memoization、results、streams 和 cancellation。
-- `analysis/`：correlation context、compiler/run spans 与 bounded trace bundles。
+- `analysis/`：pure compilation basis/provenance、semantic snapshots、diagnostics 与 editor projections。
 
 Runtime interface 明确要求只消费 immutable plan 和 plan-local handles；它不会在运行中查询 graph document 或 node registry。这一 seam 让 compiler 负责解释 mutable document，runtime 只负责执行已验证 plan。
 
@@ -268,41 +266,32 @@ flowchart TD
   SNAP --> FP[Publish function plans and parameters]
   FP --> RUN[RunExecutor]
   RUN --> RESULTS[ResultStore]
-  RUN --> TRACE[Execution Trace]
   RUN --> OUTPUT[Run Output channel]
 ```
 
 `ProjectState::execute_graph` 负责 project identity、authority token、resource version basis、function plan generation、runtime resource leases 和 final commit gate。`ProjectRunRegistry` 管理 preparing/active/finalizing run，支持指定 run cancel，并在 project replacement 时关闭 admission、cancel 和 drain。
 
-成功 run 的 variable effects 在 `RunExecutor` terminal success transaction 中 prepare/finalize；只有 authority 与 deadline/cancellation 仍有效才提交。Command 不实现这些规则，只负责 channel adapter、DTO/error 映射和 committed resource event。Run/parent-call 的 checked ID allocator 耗尽统一分类为 `RuntimeIdExhausted`，不会伪装成用户的 `InvalidPlan`。
+成功 run 的 variable effects 在 `RunExecutor` terminal success transaction 中 prepare/finalize；只有 authority 与 deadline/cancellation 仍有效才提交。Command 不实现这些规则，只负责 channel adapter、DTO/error 映射和 committed resource event。
 
-## 7. Results、Trace、Output 与 diagnostics
+## 7. Results、Run Output 与 diagnostics
 
-这四条数据流语义不同，不能互相替代。
+这三条数据流语义不同，不能互相替代。
 
-### 7.1 ResultStore
+### 7.1 Results
 
 `ProjectStore.results` 中的 `ResultStore` 是 project-session logical execution result 与 Pin history 的 authority。它提供：
 
 - activation group 的原子 `Pending → Ready/Failed/Cancelled` transition；
 - opaque、单调分配的 `ResultId`；
-- result provenance、presentation、value contract 与 stored value；
-- 每个 graph output 的历史链；
+- result state、provenance、presentation、value contract 与 stored value；
+- 每个 graph output 的 produced/reused 历史链；
 - scalar inline read 与 sequence/data-series paging。
 
-Runtime 通过 `ResultGroupChanged`、`OutputResultChanged` 和 `OpenResultWindow { result_id }` 发布变化；stream event 不携带大 payload。Frontend 通过 `ResultService` 获取 descriptor/value/page。Project replacement 会替换 session `ResultStore`，旧 ID 不会被解析成新 project 的 result。
+Frontend 通过 `ResultService` 调用 typed `get_result_descriptor`、`get_result_value`、`get_result_page` 和 `get_pin_result_history` queries。Project replacement 会替换 session `ResultStore`，使旧 result 与 Pin history 失效；旧 `ResultId` 不会 alias 新 project 的 result。
 
-### 7.2 Execution Trace
+Public `RunEvent` wire 只包含 `{ run, kind }`。`GraphRunIdentity` 的字段是 `projectSessionId`、opaque `graphPath` 和 positive decimal-string `runId`。最小 lifecycle `kind.type` 是 `runStarted`、`runCompleted`、`runErrored` 和 `runCancelled`；`pinPreviewResultReady` 只公告 `output`、`generation` 与 `resultId`，`openResultWindow` 只公告 `resultId`。这些 event 是交付通知，不是 result authority；ordinary result publication 不发送 `resultGroupChanged` 或 `outputResultChanged` public stream event。
 
-`BoundedTraceSink` 是 runtime-authoritative、project-session scoped 的 trace store，与 diagnostics 分离。默认 retention：
-
-- 最多 32 个 completed run bundles；
-- project trace estimated byte budget 为 2 MiB；
-- 每个 active bundle 最多 4096 spans。
-
-它保留完整 run/compilation bundle 作为 eviction 单位；超限时结构化截断并显式累计 `truncated` 与 `droppedSpanCount`，query 不静默修复 hierarchy。`list_graph_trace_bundles` 和 `get_run_trace_bundle` 在读取前后验证 project session。
-
-### 7.3 Run Output
+### 7.2 Run Output
 
 用户 Print/stdout/stderr 使用独立 typed `RunOutputMessage`，与 `RunEvent` 共用有序 Tauri channel transport，但 wire shape 和前端 projection 分离。每条记录保留：
 
@@ -312,7 +301,7 @@ Runtime 通过 `ResultGroupChanged`、`OutputResultChanged` 和 `OpenResultWindo
 
 Backend 每条文本最多 8 KiB，每个 run 最多 256 条文本；truncation/drop 通过 status event 明示。Frontend Output panel 维护有界投影并检测 sequence gap。Run Output 不进入 diagnostics。
 
-### 7.4 Diagnostics
+### 7.3 Diagnostics
 
 Rust `tracing` 是唯一 diagnostics pipeline。Recent storage、ingress、subscriber queue 和 JSONL 都是 bounded/lossy、sanitized、non-authoritative 的观察面。
 
@@ -413,7 +402,7 @@ Worker assets 由 Rust embed，并通过 exclusive temp file、`sync_all` 和 at
 - catalog/registry 声明 trusted descriptor 和 implementation；
 - compiler lowerer 将 document/config 转成 immutable plan；
 - runtime kernel 只消费 plan-local parameters/resources；
-- logical output 进入 `ResultStore`，Print 进入 Run Output，内部观察进入 Execution Trace/diagnostics。
+- logical output 进入 `ResultStore`，Print 进入 Run Output，内部观察使用 Rust `tracing` diagnostics。
 
 ### 新 scientific operation
 

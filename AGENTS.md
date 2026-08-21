@@ -14,7 +14,7 @@ graph compilation/execution, databases, results, and scientific orchestration.
 - `docs/architecture/ARCHITECTURE.md` owns the current implementation map.
 - `docs/development/LOCAL_WORKFLOW.md` owns toolchain, commands, and validation.
 - `docs/architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md` owns diagnostics, IPC
-  errors, execution traces, and program output details.
+  errors, results, and program output details.
 - Treat `docs/version/` as history, not current implementation authority. If
   maintained documentation and code disagree, verify behavior before editing
   and update the stale documentation as part of the change.
@@ -61,7 +61,7 @@ graph compilation/execution, databases, results, and scientific orchestration.
   Variable resources serialize as `variables/{VariableId}` and database resources as
   `databases/{database-id}`; frontend code treats every resource path as opaque.
 
-## Diagnostics, errors, traces, and output
+## Diagnostics, errors, results, and output
 
 - Rust `tracing` is the single diagnostic pipeline. Diagnostic storage and
   delivery are bounded, lossy, sanitized, and non-authoritative; logs never
@@ -76,9 +76,6 @@ graph compilation/execution, databases, results, and scientific orchestration.
   dialogs, disk log pagination commands, or compatibility logging paths.
 - Never log secrets or payload content such as DataFrame rows/cells, document
   or clipboard contents, SQL text, connection strings, or tokens.
-- Execution Trace remains runtime-authoritative and separate from diagnostics.
-  Retain and evict complete run/compilation bundles; expose truncation and drop
-  counts explicitly and never repair hierarchy silently during queries.
 - User-controlled Print/stdout/stderr uses the ordered bounded Run Output
   channel and Output panel, never diagnostic logs. Preserve opaque source graph
   and node identities on every output event.

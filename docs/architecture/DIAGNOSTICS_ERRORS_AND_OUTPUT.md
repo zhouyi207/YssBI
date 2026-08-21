@@ -1,4 +1,4 @@
-# 诊断、错误、执行追踪与程序输出架构
+# 诊断、错误、结果与程序输出架构
 
 本文档定义 YssBI 中所有“异常信息与运行信息”的权威边界。目标不是把所有内容都写入一个日志，而是让不同语义的数据走不同通道，各自拥有明确的可靠性、保留和 UI 契约。
 
@@ -9,14 +9,14 @@
 | Diagnostic log | Rust `tracing` 管线 | bounded worker + Tauri Channel | 有损 recent ring + rolling JSONL | LogView 排障，不驱动业务状态 |
 | IPC error | Rust `CommandError` | command rejection | 不单独保留；内部错误关联 incident | React 按 `code` 本地化并选择反馈表面 |
 | User feedback | React application/view | Zustand UI state / component state | 仅按交互需要 | `Alert`、`Dialog`、字段内错误、状态变化 |
-| Execution Trace | Rust runtime/compiler | trace query commands | 完整 run/compilation bundle | 性能与执行层级分析 |
+| Results | Rust `ResultStore` | typed query commands；run events 仅公告 Preview/Open result ID | project-session logical results 与 Pin history | Result/Inspect/Preview/presentation surfaces |
 | Program Output | Rust graph runtime | ordered execution Channel | 单次运行有界前端投影 | 独立 Output 面板 |
 
 核心规则：
 
 - 日志不是业务事实，不得通过读取日志决定保存、执行、选择或恢复流程。
 - IPC error 不携带后端用户文案。
-- Execution Trace 不写入普通 diagnostics 存储。
+- `ResultStore` 是 result state、payload、history、provenance 与 presentation 的 authority；run event 只公告 Preview/Open result ID。
 - Print/用户程序输出不写入 diagnostics。
 - React 是应用错误文案、本地化和反馈表面的唯一所有者；可扩展 Rust 节点目录仅拥有确定性的节点元数据与编译器诊断模板，模板不得插入内部错误文本。
 
@@ -31,7 +31,11 @@ flowchart TD
     CommandFailure[Command failure] --> CommandError[CommandError code details incidentId]
     CommandError --> ReactMapping[React localization and presentation]
 
-    RuntimeSpan[Compiler and runtime spans] --> TraceBundle[Execution Trace bundles]
+    RuntimeResult[Graph runtime result] --> ResultStore[Rust ResultStore]
+    ResultStore --> ResultQueries[Typed descriptor value page and pin-history queries]
+    ResultQueries --> ResultUi[Result consumers]
+    ResultNotice[Non-authoritative Preview or Open result ID] --> ResultUi
+
     RuntimePrint[Print node] --> RunOutput[RunOutputEvent]
     RunOutput --> OutputPanel[Output panel]
 ```
@@ -145,7 +149,7 @@ Rust 类型为 `src-tauri/src/error/mod.rs` 中的 `CommandError`。wire 中固�
 
 - `code`：稳定、lower_snake_case 的机器分类。
 - `details`：安全、结构化、可选的对象；不能放内部错误文本。
-- `incidentId`：仅需要诊断关联时存在。
+- `incidentId`：wire 中始终存在；仅需要诊断关联时为字符串，否则为 `null`。
 
 禁止 `message`、字符串前缀解析、uppercase code、`Result<T, String>` command error 或旧兼容 shape。
 
@@ -204,47 +208,33 @@ view renders Alert, Dialog, inline state, or no message
 
 原始 Rust error、diagnostic log message、resolver/parser 文本、连接字符串和 debug details 不得进入 UI。编译器领域诊断只显示稳定 code、位置与节点目录拥有的确定性模板，不显示内部 reason。
 
-## 5. Execution Trace
+## 5. Results
 
-Execution Trace 是独立的 runtime/compiler observability 数据，不是普通日志。
+### 5.1 Authority、identity 与 atomic state
 
-核心实现：
+`ProjectStore.results` 中的 Rust `ResultStore` 是 project-session logical execution result 与 Pin history 的 authority。它在同一 registry transaction 中创建 activation group 的 `Pending` outputs，并在完整校验后把 group 原子 transition 为 `Ready`、`Failed` 或 `Cancelled`；调用方不能观察同一 activation group 的部分 terminal state。
 
-- `src-tauri/src/node_system/analysis/observability.rs`
-- `src-tauri/src/node_system/analysis/trace_bundle.rs`
-- `src-tauri/src/node_system/analysis/trace_store.rs`
-- `src-tauri/src/project/project_traces.rs`
-- `src-tauri/src/commands/command_trace.rs`
+每个 logical result 使用 opaque、单调分配的 `ResultId`。`StoredResult` 保留：
 
-### 5.1 bundle authority
+- `Pending/Ready/Failed/Cancelled` state；
+- run、activation、graph path/revision、node、可选 graph output 与创建时间组成的 provenance；
+- `ResultPresentation`；
+- planned value contract，以及 ready 时的 stored value。
 
-- active run/compilation 在 Rust 中累积。
-- 顶层 root span 完成时，完整 `RunTraceBundle` / `CompilationTraceBundle` 原子提交。
-- 查询只复制已经通过 Rust hierarchy/interval/kind 校验的 bundle。
-- 禁止在 query-time 静默删除 orphan、断环或修补结构。
-- compilation active identity 使用 process-unique Snapshot root `SpanId`，不能用可能碰撞的 `compileId` 作为内部分组键。
+Pin history 以完整 `GraphOutputRef` 为 key，记录每次 produced/reused result 的 `ResultId`、run/activation、graph revision、时间与 usage。Frontend metadata 或 run-event delivery 不能替代这份 Rust authority。
 
-### 5.2 retention
+### 5.2 Typed queries、event boundary 与 invalidation
 
-默认：
+Frontend 经 `ResultService` 使用四个 typed command query：
 
-- 最多 32 个 completed run bundle。
-- completed bundle 总估算约 2 MiB。
-- 每个 active bundle 最多 4096 spans，并受同一 byte budget 约束。
-- active identity 不被淘汰；超限时只丢弃可安全删除的 span，并累计 `droppedSpanCount`。
-- completed retention 始终整 bundle 淘汰。
-- 单个 root 本身超过 byte budget 时允许形成 soft floor；没有实际丢 span 就不能标记 `truncated=true`。
+- `get_result_descriptor`：读取 identity、state、provenance、presentation、value kind、metadata 与 count；
+- `get_result_value`：读取允许 inline 的 scalar value；
+- `get_result_page`：分页读取 ready stored value，并返回 value kind、metadata 与 count；
+- `get_pin_result_history`：读取 graph output 的 ordered Pin history 与当前 result state。
 
-wire metadata 明确包含：
+Public run stream 中，只有 `{ type: 'pinPreviewResultReady', output, generation, resultId }` 和 `{ type: 'openResultWindow', resultId }` 公告 result ID。它们不携带 authoritative state、payload、history、provenance 或 presentation；ordinary result publication 也不发送 `resultGroupChanged` 或 `outputResultChanged` public event。消费者收到 Preview/Open 通知后仍从 typed queries 读取 `ResultStore`。
 
-- `provenanceScopes`
-- `truncated`
-- `droppedSpanCount`
-- `estimatedBytes`
-
-Frontend 只校验 wire 形状、枚举和 opaque decimal string，不复制 Rust 的 hierarchy/cycle 语义。
-
-Run bundle 可关联 command incident ID；Execution Trace 与 diagnostics 只共享关联 ID，不共享存储。
+Project replacement 会构造新的 project-session `ProjectStore` 与 `ResultStore`。旧 result 和 Pin history 随旧 store 失效，旧 `ResultId` 查询不会返回或 alias replacement project 的 result。
 
 ## 6. Program Output
 
@@ -273,43 +263,19 @@ Frontend `runOutputProjection` 最多保留 258 条（256 text + 2 status），�
 
 Output 面板位于 `src/views/LogView/OutputPanel.tsx`，但它只复用 workbench panel 位置，不读取 diagnostic store。来源路径是 opaque resource path；nested function 输出必须携带实际 `sourceGraphPath`，不能按 root graph 或 node UUID 猜测。
 
-## 7. 文件组织
 
-```text
-src-tauri/src/
-├─ diagnostics/                    # 有损诊断管线、脱敏、recent、worker
-├─ error/                          # CommandError wire
-├─ commands/command_diagnostics/   # thin diagnostics IPC
-├─ commands/command_trace.rs       # thin trace query IPC
-└─ node_system/
-   ├─ analysis/trace_*.rs          # authoritative Execution Trace
-   └─ runtime/run_output.rs        # ordered bounded program output
+## 7. Review checklist
 
-src/
-├─ services/ipc/                   # 唯一普通 invoke error boundary
-├─ services/log/                   # diagnostic Channel service
-├─ features/core/log/              # LogView projection/filter
-├─ features/core/execution/        # run output projection
-├─ features/application/log/       # diagnostics subscription lifecycle
-├─ shared/types/dto/               # strict wire DTO/parser
-├─ shared/ui/PageAlert.tsx
-├─ shared/ui/MessageDialog.tsx
-└─ views/
-   ├─ LogView/                     # diagnostics and separate Output panel
-   └─ ProjectView/                 # page-level project picker feedback
-```
+新增或修改错误、日志、结果或输出路径时检查：
 
-## 8. Review checklist
-
-新增或修改错误/日志路径时检查：
-
-1. 这条信息是 diagnostic、command error、user feedback、trace 还是 program output？
+1. 这条信息是 diagnostic、command error、user feedback、result 还是 program output？
 2. 是否错误地让日志驱动了业务状态？
 3. command error 是否仍是精确三字段 wire？
 4. 用户文案是否只在 React i18n 中生成？
 5. 是否可能记录 secret、row/cell/document/clipboard content？
 6. 高频路径是否 bounded 且不会阻塞业务线程？
 7. sequence gap、drop、truncate 是否显式可见？
-8. trace 是否按完整 bundle 提交/淘汰？
-9. Print/output 是否完全绕开 diagnostics？
-10. 是否增加了兼容 shim，而不是直接迁移 0.x contract？
+8. result state、payload、history、provenance 与 presentation 是否仍以 Rust `ResultStore` 为 authority、仅通过 typed queries 读取，并在 project replacement 时失效旧 ID？
+9. Preview/Open run event 是否只公告 `ResultId`，而不承载 result authority？
+10. Print/output 是否完全绕开 diagnostics？
+11. 是否增加了兼容 shim，而不是直接迁移 0.x contract？
