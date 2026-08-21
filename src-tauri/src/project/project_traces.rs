@@ -69,6 +69,7 @@ impl ProjectState {
 
         #[cfg(test)]
         if let Some(hook) = self
+            .test_hooks
             .trace_query_after_snapshot_test_hook
             .read()
             .unwrap()
@@ -104,6 +105,10 @@ impl ProjectState {
         &self,
         hook: Arc<dyn Fn() + Send + Sync>,
     ) {
-        *self.trace_query_after_snapshot_test_hook.write().unwrap() = Some(hook);
+        *self
+            .test_hooks
+            .trace_query_after_snapshot_test_hook
+            .write()
+            .unwrap() = Some(hook);
     }
 }
