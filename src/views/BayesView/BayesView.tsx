@@ -23,7 +23,10 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FormulaStep, SamplerStep, SymbolRoleStep, type BayesDatasetOption } from './components/BayesPanels';
+import { FormulaStep } from './components/model/FormulaStep';
+import { SamplerStep } from './components/model/SamplerStep';
+import { SymbolRoleStep } from './components/model/SymbolRoleStep';
+import type { BayesDatasetOption } from './components/model/types';
 import { ResultOverview } from './components/BayesResultPanels';
 import { BayesProgressStatus } from './components/BayesProgressStatus';
 import { bayesInferenceErrorMessage, bayesValidationIssueMessage } from './bayesIssuePresentation';

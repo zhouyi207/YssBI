@@ -18,7 +18,8 @@ import {
   type DiagnosticSuggestion,
 } from '@/features/domain/bayes';
 import { exportBayesArtifactCsv, readBayesAutocorrelationData, readBayesDensityPlotData, readBayesPosteriorPredictive, readBayesTracePlotData, revealBayesResultFolder } from '@/services/bayes/bayesInferenceService';
-import { LatexInline, PanelTitle, formatNumber, latexSymbol } from './BayesPanels';
+import { PanelTitle, formatNumber } from './model/BayesFields';
+import { LatexInline, latexSymbol } from './model/LatexPresentation';
 import { bayesActionErrorMessage, bayesDiagnosticWarningText } from '../bayesIssuePresentation';
 import { useBayesPlotData } from './useBayesPlotData';
 

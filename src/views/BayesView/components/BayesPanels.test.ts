@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultBayesDraft, createEmptyBayesDraft } from '@/features/domain/bayes';
-import { composeLikelihoodLatex, currentResponseExpression, latexSymbol } from './BayesPanels';
+import { composeLikelihoodLatex, currentResponseExpression } from './model/FormulaStep';
+import { latexSymbol } from './model/LatexPresentation';
 import { essRating, filterDensitySeries, filterTraceSeries, posteriorPredictiveChartData, rhatRating, traceChains } from './BayesResultPanels';
 
 describe('parameter diagnostic ratings', () => {
