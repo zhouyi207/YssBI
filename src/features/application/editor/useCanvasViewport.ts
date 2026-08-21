@@ -9,6 +9,7 @@ import {
 } from '@/features/core/viewport';
 import { useGraphDataStore } from '@/features/core/dataStore';
 import { useGraphInteractionStore } from '@/features/core/graphInteraction';
+import { measurePinConnectionAnchor } from '@/features/core/canvas/pinConnectionAnchor';
 import { resolvePinOffsetWaiters } from '@/features/core/canvas/pinOffsetWaiter';
 
 
@@ -98,18 +99,14 @@ export function useCanvasViewport(
       const pins = nodeEl.querySelectorAll<HTMLElement>('[data-pin-id]');
 
       pins.forEach((pinEl) => {
-        const pinId = pinEl.dataset.pinId;
-        if (!pinId) return;
-        const circleEl = pinEl.querySelector('.pin-circle');
-        const targetEl = circleEl || pinEl;
-        const rect = targetEl.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) {
+        const anchor = measurePinConnectionAnchor(pinEl);
+        if (!anchor) {
           hasUnmeasurablePin = true;
           return;
         }
-        nextOffsets[pinId] = {
-          x: (rect.left + rect.width / 2 - nodeRect.left) / scale,
-          y: (rect.top + rect.height / 2 - nodeRect.top) / scale,
+        nextOffsets[anchor.pinId] = {
+          x: (anchor.center.x - nodeRect.left) / scale,
+          y: (anchor.center.y - nodeRect.top) / scale,
         };
       });
     }

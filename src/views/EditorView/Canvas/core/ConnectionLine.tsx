@@ -109,7 +109,7 @@ export const ConnectionLine = ({
                         connectPreview?.feedback ?? null,
                         activeStart.ui?.color ?? getPinTypeColor(colorKey, currentTheme),
                     ),
-                    2 / viewport.scale,
+                    2,
                     activeStart.direction === "input"
                 );
             }

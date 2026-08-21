@@ -18,6 +18,7 @@ import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { getCanvasWorldPoint, resolveTabId } from './canvasInteractionUtils';
 import { unionSelectionIds } from './selectionSession';
 import { resolveConnectionTarget, type ConnectionCandidate } from './connectionInteraction';
+import { measurePinConnectionAnchor } from './pinConnectionAnchor';
 import {
   cancelCanvasInteraction,
   registerCanvasInteractionCleanup,
@@ -124,14 +125,14 @@ function installPointerLoop(): () => void {
       return;
     }
     const candidates: ConnectionCandidate[] = [];
-    canvas?.querySelectorAll<HTMLElement>('[data-pin-id]').forEach((element) => {
-      const pinId = element.dataset.pinId;
-      const pin = pinId ? bucket?.pins[pinId] : undefined;
+    canvas.querySelectorAll<HTMLElement>('[data-pin-id]').forEach((element) => {
+      const anchor = measurePinConnectionAnchor(element);
+      if (!anchor) return;
+      const pin = bucket.pins[anchor.pinId];
       if (!pin) return;
-      const rect = element.getBoundingClientRect();
       candidates.push({
         pin,
-        center: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+        center: anchor.center,
         connectionIds: bucket.pinConnections[pin.id] ?? [],
       });
     });

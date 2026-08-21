@@ -382,17 +382,12 @@ export const Pin: React.FC<PinProps> = (props) => {
           data-validation-warning={validationWarning ? 'true' : undefined}
           onContextMenu={handleContextMenu}
           onPointerDown={(e) => {
-            if (contextMenu && e.button === 0) {
-              setContextMenu(null);
-            }
-            if (!onPinPointerDown) return;
-            e.stopPropagation();
-            e.preventDefault();
-            onPinPointerDown(e, props);
+            if (contextMenu && e.button === 0) setContextMenu(null);
           }}
         >
-      {/* Pin Icon Container - 扩大交互区域 */}
+      {/* Pin Icon Container - 唯一连接锚点 */}
       <div
+        data-pin-connection-anchor={id}
         className={`
           relative w-6 h-6 flex items-center justify-center cursor-crosshair shrink-0 z-20 pin-circle rounded-full
           ${direction === "input" ? "mr-1" : "ml-1"}
@@ -400,6 +395,13 @@ export const Pin: React.FC<PinProps> = (props) => {
           ${validationWarning ? "ring-2 ring-amber-500/80" : ""}
           ${pinConnectionFeedbackClass(connectionFeedback)}
         `}
+        onPointerDown={(e) => {
+          if (contextMenu && e.button === 0) setContextMenu(null);
+          if (!onPinPointerDown) return;
+          e.stopPropagation();
+          e.preventDefault();
+          onPinPointerDown(e, props);
+        }}
         onClick={(e) => {
           e.stopPropagation();
           onPinClick?.(id, direction);

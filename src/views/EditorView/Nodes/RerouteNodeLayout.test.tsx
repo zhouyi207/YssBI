@@ -115,7 +115,9 @@ describe('RerouteNodeLayout', () => {
       expect(grip.className).toContain(kind === 'data' ? 'rounded-full' : 'rounded-none');
       expect(grip.className.includes('rotate-45')).toBe(kind === 'effect');
 
-      act(() => pins[0].dispatchEvent(new PointerEvent('pointerdown', {
+      const inputAnchor = pins[0].querySelector<HTMLElement>('[data-pin-connection-anchor]');
+      expect(inputAnchor).not.toBeNull();
+      act(() => inputAnchor!.dispatchEvent(new PointerEvent('pointerdown', {
         bubbles: true,
         cancelable: true,
         button: 0,

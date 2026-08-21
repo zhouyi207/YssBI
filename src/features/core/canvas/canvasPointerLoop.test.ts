@@ -63,6 +63,27 @@ function appendSelectionNode(
   return node;
 }
 
+function appendPinElement(
+  canvas: HTMLElement,
+  pinId: string,
+  bounds: { left: number; top: number; width: number; height: number },
+): void {
+  const pin = document.createElement('div');
+  pin.dataset.pinId = pinId;
+  const anchor = document.createElement('div');
+  anchor.dataset.pinConnectionAnchor = pinId;
+  anchor.getBoundingClientRect = () => ({
+    ...bounds,
+    right: bounds.left + bounds.width,
+    bottom: bounds.top + bounds.height,
+    x: bounds.left,
+    y: bounds.top,
+    toJSON: () => ({}),
+  });
+  pin.append(anchor);
+  canvas.append(pin);
+}
+
 function startSelection(
   baseNodeIds: readonly string[],
   startX = 0,
@@ -106,13 +127,8 @@ describe('canvas pointer loop', () => {
     target.nodeId = 'target-node';
     document.body.innerHTML = '<div data-editor-group-id="group-1"></div>';
     const canvas = document.querySelector<HTMLElement>('[data-editor-group-id="group-1"]')!;
-    const sourceElement = document.createElement('div');
-    sourceElement.dataset.pinId = source.id;
-    sourceElement.getBoundingClientRect = () => ({ left: -5, top: -5, width: 10, height: 10, right: 5, bottom: 5, x: -5, y: -5, toJSON: () => ({}) });
-    const targetElement = document.createElement('div');
-    targetElement.dataset.pinId = target.id;
-    targetElement.getBoundingClientRect = () => ({ left: 4, top: 4, width: 10, height: 10, right: 14, bottom: 14, x: 4, y: 4, toJSON: () => ({}) });
-    canvas.append(sourceElement, targetElement);
+    appendPinElement(canvas, source.id, { left: -5, top: -5, width: 10, height: 10 });
+    appendPinElement(canvas, target.id, { left: 4, top: 4, width: 10, height: 10 });
     vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
       frame = callback;
       return 1;
@@ -354,13 +370,8 @@ describe('canvas pointer loop', () => {
     bucket.pinConnections[target.id] = ['target-a', 'shared'];
 
     const canvas = document.querySelector<HTMLElement>('[data-editor-group-id="group-1"]')!;
-    const sourceElement = document.createElement('div');
-    sourceElement.dataset.pinId = source.id;
-    sourceElement.getBoundingClientRect = () => ({ left: 0, top: 0, width: 10, height: 10, right: 10, bottom: 10, x: 0, y: 0, toJSON: () => ({}) });
-    const targetElement = document.createElement('div');
-    targetElement.dataset.pinId = target.id;
-    targetElement.getBoundingClientRect = () => ({ left: 95, top: 95, width: 10, height: 10, right: 105, bottom: 105, x: 95, y: 95, toJSON: () => ({}) });
-    canvas.append(sourceElement, targetElement);
+    appendPinElement(canvas, source.id, { left: 0, top: 0, width: 10, height: 10 });
+    appendPinElement(canvas, target.id, { left: 95, top: 95, width: 10, height: 10 });
 
     useGraphInteractionStore.getState().startInteraction(graphPath, {
       type: 'drawingConnection',
