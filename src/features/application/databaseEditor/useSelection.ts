@@ -1,16 +1,96 @@
 import { useCallback, useState } from 'react';
-import { CompactSelection, type GridSelection } from '@glideapps/glide-data-grid';
 
-/** 与 Glide DataEditor 内部一致的空选区（列坐标不含行号列偏移） */
-export const emptyGridSelection: GridSelection = {
-  columns: CompactSelection.empty(),
-  rows: CompactSelection.empty(),
-  current: undefined,
-};
+interface DatabaseGridCell {
+  row: number;
+  column: number;
+}
 
-export function isEmptyGridSelection(s: GridSelection | null | undefined): boolean {
-  if (s === null || s === undefined) return true;
-  return s.rows.length === 0 && s.columns.length === 0 && s.current === undefined;
+interface DatabaseGridRange extends DatabaseGridCell {
+  rowCount: number;
+  columnCount: number;
+}
+
+export type DatabaseGridSelection =
+  | {
+    type: 'cells';
+    activeCell: DatabaseGridCell;
+    ranges: readonly DatabaseGridRange[];
+  }
+  | {
+    type: 'rows';
+    rows: readonly number[];
+  }
+  | {
+    type: 'columns';
+    columns: readonly number[];
+  };
+
+export function isEmptyGridSelection(
+  selection: DatabaseGridSelection | null | undefined,
+): boolean {
+  if (!selection) return true;
+  if (selection.type === 'rows') return selection.rows.length === 0;
+  if (selection.type === 'columns') return selection.columns.length === 0;
+  return false;
+}
+
+function appendValidRow(
+  rows: number[],
+  seen: Set<number>,
+  row: number,
+  rowCount: number,
+): void {
+  if (!Number.isInteger(row) || row < 0 || row >= rowCount || seen.has(row)) return;
+  seen.add(row);
+  rows.push(row);
+}
+
+export function selectedRowIndicesFromSelection(
+  selection: DatabaseGridSelection | null | undefined,
+  columnCount: number,
+  rowCount: number,
+): number[] {
+  if (!selection || rowCount <= 0) return [];
+
+  const rows: number[] = [];
+  const seen = new Set<number>();
+  if (selection.type === 'rows') {
+    for (const row of selection.rows) appendValidRow(rows, seen, row, rowCount);
+    return rows;
+  }
+  if (selection.type !== 'cells' || columnCount <= 0) return rows;
+
+  for (const range of selection.ranges) {
+    const isIntegerRange = Number.isInteger(range.row)
+      && Number.isInteger(range.column)
+      && Number.isInteger(range.rowCount)
+      && Number.isInteger(range.columnCount);
+    const coversAllColumns = range.column <= 0
+      && range.column + range.columnCount >= columnCount;
+    if (!isIntegerRange || range.rowCount <= 0 || !coversAllColumns) continue;
+
+    const start = Math.max(0, range.row);
+    const end = Math.min(rowCount, range.row + range.rowCount);
+    for (let row = start; row < end; row += 1) {
+      appendValidRow(rows, seen, row, rowCount);
+    }
+  }
+  return rows;
+}
+
+export function createSelectAllSelection(
+  columnCount: number,
+  rowCount: number,
+): DatabaseGridSelection | null {
+  if (!Number.isInteger(columnCount) || !Number.isInteger(rowCount)
+    || columnCount <= 0 || rowCount <= 0) {
+    return null;
+  }
+  return {
+    type: 'cells',
+    activeCell: { row: 0, column: 0 },
+    ranges: [{ row: 0, column: 0, rowCount, columnCount }],
+  };
 }
 
 interface UseSelectionParams {
@@ -18,44 +98,18 @@ interface UseSelectionParams {
   rowCount: number;
 }
 
-/**
- * 选区状态与 Glide `onGridSelectionChange` 传出结构一致，不做平行领域模型，避免与 Ctrl/Shift 行选语义脱节。
- */
 export function useSelection({ columnCount, rowCount }: UseSelectionParams) {
-  const [selection, setSelection] = useState<GridSelection | null>(null);
+  const [selection, setSelection] = useState<DatabaseGridSelection | null>(null);
 
-  const selectedRowIndices = useCallback((): number[] => {
-    if (!selection) return [];
-    if (selection.rows.length > 0) {
-      return selection.rows.toArray().filter((r) => r >= 0 && r < rowCount);
-    }
-    const cur = selection.current;
-    if (!cur || columnCount <= 0) return [];
-    const { x, y, width, height } = cur.range;
-    const c1 = x + width - 1;
-    const r1 = y + height - 1;
-    if (x !== 0 || c1 < columnCount - 1) return [];
-    const start = Math.max(0, y);
-    const end = Math.min(rowCount - 1, r1);
-    if (end < start) return [];
-    const rows: number[] = [];
-    for (let r = start; r <= end; r++) rows.push(r);
-    return rows;
-  }, [selection, columnCount, rowCount]);
+  const selectedRowIndices = useCallback(
+    () => selectedRowIndicesFromSelection(selection, columnCount, rowCount),
+    [selection, columnCount, rowCount],
+  );
 
   const selectAll = useCallback(() => {
-    if (rowCount > 0 && columnCount > 0) {
-      setSelection({
-        columns: CompactSelection.empty(),
-        rows: CompactSelection.empty(),
-        current: {
-          cell: [0, 0],
-          range: { x: 0, y: 0, width: columnCount, height: rowCount },
-          rangeStack: [],
-        },
-      });
-    }
-  }, [rowCount, columnCount]);
+    const nextSelection = createSelectAllSelection(columnCount, rowCount);
+    if (nextSelection) setSelection(nextSelection);
+  }, [columnCount, rowCount]);
 
   const clearSelection = useCallback(() => setSelection(null), []);
 

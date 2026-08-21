@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { save } from '@tauri-apps/plugin-dialog';
 import { i18n } from '@/app/i18n';
 import { DatabaseService } from '@/services/database/databaseService';
@@ -16,6 +16,12 @@ import {
   isCurrentProjectIdentity,
   type ProjectIdentitySnapshot,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import {
+  runDatabaseCellEditBatch,
+  type DatabaseCellEditBatchOutcome,
+  type DatabaseCellEditInput,
+  type DatabaseCellEditStepOutcome,
+} from './databaseCellEditBatch';
 
 async function refreshDatabaseColumns(identity: ProjectIdentitySnapshot, databaseId: string) {
   const meta = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, databaseId);
@@ -47,10 +53,8 @@ export interface DatabaseEditorIpcFailure {
   incidentId: string | null;
 }
 
-export type DatabaseFieldMutationOutcome =
-  | { status: 'applied' }
-  | { status: 'noop' }
-  | { status: 'failed'; error: DatabaseEditorIpcFailure };
+export type DatabaseFieldMutationOutcome = DatabaseCellEditStepOutcome<DatabaseEditorIpcFailure>;
+export type DatabaseCellBatchMutationOutcome = DatabaseCellEditBatchOutcome<DatabaseEditorIpcFailure>;
 
 interface UseEditActionsParams {
   selectedDfId: string | null;
@@ -59,6 +63,7 @@ interface UseEditActionsParams {
   loadedRowIds: number[];
   rowOffset: number;
   reloadAllData: () => Promise<void>;
+  getDataScopeVersion: () => number;
 }
 
 export function useEditActions({
@@ -68,9 +73,26 @@ export function useEditActions({
   loadedRowIds,
   rowOffset,
   reloadAllData,
+  getDataScopeVersion,
 }: UseEditActionsParams) {
   const editStateByDatabase = useEditStateStore(s => s.editStateByDatabase);
-  const commitInFlightRef = useRef(false);
+  const cellEditQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const cellEditScopeRef = useRef({ databaseId: selectedDfId, rowOffset, version: 0 });
+  if (cellEditScopeRef.current.databaseId !== selectedDfId
+    || cellEditScopeRef.current.rowOffset !== rowOffset) {
+    cellEditScopeRef.current = {
+      databaseId: selectedDfId,
+      rowOffset,
+      version: cellEditScopeRef.current.version + 1,
+    };
+  }
+
+  useEffect(() => () => {
+    cellEditScopeRef.current = {
+      ...cellEditScopeRef.current,
+      version: cellEditScopeRef.current.version + 1,
+    };
+  }, []);
 
   const currentEditState: EditState = selectedDfId
     ? (editStateByDatabase[selectedDfId] ?? EMPTY_EDIT_STATE)
@@ -83,41 +105,48 @@ export function useEditActions({
     await reloadAllData();
   }, [selectedDfId, reloadAllData]);
 
-  const commitCellValueOutcome = useCallback(async (
-    row: number,
-    col: number,
-    value: unknown,
-  ): Promise<DatabaseFieldMutationOutcome> => {
-    if (!selectedDfId || commitInFlightRef.current) return { status: 'noop' };
-    const globalRow = rowOffset + row;
-    const colName = columns[col]?.name;
-    if (!colName) return { status: 'noop' };
+  const enqueueCellEdit = useCallback(<T,>(operation: () => Promise<T>): Promise<T> => {
+    const result = cellEditQueueRef.current.then(operation, operation);
+    cellEditQueueRef.current = result.then(() => undefined, () => undefined);
+    return result;
+  }, []);
 
-    const oldVal = loadedRows[row]?.[col];
-    const oldStr = oldVal === null || oldVal === undefined ? '' : String(oldVal);
-    const nextStr = value === null || value === undefined ? '' : String(value);
-    if (nextStr === oldStr) return { status: 'noop' };
+  const applyCellEdit = useCallback(async (
+    edit: DatabaseCellEditInput,
+    identity: ProjectIdentitySnapshot,
+  ): Promise<DatabaseFieldMutationOutcome> => {
+    if (!selectedDfId) return { status: 'noop' };
+    const colName = columns[edit.column]?.name;
+    if (!colName || !loadedRows[edit.row]) return { status: 'noop' };
+
+    const nextText = edit.value === null || edit.value === undefined ? '' : String(edit.value);
 
     try {
-      commitInFlightRef.current = true;
-      let parsed: unknown = value;
-      if (nextStr === '') parsed = null;
-      else if (typeof value === 'string' && !isNaN(Number(value)) && value.trim() !== '') parsed = Number(value);
-      const rowId = loadedRowIds[row];
-      const es = await executeDatabaseMutation(selectedDfId, (authority) =>
+      let parsed: unknown = edit.value;
+      if (nextText === '') parsed = null;
+      else if (typeof edit.value === 'string'
+        && !isNaN(Number(edit.value))
+        && edit.value.trim() !== '') {
+        parsed = Number(edit.value);
+      }
+      const editState = await executeDatabaseMutation(selectedDfId, (authority) =>
         DatabaseService.editCell(
           authority.projectInstanceId,
           authority.operationId,
           authority.expectedRevision,
           selectedDfId,
-          globalRow,
+          rowOffset + edit.row,
           colName,
           parsed,
-          rowId,
+          loadedRowIds[edit.row],
         ));
-      await handleEditResult(es);
+      if (isCurrentProjectIdentity(identity)) {
+        invalidateWorksheetPreviewCacheForDatabase(selectedDfId);
+        useEditStateStore.getState().updateEditState(selectedDfId, editState);
+      }
       return { status: 'applied' };
     } catch (error) {
+      if (!isCurrentProjectIdentity(identity)) return { status: 'noop' };
       const ipcError = normalizeIpcError('edit_database_cell', error);
       logger.data.error(
         `editCell failed code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
@@ -127,10 +156,61 @@ export function useEditActions({
         status: 'failed',
         error: { code: ipcError.code, incidentId: ipcError.incidentId },
       };
-    } finally {
-      commitInFlightRef.current = false;
     }
-  }, [selectedDfId, columns, loadedRows, loadedRowIds, rowOffset, handleEditResult]);
+  }, [selectedDfId, columns, loadedRows, loadedRowIds, rowOffset]);
+
+  const commitCellValuesOutcome = useCallback((
+    edits: readonly DatabaseCellEditInput[],
+  ): Promise<DatabaseCellBatchMutationOutcome> => {
+    if (!selectedDfId) return Promise.resolve({ status: 'noop', appliedCount: 0 });
+    const identity = captureProjectIdentity();
+    const scopeVersion = cellEditScopeRef.current.version;
+    const dataScopeVersion = getDataScopeVersion();
+    return enqueueCellEdit(() => runDatabaseCellEditBatch({
+      edits,
+      apply: (edit) => applyCellEdit(edit, identity),
+      isCurrent: () => isCurrentProjectIdentity(identity)
+        && cellEditScopeRef.current.version === scopeVersion
+        && getDataScopeVersion() === dataScopeVersion,
+      refresh: reloadAllData,
+    }));
+  }, [
+    selectedDfId,
+    applyCellEdit,
+    enqueueCellEdit,
+    getDataScopeVersion,
+    reloadAllData,
+  ]);
+
+  const commitCellValues = useCallback(async (
+    edits: readonly DatabaseCellEditInput[],
+  ): Promise<DatabaseCellBatchMutationOutcome> => {
+    const outcome = await commitCellValuesOutcome(edits);
+    if (outcome.status === 'failed') {
+      void uiStore.alert({
+        title: i18n.t('common.error'),
+        message: i18n.t('notifications.databaseEditor.pasteFailed', {
+          appliedCount: outcome.appliedCount,
+          error: outcome.error.code,
+        }),
+        closeText: i18n.t('common.close'),
+        type: 'error',
+        incidentId: outcome.error.incidentId,
+        incidentLabel: i18n.t('common.incidentId'),
+      });
+    }
+    return outcome;
+  }, [commitCellValuesOutcome]);
+
+  const commitCellValueOutcome = useCallback(async (
+    row: number,
+    col: number,
+    value: unknown,
+  ): Promise<DatabaseFieldMutationOutcome> => {
+    const outcome = await commitCellValuesOutcome([{ row, column: col, value }]);
+    if (outcome.status === 'failed') return { status: 'failed', error: outcome.error };
+    return outcome.status === 'applied' ? { status: 'applied' } : { status: 'noop' };
+  }, [commitCellValuesOutcome]);
 
   const commitCellValue = useCallback(async (row: number, col: number, value: unknown) => {
     await commitCellValueOutcome(row, col, value);
@@ -398,6 +478,8 @@ export function useEditActions({
     currentEditState,
     commitCellValue,
     commitCellValueOutcome,
+    commitCellValues,
+    commitCellValuesOutcome,
     handleUndo,
     handleRedo,
     handleSave,

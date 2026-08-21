@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { GridSelection } from '@glideapps/glide-data-grid';
-import { isEmptyGridSelection } from './useSelection';
+import { isEmptyGridSelection, type DatabaseGridSelection } from './useSelection';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { isAppModalOpen } from '@/features/core/keyboard';
 
@@ -11,7 +10,7 @@ interface useDatabaseEditorKeyboardParams {
   selectAll: () => void;
   clearSelection: () => void;
   dismissContextMenu: () => void;
-  selection: GridSelection | null;
+  selection: DatabaseGridSelection | null;
   selectedRowIndices: () => number[];
 }
 

@@ -8,6 +8,7 @@ import { DatabaseService } from '@/services/database/databaseService';
 import { normalizeIpcError } from '@/services/ipc';
 import { logger } from '@/utils/appLogger';
 import { useDatabaseStore } from '@/features/core/dataStore';
+import { uiStore } from '@/features/core/ui/UIStore';
 import { useEditActions } from './useEditActions';
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
@@ -53,6 +54,7 @@ describe('useEditActions project lifecycle ownership', () => {
         loadedRowIds: [11],
         rowOffset: 0,
         reloadAllData,
+        getDataScopeVersion: () => 0,
       });
       return null;
     }
@@ -64,7 +66,8 @@ describe('useEditActions project lifecycle ownership', () => {
     host.remove();
   });
 
-  it('returns a typed cell failure without exposing backend details', async () => {
+  it('reports a typed paste failure without exposing backend details', async () => {
+    const alert = vi.spyOn(uiStore, 'alert').mockResolvedValue();
     vi.spyOn(DatabaseService, 'editCell').mockRejectedValue(normalizeIpcError(
       'edit_database_cell',
       {
@@ -74,16 +77,23 @@ describe('useEditActions project lifecycle ownership', () => {
       },
     ));
 
-    const outcome = await actions.commitCellValueOutcome(0, 0, 2);
+    const outcome = await actions.commitCellValues([{ row: 0, column: 0, value: 2 }]);
 
     expect(outcome).toEqual({
       status: 'failed',
+      appliedCount: 0,
       error: {
         code: 'database_cell_value_invalid',
         incidentId: 'incident-cell-42',
       },
     });
     expect(JSON.stringify(outcome)).not.toContain('sensitive database detail');
+    expect(alert).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'error',
+      incidentId: 'incident-cell-42',
+      message: expect.stringContaining('database_cell_value_invalid'),
+    }));
+    expect(JSON.stringify(alert.mock.calls)).not.toContain('sensitive database detail');
   });
 
   it('does not report a delayed export completion to a replacement project', async () => {

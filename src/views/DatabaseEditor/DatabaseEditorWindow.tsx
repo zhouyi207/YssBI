@@ -80,6 +80,7 @@ export const DatabaseEditorWindow: React.FC = () => {
     loadedRowIds: dataLoader.loadedRowIds,
     rowOffset: dataLoader.pageStartIndex,
     reloadAllData: dataLoader.reloadAllData,
+    getDataScopeVersion: dataLoader.getPageIntentEpoch,
   });
 
   // Selection
@@ -210,11 +211,13 @@ export const DatabaseEditorWindow: React.FC = () => {
         <DataTable
           columns={columns}
           loadedRows={dataLoader.loadedRows}
+          loadedRowIds={dataLoader.loadedRowIds}
           pageStartIndex={dataLoader.pageStartIndex}
           loading={dataLoader.loading}
           selection={sel.selection}
           onSelectionChange={sel.setSelection}
           onCommitCellValue={edit.commitCellValue}
+          onCommitCellValues={edit.commitCellValues}
           onContextMenu={handleContextMenu}
         />
       </div>

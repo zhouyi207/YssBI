@@ -1,23 +1,17 @@
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
+import { ClientSideRowModelModule, type ColDef } from 'ag-grid-community';
 import {
-  DataEditor,
-  GridCellKind,
-  GridColumnIcon,
-  type GridCell,
-  type GridColumn,
-  type Item,
-} from '@glideapps/glide-data-grid';
-import '@glideapps/glide-data-grid/dist/index.css';
+  AgGridReact,
+  type CustomCellRendererProps,
+  type CustomHeaderProps,
+} from 'ag-grid-react';
+import { buildAgGridTheme } from '@/components/data-grid/agGridTheme';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import {
   DATABASE_EDITOR_MIN_COLUMNS,
   DATABASE_EDITOR_ROW_HEIGHT,
   DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
 } from '@/app/appConfig/default';
-import {
-  buildDataGridThemeOverlay,
-  buildRowMarkerThemeOverlay,
-} from '@/views/DatabaseEditor/Table/dataGridTheme';
 
 export interface ReadOnlyColumnMeta {
   name: string;
@@ -33,7 +27,26 @@ interface ReadOnlyDataGridProps {
   fillHeight?: boolean;
 }
 
-function dtypeToIcon(dtype?: string): GridColumnIcon {
+type GridRow = unknown[];
+type ColumnDataKind = 'number' | 'boolean' | 'string';
+
+type ReadOnlyHeaderProps = CustomHeaderProps<GridRow> & {
+  columnType?: string;
+};
+
+const GRID_MODULES = [ClientSideRowModelModule];
+
+const DEFAULT_COLUMN_DEF: ColDef<GridRow> = {
+  cellDataType: false,
+  editable: false,
+  filter: false,
+  resizable: true,
+  sortable: false,
+  suppressHeaderMenuButton: true,
+  suppressMovable: true,
+};
+
+function dtypeToKind(dtype?: string): ColumnDataKind {
   const normalized = (dtype ?? '').toLowerCase();
   if (
     normalized.includes('int') ||
@@ -41,16 +54,87 @@ function dtypeToIcon(dtype?: string): GridColumnIcon {
     normalized.includes('double') ||
     normalized.includes('number')
   ) {
-    return GridColumnIcon.HeaderNumber;
+    return 'number';
   }
-  if (normalized.includes('bool')) return GridColumnIcon.HeaderBoolean;
-  return GridColumnIcon.HeaderString;
+  if (normalized.includes('bool')) return 'boolean';
+  return 'string';
 }
 
 function formatCell(value: unknown): string {
   if (value === null || value === undefined) return '—';
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
+}
+
+function ReadOnlyColumnHeader({ displayName, columnType }: ReadOnlyHeaderProps) {
+  const kind = dtypeToKind(columnType);
+  const typeLabel = columnType || kind;
+  const typeMarker = kind === 'number' ? '123' : kind === 'boolean' ? '✓' : 'ABC';
+
+  return (
+    <div
+      className="flex h-full min-w-0 items-center gap-1.5"
+      title={`${displayName} (${typeLabel})`}
+      aria-label={`${displayName}, ${typeLabel}`}
+    >
+      <span
+        aria-hidden="true"
+        className="flex h-4 min-w-5 shrink-0 items-center justify-center rounded-sm border border-border px-1 text-[8px] font-semibold leading-none text-muted-foreground"
+      >
+        {typeMarker}
+      </span>
+      <span className="truncate">{displayName}</span>
+    </div>
+  );
+}
+
+function ReadOnlyCellRenderer({ value }: CustomCellRendererProps<GridRow, unknown>) {
+  if (typeof value === 'boolean') {
+    return (
+      <span className="inline-flex h-full w-full items-center justify-center">
+        <span
+          aria-hidden="true"
+          className={[
+            'inline-flex size-3.5 items-center justify-center rounded-[3px] border text-[10px] leading-none',
+            value
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-muted-foreground/60 bg-transparent',
+          ].join(' ')}
+        >
+          {value ? '✓' : null}
+        </span>
+        <span className="sr-only">{String(value)}</span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={[
+        'block w-full truncate',
+        typeof value === 'number' ? 'text-right tabular-nums' : '',
+        value === null || value === undefined ? 'text-muted-foreground' : '',
+      ].join(' ')}
+    >
+      {formatCell(value)}
+    </span>
+  );
+}
+
+function RowNumberCellRenderer({ value }: CustomCellRendererProps<GridRow, number>) {
+  return (
+    <span className="block w-full text-right tabular-nums text-muted-foreground">
+      {value}
+    </span>
+  );
+}
+
+function LoadingOverlay() {
+  return (
+    <div className="pointer-events-none rounded-md border border-border bg-popover/95 px-2.5 py-1.5 text-[11px] font-medium text-popover-foreground shadow-lg backdrop-blur">
+      Loading…
+    </div>
+  );
 }
 
 export function ReadOnlyDataGrid({
@@ -62,110 +146,72 @@ export function ReadOnlyDataGrid({
   fillHeight = false,
 }: ReadOnlyDataGridProps) {
   const appTheme = useSettingsStore((s) => s.theme);
-  const dataGridTheme = useMemo(() => buildDataGridThemeOverlay(appTheme), [appTheme]);
-  const rowMarkerTheme = useMemo(() => buildRowMarkerThemeOverlay(appTheme), [appTheme]);
 
-  const gridColumns = useMemo<GridColumn[]>(() => {
-    const realColumns = columns.map((col) => ({
-      id: col.name,
-      title: col.name,
-      icon: dtypeToIcon(col.type),
-      width: Math.max(120, Math.min(280, col.name.length * 8 + 96)),
+  const dataGridTheme = useMemo(() => buildAgGridTheme(appTheme), [appTheme]);
+
+  const gridColumns = useMemo<ColDef<GridRow>[]>(() => {
+    const realColumns = columns.map<ColDef<GridRow>>((column, columnIndex) => ({
+      colId: `data_${columnIndex}`,
+      headerComponent: ReadOnlyColumnHeader,
+      headerComponentParams: { columnType: column.type },
+      headerName: column.name,
+      width: Math.max(120, Math.min(280, column.name.length * 8 + 96)),
+      valueGetter: ({ data }) => data?.[columnIndex],
+      cellRenderer: ReadOnlyCellRenderer,
     }));
-    if (realColumns.length >= DATABASE_EDITOR_MIN_COLUMNS) return realColumns;
-    return [
-      ...realColumns,
-      ...Array.from({ length: DATABASE_EDITOR_MIN_COLUMNS - realColumns.length }, (_, index) => ({
-        id: `__placeholder_${index}`,
-        title: '',
+
+    const placeholderCount = Math.max(0, DATABASE_EDITOR_MIN_COLUMNS - realColumns.length);
+    const placeholderColumns: ColDef<GridRow>[] = Array.from(
+      { length: placeholderCount },
+      (_, index) => ({
+        colId: `__placeholder_${index}`,
+        headerName: '',
         width: 96,
-      })),
+      }),
+    );
+
+    return [
+      {
+        colId: '__row_number__',
+        headerName: '',
+        lockPinned: true,
+        lockPosition: 'left',
+        maxWidth: DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
+        minWidth: DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
+        pinned: 'left',
+        resizable: false,
+        suppressNavigable: true,
+        width: DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
+        valueGetter: ({ node }) => pageStartIndex + (node?.rowIndex ?? 0) + 1,
+        cellRenderer: RowNumberCellRenderer,
+      },
+      ...realColumns,
+      ...placeholderColumns,
     ];
-  }, [columns]);
-
-  const getCellContent = useCallback(
-    (cell: Item): GridCell => {
-      const [col, row] = cell;
-      if (col >= columns.length) {
-        return {
-          kind: GridCellKind.Text,
-          allowOverlay: false,
-          readonly: true,
-          displayData: '',
-          data: '',
-          style: 'faded',
-        };
-      }
-
-      const rowData = rows[row];
-      if (!rowData) {
-        return { kind: GridCellKind.Loading, allowOverlay: false };
-      }
-
-      const value = rowData[col];
-      const displayData = formatCell(value);
-      if (typeof value === 'number') {
-        return {
-          kind: GridCellKind.Number,
-          allowOverlay: false,
-          readonly: true,
-          displayData: Number.isFinite(value) ? String(value) : displayData,
-          data: Number.isFinite(value) ? value : undefined,
-        };
-      }
-      if (typeof value === 'boolean') {
-        return { kind: GridCellKind.Boolean, allowOverlay: false, readonly: true, data: value };
-      }
-      return {
-        kind: GridCellKind.Text,
-        allowOverlay: false,
-        readonly: true,
-        displayData,
-        data: displayData,
-        style: value === null || value === undefined ? 'faded' : 'normal',
-      };
-    },
-    [columns.length, rows],
-  );
-
-  const rowMarkers = useMemo(
-    () => ({
-      kind: 'number' as const,
-      width: DATABASE_EDITOR_ROW_MARKER_WIDE_WIDTH,
-      startIndex: pageStartIndex + 1,
-      theme: rowMarkerTheme,
-    }),
-    [pageStartIndex, rowMarkerTheme],
-  );
+  }, [columns, pageStartIndex]);
 
   return (
     <div
       className={[
         'relative overflow-hidden rounded-lg border border-border bg-card',
-        fillHeight ? 'h-full min-h-[240px]' : '',
+        fillHeight ? 'h-full min-h-60' : '',
       ].join(' ')}
       style={fillHeight ? undefined : { height }}
     >
-      <DataEditor
+      <AgGridReact<GridRow>
+        animateRows={false}
         className="h-full w-full"
-        width="100%"
-        height="100%"
-        theme={dataGridTheme}
-        columns={gridColumns}
-        rows={rows.length}
-        getCellContent={getCellContent}
-        rowHeight={DATABASE_EDITOR_ROW_HEIGHT}
+        columnDefs={gridColumns}
+        defaultColDef={DEFAULT_COLUMN_DEF}
         headerHeight={36}
-        rowMarkers={rowMarkers}
-        smoothScrollX
-        smoothScrollY
-        keybindings={{ search: false }}
+        loading={loading}
+        loadingOverlayComponent={LoadingOverlay}
+        modules={GRID_MODULES}
+        rowData={rows}
+        rowHeight={DATABASE_EDITOR_ROW_HEIGHT}
+        suppressNoRowsOverlay
+        theme={dataGridTheme}
       />
-      {loading ? (
-        <div className="pointer-events-none absolute bottom-3 right-4 rounded-md border border-border bg-popover/95 px-2.5 py-1.5 text-[11px] font-medium text-popover-foreground shadow-lg backdrop-blur">
-          Loading…
-        </div>
-      ) : null}
     </div>
   );
 }
