@@ -14,9 +14,9 @@ use super::{
     validate_data_series_type_expr,
 };
 use crate::node_system::analysis::{
-    CorrelationContext, NOOP_TRACE_SINK, ParentCallId, ResourceVersionSet, RunId,
-    SYSTEM_TRACE_CLOCK, SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan,
-    complete_span_safely, start_span_safely,
+    CorrelationContext, NOOP_TRACE_SINK, ParentCallId, ResourceVersionSet, SYSTEM_TRACE_CLOCK,
+    SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan, complete_span_safely,
+    start_span_safely,
 };
 use crate::node_system::plan::{
     AttemptId, CallArgumentBinding, CallResultBinding, ControlStep, ExecutionPlan,
@@ -24,6 +24,7 @@ use crate::node_system::plan::{
     PlannedValueKind, ResultPresentation, StructuredControlRegion, ValueRef, WorkloadClass,
 };
 use crate::node_system::protocol::{CachePolicy, RetryPolicy, Value};
+use crate::node_system::runtime::RunId;
 use std::cell::Cell;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, VecDeque};

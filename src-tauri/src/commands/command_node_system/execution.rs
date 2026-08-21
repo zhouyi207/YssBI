@@ -184,7 +184,7 @@ pub fn cancel_graph_run(
     run_id: String,
 ) -> Result<bool, CommandError> {
     let run_id = parse_opaque_u64("runId", &run_id)?;
-    Ok(state.cancel_graph_run(crate::node_system::analysis::RunId::new(run_id)))
+    Ok(state.cancel_graph_run(crate::node_system::runtime::RunId::new(run_id)))
 }
 
 #[tauri::command]

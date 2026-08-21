@@ -1,9 +1,9 @@
 use super::{ActivationId, StoredValue};
-use crate::node_system::analysis::RunId;
 use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
 use crate::node_system::plan::{
     GraphOutputRef, PlannedValueContract, ResultPresentation, ValueRef,
 };
+use crate::node_system::runtime::RunId;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 

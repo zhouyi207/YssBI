@@ -225,10 +225,21 @@ fn hex_digest(digest: &[u8; 32]) -> String {
 #[serde(transparent)]
 pub struct AttemptId(u64);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidAttemptId;
+
+impl fmt::Display for InvalidAttemptId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("attempt IDs must be non-zero")
+    }
+}
+
+impl std::error::Error for InvalidAttemptId {}
+
 impl AttemptId {
-    pub fn try_new(value: u64) -> Result<Self, crate::node_system::analysis::InvalidTraceIdentity> {
+    pub fn try_new(value: u64) -> Result<Self, InvalidAttemptId> {
         if value == 0 {
-            return Err(crate::node_system::analysis::InvalidTraceIdentity);
+            return Err(InvalidAttemptId);
         }
         Ok(Self(value))
     }

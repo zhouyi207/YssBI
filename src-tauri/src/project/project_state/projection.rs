@@ -6,7 +6,7 @@ use super::*;
 pub(in crate::project) struct ProjectionEnvironmentExpectation {
     pub(in crate::project) project_instance_id: ProjectInstanceId,
     pub(in crate::project) project_root: Option<NormalizedProjectRoot>,
-    pub(in crate::project) project_session_id: crate::node_system::analysis::ProjectSessionId,
+    pub(in crate::project) project_session_id: crate::node_system::ProjectSessionId,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -21,7 +21,7 @@ pub(in crate::project) struct ProjectionEnvironmentSnapshot {
     pub(in crate::project) registry: Arc<crate::node_system::registry::NodeRegistry>,
     pub(in crate::project) catalog: Arc<crate::node_system::catalog::BuiltinCatalog>,
     pub(in crate::project) trace_sink: Arc<crate::node_system::analysis::BoundedTraceSink>,
-    pub(in crate::project) project_session_id: crate::node_system::analysis::ProjectSessionId,
+    pub(in crate::project) project_session_id: crate::node_system::ProjectSessionId,
     pub(in crate::project) database_schemas:
         BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
     #[cfg(test)]
@@ -161,7 +161,7 @@ impl ProjectState {
     pub(super) fn capture_projection_environment_for_execution_session(
         &self,
         session: &ProjectSession,
-        expected_session_id: &crate::node_system::analysis::ProjectSessionId,
+        expected_session_id: &crate::node_system::ProjectSessionId,
     ) -> Result<ProjectionEnvironmentSnapshot, String> {
         let expected = self.projection_environment_expectation_for_session(session)?;
         if &expected.project_session_id != expected_session_id {

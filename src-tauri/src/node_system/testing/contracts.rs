@@ -7,10 +7,11 @@ use crate::commands::node_system_execution_dto::{
 use crate::event::{
     Event, EventProject, ProjectionStatusDto, ResourceMoveDto, ResourceMutationResultDto,
 };
+use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CorrelationContext, EditorGraphProjectionDto, MonotonicTimestamp,
-    ProjectSessionId, ResourceVersionSet, RunId, RunTraceBundle, SpanId, SpanKind, SpanOutcome,
-    TraceBundleMetadata, TraceProvenanceScope, TraceSpan,
+    ResourceVersionSet, RunTraceBundle, SpanId, SpanKind, SpanOutcome, TraceBundleMetadata,
+    TraceProvenanceScope, TraceSpan,
 };
 use crate::node_system::catalog::{
     CatalogResourceEntry, CatalogResourcePath, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
@@ -28,6 +29,7 @@ use crate::node_system::document::{
 use crate::node_system::plan::{EXECUTION_DEMAND_VARIANT_COUNT, ExecutionDemand, GraphOutputRef};
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::registry::{NodeRegistry, canonical_semantic_protocol_snapshot};
+use crate::node_system::runtime::RunId;
 use crate::node_system::runtime::{
     OrdinaryRunErrorCode, RUN_EVENT_KIND_VARIANT_COUNT, ResultId, RunErrorOutcome, RunEvent,
     RunEventKind, RunOutputEvent, RunOutputMessage, RunOutputStatus, RunOutputStatusEvent,
@@ -261,7 +263,7 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
     ));
     let mut correlation = contract_correlation(registry);
     correlation.compile_id = CompileId::new(UNSAFE_ID);
-    let run_id = crate::node_system::analysis::RunId::new(UNSAFE_ID);
+    let run_id = crate::node_system::runtime::RunId::new(UNSAFE_ID);
     correlation.run_id = Some(run_id);
     let basis = CompilationBasis {
         graph_revision: correlation.graph_revision,

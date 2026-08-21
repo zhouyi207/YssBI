@@ -1,5 +1,6 @@
 use crate::database::DatabaseInstance;
-use crate::node_system::analysis::{BoundedTraceSink, ProjectSessionId};
+use crate::node_system::ProjectSessionId;
+use crate::node_system::analysis::BoundedTraceSink;
 use crate::node_system::catalog::{
     BuiltinCatalog, BuiltinInitializationError, BuiltinNodeSystem, build_builtin_node_system,
 };
@@ -82,13 +83,14 @@ mod tests {
 
     #[test]
     fn replacing_project_session_invalidates_all_memo_entries() {
-        use crate::node_system::analysis::{ResourceVersionSet, RunId};
+        use crate::node_system::analysis::ResourceVersionSet;
         use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
         use crate::node_system::plan::{
             ExecutionSemanticsVersion, OperationStableId, PlannedValueContract, ResultPresentation,
             ValueRef,
         };
         use crate::node_system::protocol::Value;
+        use crate::node_system::runtime::RunId;
         use crate::node_system::runtime::{
             ActivationId, ActivationProvenance, CancellationToken, DemandFingerprint,
             OperationMemoKey, PendingOutputDescriptor, ResultId, ResultUsage, StoredValue,

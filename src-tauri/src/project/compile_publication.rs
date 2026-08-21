@@ -34,7 +34,7 @@ type PublishedProducts = (
 );
 pub(super) struct ExecutionAuthorityToken {
     pub(super) project_instance_id: String,
-    pub(super) project_session_id: crate::node_system::analysis::ProjectSessionId,
+    pub(super) project_session_id: crate::node_system::ProjectSessionId,
     pub(super) graph_path: crate::node_system::document::GraphResourcePath,
     pub(super) basis: CompilationBasis<GraphRevision>,
     coordinator: Arc<ProjectCompileCoordinator>,
@@ -53,14 +53,14 @@ struct CompileInput {
     document: crate::node_system::document::GraphDocument,
     basis: CompilationBasis<GraphRevision>,
     project_instance_id: String,
-    project_session_id: crate::node_system::analysis::ProjectSessionId,
+    project_session_id: crate::node_system::ProjectSessionId,
 }
 
 struct CurrentBasis {
     basis: CompilationBasis<GraphRevision>,
     resource_states: ResourceObservationSet,
     project_instance_id: String,
-    project_session_id: crate::node_system::analysis::ProjectSessionId,
+    project_session_id: crate::node_system::ProjectSessionId,
 }
 
 impl CurrentCompilation {
@@ -96,7 +96,7 @@ impl ProjectState {
     pub(super) fn get_or_compile_current(
         &self,
         graph_path: &GraphResourcePath,
-        expected_session_id: &crate::node_system::analysis::ProjectSessionId,
+        expected_session_id: &crate::node_system::ProjectSessionId,
         trace_sink: &dyn TraceSink,
     ) -> Result<CurrentCompilation, String> {
         let input = self.capture_compile_input(graph_path)?;
@@ -282,7 +282,7 @@ impl ProjectState {
         &self,
         coordinator: &Arc<ProjectCompileCoordinator>,
         mut finished: CompilationTask,
-        expected_session_id: &crate::node_system::analysis::ProjectSessionId,
+        expected_session_id: &crate::node_system::ProjectSessionId,
         trace_sink: &dyn TraceSink,
     ) {
         while let Some(next) = coordinator.finish(&finished.graph_path, finished.compile_id) {
@@ -462,7 +462,7 @@ impl ProjectState {
         graph_path: &crate::node_system::document::GraphResourcePath,
         candidate_basis: &CompilationBasis<GraphRevision>,
         project_instance_id: &str,
-        project_session_id: &crate::node_system::analysis::ProjectSessionId,
+        project_session_id: &crate::node_system::ProjectSessionId,
     ) -> Result<CurrentBasis, String> {
         let data = self.project_data.read().unwrap();
         let graph_path = GraphResourcePath::new(graph_path.0.as_ref())

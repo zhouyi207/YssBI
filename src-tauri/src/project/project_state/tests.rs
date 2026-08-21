@@ -188,9 +188,8 @@ mod run_parameter_tests {
     }
 
     fn parameter_plan(node: &DocumentNode, params: CompiledParameterHandle) -> ExecutionPlan {
-        use crate::node_system::analysis::{
-            CompilationBasis, CompileId, CompileProvenance, ProjectSessionId,
-        };
+        use crate::node_system::ProjectSessionId;
+        use crate::node_system::analysis::{CompilationBasis, CompileId, CompileProvenance};
         use crate::node_system::document::{GraphResourcePath, GraphRevision};
         use crate::node_system::plan::StructuredControlRegion;
         use crate::node_system::registry::RegistryFingerprint;
@@ -290,7 +289,7 @@ mod run_parameter_tests {
         let registry = crate::node_system::catalog::build_builtin_node_system()
             .unwrap()
             .registry;
-        let session = crate::node_system::analysis::ProjectSessionId::new("coherent-run");
+        let session = crate::node_system::ProjectSessionId::new("coherent-run");
         let store = crate::node_system::runtime::FunctionPlanStore::new(session.clone(), 64);
         let resources = CompileResourceSnapshot {
             versions: crate::node_system::analysis::ResourceVersionSet::new(),

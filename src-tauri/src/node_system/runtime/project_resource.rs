@@ -1,7 +1,8 @@
 use super::{PlotSink, ResourceError, ResourceLease, ResourceProvider};
 use crate::graph::value::DataValue;
+use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
-    CompileProvenance, ProjectSessionId, ResourceKey, ResourceVersion, ResourceVersionSet,
+    CompileProvenance, ResourceKey, ResourceVersion, ResourceVersionSet,
 };
 use crate::node_system::plan::{
     CompiledResourceRequirement, ResourceAccess, ResourceId, ResourceKind,

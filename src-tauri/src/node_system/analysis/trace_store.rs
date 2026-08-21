@@ -3,10 +3,11 @@ use super::trace_bundle::{
     is_top_level_run_root,
 };
 use super::{
-    RunId, RunTraceBundle, SYSTEM_TRACE_CLOCK, SpanGuard, SpanId, SpanKind, SpanSpec, TraceBundle,
+    RunTraceBundle, SYSTEM_TRACE_CLOCK, SpanGuard, SpanId, SpanKind, SpanSpec, TraceBundle,
     TraceClock, TraceSink, TraceSpan,
 };
 use crate::node_system::document::GraphResourcePath;
+use crate::node_system::runtime::RunId;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 use std::sync::{Arc, Mutex};

@@ -729,7 +729,7 @@ fn production_relational_backend_executes_project_dataframe_source() {
     let resource = crate::node_system::plan::ResourceId::new("databases/main").unwrap();
     let provider = crate::node_system::runtime::ProjectResourceProvider::new(
         crate::node_system::runtime::ProjectResourceSnapshot::new(
-            crate::node_system::analysis::ProjectSessionId::new("relational-project"),
+            crate::node_system::ProjectSessionId::new("relational-project"),
             crate::node_system::analysis::ResourceVersionSet::new(),
         )
         .with_database(resource.clone(), std::sync::Arc::new(dataframe)),
@@ -744,13 +744,13 @@ fn production_relational_backend_executes_project_dataframe_source() {
         crate::node_system::runtime::RunResourceSet::acquire(&[requirement], &provider).unwrap();
     let cancellation = crate::node_system::runtime::CancellationToken::new();
     let resource_owner = crate::node_system::runtime::RunResourceOwner::new(
-        crate::node_system::analysis::RunId::new(1),
+        crate::node_system::runtime::RunId::new(1),
         crate::node_system::runtime::RunResourceBudgets::default(),
         cancellation.clone(),
     )
     .unwrap();
     let context = crate::node_system::runtime::RelationalContext {
-        run_id: crate::node_system::analysis::RunId::new(1),
+        run_id: crate::node_system::runtime::RunId::new(1),
         resources: &resources,
         resource_owner: &resource_owner,
         cancellation: &cancellation,
@@ -879,7 +879,7 @@ fn production_resource_snapshot_supplies_plot_sink() {
     use crate::node_system::runtime::ResourceProvider;
     let provider = crate::node_system::runtime::ProjectResourceProvider::new(
         crate::node_system::runtime::ProjectResourceSnapshot::new(
-            crate::node_system::analysis::ProjectSessionId::new("plot-project"),
+            crate::node_system::ProjectSessionId::new("plot-project"),
             crate::node_system::analysis::ResourceVersionSet::new(),
         )
         .with_plot_sink(std::sync::Arc::new(ProductionPlotSink)),

@@ -20,11 +20,11 @@ struct ExecutionSnapshot {
     results: crate::node_system::runtime::ResultStore,
     memoization: Arc<crate::node_system::runtime::SessionMemoization>,
     runs: Arc<crate::node_system::runtime::ProjectRunRegistry>,
-    session_id: crate::node_system::analysis::ProjectSessionId,
+    session_id: crate::node_system::ProjectSessionId,
 }
 
 impl ProjectState {
-    pub fn cancel_graph_run(&self, run_id: crate::node_system::analysis::RunId) -> bool {
+    pub fn cancel_graph_run(&self, run_id: crate::node_system::runtime::RunId) -> bool {
         let (runs, project_session_id) = self.current_run_registry();
         runs.cancel_run(&project_session_id, run_id)
     }
@@ -33,7 +33,7 @@ impl ProjectState {
         &self,
     ) -> (
         Arc<crate::node_system::runtime::ProjectRunRegistry>,
-        crate::node_system::analysis::ProjectSessionId,
+        crate::node_system::ProjectSessionId,
     ) {
         let store = self
             .project_store

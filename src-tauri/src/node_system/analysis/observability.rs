@@ -1,6 +1,10 @@
-use super::{CompilationBasis, CompileId};
+#[cfg(test)]
+use super::CompilationBasis;
+use super::{CompileId, CompileProvenance};
+use crate::node_system::ProjectSessionId;
 use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
 use crate::node_system::protocol::NodeTypeId;
+use crate::node_system::runtime::RunId;
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU64;
 use std::sync::LazyLock;
@@ -35,43 +39,7 @@ macro_rules! numeric_id {
     };
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct ProjectSessionId(Box<str>);
-
-impl ProjectSessionId {
-    pub fn new(value: impl Into<Box<str>>) -> Self {
-        Self(value.into())
-    }
-
-    pub fn unknown() -> Self {
-        Self::new("unknown")
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 numeric_id!(ParentCallId);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct RunId(NonZeroU64);
-
-impl RunId {
-    pub fn try_new(value: u64) -> Result<Self, InvalidTraceIdentity> {
-        NonZeroU64::new(value).map(Self).ok_or(InvalidTraceIdentity)
-    }
-
-    pub fn new(value: u64) -> Self {
-        Self::try_new(value).expect("run IDs must be non-zero")
-    }
-
-    pub const fn get(self) -> u64 {
-        self.0.get()
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InvalidTraceIdentity;
@@ -83,14 +51,6 @@ impl std::fmt::Display for InvalidTraceIdentity {
 }
 
 impl std::error::Error for InvalidTraceIdentity {}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CompileProvenance {
-    pub project_session_id: ProjectSessionId,
-    pub graph_path: GraphResourcePath,
-    pub basis: CompilationBasis<GraphRevision>,
-    pub compile_id: CompileId,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CorrelationContext {

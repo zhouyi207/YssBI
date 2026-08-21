@@ -41,7 +41,7 @@ pub(in crate::project) fn publish_function_plans(
     store: &crate::node_system::runtime::FunctionPlanStore,
     resources: &CompileResourceSnapshot,
     root_plan: Option<&crate::node_system::plan::ExecutionPlan>,
-    session_id: crate::node_system::analysis::ProjectSessionId,
+    session_id: crate::node_system::ProjectSessionId,
     trace_sink: &dyn crate::node_system::analysis::TraceSink,
     cancellation: &crate::node_system::compiler::CompileCancellationToken,
     computation_settings: &crate::project::ProjectComputationSettings,

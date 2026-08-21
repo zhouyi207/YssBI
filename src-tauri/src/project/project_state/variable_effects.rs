@@ -115,7 +115,7 @@ impl ProjectState {
     #[cfg(test)]
     pub(in crate::project) fn commit_variable_effects(
         &self,
-        expected_session_id: &crate::node_system::analysis::ProjectSessionId,
+        expected_session_id: &crate::node_system::ProjectSessionId,
         effects: Vec<crate::node_system::runtime::VariableWriteEffect>,
     ) -> Result<VariableEffectCommitResult, VariableEffectCommitError> {
         let mut prepared =
@@ -126,7 +126,7 @@ impl ProjectState {
     #[cfg(test)]
     pub(in crate::project) fn commit_variable_effects_for_run(
         &self,
-        expected_session_id: &crate::node_system::analysis::ProjectSessionId,
+        expected_session_id: &crate::node_system::ProjectSessionId,
         effects: Vec<crate::node_system::runtime::VariableWriteEffect>,
         cancellation: &crate::node_system::runtime::CancellationToken,
         deadline: Option<crate::node_system::runtime::RunDeadline>,
@@ -140,7 +140,7 @@ impl ProjectState {
 
     pub(super) fn prepare_variable_effects_receipt<'a>(
         &'a self,
-        expected_session_id: &crate::node_system::analysis::ProjectSessionId,
+        expected_session_id: &crate::node_system::ProjectSessionId,
         effects: Vec<crate::node_system::runtime::VariableWriteEffect>,
         terminal: Option<(
             &crate::node_system::runtime::CancellationToken,
@@ -890,8 +890,8 @@ pub(in crate::project) enum VariableEffectCommitError {
         phase: crate::node_system::runtime::RunPhase,
     },
     SessionChanged {
-        expected: crate::node_system::analysis::ProjectSessionId,
-        current: crate::node_system::analysis::ProjectSessionId,
+        expected: crate::node_system::ProjectSessionId,
+        current: crate::node_system::ProjectSessionId,
     },
     Conflict {
         resource: crate::node_system::document::ResourceKey,

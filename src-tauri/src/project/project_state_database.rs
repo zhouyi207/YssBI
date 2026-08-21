@@ -50,7 +50,7 @@ impl ProjectDatabaseError {
 #[derive(Clone)]
 pub(crate) struct DatabaseAuthorityToken {
     project_instance_id: String,
-    project_session_id: crate::node_system::analysis::ProjectSessionId,
+    project_session_id: crate::node_system::ProjectSessionId,
     database_id: String,
     database_revision: u64,
 }
@@ -234,7 +234,7 @@ impl ProjectState {
     fn validate_database_authority(
         publication: &super::project_state::MutationPublication,
         session: &ProjectSession,
-        current_session_id: &crate::node_system::analysis::ProjectSessionId,
+        current_session_id: &crate::node_system::ProjectSessionId,
         revisions: &std::collections::HashMap<String, u64>,
         token: &DatabaseAuthorityToken,
         id: &str,

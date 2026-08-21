@@ -15,8 +15,9 @@ mod traces;
 
 use super::scheduler::SchedulerCheckpoint;
 use super::*;
+use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, ResourceKey, ResourceVersion,
+    CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
     SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan,
 };
 use crate::node_system::document::{

@@ -1,5 +1,6 @@
 use super::{GraphResourcePath, ProjectInstanceId, ProjectSession, ProjectState};
-use crate::node_system::analysis::{BoundedTraceSink, RunId, RunTraceBundle, TraceBundle};
+use crate::node_system::analysis::{BoundedTraceSink, RunTraceBundle, TraceBundle};
+use crate::node_system::runtime::RunId;
 use std::fmt;
 use std::sync::Arc;
 

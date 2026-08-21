@@ -30,8 +30,6 @@ mod spill;
 mod stored_value;
 mod stream;
 
-pub use crate::node_system::analysis::RunId;
-
 pub use builtin::{
     BuiltinConstantParameters, BuiltinVariableParameters, build_builtin_kernel_registry,
 };
@@ -115,7 +113,8 @@ pub(crate) use run::MaterializedArtifact;
 pub(crate) use run::{ACTIVATION_IDS, ActivationIdAllocator, FRAME_IDS, check_terminal};
 pub use run::{
     ActivationId, Artifact, ArtifactKind, ArtifactValueKind, CancellationToken, FrameId,
-    RunDeadline, RunError, RunOptions, RunPhase, RunResult, RuntimeValue, StreamValue,
+    InvalidRunId, RunDeadline, RunError, RunId, RunOptions, RunPhase, RunResult, RuntimeValue,
+    StreamValue,
 };
 pub use scheduler::{FunctionPlanProvider, RunExecutor};
 pub use scheduling::{OperationCompletion, SchedulingPolicy};

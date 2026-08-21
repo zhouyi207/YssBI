@@ -880,9 +880,9 @@ const fn registration(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::analysis::RunId;
     use crate::node_system::document::{GraphResourcePath, NodeId};
     use crate::node_system::plan::{CompiledParameterHandle, CompiledResourceRequirement};
+    use crate::node_system::runtime::RunId;
     use crate::node_system::runtime::{
         ActivationId, CancellationToken, EffectiveComputationSettings, FrameId, KernelErrorKind,
         NOOP_RUN_OUTPUT_SINK, ResourceError, ResourceLease, ResourceProvider, RunResourceBudgets,

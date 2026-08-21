@@ -476,7 +476,7 @@ fn collect_source_requirements(
 #[cfg(test)]
 mod tests {
     use super::{Evaluator, ProductionRelationalBackend, ProductionRelationalCheckpoint};
-    use crate::node_system::analysis::{ProjectSessionId, RunId};
+    use crate::node_system::ProjectSessionId;
     use crate::node_system::plan::{
         CompiledRelationalPlan, CompiledResourceRequirement, RelationalExpression,
         RelationalFragmentId, RelationalFragmentRoot, RelationalLiteral, RelationalOperator,
@@ -486,8 +486,8 @@ mod tests {
     use crate::node_system::protocol::Value;
     use crate::node_system::runtime::{
         CancellationToken, ProjectResourceProvider, ProjectResourceSnapshot, RelationalBackend,
-        RelationalContext, RelationalError, RelationalErrorCode, RunDeadline, RunResourceBudgets,
-        RunResourceOwner, RunResourceSet, RuntimeValue,
+        RelationalContext, RelationalError, RelationalErrorCode, RunDeadline, RunId,
+        RunResourceBudgets, RunResourceOwner, RunResourceSet, RuntimeValue,
     };
     use polars::prelude::{Column, DataFrame};
     use std::collections::BTreeMap;

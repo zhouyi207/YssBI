@@ -1,5 +1,6 @@
 use super::{CancellationToken, RunError};
-use crate::node_system::analysis::{ProjectSessionId, RunId};
+use crate::node_system::ProjectSessionId;
+use crate::node_system::runtime::RunId;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::atomic::AtomicU64;

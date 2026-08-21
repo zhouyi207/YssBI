@@ -991,8 +991,8 @@ impl ProjectState {
     pub(crate) fn runtime_identity_sessions_for_test(
         &self,
     ) -> (
-        crate::node_system::analysis::ProjectSessionId,
-        crate::node_system::analysis::ProjectSessionId,
+        crate::node_system::ProjectSessionId,
+        crate::node_system::ProjectSessionId,
     ) {
         let _publication = self.mutation_publication.lock().unwrap();
         let runtime = self
@@ -1027,7 +1027,7 @@ impl ProjectState {
         let store = self.project_store.try_read().ok()?;
         let result = store.runs.track(
             store.project_session_id.clone(),
-            crate::node_system::analysis::RunId::new(9_004),
+            crate::node_system::runtime::RunId::new(9_004),
             crate::node_system::runtime::CancellationToken::new(),
         );
         let accepted = result.is_ok();

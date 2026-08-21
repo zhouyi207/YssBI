@@ -1212,9 +1212,8 @@ impl ExecutionPlanBasis {
 #[cfg(test)]
 mod materialization_tests {
     use super::*;
-    use crate::node_system::analysis::{
-        CompilationBasis, CompileId, ProjectSessionId, ResourceVersionSet,
-    };
+    use crate::node_system::ProjectSessionId;
+    use crate::node_system::analysis::{CompilationBasis, CompileId, ResourceVersionSet};
     use crate::node_system::document::{GraphResourcePath, GraphRevision};
     use crate::node_system::plan::PlannedAdapter;
     use crate::node_system::protocol::{InputConsumption, OutputProduction};

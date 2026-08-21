@@ -4,7 +4,7 @@ use super::{
     ResultProvenance, ResultState, RunDeadline, RunError, RunPhase, StoredResult, StoredValue,
 };
 #[cfg(test)]
-use crate::node_system::analysis::RunId;
+use crate::node_system::runtime::RunId;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};

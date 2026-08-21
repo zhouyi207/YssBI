@@ -1,6 +1,7 @@
 use super::*;
+use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, ResourceKey, ResourceVersion,
+    CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
 };
 use crate::node_system::document::{GraphResourcePath, GraphRevision};
 use crate::node_system::plan::{

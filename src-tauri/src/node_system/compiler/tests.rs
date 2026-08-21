@@ -1,8 +1,9 @@
 use super::*;
+use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
-    CompileId, DiagnosticLocation, DiagnosticSeverity, NOOP_TRACE_SINK, ProjectSessionId,
-    ResourceKey, ResourceVersion, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanOutcome, SpanSpec,
-    TraceSink, TraceSpan,
+    CompileId, DiagnosticLocation, DiagnosticSeverity, NOOP_TRACE_SINK, ResourceKey,
+    ResourceVersion, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanOutcome, SpanSpec, TraceSink,
+    TraceSpan,
 };
 use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,

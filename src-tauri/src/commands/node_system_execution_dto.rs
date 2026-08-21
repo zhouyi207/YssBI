@@ -940,9 +940,9 @@ mod execution_demand_tests {
 
     #[test]
     fn result_dto_serializes_identity_state_and_provenance_without_artifacts() {
-        use crate::node_system::analysis::RunId;
         use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
         use crate::node_system::plan::{PlannedValueContract, ResultPresentation, ValueRef};
+        use crate::node_system::runtime::RunId;
         use crate::node_system::runtime::{
             ActivationId, ResultFailure, ResultId, ResultProvenance, ResultState, StoredResult,
         };

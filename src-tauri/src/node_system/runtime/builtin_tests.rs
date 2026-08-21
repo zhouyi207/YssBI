@@ -6,9 +6,10 @@ mod scalar;
 mod statistics;
 
 use super::*;
+use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, SYSTEM_TRACE_CLOCK,
-    SpanGuard, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan,
+    CompilationBasis, CompileId, CompileProvenance, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind,
+    SpanOutcome, SpanSpec, TraceSink, TraceSpan,
 };
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
 use crate::node_system::document::{

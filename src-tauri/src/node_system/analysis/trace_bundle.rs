@@ -1,7 +1,8 @@
 use super::{
-    CompilationTraceBundle, CompileId, RunId, RunTraceBundle, SpanId, SpanKind, SpanOutcome,
+    CompilationTraceBundle, CompileId, RunTraceBundle, SpanId, SpanKind, SpanOutcome,
     TraceBundleMetadata, TraceProvenanceScope, TraceSpan,
 };
+use crate::node_system::runtime::RunId;
 use std::collections::{HashMap, HashSet};
 use std::mem::size_of;
 

@@ -17,8 +17,9 @@ pub use validation::{PlanValidationError, PlanValidationErrors};
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::node_system::ProjectSessionId;
     use crate::node_system::analysis::{
-        CompilationBasis, CompileId, CompileProvenance, ProjectSessionId, ResourceVersionSet,
+        CompilationBasis, CompileId, CompileProvenance, ResourceVersionSet,
     };
     use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use crate::node_system::protocol::{
@@ -29,6 +30,12 @@ mod tests {
 
     fn id<T>(value: &str, constructor: impl FnOnce(Box<str>) -> Result<T, InvalidPlanId>) -> T {
         constructor(value.into()).unwrap()
+    }
+
+    #[test]
+    fn attempt_id_rejects_zero() {
+        assert_eq!(AttemptId::try_new(0), Err(InvalidAttemptId));
+        assert_eq!(AttemptId::try_new(1).unwrap(), AttemptId::initial());
     }
 
     fn operation(output: u32) -> PlannedOperation {

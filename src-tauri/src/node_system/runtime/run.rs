@@ -3,7 +3,7 @@ use super::{
     RelationalError, RelationalErrorCode, RunResourceBudgets, SchedulingPolicy, StoredValue,
     StreamReceiveError,
 };
-use crate::node_system::analysis::{CompileProvenance, CorrelationContext, RunId};
+use crate::node_system::analysis::{CompileProvenance, CorrelationContext};
 use crate::node_system::plan::{OperationIndex, RelationalBackendId, ResourceId, ValueRef};
 use crate::node_system::protocol::Value;
 use std::collections::BTreeMap;
@@ -12,6 +12,48 @@ use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, LazyLock, Mutex, Weak};
 use std::time::{Duration, Instant};
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
+pub struct RunId(NonZeroU64);
+
+impl RunId {
+    pub fn try_new(value: u64) -> Result<Self, InvalidRunId> {
+        NonZeroU64::new(value).map(Self).ok_or(InvalidRunId)
+    }
+
+    pub fn new(value: u64) -> Self {
+        Self::try_new(value).expect("run IDs must be non-zero")
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0.get()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InvalidRunId;
+
+impl fmt::Display for InvalidRunId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("run IDs must be non-zero")
+    }
+}
+
+impl std::error::Error for InvalidRunId {}
+
+#[cfg(test)]
+mod identity_tests {
+    use super::{InvalidRunId, RunId};
+
+    #[test]
+    fn run_id_rejects_zero() {
+        assert_eq!(RunId::try_new(0), Err(InvalidRunId));
+        assert_eq!(RunId::try_new(1).unwrap().get(), 1);
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]

@@ -324,9 +324,11 @@ pub static NOOP_RUN_EVENT_SINK: NoopRunEventSink = NoopRunEventSink;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::analysis::{CompileId, ProjectSessionId, RunId};
+    use crate::node_system::ProjectSessionId;
+    use crate::node_system::analysis::CompileId;
     use crate::node_system::document::GraphResourcePath;
     use crate::node_system::registry::RegistryFingerprint;
+    use crate::node_system::runtime::RunId;
     use std::collections::BTreeMap;
 
     #[test]

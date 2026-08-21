@@ -7,6 +7,7 @@ mod basis;
 mod diagnostic;
 mod observability;
 mod projection;
+mod provenance;
 mod semantic;
 mod snapshot;
 mod trace_bundle;
@@ -28,12 +29,12 @@ pub use diagnostic::{
 #[cfg(test)]
 pub use observability::FakeTraceClock;
 pub use observability::{
-    CompilationTraceBundle, CompileProvenance, CorrelationContext, InvalidTraceIdentity,
-    MonotonicTimestamp, NOOP_TRACE_SINK, NoopTraceSink, ParentCallId, ProjectSessionId,
-    RedactionPolicy, RunId, RunTraceBundle, SYSTEM_TRACE_CLOCK, SensitiveFieldAction, SpanGuard,
-    SpanId, SpanKind, SpanOutcome, SpanSpec, SystemTraceClock, TraceBundle, TraceBundleMetadata,
-    TraceClock, TraceFieldSensitivity, TraceProvenanceScope, TraceSink, TraceSpan, TraceValue,
-    complete_span_safely, start_span_safely,
+    CompilationTraceBundle, CorrelationContext, InvalidTraceIdentity, MonotonicTimestamp,
+    NOOP_TRACE_SINK, NoopTraceSink, ParentCallId, RedactionPolicy, RunTraceBundle,
+    SYSTEM_TRACE_CLOCK, SensitiveFieldAction, SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec,
+    SystemTraceClock, TraceBundle, TraceBundleMetadata, TraceClock, TraceFieldSensitivity,
+    TraceProvenanceScope, TraceSink, TraceSpan, TraceValue, complete_span_safely,
+    start_span_safely,
 };
 pub(crate) use projection::resolve_function_data_type;
 pub use projection::{
@@ -47,6 +48,7 @@ pub use projection::{
     ResolvedPortStatusDto, SchemaSummaryDto, SchemaSummaryKindDto, TypeSummaryDto,
     build_editor_graph_projection, build_function_editor_projection,
 };
+pub use provenance::CompileProvenance;
 pub use semantic::{
     ControlEdge, EffectDependency, SemanticDependency, ValidatedSemanticGraph,
     ValidatedSemanticNode, ValidatedSemanticPort, ValueEdge,

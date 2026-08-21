@@ -996,7 +996,7 @@ fn completed_call_correlations(
     node_value: u128,
     node_type: &str,
 ) -> Vec<(
-    Option<crate::node_system::analysis::RunId>,
+    Option<crate::node_system::runtime::RunId>,
     Option<crate::node_system::analysis::ParentCallId>,
 )> {
     let expected = source(node_value, node_type);
@@ -1016,7 +1016,7 @@ fn completed_call_correlations(
 fn root_run_id(
     events: &[RunEvent],
     expected_kind: RunEventKind,
-) -> crate::node_system::analysis::RunId {
+) -> crate::node_system::runtime::RunId {
     let matching = events
         .iter()
         .filter(|event| event.correlation.parent_call.is_none() && event.kind == expected_kind)
@@ -1028,10 +1028,10 @@ fn root_run_id(
 
 fn assert_call_correlations_share_root_run(
     correlations: &[(
-        Option<crate::node_system::analysis::RunId>,
+        Option<crate::node_system::runtime::RunId>,
         Option<crate::node_system::analysis::ParentCallId>,
     )],
-    root_run_id: crate::node_system::analysis::RunId,
+    root_run_id: crate::node_system::runtime::RunId,
     expected_count: usize,
 ) {
     assert_eq!(correlations.len(), expected_count);

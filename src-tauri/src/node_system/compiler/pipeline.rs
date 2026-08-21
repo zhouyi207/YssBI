@@ -21,15 +21,16 @@ use super::{
     LoweredKernel, LoweringContext, LoweringError, NodeImplementation, ValidatedNodeConfig,
     compare_diagnostics, managed_node_role_name, node_scope_name, port_kind_name,
 };
+use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
     AnalysisResourceReads, AnalysisResourceResolver, AnalysisSnapshot, AnalyzedNode,
     CompilationBasis, CompileId, CompileProvenance, ControlEdge, CorrelationContext,
-    DiagnosticLocation, NOOP_TRACE_SINK, NodeDiagnostic, ProjectSessionId, ResolvedDatabase,
-    ResolvedDatabaseValue, ResolvedFunction, ResolvedFunctionValue, ResolvedInterface,
-    ResolvedPort, ResolvedResource, ResolvedVariable, ResourceKey, ResourceObservationSet,
-    ResourceObservedState, ResourceResolutionError, ResourceVersion, ResourceVersionSet,
-    SemanticDependency, SpanId, SpanKind, SpanOutcome, SpanSpec, TraceSink, ValidatedSemanticGraph,
-    ValidatedSemanticNode, ValidatedSemanticPort, ValueEdge, start_span_safely,
+    DiagnosticLocation, NOOP_TRACE_SINK, NodeDiagnostic, ResolvedDatabase, ResolvedDatabaseValue,
+    ResolvedFunction, ResolvedFunctionValue, ResolvedInterface, ResolvedPort, ResolvedResource,
+    ResolvedVariable, ResourceKey, ResourceObservationSet, ResourceObservedState,
+    ResourceResolutionError, ResourceVersion, ResourceVersionSet, SemanticDependency, SpanId,
+    SpanKind, SpanOutcome, SpanSpec, TraceSink, ValidatedSemanticGraph, ValidatedSemanticNode,
+    ValidatedSemanticPort, ValueEdge, start_span_safely,
 };
 use crate::node_system::document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, FunctionDocument, FunctionParameterId,

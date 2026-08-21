@@ -1,8 +1,9 @@
 use crate::error::CommandError;
 use crate::node_system::analysis::{
-    CompilationTraceBundle, CorrelationContext, RunId, RunTraceBundle, SpanKind, SpanOutcome,
-    TraceBundle, TraceBundleMetadata, TraceProvenanceScope, TraceSpan,
+    CompilationTraceBundle, CorrelationContext, RunTraceBundle, SpanKind, SpanOutcome, TraceBundle,
+    TraceBundleMetadata, TraceProvenanceScope, TraceSpan,
 };
+use crate::node_system::runtime::RunId;
 use crate::project::{GraphResourcePath, ProjectInstanceId, ProjectState, TraceQueryError};
 use serde::Serialize;
 use std::collections::BTreeMap;

@@ -1,7 +1,6 @@
 use super::FunctionPlanProvider;
-use crate::node_system::analysis::{
-    ProjectSessionId, ResourceKey, ResourceVersion, ResourceVersionSet,
-};
+use crate::node_system::ProjectSessionId;
+use crate::node_system::analysis::{ResourceKey, ResourceVersion, ResourceVersionSet};
 use crate::node_system::document::GraphResourcePath;
 use crate::node_system::plan::{
     ExecutionPlan, FunctionPlanAbi, FunctionPlanHandle, PlanSourceFacts,
