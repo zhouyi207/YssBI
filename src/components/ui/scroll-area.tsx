@@ -27,8 +27,12 @@ function ScrollArea({
     >
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
+        data-orientation={orientation}
         className={cn(
           "size-full min-h-0 flex-1 overscroll-contain rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1",
+          // Radix's inline table wrapper can add horizontal scrollWidth that drag auto-scroll can move.
+          orientation === "vertical" &&
+            "[&>div]:block! [&>div]:w-full! [&>div]:min-w-0! [&>div]:max-w-full!",
           orientation === "horizontal" && "flex flex-row items-start"
         )}
         ref={viewportRef}
