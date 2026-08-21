@@ -40,7 +40,7 @@ pub use types::{
 };
 pub use validation::{
     LiteralValidationIssue, LocatedParameterIssue, NominalParameterValidator, ParameterIssueKind,
-    ParameterValidation, validate_and_prepare_parameter_values, validate_parameter_values,
-    validate_typed_literal,
+    ParameterValidation, normalize_json_literal, protocol_value_to_json,
+    validate_and_prepare_parameter_values, validate_parameter_values, validate_typed_literal,
 };
 pub use value::{CanonicalDecimal, InvalidDecimal, ParameterValue, TypedValue, Value};

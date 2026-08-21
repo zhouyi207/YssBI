@@ -17,7 +17,8 @@ use crate::node_system::document::{
     ConnectionId, GraphDocument, GraphRevision, NodeId, PortAddress, port_member_group_state,
 };
 use crate::node_system::protocol::{
-    I18nKey, PortDirection, PortInstances, PortKey, SchemaExpr, TypeExpr,
+    I18nKey, PortDirection, PortInstances, PortKey, SchemaExpr, TypeExpr, protocol_value_to_json,
+    validate_typed_literal,
 };
 use crate::node_system::registry::NodeRegistry;
 use std::collections::BTreeMap;
@@ -193,15 +194,21 @@ impl EditorGraphProjectionDto {
                                     let literal_override = document
                                         .input_states
                                         .get(&port.address)
-                                        .and_then(|state| state.literal_override.clone());
+                                        .and_then(|state| state.literal_override.as_ref())
+                                        .map(|literal| {
+                                            validate_typed_literal(
+                                                literal,
+                                                &spec.value_type,
+                                                registry,
+                                            )
+                                            .map(|literal| protocol_value_to_json(&literal.value))
+                                            .unwrap_or_else(|_| literal.clone())
+                                        });
                                     let protocol_default = spec
                                         .input_binding
                                         .as_ref()
                                         .and_then(|binding| binding.default_value.as_ref())
-                                        .map(|default| {
-                                            serde_json::to_value(&default.value)
-                                                .expect("protocol values must serialize")
-                                        });
+                                        .map(|default| protocol_value_to_json(&default.value));
                                     let effective = project_effective_input_binding(
                                         document.effective_input_binding(
                                             &port.address,

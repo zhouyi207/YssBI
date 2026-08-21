@@ -1133,7 +1133,13 @@ fn editor_projection_includes_positions_connections_and_input_bindings() {
     document.input_states.insert(
         branch_condition,
         InputState {
-            literal_override: Some(json!(true)),
+            literal_override: Some(
+                serde_json::to_value(TypedValue {
+                    value_type: TypeExpr::Concrete(TypeId::new("core.bool").unwrap()),
+                    value: Value::Bool(true),
+                })
+                .unwrap(),
+            ),
         },
     );
     let analysis = GraphCompiler::new(registry.as_ref(), &EmptyResources)
@@ -1206,7 +1212,7 @@ fn editor_projection_includes_positions_connections_and_input_bindings() {
     );
     assert_eq!(
         binding(sleep, "duration").protocol_default,
-        Some(json!({ "Decimal": "1" }))
+        Some(json!("1"))
     );
 
     let zh_projection = EditorGraphProjectionDto::from_sources(

@@ -1,6 +1,6 @@
 use super::{
-    NodeProtocol, ParameterConstraint, ParameterEditorSpec, ParameterKey, ParameterValues,
-    TypeExpr, TypeId, TypedValue, Value,
+    CanonicalDecimal, NodeProtocol, ParameterConstraint, ParameterEditorSpec, ParameterKey,
+    ParameterValues, TypeExpr, TypeId, TypedValue, Value,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +33,30 @@ pub fn validate_typed_literal(
 ) -> Result<TypedValue, LiteralValidationIssue> {
     let decoded = serde_json::from_value::<TypedValue>(wire.clone())
         .map_err(|_| LiteralValidationIssue::MalformedWire)?;
+    validate_decoded_literal(decoded, declared_type, nominal)
+}
+
+pub fn normalize_json_literal(
+    raw: &serde_json::Value,
+    declared_type: &TypeExpr,
+    nominal: &impl NominalParameterValidator,
+) -> Result<TypedValue, LiteralValidationIssue> {
+    let value = json_literal_to_protocol_value(raw, declared_type)?;
+    validate_decoded_literal(
+        TypedValue {
+            value_type: declared_type.clone(),
+            value,
+        },
+        declared_type,
+        nominal,
+    )
+}
+
+fn validate_decoded_literal(
+    decoded: TypedValue,
+    declared_type: &TypeExpr,
+    nominal: &impl NominalParameterValidator,
+) -> Result<TypedValue, LiteralValidationIssue> {
     if !type_expr_accepts(declared_type, &decoded.value_type) {
         return Err(LiteralValidationIssue::DeclaredTypeMismatch);
     }
@@ -40,6 +64,56 @@ pub fn validate_typed_literal(
         return Err(LiteralValidationIssue::ValueTypeMismatch);
     }
     Ok(decoded)
+}
+
+fn json_literal_to_protocol_value(
+    raw: &serde_json::Value,
+    declared_type: &TypeExpr,
+) -> Result<Value, LiteralValidationIssue> {
+    if matches!(declared_type, TypeExpr::Concrete(type_id) if type_id.as_str() == "core.bytes") {
+        let bytes = raw
+            .as_array()
+            .ok_or(LiteralValidationIssue::ValueTypeMismatch)?
+            .iter()
+            .map(|value| {
+                value
+                    .as_u64()
+                    .and_then(|value| u8::try_from(value).ok())
+                    .ok_or(LiteralValidationIssue::ValueTypeMismatch)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(Value::Bytes(bytes));
+    }
+
+    match raw {
+        serde_json::Value::Null => Ok(Value::Null),
+        serde_json::Value::Bool(value) => Ok(Value::Bool(*value)),
+        serde_json::Value::Number(value) if value.is_i64() => {
+            Ok(Value::Integer(value.as_i64().expect("checked i64")))
+        }
+        serde_json::Value::Number(value) if value.is_u64() => {
+            Ok(Value::Unsigned(value.as_u64().expect("checked u64")))
+        }
+        serde_json::Value::Number(value) => CanonicalDecimal::new(value.to_string())
+            .map(Value::Decimal)
+            .map_err(|_| LiteralValidationIssue::MalformedWire),
+        serde_json::Value::String(value) => Ok(Value::String(value.as_str().into())),
+        serde_json::Value::Array(values) => values
+            .iter()
+            .map(|value| json_literal_to_protocol_value(value, &TypeExpr::Unknown))
+            .collect::<Result<Vec<_>, _>>()
+            .map(Value::List),
+        serde_json::Value::Object(values) => values
+            .iter()
+            .map(|(key, value)| {
+                Ok((
+                    key.as_str().into(),
+                    json_literal_to_protocol_value(value, &TypeExpr::Unknown)?,
+                ))
+            })
+            .collect::<Result<_, LiteralValidationIssue>>()
+            .map(Value::Object),
+    }
 }
 
 fn type_expr_accepts(declared: &TypeExpr, actual: &TypeExpr) -> bool {
@@ -122,7 +196,7 @@ fn protocol_value_matches_type(
     }
 }
 
-fn protocol_value_to_json(value: &Value) -> serde_json::Value {
+pub fn protocol_value_to_json(value: &Value) -> serde_json::Value {
     match value {
         Value::Null => serde_json::Value::Null,
         Value::Bool(value) => (*value).into(),

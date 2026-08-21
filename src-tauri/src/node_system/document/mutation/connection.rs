@@ -751,12 +751,11 @@ fn validate_connection_capacity(
     })
 }
 
-pub(crate) fn validate_literal_target(
-    document: &GraphDocument,
-    registry: &NodeRegistry,
+fn resolve_literal_target<'a>(
+    document: &'a GraphDocument,
+    registry: &'a NodeRegistry,
     address: &PortAddress,
-    literal: Option<&TypedValue>,
-) -> Result<(), MutationConflict> {
+) -> Result<MutationPort<'a>, MutationConflict> {
     let port = resolve_mutation_port(document, registry, address)?;
     if matches!(port.binding, Some(DynamicPortBinding::Orphan { .. })) {
         return Err(invalid_editor_mutation(
@@ -779,6 +778,16 @@ pub(crate) fn validate_literal_target(
             "the input protocol forbids literal overrides",
         ));
     }
+    Ok(port)
+}
+
+pub(crate) fn validate_literal_target(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    address: &PortAddress,
+    literal: Option<&TypedValue>,
+) -> Result<(), MutationConflict> {
+    let port = resolve_literal_target(document, registry, address)?;
     if let Some(literal) = literal {
         crate::node_system::protocol::validate_typed_literal(
             literal,
@@ -788,4 +797,26 @@ pub(crate) fn validate_literal_target(
         .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))?;
     }
     Ok(())
+}
+
+pub(crate) fn normalize_editor_literal_target(
+    document: &GraphDocument,
+    registry: &NodeRegistry,
+    address: &PortAddress,
+    literal: Option<&TypedValue>,
+) -> Result<Option<TypedValue>, MutationConflict> {
+    let port = resolve_literal_target(document, registry, address)?;
+    literal
+        .map(|raw| {
+            crate::node_system::protocol::normalize_json_literal(
+                raw,
+                &port.spec.value_type,
+                registry,
+            )
+            .map(|literal| {
+                serde_json::to_value(literal).expect("protocol typed values must serialize")
+            })
+            .map_err(|_| invalid_editor_mutation("literal does not match the input value type"))
+        })
+        .transpose()
 }

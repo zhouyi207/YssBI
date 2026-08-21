@@ -24,8 +24,8 @@ use std::fmt;
 #[path = "mutation/connection.rs"]
 mod connection;
 use connection::{
-    connect_operations, connect_operations_prevalidated_type, projected_connect_operations,
-    resolve_mutation_port,
+    connect_operations, connect_operations_prevalidated_type, normalize_editor_literal_target,
+    projected_connect_operations, resolve_mutation_port,
 };
 #[allow(unused_imports)]
 pub(super) use connection::{
@@ -861,7 +861,12 @@ impl EditorGraphMutationDto {
                 let address = address.try_into().map_err(|detail| {
                     editor_error(EditorMutationErrorCode::GraphPortNotFound, detail)
                 })?;
-                validate_literal_target(document, registry, &address, literal.as_ref())?;
+                let literal = normalize_editor_literal_target(
+                    document,
+                    registry,
+                    &address,
+                    literal.as_ref(),
+                )?;
                 let before = document.input_states.get(&address).cloned();
                 vec![GraphDocumentOperation::SetInputState {
                     address,

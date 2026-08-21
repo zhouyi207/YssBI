@@ -312,15 +312,47 @@ fn editor_mutation_rejects_orphan_and_binding_policy_mismatches() {
 }
 
 #[test]
+fn editor_set_literal_normalizes_raw_print_message() {
+    let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
+    let print_id = node_id(1_030);
+    let address = declared(print_id, "message");
+    let mut document = GraphDocument::default();
+    document
+        .create_node(DocumentNode {
+            id: print_id,
+            node_type: NodeTypeId::new("yssbi.debug.print").unwrap(),
+            position: NodePosition { x: 0.0, y: 0.0 },
+            parameters: ParameterValues::new(),
+            user_label: None,
+        })
+        .unwrap();
+
+    let patch = plan(
+        EditorGraphMutationDto::SetLiteral {
+            address: address.clone().into(),
+            literal: Some(json!("Changed message")),
+        },
+        &document,
+        &registry,
+    )
+    .unwrap();
+    document.apply_patch(&patch).unwrap();
+
+    assert_eq!(
+        document.input_states[&address].literal_override,
+        Some(json!({
+            "value_type": { "Concrete": "core.string" },
+            "value": { "String": "Changed message" }
+        }))
+    );
+}
+
+#[test]
 fn editor_mutation_enforces_literal_policy() {
     let registry = validation_registry();
     let owner = node_id(1_031);
     let document = validation_document(&[owner]);
-    let literal = serde_json::to_value(crate::node_system::protocol::TypedValue {
-        value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
-        value: Value::Integer(1),
-    })
-    .unwrap();
+    let literal = json!(1);
 
     assert!(
         plan(
@@ -362,7 +394,7 @@ fn editor_mutation_enforces_literal_policy() {
 }
 
 #[test]
-fn editor_mutation_rejects_legal_typed_literal_for_the_wrong_port_type() {
+fn editor_mutation_rejects_raw_literal_for_the_wrong_port_type() {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
     let owner = node_id(1_035);
     let mut document = GraphDocument::default();
@@ -375,11 +407,7 @@ fn editor_mutation_rejects_legal_typed_literal_for_the_wrong_port_type() {
             user_label: None,
         })
         .unwrap();
-    let literal = serde_json::to_value(crate::node_system::protocol::TypedValue {
-        value_type: TypeExpr::Concrete(TypeId::new("core.string").unwrap()),
-        value: Value::String("not-a-bool".into()),
-    })
-    .unwrap();
+    let literal = json!("not-a-bool");
 
     let error = plan(
         EditorGraphMutationDto::SetLiteral {
@@ -408,16 +436,7 @@ fn editor_mutation_rejects_nested_literal_element_mismatch() {
             user_label: None,
         })
         .unwrap();
-    let series = TypeExpr::Applied {
-        constructor: crate::node_system::protocol::TypeConstructorId::new("core.data_series")
-            .unwrap(),
-        arguments: vec![TypeExpr::Concrete(TypeId::new("core.int64").unwrap())],
-    };
-    let literal = serde_json::to_value(crate::node_system::protocol::TypedValue {
-        value_type: series,
-        value: Value::List(vec![Value::Integer(1), Value::String("wrong".into())]),
-    })
-    .unwrap();
+    let literal = json!([1, "wrong"]);
 
     let error = plan(
         EditorGraphMutationDto::SetLiteral {
