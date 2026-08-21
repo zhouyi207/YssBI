@@ -17,9 +17,8 @@ export function useDataLoader(selectedDfId: string | null) {
   const [loading, setLoading] = useState(true);
   const [pageIndex, setPageIndex] = useState(0);
   const [lastFetchMs, setLastFetchMs] = useState<number | null>(null);
-  const initialRowsRequestRef = useRef(0);
-  const reloadRequestRef = useRef(0);
-  const refreshRequestRef = useRef(0);
+  const rowsRequestEpochRef = useRef(0);
+  const pageIntentEpochRef = useRef(0);
   const selectedDfIdRef = useRef(selectedDfId);
   selectedDfIdRef.current = selectedDfId;
 
@@ -32,7 +31,7 @@ export function useDataLoader(selectedDfId: string | null) {
     id: string,
     nextPageIndex: number,
   ) => {
-    const requestId = ++initialRowsRequestRef.current;
+    const requestEpoch = ++rowsRequestEpochRef.current;
     const rowCount = useDatabaseStore.getState().databases[id]?.rowCount ?? 0;
     const maxPageIndex = rowCount > 0
       ? Math.max(0, Math.ceil(rowCount / CHUNK_SIZE) - 1)
@@ -48,7 +47,7 @@ export function useDataLoader(selectedDfId: string | null) {
         CHUNK_SIZE,
       );
       if (!isCurrentProjectIdentity(identity)
-        || requestId !== initialRowsRequestRef.current
+        || requestEpoch !== rowsRequestEpochRef.current
         || id !== selectedDfIdRef.current) return;
       setPageIndex(safePageIndex);
       setLoadedRows(page.rows);
@@ -59,7 +58,7 @@ export function useDataLoader(selectedDfId: string | null) {
         logger.data.error('Failed to load page rows: ' + String(e), 'DatabaseEditorWindow');
       }
     } finally {
-      if (isCurrentProjectIdentity(identity) && requestId === initialRowsRequestRef.current) {
+      if (isCurrentProjectIdentity(identity) && requestEpoch === rowsRequestEpochRef.current) {
         setLoading(false);
       }
     }
@@ -88,6 +87,8 @@ export function useDataLoader(selectedDfId: string | null) {
 
   const loadInitialRows = useCallback(async (id: string) => {
     const identity = captureProjectIdentity();
+    pageIntentEpochRef.current += 1;
+    rowsRequestEpochRef.current += 1;
     try {
       await ensureDatabaseMeta(identity, id);
       if (!isCurrentProjectIdentity(identity)) return;
@@ -101,7 +102,7 @@ export function useDataLoader(selectedDfId: string | null) {
   const reloadAllData = useCallback(async () => {
     if (!selectedDfId) return;
     const identity = captureProjectIdentity();
-    const requestId = ++reloadRequestRef.current;
+    const requestEpoch = ++rowsRequestEpochRef.current;
     const id = selectedDfId;
     const safePageIndex = Math.max(0, Math.min(pageIndex, Math.max(0, totalPages - 1)));
     const startedAt = performance.now();
@@ -113,14 +114,14 @@ export function useDataLoader(selectedDfId: string | null) {
         CHUNK_SIZE,
       );
       if (!isCurrentProjectIdentity(identity)
-        || requestId !== reloadRequestRef.current
+        || requestEpoch !== rowsRequestEpochRef.current
         || id !== selectedDfIdRef.current) return;
       setPageIndex(safePageIndex);
       setLoadedRows(page.rows);
       setLoadedRowIds(page.rowIds);
       const meta = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, id);
       if (!isCurrentProjectIdentity(identity)
-        || requestId !== reloadRequestRef.current
+        || requestEpoch !== rowsRequestEpochRef.current
         || id !== selectedDfIdRef.current) return;
       useDatabaseStore.getState().updateDatabase(id, {
         name: meta.name,
@@ -138,6 +139,7 @@ export function useDataLoader(selectedDfId: string | null) {
 
   const goToPage = useCallback(async (nextPageIndex: number) => {
     if (!selectedDfId) return;
+    pageIntentEpochRef.current += 1;
     await loadPageRows(selectedDfId, nextPageIndex);
   }, [selectedDfId, loadPageRows]);
 
@@ -151,12 +153,14 @@ export function useDataLoader(selectedDfId: string | null) {
 
   const refreshData = useCallback(async () => {
     const identity = captureProjectIdentity();
-    const requestId = ++refreshRequestRef.current;
+    pageIntentEpochRef.current += 1;
+    const requestEpoch = ++rowsRequestEpochRef.current;
     setLoading(true);
     const startedAt = performance.now();
     try {
       await initProjectSync();
-      if (!isCurrentProjectIdentity(identity)) return;
+      if (!isCurrentProjectIdentity(identity)
+        || requestEpoch !== rowsRequestEpochRef.current) return;
       if (selectedDfId) {
         const id = selectedDfId;
         const safePageIndex = Math.max(0, Math.min(pageIndex, Math.max(0, totalPages - 1)));
@@ -167,7 +171,7 @@ export function useDataLoader(selectedDfId: string | null) {
           CHUNK_SIZE,
         );
         if (!isCurrentProjectIdentity(identity)
-          || requestId !== refreshRequestRef.current
+          || requestEpoch !== rowsRequestEpochRef.current
           || id !== selectedDfIdRef.current) return;
         setPageIndex(safePageIndex);
         setLoadedRows(page.rows);
@@ -179,11 +183,13 @@ export function useDataLoader(selectedDfId: string | null) {
         logger.data.error('Failed to fetch dataframes: ' + String(e), 'DatabaseEditorWindow');
       }
     } finally {
-      if (isCurrentProjectIdentity(identity) && requestId === refreshRequestRef.current) {
+      if (isCurrentProjectIdentity(identity) && requestEpoch === rowsRequestEpochRef.current) {
         setLoading(false);
       }
     }
   }, [selectedDfId, pageIndex, totalPages, CHUNK_SIZE]);
+
+  const getPageIntentEpoch = useCallback(() => pageIntentEpochRef.current, []);
 
   return {
     loadedRows,
@@ -203,5 +209,6 @@ export function useDataLoader(selectedDfId: string | null) {
     goToPreviousPage,
     goToNextPage,
     refreshData,
+    getPageIntentEpoch,
   };
 }

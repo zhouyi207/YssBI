@@ -124,6 +124,41 @@ describe('useDataLoader project lifecycle ownership', () => {
     expect(useDatabaseStore.getState()).toBe(replacementStoreSnapshot);
   });
 
+  it('keeps a newer page when an older reload completes later', async () => {
+    act(() => useDatabaseStore.setState((state) => ({
+      databases: {
+        ...state.databases,
+        sales: { ...state.databases.sales, rowCount: 400 },
+      },
+    })));
+    const oldPage = deferred<DatabaseRowsResult>();
+    const nextPage = deferred<DatabaseRowsResult>();
+    vi.spyOn(DatabaseService, 'getDatabaseRows').mockImplementation(
+      async (_projectInstanceId, _id, offset) => (
+        offset === 0 ? oldPage.promise : nextPage.promise
+      ),
+    );
+    vi.spyOn(DatabaseService, 'getDatabaseMeta').mockResolvedValue({
+      ...oldMeta,
+      rowCount: 400,
+    });
+
+    let reloadCompletion!: Promise<void>;
+    let pageCompletion!: Promise<void>;
+    act(() => {
+      reloadCompletion = loader.reloadAllData();
+      pageCompletion = loader.goToNextPage();
+    });
+    nextPage.resolve({ rows: [[200]], rowIds: [200] });
+    await act(async () => pageCompletion);
+    oldPage.resolve({ rows: [[0]], rowIds: [0] });
+    await act(async () => reloadCompletion);
+
+    expect(loader.pageIndex).toBe(1);
+    expect(loader.loadedRows).toEqual([[200]]);
+    expect(loader.loadedRowIds).toEqual([200]);
+  });
+
   it('suppresses delayed metadata rejection after replacement with zero effects', async () => {
     act(() => useDatabaseStore.setState({
       databases: { sales: { id: 'sales', name: 'Sales', columns: [], rowCount: 0, columnCount: 0 } },
