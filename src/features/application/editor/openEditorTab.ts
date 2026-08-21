@@ -1,10 +1,10 @@
 import type { LayoutTab } from '@/shared/types';
 import type { DetailFocus } from '@/features/core/editor/detail/types';
-import { useEditorStore } from '@/features/core/editor';
 import { editorDockviewPort } from '@/features/core/dockview';
 import { applyTabPinState, findPreviewTabInTabs } from '@/features/core/layout/layoutTabModel';
 import { resolveTabDisplayName } from './resolveTabDisplayName';
 import { ensureDetailVisible } from './ensureDetailVisible';
+import { focusDetails } from './rightSidebarActions';
 
 export interface OpenEditorTabOptions {
   targetGroupId?: string;
@@ -74,7 +74,7 @@ export function openEditorTab(tab: LayoutTab, options?: OpenEditorTabOptions): v
     });
   }
 
-  if (options?.focusDetail) useEditorStore.getState().setDetailFocus(options.focusDetail);
+  if (options?.focusDetail) focusDetails(options.focusDetail);
   ensureDetailVisible();
 }
 

@@ -1,23 +1,20 @@
 import { useTranslation } from 'react-i18next';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
-import { DetailForm, DetailNameField } from '../shared/DetailForm';
+import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 
 interface EventDetailPanelProps {
   event: { name: string };
-  onUpdate: (patch: Record<string, unknown>) => void;
 }
 
-export function EventDetailPanel({ event, onUpdate }: EventDetailPanelProps) {
+export function EventDetailPanel({ event }: EventDetailPanelProps) {
   const { t } = useTranslation();
 
   return (
-    <DetailPanelShell title={t('detail.titleWithName', { name: event.name })}>
+    <DetailPanelShell>
       <DetailForm>
-        <DetailNameField
-          label={t('detail.fields.name')}
-          value={event.name}
-          onCommit={(name) => onUpdate({ name })}
-        />
+        <DetailReadonlyField label={t('detail.fields.name')} tone="body">
+          {event.name}
+        </DetailReadonlyField>
       </DetailForm>
     </DetailPanelShell>
   );

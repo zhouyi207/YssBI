@@ -1,16 +1,11 @@
 import type { ReactNode } from 'react';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
-import {
-  detailLabelCellClass,
-  detailLabelCellNarrowClass,
-  detailLabelCellWideClass,
-} from './detailStyles';
+import { detailLabelCellClass } from './detailStyles';
 
 interface DetailFieldRowProps {
   label: ReactNode;
   children: ReactNode;
-  labelWidth?: 'narrow' | 'wide' | 'auto';
   labelClassName?: string;
   valueClassName?: string;
   rowClassName?: string;
@@ -19,29 +14,24 @@ interface DetailFieldRowProps {
 export function DetailFieldRow({
   label,
   children,
-  labelWidth = 'auto',
   labelClassName,
   valueClassName,
   rowClassName,
 }: DetailFieldRowProps) {
-  const labelWidthClass =
-    labelWidth === 'wide'
-      ? detailLabelCellWideClass
-      : labelWidth === 'auto'
-        ? detailLabelCellClass
-        : detailLabelCellNarrowClass;
-
   return (
     <div
       className={cn(
-        'grid min-h-10 grid-cols-[max-content_minmax(0,1fr)] items-center gap-2',
+        'grid min-h-10 grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-center gap-2',
         rowClassName,
       )}
     >
-      <Label className={cn(labelWidthClass, 'shrink-0 justify-start', labelClassName)}>
+      <Label
+        title={typeof label === 'string' ? label : undefined}
+        className={cn(detailLabelCellClass, 'min-w-0 w-full truncate justify-start', labelClassName)}
+      >
         {label}
       </Label>
-      <div className={cn('min-w-0', valueClassName)}>{children}</div>
+      <div className={cn('min-w-0 w-full text-right', valueClassName)}>{children}</div>
     </div>
   );
 }

@@ -14,7 +14,6 @@ import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 import { DetailBadge, DetailText } from '../shared/DetailText';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
-import { NodeParameterEditor } from '../node/parameterEditors/NodeParameterEditor';
 
 const EMPTY_PINS: PinData[] = [];
 const EMPTY_PIN_CONNECTIONS: string[][] = [];
@@ -23,11 +22,6 @@ function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
 }
 
-function formatProjectedValue(value: unknown): string {
-  if (value == null) return '—';
-  if (typeof value === 'string') return value;
-  return JSON.stringify(value);
-}
 
 export function selectNodeDetailNode(
   state: GraphEntitiesState,
@@ -43,7 +37,7 @@ interface NodeDetailPanelProps {
 }
 
 export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const node = useGraphDataStore((state) => selectNodeDetailNode(state, graphPath, nodeId));
   const pinObjs = useGraphDataStore(
     useShallow((state) => {
@@ -98,7 +92,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
 
   if (!node) {
     return (
-      <DetailPanelShell title={t('detail.titleNode')}>
+      <DetailPanelShell>
         <DetailText as="div" tone="muted" className="p-4">
           {t('detail.nodeNotFound')}
         </DetailText>
@@ -109,7 +103,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
   const documentation = node.display?.description ?? node.description;
 
   return (
-    <DetailPanelShell title={t('detail.titleWithName', { name: node.title || node.nodeType })}>
+    <DetailPanelShell>
       <DetailForm>
         <DetailReadonlyField
           label={t('detail.fields.name')}
@@ -120,23 +114,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
           {node.display?.title ?? node.title}
         </DetailReadonlyField>
       </DetailForm>
-      {node.parameterEditors && node.parameterEditors.length > 0 && (
-        <DetailCollapsibleSection title={t('detail.parameters')} defaultOpen>
-          <DetailForm>
-            {node.parameterEditors.map((parameter) => (
-              <NodeParameterEditor
-                key={parameter.key}
-                graphPath={graphPath}
-                nodeId={nodeId}
-                locale={i18n.language}
-                parameter={parameter}
-                diagnostics={node.diagnostics ?? []}
-                formatFallback={formatProjectedValue}
-              />
-            ))}
-          </DetailForm>
-        </DetailCollapsibleSection>
-      )}
+
       {node.capabilities && (
         <DetailCollapsibleSection title="Capabilities">
           <div className="flex flex-wrap gap-1.5 px-1 py-2">

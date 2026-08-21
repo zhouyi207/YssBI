@@ -13,9 +13,13 @@ import {
   evaluatePinViewState,
   type ResolvePinViewTargetParams,
 } from '@/features/core/execution/pinViewTarget';
+import { focusResultSidebar } from '@/features/application/editor/rightSidebarActions';
 import { useExecutionStore } from '@/features/core/execution/useExecutionStore';
-import { useEditorStore } from '@/features/core/editor';
-import { ensureDetailVisible } from '@/features/application/editor/ensureDetailVisible';
+import { useResultWorkspaceStore } from '@/features/core/resultWorkspace';
+import {
+  captureProjectIdentity,
+  isCurrentProjectIdentity,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 export async function launchInspectablePresentation(
   descriptor: ResultDescriptor,
@@ -29,24 +33,18 @@ export async function launchInspectablePresentation(
 
 export async function openInspectableResult(
   ref: InspectableResultRef,
-  t: TFunction,
+  _t: TFunction,
   options?: { selectedResultId?: string | null },
 ): Promise<boolean> {
   try {
+    const project = captureProjectIdentity();
     const resolved = await resolveInspectableResultRef(ref, options?.selectedResultId);
-    if (resolved.history) {
-      useExecutionStore.getState().recordPinHistory(resolved.history);
-    }
-    const descriptor = resolved.ref
-      ? await resolveInspectableResult(resolved.ref)
-      : null;
-    if (!descriptor) return false;
-    if (descriptor.presentation.kind === 'plot') {
-      await launchInspectablePresentation(descriptor, t('contextMenu.pin.view'));
-    } else {
-      useEditorStore.getState().inspectResult(descriptor.resultId);
-      ensureDetailVisible();
-    }
+    if (!isCurrentProjectIdentity(project)) return false;
+    if (resolved.history) useExecutionStore.getState().recordPinHistory(resolved.history);
+    const descriptor = resolved.ref ? await resolveInspectableResult(resolved.ref) : null;
+    if (!isCurrentProjectIdentity(project) || !descriptor) return false;
+    useResultWorkspaceStore.getState().openResult(descriptor);
+    focusResultSidebar();
     return true;
   } catch {
     return false;

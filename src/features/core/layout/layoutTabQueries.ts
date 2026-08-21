@@ -66,32 +66,40 @@ export function getEditorGroupGraphSelection(groupId: string): GraphSelection {
   return createGraphSelection(selection.selectedNodeIds, selection.selectedConnectionIds);
 }
 
+export interface UpdatedGraphNodeSelection {
+  groupId: string;
+  nodeIds: string[];
+}
+
 export function updateEditorGroupSelectedNodeIds(
   updater: string[] | ((prev: string[]) => string[]),
   targetGroupId?: string | null,
-): void {
+): UpdatedGraphNodeSelection | null {
   const groupId = resolveEditorGroupId(targetGroupId);
   const panelId = groupId ? activePanelInstanceId(groupId) : undefined;
-  if (!panelId) return;
+  if (!groupId || !panelId) return null;
   const current = getPaneSelection(panelId).selectedNodeIds;
-  useEditorPaneStateStore.getState().setSelectedNodeIds(
-    panelId,
-    typeof updater === 'function' ? updater(current) : updater,
-  );
+  const nodeIds = typeof updater === 'function' ? updater(current) : updater;
+  useEditorPaneStateStore.getState().setSelectedNodeIds(panelId, nodeIds);
+  return { groupId, nodeIds: [...new Set(nodeIds)] };
+}
+
+export interface UpdatedGraphConnectionSelection {
+  groupId: string;
+  connectionIds: string[];
 }
 
 export function updateEditorGroupSelectedConnectionIds(
   updater: string[] | ((prev: string[]) => string[]),
   targetGroupId?: string | null,
-): void {
+): UpdatedGraphConnectionSelection | null {
   const groupId = resolveEditorGroupId(targetGroupId);
   const panelId = groupId ? activePanelInstanceId(groupId) : undefined;
-  if (!panelId) return;
+  if (!groupId || !panelId) return null;
   const current = getPaneSelection(panelId).selectedConnectionIds;
-  useEditorPaneStateStore.getState().setSelectedConnectionIds(
-    panelId,
-    typeof updater === 'function' ? updater(current) : updater,
-  );
+  const connectionIds = typeof updater === 'function' ? updater(current) : updater;
+  useEditorPaneStateStore.getState().setSelectedConnectionIds(panelId, connectionIds);
+  return { groupId, connectionIds: [...new Set(connectionIds)] };
 }
 
 export function clearEditorGroupGraphSelection(targetGroupId?: string | null): void {

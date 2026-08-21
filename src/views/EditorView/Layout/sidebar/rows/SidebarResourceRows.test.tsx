@@ -31,7 +31,7 @@ vi.mock('@dnd-kit/core', () => ({
 vi.mock('@/features/application/nodeCatalog/useLocalizedNodeCatalog', () => ({
   useLocalizedNodeCatalog: () => mocks.catalogState,
 }));
-vi.mock('@/features/core/editor/detail/detailFocusCommands', () => ({ focusDetail: vi.fn() }));
+vi.mock('@/features/application/editor', () => ({ focusDetails: vi.fn() }));
 vi.mock('@/features/application/window', () => ({ openDatabaseEditorWindow: vi.fn() }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),

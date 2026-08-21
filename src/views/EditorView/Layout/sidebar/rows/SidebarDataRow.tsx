@@ -8,7 +8,7 @@ import {
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { findResourceNodeSpawnTemplate } from '@/features/application/editor/canvasDrop';
 import { openDatabaseEditorWindow } from '@/features/application/window';
-import { focusDetail } from '@/features/core/editor/detail/detailFocusCommands';
+import { focusDetails } from '@/features/application/editor';
 import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SidebarListItem, SidebarRowActionButton, SIDEBAR_ROW_ICON_SIZE } from '../../sidebarUi';
@@ -72,7 +72,7 @@ export const SidebarDataRow = memo(function SidebarDataRow({
       label={name}
       onClick={(e) => {
         e.stopPropagation();
-        focusDetail({ kind: 'data', id });
+        focusDetails({ kind: 'data', id });
       }}
       onDoubleClick={(e) => {
         e.stopPropagation();

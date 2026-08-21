@@ -2,7 +2,7 @@ import { Children, isValidElement, type ReactElement } from 'react';
 import { createDataSignaturePin } from '@/shared/types/domain/functionSignaturePin';
 import { describe, expect, it, vi } from 'vitest';
 import { PinEditor } from '../shared/PinEditor';
-import { DetailNameField } from '../shared/DetailForm';
+import { DetailReadonlyField } from '../shared/DetailForm';
 import { FunctionDetailPanel } from './FunctionDetailPanel';
 
 vi.mock('react-i18next', () => ({
@@ -25,8 +25,7 @@ function findAllByType(root: ReactElement, type: unknown): ReactElement[] {
 }
 
 describe('FunctionDetailPanel', () => {
-  it('routes rename and signature edits through separate callbacks', () => {
-    const onRename = vi.fn();
+  it('renders the resource name as read-only while keeping signature edits available', () => {
     const onSignatureChange = vi.fn();
     const element = FunctionDetailPanel({
       fn: {
@@ -34,12 +33,11 @@ describe('FunctionDetailPanel', () => {
         inputs: [createDataSignaturePin('input-1', 'Value', { kind: 'Int64' })],
         outputs: [createDataSignaturePin('output-1', 'Result', { kind: 'Float64' })],
       },
-      onRename,
       onSignatureChange,
     }) as ReactElement;
 
-    const nameField = findAllByType(element, DetailNameField)[0];
-    (nameField.props as { onCommit: (name: string) => void }).onCommit('Renamed');
+    const nameField = findAllByType(element, DetailReadonlyField)[0];
+    expect((nameField.props as { children?: unknown }).children).toBe('Compute');
 
     const pinEditors = findAllByType(element, PinEditor);
     (pinEditors[0].props as { onChange: (pins: unknown[]) => void }).onChange([
@@ -49,7 +47,6 @@ describe('FunctionDetailPanel', () => {
       createDataSignaturePin('output-2', 'Done', { kind: 'Boolean' }),
     ]);
 
-    expect(onRename).toHaveBeenCalledWith('Renamed');
     expect(onSignatureChange).toHaveBeenNthCalledWith(1, {
       inputs: [createDataSignaturePin('input-2', 'Next', { kind: 'String' })],
     });

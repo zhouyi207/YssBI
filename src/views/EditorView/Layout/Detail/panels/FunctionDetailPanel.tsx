@@ -4,7 +4,7 @@ import type { FunctionPinSpec, FunctionSignaturePatch } from '@/shared/types';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { PinEditor } from '../shared/PinEditor';
 
-import { DetailForm, DetailNameField, DetailReadonlyField } from '../shared/DetailForm';
+import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 
 interface FunctionDetailPanelProps {
   fn: {
@@ -13,26 +13,21 @@ interface FunctionDetailPanelProps {
     outputs?: FunctionPinSpec[];
   };
 
-  onRename: (name: string) => void;
   onSignatureChange: (patch: FunctionSignaturePatch) => void;
 }
 
 export function FunctionDetailPanel({
   fn,
-
-  onRename,
   onSignatureChange,
 }: FunctionDetailPanelProps) {
   const { t } = useTranslation();
 
   return (
-    <DetailPanelShell title={t('detail.titleWithName', { name: fn.name })}>
+    <DetailPanelShell>
       <DetailForm>
-        <DetailNameField
-          label={t('detail.fields.name')}
-          value={fn.name}
-          onCommit={onRename}
-        />
+        <DetailReadonlyField label={t('detail.fields.name')} tone="body">
+          {fn.name}
+        </DetailReadonlyField>
         <DetailReadonlyField label={t('detail.fields.type')} className="italic">
           {t('detail.typeLabels.function')}
         </DetailReadonlyField>

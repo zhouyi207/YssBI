@@ -13,7 +13,7 @@ export function NodeDefinitionDetailPanel({ nodeType }: NodeDefinitionDetailPane
   const item = catalog?.items.find((candidate) => candidate.nodeTypeId === nodeType);
 
   return (
-    <DetailPanelShell title={item?.title ?? t('detail.titleNodeDefinition')}>
+    <DetailPanelShell>
       <DetailForm>
         <DetailReadonlyField label={t('detail.fields.type')} tone="muted">
           {nodeType}

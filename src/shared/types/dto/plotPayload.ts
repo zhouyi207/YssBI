@@ -209,7 +209,7 @@ export function parseCorrelationPlot(raw: unknown): CorrelationPlotDTO | null {
 }
 
 
-/** 按 descriptor chart 窄化 plot payload；失败返回 null（由调用方 toast + 空态）。 */
+/** 按 descriptor chart 窄化 plot payload；失败返回 null（由调用方渲染局部 invalid 状态）。 */
 export function parsePlotPayload(chart: PlotChart, raw: unknown): ParsedPlotPayload | null {
   switch (chart) {
     case 'correlogram': {

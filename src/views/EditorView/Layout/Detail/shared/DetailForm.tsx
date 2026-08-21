@@ -4,9 +4,8 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { DetailFieldRow } from './DetailFieldRow';
 import { DetailText } from './DetailText';
-import { detailInlineInputClass, detailTableClass } from './detailStyles';
+import { detailTableClass } from './detailStyles';
 
-type DetailLabelWidth = 'narrow' | 'wide' | 'auto';
 
 interface DetailFormProps {
   children: ReactNode;
@@ -21,12 +20,6 @@ export function DetailForm({ children, className }: DetailFormProps) {
   );
 }
 
-interface DetailNameFieldProps {
-  label: ReactNode;
-  value: string;
-  onCommit: (value: string) => void | Promise<void>;
-  labelWidth?: DetailLabelWidth;
-}
 
 interface DetailCommitInputProps {
   value: string;
@@ -81,27 +74,10 @@ export function DetailCommitInput({
   );
 }
 
-export function DetailNameField({
-  label,
-  value,
-  onCommit,
-  labelWidth,
-}: DetailNameFieldProps) {
-  return (
-    <DetailFieldRow label={label} labelWidth={labelWidth}>
-      <DetailCommitInput
-        className={detailInlineInputClass}
-        value={value}
-        onCommit={onCommit}
-      />
-    </DetailFieldRow>
-  );
-}
 
 interface DetailReadonlyFieldProps {
   label: ReactNode;
   children: ReactNode;
-  labelWidth?: DetailLabelWidth;
   tone?: 'body' | 'muted' | 'smallMuted' | 'mono' | 'accentMono';
   className?: string;
   labelClassName?: string;
@@ -111,7 +87,6 @@ interface DetailReadonlyFieldProps {
 export function DetailReadonlyField({
   label,
   children,
-  labelWidth,
   tone = 'muted',
   className,
   labelClassName,
@@ -120,7 +95,6 @@ export function DetailReadonlyField({
   return (
     <DetailFieldRow
       label={label}
-      labelWidth={labelWidth}
       labelClassName={labelClassName}
       valueClassName={valueClassName}
     >
@@ -128,7 +102,7 @@ export function DetailReadonlyField({
         as="div"
         tone={tone}
         className={cn(
-          'flex min-h-8 min-w-0 items-center justify-start truncate rounded-md border border-transparent px-3 py-1 text-left',
+          'flex min-h-8 min-w-0 items-center justify-end truncate rounded-md border border-transparent px-3 py-1 text-right',
           className,
         )}
       >

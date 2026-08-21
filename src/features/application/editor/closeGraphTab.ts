@@ -6,13 +6,14 @@ import { GraphService } from '@/services/graph/graphService';
 import { closeGraphDocumentPanel } from './graphDocumentCloseLifecycle';
 import { resolveTabDisplayName } from './resolveTabDisplayName';
 import { clearDetailFocusForClosedTab } from '@/features/core/editor/detail/clearDetailFocusForClosedTab';
-import { focusDetailOnActiveGraph } from '@/features/core/editor/detail/detailFocusCommands';
 import { syncVariablesGraphScopeAfterClose } from '@/features/core/editor/detail/variablesGraphScope';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { isGraphResourceDirty, markResourceDirty } from '@/features/core/resource';
+import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { releaseEditorViewport } from '@/features/core/viewport';
 import { editorViewportScope } from '@/features/core/viewport/viewportScope';
 import { switchEditorTab } from './switchEditorTab';
+import { focusDetails } from './rightSidebarActions';
 import { deactivateGraphTab } from './activateGraphTab';
 import { showBlockingIpcError } from './blockingErrorDialog';
 import {
@@ -76,7 +77,12 @@ export async function closeGraphTab(graphPath: string, groupId?: string, skipDir
       const active = editorDockviewPort.getActivePanel();
       const activeTab = active ? readLayoutTab(active) : null;
       if (active && activeTab) await switchEditorTab(active.groupId, activeTab);
-      if (!useEditorStore.getState().detailFocus) focusDetailOnActiveGraph(active?.groupId ?? panel.groupId);
+      if (!useEditorStore.getState().detailFocus) {
+        const fallback = getActiveLayoutTab(active?.groupId ?? panel.groupId);
+        if (fallback?.tab.type === 'event' || fallback?.tab.type === 'function') {
+          focusDetails({ kind: fallback.tab.type, path: fallback.activeTabId });
+        }
+      }
     },
   });
   return true;

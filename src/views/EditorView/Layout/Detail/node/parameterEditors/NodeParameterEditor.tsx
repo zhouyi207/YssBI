@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { setNodeParameters } from '@/features/application/editor/setNodeParameters';
+import type { DataType } from '@/shared/types/domain/dataType';
 import type {
   DiagnosticDto,
   ParameterEditorDto,
@@ -12,10 +13,6 @@ import { formatInlineUserError } from '@/features/application/userErrorSummary';
 import { DetailReadonlyField } from '../../shared/DetailForm';
 import { DetailFieldRow } from '../../shared/DetailFieldRow';
 import { detailInlineInputClass } from '../../shared/detailStyles';
-import {
-  inlineNumberErrorMessage,
-  parseInlineNumber,
-} from '../../../../Nodes/InlineParameterEditor';
 import {
   FilterPredicateEditor,
   ProjectColumnsEditor,
@@ -34,6 +31,42 @@ function projectedDraft(parameter: ParameterEditorDto): string {
   return parameter.value === null || parameter.value === undefined
     ? ''
     : String(parameter.value);
+}
+
+type NumberDraftError =
+  | 'required'
+  | 'notFinite'
+  | 'notInteger'
+  | 'outOfRange'
+  | 'unsupportedType';
+
+function parseNumberDraft(
+  draft: string,
+  valueType: DataType | null,
+): { ok: true; value: number } | { ok: false; error: NumberDraftError } {
+  const trimmed = draft.trim();
+  if (trimmed.length === 0) return { ok: false, error: 'required' };
+  const value = Number(trimmed);
+  if (!Number.isFinite(value)) return { ok: false, error: 'notFinite' };
+  if (valueType?.kind === 'Int64') {
+    if (!Number.isInteger(value)) return { ok: false, error: 'notInteger' };
+    if (!Number.isSafeInteger(value)) return { ok: false, error: 'outOfRange' };
+  }
+  if (valueType?.kind !== 'Int64' && valueType?.kind !== 'Float64') {
+    return { ok: false, error: 'unsupportedType' };
+  }
+  return { ok: true, value };
+}
+
+function numberDraftErrorMessage(error: NumberDraftError, t: TFunction): string {
+  const keys = {
+    required: 'notifications.parameter.enterNumber',
+    notFinite: 'notifications.parameter.enterFiniteNumber',
+    notInteger: 'notifications.parameter.enterInteger',
+    outOfRange: 'notifications.parameter.enterSupportedInteger',
+    unsupportedType: 'notifications.parameter.unsupportedNumericType',
+  } as const;
+  return t(keys[error]);
 }
 
 
@@ -267,9 +300,9 @@ function OrdinaryValueEditor({ parameter, pending, errors, errorId: providedErro
   const submit = (value: unknown) => onCommit(value, { onRejected: reset });
   const commitDraft = (resetInvalid = false) => {
     if (parameter.editor === 'number') {
-      const parsed = parseInlineNumber(draft, parameter.valueType);
+      const parsed = parseNumberDraft(draft, parameter.valueType);
       if (!parsed.ok) {
-        setParseError(inlineNumberErrorMessage(parsed.error, t));
+        setParseError(numberDraftErrorMessage(parsed.error, t));
         if (resetInvalid) reset();
         return;
       }
@@ -310,7 +343,7 @@ function OrdinaryValueEditor({ parameter, pending, errors, errorId: providedErro
         {parameter.editor === 'text' && parameter.multiline ? (
           <textarea
             {...sharedProps}
-            className="min-h-20 w-full rounded-md border border-border bg-input/30 px-3 py-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
+            className="min-h-20 w-full rounded-md border border-border bg-input/30 px-3 py-2 text-left text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50"
           />
         ) : (
           <Input

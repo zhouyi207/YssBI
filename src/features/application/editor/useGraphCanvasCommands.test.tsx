@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useEditorStore } from '@/features/core/editor';
 import { useGraphCanvasCommands } from './useGraphCanvasCommands';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -94,6 +95,12 @@ function installCanvas(groupId: string, offset = 0): HTMLElement {
 describe('useGraphCanvasCommands', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.updateSelectedNodeIds.mockReset();
+    mocks.updateSelectedNodeIds.mockReturnValue({
+      groupId: 'group-a',
+      nodeIds: ['node-a', 'node-b'],
+    });
+    useEditorStore.setState({ detailFocus: null, rightSidebarTab: 'details' });
     document.body.replaceChildren();
     mocks.activeGroupId = 'group-a';
     mocks.activeTab = { activeTabId: 'events/main.yssbi-event', tab: { type: 'event' } };
@@ -119,6 +126,28 @@ describe('useGraphCanvasCommands', () => {
   it('returns true after selecting eligible nodes in graph order', () => {
     expect(commands.selectAllNodes()).toBe(true);
     expect(mocks.updateSelectedNodeIds).toHaveBeenCalledWith(['node-a', 'node-b'], 'group-a');
+  });
+
+  it('returns false without focusing Inspect when the selection write cannot settle', () => {
+    mocks.updateSelectedNodeIds.mockReturnValueOnce(null);
+    useEditorStore.setState({
+      rightSidebarTab: 'result',
+      detailFocus: {
+        kind: 'node',
+        id: 'stale-node',
+        graphPath: 'events/main.yssbi-event',
+      },
+    });
+
+    expect(commands.selectAllNodes()).toBe(false);
+    expect(useEditorStore.getState()).toMatchObject({
+      rightSidebarTab: 'result',
+      detailFocus: {
+        kind: 'node',
+        id: 'stale-node',
+        graphPath: 'events/main.yssbi-event',
+      },
+    });
   });
 
   it.each([

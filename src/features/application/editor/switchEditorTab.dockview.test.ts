@@ -16,9 +16,6 @@ vi.mock('@/features/core/dockview', () => ({
     findPanelsByResource: mocks.findPanelsByResource,
   },
 }));
-vi.mock('@/features/core/editor', () => ({
-  useEditorStore: { getState: () => ({ setDetailFocus: vi.fn() }) },
-}));
 vi.mock('@/features/core/graphSession/graphSessionStore', () => ({
   useGraphSessionStore: {
     getState: () => ({
@@ -34,7 +31,7 @@ vi.mock('./activateGraphTab', () => ({ activateGraphTab: vi.fn(async () => true)
 vi.mock('@/features/core/editor/detail/variablesGraphScope', () => ({
   syncVariablesGraphScopeFromActiveTab: vi.fn(),
 }));
-vi.mock('./ensureDetailVisible', () => ({ ensureDetailVisible: vi.fn() }));
+vi.mock('./rightSidebarActions', () => ({ focusDetails: vi.fn() }));
 
 import { focusEditorGroupSync, synchronizeActiveEditorTab } from './switchEditorTab';
 

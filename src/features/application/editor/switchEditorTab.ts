@@ -1,12 +1,11 @@
-import { useEditorStore } from '@/features/core/editor';
 import { syncVariablesGraphScopeFromActiveTab } from '@/features/core/editor/detail/variablesGraphScope';
 import { editorDockviewPort } from '@/features/core/dockview';
 import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import type { LayoutTab } from '@/shared/types/ui';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { activateGraphTab } from './activateGraphTab';
-import { ensureDetailVisible } from './ensureDetailVisible';
 import { suspendEditorGroupGraphSession } from './graphSessionLifecycle';
+import { focusDetails } from './rightSidebarActions';
 
 let editorGroupSessionChain: Promise<void> = Promise.resolve();
 let latestTabSwitchRequest = 0;
@@ -48,8 +47,7 @@ async function synchronizeTabSession(
   tab: LayoutTab,
 ): Promise<boolean> {
   if (tab.type === 'event' || tab.type === 'function') {
-    useEditorStore.getState().setDetailFocus({ kind: tab.type, path: tab.id });
-    ensureDetailVisible();
+    focusDetails({ kind: tab.type, path: tab.id });
     const loaded = await activateGraphTab(tab.id, groupId);
     if (!loaded || request !== latestTabSwitchRequest) return false;
     syncVariablesGraphScopeFromActiveTab();
@@ -57,8 +55,7 @@ async function synchronizeTabSession(
   }
 
   if (tab.type === 'worksheet') {
-    useEditorStore.getState().setDetailFocus({ kind: 'worksheet', worksheetPath: tab.id });
-    ensureDetailVisible();
+    focusDetails({ kind: 'worksheet', worksheetPath: tab.id });
     const sessionStore = useGraphSessionStore.getState();
     if (sessionStore.getFocusedGroupId() === groupId) sessionStore.clearFocusedSession(groupId);
   }

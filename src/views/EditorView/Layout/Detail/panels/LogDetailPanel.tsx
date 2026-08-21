@@ -36,7 +36,7 @@ export function LogDetailPanel({ log }: { log: DiagnosticRecordDto }) {
   const hasFields = Object.keys(log.fields).length > 0;
 
   return (
-    <DetailPanelShell title={t('detail.titleLog')}>
+    <DetailPanelShell>
       <DetailForm className="select-text">
         <DetailReadonlyField label={t('detail.fields.time')} tone="mono" className="text-foreground">
           {log.timestamp}
@@ -54,12 +54,12 @@ export function LogDetailPanel({ log }: { log: DiagnosticRecordDto }) {
           {String(log.sequence)}
         </DetailReadonlyField>
         <DetailFieldRow label={t('detail.fields.level')}>
-          <div className="flex min-h-8 items-center">
+          <div className="flex min-h-8 items-center justify-end">
             <DetailBadge className={getLevelColor(log.level)}>{log.level}</DetailBadge>
           </div>
         </DetailFieldRow>
         <DetailFieldRow label={t('detail.fields.type')}>
-          <div className="flex min-h-8 items-center">
+          <div className="flex min-h-8 items-center justify-end">
             <DetailBadge className={getDomainColor(log.domain)}>{domainLabel}</DetailBadge>
           </div>
         </DetailFieldRow>

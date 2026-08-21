@@ -24,8 +24,8 @@ vi.mock('@/components/ui/tooltip', () => ({
 vi.mock('@/features/application/editor/openGraphInEditor', () => ({
   openGraphInEditor: vi.fn(),
 }));
-vi.mock('@/features/core/editor/detail/detailFocusCommands', () => ({
-  focusDetail: vi.fn(),
+vi.mock('@/features/application/editor', () => ({
+  focusDetails: vi.fn(),
 }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),

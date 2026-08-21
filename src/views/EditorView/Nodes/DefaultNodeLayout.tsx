@@ -1,13 +1,10 @@
 import React, { useCallback } from "react";
-import { useTranslation } from "react-i18next";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel } from "@/shared/types/domain";
 import type { UINode } from "@/shared/types/ui";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";
-import { DEFAULT_LANGUAGE } from "@/shared/types/settings/LanguageSettings";
-import { InlineParameterEditor } from "./InlineParameterEditor";
 
 interface DefaultNodeLayoutProps {
   node: UINode;
@@ -21,6 +18,12 @@ interface DefaultNodeLayoutProps {
   onPinPointerDown?: (e: React.PointerEvent, pin: PinModel) => void;
   onPinValueChange?: (pinId: string, value: unknown) => void;
 }
+
+const formatInlineSummary = (value: unknown): string => {
+  if (value == null) return '—';
+  const rendered = typeof value === 'string' ? value : JSON.stringify(value);
+  return rendered.length <= 48 ? rendered : `${rendered.slice(0, 47)}…`;
+};
 
 
 /**
@@ -42,8 +45,6 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
   onPinPointerDown,
   onPinValueChange,
 }) => {
-  const { i18n } = useTranslation();
-  const locale = i18n.resolvedLanguage || i18n.language || DEFAULT_LANGUAGE;
   const inlineParameters = (node.parameterEditors ?? [])
     .filter((parameter) => parameter.presentation === 'inlineAndDetail');
   const inputsExec = node.inputs.filter(isExecPin);
@@ -90,18 +91,12 @@ export const DefaultNodeLayout: React.FC<DefaultNodeLayoutProps> = ({
 
       {inlineParameters.length > 0 ? (
         <div className="flex flex-col gap-1 border-b border-[var(--node-border)] px-2 py-1.5">
-          {inlineParameters.map((parameter) => graphPath ? (
-            <InlineParameterEditor
-              key={parameter.key}
-              graphPath={graphPath}
-              nodeId={node.id}
-              locale={locale}
-              parameter={parameter}
-            />
-          ) : (
+          {inlineParameters.map((parameter) => (
             <div key={parameter.key} className="flex items-center justify-between gap-2 text-xs">
-              <span className="truncate">{parameter.display.title}</span>
-              <span className="truncate opacity-70">{String(parameter.value ?? '')}</span>
+              <span className="min-w-0 flex-1 truncate">{parameter.display.title}</span>
+              <span className="max-w-28 truncate opacity-70">
+                {formatInlineSummary(parameter.value)}
+              </span>
             </div>
           ))}
         </div>

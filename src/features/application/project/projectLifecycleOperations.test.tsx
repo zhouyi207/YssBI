@@ -9,6 +9,8 @@ import {
   resetProjectLifecycleReceiptHandlerForTests,
 } from '@/features/application/projectLifecycleReceipt';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useEditorStore } from '@/features/core/editor';
+import { useResultWorkspaceStore } from '@/features/core/resultWorkspace';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { ProjectLifecycleCommittedHandler } from '@/features/core/sync/handlers/ProjectEventHandler';
 import { ProjectService } from '@/services/project/projectService';
@@ -18,6 +20,7 @@ import type {
   LifecycleMutationResultDto,
   ProjectRecordRow,
 } from '@/shared/types/dto/project';
+import type { ResultDescriptor } from '@/shared/types/dto/result';
 import { useProjectOperations } from '@/features/application/editor/useProjectOperations';
 import { useProjectPicker } from './useProjectPicker';
 import { saveAllDirtyGraphs } from '@/features/application/editor/saveAllDirtyGraphs';
@@ -206,6 +209,70 @@ describe('project lifecycle initiating operations', () => {
     resetCoreApplicationTestPorts();
   });
 
+
+  it('resets project-scoped right sidebar state after authoritative replacement', async () => {
+    const direct = deferred<LifecycleMutationResultDto | null>();
+    const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
+    vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-b/metadata.yssbi');
+    vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({ databases: {}, variables: {} });
+    vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue({
+      projectInstanceId: 'project-b',
+      publicationRevision: 0,
+      history: { canUndo: false, canRedo: false },
+      projectName: 'Project B',
+      graphs: [],
+      variables: [],
+      worksheets: [],
+      databases: [],
+      exportTime: '',
+    });
+    useResultWorkspaceStore.getState().openResult({
+      resultId: 'stale-result',
+      state: { kind: 'ready' },
+      provenance: {
+        runId: 'stale-run',
+        activationId: 'stale-activation',
+        graphPath: 'events/Stale.yssbi-event',
+        graphRevision: '1',
+        nodeId: 'stale-node',
+        output: null,
+        createdAtMs: '1787270400000',
+      },
+      presentation: { kind: 'inspector' },
+      valueKind: 'scalar',
+      metadata: null,
+      totalCount: null,
+      title: 'Stale result',
+    } satisfies ResultDescriptor);
+    useEditorStore.setState({
+      rightSidebarTab: 'result',
+      detailFocus: {
+        kind: 'node',
+        id: 'stale-node',
+        graphPath: 'events/Stale.yssbi-event',
+      },
+    });
+
+    let completion!: Promise<void>;
+    await act(async () => {
+      completion = operations.saveGraphAs();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(saveAs).toHaveBeenCalledOnce());
+    await act(async () => {
+      direct.resolve(saveAsReceipt(saveAs.mock.calls[0][1]));
+      await completion;
+    });
+
+    const resultWorkspace = useResultWorkspaceStore.getState();
+    expect(resultWorkspace.order).toEqual([]);
+    expect(resultWorkspace.activeTabKey).toBeNull();
+    expect(resultWorkspace.tabs).toEqual({});
+    expect(useEditorStore.getState()).toMatchObject({
+      rightSidebarTab: 'details',
+      detailFocus: null,
+    });
+  });
 
   it('gives a mismatching direct save-as DTO zero initiating effects', async () => {
     const direct = deferred<LifecycleMutationResultDto | null>();

@@ -4,7 +4,6 @@ import {
   getActiveLayoutTab,
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
-  updateEditorGroupSelectedNodeIds,
 } from '@/features/core/layout/layoutTabQueries';
 import type { GraphSelection } from '@/features/core/layout';
 
@@ -42,9 +41,13 @@ function selectionMatches(
     && [...actual.connectionIds].every((id) => expected.connectionIds.has(id));
 }
 
-function restoreGraphSelection(groupId: string, selection: GraphSelection): void {
+function restoreGraphSelection(
+  groupId: string,
+  selection: GraphSelection,
+  setSelectedNodeIds: UseCanvasInteractionProps['setSelectedNodeIds'],
+): void {
   if (selection.nodeIds.size > 0) {
-    updateEditorGroupSelectedNodeIds([...selection.nodeIds], groupId);
+    setSelectedNodeIds([...selection.nodeIds], groupId);
   } else {
     updateEditorGroupSelectedConnectionIds([...selection.connectionIds], groupId);
   }
@@ -169,7 +172,7 @@ export function useCanvasInteraction({
         groupId,
       );
     } else {
-      restoreGraphSelection(groupId, selection.before);
+      restoreGraphSelection(groupId, selection.before, setSelectedNodeIdsRef.current);
     }
     return outcome;
   }, [handlers]);

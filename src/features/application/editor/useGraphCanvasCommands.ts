@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import type { EditorSessionCanvasActions } from './editorSessionTypes';
+import { focusCanvasSelection } from './rightSidebarActions';
 import { collectCanvasNodeWorldBounds } from '@/features/core/canvas';
 import { useGraphDataStore } from '@/features/core/dataStore';
 import { editorDockviewPort } from '@/features/core/dockview';
@@ -77,7 +78,12 @@ export function useGraphCanvasCommands(): EditorSessionCanvasActions {
         (nodeId) => bucket.nodes[nodeId]?.capabilities?.managed === false,
       );
       if (selectableNodeIds.length === 0) return false;
-      updateEditorGroupSelectedNodeIds(selectableNodeIds, context.groupId);
+      const update = updateEditorGroupSelectedNodeIds(selectableNodeIds, context.groupId);
+      if (!update) return false;
+      const active = getActiveLayoutTab(update.groupId);
+      if (active?.tab.type === 'event' || active?.tab.type === 'function') {
+        focusCanvasSelection(active.activeTabId, update.nodeIds);
+      }
       return true;
     },
 

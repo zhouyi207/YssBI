@@ -10,7 +10,7 @@ import type { WorksheetChartType, WorksheetDocument } from '@/shared/types/domai
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailFieldRow } from '../shared/DetailFieldRow';
 import { DetailColumnList } from '../shared/DetailColumnList';
-import { DetailForm, DetailNameField } from '../shared/DetailForm';
+import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 import { DetailSectionHeader } from '../shared/DetailText';
 import {
   captureProjectIdentity,
@@ -56,14 +56,12 @@ interface WorksheetDetailPanelProps {
   worksheetPath: string;
   name: string;
   document: WorksheetDocument;
-  onRename: (name: string) => void | Promise<void>;
 }
 
 export function WorksheetDetailPanel({
   worksheetPath,
   name,
   document,
-  onRename,
 }: WorksheetDetailPanelProps) {
   const { t } = useTranslation();
   const { dataframes } = useEditorSessionResources();
@@ -108,16 +106,13 @@ export function WorksheetDetailPanel({
   const encodingLabelClass = 'align-top pt-2';
 
   return (
-    <DetailPanelShell title={t('detail.titleWithName', { name })}>
+    <DetailPanelShell>
       <DetailForm>
-        <DetailNameField
-          label={t('detail.fields.name')}
-          value={name}
-          onCommit={onRename}
-        />
+        <DetailReadonlyField label={t('detail.fields.name')} tone="body">
+          {name}
+        </DetailReadonlyField>
         <DetailFieldRow
           label={t('chartsSidebar.dataset')}
-          labelWidth="wide"
           labelClassName={encodingLabelClass}
         >
           <Select
@@ -128,7 +123,6 @@ export function WorksheetDetailPanel({
         </DetailFieldRow>
         <DetailFieldRow
           label={t('chartsSidebar.chartType')}
-          labelWidth="wide"
           labelClassName={encodingLabelClass}
         >
           <Select
@@ -143,7 +137,6 @@ export function WorksheetDetailPanel({
         {document.chartType === 'histogram' ? (
           <DetailFieldRow
             label={t('chartsSidebar.encodingY')}
-            labelWidth="wide"
             labelClassName={encodingLabelClass}
           >
             <Select
@@ -156,7 +149,6 @@ export function WorksheetDetailPanel({
           <>
             <DetailFieldRow
               label={t('chartsSidebar.encodingX')}
-              labelWidth="wide"
               labelClassName={encodingLabelClass}
             >
               <Select
@@ -167,7 +159,6 @@ export function WorksheetDetailPanel({
             </DetailFieldRow>
             <DetailFieldRow
               label={t('chartsSidebar.encodingY')}
-              labelWidth="wide"
               labelClassName={encodingLabelClass}
             >
               <Select

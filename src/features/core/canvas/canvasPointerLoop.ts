@@ -8,7 +8,6 @@ import {
   type CanvasInteractionScope,
 } from '@/features/core/graphInteraction/graphInteractionStore';
 import { commitViewport, setViewportLive, editorViewportScope } from '@/features/core/viewport';
-import { applyCanvasDetailFocus } from '@/features/core/editor/detail/detailFocusCommands';
 import { executeCommand } from '@/features/core/history';
 import type { EditorViewport } from '@/features/core/viewport';
 import { logger } from '@/utils/appLogger';
@@ -332,10 +331,8 @@ function installPointerLoop(): () => void {
         || Math.abs(session.currentY - session.startY) > CONTEXT_MENU_MOVE_THRESHOLD_PX;
       if (moved) {
         deps.setSelectedNodeIds(ids, session.groupId);
-        applyCanvasDetailFocus({ type: 'box-select', groupId: session.groupId, selectedIds: ids });
       } else {
         deps.setSelectedNodeIds([...session.baseNodeIds], session.groupId);
-        applyCanvasDetailFocus({ type: 'blank-click', groupId: session.groupId });
       }
       cancelCanvasInteraction(graphPath, groupId);
     } else if (interaction.type === 'draggingNodes') {
@@ -350,8 +347,6 @@ function installPointerLoop(): () => void {
             'CanvasInteraction',
           ))
           .finally(() => store.clearPositionOverrides(graphPath, session.nodeIds));
-      } else {
-        applyCanvasDetailFocus({ type: 'node-click', groupId: session.groupId, nodeId: session.nodeId });
       }
       store.finishInteraction(graphPath, groupId);
     }

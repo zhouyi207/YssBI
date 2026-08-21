@@ -55,6 +55,11 @@ export { useCanvasWheelZoom } from './useCanvasWheelZoom';
 export { useCanvasDrop } from './useCanvasDrop';
 export type { VariableDropMenu } from './canvasDrop';
 export { useCanvasOverlayHandlers } from './useCanvasOverlayHandlers';
+export {
+  focusCanvasSelection,
+  focusDetails,
+  focusResultSidebar,
+} from './rightSidebarActions';
 export { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 export {
   isPinPreviewActionAvailable,

@@ -8,7 +8,7 @@ import { dataTypeKind, dataTypeFromKey, isPrimitiveType, isComplexType, VARIABLE
 import { dataValueToRaw, dataValueFromRaw } from '@/shared/types/domain/dataValue';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailFieldRow } from '../shared/DetailFieldRow';
-import { DetailCommitInput, DetailForm, DetailNameField } from '../shared/DetailForm';
+import { DetailCommitInput, DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 import { DetailText } from '../shared/DetailText';
 import { detailInlineInputClass } from '../shared/detailStyles';
 import { VariableValueEditorModal } from '../variableValue/VariableValueEditorModal';
@@ -38,13 +38,11 @@ export function VariableDetailPanel({
   );
 
   return (
-    <DetailPanelShell title={t('detail.titleWithName', { name: variable.name })}>
+    <DetailPanelShell>
       <DetailForm>
-        <DetailNameField
-          label={t('detail.fields.name')}
-          value={variable.name}
-          onCommit={(name) => onUpdate({ name })}
-        />
+        <DetailReadonlyField label={t('detail.fields.name')} tone="body">
+          {variable.name}
+        </DetailReadonlyField>
         <DetailFieldRow label={t('detail.fields.type')}>
           <Select
             value={dataTypeKind(variable.dataType)}
@@ -55,7 +53,7 @@ export function VariableDetailPanel({
         {variable.dataType.kind !== 'Array' && isPrimitiveType(variable.dataType) && (
           <DetailFieldRow label={t('detail.fields.value')}>
             {variable.dataType.kind === 'Boolean' ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-end gap-2">
                 <Checkbox
                   id={`variable-bool-${variable.id}`}
                   checked={!!dataValueToRaw(variable.dataValue)}

@@ -10,6 +10,10 @@ vi.mock('@/services/result/resultService', () => ({
   },
 }));
 
+vi.mock('@/utils/appLogger', () => ({
+  logger: { app: { error: vi.fn() } },
+}));
+
 import { ResultService } from '@/services/result/resultService';
 
 const provenance = {

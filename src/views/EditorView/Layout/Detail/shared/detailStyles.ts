@@ -6,10 +6,6 @@ export const detailTableClass = 'text-sm text-foreground';
 
 export const detailLabelCellClass = 'text-xs font-medium text-muted-foreground';
 
-export const detailLabelCellNarrowClass = `${detailLabelCellClass} w-20`;
-
-export const detailLabelCellWideClass = `${detailLabelCellClass} w-24`;
-
 export const detailValueMutedClass = 'text-muted-foreground';
 
 export const detailBodyTextClass = 'text-sm leading-relaxed text-foreground';
@@ -39,7 +35,7 @@ export const detailListItemClass =
   'flex items-center justify-between rounded-lg border border-border/60 bg-card px-3 py-2 text-sm text-foreground shadow-xs transition-colors hover:bg-accent/30';
 
 export const detailInlineInputClass =
-  'h-8 bg-background/60 text-sm font-medium';
+  'h-8 w-full bg-background/60 text-left text-sm font-medium';
 
 export const detailInlineInputSmallClass =
   'h-8 flex-1 bg-background/60 text-xs shadow-none';

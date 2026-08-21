@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { focusDetails } from '@/features/application/editor';
 import { useDiagnosticSubscription } from '@/features/application/log';
 import { useEditorStore } from '@/features/core/editor';
 import { logBuffer } from '@/features/core/log/logBuffer';
@@ -66,7 +67,7 @@ export function useLogPanelController(variant: LogPanelVariant): LogPanelControl
   const handleSelectLog = useCallback((index: number) => {
     const log = filteredLogs[index] ?? null;
     setSelectedLog(log);
-    if (log) useEditorStore.getState().setDetailFocus({ kind: 'log' });
+    if (log) focusDetails({ kind: 'log' });
     else useEditorStore.getState().clearDetailFocus();
   }, [filteredLogs, setSelectedLog]);
 

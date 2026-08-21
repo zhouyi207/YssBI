@@ -42,11 +42,10 @@ describe('worksheet detail metadata lifecycle ownership', () => {
     projectPublicationCoordinator.startProject(projectInstanceId, 0);
   });
 
-  it('commits the separately supplied Rust name through rename', async () => {
+  it('renders the separately supplied Rust name as read-only metadata', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const root = createRoot(host);
-    const onRename = vi.fn();
 
     act(() => root.render(
       <WorksheetDetailPanel
@@ -59,25 +58,11 @@ describe('worksheet detail metadata lifecycle ownership', () => {
           chartType: 'scatter',
           encodings: {},
         }}
-        onRename={onRename}
       />,
     ));
-    const nameInput = host.querySelector('input[type="text"]') as HTMLInputElement;
-    expect(nameInput.value).toBe('Rust supplied label');
 
-    act(() => {
-      const setValue = Object.getOwnPropertyDescriptor(
-        HTMLInputElement.prototype,
-        'value',
-      )?.set;
-      setValue?.call(nameInput, 'Renamed by user');
-      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    act(() => {
-      nameInput.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
-    });
-
-    expect(onRename).toHaveBeenCalledWith('Renamed by user');
+    expect(host.textContent).toContain('Rust supplied label');
+    expect(host.querySelector('input[type="text"]')).toBeNull();
     act(() => root.unmount());
     host.remove();
   });

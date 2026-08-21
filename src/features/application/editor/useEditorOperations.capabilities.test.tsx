@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearProjectLifecycle, startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import { useEditorStore } from '@/features/core/editor';
 import type { ClipboardSubgraphDto } from '@/shared/types/dto/clipboardSubgraph';
 import type { GraphMutationCommandResult } from '@/features/core/history/types';
 import { useEditorOperations } from './useEditorOperations';
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   writeGraphClipboard: vi.fn(),
   readGraphClipboard: vi.fn(),
   executeCommandWithResult: vi.fn(),
+  updateSelectedConnectionIds: vi.fn(),
   graphError: vi.fn(),
 }));
 
@@ -38,7 +40,7 @@ vi.mock('@/features/core/dockview', () => ({
 vi.mock('@/features/core/layout', () => ({
   getActiveLayoutTab: (groupId: string) => {
     const activeTabId = mocks.activeResourceByGroup.get(groupId);
-    return activeTabId ? { activeTabId, tab: { id: activeTabId } } : null;
+    return activeTabId ? { activeTabId, tab: { id: activeTabId, type: 'event' } } : null;
   },
   getEditorGroupGraphSelection: (groupId: string) => ({
     nodeIds: new Set(mocks.selectionByGroup.get(groupId) ?? []),
@@ -48,7 +50,7 @@ vi.mock('@/features/core/layout', () => ({
     const previous = mocks.selectionByGroup.get(groupId) ?? [];
     mocks.selectionByGroup.set(groupId, typeof value === 'function' ? value(previous) : value);
   },
-  updateEditorGroupSelectedConnectionIds: vi.fn(),
+  updateEditorGroupSelectedConnectionIds: mocks.updateSelectedConnectionIds,
 }));
 vi.mock('@/features/core/dataStore/graphNodeSelectors', () => ({
   canCopyNode: mocks.canCopyNode,
@@ -135,6 +137,7 @@ describe('useEditorOperations authoritative subgraph workflows', () => {
     mocks.writeGraphClipboard.mockReset();
     mocks.readGraphClipboard.mockReset();
     mocks.executeCommandWithResult.mockReset();
+    mocks.updateSelectedConnectionIds.mockReset();
     mocks.graphError.mockReset();
     clearProjectLifecycle();
     startProjectLifecycle('project-a');
@@ -144,6 +147,8 @@ describe('useEditorOperations authoritative subgraph workflows', () => {
     mocks.hookState.activeTabId = graphPath;
     mocks.hookState.groupId = 'group-a';
     mocks.hookState.selectedNodeIds = ['node-a', 'node-b'];
+    mocks.hookState.selectedConnectionIds = [];
+    useEditorStore.setState({ detailFocus: null, rightSidebarTab: 'details' });
     mocks.canCopyNode.mockReturnValue(true);
     mocks.canDeleteNode.mockReturnValue(true);
     mocks.exportEditorSubgraph.mockResolvedValue(snapshot);
@@ -164,6 +169,28 @@ describe('useEditorOperations authoritative subgraph workflows', () => {
 
   it('enables paste and duplicate capabilities', () => {
     expect(EDITOR_MUTATION_CAPABILITIES).toMatchObject({ pasteNodes: true, duplicateNodes: true });
+  });
+
+  it('coordinates connection selection with Inspect and clears stale node focus', () => {
+    mocks.updateSelectedConnectionIds.mockReturnValueOnce({
+      groupId: 'group-a',
+      connectionIds: ['connection-a'],
+    });
+    useEditorStore.setState({
+      rightSidebarTab: 'result',
+      detailFocus: { kind: 'node', id: 'stale-node', graphPath },
+    });
+
+    act(() => operations.setSelectedConnectionIds(['connection-a', 'connection-a'], 'group-a'));
+
+    expect(mocks.updateSelectedConnectionIds).toHaveBeenCalledWith(
+      ['connection-a', 'connection-a'],
+      'group-a',
+    );
+    expect(useEditorStore.getState()).toMatchObject({
+      rightSidebarTab: 'inspect',
+      detailFocus: null,
+    });
   });
 
   it('copies by awaiting backend export before system clipboard write', async () => {

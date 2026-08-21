@@ -31,6 +31,7 @@ import {
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { readGraphClipboard, writeGraphClipboard } from '@/services/clipboard';
 import { disconnectConnectionsById } from './edgeOperations';
+import { focusCanvasSelection } from './rightSidebarActions';
 
 const DUPLICATE_SUBGRAPH_OFFSET = { x: 40, y: 40 } as const;
 const EDITOR_OPERATIONS_LOG_SOURCE = 'EditorOperations';
@@ -113,14 +114,24 @@ export function useEditorOperations() {
 
   const setSelectedConnectionIds = useCallback(
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
-      updateEditorGroupSelectedConnectionIds(updater, targetGroupId);
+      const update = updateEditorGroupSelectedConnectionIds(updater, targetGroupId);
+      if (!update) return;
+      const active = getActiveLayoutTab(update.groupId);
+      if (active?.tab.type === 'event' || active?.tab.type === 'function') {
+        focusCanvasSelection(active.activeTabId, []);
+      }
     },
     [],
   );
 
   const setSelectedNodeIds = useCallback(
     (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
-      updateEditorGroupSelectedNodeIds(updater, targetGroupId);
+      const update = updateEditorGroupSelectedNodeIds(updater, targetGroupId);
+      if (!update) return;
+      const active = getActiveLayoutTab(update.groupId);
+      if (active?.tab.type === 'event' || active?.tab.type === 'function') {
+        focusCanvasSelection(active.activeTabId, update.nodeIds);
+      }
     },
     [],
   );

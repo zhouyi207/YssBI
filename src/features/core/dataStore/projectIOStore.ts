@@ -28,7 +28,10 @@ import {
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
 } from '@/features/core/variable/variableCatalog';
-import { resetClientProjectState } from './projectClientReset';
+import {
+  resetClientProjectState,
+  resetProjectScopedRightSidebarState,
+} from './projectClientReset';
 import { useGraphMetaStore } from './graphMetaStore';
 import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
@@ -312,6 +315,7 @@ export function commitPreparedAuthoritativeProjectLoad(
 
   commitProjectLoadStep('editor dock', () => { void editorDockviewPort.reset(); });
   commitProjectLoadStep('editor pane state', () => useEditorPaneStateStore.getState().reset());
+  commitProjectLoadStep('project-scoped right sidebar', resetProjectScopedRightSidebarState);
   commitProjectLoadStep('detail focus', () => useEditorStore.setState({
     detailFocus: prepared.storeState.detailFocus,
   }));

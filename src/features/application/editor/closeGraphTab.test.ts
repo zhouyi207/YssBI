@@ -54,8 +54,8 @@ vi.mock('@/features/core/editor/detail/clearDetailFocusForClosedTab', () => ({
   clearDetailFocusForClosedTab: vi.fn(),
 }));
 
-vi.mock('@/features/core/editor/detail/detailFocusCommands', () => ({
-  focusDetailOnActiveGraph: vi.fn(),
+vi.mock('./rightSidebarActions', () => ({
+  focusDetails: vi.fn(),
 }));
 
 vi.mock('@/features/core/editor/detail/variablesGraphScope', () => ({
