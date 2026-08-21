@@ -1,4 +1,6 @@
+import { createElement } from 'react';
 import type { TFunction } from 'i18next';
+import { VscCheckAll, VscClearAll, VscClose, VscCloseAll } from 'react-icons/vsc';
 import { isGraphResourceDirty } from '@/features/core/resource';
 import type { ContextMenuSection } from '@/shared/ui/contextMenu';
 import type { LayoutTab } from '@/shared/types/ui';
@@ -26,31 +28,39 @@ export function buildTabContextMenuSections(
   t: TFunction,
   actions?: TabContextMenuActions,
 ): ContextMenuSection[] {
-  const sections: ContextMenuSection[] = [{
-    items: [
-      {
+  const sections: ContextMenuSection[] = [
+    {
+      items: [{
         id: 'close',
         label: t('tabBar.contextMenu.close'),
+        icon: createElement(VscClose, { size: 12 }),
         onClick: () => void closeTab(groupId, tab.id),
-      },
-      {
-        id: 'close-others',
-        label: t('tabBar.contextMenu.closeOthers'),
-        onClick: () => void closeOtherTabs(groupId, tab.id),
-      },
-      {
-        id: 'close-saved',
-        label: t('tabBar.contextMenu.closeSaved'),
-        disabled: !groupHasSavedTabs(groupId),
-        onClick: () => void closeSavedTabsInGroup(groupId),
-      },
-      {
-        id: 'close-all',
-        label: t('tabBar.contextMenu.closeAll'),
-        onClick: () => void closeAllTabsInGroup(groupId),
-      },
-    ],
-  }];
+      }],
+    },
+    {
+      items: [
+        {
+          id: 'close-others',
+          label: t('tabBar.contextMenu.closeOthers'),
+          icon: createElement(VscCloseAll, { size: 12 }),
+          onClick: () => void closeOtherTabs(groupId, tab.id),
+        },
+        {
+          id: 'close-saved',
+          label: t('tabBar.contextMenu.closeSaved'),
+          icon: createElement(VscCheckAll, { size: 12 }),
+          disabled: !groupHasSavedTabs(groupId),
+          onClick: () => void closeSavedTabsInGroup(groupId),
+        },
+        {
+          id: 'close-all',
+          label: t('tabBar.contextMenu.closeAll'),
+          icon: createElement(VscClearAll, { size: 12 }),
+          onClick: () => void closeAllTabsInGroup(groupId),
+        },
+      ],
+    },
+  ];
 
   if (actions?.revealInSidebar && (tab.type === 'event' || tab.type === 'function')) {
     sections.push({

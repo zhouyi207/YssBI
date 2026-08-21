@@ -1,13 +1,11 @@
 import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  DockviewDefaultTab,
   DockviewReact,
   GridviewReact,
   type DockviewApi,
   type DockviewReadyEvent,
   type GridviewApi,
   type GridviewReadyEvent,
-  type IDockviewPanelHeaderProps,
   type IDockviewPanelProps,
   type IWatermarkPanelProps,
   Orientation,
@@ -22,7 +20,6 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 
-import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
 import { synchronizeActiveEditorTab } from '@/features/application/editor/switchEditorTab';
 import { executeEditorDragEnd } from '@/features/application/editor/editorDragDropActions';
 import { editorDockviewPort, type DockviewPanelParams } from '@/features/core/dockview';
@@ -48,7 +45,7 @@ import Sidebar from './Sidebar';
 import { WorkspaceDragOverlay } from './WorkspaceDragOverlay';
 import { WatermarkView } from '../Canvas/overlays/WatermarkView';
 import { viewRegistry } from '../Renderer/viewRegistry';
-
+import { DockviewEditorTab } from './DockviewEditorTab';
 
 function useDockviewPanelGroupId(api: IDockviewPanelProps<DockviewPanelParams>['api']): string {
   const [groupId, setGroupId] = useState(() => api.group.id);
@@ -78,15 +75,6 @@ export function DockviewEditorPanel(props: IDockviewPanelProps<DockviewPanelPara
 
 export function DockviewEditorWatermark(_: IWatermarkPanelProps) {
   return <WatermarkView />;
-}
-
-function DockviewEditorTab(props: IDockviewPanelHeaderProps<DockviewPanelParams>) {
-  const requestClose = useCallback(() => {
-    const tab = props.params.layoutTab;
-    void closeEditorTab(tab.resourceRef, props.api.group.id);
-  }, [props.api, props.params.layoutTab]);
-
-  return <DockviewDefaultTab {...props} closeActionOverride={requestClose} />;
 }
 
 function EditorDock() {
