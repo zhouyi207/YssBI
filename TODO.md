@@ -377,6 +377,16 @@ src/app/appConfig/appLinks.ts
 
 - [ ] 这个问题好像只能等 rust 升级到 1.99 版本才行，大概在 10.1 期间： warning: linker stdout: 正在创建库 D:\Desktop\YssBI\target\debug\deps\yssbi.lib 和对象 D:\Desktop\YssBI\target\debug\deps\yssbi.exp
 
+## 2026.08.21
+
+- [ ] **统一 Dockview 工作台拓扑**：将工作台演进为单一 Dockview
+  authority，使资源侧栏、编辑器、Details、Inspect、Result、Logs 和
+  Output 等面板能够像 Dockview Demo 一样在左、中、右区域之间拖动、
+  分组和重新停靠。迁移时保持 `resourceRef`、`panelInstanceId` 与
+  `groupId` 分离，保留编辑器脏数据关闭确认和布局恢复，并直接删除被
+  替代的外层 Gridview、嵌套 Dockview 与兼容拓扑，不建立第二套布局
+  事实源。
+
 ## v1.0 待办
 
 ### 窗口跨窗同步

@@ -90,6 +90,13 @@ components/ui and shared/ui
 - nested editor `DockviewReact` 是 editor groups、panels、tab 顺序与 active state 的 authority。
 - Zustand 不镜像上述 placement/topology。
 
+右侧 `Gridview` leaf 包含固定的 `Details`、`Inspect` 和 `Result` 内容 tabs：
+
+- `Details` 展示只读节点结构和 resource-specific details；resource-specific panels 可保留既有 mutation/edit 能力。
+- 节点参数编辑唯一位于 `Inspect`；它通过 Rust 投影的 parameter editors 编辑 Canvas 中唯一选中的 node。
+- `Result` 只保存 session-scoped tab metadata，并以 opaque `resultId` 从 Rust `ResultStore` 读取每个 payload。
+- 存在 provenance 时，Result tabs 使用完整 graph-output identity 作为 key；project replacement 时全部 reset。
+
 当前结果消费不依赖独立窗口 payload store。运行事件只携带 opaque `resultId`；`src/services/result/resultService.ts` 通过 `get_result_descriptor`、`get_result_value`、`get_result_page` 和 `get_pin_result_history` 读取后端 `ResultStore`。展示窗口根据 descriptor/presentation 读取同一 logical result。
 
 ## 4. Commands → application → domain

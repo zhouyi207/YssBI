@@ -30,11 +30,22 @@ EditorWindow
 │        │     └─ edge group
 │        │        ├─ Logs
 │        │        └─ Output
-│        └─ Detail
+│        └─ Right sidebar
+│           ├─ Details
+│           ├─ Inspect
+│           └─ Result
+│              └─ session-only result subtabs
 └─ BottomBar
 ```
 
 Menubar, activity bar, status bar, dialogs, and modal overlays remain outside the Gridview/Dockview workspace. Floating groups and browser popouts are disabled; restored Dockview layouts are sanitized before application.
+
+Right-sidebar authority remains split as follows:
+
+- The outer Gridview continues to own right-sidebar placement and splitter size.
+- The active `Details` / `Inspect` / `Result` tab and Result-subtab order are non-placement UI state.
+- Result subtabs are lightweight content tabs, not editor Dockview panels, and are excluded from layout persistence.
+- Right-sidebar pane content remains placement-neutral for the separately tracked future single-Dockview migration.
 
 ## Module seams
 
