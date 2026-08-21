@@ -375,6 +375,8 @@ src/app/appConfig/appLinks.ts
             },
 
 
+- [ ] 这个问题好像只能等 rust 升级到 1.99 版本才行，大概在 10.1 期间： warning: linker stdout: 正在创建库 D:\Desktop\YssBI\target\debug\deps\yssbi.lib 和对象 D:\Desktop\YssBI\target\debug\deps\yssbi.exp
+
 ## v1.0 待办
 
 ### 窗口跨窗同步
