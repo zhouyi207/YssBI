@@ -227,7 +227,6 @@ impl ProjectState {
         }
         let store = self.project_store.read().unwrap();
         let session_id = store.project_session_id.clone();
-        let trace_sink = Arc::clone(&store.trace_sink);
         let runs = Arc::clone(&store.runs);
         let preparation = runs
             .track_pre_run(session_id.clone(), cancellation.clone())
@@ -458,7 +457,6 @@ impl ProjectState {
         .with_run_registry(execution.runs.as_ref())
         .with_computation_settings_snapshot(&execution.data.computation_settings)
         .with_selection_digest(selected.selection_digest)
-        .with_trace_sink(trace_sink.as_ref())
         .with_event_sink(events)
         .with_result_store(&execution.results)
         .with_atomic_success_transaction(&prepare, &finalize)

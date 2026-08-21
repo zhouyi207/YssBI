@@ -11,14 +11,12 @@ mod results;
 mod retry;
 mod scheduler;
 mod streams;
-mod traces;
 
 use super::scheduler::SchedulerCheckpoint;
 use super::*;
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
-    SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanOutcome, SpanSpec, TraceSink, TraceSpan,
 };
 use crate::node_system::document::{
     FunctionParameterId, GraphResourcePath, GraphRevision, NodeId, PortAddress,
@@ -234,31 +232,6 @@ where
 }
 
 #[derive(Default)]
-struct RecordingTrace(Mutex<Vec<TraceSpan>>);
-
-impl TraceSink for RecordingTrace {
-    fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
-        SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
-    }
-
-    fn complete_span(&self, span: TraceSpan) {
-        self.0.lock().unwrap().push(span);
-    }
-}
-
-struct PanickingCompletionTrace;
-
-impl TraceSink for PanickingCompletionTrace {
-    fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
-        SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
-    }
-
-    fn complete_span(&self, _: TraceSpan) {
-        panic!("trace completion sink failed")
-    }
-}
-
-#[derive(Default)]
 struct RecordingRunEvents(Mutex<Vec<RunEvent>>);
 
 impl RunEventSink for RecordingRunEvents {
@@ -456,38 +429,6 @@ fn requirement(name: &str) -> CompiledResourceRequirement {
         kind: ResourceKind::TemporaryStorage,
         access: ResourceAccess::Exclusive,
         optional: false,
-    }
-}
-
-fn assert_run_phase_coverage(
-    spans: &[TraceSpan],
-    resource_outcome: SpanOutcome,
-    publication_outcome: SpanOutcome,
-) {
-    let run = spans
-        .iter()
-        .find(|span| span.kind == SpanKind::Run)
-        .unwrap();
-    let phase = |kind| {
-        let matches = spans
-            .iter()
-            .filter(|span| span.kind == kind)
-            .collect::<Vec<_>>();
-        assert_eq!(matches.len(), 1, "expected exactly one {kind:?} span");
-        assert_eq!(matches[0].parent_span_id, Some(run.span_id));
-        matches[0]
-    };
-    let resource = phase(SpanKind::ResourceAcquire);
-    let publication = phase(SpanKind::ResultPublication);
-    let cleanup = phase(SpanKind::Cleanup);
-    assert_eq!(resource.outcome, resource_outcome);
-    assert_eq!(publication.outcome, publication_outcome);
-    assert!(matches!(cleanup.outcome, SpanOutcome::Cleanup { .. }));
-    assert!(resource.started_at <= publication.started_at);
-    assert!(publication.started_at <= cleanup.started_at);
-    for span in spans.iter().filter(|span| span.span_id != run.span_id) {
-        assert!(span.started_at >= run.started_at);
-        assert!(span.finished_at <= run.finished_at);
     }
 }
 

@@ -492,7 +492,6 @@ fn retry_transient_failure_then_success_publishes_only_final_output() {
             }),
         )
         .unwrap();
-    let trace = RecordingTrace::default();
     let results = ResultStore::new();
 
     let execution_plan = retry_plan("retry_transient_success", 3, Duration::ZERO);
@@ -504,7 +503,6 @@ fn retry_transient_failure_then_success_publishes_only_final_output() {
         crate::node_system::runtime::ResultStore::new(),
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
-    .with_trace_sink(&trace)
     .with_result_store(&results)
     .run(&execution_plan, CancellationToken::new())
     .unwrap();
@@ -518,38 +516,6 @@ fn retry_transient_failure_then_success_publishes_only_final_output() {
     let history = results.pin_history(&stable_output("retry_result"));
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].result_id, result_id);
-    let spans = trace.0.lock().unwrap();
-    let run = spans
-        .iter()
-        .find(|span| span.kind == SpanKind::Run)
-        .unwrap();
-    let attempts = spans
-        .iter()
-        .filter(|span| span.kind == SpanKind::OperationAttempt)
-        .collect::<Vec<_>>();
-    assert_eq!(attempts.len(), 2);
-    assert_eq!(attempts[0].outcome, SpanOutcome::Retry);
-    assert_eq!(attempts[1].outcome, SpanOutcome::Success);
-    assert_eq!(attempts[0].attempt_id, Some(AttemptId::new(1)));
-    assert_eq!(attempts[1].attempt_id, Some(AttemptId::new(2)));
-    assert_eq!(attempts[0].operation_id, attempts[1].operation_id);
-    assert_eq!(attempts[0].run_id, attempts[1].run_id);
-    assert!(
-        attempts
-            .iter()
-            .all(|span| span.parent_span_id == Some(run.span_id))
-    );
-    for kind in [
-        SpanKind::ResourceAcquire,
-        SpanKind::ResultPublication,
-        SpanKind::Cleanup,
-    ] {
-        assert!(
-            spans
-                .iter()
-                .any(|span| span.kind == kind && span.parent_span_id == Some(run.span_id))
-        );
-    }
 }
 
 #[test]
@@ -631,7 +597,6 @@ fn retry_insufficient_deadline_returns_typed_deadline_without_next_attempt() {
         )
         .unwrap();
 
-    let trace = RecordingTrace::default();
     let results = ResultStore::new();
     let error = RunExecutor::new(
         &kernels,
@@ -640,7 +605,6 @@ fn retry_insufficient_deadline_returns_typed_deadline_without_next_attempt() {
         results.clone(),
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
-    .with_trace_sink(&trace)
     .with_deadline(RunDeadline::after(Duration::from_millis(10)))
     .run(
         &retry_plan("retry_deadline", 3, Duration::from_millis(100)),
@@ -660,19 +624,6 @@ fn retry_insufficient_deadline_returns_typed_deadline_without_next_attempt() {
         results.result(result_id).unwrap().state,
         ResultState::Failed(_)
     ));
-    let spans = trace.0.lock().unwrap();
-    assert!(spans.iter().any(|span| {
-        span.kind == SpanKind::OperationAttempt && span.outcome == SpanOutcome::Retry
-    }));
-    assert!(
-        spans
-            .iter()
-            .any(|span| span.kind == SpanKind::Run && span.outcome == SpanOutcome::Timeout)
-    );
-    assert!(spans.iter().any(|span| matches!(
-        (&span.kind, &span.outcome),
-        (SpanKind::Cleanup, SpanOutcome::Cleanup { .. })
-    )));
 }
 
 #[test]

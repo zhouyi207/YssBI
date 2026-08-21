@@ -1,56 +1,8 @@
 use super::*;
 
-pub(super) fn operation_correlation(
-    plan: &ExecutionPlan,
-    run_id: RunId,
-    parent_call: Option<ParentCallId>,
-    operation: OperationIndex,
-) -> CorrelationContext {
-    let planned = &plan.operations[operation.index()];
-    CorrelationContext::compile(&plan.provenance)
-        .for_run(run_id, parent_call)
-        .for_node(planned.source_node_id, planned.source_node_type_id.clone())
-}
-
 pub(super) fn execute_operation_worker(
     context: &OperationWorkerContext<'_>,
     job: PreparedOperation,
-    trace: &dyn TraceSink,
-) -> Result<Box<[StoredValue]>, RunError> {
-    let operation = job.operation;
-    let activation = job.activation;
-    let attempt = job.attempt;
-    let correlation =
-        operation_correlation(context.plan, context.run_id, context.parent_call, operation);
-    let planned = &context.plan.operations[operation.index()];
-    let mut span = start_span_safely(
-        trace,
-        SpanSpec {
-            parent_span_id: context.run_parent_span_id,
-            run_id: Some(context.run_id),
-            operation_id: Some(planned.stable_id.clone()),
-            activation_id: Some(activation),
-            attempt_id: Some(attempt),
-            kind: SpanKind::OperationAttempt,
-            correlation,
-        },
-    );
-    let operation_span_id = span.span_id();
-    let result = execute_operation_worker_inner(context, job, trace, operation_span_id);
-    span.finish(operation_span_outcome(
-        context.plan,
-        operation,
-        attempt,
-        &result,
-    ));
-    result
-}
-
-fn execute_operation_worker_inner(
-    context: &OperationWorkerContext<'_>,
-    job: PreparedOperation,
-    trace: &dyn TraceSink,
-    operation_span_id: Option<SpanId>,
 ) -> Result<Box<[StoredValue]>, RunError> {
     check_terminal(context.cancellation, context.deadline, RunPhase::Kernel)?;
     let operation = &context.plan.operations[job.operation.index()];
@@ -178,31 +130,12 @@ fn execute_operation_worker_inner(
                 let input = inputs.into_vec().into_iter().next().ok_or_else(|| {
                     RunError::InvalidPlan("adapter operation has no input".into())
                 })?;
-                let correlation = operation_correlation(
-                    context.plan,
-                    context.run_id,
-                    context.parent_call,
-                    job.operation,
-                );
-                let mut adapter_span = start_span_safely(
-                    trace,
-                    SpanSpec {
-                        parent_span_id: operation_span_id,
-                        run_id: Some(context.run_id),
-                        operation_id: Some(operation.stable_id.clone()),
-                        activation_id: Some(job.activation),
-                        attempt_id: Some(job.attempt),
-                        kind: SpanKind::AdapterIo,
-                        correlation,
-                    },
-                );
                 let result = execute_planned_adapter(
                     adapter,
                     input,
                     context.resource_owner,
                     context.cancellation,
                 );
-                adapter_span.finish(span_outcome(&result));
                 vec![result?]
             }
             PlannedKernel::Relational(index) => {
@@ -218,38 +151,8 @@ fn execute_operation_worker_inner(
                     cancellation: context.cancellation,
                     deadline: context.deadline,
                 };
-                let correlation = operation_correlation(
-                    context.plan,
-                    context.run_id,
-                    context.parent_call,
-                    job.operation,
-                );
-                let mut adapter_span = start_span_safely(
-                    trace,
-                    SpanSpec {
-                        parent_span_id: operation_span_id,
-                        run_id: Some(context.run_id),
-                        operation_id: Some(operation.stable_id.clone()),
-                        activation_id: Some(job.activation),
-                        attempt_id: Some(job.attempt),
-                        kind: SpanKind::AdapterIo,
-                        correlation,
-                    },
-                );
                 let backend_result =
                     backend.execute(&relational_context, &subplan.compiled_plan, &inputs);
-                let backend_outcome = match &backend_result {
-                    Err(error)
-                        if error.code()
-                            == crate::node_system::runtime::RelationalErrorCode::Cancelled =>
-                    {
-                        SpanOutcome::Cancellation
-                    }
-                    Err(_) => SpanOutcome::Error,
-                    Ok(_) if context.cancellation.is_cancelled() => SpanOutcome::Cancellation,
-                    Ok(_) => SpanOutcome::Success,
-                };
-                adapter_span.finish(backend_outcome);
                 match backend_result {
                     Ok(execution) => execution.outputs,
                     Err(error) => return Err(RunError::from_relational(job.operation, error)),

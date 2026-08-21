@@ -7,10 +7,7 @@ mod statistics;
 
 use super::*;
 use crate::node_system::ProjectSessionId;
-use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CompileProvenance, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind,
-    SpanOutcome, SpanSpec, TraceSink, TraceSpan,
-};
+use crate::node_system::analysis::{CompilationBasis, CompileId, CompileProvenance};
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
 use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,

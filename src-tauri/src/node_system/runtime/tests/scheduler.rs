@@ -643,6 +643,73 @@ fn parallel_scheduler_cancellation_drains_all_workers() {
 }
 
 #[test]
+fn worker_panic_outranks_deadline_and_cancellation() {
+    #[derive(Clone, Copy)]
+    enum CompetingTerminal {
+        Deadline,
+        Cancellation,
+    }
+
+    const PANIC_PAYLOAD: &str = "panic terminal truth sentinel";
+
+    for terminal in [CompetingTerminal::Deadline, CompetingTerminal::Cancellation] {
+        let cancellation = CancellationToken::new();
+        let run_cancellation = cancellation.clone();
+        let (started_tx, started_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let release_rx = Arc::new(Mutex::new(release_rx));
+        let kernel_release = Arc::clone(&release_rx);
+        let mut kernels = KernelRegistry::new();
+        kernels
+            .register(
+                id("panic_terminal_truth", KernelHandle::new),
+                FnKernel(move |_: &[RuntimeValue]| {
+                    started_tx.send(()).unwrap();
+                    kernel_release.lock().unwrap().recv().unwrap();
+                    panic!("panic terminal truth sentinel")
+                }),
+            )
+            .unwrap();
+        let execution_plan = plan(
+            vec![operation("panic_terminal_truth", &[], &[])],
+            0,
+            StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(
+                OperationIndex::new(0),
+            )])),
+        );
+
+        let panic = thread::scope(|scope| {
+            let run = scope.spawn(|| {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let resources = no_resources();
+                    let mut executor = RunExecutor::new(
+                        &kernels,
+                        &resources,
+                        &NoFunctions,
+                        ResultStore::new(),
+                        Arc::new(SessionMemoization::new()),
+                    );
+                    if matches!(terminal, CompetingTerminal::Deadline) {
+                        executor =
+                            executor.with_deadline(RunDeadline::after(Duration::from_millis(20)));
+                    }
+                    let _ = executor.run(&execution_plan, run_cancellation);
+                }))
+            });
+            started_rx.recv().unwrap();
+            match terminal {
+                CompetingTerminal::Deadline => thread::sleep(Duration::from_millis(40)),
+                CompetingTerminal::Cancellation => cancellation.cancel(),
+            }
+            release_tx.send(()).unwrap();
+            run.join().unwrap()
+        });
+        let payload = panic.expect_err("the original worker panic must propagate");
+        assert_eq!(payload.downcast_ref::<&str>().copied(), Some(PANIC_PAYLOAD));
+    }
+}
+
+#[test]
 fn duplicate_operation_in_one_activation_is_rejected() {
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = calls.clone();

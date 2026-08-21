@@ -1028,9 +1028,13 @@ impl Kernel for PanicWithCleanupFailureKernel {
 }
 
 #[test]
-fn bounded_materialization_panic_cleanup_errors_are_traced_without_replacing_panic() {
-    let root = materialization_test_root("panic-trace");
-    let trace = RecordingTrace::default();
+fn bounded_materialization_panic_cleanup_failure_is_diagnosed_without_replacing_panic() {
+    use tracing_subscriber::layer::SubscriberExt;
+
+    const PRIMARY_PANIC_PAYLOAD: &str = "primary kernel panic sentinel";
+    const CLEANUP_PANIC_PAYLOAD: &str = "cleanup task panic sentinel";
+
+    let root = materialization_test_root("panic-diagnostic");
     let mut kernels = KernelRegistry::new();
     kernels
         .register(
@@ -1051,32 +1055,48 @@ fn bounded_materialization_panic_cleanup_errors_are_traced_without_replacing_pan
         &kernels,
         &resources,
         &functions,
-        crate::node_system::runtime::ResultStore::new(),
-        std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
+        ResultStore::new(),
+        Arc::new(SessionMemoization::new()),
     )
-    .with_trace_sink(&trace)
     .with_test_spill_root(root.clone());
+    let (diagnostics, _diagnostics_guard) = crate::diagnostics::dispatcher::DiagnosticsHub::start();
+    let subscriber = tracing_subscriber::registry()
+        .with(crate::diagnostics::recent_layer::RecentDiagnosticsLayer::new(diagnostics.clone()));
 
-    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let _ = executor.run(&execution_plan, CancellationToken::new());
-    }));
+    let panic = tracing::subscriber::with_default(subscriber, || {
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = executor.run(&execution_plan, CancellationToken::new());
+        }))
+    });
 
-    assert!(panic.is_err());
-    let cleanup = trace
-        .0
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|span| span.kind == SpanKind::Cleanup)
-        .cloned()
-        .expect("panic cleanup trace");
+    let payload = panic.expect_err("the primary kernel panic must propagate");
     assert_eq!(
-        cleanup.outcome,
-        SpanOutcome::Cleanup {
-            error_count: 1,
-            panicking: true,
-        }
+        payload.downcast_ref::<&str>().copied(),
+        Some(PRIMARY_PANIC_PAYLOAD)
     );
+    let subscription = diagnostics.subscribe(|_| true).unwrap();
+    let cleanup_diagnostics = subscription
+        .entries
+        .iter()
+        .filter(|record| record.event.as_deref() == Some("resourceCleanupFailed"))
+        .collect::<Vec<_>>();
+    assert_eq!(cleanup_diagnostics.len(), 1);
+    let cleanup = cleanup_diagnostics[0];
+    assert_eq!(cleanup.level, crate::diagnostics::DiagnosticLevel::Warn);
+    assert_eq!(
+        cleanup.domain,
+        crate::diagnostics::DiagnosticDomain::Execution
+    );
+    assert_eq!(cleanup.target, "yssbi::node_system::runtime::cleanup");
+    assert_eq!(cleanup.message, "Runtime resource cleanup failed");
+    assert_eq!(cleanup.fields["error"], "stream producer panicked");
+    let encoded = serde_json::to_string(cleanup).unwrap();
+    assert!(!encoded.contains(PRIMARY_PANIC_PAYLOAD));
+    assert!(!encoded.contains(CLEANUP_PANIC_PAYLOAD));
+    diagnostics
+        .unsubscribe(subscription.subscription_id)
+        .unwrap();
+
     assert!(std::fs::read_dir(&root).unwrap().next().is_none());
     std::fs::remove_dir(root).unwrap();
 }

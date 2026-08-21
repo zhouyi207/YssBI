@@ -18,7 +18,7 @@ impl<'a> RunExecutor<'a> {
         cancellation: &CancellationToken,
         run: &GraphRunIdentity,
         worker_panic: &mut Option<Box<dyn std::any::Any + Send>>,
-        mut envelope: WorkerCompletion,
+        envelope: WorkerCompletion,
     ) {
         let completed_at = envelope.completed_at;
         let completion = envelope.completion;
@@ -86,17 +86,7 @@ impl<'a> RunExecutor<'a> {
         {
             *terminal_error = Some(RunError::Cancelled);
         }
-        apply_authoritative_attempt_outcome(
-            &mut envelope.trace_spans,
-            &plan.operations[completion.operation.index()].stable_id,
-            &completion,
-            completed_at,
-            cancellation.cancelled_at(),
-            self.options.deadline,
-        );
-        for span in envelope.trace_spans {
-            complete_span_safely(self.trace, span);
-        }
+
         if worker_panic.is_none() {
             *worker_panic = envelope.panic;
         }

@@ -138,6 +138,5 @@ impl MemoTables<'_> {
 pub(super) struct WorkerCompletion {
     pub(super) completed_at: Instant,
     pub(super) completion: OperationCompletion,
-    pub(super) trace_spans: Box<[TraceSpan]>,
     pub(super) panic: Option<Box<dyn std::any::Any + Send>>,
 }

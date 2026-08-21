@@ -172,6 +172,84 @@ fn ordinary_outcome_produced_before_cancellation_is_preserved() {
     ));
 }
 
+#[test]
+fn completed_success_before_cancellation_is_not_committed_while_envelope_drains() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let mut kernels = KernelRegistry::new();
+    kernels
+        .register(
+            id("success_before_cancel", KernelHandle::new),
+            FnKernel(move |_: &[RuntimeValue]| {
+                observed.fetch_add(1, Ordering::SeqCst);
+                Ok(vec![Value::Integer(7).into()])
+            }),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![operation("success_before_cancel", &[], &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("success-before-cancel"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+    let cancellation = CancellationToken::new();
+    let run_cancellation = cancellation.clone();
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+    let (produced_tx, produced_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let checkpoint_release = Arc::clone(&release_rx);
+
+    let result = thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            RunExecutor::new(
+                &kernels,
+                &no_resources(),
+                &NoFunctions,
+                ResultStore::new(),
+                Arc::new(SessionMemoization::new()),
+            )
+            .with_event_sink(&events)
+            .with_result_store(&results)
+            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+                    produced_tx.send(()).unwrap();
+                    checkpoint_release.lock().unwrap().recv().unwrap();
+                }
+            }))
+            .run(&execution_plan, run_cancellation)
+        });
+        produced_rx.recv().unwrap();
+        cancellation.cancel();
+        release_tx.send(()).unwrap();
+        run.join().unwrap()
+    });
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "the kernel returned");
+    assert_eq!(result, Err(RunError::Cancelled));
+    let recorded = events.0.lock().unwrap();
+    let run_id = recorded
+        .iter()
+        .find(|event| event.kind == RunEventKind::RunStarted)
+        .map(|event| event.run.run_id)
+        .expect("RunStarted carries the active run ID");
+    let stored_results = results.results_for_run(run_id);
+    assert_eq!(stored_results.len(), 1);
+    assert!(matches!(stored_results[0].state, ResultState::Cancelled));
+    assert_eq!(
+        recorded.last().map(|event| &event.kind),
+        Some(&RunEventKind::RunCancelled)
+    );
+}
+
 struct OrdinaryErrorAfterCancellationBackend;
 
 impl RelationalBackend for OrdinaryErrorAfterCancellationBackend {

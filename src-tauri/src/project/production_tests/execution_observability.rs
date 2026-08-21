@@ -339,30 +339,12 @@ fn project_execute_graph_source_rename_limit_is_insertion_order_independent() {
 
     assert_eq!(forward_observer.snapshot(), reversed_observer.snapshot());
     assert_ne!(forward.run_id, reversed.run_id);
-    assert_eq!(forward.correlation.run_id, Some(forward.run_id));
-    assert_eq!(reversed.correlation.run_id, Some(reversed.run_id));
-    assert_ne!(forward.correlation.run_id, reversed.correlation.run_id);
-    assert_eq!(
-        forward.correlation.compile_id,
-        forward.provenance.compile_id
-    );
-    assert_eq!(
-        reversed.correlation.compile_id,
-        reversed.provenance.compile_id
-    );
     assert_ne!(
         forward.provenance.compile_id,
         reversed.provenance.compile_id
     );
-    assert_ne!(
-        forward.correlation.compile_id,
-        reversed.correlation.compile_id
-    );
     reversed.run_id = forward.run_id;
     reversed.provenance.compile_id = forward.provenance.compile_id;
-    reversed.correlation.run_id = forward.correlation.run_id;
-    reversed.correlation.compile_id = forward.correlation.compile_id;
-    reversed.correlation.trace_parent_span_id = forward.correlation.trace_parent_span_id;
     assert_eq!(
         forward.result_ids.keys().collect::<Vec<_>>(),
         reversed.result_ids.keys().collect::<Vec<_>>()

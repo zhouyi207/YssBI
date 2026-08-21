@@ -22,7 +22,6 @@ fn successful_run_releases_all_resources() {
 
 #[test]
 fn acquire_failure_releases_previously_acquired_resources() {
-    let trace = RecordingTrace::default();
     let released = Arc::new(AtomicUsize::new(0));
     let resources = TrackingResources {
         acquired: Arc::new(AtomicUsize::new(0)),
@@ -39,17 +38,11 @@ fn acquire_failure_releases_previously_acquired_resources() {
         crate::node_system::runtime::ResultStore::new(),
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
-    .with_trace_sink(&trace)
     .run(&execution_plan, CancellationToken::new())
     .unwrap_err();
 
     assert!(matches!(error, RunError::ResourceAcquire { .. }));
     assert_eq!(released.load(Ordering::SeqCst), 1);
-    assert_run_phase_coverage(
-        &trace.0.lock().unwrap(),
-        SpanOutcome::Error,
-        SpanOutcome::NotReached,
-    );
 }
 
 #[test]

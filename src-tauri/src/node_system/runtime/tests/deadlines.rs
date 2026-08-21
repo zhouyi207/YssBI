@@ -113,6 +113,118 @@ fn deadline_late_kernel_completion_is_joined_without_commit() {
 }
 
 #[test]
+fn deadline_before_envelope_receive_does_not_commit_completed_worker_output() {
+    struct CompletedOutputBackend(Arc<AtomicUsize>);
+
+    impl RelationalBackend for CompletedOutputBackend {
+        fn execute(
+            &self,
+            _: &RelationalContext<'_>,
+            _: &CompiledRelationalPlan,
+            _: &[RuntimeValue],
+        ) -> Result<RelationalExecution, RelationalError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Ok(RelationalExecution {
+                outputs: vec![Value::Integer(7).into()],
+            })
+        }
+    }
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut relational = RelationalBackendRegistry::new();
+    relational
+        .register(
+            id("deadline-before-receive", RelationalBackendId::new),
+            CompletedOutputBackend(Arc::clone(&calls)),
+        )
+        .unwrap();
+    let mut execution_plan = plan(
+        vec![relational_operation(0, &[0])],
+        1,
+        StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
+            0,
+        ))])),
+    );
+    execution_plan.relational_subplans = Box::new([relational_subplan(
+        "deadline-before-receive",
+        "synchronized-fragment",
+        Box::new([]),
+    )]);
+    execution_plan.results = Box::new([PlanResult {
+        name: "result".into(),
+        output: stable_output("deadline-before-receive"),
+        value: ValueRef::new(0),
+    }]);
+    publish_graph_results(&mut execution_plan);
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+    let deadline = RunDeadline::after(Duration::from_secs(1));
+    let (produced_tx, produced_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let release_rx = Arc::new(Mutex::new(release_rx));
+    let checkpoint_release = Arc::clone(&release_rx);
+
+    let result = thread::scope(|scope| {
+        let run = scope.spawn(|| {
+            RunExecutor::new(
+                &KernelRegistry::new(),
+                &no_resources(),
+                &NoFunctions,
+                ResultStore::new(),
+                Arc::new(SessionMemoization::new()),
+            )
+            .with_relational_backends(&relational)
+            .with_event_sink(&events)
+            .with_result_store(&results)
+            .with_deadline(deadline)
+            .with_test_checkpoint(Arc::new(move |checkpoint, _| {
+                if checkpoint == SchedulerCheckpoint::WorkerOutcomeProduced {
+                    produced_tx
+                        .send(!deadline.exceeded_at(Instant::now()))
+                        .unwrap();
+                    checkpoint_release.lock().unwrap().recv().unwrap();
+                }
+            }))
+            .run(&execution_plan, CancellationToken::new())
+        });
+        assert!(
+            produced_rx.recv().unwrap(),
+            "worker completion must be produced before the deadline"
+        );
+        while !deadline.exceeded_at(Instant::now()) {
+            thread::sleep(Duration::from_millis(1));
+        }
+        release_tx.send(()).unwrap();
+        run.join().unwrap()
+    });
+
+    assert_eq!(
+        result,
+        Err(RunError::DeadlineExceeded {
+            phase: RunPhase::Kernel,
+        })
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let recorded = events.0.lock().unwrap();
+    let run_id = recorded
+        .iter()
+        .find(|event| event.kind == RunEventKind::RunStarted)
+        .map(|event| event.run.run_id)
+        .expect("RunStarted carries the active run ID");
+    let stored_results = results.results_for_run(run_id);
+    assert_eq!(stored_results.len(), 1);
+    assert!(matches!(&stored_results[0].state, ResultState::Failed(_)));
+    assert_eq!(
+        recorded.last().map(|event| &event.kind),
+        Some(&RunEventKind::RunErrored {
+            outcome: RunErrorOutcome::DeadlineExceeded {
+                phase: RunPhase::Kernel,
+            },
+        })
+    );
+}
+
+#[test]
 fn deadline_queue_wait_is_typed_and_late_workers_do_not_commit() {
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();

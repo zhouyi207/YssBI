@@ -140,6 +140,76 @@ fn view_node_id() -> NodeId {
 }
 
 #[test]
+fn nested_view_data_event_keeps_root_graph_run_identity() {
+    let mut kernels = build_builtin_kernel_registry();
+    kernels
+        .register(
+            id("nested_view_data_source", KernelHandle::new),
+            FnKernel(|_: &[RuntimeValue]| Ok(vec![Value::Integer(42).into()])),
+        )
+        .unwrap();
+
+    let source = operation("nested_view_data_source", &[], &[0]);
+    let mut view = operation("yssbi.debug.view", &[0], &[]);
+    view.source_node_id = view_node_id();
+    view.source_node_type_id = NodeTypeId::new("yssbi.debug.view").unwrap();
+    let callee = plan(
+        vec![source, view],
+        1,
+        StructuredControlRegion::Sequence(Box::new([
+            ControlStep::Operation(OperationIndex::new(0)),
+            ControlStep::Operation(OperationIndex::new(1)),
+        ])),
+    );
+    let mut caller = plan(
+        vec![],
+        0,
+        StructuredControlRegion::Call {
+            target: id("functions/callee", FunctionPlanHandle::new),
+            arguments: Box::new([]),
+            results: Box::new([]),
+            mandatory: true,
+        },
+    );
+    caller.provenance.graph_path = GraphResourcePath("events/caller".into());
+    let callee_graph_path = GraphResourcePath("functions/callee".into());
+    let events = RecordingRunEvents::default();
+    let results = ResultStore::new();
+
+    RunExecutor::new(
+        &kernels,
+        &no_resources(),
+        &OneFunction(published_function(callee, "functions/callee", &[], &[])),
+        ResultStore::new(),
+        Arc::new(SessionMemoization::new()),
+    )
+    .with_event_sink(&events)
+    .with_result_store(&results)
+    .run(&caller, CancellationToken::new())
+    .unwrap();
+
+    let recorded = events.0.lock().unwrap();
+    let open_events = recorded
+        .iter()
+        .filter(|event| matches!(event.kind, RunEventKind::OpenResultWindow { .. }))
+        .collect::<Vec<_>>();
+    assert_eq!(open_events.len(), 1);
+    let open_event = open_events[0];
+    assert_eq!(
+        &open_event.run.graph_path, &caller.provenance.graph_path,
+        "the public event belongs to the caller/root run",
+    );
+    let RunEventKind::OpenResultWindow { result_id } = &open_event.kind else {
+        unreachable!("filtered to OpenResultWindow")
+    };
+    let stored = results.result(*result_id).expect("View Data input result");
+    assert_eq!(
+        &stored.provenance.graph_path, &callee_graph_path,
+        "stored-result provenance belongs to the callee",
+    );
+}
+
+#[test]
 fn kernel_receives_all_inputs_once_and_outputs_publish_atomically() {
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = Arc::new(Mutex::new(Vec::new()));

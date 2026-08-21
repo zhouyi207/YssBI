@@ -3,7 +3,7 @@ use super::{
     RelationalError, RelationalErrorCode, RunResourceBudgets, SchedulingPolicy, StoredValue,
     StreamReceiveError,
 };
-use crate::node_system::analysis::{CompileProvenance, CorrelationContext};
+use crate::node_system::analysis::CompileProvenance;
 use crate::node_system::plan::{OperationIndex, RelationalBackendId, ResourceId, ValueRef};
 use crate::node_system::protocol::Value;
 use std::collections::BTreeMap;
@@ -549,7 +549,6 @@ impl CancellationToken {
 pub struct RunResult {
     pub run_id: RunId,
     pub provenance: CompileProvenance,
-    pub correlation: CorrelationContext,
     pub result_ids: BTreeMap<Box<str>, super::ResultId>,
     pub(crate) results: super::ResultStore,
     pub committed_variable_ids: Box<[crate::variable::VariableId]>,

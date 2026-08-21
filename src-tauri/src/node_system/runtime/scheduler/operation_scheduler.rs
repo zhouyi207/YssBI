@@ -14,8 +14,6 @@ pub(super) struct ReadyOperationContext<'context, 'memo> {
     pub(super) memoization: &'context MemoTables<'memo>,
     pub(super) demand: &'context DemandFingerprint,
     pub(super) cancellation: &'context CancellationToken,
-    pub(super) run_parent_span_id: Option<SpanId>,
-    pub(super) parent_call: Option<ParentCallId>,
 }
 
 impl<'a> RunExecutor<'a> {
@@ -37,8 +35,6 @@ impl<'a> RunExecutor<'a> {
             memoization,
             demand,
             cancellation,
-            run_parent_span_id,
-            parent_call,
         } = context;
         let run_id = run.run_id;
         self.propagate_value_dependencies(plan, frame)?;
@@ -80,8 +76,6 @@ impl<'a> RunExecutor<'a> {
             results: self.result_store(),
             cancellation,
             deadline: self.options.deadline,
-            run_parent_span_id,
-            parent_call,
             #[cfg(test)]
             checkpoint: self.checkpoint.as_ref(),
         };
@@ -99,10 +93,9 @@ impl<'a> RunExecutor<'a> {
                         let activation = job.activation;
                         let attempt = job.attempt;
                         let output_group = job.output_group.clone();
-                        let trace = WorkerTrace::default();
                         let (outputs, panic, completed_at) =
                             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                                let outputs = execute_operation_worker(context, job, &trace);
+                                let outputs = execute_operation_worker(context, job);
                                 (outputs, Instant::now())
                             })) {
                                 Ok((outputs, completed_at)) => (outputs, None, completed_at),
@@ -129,7 +122,6 @@ impl<'a> RunExecutor<'a> {
                                     output_group,
                                     outputs,
                                 },
-                                trace_spans: trace.into_spans(),
                                 panic,
                             })
                             .is_err()
@@ -414,7 +406,6 @@ impl<'a> RunExecutor<'a> {
                                             output_group: job.output_group,
                                             outputs: Ok(Box::new([])),
                                         },
-                                        trace_spans: Box::new([]),
                                         panic: None,
                                     },
                                 );
