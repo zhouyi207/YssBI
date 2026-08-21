@@ -13,7 +13,7 @@ const ACTIVE_TASK_STATUSES = new Set<BayesInferenceTaskDTO['status']>(['queued',
 export type BayesInferenceError = BayesApplicationError;
 
 export interface BayesInferenceState {
-  runId: number;
+  requestGeneration: number;
   phase: 'idle' | 'submitting' | 'active' | 'reading_result' | 'completed' | 'cancelled' | 'failed';
   task: BayesInferenceTaskDTO | null;
   result: InferenceResultDTO | null;
@@ -21,14 +21,14 @@ export interface BayesInferenceState {
 }
 
 type BayesInferenceAction =
-  | { type: 'submit_started'; runId: number }
-  | { type: 'task_received'; runId: number; task: BayesInferenceTaskDTO }
-  | { type: 'result_received'; runId: number; taskId: string; result: InferenceResultDTO }
-  | { type: 'request_failed'; runId: number; taskId?: string; error: BayesInferenceError }
-  | { type: 'cancel_started'; runId: number; taskId: string };
+  | { type: 'submit_started'; requestGeneration: number }
+  | { type: 'task_received'; requestGeneration: number; task: BayesInferenceTaskDTO }
+  | { type: 'result_received'; requestGeneration: number; taskId: string; result: InferenceResultDTO }
+  | { type: 'request_failed'; requestGeneration: number; taskId?: string; error: BayesInferenceError }
+  | { type: 'cancel_started'; requestGeneration: number; taskId: string };
 
 export const initialBayesInferenceState: BayesInferenceState = {
-  runId: 0,
+  requestGeneration: 0,
   phase: 'idle',
   task: null,
   result: null,
@@ -36,12 +36,12 @@ export const initialBayesInferenceState: BayesInferenceState = {
 };
 
 export function bayesInferenceReducer(state: BayesInferenceState, action: BayesInferenceAction): BayesInferenceState {
-  if (action.runId !== state.runId && action.type !== 'submit_started') return state;
+  if (action.requestGeneration !== state.requestGeneration && action.type !== 'submit_started') return state;
   if ('taskId' in action && action.taskId && state.task?.taskId !== action.taskId) return state;
 
   switch (action.type) {
     case 'submit_started':
-      return { runId: action.runId, phase: 'submitting', task: null, result: null, error: null };
+      return { requestGeneration: action.requestGeneration, phase: 'submitting', task: null, result: null, error: null };
     case 'task_received': {
       const task = action.task;
       if (state.task && state.task.taskId !== task.taskId) return state;
@@ -65,50 +65,50 @@ export function bayesInferenceReducer(state: BayesInferenceState, action: BayesI
 
 export function useBayesInferenceTask() {
   const [state, dispatch] = useReducer(bayesInferenceReducer, initialBayesInferenceState);
-  const nextRunId = useRef(0);
+  const nextRequestGeneration = useRef(0);
 
   useEffect(() => {
     const taskId = state.task?.taskId;
     if (!taskId || state.phase !== 'active') return;
-    const runId = state.runId;
+    const requestGeneration = state.requestGeneration;
     let cancelled = false;
     const poll = () => void getBayesInferenceStatus(taskId)
-      .then(task => { if (!cancelled) dispatch({ type: 'task_received', runId, task }); })
-      .catch((caught: unknown) => { if (!cancelled) dispatch({ type: 'request_failed', runId, taskId, error: formatBayesError(caught) }); });
+      .then(task => { if (!cancelled) dispatch({ type: 'task_received', requestGeneration, task }); })
+      .catch((caught: unknown) => { if (!cancelled) dispatch({ type: 'request_failed', requestGeneration, taskId, error: formatBayesError(caught) }); });
     const intervalId = window.setInterval(poll, 1_000);
     poll();
     return () => { cancelled = true; window.clearInterval(intervalId); };
-  }, [state.phase, state.runId, state.task?.taskId]);
+  }, [state.phase, state.requestGeneration, state.task?.taskId]);
 
   useEffect(() => {
     const taskId = state.task?.taskId;
     if (!taskId || state.phase !== 'reading_result') return;
-    const runId = state.runId;
+    const requestGeneration = state.requestGeneration;
     let cancelled = false;
     void readBayesInferenceResult(taskId)
-      .then(result => { if (!cancelled) dispatch({ type: 'result_received', runId, taskId, result }); })
-      .catch((caught: unknown) => { if (!cancelled) dispatch({ type: 'request_failed', runId, taskId, error: formatBayesError(caught) }); });
+      .then(result => { if (!cancelled) dispatch({ type: 'result_received', requestGeneration, taskId, result }); })
+      .catch((caught: unknown) => { if (!cancelled) dispatch({ type: 'request_failed', requestGeneration, taskId, error: formatBayesError(caught) }); });
     return () => { cancelled = true; };
-  }, [state.phase, state.runId, state.task?.taskId]);
+  }, [state.phase, state.requestGeneration, state.task?.taskId]);
 
   const run = async (draft: BayesModelDraftDTO) => {
-    const runId = ++nextRunId.current;
-    dispatch({ type: 'submit_started', runId });
+    const requestGeneration = ++nextRequestGeneration.current;
+    dispatch({ type: 'submit_started', requestGeneration });
     try {
       const task = await submitBayesInference(draft);
-      dispatch({ type: 'task_received', runId, task });
+      dispatch({ type: 'task_received', requestGeneration, task });
     } catch (caught) {
-      dispatch({ type: 'request_failed', runId, error: formatBayesError(caught) });
+      dispatch({ type: 'request_failed', requestGeneration, error: formatBayesError(caught) });
     }
   };
 
   const cancel = () => {
     const taskId = state.task?.taskId;
     if (!taskId || !ACTIVE_TASK_STATUSES.has(state.task!.status)) return;
-    const runId = state.runId;
-    dispatch({ type: 'cancel_started', runId, taskId });
+    const requestGeneration = state.requestGeneration;
+    dispatch({ type: 'cancel_started', requestGeneration, taskId });
     void cancelBayesInference(taskId)
-      .catch((caught: unknown) => dispatch({ type: 'request_failed', runId, taskId, error: formatBayesError(caught) }));
+      .catch((caught: unknown) => dispatch({ type: 'request_failed', requestGeneration, taskId, error: formatBayesError(caught) }));
   };
 
   return { task: state.task, result: state.result, error: state.error, phase: state.phase, run, cancel };
