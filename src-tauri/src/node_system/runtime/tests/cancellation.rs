@@ -195,7 +195,7 @@ fn completed_success_before_cancellation_is_not_committed_while_envelope_drains(
     );
     execution_plan.results = Box::new([PlanResult {
         name: "result".into(),
-        output: stable_output("success-before-cancel"),
+        output: stable_output("success_before_cancel"),
         value: ValueRef::new(0),
     }]);
     publish_graph_results(&mut execution_plan);
