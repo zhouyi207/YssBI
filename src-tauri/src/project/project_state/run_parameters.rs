@@ -42,7 +42,6 @@ pub(in crate::project) fn publish_function_plans(
     resources: &CompileResourceSnapshot,
     root_plan: Option<&crate::node_system::plan::ExecutionPlan>,
     session_id: crate::node_system::ProjectSessionId,
-    trace_sink: &dyn crate::node_system::analysis::TraceSink,
     cancellation: &crate::node_system::compiler::CompileCancellationToken,
     computation_settings: &crate::project::ProjectComputationSettings,
     parameters: &mut crate::node_system::runtime::CompiledParameterStore,
@@ -53,7 +52,7 @@ pub(in crate::project) fn publish_function_plans(
         resources.schema_resolvers(),
         crate::node_system::compiler::build_builtin_interface_resolvers(),
     )
-    .with_observability(session_id, trace_sink);
+    .with_project_session_id(session_id);
     let compile_id = root_plan
         .map(|plan| plan.provenance.compile_id)
         .unwrap_or_else(|| crate::node_system::analysis::CompileId::new(0));

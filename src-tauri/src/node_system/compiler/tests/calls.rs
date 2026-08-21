@@ -74,7 +74,6 @@ fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
             3,
             &[("target", serde_json::json!(target.0.as_ref()))],
         );
-        let trace = RecordingTrace::default();
         let compiler = GraphCompiler::with_interface_resolvers(
             &registry,
             &blocking_resources,
@@ -82,10 +81,10 @@ fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
         );
 
         let result = compiler
-            .with_observability(ProjectSessionId::new("lowerability"), &trace)
+            .with_project_session_id(ProjectSessionId::new("lowerability"))
             .compile(&graph);
 
-        assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+        assert_analysis_blocks_before_lowering(&result, &calls);
         let locations = result
             .analysis
             .diagnostics
@@ -129,11 +128,14 @@ fn nested_blocking_callee_projects_to_root_call_with_exact_basis() {
         }
     }
 
-    let registry = std::sync::Arc::unwrap_or_clone(
-        crate::node_system::catalog::build_builtin_node_system()
-            .unwrap()
-            .registry,
-    );
+    let builtins = crate::node_system::catalog::build_builtin_node_system().unwrap();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let counted = test_protocol("callee_guard", vec![], vec![], vec![]);
+    let registry = AugmentedCompilerRegistry {
+        frozen: &builtins.registry,
+        protocol: counted,
+        implementation: NodeImplementation::new(CountingLowerer(calls.clone())),
+    };
     let outer_path = GraphResourcePath("functions/outer".into());
     let inner_path = GraphResourcePath("functions/inner".into());
     let signature = FunctionDocument::new(FunctionSignature {
@@ -187,24 +189,25 @@ fn nested_blocking_callee_projects_to_root_call_with_exact_basis() {
         ]),
         versions: versions.clone(),
     };
-    let mut caller = builtin_graph_with_nodes(&[(1, "yssbi.project.function.call")]);
+    let mut caller = builtin_graph_with_nodes(&[
+        (1, "yssbi.project.function.call"),
+        (2, "yssbi.test.callee_guard"),
+    ]);
     set_parameters(
         &mut caller,
         1,
         &[("target", serde_json::json!(outer_path.0.as_ref()))],
     );
-    let trace = RecordingTrace::default();
-    let calls = AtomicUsize::new(0);
 
     let result = GraphCompiler::with_interface_resolvers(
         &registry,
         &resources,
         build_builtin_interface_resolvers(),
     )
-    .with_observability(ProjectSessionId::new("nested-call"), &trace)
+    .with_project_session_id(ProjectSessionId::new("nested-call"))
     .compile(&caller);
 
-    assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+    assert_analysis_blocks_before_lowering(&result, &calls);
     assert_eq!(result.analysis.basis.resource_versions, versions);
     assert!(result.analysis.basis.resource_observations.is_empty());
     assert!(result.analysis.diagnostics.iter().any(|diagnostic| {

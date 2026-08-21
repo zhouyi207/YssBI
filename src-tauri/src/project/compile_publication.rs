@@ -4,7 +4,7 @@ use super::{GraphResourcePath, ProjectState};
 use crate::node_system::analysis::ResourceKey;
 use crate::node_system::analysis::{
     CompilationBasis, CompileProjection, ResourceObservationSet, ResourceObservedState,
-    ResourceVersion, TraceSink,
+    ResourceVersion,
 };
 use crate::node_system::compiler::{
     CompilationOutcome, CompilationTask, CompileProducts, GraphCompiler, ProjectCompileCoordinator,
@@ -88,8 +88,7 @@ impl ProjectState {
         source: &ProjectionSourceSnapshot,
     ) -> Result<PublishedProducts, String> {
         let input = CompileInput::from_source(graph_path, source.clone())?;
-        let trace_sink = Arc::clone(&input.source.environment.trace_sink);
-        self.get_or_compile_input(input, trace_sink.as_ref())
+        self.get_or_compile_input(input)
             .map(CurrentCompilation::into_products)
     }
 
@@ -97,7 +96,6 @@ impl ProjectState {
         &self,
         graph_path: &GraphResourcePath,
         expected_session_id: &crate::node_system::ProjectSessionId,
-        trace_sink: &dyn TraceSink,
     ) -> Result<CurrentCompilation, String> {
         let input = self.capture_compile_input(graph_path)?;
         if &input.project_session_id != expected_session_id {
@@ -105,14 +103,10 @@ impl ProjectState {
                 "stale_project_lifecycle: project changed before execution compilation".into(),
             );
         }
-        self.get_or_compile_input(input, trace_sink)
+        self.get_or_compile_input(input)
     }
 
-    fn get_or_compile_input(
-        &self,
-        mut input: CompileInput,
-        trace_sink: &dyn TraceSink,
-    ) -> Result<CurrentCompilation, String> {
+    fn get_or_compile_input(&self, mut input: CompileInput) -> Result<CurrentCompilation, String> {
         let coordinator = self.compile_coordinator.read().unwrap().clone();
         loop {
             if let Some(products) = self.current_products_at_authority_gate(&coordinator, &input)? {
@@ -138,14 +132,8 @@ impl ProjectState {
             }
             match coordinator.request(input.document_path.clone(), input.basis.clone()) {
                 ScheduleOutcome::Start(task) => {
-                    let outcome =
-                        self.compile_and_publish(&coordinator, &task, &input, trace_sink)?;
-                    self.finish_and_drive_pending(
-                        &coordinator,
-                        task,
-                        &input.project_session_id,
-                        trace_sink,
-                    );
+                    let outcome = self.compile_and_publish(&coordinator, &task, &input)?;
+                    self.finish_and_drive_pending(&coordinator, task, &input.project_session_id);
                     if outcome != PublishOutcome::Current {
                         let graph_path = GraphResourcePath::new(input.document_path.0.as_ref())
                             .expect("captured graph path is normalized");
@@ -283,7 +271,6 @@ impl ProjectState {
         coordinator: &Arc<ProjectCompileCoordinator>,
         mut finished: CompilationTask,
         expected_session_id: &crate::node_system::ProjectSessionId,
-        trace_sink: &dyn TraceSink,
     ) {
         while let Some(next) = coordinator.finish(&finished.graph_path, finished.compile_id) {
             let graph_path = match GraphResourcePath::new(next.graph_path.0.as_ref()) {
@@ -304,7 +291,7 @@ impl ProjectState {
                 finished = next;
                 continue;
             }
-            let _ = self.compile_and_publish(coordinator, &next, &input, trace_sink);
+            let _ = self.compile_and_publish(coordinator, &next, &input);
             finished = next;
         }
     }
@@ -314,7 +301,6 @@ impl ProjectState {
         coordinator: &Arc<ProjectCompileCoordinator>,
         task: &CompilationTask,
         input: &CompileInput,
-        trace_sink: &dyn TraceSink,
     ) -> Result<PublishOutcome, String> {
         self.run_compile_after_source_capture_test_hook();
         {
@@ -333,10 +319,7 @@ impl ProjectState {
             resources.schema_resolvers(),
             crate::node_system::compiler::build_builtin_interface_resolvers(),
         )
-        .with_observability(
-            input.source.environment.project_session_id.clone(),
-            trace_sink,
-        );
+        .with_project_session_id(input.source.environment.project_session_id.clone());
         let snapshot = compiler.snapshot_with_compile_id(
             task.compile_id,
             input.document_path.clone(),

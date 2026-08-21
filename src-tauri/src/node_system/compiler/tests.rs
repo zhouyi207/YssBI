@@ -1,9 +1,7 @@
 use super::*;
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
-    CompileId, DiagnosticLocation, DiagnosticSeverity, NOOP_TRACE_SINK, ResourceKey,
-    ResourceVersion, SYSTEM_TRACE_CLOCK, SpanGuard, SpanKind, SpanOutcome, SpanSpec, TraceSink,
-    TraceSpan,
+    CompileId, DiagnosticLocation, DiagnosticSeverity, ResourceKey, ResourceVersion,
 };
 use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
@@ -29,8 +27,8 @@ use crate::node_system::registry::{
 };
 use crate::node_system::testing::TestProtocolBuilder;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
-use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 struct ConstantLowerer;
@@ -40,19 +38,6 @@ impl NodeLowerer for ConstantLowerer {
             kernel: LoweredKernel::Native(KernelHandle::new("test.constant").unwrap()),
             parameters: CompiledParameterHandle::new("test.params").unwrap(),
         })
-    }
-}
-
-#[derive(Default)]
-struct RecordingTrace(Mutex<Vec<TraceSpan>>);
-
-impl TraceSink for RecordingTrace {
-    fn start_span(&self, spec: SpanSpec) -> SpanGuard<'_> {
-        SpanGuard::new(self, spec, &SYSTEM_TRACE_CLOCK)
-    }
-
-    fn complete_span(&self, span: TraceSpan) {
-        self.0.lock().unwrap().push(span);
     }
 }
 
@@ -68,22 +53,14 @@ impl NodeLowerer for CountingLowerer {
     }
 }
 
-fn assert_analysis_blocks_before_lowering(
-    result: &CompileResult,
-    trace: &RecordingTrace,
-    calls: &AtomicUsize,
-) {
+fn assert_analysis_blocks_before_lowering(result: &CompileResult, calls: &AtomicUsize) {
+    assert!(matches!(
+        result.outcome,
+        CompilationOutcome::AnalysisBlocked
+    ));
     assert!(result.semantic.is_none());
     assert!(result.plan.is_none());
     assert_eq!(calls.load(AtomicOrdering::Relaxed), 0);
-    assert!(
-        trace
-            .0
-            .lock()
-            .unwrap()
-            .iter()
-            .all(|span| span.kind != SpanKind::Lowering)
-    );
 }
 
 struct Resources;

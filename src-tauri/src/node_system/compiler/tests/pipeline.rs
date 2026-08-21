@@ -34,68 +34,32 @@ fn valid_constant_graph_produces_plan_with_same_basis() {
 }
 
 #[test]
-fn compile_plan_and_trace_keep_the_exact_requested_correlation() {
+fn compile_plan_keeps_the_exact_requested_provenance() {
     let registry = registry();
-    let trace = RecordingTrace::default();
-    let compiler = GraphCompiler::new(&registry, &Resources)
-        .with_observability(ProjectSessionId::new("project-session-1"), &trace);
+    let session_id = ProjectSessionId::new("project-session-1");
+    let compiler =
+        GraphCompiler::new(&registry, &Resources).with_project_session_id(session_id.clone());
     let snapshot = compiler.snapshot_with_compile_id(
         CompileId::new(41),
         GraphResourcePath("events/main".into()),
         &document(NodeTypeId::new("yssbi.test.constant").unwrap()),
     );
-
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
-    let plan = result.plan.unwrap();
 
-    assert_eq!(plan.provenance, snapshot.provenance);
-    let spans = trace.0.lock().unwrap();
-    let snapshot_span = spans
-        .iter()
-        .find(|span| span.kind == SpanKind::Snapshot)
-        .unwrap();
-    assert_eq!(snapshot_span.parent_span_id, None);
-    assert_eq!(snapshot_span.outcome, SpanOutcome::Success);
-    for kind in [SpanKind::Analysis, SpanKind::Lowering] {
-        let span = spans.iter().find(|span| span.kind == kind).unwrap();
-        assert_eq!(span.parent_span_id, Some(snapshot_span.span_id));
-        assert_eq!(
-            span.outcome,
-            crate::node_system::analysis::SpanOutcome::Success
-        );
-    }
-    for span in spans.iter() {
-        assert_eq!(
-            span.correlation.project_session_id,
-            snapshot.provenance.project_session_id
-        );
-        assert_eq!(span.correlation.graph_path, snapshot.provenance.graph_path);
-        assert_eq!(
-            span.correlation.graph_revision,
-            snapshot.provenance.basis.graph_revision
-        );
-        assert_eq!(span.correlation.compile_id, snapshot.provenance.compile_id);
-    }
-}
-
-#[test]
-fn blocking_compile_emits_no_lowering_or_run_span() {
-    let registry = registry();
-    let trace = RecordingTrace::default();
-    let result = GraphCompiler::new(&registry, &Resources)
-        .with_observability(ProjectSessionId::new("project-session-1"), &trace)
-        .compile(&document(NodeTypeId::new("yssbi.test.missing").unwrap()));
-
-    assert!(result.plan.is_none());
-    assert!(
-        trace
-            .0
-            .lock()
-            .unwrap()
-            .iter()
-            .all(|span| { !matches!(span.kind, SpanKind::Lowering | SpanKind::Run) })
+    assert_eq!(&snapshot.provenance.project_session_id, &session_id);
+    assert_eq!(
+        &result.plan.as_ref().expect("valid graph plan").provenance,
+        &snapshot.provenance,
+    );
+    assert_eq!(
+        &result
+            .execution_basis
+            .as_ref()
+            .expect("valid graph execution basis")
+            .provenance,
+        &snapshot.provenance,
     );
 }
 
@@ -182,10 +146,8 @@ fn semantically_identical_documents_serialize_identically() {
     assert_eq!(forward.document, reverse.document);
 
     let registry = determinism_registry(determinism_protocols());
-    let compiler = GraphCompiler::new(&registry, &Resources).with_observability(
-        ProjectSessionId::new("determinism-session"),
-        &NOOP_TRACE_SINK,
-    );
+    let compiler = GraphCompiler::new(&registry, &Resources)
+        .with_project_session_id(ProjectSessionId::new("determinism-session"));
     let graph_path = GraphResourcePath("events/determinism".into());
     let compile_id = CompileId::new(73);
     let forward_snapshot =

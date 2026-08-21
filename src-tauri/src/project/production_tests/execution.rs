@@ -703,7 +703,6 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
             &resources,
             None,
             session,
-            &crate::node_system::analysis::NOOP_TRACE_SINK,
             &crate::node_system::compiler::CompileCancellationToken::new(),
             &crate::project::ProjectComputationSettings::default(),
             &mut parameters,

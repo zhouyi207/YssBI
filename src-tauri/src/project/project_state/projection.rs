@@ -20,7 +20,6 @@ pub(in crate::project) struct ProjectionEnvironmentSnapshot {
     pub(in crate::project) authority: ProjectionEnvironmentAuthorityBasis,
     pub(in crate::project) registry: Arc<crate::node_system::registry::NodeRegistry>,
     pub(in crate::project) catalog: Arc<crate::node_system::catalog::BuiltinCatalog>,
-    pub(in crate::project) trace_sink: Arc<crate::node_system::analysis::BoundedTraceSink>,
     pub(in crate::project) project_session_id: crate::node_system::ProjectSessionId,
     pub(in crate::project) database_schemas:
         BTreeMap<crate::node_system::plan::ResourceId, Vec<crate::schema::ColumnInfoDTO>>,
@@ -232,7 +231,7 @@ impl ProjectState {
                 .map(NormalizedProjectRoot::from_project_path)
                 .transpose()
                 .map_err(|error| error.to_string())?;
-            let (registry, catalog, trace_sink, project_session_id, mut database_schemas) = {
+            let (registry, catalog, project_session_id, mut database_schemas) = {
                 let store = self.project_store.read().unwrap();
                 let schemas = store
                     .databases
@@ -260,7 +259,6 @@ impl ProjectState {
                 (
                     Arc::clone(&store.node_registry),
                     Arc::clone(&store.catalog),
-                    Arc::clone(&store.trace_sink),
                     store.project_session_id.clone(),
                     schemas,
                 )
@@ -351,7 +349,6 @@ impl ProjectState {
                 authority,
                 registry,
                 catalog,
-                trace_sink,
                 project_session_id,
                 database_schemas,
                 #[cfg(test)]
@@ -483,10 +480,7 @@ pub(in crate::project) fn candidate_projection_replacement(
         resources.schema_resolvers(),
         crate::node_system::compiler::build_builtin_interface_resolvers(),
     )
-    .with_observability(
-        source.environment.project_session_id.clone(),
-        source.environment.trace_sink.as_ref(),
-    );
+    .with_project_session_id(source.environment.project_session_id.clone());
     let snapshot = compiler.snapshot_with_compile_id(
         crate::node_system::analysis::CompileId::new(source.authority_generation),
         crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),

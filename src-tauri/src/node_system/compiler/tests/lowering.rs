@@ -35,13 +35,11 @@ fn lowerability_invalid_dataframe_parameters_block_in_analysis() {
                 serde_json::json!("renamed"),
             );
         }
-        let trace = RecordingTrace::default();
-
         let result = GraphCompiler::new(&registry, &Resources)
-            .with_observability(ProjectSessionId::new("lowerability"), &trace)
+            .with_project_session_id(ProjectSessionId::new("lowerability"))
             .compile(&graph);
 
-        assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+        assert_analysis_blocks_before_lowering(&result, &calls);
         assert!(
             result.analysis.diagnostics.iter().any(|diagnostic| {
                 diagnostic.code.as_str() == "compiler.parameter.invalid"
@@ -81,13 +79,11 @@ fn lowerability_malformed_persisted_literal_blocks_at_port_in_analysis() {
             literal_override: Some(serde_json::json!({"value_type": "not-a-type"})),
         },
     );
-    let trace = RecordingTrace::default();
-
     let result = GraphCompiler::new(&registry, &Resources)
-        .with_observability(ProjectSessionId::new("lowerability"), &trace)
+        .with_project_session_id(ProjectSessionId::new("lowerability"))
         .compile(&graph);
 
-    assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+    assert_analysis_blocks_before_lowering(&result, &calls);
     assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
         diagnostic.code.as_str() == "compiler.input.literal_invalid"
             && diagnostic.primary == DiagnosticLocation::Port(address.clone())
@@ -125,13 +121,11 @@ fn lowerability_legal_literal_wire_with_wrong_port_type_blocks_at_exact_port() {
             ),
         },
     );
-    let trace = RecordingTrace::default();
-
     let result = GraphCompiler::new(&registry, &Resources)
-        .with_observability(ProjectSessionId::new("literal-mismatch"), &trace)
+        .with_project_session_id(ProjectSessionId::new("literal-mismatch"))
         .compile(&graph);
 
-    assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+    assert_analysis_blocks_before_lowering(&result, &calls);
     assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
         diagnostic.code.as_str() == "compiler.input.literal_invalid"
             && diagnostic.primary == DiagnosticLocation::Port(address.clone())
@@ -173,13 +167,11 @@ fn lowerability_nested_literal_mismatch_blocks_at_exact_port_before_lowering() {
             ),
         },
     );
-    let trace = RecordingTrace::default();
-
     let result = GraphCompiler::new(&registry, &Resources)
-        .with_observability(ProjectSessionId::new("nested-literal-mismatch"), &trace)
+        .with_project_session_id(ProjectSessionId::new("nested-literal-mismatch"))
         .compile(&graph);
 
-    assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+    assert_analysis_blocks_before_lowering(&result, &calls);
     assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
         diagnostic.code.as_str() == "compiler.input.literal_invalid"
             && diagnostic.primary == DiagnosticLocation::Port(address.clone())
@@ -226,13 +218,11 @@ fn non_concrete_parameter_shapes_block_when_they_cannot_be_prepared() {
             .with_lowerer(&node_type, CountingLowerer(calls.clone()));
         let mut graph = graph_with_nodes(&[(1, name)]);
         set_parameters(&mut graph, 1, &[("value", serde_json::json!(7))]);
-        let trace = RecordingTrace::default();
-
         let result = GraphCompiler::new(&registry, &Resources)
-            .with_observability(ProjectSessionId::new("unpreparable"), &trace)
+            .with_project_session_id(ProjectSessionId::new("unpreparable"))
             .compile(&graph);
 
-        assert_analysis_blocks_before_lowering(&result, &trace, &calls);
+        assert_analysis_blocks_before_lowering(&result, &calls);
         assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
             diagnostic.code.as_str() == "compiler.parameter.invalid"
                 && matches!(

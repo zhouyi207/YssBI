@@ -24,13 +24,12 @@ use super::{
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
     AnalysisResourceReads, AnalysisResourceResolver, AnalysisSnapshot, AnalyzedNode,
-    CompilationBasis, CompileId, CompileProvenance, ControlEdge, CorrelationContext,
-    DiagnosticLocation, NOOP_TRACE_SINK, NodeDiagnostic, ResolvedDatabase, ResolvedDatabaseValue,
-    ResolvedFunction, ResolvedFunctionValue, ResolvedInterface, ResolvedPort, ResolvedResource,
-    ResolvedVariable, ResourceKey, ResourceObservationSet, ResourceObservedState,
-    ResourceResolutionError, ResourceVersion, ResourceVersionSet, SemanticDependency, SpanId,
-    SpanKind, SpanOutcome, SpanSpec, TraceSink, ValidatedSemanticGraph, ValidatedSemanticNode,
-    ValidatedSemanticPort, ValueEdge, start_span_safely,
+    CompilationBasis, CompileId, CompileProvenance, ControlEdge, DiagnosticLocation,
+    NodeDiagnostic, ResolvedDatabase, ResolvedDatabaseValue, ResolvedFunction,
+    ResolvedFunctionValue, ResolvedInterface, ResolvedPort, ResolvedResource, ResolvedVariable,
+    ResourceKey, ResourceObservationSet, ResourceObservedState, ResourceResolutionError,
+    ResourceVersion, ResourceVersionSet, SemanticDependency, ValidatedSemanticGraph,
+    ValidatedSemanticNode, ValidatedSemanticPort, ValueEdge,
 };
 use crate::node_system::document::{
     ConnectionId, DynamicMemberLocator, DynamicPortBinding, FunctionDocument, FunctionParameterId,
@@ -184,7 +183,6 @@ pub struct GraphCompiler<'a, R, S> {
     schema_resolvers: SchemaResolverSet,
     interface_resolvers: InterfaceResolverSet,
     project_session_id: ProjectSessionId,
-    trace: &'a dyn TraceSink,
 }
 
 #[cfg(test)]
@@ -205,7 +203,6 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             schema_resolvers: SchemaResolverSet::new(),
             interface_resolvers: InterfaceResolverSet::new(),
             project_session_id: ProjectSessionId::unknown(),
-            trace: &NOOP_TRACE_SINK,
         }
     }
 
@@ -220,7 +217,6 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             schema_resolvers,
             interface_resolvers: InterfaceResolverSet::new(),
             project_session_id: ProjectSessionId::unknown(),
-            trace: &NOOP_TRACE_SINK,
         }
     }
 
@@ -235,7 +231,6 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             schema_resolvers: SchemaResolverSet::new(),
             interface_resolvers,
             project_session_id: ProjectSessionId::unknown(),
-            trace: &NOOP_TRACE_SINK,
         }
     }
 
@@ -251,17 +246,11 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             schema_resolvers,
             interface_resolvers,
             project_session_id: ProjectSessionId::unknown(),
-            trace: &NOOP_TRACE_SINK,
         }
     }
 
-    pub fn with_observability(
-        mut self,
-        project_session_id: ProjectSessionId,
-        trace: &'a dyn TraceSink,
-    ) -> Self {
+    pub fn with_project_session_id(mut self, project_session_id: ProjectSessionId) -> Self {
         self.project_session_id = project_session_id;
-        self.trace = trace;
         self
     }
 
@@ -310,60 +299,17 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         snapshot: &CompilationSnapshot,
         cancellation: &CompileCancellationToken,
     ) -> Result<CompileResult, CompileCancelled> {
-        let correlation = CorrelationContext::compile(&snapshot.provenance);
-        let mut snapshot_span = start_span_safely(
-            self.trace,
-            SpanSpec {
-                parent_span_id: None,
-                run_id: None,
-                operation_id: None,
-                activation_id: None,
-                attempt_id: None,
-                kind: SpanKind::Snapshot,
-                correlation,
-            },
-        );
-        let result = self.compile_snapshot_inner(snapshot, cancellation, snapshot_span.span_id());
-        let outcome = match &result {
-            Ok(result) => {
-                let mut final_provenance = snapshot.provenance.clone();
-                final_provenance.basis = result.analysis.basis.clone();
-                snapshot_span.replace_correlation(CorrelationContext::compile(&final_provenance));
-                if result.outcome == CompilationOutcome::Succeeded {
-                    SpanOutcome::Success
-                } else {
-                    SpanOutcome::Error
-                }
-            }
-            Err(_) => SpanOutcome::Cancellation,
-        };
-        snapshot_span.finish(outcome);
-        result
+        self.compile_snapshot_inner(snapshot, cancellation)
     }
 
     fn compile_snapshot_inner(
         &self,
         snapshot: &CompilationSnapshot,
         cancellation: &CompileCancellationToken,
-        snapshot_trace_span_id: Option<SpanId>,
     ) -> Result<CompileResult, CompileCancelled> {
         #[cfg(test)]
         COMPILE_SNAPSHOT_INVOCATIONS.fetch_add(1, Ordering::Relaxed);
-        let correlation = CorrelationContext::compile(&snapshot.provenance);
-        let mut analysis_span = start_span_safely(
-            self.trace,
-            SpanSpec {
-                parent_span_id: snapshot_trace_span_id,
-                run_id: None,
-                operation_id: None,
-                activation_id: None,
-                attempt_id: None,
-                kind: SpanKind::Analysis,
-                correlation: correlation.clone(),
-            },
-        );
         if let Err(error) = cancellation.checkpoint() {
-            analysis_span.finish(SpanOutcome::Cancellation);
             return Err(error);
         }
         let mut resources = TrackedResourceResolver::new(self.resources);
@@ -379,7 +325,6 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             &mut resources,
             cancellation,
         ) {
-            analysis_span.finish(SpanOutcome::Cancellation);
             return Err(error);
         }
         let prepared_configs = state.prepared_configs();
@@ -404,10 +349,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             cancellation,
         ) {
             Ok(closure) => closure,
-            Err(error) => {
-                analysis_span.finish(SpanOutcome::Cancellation);
-                return Err(error);
-            }
+            Err(error) => return Err(error),
         };
         state.diagnostics.extend(closure.diagnostics);
         let mut function_abis = closure.abis;
@@ -416,11 +358,9 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
         let decoded_literals = state.decoded_literals.clone();
         let mut analysis = state.snapshot();
         if let Err(error) = cancellation.checkpoint() {
-            analysis_span.finish(SpanOutcome::Cancellation);
             return Err(error);
         }
         if analysis.has_blocking_errors() {
-            analysis_span.finish(SpanOutcome::Error);
             return Ok(finalize_resource_basis(
                 CompileResult {
                     analysis,
@@ -443,7 +383,6 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     analysis.diagnostics,
                     CompilerDiagnostic::SemanticInvalid {}.into_node(DiagnosticLocation::Graph),
                 );
-                analysis_span.finish(SpanOutcome::Error);
                 return Ok(finalize_resource_basis(
                     CompileResult {
                         analysis,
@@ -466,19 +405,6 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             }
         };
         let mut semantic = semantic_for_lowering(self.registry, semantic);
-        analysis_span.finish(SpanOutcome::Success);
-        let mut lowering_span = start_span_safely(
-            self.trace,
-            SpanSpec {
-                parent_span_id: snapshot_trace_span_id,
-                run_id: None,
-                operation_id: None,
-                activation_id: None,
-                attempt_id: None,
-                kind: SpanKind::Lowering,
-                correlation: correlation.clone(),
-            },
-        );
 
         let final_versions = resources.reads().clone();
         let final_observations = resources.observations().clone();
@@ -518,7 +444,6 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     })
                     .transpose();
                 if abi_finalized.is_err() {
-                    lowering_span.finish(SpanOutcome::Error);
                     (
                         Some(semantic),
                         None,
@@ -530,7 +455,6 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                         }),
                     )
                 } else {
-                    lowering_span.finish(SpanOutcome::Success);
                     (
                         Some(semantic),
                         Some(basis),
@@ -539,19 +463,13 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
                     )
                 }
             }
-            Err(LowerGraphFailure::Cancelled(error)) => {
-                lowering_span.finish(SpanOutcome::Cancellation);
-                return Err(error);
-            }
-            Err(LowerGraphFailure::Internal(failure)) => {
-                lowering_span.finish(SpanOutcome::Error);
-                (
-                    Some(semantic),
-                    None,
-                    None,
-                    CompilationOutcome::InternalFailure(failure),
-                )
-            }
+            Err(LowerGraphFailure::Cancelled(error)) => return Err(error),
+            Err(LowerGraphFailure::Internal(failure)) => (
+                Some(semantic),
+                None,
+                None,
+                CompilationOutcome::InternalFailure(failure),
+            ),
         };
         Ok(finalize_resource_basis(
             CompileResult {

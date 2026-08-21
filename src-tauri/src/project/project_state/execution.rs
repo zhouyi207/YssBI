@@ -236,8 +236,7 @@ impl ProjectState {
         drop(publication);
 
         self.load_function_resources(&cancellation)?;
-        let compilation =
-            self.get_or_compile_current(graph_path, &session_id, trace_sink.as_ref())?;
+        let compilation = self.get_or_compile_current(graph_path, &session_id)?;
         let product = match &compilation.analysis.payload.outcome {
             crate::node_system::compiler::CompilationOutcome::Succeeded => compilation
                 .plan
@@ -313,7 +312,6 @@ impl ProjectState {
             &resource_snapshot.compile,
             Some(plan.as_ref()),
             execution.session_id.clone(),
-            trace_sink.as_ref(),
             &compile_cancellation,
             &execution.data.computation_settings,
             &mut compiled_parameters,
