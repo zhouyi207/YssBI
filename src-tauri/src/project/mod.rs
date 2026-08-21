@@ -23,7 +23,6 @@ pub mod project_scan;
 pub mod project_session;
 pub mod project_state;
 pub mod project_state_database;
-pub mod project_traces;
 pub mod project_writers;
 pub mod resource_mutations;
 
@@ -62,7 +61,6 @@ pub use project_session::*;
 pub use project_state::*;
 pub use project_state_database::ProjectDatabaseError;
 pub use project_store::*;
-pub use project_traces::*;
 
 pub use project_watcher::*;
 pub use resource_patch::*;
@@ -199,7 +197,5 @@ mod editor_reroute_mutation_tests;
 mod move_connections_project_state_tests;
 #[cfg(test)]
 mod production_tests;
-#[cfg(test)]
-mod project_trace_query_tests;
 #[cfg(test)]
 mod structured_control_production_tests;

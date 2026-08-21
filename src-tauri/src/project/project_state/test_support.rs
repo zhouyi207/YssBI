@@ -9,7 +9,6 @@ pub(super) type CompilePublicationTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type ExecutionTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type ProductionRelationalBackendFactory =
     Arc<dyn Fn() -> Arc<dyn crate::node_system::runtime::RelationalBackend> + Send + Sync>;
-pub(super) type TraceQueryTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type VariableStagingTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(super) type VariableAuthorityAssignmentPanicTestHook = Arc<dyn Fn() + Send + Sync>;
 pub(crate) type ProjectActivationTestHook = Arc<dyn Fn() + Send + Sync>;
@@ -64,8 +63,6 @@ pub(in crate::project) struct ProjectStateTestHooks {
     pub(in crate::project) execution_before_run_test_hook: Arc<RwLock<Option<ExecutionTestHook>>>,
     pub(in crate::project) execution_before_commit_gate_test_hook:
         Arc<RwLock<Option<ExecutionTestHook>>>,
-    pub(in crate::project) trace_query_after_snapshot_test_hook:
-        Arc<RwLock<Option<TraceQueryTestHook>>>,
     pub(in crate::project) variable_staging_test_hook: Arc<RwLock<Option<VariableStagingTestHook>>>,
     pub(in crate::project) variable_authority_assignment_panic_test_hook:
         Arc<RwLock<Option<VariableAuthorityAssignmentPanicTestHook>>>,

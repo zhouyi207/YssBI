@@ -202,8 +202,6 @@ const capabilityCommandExemptions = [
   'get_result_value',
   'get_result_page',
   'get_pin_result_history',
-  'list_graph_trace_bundles',
-  'get_run_trace_bundle',
 
   'submit_bayes_inference',
   'get_bayes_inference_status',

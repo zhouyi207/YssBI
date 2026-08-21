@@ -5,15 +5,10 @@
 
 mod basis;
 mod diagnostic;
-mod observability;
 mod projection;
 mod provenance;
 mod semantic;
 mod snapshot;
-mod trace_bundle;
-mod trace_store;
-#[cfg(test)]
-mod trace_store_tests;
 
 pub use crate::node_system::document::PortAddressDto;
 pub use basis::{
@@ -25,16 +20,6 @@ pub use basis::{
 pub use diagnostic::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, Location,
     NodeDiagnostic, Severity,
-};
-#[cfg(test)]
-pub use observability::FakeTraceClock;
-pub use observability::{
-    CompilationTraceBundle, CorrelationContext, InvalidTraceIdentity, MonotonicTimestamp,
-    NOOP_TRACE_SINK, NoopTraceSink, ParentCallId, RedactionPolicy, RunTraceBundle,
-    SYSTEM_TRACE_CLOCK, SensitiveFieldAction, SpanGuard, SpanId, SpanKind, SpanOutcome, SpanSpec,
-    SystemTraceClock, TraceBundle, TraceBundleMetadata, TraceClock, TraceFieldSensitivity,
-    TraceProvenanceScope, TraceSink, TraceSpan, TraceValue, complete_span_safely,
-    start_span_safely,
 };
 pub(crate) use projection::resolve_function_data_type;
 pub use projection::{
@@ -56,10 +41,6 @@ pub use semantic::{
 pub use snapshot::{
     AnalysisSnapshot, AnalyzedNode, ResolvedInterface, ResolvedPort, ResolvedPortStatus,
     SchemaFacts, TypeFacts, ValidationError,
-};
-pub use trace_store::{
-    BoundedTraceSink, DEFAULT_ACTIVE_TRACE_SPAN_LIMIT, DEFAULT_COMPLETED_RUN_TRACE_LIMIT,
-    DEFAULT_PROJECT_TRACE_BYTE_LIMIT, TraceRetentionError, TraceRetentionPolicy,
 };
 
 #[cfg(test)]

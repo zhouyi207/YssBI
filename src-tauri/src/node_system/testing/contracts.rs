@@ -1,4 +1,3 @@
-use crate::commands::command_trace::{TraceBundleDto, TraceSpanDto};
 use crate::commands::node_system_execution_dto::{
     EXECUTION_DEMAND_DTO_WIRE_TYPES, ExecutionChannelEventDto, ExecutionDemandDto,
     RUN_EVENT_KIND_DTO_WIRE_TYPES, RunEventDto,
@@ -7,11 +6,7 @@ use crate::event::{
     Event, EventProject, ProjectionStatusDto, ResourceMoveDto, ResourceMutationResultDto,
 };
 use crate::node_system::ProjectSessionId;
-use crate::node_system::analysis::{
-    CompileId, CorrelationContext, EditorGraphProjectionDto, MonotonicTimestamp,
-    ResourceVersionSet, RunTraceBundle, SpanId, SpanKind, SpanOutcome, TraceBundleMetadata,
-    TraceProvenanceScope, TraceSpan,
-};
+use crate::node_system::analysis::{EditorGraphProjectionDto, ResourceVersionSet};
 use crate::node_system::catalog::{
     CatalogResourceEntry, CatalogResourcePath, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
     build_builtin_node_system,
@@ -28,7 +23,6 @@ use crate::node_system::document::{
 use crate::node_system::plan::{EXECUTION_DEMAND_VARIANT_COUNT, ExecutionDemand, GraphOutputRef};
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::registry::{NodeRegistry, canonical_semantic_protocol_snapshot};
-use crate::node_system::runtime::RunId;
 use crate::node_system::runtime::{
     GraphRunIdentity, OrdinaryRunErrorCode, RUN_EVENT_KIND_VARIANT_COUNT, ResultId,
     RunErrorOutcome, RunEvent, RunEventKind, RunOutputEvent, RunOutputMessage, RunOutputStatus,
@@ -221,24 +215,6 @@ fn editor_projection_contract(
     )
     .unwrap();
     serde_json::to_value(projection).unwrap()
-}
-
-fn contract_correlation(registry: &NodeRegistry) -> CorrelationContext {
-    let resource_versions = ContractResources.versions();
-    CorrelationContext {
-        project_session_id: ProjectSessionId::new("contract-session"),
-        graph_path: GraphResourcePath(GRAPH_PATH.into()),
-        graph_revision: GraphRevision::new(7),
-        registry_fingerprint: registry.fingerprint().clone(),
-        resource_versions,
-        compile_id: CompileId::new(9),
-        selection_digest: Some("contract-selection".into()),
-        run_id: None,
-        node_id: None,
-        node_type_id: None,
-        parent_call: None,
-        trace_parent_span_id: None,
-    }
 }
 
 fn contract_output(port: PortAddress) -> GraphOutputRef {
@@ -656,27 +632,7 @@ fn required_fingerprint(value: &Value, pointer: &str, purpose: &str) -> String {
     fingerprint.to_owned()
 }
 
-fn fingerprint_wire_from_production_encoders(
-    registry: &NodeRegistry,
-    catalog: &Value,
-    editor: &Value,
-) -> Value {
-    let correlation = contract_correlation(registry);
-    let trace = serde_json::to_value(TraceSpanDto::from(TraceSpan {
-        span_id: SpanId::new(1).unwrap(),
-        parent_span_id: None,
-        run_id: None,
-        operation_id: None,
-        activation_id: None,
-        attempt_id: None,
-        kind: SpanKind::Snapshot,
-        started_at: MonotonicTimestamp::new(1).unwrap(),
-        finished_at: MonotonicTimestamp::new(2).unwrap(),
-        outcome: SpanOutcome::Success,
-        correlation,
-    }))
-    .expect("production trace DTO must serialize");
-
+fn fingerprint_wire_from_production_encoders(catalog: &Value, editor: &Value) -> Value {
     json!({
         "format": "yssbi.registry-fingerprint-wire.v1",
         "catalog": required_fingerprint(catalog, "/registryFingerprint", "Catalog"),
@@ -685,63 +641,7 @@ fn fingerprint_wire_from_production_encoders(
             "/basis/registryFingerprint",
             "editor projection",
         ),
-        "trace": required_fingerprint(
-            &trace,
-            "/correlation/registryFingerprint",
-            "trace",
-        ),
     })
-}
-
-fn trace_bundle_wire_contract(registry: &NodeRegistry) -> Value {
-    let unsafe_id = 9_007_199_254_740_993_u64;
-    let run_id = RunId::new(unsafe_id + 4);
-    let correlation = contract_correlation(registry).for_run(run_id, None);
-    let run_span_id = SpanId::new(unsafe_id).unwrap();
-    let run = TraceSpan {
-        span_id: run_span_id,
-        parent_span_id: None,
-        run_id: Some(run_id),
-        operation_id: None,
-        activation_id: None,
-        attempt_id: None,
-        kind: SpanKind::Run,
-        started_at: MonotonicTimestamp::new(unsafe_id).unwrap(),
-        finished_at: MonotonicTimestamp::new(unsafe_id + 5).unwrap(),
-        outcome: SpanOutcome::Success,
-        correlation: correlation.clone(),
-    };
-    let cleanup = TraceSpan {
-        span_id: SpanId::new(unsafe_id + 1).unwrap(),
-        parent_span_id: Some(run_span_id),
-        run_id: Some(run_id),
-        operation_id: None,
-        activation_id: None,
-        attempt_id: None,
-        kind: SpanKind::Cleanup,
-        started_at: MonotonicTimestamp::new(unsafe_id + 2).unwrap(),
-        finished_at: MonotonicTimestamp::new(unsafe_id + 3).unwrap(),
-        outcome: SpanOutcome::Cleanup {
-            error_count: unsafe_id + 4,
-            panicking: true,
-        },
-        correlation: correlation.clone(),
-    };
-    serde_json::to_value(TraceBundleDto::from(RunTraceBundle {
-        run_id,
-        compile_id: correlation.compile_id,
-        graph_path: correlation.graph_path.clone(),
-        selection_digest: correlation.selection_digest.clone(),
-        incident_id: Some("contract-incident".into()),
-        metadata: TraceBundleMetadata {
-            provenance_scopes: vec![TraceProvenanceScope::from(&correlation)].into_boxed_slice(),
-            truncated: false,
-            dropped_span_count: 0,
-            estimated_bytes: unsafe_id + 6,
-        },
-        spans: vec![run, cleanup].into_boxed_slice(),
-    }))
-    .expect("production trace bundle DTO must serialize")
 }
 
 fn ols_summary_report_contract() -> Value {
@@ -805,11 +705,8 @@ fn contracts() -> BTreeMap<&'static str, Value> {
     let catalog = builtin.catalog;
     let localized_catalog = localized_catalog_contract(&registry, &catalog);
     let editor_projection = editor_projection_contract(&registry, &catalog);
-    let fingerprint_wire = fingerprint_wire_from_production_encoders(
-        &registry,
-        &localized_catalog,
-        &editor_projection,
-    );
+    let fingerprint_wire =
+        fingerprint_wire_from_production_encoders(&localized_catalog, &editor_projection);
 
     BTreeMap::from([
         (
@@ -830,10 +727,6 @@ fn contracts() -> BTreeMap<&'static str, Value> {
             function_editor_projection_contract(),
         ),
         ("fingerprint-wire.json", fingerprint_wire),
-        (
-            "trace-bundle-wire.json",
-            trace_bundle_wire_contract(&registry),
-        ),
         ("project-events.json", project_events_contract()),
         ("execution-wire.json", execution_wire_contract(&registry)),
     ])
@@ -973,10 +866,10 @@ fn fingerprint_wire_is_extracted_from_production_dto_encoders() {
     let catalog = localized_catalog_contract(&builtin.registry, &builtin.catalog);
     let editor = editor_projection_contract(&builtin.registry, &builtin.catalog);
 
-    let wire = fingerprint_wire_from_production_encoders(&builtin.registry, &catalog, &editor);
+    let wire = fingerprint_wire_from_production_encoders(&catalog, &editor);
 
     assert_eq!(wire["format"], "yssbi.registry-fingerprint-wire.v1");
-    let values = [&wire["catalog"], &wire["editorProjection"], &wire["trace"]];
+    let values = [&wire["catalog"], &wire["editorProjection"]];
     for value in values {
         let value = value
             .as_str()
@@ -1157,7 +1050,6 @@ fn checked_in_node_system_contracts_match_rust() {
         "catalog-search-wire.json",
         "project-events.json",
         "execution-wire.json",
-        "trace-bundle-wire.json",
     ] {
         assert!(
             contracts.contains_key(required),

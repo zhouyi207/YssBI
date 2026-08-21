@@ -133,8 +133,6 @@ pub fn run() {
             allocate_pin_preview_generation,
             execute_graph_document,
             cancel_graph_run,
-            list_graph_trace_bundles,
-            get_run_trace_bundle,
             get_result_descriptor,
             get_result_value,
             get_result_page,

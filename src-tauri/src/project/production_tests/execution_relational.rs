@@ -1,48 +1,5 @@
 use super::*;
 
-#[test]
-fn project_execution_runs_valid_plan_through_run_executor() {
-    let (state, root) = active_state_with_valid_constant_graph("valid-plan-execution");
-    let result = state
-        .execute_graph_for_current_project_for_test(
-            &graph_path(),
-            &crate::node_system::plan::ExecutionDemand::Default,
-            &NOOP_RUN_EVENT_SINK,
-        )
-        .unwrap();
-    assert!(result.run_id.get() > 0);
-    std::fs::remove_dir_all(root).unwrap();
-}
-
-#[test]
-fn production_observability_project_replacement_installs_empty_distinct_sink() {
-    let (state, root) = active_state_with_valid_constant_graph("trace-sink-replacement");
-    let old_sink = {
-        let store = state.project_store.read().unwrap();
-        std::sync::Arc::clone(&store.trace_sink)
-    };
-    state
-        .execute_graph_for_current_project_for_test(
-            &graph_path(),
-            &crate::node_system::plan::ExecutionDemand::Default,
-            &NOOP_RUN_EVENT_SINK,
-        )
-        .unwrap();
-    assert!(!old_sink.bundles().is_empty());
-
-    state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
-
-    let new_sink = {
-        let store = state.project_store.read().unwrap();
-        std::sync::Arc::clone(&store.trace_sink)
-    };
-    assert!(!std::sync::Arc::ptr_eq(&old_sink, &new_sink));
-    assert!(new_sink.bundles().is_empty());
-    assert!(!old_sink.bundles().is_empty());
-
-    std::fs::remove_dir_all(root).unwrap();
-}
-
 struct SourceRenameLimitFixture {
     state: ProjectState,
     root: std::path::PathBuf,

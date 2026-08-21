@@ -11,15 +11,12 @@ pub(crate) mod node_system_execution_dto;
 
 pub mod command_sci;
 pub mod command_serial_tests;
-pub mod command_trace;
 pub mod command_variable;
 pub mod command_window;
 pub mod command_worksheet;
 
 #[cfg(test)]
 mod command_blueprint_graph_phase1_tests;
-#[cfg(test)]
-mod command_trace_tests;
 
 pub use command_bayes::*;
 pub use command_dataframe::*;
@@ -33,7 +30,6 @@ pub use command_project::*;
 
 pub use command_sci::*;
 pub use command_serial_tests::*;
-pub use command_trace::*;
 pub use command_variable::*;
 pub use command_window::*;
 pub use command_worksheet::*;

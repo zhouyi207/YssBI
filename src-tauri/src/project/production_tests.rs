@@ -474,7 +474,7 @@ mod editor_mutations;
 #[cfg(test)]
 mod execution;
 #[cfg(test)]
-mod execution_observability;
+mod execution_relational;
 #[cfg(test)]
 mod graph_projection;
 #[cfg(test)]
