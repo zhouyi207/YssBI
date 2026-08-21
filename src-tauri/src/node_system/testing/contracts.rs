@@ -1,4 +1,3 @@
-use crate::commands::command_node_system::ExecuteGraphResultDto;
 use crate::commands::command_trace::{TraceBundleDto, TraceSpanDto};
 use crate::commands::node_system_execution_dto::{
     EXECUTION_DEMAND_DTO_WIRE_TYPES, ExecutionChannelEventDto, ExecutionDemandDto,
@@ -9,7 +8,7 @@ use crate::event::{
 };
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
-    CompilationBasis, CompileId, CorrelationContext, EditorGraphProjectionDto, MonotonicTimestamp,
+    CompileId, CorrelationContext, EditorGraphProjectionDto, MonotonicTimestamp,
     ResourceVersionSet, RunTraceBundle, SpanId, SpanKind, SpanOutcome, TraceBundleMetadata,
     TraceProvenanceScope, TraceSpan,
 };
@@ -31,9 +30,9 @@ use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::registry::{NodeRegistry, canonical_semantic_protocol_snapshot};
 use crate::node_system::runtime::RunId;
 use crate::node_system::runtime::{
-    OrdinaryRunErrorCode, RUN_EVENT_KIND_VARIANT_COUNT, ResultId, RunErrorOutcome, RunEvent,
-    RunEventKind, RunOutputEvent, RunOutputMessage, RunOutputStatus, RunOutputStatusEvent,
-    RunOutputStream, RunPhase,
+    GraphRunIdentity, OrdinaryRunErrorCode, RUN_EVENT_KIND_VARIANT_COUNT, ResultId,
+    RunErrorOutcome, RunEvent, RunEventKind, RunOutputEvent, RunOutputMessage, RunOutputStatus,
+    RunOutputStatusEvent, RunOutputStream, RunPhase,
 };
 use crate::project::{
     GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectGraphIndexEntry,
@@ -249,7 +248,7 @@ fn contract_output(port: PortAddress) -> GraphOutputRef {
     }
 }
 
-fn execution_wire_contract(registry: &NodeRegistry) -> Value {
+fn execution_wire_contract(_registry: &NodeRegistry) -> Value {
     const UNSAFE_ID: u64 = 9_007_199_254_740_993;
     let node_id = NodeId::from_uuid(Uuid::from_u128(2));
     let declared = contract_output(PortAddress::declared(
@@ -261,15 +260,11 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
         PortKey::new("results").unwrap(),
         PortInstanceId::from_uuid(Uuid::from_u128(3)),
     ));
-    let mut correlation = contract_correlation(registry);
-    correlation.compile_id = CompileId::new(UNSAFE_ID);
     let run_id = crate::node_system::runtime::RunId::new(UNSAFE_ID);
-    correlation.run_id = Some(run_id);
-    let basis = CompilationBasis {
-        graph_revision: correlation.graph_revision,
-        registry_fingerprint: correlation.registry_fingerprint.clone(),
-        resource_versions: correlation.resource_versions.clone(),
-        resource_observations: Default::default(),
+    let run = GraphRunIdentity {
+        project_session_id: ProjectSessionId::new("contract-session"),
+        graph_path: GraphResourcePath(GRAPH_PATH.into()),
+        run_id,
     };
     let kinds = [
         RunEventKind::RunStarted,
@@ -315,37 +310,9 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
             },
         },
         RunEventKind::RunCancelled,
-        RunEventKind::OperationStarted {
-            operation_index: 3,
-            activation_id: UNSAFE_ID,
-            attempt_id: UNSAFE_ID,
-        },
-        RunEventKind::OperationCompleted {
-            operation_index: 3,
-            activation_id: UNSAFE_ID,
-            attempt_id: UNSAFE_ID,
-        },
-        RunEventKind::OperationErrored {
-            operation_index: 3,
-            activation_id: UNSAFE_ID,
-            attempt_id: UNSAFE_ID,
-            outcome: RunErrorOutcome::Ordinary {
-                code: OrdinaryRunErrorCode::KernelFailed,
-            },
-        },
-        RunEventKind::ResultGroupChanged {
-            activation_id: UNSAFE_ID,
-            result_ids: vec![ResultId::new(UNSAFE_ID)].into_boxed_slice(),
-            state: crate::node_system::runtime::ResultStateKind::Ready,
-        },
-        RunEventKind::OutputResultChanged {
+        RunEventKind::PinPreviewResultReady {
             output: declared.clone(),
-            generation: None,
-            result_id: ResultId::new(UNSAFE_ID),
-        },
-        RunEventKind::OutputResultChanged {
-            output: declared.clone(),
-            generation: Some(17),
+            generation: 17,
             result_id: ResultId::new(UNSAFE_ID),
         },
         RunEventKind::OpenResultWindow {
@@ -355,11 +322,13 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
     let run_events = kinds
         .into_iter()
         .map(|kind| {
-            serde_json::to_value(RunEventDto::from(RunEvent {
-                correlation: correlation.clone(),
-                basis: basis.clone(),
-                kind,
-            }))
+            serde_json::to_value(
+                RunEventDto::try_from(RunEvent {
+                    run: run.clone(),
+                    kind,
+                })
+                .expect("contract run event must convert"),
+            )
             .expect("production RunEvent DTO must serialize")
         })
         .collect::<Vec<_>>();
@@ -421,17 +390,12 @@ fn execution_wire_contract(registry: &NodeRegistry) -> Value {
             .expect("production execution demand DTO must serialize")
     })
     .collect::<Vec<_>>();
-    let execute_graph_result = serde_json::to_value(ExecuteGraphResultDto {
-        run_id: UNSAFE_ID.to_string(),
-    })
-    .expect("production execute graph result DTO must serialize");
 
     json!({
         "format": "yssbi.execution-wire.v1",
         "demands": demands,
         "runEvents": run_events,
         "runOutputEvents": run_output_events,
-        "executeGraphResult": execute_graph_result,
     })
 }
 
@@ -698,18 +662,6 @@ fn fingerprint_wire_from_production_encoders(
     editor: &Value,
 ) -> Value {
     let correlation = contract_correlation(registry);
-    let basis = CompilationBasis {
-        graph_revision: correlation.graph_revision,
-        registry_fingerprint: correlation.registry_fingerprint.clone(),
-        resource_versions: correlation.resource_versions.clone(),
-        resource_observations: Default::default(),
-    };
-    let run_event = serde_json::to_value(RunEventDto::from(RunEvent {
-        correlation: correlation.clone(),
-        basis,
-        kind: RunEventKind::RunStarted,
-    }))
-    .expect("production RunEvent DTO must serialize");
     let trace = serde_json::to_value(TraceSpanDto::from(TraceSpan {
         span_id: SpanId::new(1).unwrap(),
         parent_span_id: None,
@@ -725,16 +677,6 @@ fn fingerprint_wire_from_production_encoders(
     }))
     .expect("production trace DTO must serialize");
 
-    let run_correlation = required_fingerprint(
-        &run_event,
-        "/correlation/registryFingerprint",
-        "run event correlation",
-    );
-    assert_eq!(
-        run_correlation,
-        required_fingerprint(&run_event, "/basis/registryFingerprint", "run event basis"),
-        "run event correlation and basis encoders disagree"
-    );
     json!({
         "format": "yssbi.registry-fingerprint-wire.v1",
         "catalog": required_fingerprint(catalog, "/registryFingerprint", "Catalog"),
@@ -743,7 +685,6 @@ fn fingerprint_wire_from_production_encoders(
             "/basis/registryFingerprint",
             "editor projection",
         ),
-        "runEvent": run_correlation,
         "trace": required_fingerprint(
             &trace,
             "/correlation/registryFingerprint",
@@ -1035,12 +976,7 @@ fn fingerprint_wire_is_extracted_from_production_dto_encoders() {
     let wire = fingerprint_wire_from_production_encoders(&builtin.registry, &catalog, &editor);
 
     assert_eq!(wire["format"], "yssbi.registry-fingerprint-wire.v1");
-    let values = [
-        &wire["catalog"],
-        &wire["editorProjection"],
-        &wire["runEvent"],
-        &wire["trace"],
-    ];
+    let values = [&wire["catalog"], &wire["editorProjection"], &wire["trace"]];
     for value in values {
         let value = value
             .as_str()
@@ -1080,7 +1016,6 @@ fn execution_and_project_event_contract_inventories_are_complete() {
         .collect::<Vec<_>>();
     assert_eq!(demand_types.len(), EXECUTION_DEMAND_VARIANT_COUNT);
     assert_eq!(demand_types, EXECUTION_DEMAND_DTO_WIRE_TYPES);
-    assert_eq!(execution["executeGraphResult"]["runId"], "9007199254740993");
     for event in run_events {
         assert_eq!(
             event
@@ -1089,7 +1024,20 @@ fn execution_and_project_event_contract_inventories_are_complete() {
                 .keys()
                 .cloned()
                 .collect::<BTreeSet<_>>(),
-            BTreeSet::from(["basis".into(), "correlation".into(), "kind".into()]),
+            BTreeSet::from(["kind".into(), "run".into()]),
+        );
+        assert_eq!(
+            event["run"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([
+                "graphPath".into(),
+                "projectSessionId".into(),
+                "runId".into(),
+            ]),
         );
     }
     let run_output_events = execution["runOutputEvents"].as_array().unwrap();

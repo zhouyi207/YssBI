@@ -1,5 +1,4 @@
 import type { GraphOutputRefDto } from './executionDemand';
-import type { ResultStateKind } from './result';
 
 export type RunErrorCode =
   | 'invalidPlan'
@@ -15,8 +14,6 @@ export type RunErrorCode =
   | 'relationalTypeMismatch'
   | 'relationalInputShapeInvalid'
   | 'relationalHintInvalid'
-  | 'missingRelationalFragment'
-  | 'bridgeFailed'
   | 'stream'
   | 'missingValue'
   | 'invalidCondition'
@@ -45,8 +42,6 @@ export const RUN_ERROR_CODES = {
   relationalTypeMismatch: true,
   relationalInputShapeInvalid: true,
   relationalHintInvalid: true,
-  missingRelationalFragment: true,
-  bridgeFailed: true,
   stream: true,
   missingValue: true,
   invalidCondition: true,
@@ -81,62 +76,28 @@ export const RUN_PHASES = {
   cleanup: true,
 } as const satisfies Record<RunPhase, true>;
 
-export type ResourceVersionSetDto = Record<string, string>;
+export type RunErrorOutcome =
+  | { code: 'deadlineExceeded'; phase: RunPhase }
+  | {
+      code: Exclude<RunErrorCode, 'deadlineExceeded'>;
+      phase: null;
+    };
 
-export interface CompilationBasisDto {
-  graphRevision: string;
-  registryFingerprint: string;
-  resourceVersions: ResourceVersionSetDto;
-}
-
-export interface RunCorrelationDto {
+export interface GraphRunIdentityDto {
   projectSessionId: string;
   graphPath: string;
-  graphRevision: string;
-  registryFingerprint: string;
-  resourceVersions: ResourceVersionSetDto;
-  compileId: string;
-  selectionDigest: string | null;
-  runId: string | null;
-  nodeId: string | null;
-  nodeTypeId: string | null;
-  parentCall: string | null;
+  runId: string;
 }
 
 export type RunEventKind =
   | { type: 'runStarted' }
   | { type: 'runCompleted' }
-  | { type: 'runErrored'; code: 'deadlineExceeded'; phase: RunPhase }
-  | { type: 'runErrored'; code: Exclude<RunErrorCode, 'deadlineExceeded'>; phase: null }
+  | ({ type: 'runErrored' } & RunErrorOutcome)
   | { type: 'runCancelled' }
-  | { type: 'operationStarted'; operationIndex: number; activationId: string; attemptId: string }
-  | { type: 'operationCompleted'; operationIndex: number; activationId: string; attemptId: string }
   | {
-      type: 'operationErrored';
-      operationIndex: number;
-      activationId: string;
-      attemptId: string;
-      code: 'deadlineExceeded';
-      phase: RunPhase;
-    }
-  | {
-      type: 'operationErrored';
-      operationIndex: number;
-      activationId: string;
-      attemptId: string;
-      code: Exclude<RunErrorCode, 'deadlineExceeded'>;
-      phase: null;
-    }
-  | {
-      type: 'resultGroupChanged';
-      activationId: string;
-      resultIds: string[];
-      state: ResultStateKind;
-    }
-  | {
-      type: 'outputResultChanged';
+      type: 'pinPreviewResultReady';
       output: GraphOutputRefDto;
-      generation: number | null;
+      generation: number;
       resultId: string;
     }
   | { type: 'openResultWindow'; resultId: string };
@@ -146,17 +107,12 @@ export const RUN_EVENT_KIND_TYPES = {
   runCompleted: true,
   runErrored: true,
   runCancelled: true,
-  operationStarted: true,
-  operationCompleted: true,
-  operationErrored: true,
-  resultGroupChanged: true,
-  outputResultChanged: true,
+  pinPreviewResultReady: true,
   openResultWindow: true,
 } as const satisfies Record<RunEventKind['type'], true>;
 
 export interface RunEvent {
-  correlation: RunCorrelationDto;
-  basis: CompilationBasisDto;
+  run: GraphRunIdentityDto;
   kind: RunEventKind;
 }
 
@@ -194,7 +150,3 @@ export interface RunOutputStatusEvent {
 
 export type RunOutputChannelEvent = RunOutputEvent | RunOutputStatusEvent;
 export type ExecutionChannelEvent = RunEvent | RunOutputChannelEvent;
-
-export interface ExecuteGraphResultDto {
-  runId: string;
-}

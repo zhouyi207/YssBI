@@ -42,8 +42,8 @@ pub use data_series::{
 #[cfg(test)]
 pub(crate) use execution_event::RUN_EVENT_KIND_VARIANT_COUNT;
 pub use execution_event::{
-    NOOP_RUN_EVENT_SINK, NoopRunEventSink, OrdinaryRunErrorCode, RunErrorCode, RunErrorOutcome,
-    RunEvent, RunEventKind, RunEventSink,
+    GraphRunIdentity, NOOP_RUN_EVENT_SINK, NoopRunEventSink, OrdinaryRunErrorCode, RunErrorCode,
+    RunErrorOutcome, RunEvent, RunEventKind, RunEventSink,
 };
 pub use function_plan::{
     FunctionPlanGeneration, FunctionPlanStore, FunctionPlanStoreError, PublishedFunctionPlan,

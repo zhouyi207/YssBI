@@ -1,19 +1,17 @@
-use crate::node_system::analysis::{CompilationBasis, CorrelationContext, ResourceVersionSet};
-use crate::node_system::document::{GraphResourcePath, GraphRevision, PortAddressDto};
+use crate::node_system::document::{GraphResourcePath, PortAddressDto};
 use crate::node_system::plan::{
     ExecutionDemand, GraphOutputRef, MAX_SAFE_PREVIEW_GENERATION, PlannedValueKind,
     ResultPresentation,
 };
 
 use crate::node_system::runtime::{
-    DataSeriesMetadata, OrdinaryRunErrorCode, PinResultEntry, ResultFailureCause, ResultState,
-    ResultUsage, RunErrorCode, RunErrorOutcome, RunEvent, RunEventKind, RunOutputEvent,
-    RunOutputMessage, RunOutputStatus, RunOutputStatusEvent, RunOutputStream, RunPhase,
-    StoredResult, StoredValueKind,
+    DataSeriesMetadata, GraphRunIdentity, OrdinaryRunErrorCode, PinResultEntry, ResultFailureCause,
+    ResultState, ResultUsage, RunErrorCode, RunErrorOutcome, RunEvent, RunEventKind,
+    RunOutputEvent, RunOutputMessage, RunOutputStatus, RunOutputStatusEvent, RunOutputStream,
+    RunPhase, StoredResult, StoredValueKind,
 };
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Serialize, Serializer};
-use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -132,67 +130,29 @@ impl From<ExecutionDemand> for ExecutionDemandDto {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct CompilationBasisDto {
-    graph_revision: String,
-    registry_fingerprint: String,
-    resource_versions: BTreeMap<String, String>,
-}
-
-impl From<CompilationBasis<GraphRevision>> for CompilationBasisDto {
-    fn from(basis: CompilationBasis<GraphRevision>) -> Self {
-        Self {
-            graph_revision: basis.graph_revision.get().to_string(),
-            registry_fingerprint: basis.registry_fingerprint.to_hex(),
-            resource_versions: resource_versions(basis.resource_versions),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RunCorrelationDto {
+pub(crate) struct GraphRunIdentityDto {
     project_session_id: String,
     graph_path: String,
-    graph_revision: String,
-    registry_fingerprint: String,
-    resource_versions: BTreeMap<String, String>,
-    compile_id: String,
-    selection_digest: Option<Box<str>>,
-    run_id: Option<String>,
-    node_id: Option<String>,
-    node_type_id: Option<String>,
-    parent_call: Option<String>,
+    run_id: String,
 }
 
-impl From<CorrelationContext> for RunCorrelationDto {
-    fn from(correlation: CorrelationContext) -> Self {
+impl From<GraphRunIdentity> for GraphRunIdentityDto {
+    fn from(run: GraphRunIdentity) -> Self {
         Self {
-            project_session_id: correlation.project_session_id.as_str().to_owned(),
-            graph_path: String::from(correlation.graph_path.0),
-            graph_revision: correlation.graph_revision.get().to_string(),
-            registry_fingerprint: correlation.registry_fingerprint.to_hex(),
-            resource_versions: resource_versions(correlation.resource_versions),
-            compile_id: correlation.compile_id.get().to_string(),
-            selection_digest: correlation.selection_digest,
-            run_id: correlation.run_id.map(|id| id.get().to_string()),
-            node_id: correlation.node_id.map(|id| id.to_string()),
-            node_type_id: correlation.node_type_id.map(|id| id.as_str().to_owned()),
-            parent_call: correlation.parent_call.map(|id| id.get().to_string()),
+            project_session_id: run.project_session_id.as_str().to_owned(),
+            graph_path: run.graph_path.0.into(),
+            run_id: run.run_id.get().to_string(),
         }
     }
 }
 
 #[cfg(test)]
-pub(crate) const RUN_EVENT_KIND_DTO_WIRE_TYPES: [&str; 10] = [
+pub(crate) const RUN_EVENT_KIND_DTO_WIRE_TYPES: [&str; 6] = [
     "runStarted",
     "runCompleted",
     "runErrored",
     "runCancelled",
-    "operationStarted",
-    "operationCompleted",
-    "operationErrored",
-    "resultGroupChanged",
-    "outputResultChanged",
+    "pinPreviewResultReady",
     "openResultWindow",
 ];
 
@@ -245,31 +205,9 @@ pub(crate) enum RunEventKindDto {
         outcome: RunErrorOutcomeDto,
     },
     RunCancelled,
-    OperationStarted {
-        operation_index: u32,
-        activation_id: String,
-        attempt_id: String,
-    },
-    OperationCompleted {
-        operation_index: u32,
-        activation_id: String,
-        attempt_id: String,
-    },
-    OperationErrored {
-        operation_index: u32,
-        activation_id: String,
-        attempt_id: String,
-        #[serde(flatten)]
-        outcome: RunErrorOutcomeDto,
-    },
-    ResultGroupChanged {
-        activation_id: String,
-        result_ids: Box<[String]>,
-        state: ResultStateKindDto,
-    },
-    OutputResultChanged {
+    PinPreviewResultReady {
         output: GraphOutputRefDto,
-        generation: Option<u64>,
+        generation: u64,
         result_id: String,
     },
     OpenResultWindow {
@@ -277,70 +215,39 @@ pub(crate) enum RunEventKindDto {
     },
 }
 
-impl From<RunEventKind> for RunEventKindDto {
-    fn from(kind: RunEventKind) -> Self {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunEventDtoError {
+    UnsafePreviewGeneration,
+}
+
+impl TryFrom<RunEventKind> for RunEventKindDto {
+    type Error = RunEventDtoError;
+
+    fn try_from(kind: RunEventKind) -> Result<Self, Self::Error> {
         match kind {
-            RunEventKind::RunStarted => Self::RunStarted,
-            RunEventKind::RunCompleted => Self::RunCompleted,
-            RunEventKind::RunErrored { outcome } => Self::RunErrored {
+            RunEventKind::RunStarted => Ok(Self::RunStarted),
+            RunEventKind::RunCompleted => Ok(Self::RunCompleted),
+            RunEventKind::RunErrored { outcome } => Ok(Self::RunErrored {
                 outcome: outcome.into(),
-            },
-            RunEventKind::RunCancelled => Self::RunCancelled,
-            RunEventKind::OperationStarted {
-                operation_index,
-                activation_id,
-                attempt_id,
-            } => Self::OperationStarted {
-                operation_index,
-                activation_id: activation_id.to_string(),
-                attempt_id: attempt_id.to_string(),
-            },
-            RunEventKind::OperationCompleted {
-                operation_index,
-                activation_id,
-                attempt_id,
-            } => Self::OperationCompleted {
-                operation_index,
-                activation_id: activation_id.to_string(),
-                attempt_id: attempt_id.to_string(),
-            },
-            RunEventKind::OperationErrored {
-                operation_index,
-                activation_id,
-                attempt_id,
-                outcome,
-            } => Self::OperationErrored {
-                operation_index,
-                activation_id: activation_id.to_string(),
-                attempt_id: attempt_id.to_string(),
-                outcome: outcome.into(),
-            },
-            RunEventKind::ResultGroupChanged {
-                activation_id,
-                result_ids,
-                state,
-            } => Self::ResultGroupChanged {
-                activation_id: activation_id.to_string(),
-                result_ids: result_ids
-                    .into_vec()
-                    .into_iter()
-                    .map(|result_id| result_id.get().to_string())
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice(),
-                state: state.into(),
-            },
-            RunEventKind::OutputResultChanged {
+            }),
+            RunEventKind::RunCancelled => Ok(Self::RunCancelled),
+            RunEventKind::PinPreviewResultReady {
                 output,
                 generation,
                 result_id,
-            } => Self::OutputResultChanged {
-                output: output.into(),
-                generation,
+            } => {
+                if generation > MAX_SAFE_PREVIEW_GENERATION {
+                    return Err(RunEventDtoError::UnsafePreviewGeneration);
+                }
+                Ok(Self::PinPreviewResultReady {
+                    output: output.into(),
+                    generation,
+                    result_id: result_id.get().to_string(),
+                })
+            }
+            RunEventKind::OpenResultWindow { result_id } => Ok(Self::OpenResultWindow {
                 result_id: result_id.get().to_string(),
-            },
-            RunEventKind::OpenResultWindow { result_id } => Self::OpenResultWindow {
-                result_id: result_id.get().to_string(),
-            },
+            }),
         }
     }
 }
@@ -348,18 +255,18 @@ impl From<RunEventKind> for RunEventKindDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RunEventDto {
-    correlation: RunCorrelationDto,
-    basis: CompilationBasisDto,
+    run: GraphRunIdentityDto,
     kind: RunEventKindDto,
 }
 
-impl From<RunEvent> for RunEventDto {
-    fn from(event: RunEvent) -> Self {
-        Self {
-            correlation: event.correlation.into(),
-            basis: event.basis.into(),
-            kind: event.kind.into(),
-        }
+impl TryFrom<RunEvent> for RunEventDto {
+    type Error = RunEventDtoError;
+
+    fn try_from(event: RunEvent) -> Result<Self, Self::Error> {
+        Ok(Self {
+            run: event.run.into(),
+            kind: event.kind.try_into()?,
+        })
     }
 }
 
@@ -451,9 +358,11 @@ pub enum ExecutionChannelEventDto {
     RunOutputStatus(RunOutputStatusEventDto),
 }
 
-impl From<RunEvent> for ExecutionChannelEventDto {
-    fn from(event: RunEvent) -> Self {
-        Self::RunEvent(event.into())
+impl TryFrom<RunEvent> for ExecutionChannelEventDto {
+    type Error = RunEventDtoError;
+
+    fn try_from(event: RunEvent) -> Result<Self, Self::Error> {
+        Ok(Self::RunEvent(event.try_into()?))
     }
 }
 
@@ -754,18 +663,12 @@ impl PinResultEntryDto {
     }
 }
 
-fn resource_versions(versions: ResourceVersionSet) -> BTreeMap<String, String> {
-    versions
-        .into_iter()
-        .map(|(key, version)| (key.as_str().to_owned(), version.as_str().to_owned()))
-        .collect()
-}
-
 #[cfg(test)]
 mod execution_demand_tests {
     use super::*;
-    use crate::node_system::document::{PortAddress, PortAddressDto, PortRef};
+    use crate::node_system::document::{PortAddress, PortRef};
     use crate::node_system::plan::ExecutionDemand;
+    use crate::node_system::runtime::ResultId;
     use serde_json::{Value, json};
 
     const NODE_ID: &str = "00000000-0000-0000-0000-000000000001";
@@ -904,38 +807,46 @@ mod execution_demand_tests {
     }
 
     #[test]
-    fn output_result_changed_serializes_only_stable_output_and_result_id() {
-        let output = GraphOutputRefDto {
-            graph_path: "events/Main.yssbi-event".into(),
-            port: PortAddressDto::from(PortAddress::declared(
+    fn pin_preview_result_ready_serializes_only_safe_generation_and_stable_ids() {
+        let output = GraphOutputRef {
+            graph_path: GraphResourcePath("events/Main.yssbi-event".into()),
+            port: PortAddress::declared(
                 crate::node_system::document::NodeId::from_uuid(
                     uuid::Uuid::parse_str(NODE_ID).unwrap(),
                 ),
                 crate::node_system::protocol::PortKey::new("result").unwrap(),
-            )),
+            ),
         };
-        let wire = serde_json::to_value(RunEventKindDto::OutputResultChanged {
-            output,
-            generation: None,
-            result_id: "42".into(),
-        })
+        let wire = serde_json::to_value(
+            RunEventKindDto::try_from(RunEventKind::PinPreviewResultReady {
+                output: output.clone(),
+                generation: MAX_SAFE_PREVIEW_GENERATION,
+                result_id: ResultId::new(42),
+            })
+            .unwrap(),
+        )
         .unwrap();
 
         assert_eq!(
             wire,
             json!({
-                "type": "outputResultChanged",
+                "type": "pinPreviewResultReady",
                 "output": {
                     "graphPath": "events/Main.yssbi-event",
                     "port": { "kind": "declared", "nodeId": NODE_ID, "portKey": "result" }
                 },
-                "generation": null,
+                "generation": 9_007_199_254_740_991_u64,
                 "resultId": "42"
             })
         );
-        assert!(wire.get("valueIndex").is_none());
-        assert!(wire.get("operationIndex").is_none());
-        assert!(wire.get("name").is_none());
+        assert!(matches!(
+            RunEventKindDto::try_from(RunEventKind::PinPreviewResultReady {
+                output,
+                generation: MAX_SAFE_PREVIEW_GENERATION + 1,
+                result_id: ResultId::new(42),
+            }),
+            Err(RunEventDtoError::UnsafePreviewGeneration)
+        ));
     }
 
     #[test]
@@ -1004,17 +915,7 @@ mod execution_demand_tests {
     }
 
     #[test]
-    fn result_group_and_open_window_wire_include_terminal_state_and_result_id() {
-        let group = serde_json::to_value(RunEventKindDto::ResultGroupChanged {
-            activation_id: "9".into(),
-            result_ids: vec!["17".into()].into_boxed_slice(),
-            state: ResultStateKindDto::Failed,
-        })
-        .unwrap();
-        assert_eq!(group["type"], "resultGroupChanged");
-        assert_eq!(group["state"], "failed");
-
-        // Task 6 defines this wire shape; Task 9 owns actual View Data emission.
+    fn open_result_window_wire_includes_only_result_identity() {
         let window = serde_json::to_value(RunEventKindDto::OpenResultWindow {
             result_id: "17".into(),
         })

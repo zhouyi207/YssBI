@@ -40,23 +40,10 @@ function backendIpcError(
 
 function runEvent(kind: RunEvent['kind']): RunEvent {
   return {
-    correlation: {
+    run: {
       projectSessionId: 'project-session-1',
       graphPath: 'events/Main.yssbi-event',
-      graphRevision: '7',
-      registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-      resourceVersions: {},
-      compileId: '9',
-      selectionDigest: 'demand-selection-a',
       runId: '41',
-      nodeId: null,
-      nodeTypeId: null,
-      parentCall: null,
-    },
-    basis: {
-      graphRevision: '7',
-      registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-      resourceVersions: {},
     },
     kind,
   };
@@ -202,25 +189,10 @@ describe('ProjectService execution contract', () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
-  it('rejects a malformed execute result immediately after invoke', async () => {
-    vi.mocked(invoke).mockResolvedValue({ runId: 41 });
-    const execution = ProjectService.executeGraphDocument(
-      projectInstanceId,
-      'events/Main.yssbi-event',
-      { type: 'default' },
-    );
-    const [, args] = vi.mocked(invoke).mock.calls[0] as [
-      string,
-      { onEvent: Channel<RunEvent> },
-    ];
-    args.onEvent.onmessage?.(runEvent({ type: 'runCompleted' }));
-
-    await expect(execution).rejects.toThrow('Invalid execute graph result');
-  });
 
   it('invokes execute_graph_document and drains its RunEvent channel before resolving', async () => {
-    let resolveInvoke!: (result: { runId: string }) => void;
-    vi.mocked(invoke).mockReturnValue(new Promise((resolve) => {
+    let resolveInvoke!: () => void;
+    vi.mocked(invoke).mockReturnValue(new Promise<void>((resolve) => {
       resolveInvoke = resolve;
     }));
     const received: RunEvent[] = [];
@@ -245,7 +217,7 @@ describe('ProjectService execution contract', () => {
       onEvent: expect.any(Channel),
     });
 
-    resolveInvoke({ runId: '41' });
+    resolveInvoke();
     let settled = false;
     void execution.then(() => {
       settled = true;
@@ -253,35 +225,15 @@ describe('ProjectService execution contract', () => {
     await Promise.resolve();
     expect(settled).toBe(false);
 
-    const completed: RunEvent = {
-      correlation: {
-        projectSessionId: 'project-session-1',
-        graphPath: 'events/Main.yssbi-event',
-        graphRevision: '7',
-        registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-        resourceVersions: {},
-        compileId: '9',
-        selectionDigest: 'demand-selection-a',
-        runId: '41',
-        nodeId: null,
-        nodeTypeId: null,
-        parentCall: null,
-      },
-      basis: {
-        graphRevision: '7',
-        registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-        resourceVersions: {},
-      },
-      kind: { type: 'runCompleted' },
-    };
+    const completed = runEvent({ type: 'runCompleted' });
     args.onEvent.onmessage?.(completed);
 
-    await expect(execution).resolves.toEqual({ runId: '41' });
+    await expect(execution).resolves.toBeUndefined();
     expect(received).toEqual([completed]);
   });
 
   it('routes ordered user output through a callback separate from RunEvent consumers', async () => {
-    vi.mocked(invoke).mockResolvedValue({ runId: '41' });
+    vi.mocked(invoke).mockResolvedValue(undefined);
     const receivedRunEvents: RunEvent[] = [];
     const receivedOutput: RunOutputChannelEvent[] = [];
     const execution = ProjectService.executeGraphDocument(
@@ -317,14 +269,14 @@ describe('ProjectService execution contract', () => {
     args.onEvent.onmessage?.(status);
     args.onEvent.onmessage?.(completed);
 
-    await expect(execution).resolves.toEqual({ runId: '41' });
+    await expect(execution).resolves.toBeUndefined();
     expect(receivedOutput).toEqual([output, status]);
     expect(receivedRunEvents).toEqual([completed]);
   });
 
   it('surfaces a throwing runCompleted consumer after a successful invoke settles', async () => {
     const consumerError = new Error('runCompleted consumer failed');
-    vi.mocked(invoke).mockResolvedValue({ runId: '41' });
+    vi.mocked(invoke).mockResolvedValue(undefined);
     const execution = ProjectService.executeGraphDocument(
       projectInstanceId,
       'events/Main.yssbi-event',
@@ -386,7 +338,7 @@ describe('ProjectService execution contract', () => {
   });
 
   it('rejects its pending drain when HMR disposes the execution channel', async () => {
-    vi.mocked(invoke).mockResolvedValue({ runId: '41' });
+    vi.mocked(invoke).mockResolvedValue(undefined);
     const execution = ProjectService.executeGraphDocument(
       projectInstanceId,
       'events/Main.yssbi-event',
@@ -407,27 +359,7 @@ describe('ProjectService execution contract', () => {
       new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 10)),
     ]);
     if (observed === 'timeout') {
-      args.onEvent.onmessage?.({
-        correlation: {
-          projectSessionId: 'project-session-1',
-          graphPath: 'events/Main.yssbi-event',
-          graphRevision: '7',
-          registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-          resourceVersions: {},
-          compileId: '9',
-          selectionDigest: 'demand-selection-a',
-          runId: '41',
-          nodeId: null,
-          nodeTypeId: null,
-          parentCall: null,
-        },
-        basis: {
-          graphRevision: '7',
-          registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-          resourceVersions: {},
-        },
-        kind: { type: 'runCompleted' },
-      });
+      args.onEvent.onmessage?.(runEvent({ type: 'runCompleted' }));
       await execution;
     }
 
@@ -483,27 +415,7 @@ describe('ProjectService execution contract', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(settled).toBe(false);
 
-    const errored: RunEvent = {
-      correlation: {
-        projectSessionId: 'project-session-1',
-        graphPath: 'events/Main.yssbi-event',
-        graphRevision: '7',
-        registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-        resourceVersions: {},
-        compileId: '9',
-        selectionDigest: 'demand-selection-a',
-        runId: '41',
-        nodeId: null,
-        nodeTypeId: null,
-        parentCall: null,
-      },
-      basis: {
-        graphRevision: '7',
-        registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-        resourceVersions: {},
-      },
-      kind: { type: 'runErrored', code: 'kernelFailed', phase: null },
-    };
+    const errored = runEvent({ type: 'runErrored', code: 'kernelFailed', phase: null });
     args.onEvent.onmessage?.(errored);
 
     await expect(execution).rejects.toMatchObject({

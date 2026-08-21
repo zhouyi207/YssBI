@@ -3,7 +3,6 @@ import executionWire from '@/tests/fixtures/node-system-contracts/execution-wire
 import { EXECUTION_DEMAND_TYPES } from './executionDemand';
 import { RUN_EVENT_KIND_TYPES } from './runEvent';
 import {
-  parseExecuteGraphResultDto,
   parseExecutionChannelEvent,
   parseExecutionDemandDto,
   parseRunEvent,
@@ -80,7 +79,7 @@ describe('execution wire parsers', () => {
     const event = executionWire.runEvents[0];
     expect(() => parseRunEvent({
       ...event,
-      correlation: { ...event.correlation, graphPath },
+      run: { ...event.run, graphPath },
     })).not.toThrow();
   });
 
@@ -102,13 +101,26 @@ describe('execution wire parsers', () => {
     expect(() => parseExecutionDemandDto(outputs)).toThrow('graph output reference');
   });
 
-  it('parses every Rust-generated RunEventKindDto variant', () => {
+  it('parses the exact minimal Rust-generated run-event inventory', () => {
+    const valid = executionWire.runEvents[0];
+
     expect(executionWire.runEvents.map(parseRunEvent)).toEqual(executionWire.runEvents);
     expect([...new Set(executionWire.runEvents.map((event) => event.kind.type))])
       .toEqual(Object.keys(RUN_EVENT_KIND_TYPES));
+
+    expect(() => parseRunEvent({
+      correlation: {},
+      basis: {},
+      kind: { type: 'runStarted' },
+    })).toThrow('Invalid run event');
+
+    expect(() => parseRunEvent({
+      ...valid,
+      run: { ...valid.run, runId: null },
+    })).toThrow('Invalid graph run identity');
   });
 
-  it('parses run output separately from diagnostic and lifecycle events', () => {
+  it('parses run output separately from lifecycle events', () => {
     expect(executionWire.runOutputEvents.map(parseExecutionChannelEvent))
       .toEqual(executionWire.runOutputEvents);
     const output = {
@@ -139,36 +151,36 @@ describe('execution wire parsers', () => {
     expect(() => parseExecutionChannelEvent({ ...truncated, status: 'warning' })).toThrow();
   });
 
-  it('requires exact decimal attempt identity on every operation event', () => {
-    const operations = executionWire.runEvents.filter(
-      (event) => event.kind.type === 'operationStarted'
-        || event.kind.type === 'operationCompleted'
-        || event.kind.type === 'operationErrored',
-    );
-    for (const operation of operations) {
-      expect(operation.kind).toHaveProperty('attemptId');
-      const missing = clone(operation);
-      delete record(record(missing).kind).attemptId;
-      expect(() => parseRunEvent(missing)).toThrow();
-      const wrong = clone(operation);
-      record(record(wrong).kind).attemptId = 1;
-      expect(() => parseRunEvent(wrong)).toThrow();
-    }
+  it.each([
+    'operationStarted',
+    'operationCompleted',
+    'operationErrored',
+    'resultGroupChanged',
+    'outputResultChanged',
+  ])('rejects removed run-event variant %s', (type) => {
+    const valid = executionWire.runEvents[0];
+    expect(() => parseRunEvent({
+      ...valid,
+      kind: { type },
+    })).toThrow('Invalid run event kind variant');
   });
 
   it.each(executionWire.runEvents)('rejects extra keys on RunEvent $kind.type', (valid) => {
     expect(() => parseRunEvent({ ...valid, extra: true })).toThrow();
+    expect(() => parseRunEvent({ ...valid, run: { ...valid.run, extra: true } })).toThrow();
     expect(() => parseRunEvent({ ...valid, kind: { ...valid.kind, extra: true } })).toThrow();
   });
 
-  it('requires exact outputResultChanged generation wire', () => {
-    const outputResultChanged = executionWire.runEvents.find((event) => event.kind.type === 'outputResultChanged');
-    if (!outputResultChanged) throw new Error('missing output publication fixture');
+  it('requires an exact pinPreviewResultReady generation wire', () => {
+    const preview = executionWire.runEvents.find(
+      (event) => event.kind.type === 'pinPreviewResultReady',
+    );
+    if (!preview) throw new Error('missing pin preview result fixture');
 
-    const missingGeneration = clone(outputResultChanged);
+    const missingGeneration = clone(preview);
     delete record(record(missingGeneration).kind).generation;
     expect(() => parseRunEvent(missingGeneration)).toThrow();
-    expect(parseRunEvent(outputResultChanged)).toEqual(outputResultChanged);
+    expect(parseRunEvent(preview)).toEqual(preview);
   });
 
   it('strictly parses typed deadline phases and rejects malformed timeout wire', () => {
@@ -190,17 +202,17 @@ describe('execution wire parsers', () => {
     }
   });
 
-  it('rejects unknown and malformed run event variants', () => {
+  it('rejects unknown variants and malformed graph run identities', () => {
     const valid = executionWire.runEvents[0];
     expect(() => parseRunEvent({ ...valid, kind: { type: 'unknown' } })).toThrow();
     expect(() => parseRunEvent({
       ...valid,
-      correlation: { ...valid.correlation, compileId: 9_007_199_254_740_993 },
-    })).toThrow();
+      run: { ...valid.run, runId: '01' },
+    })).toThrow('graph run identity');
     expect(() => parseRunEvent({
       ...valid,
-      correlation: { ...valid.correlation, runId: '01' },
-    })).toThrow();
+      run: { ...valid.run, projectSessionId: '' },
+    })).toThrow('graph run identity');
   });
 
   it.each([
@@ -209,94 +221,44 @@ describe('execution wire parsers', () => {
     'functions/contract.yssbi-event',
     'events//contract.yssbi-event',
     'events/../contract.yssbi-event',
-  ])('rejects malformed run correlation graph path %j', (graphPath) => {
+  ])('rejects malformed graph run path %j', (graphPath) => {
     const valid = executionWire.runEvents[0];
     expect(() => parseRunEvent({
       ...valid,
-      correlation: { ...valid.correlation, graphPath },
-    })).toThrow('run correlation');
+      run: { ...valid.run, graphPath },
+    })).toThrow('graph run identity');
   });
 
-  it('requires a UUID correlation nodeId while keeping nodeTypeId opaque', () => {
-    const valid = executionWire.runEvents[0];
-    expect(() => parseRunEvent({
-      ...valid,
-      correlation: { ...valid.correlation, nodeId: 'not-a-uuid' },
-    })).toThrow('run correlation');
-    expect(() => parseRunEvent({
-      ...valid,
-      correlation: {
-        ...valid.correlation,
-        nodeId: '00000000-0000-0000-0000-000000000002',
-        nodeTypeId: 'opaque registry identifier/with spaces',
-      },
-    })).not.toThrow();
-  });
+  it('rejects malformed pinPreviewResultReady graph and port identities', () => {
+    const preview = executionWire.runEvents.find(
+      (event) => event.kind.type === 'pinPreviewResultReady',
+    );
+    if (!preview) throw new Error('missing pinPreviewResultReady fixture');
 
-  it('rejects malformed OutputResultChanged graph and port identities', () => {
-    const outputResultChanged = executionWire.runEvents.find((event) => event.kind.type === 'outputResultChanged');
-    if (!outputResultChanged) throw new Error('missing outputResultChanged fixture');
-
-    const malformedPath = clone(outputResultChanged);
+    const malformedPath = clone(preview);
     (record(record(malformedPath).kind).output as Record<string, unknown>).graphPath =
       'functions/contract.yssbi-event';
     expect(() => parseRunEvent(malformedPath)).toThrow('graph output reference');
 
-    const malformedPort = clone(outputResultChanged);
+    const malformedPort = clone(preview);
     const output = record(record(malformedPort).kind).output as Record<string, unknown>;
     (output.port as Record<string, unknown>).nodeId = 'not-a-uuid';
     expect(() => parseRunEvent(malformedPort)).toThrow('graph output reference');
   });
 
-  it('bounds u32 operation indexes and safe integer preview generations', () => {
-    const operation = executionWire.runEvents.find(
-      (event) => event.kind.type === 'operationStarted',
+  it('bounds safe integer preview generations', () => {
+    const preview = executionWire.runEvents.find(
+      (event) => event.kind.type === 'pinPreviewResultReady',
     );
-    const output = executionWire.runEvents.find((event) => event.kind.type === 'outputResultChanged');
-    if (!operation || !output) throw new Error('missing indexed event fixtures');
+    if (!preview) throw new Error('missing preview event fixture');
 
     expect(() => parseRunEvent({
-      ...operation,
-      kind: { ...operation.kind, operationIndex: 4_294_967_295 },
+      ...preview,
+      kind: { ...preview.kind, generation: Number.MAX_SAFE_INTEGER },
     })).not.toThrow();
     expect(() => parseRunEvent({
-      ...operation,
-      kind: { ...operation.kind, operationIndex: 4_294_967_296 },
+      ...preview,
+      kind: { ...preview.kind, generation: Number.MAX_SAFE_INTEGER + 1 },
     })).toThrow();
-    expect(() => parseRunEvent({
-      ...output,
-      kind: { ...output.kind, generation: Number.MAX_SAFE_INTEGER },
-    })).not.toThrow();
-    expect(() => parseRunEvent({
-      ...output,
-      kind: { ...output.kind, generation: Number.MAX_SAFE_INTEGER + 1 },
-    })).toThrow();
-  });
-
-  it('requires lowercase 64-hex Registry fingerprints in correlation and basis', () => {
-    const valid = executionWire.runEvents[0];
-    expect(() => parseRunEvent({
-      ...valid,
-      correlation: {
-        ...valid.correlation,
-        registryFingerprint: valid.correlation.registryFingerprint.toUpperCase(),
-      },
-    })).toThrow();
-    expect(() => parseRunEvent({
-      ...valid,
-      basis: {
-        ...valid.basis,
-        registryFingerprint: valid.basis.registryFingerprint.slice(1),
-      },
-    })).toThrow();
-  });
-
-  it('parses only an exact execute graph result with an opaque decimal string ID', () => {
-    expect(parseExecuteGraphResultDto(executionWire.executeGraphResult))
-      .toEqual(executionWire.executeGraphResult);
-    expect(() => parseExecuteGraphResultDto({ runId: 41 })).toThrow();
-    expect(() => parseExecuteGraphResultDto({ runId: '41', extra: true })).toThrow();
-    expect(() => parseExecuteGraphResultDto({ runId: '01' })).toThrow();
-    expect(() => parseExecuteGraphResultDto({ runId: '0' })).toThrow();
   });
 });

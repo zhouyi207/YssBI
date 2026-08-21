@@ -3,7 +3,9 @@ use crate::application::graph_execution::{
     GraphExecutionDeliveryReport, GraphExecutionRequest, GraphExecutionStreamEvent,
     TerminalRunEventKind,
 };
-use crate::commands::node_system_execution_dto::{ExecutionChannelEventDto, ExecutionDemandDto};
+use crate::commands::node_system_execution_dto::{
+    ExecutionChannelEventDto, ExecutionDemandDto, RunEventDtoError,
+};
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, emit_project_event};
 use crate::project::{ProjectInstanceId, ProjectState};
@@ -16,20 +18,19 @@ struct TauriExecutionChannelAdapter {
 
 impl TauriExecutionChannelAdapter {
     fn deliver(&self, event: GraphExecutionStreamEvent) -> bool {
-        self.channel
-            .send(execution_channel_event_dto(event))
-            .is_ok()
+        let Ok(event) = execution_channel_event_dto(event) else {
+            return false;
+        };
+        self.channel.send(event).is_ok()
     }
 }
 
 pub(super) fn execution_channel_event_dto(
     event: GraphExecutionStreamEvent,
-) -> ExecutionChannelEventDto {
+) -> Result<ExecutionChannelEventDto, RunEventDtoError> {
     match event {
-        GraphExecutionStreamEvent::RunEvent(event) => {
-            ExecutionChannelEventDto::RunEvent(event.into())
-        }
-        GraphExecutionStreamEvent::RunOutput(event) => event.into(),
+        GraphExecutionStreamEvent::RunEvent(event) => event.try_into(),
+        GraphExecutionStreamEvent::RunOutput(event) => Ok(event.into()),
     }
 }
 
@@ -38,30 +39,6 @@ pub(super) fn execution_channel_command_error() -> CommandError {
         "execution_channel_failed",
         "execution channel rejected a streamed event",
     )
-}
-
-fn associate_execution_incident(
-    state: &ProjectState,
-    project_instance_id: &ProjectInstanceId,
-    delivery: &GraphExecutionDeliveryReport,
-    error: &CommandError,
-) {
-    let (Some(incident_id), Some(run_id)) = (error.incident_id(), delivery.terminal_run_id())
-    else {
-        return;
-    };
-    if !state
-        .associate_run_trace_incident(project_instance_id, run_id, incident_id)
-        .is_ok_and(|associated| associated)
-    {
-        tracing::warn!(
-            target: "yssbi::execution_trace",
-            diagnostic_domain = "execution",
-            diagnostic_event = "traceIncidentAssociationMissed",
-            run_id = run_id.get(),
-            "Run trace incident could not be associated"
-        );
-    }
 }
 
 #[derive(Serialize)]
@@ -161,12 +138,6 @@ fn relational_run_command_error_code(
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ExecuteGraphResultDto {
-    pub run_id: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct PinPreviewGenerationDto {
     pub generation: u64,
 }
@@ -195,7 +166,7 @@ pub async fn execute_graph_document(
     graph_path: String,
     demand: ExecutionDemandDto,
     on_event: Channel<ExecutionChannelEventDto>,
-) -> Result<ExecuteGraphResultDto, CommandError> {
+) -> Result<(), CommandError> {
     let graph_path = parse_graph_path(graph_path)?;
     let demand = crate::node_system::plan::ExecutionDemand::try_from(demand)
         .map_err(|_| CommandError::expected("invalid_execution_demand"))?;
@@ -229,18 +200,13 @@ pub async fn execute_graph_document(
             Err(execution_channel_command_error())
         } else {
             match execution {
-                Ok(outcome) => Ok(ExecuteGraphResultDto {
-                    run_id: outcome.run_id.get().to_string(),
-                }),
+                Ok(_) => Ok(()),
                 Err(error) => Err(execution_command_error(
                     error.project_error,
                     &error.delivery,
                 )),
             }
         };
-        if let Err(error) = &result {
-            associate_execution_incident(&state, &project_instance_id, &delivery, error);
-        }
         result
     })
     .await

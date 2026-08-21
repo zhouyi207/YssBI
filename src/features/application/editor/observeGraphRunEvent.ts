@@ -26,25 +26,25 @@ function observePinPreviewEvent(
   preview: PinPreviewObservation,
 ): void {
   if (!preview.lease.isCurrent()) return;
-  if (event.correlation.graphPath !== graphPath) {
+  if (event.run.graphPath !== graphPath) {
     preview.stale = true;
     return;
   }
 
   if (event.kind.type === 'runStarted') {
-    if (preview.runId || !event.correlation.runId) {
+    if (preview.runId) {
       preview.stale = true;
       return;
     }
-    preview.projectSessionId = event.correlation.projectSessionId;
-    preview.runId = event.correlation.runId;
+    preview.projectSessionId = event.run.projectSessionId;
+    preview.runId = event.run.runId;
     return;
   }
   if (
     !preview.projectSessionId
     || !preview.runId
-    || event.correlation.projectSessionId !== preview.projectSessionId
-    || event.correlation.runId !== preview.runId
+    || event.run.projectSessionId !== preview.projectSessionId
+    || event.run.runId !== preview.runId
   ) {
     preview.stale = true;
     return;
@@ -61,7 +61,7 @@ function observePinPreviewEvent(
     preview.terminal = 'cancelled';
     return;
   }
-  if (event.kind.type !== 'outputResultChanged') return;
+  if (event.kind.type !== 'pinPreviewResultReady') return;
   if (
     event.kind.generation !== preview.generation
     || event.kind.output.graphPath !== preview.output.graphPath
@@ -92,8 +92,8 @@ export function observeGraphRunEvent(
     observePinPreviewEvent(graphPath, event, preview);
     return;
   }
-  if (event.kind.type === 'runStarted' && event.correlation.runId) {
-    useExecutionStore.getState().setActiveRunId(graphPath, event.correlation.runId);
+  if (event.kind.type === 'runStarted') {
+    useExecutionStore.getState().setActiveRunId(graphPath, event.run.runId);
   }
   if (event.kind.type === 'runErrored') state.outcome = 'error';
   if (event.kind.type === 'runCancelled') state.outcome = 'cancelled';

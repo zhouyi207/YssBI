@@ -95,7 +95,6 @@ describe('Rust-generated node-system golden contracts', () => {
     expect([
       fingerprintWire.catalog,
       fingerprintWire.editorProjection,
-      fingerprintWire.runEvent,
       fingerprintWire.trace,
     ].every((value) => fingerprintPattern.test(value))).toBe(true);
     expect(new Set([
@@ -104,7 +103,6 @@ describe('Rust-generated node-system golden contracts', () => {
       editorProjection.basis.registryFingerprint,
       fingerprintWire.catalog,
       fingerprintWire.editorProjection,
-      fingerprintWire.runEvent,
       fingerprintWire.trace,
     ])).toEqual(new Set([fingerprintWire.catalog]));
   });

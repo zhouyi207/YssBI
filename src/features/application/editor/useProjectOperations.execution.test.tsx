@@ -17,23 +17,10 @@ const graphPath = 'events/Main.yssbi-event';
 
 function runStartedEvent(): RunEvent {
   return {
-    correlation: {
+    run: {
       projectSessionId: 'backend-session-1',
       graphPath,
-      graphRevision: '1',
-      registryFingerprint: 'registry-1',
-      resourceVersions: {},
-      compileId: '1',
-      selectionDigest: 'selection-1',
       runId: 'run-stale',
-      nodeId: null,
-      nodeTypeId: null,
-      parentCall: null,
-    },
-    basis: {
-      graphRevision: '1',
-      registryFingerprint: 'registry-1',
-      resourceVersions: {},
     },
     kind: { type: 'runStarted' },
   };
@@ -104,7 +91,7 @@ describe('useProjectOperations execution demand', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
-    vi.spyOn(ProjectService, 'executeGraphDocument').mockResolvedValue({ runId: 'run-1' });
+    vi.spyOn(ProjectService, 'executeGraphDocument').mockResolvedValue(undefined);
 
     function Harness() {
       operations = useProjectOperations();
@@ -140,23 +127,7 @@ describe('useProjectOperations execution demand', () => {
         onEvent?.({
           ...runStartedEvent(),
           kind: {
-            type: 'outputResultChanged',
-            output: {
-              graphPath,
-              port: {
-                kind: 'declared',
-                nodeId: '00000000-0000-0000-0000-000000000001',
-                portKey: 'value',
-              },
-            },
-            generation: null,
-            resultId: '15',
-          },
-        });
-        onEvent?.({
-          ...runStartedEvent(),
-          kind: {
-            type: 'outputResultChanged',
+            type: 'pinPreviewResultReady',
             output: {
               graphPath,
               port: {
@@ -171,7 +142,7 @@ describe('useProjectOperations execution demand', () => {
         });
         expect(openInspectableResult).not.toHaveBeenCalled();
         onEvent?.({ ...runStartedEvent(), kind: { type: 'openResultWindow', resultId: '17' } });
-        return { runId: 'run-1' };
+        return undefined;
       },
     );
 
@@ -197,7 +168,7 @@ describe('useProjectOperations execution demand', () => {
 
   it('ignores delayed events and completion after project lifecycle replacement', async () => {
     let emit!: (event: RunEvent) => void;
-    let resolveExecution!: (value: { runId: string }) => void;
+    let resolveExecution!: () => void;
     vi.mocked(ProjectService.executeGraphDocument).mockImplementation(
       (_projectInstanceId, _graphPath, _demand, onEvent) => new Promise((resolve) => {
         emit = onEvent ?? (() => undefined);
@@ -208,7 +179,7 @@ describe('useProjectOperations execution demand', () => {
     const execution = operations.executeGraph();
     startProjectLifecycle('project-instance-2');
     emit(runStartedEvent());
-    resolveExecution({ runId: 'run-stale' });
+    resolveExecution();
     await act(async () => execution);
 
     expect(executionState.setActiveRunId).not.toHaveBeenCalled();

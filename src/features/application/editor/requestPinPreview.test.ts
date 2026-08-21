@@ -27,23 +27,10 @@ const backendProjectSessionId = 'backend-project-session-1';
 
 function runEvent(kind: RunEvent['kind'], runId = 'run-1'): RunEvent {
   return {
-    correlation: {
+    run: {
       projectSessionId: backendProjectSessionId,
       graphPath: eventGraphPath,
-      graphRevision: '1',
-      registryFingerprint: 'registry-1',
-      resourceVersions: {},
-      compileId: 'compile-1',
-      selectionDigest: 'selection-1',
       runId,
-      nodeId: null,
-      nodeTypeId: null,
-      parentCall: null,
-    },
-    basis: {
-      graphRevision: '1',
-      registryFingerprint: 'registry-1',
-      resourceVersions: {},
     },
     kind,
   };
@@ -85,7 +72,7 @@ function emitSuccessfulPreview(
   if (demand.type !== 'pinPreview') throw new Error('expected pin preview demand');
   onEvent?.(runEvent({ type: 'runStarted' }));
   onEvent?.(runEvent({
-    type: 'outputResultChanged',
+    type: 'pinPreviewResultReady',
     output: demand.output,
     generation: demand.generation,
     resultId,
@@ -136,7 +123,6 @@ describe('requestPinPreview', () => {
     const execute = vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
       async (_projectInstanceId, _graphPath, demand, onEvent) => {
         emitSuccessfulPreview(demand, onEvent);
-        return { runId: 'run-1' };
       },
     );
 
@@ -374,13 +360,12 @@ describe('requestPinPreview', () => {
         onEvent?.(runEvent({ type: 'runStarted' }));
         replace();
         onEvent?.(runEvent({
-          type: 'outputResultChanged',
+          type: 'pinPreviewResultReady',
           output: demand.output,
           generation: demand.generation,
           resultId: 'result-stale-projection',
         }));
         onEvent?.(runEvent({ type: 'runCompleted' }));
-        return { runId: 'run-1' };
       },
     );
 
@@ -407,7 +392,7 @@ describe('requestPinPreview', () => {
       const removePinPreview = vi.spyOn(originalStore, 'removePinPreview');
       const setActiveRunId = vi.spyOn(originalStore, 'setActiveRunId');
       let emit!: (event: RunEvent) => void;
-      let resolveExecution!: (value: { runId: string }) => void;
+      let resolveExecution!: () => void;
       let rejectExecution!: (reason: unknown) => void;
       const execute = vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
         (_projectInstanceId, _graphPath, _demand, onEvent) => new Promise((resolve, reject) => {
@@ -454,13 +439,13 @@ describe('requestPinPreview', () => {
       if (settlement === 'resolution') {
         emit(runEvent({ type: 'runStarted' }));
         emit(runEvent({
-          type: 'outputResultChanged',
+          type: 'pinPreviewResultReady',
           output: { graphPath: eventGraphPath, port: outputAddress },
           generation: originalGeneration ?? 0,
           resultId: 'result-stale-project',
         }));
         emit(runEvent({ type: 'runCompleted' }));
-        resolveExecution({ runId: 'run-1' });
+        resolveExecution();
       } else {
         rejectExecution({ code: 'stale_request', message: 'old request rejected' });
       }
@@ -551,7 +536,7 @@ describe('requestPinPreview', () => {
   it('suppresses the older completion when two previews race', async () => {
     const { outputKey, outputAddress } = installGraph();
     const callbacks: Array<(event: RunEvent) => void> = [];
-    const resolvers: Array<(value: { runId: string }) => void> = [];
+    const resolvers: Array<() => void> = [];
     vi.spyOn(ProjectService, 'executeGraphDocument').mockImplementation(
       (_projectInstanceId, _graphPath, _demand, onEvent) => new Promise((resolve) => {
         callbacks.push(onEvent ?? (() => undefined));
@@ -573,13 +558,13 @@ describe('requestPinPreview', () => {
 
     callbacks[0](runEvent({ type: 'runStarted' }, 'run-old'));
     callbacks[0](runEvent({
-      type: 'outputResultChanged',
+      type: 'pinPreviewResultReady',
       output: { graphPath: eventGraphPath, port: outputAddress },
       generation: 1,
       resultId: 'result-old',
     }, 'run-old'));
     callbacks[0](runEvent({ type: 'runCompleted' }, 'run-old'));
-    resolvers[0]({ runId: 'run-old' });
+    resolvers[0]();
     await expect(first).resolves.toEqual({
       status: 'rejected',
       reason: 'stale-project-lifecycle',
@@ -592,13 +577,13 @@ describe('requestPinPreview', () => {
 
     callbacks[1](runEvent({ type: 'runStarted' }, 'run-new'));
     callbacks[1](runEvent({
-      type: 'outputResultChanged',
+      type: 'pinPreviewResultReady',
       output: { graphPath: eventGraphPath, port: outputAddress },
       generation: 2,
       resultId: 'result-new',
     }, 'run-new'));
     callbacks[1](runEvent({ type: 'runCompleted' }, 'run-new'));
-    resolvers[1]({ runId: 'run-new' });
+    resolvers[1]();
     await second;
 
     expect(useExecutionStore.getState().getGraph(eventGraphPath).pinPreviews.get(
@@ -613,13 +598,12 @@ describe('requestPinPreview', () => {
         if (demand.type !== 'pinPreview') throw new Error('expected pin preview demand');
         onEvent?.(runEvent({ type: 'runStarted' }));
         onEvent?.(runEvent({
-          type: 'outputResultChanged',
+          type: 'pinPreviewResultReady',
           output: demand.output,
           generation: demand.generation + 1,
           resultId: 'result-stale-generation',
         }));
         onEvent?.(runEvent({ type: 'runCompleted' }));
-        return { runId: 'run-1' };
       },
     );
 

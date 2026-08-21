@@ -2,16 +2,12 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Channel } from "@tauri-apps/api/core";
 import type {
-    ExecuteGraphResultDto,
     RunEvent,
     RunOutputChannelEvent,
 } from "@/shared/types/dto/runEvent";
 import type { ExecutionDemandDto } from "@/shared/types/dto/executionDemand";
 import { parseInternalCompilationErrorDetails } from "@/shared/types/dto/executionError";
-import {
-    parseExecuteGraphResultDto,
-    parseExecutionDemandDto,
-} from "@/shared/types/dto/runEventParser";
+import { parseExecutionDemandDto } from "@/shared/types/dto/runEventParser";
 
 import type {
   FunctionSignatureDto,
@@ -549,17 +545,17 @@ export class ProjectService {
         demand: ExecutionDemandDto,
         onEvent?: (event: RunEvent) => void,
         onOutput?: (event: RunOutputChannelEvent) => void,
-    ): Promise<ExecuteGraphResultDto> {
+    ): Promise<void> {
         const parsedDemand = parseExecutionDemandDto(demand);
         const { channel, waitForStreamEnd } = bindExecutionEventChannel(onEvent, onOutput);
         try {
-            let result: ExecuteGraphResultDto;
             try {
-                const rawResult = await invokeCommand<unknown>(
-                    "execute_graph_document",
-                    { projectInstanceId, graphPath, demand: parsedDemand, onEvent: channel },
-                );
-                result = parseExecuteGraphResultDto(rawResult);
+                await invokeCommand<void>('execute_graph_document', {
+                    projectInstanceId,
+                    graphPath,
+                    demand: parsedDemand,
+                    onEvent: channel,
+                });
             } catch (error) {
                 if (isIpcErrorCode(error, 'internal_compilation_failure')) {
                     parseInternalCompilationErrorDetails(error.details);
@@ -569,13 +565,12 @@ export class ProjectService {
                     try {
                         await waitForStreamEnd();
                     } catch {
-                        // Drain failures must not replace the backend command classification.
+                        // Backend classification remains authoritative.
                     }
                 }
                 throw error;
             }
             await waitForStreamEnd();
-            return result;
         } finally {
             untrackChannel(channel);
         }

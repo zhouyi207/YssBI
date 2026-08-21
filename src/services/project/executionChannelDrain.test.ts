@@ -4,23 +4,10 @@ import { createExecutionStreamDrain } from './executionChannelDrain';
 
 function runEvent(kind: RunEventKind): RunEvent {
   return {
-    correlation: {
+    run: {
       projectSessionId: 'project-session-1',
       graphPath: 'events/Main.yssbi-event',
-      graphRevision: '7',
-      registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-      resourceVersions: {},
-      compileId: '9',
-      selectionDigest: 'demand-selection-a',
       runId: '41',
-      nodeId: null,
-      nodeTypeId: null,
-      parentCall: null,
-    },
-    basis: {
-      graphRevision: '7',
-      registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-      resourceVersions: {},
     },
     kind,
   };
@@ -36,10 +23,8 @@ describe('createExecutionStreamDrain', () => {
     const wait = drain.waitForStreamEnd();
 
     drain.onmessage(runEvent({ type: 'runStarted' }));
-    drain.onmessage(runEvent({
-          type: 'operationStarted', operationIndex: 0, activationId: '1', attemptId: '1',
-        }));
-    expect(recording).toEqual(['runStarted', 'operationStarted']);
+    drain.onmessage(runEvent({ type: 'openResultWindow', resultId: '1' }));
+    expect(recording).toEqual(['runStarted', 'openResultWindow']);
 
     let settled = false;
     void wait.then(() => {
@@ -51,7 +36,7 @@ describe('createExecutionStreamDrain', () => {
     drain.onmessage(runEvent({ type: 'runCompleted' }));
     await wait;
 
-    expect(recording).toEqual(['runStarted', 'operationStarted', 'runCompleted']);
+    expect(recording).toEqual(['runStarted', 'openResultWindow', 'runCompleted']);
   });
 
   it.each([

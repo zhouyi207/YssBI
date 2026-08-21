@@ -16,23 +16,10 @@ import {
 
 function event(kind: RunEvent['kind']): RunEvent {
   return {
-    correlation: {
+    run: {
       projectSessionId: 'project-session-1',
       graphPath: 'events/Main.yssbi-event',
-      graphRevision: '7',
-      registryFingerprint: 'registry-1',
-      resourceVersions: {},
-      compileId: '9',
-      selectionDigest: 'demand-selection-a',
       runId: '9007199254740993',
-      nodeId: null,
-      nodeTypeId: null,
-      parentCall: null,
-    },
-    basis: {
-      graphRevision: '7',
-      registryFingerprint: 'registry-1',
-      resourceVersions: {},
     },
     kind,
   };
@@ -97,7 +84,7 @@ describe('observeGraphRunEvent', () => {
   it.each([
     ['declared', declaredOutput],
     ['dynamic instance', instanceOutput],
-  ] as const)('completes a %s preview only from its exact stable OutputResultChanged', (_name, port) => {
+  ] as const)('completes a %s preview only from its exact pinPreviewResultReady', (_name, port) => {
     const graphPath = 'events/Main.yssbi-event';
     const outcome: GraphRunOutcomeState = { outcome: 'success' };
     const lease = beginPreview(graphPath, port, 1);
@@ -108,7 +95,7 @@ describe('observeGraphRunEvent', () => {
     observeGraphRunEvent(
       graphPath,
       event({
-        type: 'outputResultChanged',
+        type: 'pinPreviewResultReady',
         output: { graphPath, port },
         generation,
         resultId: 'result-current',
@@ -137,7 +124,7 @@ describe('observeGraphRunEvent', () => {
     observeGraphRunEvent(
       graphPath,
       event({
-        type: 'outputResultChanged',
+        type: 'pinPreviewResultReady',
         output: { graphPath, port: instanceOutput },
         generation: currentGeneration,
         resultId: 'result-wrong-address',
@@ -146,25 +133,25 @@ describe('observeGraphRunEvent', () => {
       current,
     );
     const wrongSession = event({
-      type: 'outputResultChanged',
+      type: 'pinPreviewResultReady',
       output: { graphPath, port: declaredOutput },
       generation: currentGeneration,
       resultId: 'result-stale-session',
     });
-    wrongSession.correlation.projectSessionId = 'stale-backend-session';
+    wrongSession.run.projectSessionId = 'stale-backend-session';
     observeGraphRunEvent(graphPath, wrongSession, outcome, current);
     const wrongRun = event({
-      type: 'outputResultChanged',
+      type: 'pinPreviewResultReady',
       output: { graphPath, port: declaredOutput },
       generation: currentGeneration,
       resultId: 'result-wrong-run',
     });
-    wrongRun.correlation.runId = 'different-run';
+    wrongRun.run.runId = 'different-run';
     observeGraphRunEvent(graphPath, wrongRun, outcome, current);
     observeGraphRunEvent(
       graphPath,
       event({
-        type: 'outputResultChanged',
+        type: 'pinPreviewResultReady',
         output: { graphPath, port: declaredOutput },
         generation: staleGeneration,
         resultId: 'result-stale-generation',
@@ -195,7 +182,7 @@ describe('observeGraphRunEvent', () => {
 
     observeGraphRunEvent(graphPath, event({ type: 'runStarted' }), outcome, stale);
     observeGraphRunEvent(graphPath, event({
-      type: 'outputResultChanged',
+      type: 'pinPreviewResultReady',
       output: { graphPath, port: declaredOutput },
       generation: 1,
       resultId: 'result-old',
@@ -223,18 +210,18 @@ describe('observeGraphRunEvent', () => {
     const preview = previewObservation(lease);
 
     const previewStarted = event({ type: 'runStarted' });
-    previewStarted.correlation.runId = 'preview-run';
+    previewStarted.run.runId = 'preview-run';
     observeGraphRunEvent(graphPath, previewStarted, ordinaryOutcome, preview);
-    const outputResultChanged = event({
-      type: 'outputResultChanged',
+    const previewResultReady = event({
+      type: 'pinPreviewResultReady',
       output: { graphPath, port: declaredOutput },
       generation,
       resultId: 'preview-result',
     });
-    outputResultChanged.correlation.runId = 'preview-run';
-    observeGraphRunEvent(graphPath, outputResultChanged, ordinaryOutcome, preview);
+    previewResultReady.run.runId = 'preview-run';
+    observeGraphRunEvent(graphPath, previewResultReady, ordinaryOutcome, preview);
     const previewTerminal = event(terminal);
-    previewTerminal.correlation.runId = 'preview-run';
+    previewTerminal.run.runId = 'preview-run';
     observeGraphRunEvent(graphPath, previewTerminal, ordinaryOutcome, preview);
 
     expect(useExecutionStore.getState().getGraph(graphPath)).toMatchObject({
@@ -257,7 +244,7 @@ describe('observeGraphRunEvent', () => {
     const lease = beginPreview(graphPath, declaredOutput, 1);
     const preview = previewObservation(lease);
     const previewStarted = event({ type: 'runStarted' });
-    previewStarted.correlation.runId = 'preview-run';
+    previewStarted.run.runId = 'preview-run';
 
     observeGraphRunEvent(graphPath, previewStarted, ordinaryOutcome, preview);
     const cancelGraphRun = vi.fn().mockResolvedValue(true);

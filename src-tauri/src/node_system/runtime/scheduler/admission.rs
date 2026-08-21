@@ -80,7 +80,6 @@ impl<'a> RunExecutor<'a> {
             .result_store()
             .record_reused_group(provenance, &descriptors, result_ids)
             .map_err(result_store_error)?;
-        self.record_result_group_changed(plan, &group, super::super::ResultStateKind::Ready);
         for (output, result_id) in operation
             .outputs
             .iter()
@@ -223,7 +222,7 @@ impl<'a> RunExecutor<'a> {
                         operation.cache_policy,
                         error.clone(),
                     );
-                    self.transition_group_terminal(plan, Some(&group), &error);
+                    self.transition_group_terminal(Some(&group), &error);
                     return Err(error);
                 }
             }
@@ -358,10 +357,9 @@ impl<'a> RunExecutor<'a> {
         job: PreparedOperation,
         class: WorkloadClass,
         cancellation: &CancellationToken,
-        parent_call: Option<ParentCallId>,
-        run_id: RunId,
     ) -> Result<(), RunError> {
         let operation = job.operation;
+        #[cfg(test)]
         let activation = job.activation;
         let attempt = job.attempt;
         let output_group = job.output_group.clone();
@@ -396,11 +394,9 @@ impl<'a> RunExecutor<'a> {
                 plan.operations[operation.index()].cache_policy,
                 error.clone(),
             );
-            self.transition_group_terminal(plan, output_group.as_ref(), &error);
+            self.transition_group_terminal(output_group.as_ref(), &error);
             return Err(error);
         }
-        let correlation = operation_correlation(plan, run_id, parent_call, operation);
-        self.record_operation_started(plan, correlation, operation, activation, attempt);
         Ok(())
     }
 }

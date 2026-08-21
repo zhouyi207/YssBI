@@ -239,7 +239,7 @@ export function useProjectOperations() {
       const runState: GraphRunOutcomeState = { outcome: 'success' };
       useExecutionStore.getState().startExecution(graphPath);
 
-      const result = await ProjectService.executeGraphDocument(
+      await ProjectService.executeGraphDocument(
         project.projectInstanceId,
         graphPath,
         { type: 'default' },
@@ -258,7 +258,6 @@ export function useProjectOperations() {
 
       if (!isCurrentProjectIdentity(project)) return;
       finalizeExecutionRun(graphPath, recording, runState.outcome);
-      logger.exec.debug(`执行 runId: ${result.runId}`);
     } catch (e) {
       if (!isCurrentProjectIdentity(project)) return;
       if (isExecutionCancelledError(e)) {

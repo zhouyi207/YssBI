@@ -16,8 +16,7 @@ impl<'a> RunExecutor<'a> {
         pending: &mut BTreeSet<OperationIndex>,
         terminal_error: &mut Option<RunError>,
         cancellation: &CancellationToken,
-        parent_call: Option<ParentCallId>,
-        run_id: RunId,
+        run: &GraphRunIdentity,
         worker_panic: &mut Option<Box<dyn std::any::Any + Send>>,
         mut envelope: WorkerCompletion,
     ) {
@@ -109,14 +108,12 @@ impl<'a> RunExecutor<'a> {
                 );
             }
             self.transition_group_terminal(
-                plan,
                 completion.output_group.as_ref(),
                 terminal_error.as_ref().unwrap_or(&RunError::Cancelled),
             );
             return;
         }
 
-        let correlation = operation_correlation(plan, run_id, parent_call, completion.operation);
         if terminal_error.is_some() {
             if matches!(terminal_error, Some(RunError::Cancelled))
                 && completion
@@ -141,11 +138,9 @@ impl<'a> RunExecutor<'a> {
                 );
             }
             self.transition_group_terminal(
-                plan,
                 completion.output_group.as_ref(),
                 terminal_error.as_ref().expect("terminal error is present"),
             );
-            self.record_operation_terminal_event(plan, correlation, &completion);
             if let Some(key) = &active.memo_key {
                 memo_inflight.remove(key);
             }
@@ -168,7 +163,6 @@ impl<'a> RunExecutor<'a> {
             })
             .filter(|policy| completion.attempt.get() < u64::from(policy.max_attempts.get()));
         if let Some(policy) = retry_policy {
-            self.record_operation_terminal_event(plan, correlation, &completion);
             let backoff = retry_backoff(policy, completion.attempt);
             let Some(eligible_at) = Instant::now().checked_add(backoff) else {
                 if let Some(key) = &active.memo_key {
@@ -178,7 +172,7 @@ impl<'a> RunExecutor<'a> {
                     phase: RunPhase::QueueWait,
                 };
                 _memoization.abort_owned(&active, error.clone());
-                self.transition_group_terminal(plan, active.output_group.as_ref(), &error);
+                self.transition_group_terminal(active.output_group.as_ref(), &error);
                 *terminal_error = Some(error);
                 return;
             };
@@ -199,7 +193,7 @@ impl<'a> RunExecutor<'a> {
                     }
                 };
                 _memoization.abort_owned(&active, error.clone());
-                self.transition_group_terminal(plan, active.output_group.as_ref(), &error);
+                self.transition_group_terminal(active.output_group.as_ref(), &error);
                 *terminal_error = Some(error);
                 return;
             }
@@ -209,7 +203,7 @@ impl<'a> RunExecutor<'a> {
                 }
                 let error = RunError::InvalidPlan("retry attempt identity overflowed".into());
                 _memoization.abort_owned(&active, error.clone());
-                self.transition_group_terminal(plan, active.output_group.as_ref(), &error);
+                self.transition_group_terminal(active.output_group.as_ref(), &error);
                 *terminal_error = Some(error);
                 return;
             };
@@ -221,7 +215,7 @@ impl<'a> RunExecutor<'a> {
                 let error =
                     RunError::InvalidPlan("delayed retry tie-break identity overflowed".into());
                 _memoization.abort_owned(&active, error.clone());
-                self.transition_group_terminal(plan, active.output_group.as_ref(), &error);
+                self.transition_group_terminal(active.output_group.as_ref(), &error);
                 *terminal_error = Some(error);
                 return;
             };
@@ -262,7 +256,6 @@ impl<'a> RunExecutor<'a> {
                         _memoization.abort_owned(&active, RunError::Cancelled);
                     }
                     self.transition_group_terminal(
-                        plan,
                         completion.output_group.as_ref(),
                         &RunError::Cancelled,
                     );
@@ -281,7 +274,7 @@ impl<'a> RunExecutor<'a> {
                         "operation completion no longer matches its active attempt".into(),
                     );
                     _memoization.abort_owned(&active, error.clone());
-                    self.transition_group_terminal(plan, completion.output_group.as_ref(), &error);
+                    self.transition_group_terminal(completion.output_group.as_ref(), &error);
                     *terminal_error = Some(error);
                     return;
                 }
@@ -291,12 +284,12 @@ impl<'a> RunExecutor<'a> {
                 }
                 if !active.reused_memo
                     && let Some(group) = completion.output_group.as_ref()
-                    && let Err(error) = self.complete_result_group(plan, group, outputs)
+                    && let Err(error) = self.complete_result_group(group, outputs)
                 {
                     if active.owns_memo_flight {
                         _memoization.abort_owned(&active, error.clone());
                     }
-                    self.transition_group_terminal(plan, Some(group), &error);
+                    self.transition_group_terminal(Some(group), &error);
                     *terminal_error = Some(error);
                     cancellation.cancel();
                     return;
@@ -313,7 +306,7 @@ impl<'a> RunExecutor<'a> {
                         )
                 {
                     let error = RunError::Cancelled;
-                    self.transition_group_terminal(plan, Some(group), &error);
+                    self.transition_group_terminal(Some(group), &error);
                     *terminal_error = Some(error);
                     cancellation.cancel();
                     return;
@@ -339,53 +332,30 @@ impl<'a> RunExecutor<'a> {
                         diagnostic_event = "openResultWindow",
                         diagnostic_source = "yssbi.debug.view",
                         result_id = result_id.get(),
-                        run_id = run_id.get(),
+                        run_id = run.run_id.get(),
                         activation_id = completion.activation.get(),
                         node_id = %operation.source_node_id,
                         "View Data result is ready"
                     );
-                    self.record_event(
-                        plan,
-                        correlation.clone(),
-                        RunEventKind::OpenResultWindow { result_id },
-                    );
+                    self.record_event(run, RunEventKind::OpenResultWindow { result_id });
                 }
                 if let Err(error) = self.propagate_value_dependencies(plan, frame) {
                     *terminal_error = Some(error);
                     cancellation.cancel();
                     return;
                 }
-                self.record_event(
-                    plan,
-                    correlation,
-                    RunEventKind::OperationCompleted {
-                        operation_index: completion.operation.index() as u32,
-                        activation_id: completion.activation.get(),
-                        attempt_id: completion.attempt.get(),
-                    },
-                );
             }
             Err(error) => {
                 if active.owns_memo_flight {
                     _memoization.abort_owned(&active, error.clone());
                 }
-                self.transition_group_terminal(plan, completion.output_group.as_ref(), &error);
+                self.transition_group_terminal(completion.output_group.as_ref(), &error);
                 if let Err(propagation_error) = self.propagate_value_dependencies(plan, frame) {
                     *terminal_error = Some(propagation_error);
                     cancellation.cancel();
                     return;
                 }
-                self.terminalize_dependent_operations(plan, frame, pending, run_id, &error);
-                self.record_event(
-                    plan,
-                    correlation,
-                    RunEventKind::OperationErrored {
-                        operation_index: completion.operation.index() as u32,
-                        activation_id: completion.activation.get(),
-                        attempt_id: completion.attempt.get(),
-                        outcome: RunErrorOutcome::from(&error),
-                    },
-                );
+                self.terminalize_dependent_operations(plan, frame, pending, run.run_id, &error);
                 *terminal_error = Some(error);
                 cancellation.cancel();
             }
@@ -471,52 +441,11 @@ impl<'a> RunExecutor<'a> {
                         }
                         _ => upstream_error.clone(),
                     };
-                    self.transition_group_terminal(plan, Some(group), &error);
+                    self.transition_group_terminal(Some(group), &error);
                 }
                 pending.remove(&operation_index);
             }
             let _ = self.propagate_value_dependencies(plan, frame);
         }
-    }
-
-    pub(super) fn record_operation_started(
-        &self,
-        plan: &ExecutionPlan,
-        correlation: CorrelationContext,
-        operation: OperationIndex,
-        activation: ActivationId,
-        attempt: AttemptId,
-    ) {
-        self.record_event(
-            plan,
-            correlation.clone(),
-            RunEventKind::OperationStarted {
-                operation_index: operation.index() as u32,
-                activation_id: activation.get(),
-                attempt_id: attempt.get(),
-            },
-        );
-    }
-
-    pub(super) fn record_operation_terminal_event(
-        &self,
-        plan: &ExecutionPlan,
-        correlation: CorrelationContext,
-        completion: &OperationCompletion,
-    ) {
-        let kind = match &completion.outputs {
-            Ok(_) => RunEventKind::OperationCompleted {
-                operation_index: completion.operation.index() as u32,
-                activation_id: completion.activation.get(),
-                attempt_id: completion.attempt.get(),
-            },
-            Err(error) => RunEventKind::OperationErrored {
-                operation_index: completion.operation.index() as u32,
-                activation_id: completion.activation.get(),
-                attempt_id: completion.attempt.get(),
-                outcome: RunErrorOutcome::from(error),
-            },
-        };
-        self.record_event(plan, correlation, kind);
     }
 }

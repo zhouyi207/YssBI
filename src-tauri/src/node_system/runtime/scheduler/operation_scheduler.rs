@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) struct ReadyOperationContext<'context, 'memo> {
-    pub(super) run_id: RunId,
+    pub(super) run: &'context GraphRunIdentity,
     pub(super) run_output: &'context dyn RunOutputSink,
     pub(super) plan: &'context ExecutionPlan,
     pub(super) operations: &'context [OperationIndex],
@@ -24,7 +24,7 @@ impl<'a> RunExecutor<'a> {
         context: ReadyOperationContext<'_, '_>,
     ) -> Result<(), RunError> {
         let ReadyOperationContext {
-            run_id,
+            run,
             run_output,
             plan,
             operations,
@@ -40,6 +40,7 @@ impl<'a> RunExecutor<'a> {
             run_parent_span_id,
             parent_call,
         } = context;
+        let run_id = run.run_id;
         self.propagate_value_dependencies(plan, frame)?;
         let mut pending = BTreeSet::new();
         for operation in operations {
@@ -179,11 +180,7 @@ impl<'a> RunExecutor<'a> {
                                     memo_inflight.remove(key);
                                 }
                                 memoization.abort_delayed(&retry, error.clone());
-                                self.transition_group_terminal(
-                                    plan,
-                                    retry.output_group.as_ref(),
-                                    &error,
-                                );
+                                self.transition_group_terminal(retry.output_group.as_ref(), &error);
                                 terminal_error = Some(error);
                                 break;
                             }
@@ -378,8 +375,6 @@ impl<'a> RunExecutor<'a> {
                                         job,
                                         class,
                                         cancellation,
-                                        parent_call,
-                                        run_id,
                                     ) {
                                         terminal_error = Some(error);
                                     }
@@ -393,15 +388,6 @@ impl<'a> RunExecutor<'a> {
                                     &job,
                                     class,
                                     false,
-                                );
-                                let correlation =
-                                    operation_correlation(plan, run_id, parent_call, operation);
-                                self.record_operation_started(
-                                    plan,
-                                    correlation,
-                                    operation,
-                                    job.activation,
-                                    job.attempt,
                                 );
                                 self.finish_operation_completion(
                                     plan,
@@ -417,8 +403,7 @@ impl<'a> RunExecutor<'a> {
                                     &mut pending,
                                     &mut terminal_error,
                                     cancellation,
-                                    parent_call,
-                                    run_id,
+                                    run,
                                     &mut worker_panic,
                                     WorkerCompletion {
                                         completed_at: Instant::now(),
@@ -455,8 +440,6 @@ impl<'a> RunExecutor<'a> {
                                 job,
                                 class,
                                 cancellation,
-                                parent_call,
-                                run_id,
                             ) {
                                 terminal_error.get_or_insert(error);
                                 break;
@@ -488,8 +471,7 @@ impl<'a> RunExecutor<'a> {
                             &mut pending,
                             &mut terminal_error,
                             cancellation,
-                            parent_call,
-                            run_id,
+                            run,
                             &mut worker_panic,
                             completion,
                         );
@@ -535,8 +517,7 @@ impl<'a> RunExecutor<'a> {
                                 &mut pending,
                                 &mut terminal_error,
                                 cancellation,
-                                parent_call,
-                                run_id,
+                                run,
                                 &mut worker_panic,
                                 completion,
                             ),
@@ -603,8 +584,7 @@ impl<'a> RunExecutor<'a> {
                                 &mut pending,
                                 &mut terminal_error,
                                 cancellation,
-                                parent_call,
-                                run_id,
+                                run,
                                 &mut worker_panic,
                                 completion,
                             );
@@ -638,15 +618,15 @@ impl<'a> RunExecutor<'a> {
             if let Err(error) = &scheduler_result {
                 for job in prepared.values() {
                     memoization.abort_prepared(job, error.clone());
-                    self.transition_group_terminal(plan, job.output_group.as_ref(), error);
+                    self.transition_group_terminal(job.output_group.as_ref(), error);
                 }
                 for operation in running.values() {
                     memoization.abort_owned(operation, error.clone());
-                    self.transition_group_terminal(plan, operation.output_group.as_ref(), error);
+                    self.transition_group_terminal(operation.output_group.as_ref(), error);
                 }
                 for retry in delayed_retries.iter() {
                     memoization.abort_delayed(&retry.0, error.clone());
-                    self.transition_group_terminal(plan, retry.0.output_group.as_ref(), error);
+                    self.transition_group_terminal(retry.0.output_group.as_ref(), error);
                 }
             }
             scheduler_result

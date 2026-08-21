@@ -92,7 +92,7 @@ fn deadline_late_kernel_completion_is_joined_without_commit() {
     let run_id = events
         .iter()
         .find(|event| event.kind == RunEventKind::RunStarted)
-        .and_then(|event| event.correlation.run_id)
+        .map(|event| event.run.run_id)
         .expect("RunStarted carries the active run ID");
     let stored_results = results.results_for_run(run_id);
     assert_eq!(stored_results.len(), 1);
@@ -155,7 +155,7 @@ fn deadline_queue_wait_is_typed_and_late_workers_do_not_commit() {
     let run_id = events
         .iter()
         .find(|event| event.kind == RunEventKind::RunStarted)
-        .and_then(|event| event.correlation.run_id)
+        .map(|event| event.run.run_id)
         .expect("RunStarted carries the active run ID");
     let stored_results = results.results_for_run(run_id);
     assert!(!stored_results.is_empty());
@@ -242,7 +242,7 @@ fn deadline_publication_preserves_ready_result_but_emits_run_error() {
     let run_id = events
         .iter()
         .find(|event| event.kind == RunEventKind::RunStarted)
-        .and_then(|event| event.correlation.run_id)
+        .map(|event| event.run.run_id)
         .expect("RunStarted carries the active run ID");
     let stored_results = results.results_for_run(run_id);
     assert_eq!(stored_results.len(), 1);

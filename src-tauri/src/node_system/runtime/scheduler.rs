@@ -3,8 +3,8 @@ use super::scheduling::ClassScheduler;
 use super::{
     ACTIVATION_IDS, ActivationId, ActivationIdAllocator, ActivationProvenance,
     ActivationResultGroup, CancellationToken, CompiledParameterStore, DemandFingerprint,
-    EffectiveComputationSettings, FRAME_IDS, FrameId, KernelContext, KernelErrorKind,
-    KernelRegistry, NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey,
+    EffectiveComputationSettings, FRAME_IDS, FrameId, GraphRunIdentity, KernelContext,
+    KernelErrorKind, KernelRegistry, NOOP_RUN_EVENT_SINK, OperationCompletion, OperationMemoKey,
     PendingOutputDescriptor, ProjectRunRegistry, PublishedFunctionPlan, RelationalBackendProvider,
     RelationalContext, ResourceErrorKind, ResourceProvider, ResultFailure, ResultId, ResultState,
     ResultStore, ResultUsage, RunDeadline, RunError, RunErrorOutcome, RunEvent, RunEventKind,
@@ -51,7 +51,7 @@ use operation_state::{
     AdmissionBookkeeping, DelayedRetry, MemoTables, PreparedOperation, RunningOperation,
     WorkerCompletion,
 };
-use worker_execution::{execute_operation_worker, operation_correlation};
+use worker_execution::execute_operation_worker;
 
 const DEFAULT_RECURSION_LIMIT: usize = 64;
 static NEXT_RUN_ID: AtomicU64 = AtomicU64::new(1);
@@ -712,23 +712,30 @@ impl<'a> RunExecutor<'a> {
         cancellation: CancellationToken,
     ) -> Result<RunResult, RunError> {
         let run_id = allocate_runtime_id(&NEXT_RUN_ID).map(|id| RunId::new(id.get()))?;
+        let run = GraphRunIdentity {
+            project_session_id: plan.provenance.project_session_id.clone(),
+            graph_path: plan.provenance.graph_path.clone(),
+            run_id,
+        };
         let _registration = self
             .run_registry
             .map(|registry| {
                 registry.track(
-                    plan.provenance.project_session_id.clone(),
-                    run_id,
+                    run.project_session_id.clone(),
+                    run.run_id,
                     cancellation.clone(),
                 )
             })
             .transpose()
             .map_err(|error| RunError::ProjectDraining(error.to_string().into()))?;
-        let mut correlation = CorrelationContext::compile(&plan.provenance).for_run(run_id, None);
+
+        let mut correlation =
+            CorrelationContext::compile(&plan.provenance).for_run(run.run_id, None);
         if let Some(digest) = self.selection_digest {
             correlation = correlation.with_selection_digest(digest);
         }
-        let run_output = RunOutputEmitter::new(run_id, self.events);
-        self.record_event(plan, correlation.clone(), RunEventKind::RunStarted);
+        let run_output = RunOutputEmitter::new(run.run_id, self.events);
+        self.record_event(&run, RunEventKind::RunStarted);
         let mut run_span = start_span_safely(
             self.trace,
             SpanSpec {
@@ -773,7 +780,7 @@ impl<'a> RunExecutor<'a> {
                 self.finish_run(
                     plan,
                     cancellation.clone(),
-                    run_id,
+                    &run,
                     &run_output,
                     correlation.clone(),
                     &resource_owner,
@@ -807,7 +814,7 @@ impl<'a> RunExecutor<'a> {
                 outcome: RunErrorOutcome::from(error),
             },
         };
-        self.record_event(plan, correlation, event);
+        self.record_event(&run, event);
         result
     }
 
@@ -815,7 +822,7 @@ impl<'a> RunExecutor<'a> {
         &self,
         plan: &ExecutionPlan,
         cancellation: CancellationToken,
-        run_id: RunId,
+        run: &GraphRunIdentity,
         run_output: &dyn RunOutputSink,
         correlation: CorrelationContext,
         resource_owner: &RunResourceOwner,
@@ -825,7 +832,7 @@ impl<'a> RunExecutor<'a> {
         let execution_result = self.run_root(
             plan,
             cancellation.clone(),
-            run_id,
+            run,
             run_output,
             correlation.clone(),
             resource_owner,
@@ -881,7 +888,7 @@ impl<'a> RunExecutor<'a> {
                 result = Err(error);
             }
             if let Ok(run_result) = result.as_ref() {
-                self.record_output_result_events(plan, run_result);
+                self.record_pin_preview_result_events(plan, run, run_result);
             }
             result
         })();
@@ -912,38 +919,38 @@ impl<'a> RunExecutor<'a> {
         });
     }
 
-    fn record_output_result_events(&self, plan: &ExecutionPlan, run_result: &RunResult) {
+    fn record_pin_preview_result_events(
+        &self,
+        plan: &ExecutionPlan,
+        run: &GraphRunIdentity,
+        run_result: &RunResult,
+    ) {
         for publication in &plan.publications {
-            let (output, generation, result_id) = match publication {
-                PlannedPublication::GraphResult { name, output, .. } => (
-                    output.clone(),
-                    None,
-                    run_result.result_ids.get(name).copied(),
-                ),
-                PlannedPublication::PinPreview {
-                    output,
-                    generation,
-                    value,
-                } => {
-                    let result_id = plan
-                        .results
-                        .iter()
-                        .find(|result| result.output == *output && result.value == *value)
-                        .and_then(|result| run_result.result_ids.get(&result.name))
-                        .copied();
-                    (output.clone(), Some(*generation), result_id)
-                }
+            let PlannedPublication::PinPreview {
+                output,
+                generation,
+                value,
+            } = publication
+            else {
+                continue;
             };
+
+            let result_id = plan
+                .results
+                .iter()
+                .find(|result| result.output == *output && result.value == *value)
+                .and_then(|result| run_result.result_ids.get(&result.name))
+                .copied();
+
             if let Some(result_id) = result_id {
-                self.events.record(RunEvent {
-                    correlation: run_result.correlation.clone(),
-                    basis: plan.provenance.basis.clone(),
-                    kind: RunEventKind::OutputResultChanged {
-                        output,
-                        generation,
+                self.record_event(
+                    run,
+                    RunEventKind::PinPreviewResultReady {
+                        output: output.clone(),
+                        generation: *generation,
                         result_id,
                     },
-                });
+                );
             }
         }
     }
@@ -952,7 +959,7 @@ impl<'a> RunExecutor<'a> {
         &self,
         plan: &ExecutionPlan,
         cancellation: CancellationToken,
-        run_id: RunId,
+        run: &GraphRunIdentity,
         run_output: &dyn RunOutputSink,
         correlation: CorrelationContext,
         resource_owner: &RunResourceOwner,
@@ -969,7 +976,7 @@ impl<'a> RunExecutor<'a> {
             &cancellation,
         )?;
         let mut frame = Frame::new(plan.value_count, self.frame_ids)?;
-        self.bind_internal_values(run_id, plan, &mut frame, &plan.bound_values)?;
+        self.bind_internal_values(run.run_id, plan, &mut frame, &plan.bound_values)?;
         let run_memoization = SessionMemoization::new();
         let memoization = MemoTables {
             per_run: &run_memoization,
@@ -978,7 +985,7 @@ impl<'a> RunExecutor<'a> {
         let root_demand = DemandFingerprint::for_root(plan, self.selection_digest);
         let result = (|| {
             self.execute_region(
-                run_id,
+                run,
                 run_output,
                 plan,
                 &plan.root_region,
@@ -1001,7 +1008,7 @@ impl<'a> RunExecutor<'a> {
                 result_ids.insert(result.name.clone(), result_id);
             }
             Ok(RunResult {
-                run_id,
+                run_id: run.run_id,
                 provenance: plan.provenance.clone(),
                 correlation,
                 result_ids,
@@ -1054,11 +1061,7 @@ impl<'a> RunExecutor<'a> {
                 }],
             )
             .map_err(result_store_error)?;
-        self.complete_result_group(
-            plan,
-            &group,
-            vec![StoredValue::scalar(value)].into_boxed_slice(),
-        )?;
+        self.complete_result_group(&group, vec![StoredValue::scalar(value)].into_boxed_slice())?;
         Ok(group.output_result_ids[0])
     }
 
@@ -1115,12 +1118,7 @@ impl<'a> RunExecutor<'a> {
         }
     }
 
-    fn transition_group_terminal(
-        &self,
-        plan: &ExecutionPlan,
-        group: Option<&ActivationResultGroup>,
-        error: &RunError,
-    ) {
+    fn transition_group_terminal(&self, group: Option<&ActivationResultGroup>, error: &RunError) {
         let Some(group) = group else {
             return;
         };
@@ -1140,19 +1138,7 @@ impl<'a> RunExecutor<'a> {
             self.result_store().fail_group(group, Arc::new(failure))
         };
         match transition {
-            Ok(()) => self.record_result_group_changed(
-                plan,
-                group,
-                if matches!(
-                    error,
-                    RunError::Cancelled | RunError::UpstreamResultCancelled { .. }
-                ) {
-                    super::ResultStateKind::Cancelled
-                } else {
-                    super::ResultStateKind::Failed
-                },
-            ),
-            Err(super::ResultStoreError::TerminalResult(_)) => {}
+            Ok(()) | Err(super::ResultStoreError::TerminalResult(_)) => {}
             Err(error) => tracing::warn!(
                 target: "yssbi::node_system::runtime::results",
                 diagnostic_domain = "execution",
@@ -1163,56 +1149,15 @@ impl<'a> RunExecutor<'a> {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn transition_group_terminal_for_test(
-        &self,
-        plan: &ExecutionPlan,
-        group: &ActivationResultGroup,
-        error: &RunError,
-    ) {
-        self.transition_group_terminal(plan, Some(group), error);
-    }
-
     fn complete_result_group(
         &self,
-        plan: &ExecutionPlan,
         group: &ActivationResultGroup,
         values: Box<[StoredValue]>,
     ) -> Result<(), RunError> {
         self.result_store()
             .complete_group(group, values)
             .map_err(result_store_error)?;
-        self.record_result_group_changed(plan, group, super::ResultStateKind::Ready);
         Ok(())
-    }
-
-    fn record_result_group_changed(
-        &self,
-        plan: &ExecutionPlan,
-        group: &ActivationResultGroup,
-        state: super::ResultStateKind,
-    ) {
-        let Some(result) = group
-            .output_result_ids
-            .first()
-            .and_then(|result_id| self.result_store().result(*result_id))
-        else {
-            return;
-        };
-        let mut correlation =
-            CorrelationContext::compile(&plan.provenance).for_run(result.provenance.run_id, None);
-        if let Some(selection_digest) = self.selection_digest {
-            correlation = correlation.with_selection_digest(selection_digest);
-        }
-        self.events.record(RunEvent {
-            correlation,
-            basis: plan.provenance.basis.clone(),
-            kind: RunEventKind::ResultGroupChanged {
-                activation_id: group.activation_id.get(),
-                result_ids: group.output_result_ids.clone(),
-                state,
-            },
-        });
     }
 
     fn acquire_resources(
@@ -1239,7 +1184,7 @@ impl<'a> RunExecutor<'a> {
     #[allow(clippy::too_many_arguments)]
     fn execute_region(
         &self,
-        run_id: RunId,
+        run: &GraphRunIdentity,
         run_output: &dyn RunOutputSink,
         plan: &ExecutionPlan,
         region: &StructuredControlRegion,
@@ -1259,7 +1204,7 @@ impl<'a> RunExecutor<'a> {
         self.propagate_value_dependencies(plan, frame)?;
         match region {
             StructuredControlRegion::Sequence(steps) => self.execute_sequence(
-                run_id,
+                run,
                 run_output,
                 plan,
                 steps,
@@ -1287,7 +1232,7 @@ impl<'a> RunExecutor<'a> {
                     else_region
                 };
                 self.execute_region(
-                    run_id,
+                    run,
                     run_output,
                     plan,
                     selected,
@@ -1324,7 +1269,7 @@ impl<'a> RunExecutor<'a> {
                 for _ in 0..*max_iterations {
                     cancellation.check()?;
                     self.execute_region(
-                        run_id,
+                        run,
                         run_output,
                         plan,
                         body,
@@ -1376,8 +1321,8 @@ impl<'a> RunExecutor<'a> {
                 let callee = Arc::clone(&published.plan);
                 let call_id = allocate_runtime_id(&NEXT_PARENT_CALL_ID)
                     .map(|id| ParentCallId::new(id.get()))?;
-                let mut correlation =
-                    CorrelationContext::compile(&callee.provenance).for_run(run_id, Some(call_id));
+                let mut correlation = CorrelationContext::compile(&callee.provenance)
+                    .for_run(run.run_id, Some(call_id));
                 let call_parent_span_id = (callee.provenance.graph_path
                     == plan.provenance.graph_path)
                     .then_some(run_parent_span_id)
@@ -1386,7 +1331,7 @@ impl<'a> RunExecutor<'a> {
                     self.trace,
                     SpanSpec {
                         parent_span_id: call_parent_span_id,
-                        run_id: Some(run_id),
+                        run_id: Some(run.run_id),
                         operation_id: None,
                         activation_id: None,
                         attempt_id: None,
@@ -1420,7 +1365,7 @@ impl<'a> RunExecutor<'a> {
                     )?;
                     let mut callee_frame = Frame::new(callee.value_count, self.frame_ids)?;
                     self.bind_internal_values(
-                        run_id,
+                        run.run_id,
                         &callee,
                         &mut callee_frame,
                         &callee.bound_values,
@@ -1432,7 +1377,7 @@ impl<'a> RunExecutor<'a> {
                             callee_frame.bind_result(destination, result_id)?;
                         }
                         self.execute_region(
-                            run_id,
+                            run,
                             run_output,
                             &callee,
                             &callee.root_region,
@@ -1474,7 +1419,7 @@ impl<'a> RunExecutor<'a> {
     #[allow(clippy::too_many_arguments)]
     fn execute_sequence(
         &self,
-        run_id: RunId,
+        run: &GraphRunIdentity,
         run_output: &dyn RunOutputSink,
         plan: &ExecutionPlan,
         steps: &[ControlStep],
@@ -1499,7 +1444,7 @@ impl<'a> RunExecutor<'a> {
                 ControlStep::Operation(operation) => operations.push(*operation),
                 ControlStep::Region(child) => {
                     self.execute_ready_operations(ReadyOperationContext {
-                        run_id,
+                        run,
                         run_output,
                         plan,
                         operations: &operations,
@@ -1517,7 +1462,7 @@ impl<'a> RunExecutor<'a> {
                     })?;
                     operations.clear();
                     self.execute_region(
-                        run_id,
+                        run,
                         run_output,
                         plan,
                         child,
@@ -1536,7 +1481,7 @@ impl<'a> RunExecutor<'a> {
             }
         }
         self.execute_ready_operations(ReadyOperationContext {
-            run_id,
+            run,
             run_output,
             plan,
             operations: &operations,
@@ -1666,15 +1611,9 @@ impl<'a> RunExecutor<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn record_event(
-        &self,
-        plan: &ExecutionPlan,
-        correlation: CorrelationContext,
-        kind: RunEventKind,
-    ) {
+    fn record_event(&self, run: &GraphRunIdentity, kind: RunEventKind) {
         self.events.record(RunEvent {
-            correlation,
-            basis: plan.provenance.basis.clone(),
+            run: run.clone(),
             kind,
         });
     }

@@ -327,9 +327,9 @@ fn default_requested_and_preview_demands_reuse_one_compilation_basis() {
             .iter()
             .filter(|event| matches!(
                 &event.kind,
-                crate::node_system::runtime::RunEventKind::OutputResultChanged {
+                crate::node_system::runtime::RunEventKind::PinPreviewResultReady {
                     output,
-                    generation: Some(17),
+                    generation: 17,
                     ..
                 } if output == &first_output
             ))

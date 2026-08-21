@@ -46,10 +46,10 @@ describe('invokeCommand', () => {
     const channel = { onmessage: vi.fn() };
     const args = { projectInstanceId: 'project-1', onEvent: channel };
     const options = { headers: { 'x-request-id': 'request-1' } };
-    vi.mocked(invoke).mockResolvedValue({ runId: '41' });
+    vi.mocked(invoke).mockResolvedValue(undefined);
 
-    await expect(invokeCommand<{ runId: string }>('execute_graph_document', args, options))
-      .resolves.toEqual({ runId: '41' });
+    await expect(invokeCommand<void>('execute_graph_document', args, options))
+      .resolves.toBeUndefined();
 
     expect(invoke).toHaveBeenCalledWith('execute_graph_document', args, options);
     expect(vi.mocked(invoke).mock.calls[0]?.[1]).toBe(args);

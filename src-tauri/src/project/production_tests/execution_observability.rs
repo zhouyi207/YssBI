@@ -520,20 +520,9 @@ fn project_execution_preserves_relational_codes_in_errors_and_terminal_events() 
             crate::node_system::runtime::RunEventKind::RunErrored { outcome }
                 if outcome.code() == run_code
         )));
-        assert_eq!(
-            events
-                .iter()
-                .filter(|event| matches!(
-                    event.kind,
-                    crate::node_system::runtime::RunEventKind::ResultGroupChanged { .. }
-                ))
-                .count(),
-            1,
-        );
         assert!(events.iter().all(|event| !matches!(
             event.kind,
-            crate::node_system::runtime::RunEventKind::OutputResultChanged { .. }
-                | crate::node_system::runtime::RunEventKind::RunCompleted
+            crate::node_system::runtime::RunEventKind::RunCompleted
         )));
 
         drop(events);
@@ -930,7 +919,6 @@ impl ProductionRelationalChainFixture {
             result.value_for_test(result_name),
             Some(Self::expected_value(output))
         );
-        let expected_output = self.output_ref(output);
         let _expected_name = format!("node.{}.result", self.node_id(output));
         let events = events.0.lock().unwrap();
         assert_eq!(
@@ -943,36 +931,7 @@ impl ProductionRelationalChainFixture {
                 .count(),
             1
         );
-        assert_eq!(
-            events
-                .iter()
-                .filter(|event| matches!(
-                    event.kind,
-                    crate::node_system::runtime::RunEventKind::ResultGroupChanged { .. }
-                ))
-                .count(),
-            1
-        );
-        assert_eq!(
-            events
-                .iter()
-                .filter(|event| matches!(
-                    event.kind,
-                    crate::node_system::runtime::RunEventKind::OutputResultChanged { .. }
-                ))
-                .count(),
-            1
-        );
-        assert!(events.iter().any(|event| matches!(
-            &event.kind,
-            crate::node_system::runtime::RunEventKind::ResultGroupChanged { result_ids, .. }
-                if !result_ids.is_empty()
-        )));
-        assert!(events.iter().any(|event| matches!(
-            &event.kind,
-            crate::node_system::runtime::RunEventKind::OutputResultChanged { output, .. }
-                if output == &expected_output
-        )));
+
         drop(events);
         let store = self.state.project_store.read().unwrap();
         assert_eq!(store.runs.active_run_count(), 0);

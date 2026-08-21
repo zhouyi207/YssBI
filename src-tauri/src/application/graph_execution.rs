@@ -1,6 +1,6 @@
 use crate::event::ResourceMutationResultDto;
 use crate::node_system::plan::ExecutionDemand;
-use crate::node_system::runtime::RunId;
+
 use crate::node_system::runtime::{RunEvent, RunEventKind, RunEventSink, RunOutputMessage};
 use crate::project::{GraphResourcePath, ProjectExecutionError, ProjectInstanceId, ProjectState};
 use std::sync::Mutex;
@@ -34,7 +34,6 @@ pub enum TerminalRunEventKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TerminalRunEventDelivery {
     pub kind: TerminalRunEventKind,
-    pub run_id: Option<RunId>,
     pub disposition: DeliveryDisposition,
 }
 
@@ -48,13 +47,6 @@ pub struct GraphExecutionDeliveryReport {
 impl GraphExecutionDeliveryReport {
     pub const fn delivery_failed(&self) -> bool {
         self.rejected_event_count != 0
-    }
-
-    pub const fn terminal_run_id(&self) -> Option<RunId> {
-        match self.terminal {
-            Some(terminal) => terminal.run_id,
-            None => None,
-        }
     }
 
     pub const fn delivered_terminal_kind(&self) -> Option<TerminalRunEventKind> {
@@ -71,7 +63,6 @@ impl GraphExecutionDeliveryReport {
 
 #[derive(Debug)]
 pub struct GraphExecutionOutcome {
-    pub run_id: RunId,
     pub resource_mutation: Option<ResourceMutationResultDto>,
     pub delivery: GraphExecutionDeliveryReport,
 }
@@ -113,7 +104,6 @@ where
 
     match execution {
         Ok(result) => Ok(GraphExecutionOutcome {
-            run_id: result.run_id,
             resource_mutation: result.resource_mutation,
             delivery,
         }),
@@ -140,11 +130,7 @@ where
         }
     }
 
-    fn deliver(
-        &self,
-        event: GraphExecutionStreamEvent,
-        terminal: Option<(TerminalRunEventKind, Option<RunId>)>,
-    ) {
+    fn deliver(&self, event: GraphExecutionStreamEvent, terminal: Option<TerminalRunEventKind>) {
         let disposition = if (self.deliver)(event) {
             DeliveryDisposition::Delivered
         } else {
@@ -155,12 +141,8 @@ where
             DeliveryDisposition::Delivered => report.delivered_event_count += 1,
             DeliveryDisposition::Rejected => report.rejected_event_count += 1,
         }
-        if let Some((kind, run_id)) = terminal {
-            report.terminal = Some(TerminalRunEventDelivery {
-                kind,
-                run_id,
-                disposition,
-            });
+        if let Some(kind) = terminal {
+            report.terminal = Some(TerminalRunEventDelivery { kind, disposition });
         }
     }
 
@@ -179,8 +161,7 @@ where
             RunEventKind::RunErrored { .. } => Some(TerminalRunEventKind::Errored),
             RunEventKind::RunCancelled => Some(TerminalRunEventKind::Cancelled),
             _ => None,
-        }
-        .map(|kind| (kind, event.correlation.run_id));
+        };
         self.deliver(GraphExecutionStreamEvent::RunEvent(event), terminal);
     }
 

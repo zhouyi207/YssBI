@@ -815,7 +815,7 @@ fn demand_driven_publication_exposes_only_the_requested_final_output() {
 }
 
 #[test]
-fn demand_driven_publication_pin_preview_emits_only_generation_bound_output() {
+fn demand_driven_publication_pin_preview_emits_only_dedicated_ready_event() {
     let mut kernels = KernelRegistry::new();
     kernels
         .register(
@@ -857,16 +857,16 @@ fn demand_driven_publication_pin_preview_emits_only_generation_bound_output() {
     .unwrap();
 
     let recorded = events.0.lock().unwrap();
-    let output_events = recorded
+    let preview_events = recorded
         .iter()
-        .filter(|event| matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
+        .filter(|event| matches!(event.kind, RunEventKind::PinPreviewResultReady { .. }))
         .collect::<Vec<_>>();
-    assert_eq!(output_events.len(), 1);
+    assert_eq!(preview_events.len(), 1);
     assert!(matches!(
-        &output_events[0].kind,
-        RunEventKind::OutputResultChanged {
+        &preview_events[0].kind,
+        RunEventKind::PinPreviewResultReady {
             output: emitted,
-            generation: Some(17),
+            generation: 17,
             ..
         } if emitted == &output
     ));
@@ -977,12 +977,7 @@ fn run_result_keeps_run_id_and_plan_provenance() {
         .unwrap()
         .iter()
         .filter(|event| event.kind == RunEventKind::RunStarted)
-        .map(|event| {
-            event
-                .correlation
-                .run_id
-                .expect("RunStarted carries the active run ID")
-        })
+        .map(|event| event.run.run_id)
         .collect::<Vec<_>>();
     assert_eq!(started_run_ids, [result.run_id]);
 }
@@ -1048,7 +1043,7 @@ fn failed_success_finalizer_publishes_no_result_or_completion() {
     let run_id = recorded
         .iter()
         .find(|event| event.kind == RunEventKind::RunStarted)
-        .and_then(|event| event.correlation.run_id)
+        .map(|event| event.run.run_id)
         .expect("RunStarted carries the active run ID");
     let stored_results = results.results_for_run(run_id);
     assert_eq!(stored_results.len(), 1);

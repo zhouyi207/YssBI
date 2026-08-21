@@ -272,7 +272,7 @@ fn assert_cancelled_without_completion(events: &RecordingRunEvents) -> RunId {
     let run_id = events
         .iter()
         .find(|event| event.kind == RunEventKind::RunStarted)
-        .and_then(|event| event.correlation.run_id)
+        .map(|event| event.run.run_id)
         .expect("RunStarted carries the active run ID");
     let final_lifecycle = events.iter().rev().find(|event| {
         matches!(

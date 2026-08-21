@@ -55,7 +55,6 @@ fn rejected_stream_delivery_preserves_committed_mutation_for_publication() {
         outcome.delivery.terminal,
         Some(TerminalRunEventDelivery {
             kind: TerminalRunEventKind::Completed,
-            run_id: Some(outcome.run_id),
             disposition: DeliveryDisposition::Rejected,
         }),
     );

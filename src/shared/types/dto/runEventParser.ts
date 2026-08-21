@@ -8,18 +8,16 @@ import {
   isPortAddressDto,
   isUuid,
 } from './editorProjectionGuards';
-import type { ResultStateKind } from './result';
 import {
   RUN_ERROR_CODES,
   RUN_EVENT_KIND_TYPES,
   RUN_OUTPUT_STATUSES,
   RUN_OUTPUT_STREAMS,
   RUN_PHASES,
-  type CompilationBasisDto,
-  type ExecuteGraphResultDto,
   type ExecutionChannelEvent,
-  type RunCorrelationDto,
+  type GraphRunIdentityDto,
   type RunErrorCode,
+  type RunErrorOutcome,
   type RunEvent,
   type RunEventKind,
   type RunOutputChannelEvent,
@@ -28,10 +26,7 @@ import {
 
 type UnknownRecord = Record<string, unknown>;
 
-const DECIMAL_ID_PATTERN = /^(0|[1-9]\d*)$/;
 const POSITIVE_DECIMAL_ID_PATTERN = /^[1-9]\d*$/;
-const FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
-const MAX_U32 = 4_294_967_295;
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -60,31 +55,12 @@ function parseDiscriminant<T extends string>(
   return value as T;
 }
 
-function isU32(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= MAX_U32;
-}
-
 function isGeneration(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
-function isDecimalId(value: unknown): value is string {
-  return typeof value === 'string' && DECIMAL_ID_PATTERN.test(value);
-}
-
 function isPositiveDecimalId(value: unknown): value is string {
   return typeof value === 'string' && POSITIVE_DECIMAL_ID_PATTERN.test(value);
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return value === null || typeof value === 'string';
-}
-
-function parseResourceVersions(value: unknown): Record<string, string> {
-  if (!isRecord(value) || !Object.values(value).every((entry) => typeof entry === 'string')) {
-    return fail('resource version set');
-  }
-  return value as Record<string, string>;
 }
 
 function parseGraphOutputRefDto(value: unknown): GraphOutputRefDto {
@@ -144,8 +120,6 @@ function parseRunErrorCode(value: unknown): RunErrorCode {
     case 'relationalTypeMismatch':
     case 'relationalInputShapeInvalid':
     case 'relationalHintInvalid':
-    case 'missingRelationalFragment':
-    case 'bridgeFailed':
     case 'stream':
     case 'missingValue':
     case 'invalidCondition':
@@ -169,10 +143,7 @@ function parseRunPhase(value: unknown): RunPhase {
   return parseDiscriminant(value, RUN_PHASES, 'run phase');
 }
 
-function parseErrorOutcome(
-  value: UnknownRecord,
-): { code: 'deadlineExceeded'; phase: RunPhase }
-  | { code: Exclude<RunErrorCode, 'deadlineExceeded'>; phase: null } {
+function parseErrorOutcome(value: UnknownRecord): RunErrorOutcome {
   const code = parseRunErrorCode(value.code);
   if (code === 'deadlineExceeded') {
     return { code, phase: parseRunPhase(value.phase) };
@@ -181,76 +152,21 @@ function parseErrorOutcome(
   return { code, phase: null };
 }
 
-function parseCompilationBasisDto(value: unknown): CompilationBasisDto {
-  if (!isRecord(value)
-    || !hasExactKeys(value, ['graphRevision', 'registryFingerprint', 'resourceVersions'])
-    || !isDecimalId(value.graphRevision)
-    || typeof value.registryFingerprint !== 'string'
-    || !FINGERPRINT_PATTERN.test(value.registryFingerprint)) {
-    return fail('compilation basis');
-  }
-  return {
-    graphRevision: value.graphRevision,
-    registryFingerprint: value.registryFingerprint,
-    resourceVersions: parseResourceVersions(value.resourceVersions),
-  };
-}
-
-function parseRunCorrelationDto(value: unknown): RunCorrelationDto {
-  if (!isRecord(value)
-    || !hasExactKeys(value, [
-      'projectSessionId', 'graphPath', 'graphRevision', 'registryFingerprint', 'resourceVersions',
-      'compileId', 'selectionDigest', 'runId', 'nodeId', 'nodeTypeId', 'parentCall',
-    ])
+function parseGraphRunIdentityDto(value: unknown): GraphRunIdentityDto {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ['projectSessionId', 'graphPath', 'runId'])
     || typeof value.projectSessionId !== 'string'
+    || value.projectSessionId.length === 0
     || !isGraphResourcePath(value.graphPath)
-    || !isDecimalId(value.graphRevision)
-    || typeof value.registryFingerprint !== 'string'
-    || !FINGERPRINT_PATTERN.test(value.registryFingerprint)
-    || !isDecimalId(value.compileId)
-    || !isNullableString(value.selectionDigest)
-    || !(value.runId === null || isPositiveDecimalId(value.runId))
-    || !(value.nodeId === null || isUuid(value.nodeId))
-    || !isNullableString(value.nodeTypeId)
-    || !(value.parentCall === null || isPositiveDecimalId(value.parentCall))) {
-    return fail('run correlation');
-  }
+    || !isPositiveDecimalId(value.runId)
+  ) return fail('graph run identity');
+
   return {
     projectSessionId: value.projectSessionId,
     graphPath: value.graphPath,
-    graphRevision: value.graphRevision,
-    registryFingerprint: value.registryFingerprint,
-    resourceVersions: parseResourceVersions(value.resourceVersions),
-    compileId: value.compileId,
-    selectionDigest: value.selectionDigest,
     runId: value.runId,
-    nodeId: value.nodeId,
-    nodeTypeId: value.nodeTypeId,
-    parentCall: value.parentCall,
   };
-}
-
-function parseOperationEvent(
-  value: UnknownRecord,
-  type: 'operationStarted' | 'operationCompleted',
-): RunEventKind {
-  if (!hasExactKeys(value, ['type', 'operationIndex', 'activationId', 'attemptId'])
-    || !isU32(value.operationIndex)
-    || !isPositiveDecimalId(value.activationId)
-    || !isPositiveDecimalId(value.attemptId)) return fail(type);
-  return {
-    type,
-    operationIndex: value.operationIndex,
-    activationId: value.activationId,
-    attemptId: value.attemptId,
-  };
-}
-
-function parseResultStateKind(value: unknown): ResultStateKind {
-  if (value === 'pending' || value === 'ready' || value === 'failed' || value === 'cancelled') {
-    return value;
-  }
-  return fail('result state kind');
 }
 
 function parseRunEventKind(value: unknown): RunEventKind {
@@ -269,42 +185,14 @@ function parseRunEventKind(value: unknown): RunEventKind {
     case 'runCancelled':
       if (!hasExactKeys(value, ['type'])) return fail('runCancelled');
       return { type: 'runCancelled' };
-    case 'operationStarted':
-      return parseOperationEvent(value, 'operationStarted');
-    case 'operationCompleted':
-      return parseOperationEvent(value, 'operationCompleted');
-    case 'operationErrored':
-      if (!hasExactKeys(
-        value,
-        ['type', 'operationIndex', 'activationId', 'attemptId', 'code', 'phase'],
-      )
-        || !isU32(value.operationIndex)
-        || !isPositiveDecimalId(value.activationId)
-        || !isPositiveDecimalId(value.attemptId)) return fail('operationErrored');
+    case 'pinPreviewResultReady':
+      if (
+        !hasExactKeys(value, ['type', 'output', 'generation', 'resultId'])
+        || !isGeneration(value.generation)
+        || !isPositiveDecimalId(value.resultId)
+      ) return fail('pinPreviewResultReady');
       return {
-        type: 'operationErrored',
-        operationIndex: value.operationIndex,
-        activationId: value.activationId,
-        attemptId: value.attemptId,
-        ...parseErrorOutcome(value),
-      };
-    case 'resultGroupChanged':
-      if (!hasExactKeys(value, ['type', 'activationId', 'resultIds', 'state'])
-        || !isDecimalId(value.activationId)
-        || !Array.isArray(value.resultIds)
-        || !value.resultIds.every(isPositiveDecimalId)) return fail('resultGroupChanged');
-      return {
-        type: 'resultGroupChanged',
-        activationId: value.activationId,
-        resultIds: value.resultIds,
-        state: parseResultStateKind(value.state),
-      };
-    case 'outputResultChanged':
-      if (!hasExactKeys(value, ['type', 'output', 'generation', 'resultId'])
-        || !(value.generation === null || isGeneration(value.generation))
-        || !isPositiveDecimalId(value.resultId)) return fail('outputResultChanged');
-      return {
-        type: 'outputResultChanged',
+        type: 'pinPreviewResultReady',
         output: parseGraphOutputRefDto(value.output),
         generation: value.generation,
         resultId: value.resultId,
@@ -320,12 +208,11 @@ function parseRunEventKind(value: unknown): RunEventKind {
 }
 
 export function parseRunEvent(value: unknown): RunEvent {
-  if (!isRecord(value) || !hasExactKeys(value, ['correlation', 'basis', 'kind'])) {
+  if (!isRecord(value) || !hasExactKeys(value, ['run', 'kind'])) {
     return fail('run event');
   }
   return {
-    correlation: parseRunCorrelationDto(value.correlation),
-    basis: parseCompilationBasisDto(value.basis),
+    run: parseGraphRunIdentityDto(value.run),
     kind: parseRunEventKind(value.kind),
   };
 }
@@ -373,13 +260,4 @@ export function parseExecutionChannelEvent(value: unknown): ExecutionChannelEven
     return parseRunEvent(value);
   }
   return parseRunOutputChannelEvent(value);
-}
-
-export function parseExecuteGraphResultDto(value: unknown): ExecuteGraphResultDto {
-  if (!isRecord(value)
-    || !hasExactKeys(value, ['runId'])
-    || !isPositiveDecimalId(value.runId)) {
-    return fail('execute graph result');
-  }
-  return { runId: value.runId };
 }

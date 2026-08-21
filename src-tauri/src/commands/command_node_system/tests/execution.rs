@@ -147,97 +147,66 @@ fn relational_execution_errors_keep_exact_command_codes() {
 }
 
 #[test]
-fn execution_channel_adapter_serializes_opaque_ids_as_decimal_strings() {
+fn execution_channel_adapter_serializes_minimal_run_and_preview_ids() {
     let unsafe_id = 9_007_199_254_740_993_u64;
-    let basis = CompilationBasis {
-        graph_revision: crate::node_system::document::GraphRevision::new(unsafe_id),
-        registry_fingerprint: RegistryFingerprint::from_bytes([2; 32]),
-        resource_versions: Default::default(),
-        resource_observations: Default::default(),
-    };
-    let correlation = CorrelationContext {
+    let run = GraphRunIdentity {
         project_session_id: ProjectSessionId::new("session"),
-        graph_path: crate::node_system::document::GraphResourcePath("events/main".into()),
-        graph_revision: basis.graph_revision,
-        registry_fingerprint: basis.registry_fingerprint.clone(),
-        resource_versions: basis.resource_versions.clone(),
-        compile_id: CompileId::new(unsafe_id),
-        selection_digest: Some("demand-selection-a".into()),
-        run_id: Some(RunId::new(unsafe_id)),
-        node_id: None,
-        node_type_id: None,
-        parent_call: Some(ParentCallId::new(unsafe_id)),
-        trace_parent_span_id: None,
+        graph_path: crate::node_system::document::GraphResourcePath(
+            "events/Main.yssbi-event".into(),
+        ),
+        run_id: RunId::new(unsafe_id),
     };
-    let operation = execution_channel_event_dto(GraphExecutionStreamEvent::RunEvent(RunEvent {
-        correlation: correlation.clone(),
-        basis: basis.clone(),
-        kind: RunEventKind::OperationStarted {
-            operation_index: 3,
-            activation_id: unsafe_id,
-            attempt_id: unsafe_id,
-        },
-    }));
-    let preview = execution_channel_event_dto(GraphExecutionStreamEvent::RunEvent(RunEvent {
-        correlation: CorrelationContext {
-            selection_digest: Some("demand-selection-b".into()),
-            ..correlation.clone()
-        },
-        basis: basis.clone(),
+    let started = execution_channel_event_dto(GraphExecutionStreamEvent::RunEvent(RunEvent {
+        run: run.clone(),
         kind: RunEventKind::RunStarted,
-    }));
-
-    let result = execution_channel_event_dto(GraphExecutionStreamEvent::RunEvent(RunEvent {
-        correlation,
-        basis,
-        kind: RunEventKind::ResultGroupChanged {
-            activation_id: unsafe_id,
-            result_ids: vec![ResultId::new(unsafe_id)].into_boxed_slice(),
-            state: crate::node_system::runtime::ResultStateKind::Ready,
-        },
-    }));
-
-    let operation = serde_json::to_value(operation).unwrap();
-    assert_eq!(
-        operation["correlation"]["graphRevision"],
-        unsafe_id.to_string()
-    );
-    assert_eq!(operation["correlation"]["compileId"], unsafe_id.to_string());
-    assert_eq!(
-        operation["correlation"]["selectionDigest"],
-        "demand-selection-a"
-    );
-    assert_eq!(operation["correlation"]["runId"], unsafe_id.to_string());
-    assert_eq!(
-        operation["correlation"]["parentCall"],
-        unsafe_id.to_string()
-    );
-    assert_eq!(operation["basis"]["graphRevision"], unsafe_id.to_string());
-    assert_eq!(operation["kind"]["activationId"], unsafe_id.to_string());
-    assert!(operation["correlation"].get("graph_revision").is_none());
-    assert!(operation["correlation"].get("selection_digest").is_none());
-    let preview = serde_json::to_value(preview).unwrap();
-    assert_eq!(
-        operation["correlation"]["compileId"],
-        preview["correlation"]["compileId"]
-    );
-    assert_ne!(
-        operation["correlation"]["selectionDigest"],
-        preview["correlation"]["selectionDigest"]
-    );
-
-    let result = serde_json::to_value(result).unwrap();
-    assert_eq!(
-        result["correlation"]["selectionDigest"],
-        "demand-selection-a"
-    );
-    assert_eq!(result["kind"]["activationId"], unsafe_id.to_string());
-    assert_eq!(result["kind"]["resultIds"][0], unsafe_id.to_string());
-    let execute_result = serde_json::to_value(ExecuteGraphResultDto {
-        run_id: unsafe_id.to_string(),
-    })
+    }))
     .unwrap();
-    assert_eq!(execute_result["runId"], unsafe_id.to_string());
+    let output = crate::node_system::plan::GraphOutputRef {
+        graph_path: run.graph_path.clone(),
+        port: crate::node_system::document::PortAddress::declared(
+            NodeId::from_uuid(uuid::Uuid::from_u128(2)),
+            crate::node_system::protocol::PortKey::new("result").unwrap(),
+        ),
+    };
+    let preview = execution_channel_event_dto(GraphExecutionStreamEvent::RunEvent(RunEvent {
+        run: run.clone(),
+        kind: RunEventKind::PinPreviewResultReady {
+            output: output.clone(),
+            generation: crate::node_system::plan::MAX_SAFE_PREVIEW_GENERATION,
+            result_id: ResultId::new(unsafe_id),
+        },
+    }))
+    .unwrap();
+
+    assert_eq!(
+        serde_json::to_value(started).unwrap(),
+        serde_json::json!({
+            "run": {
+                "projectSessionId": "session",
+                "graphPath": "events/Main.yssbi-event",
+                "runId": unsafe_id.to_string(),
+            },
+            "kind": { "type": "runStarted" },
+        })
+    );
+    let preview = serde_json::to_value(preview).unwrap();
+    assert_eq!(preview["run"]["runId"], unsafe_id.to_string());
+    assert_eq!(preview["kind"]["resultId"], unsafe_id.to_string());
+    assert_eq!(
+        preview["kind"]["generation"],
+        crate::node_system::plan::MAX_SAFE_PREVIEW_GENERATION,
+    );
+    assert!(matches!(
+        execution_channel_event_dto(GraphExecutionStreamEvent::RunEvent(RunEvent {
+            run,
+            kind: RunEventKind::PinPreviewResultReady {
+                output,
+                generation: crate::node_system::plan::MAX_SAFE_PREVIEW_GENERATION + 1,
+                result_id: ResultId::new(unsafe_id),
+            },
+        })),
+        Err(crate::commands::node_system_execution_dto::RunEventDtoError::UnsafePreviewGeneration)
+    ));
     assert_eq!(
         parse_opaque_u64("resultId", &unsafe_id.to_string()).unwrap(),
         unsafe_id,
@@ -265,7 +234,8 @@ fn run_output_channel_adapter_uses_a_separate_exact_wire_shape() {
             source_graph_path: source_graph_path.clone(),
             source_node_id,
         }),
-    ));
+    ))
+    .unwrap();
     let status = execution_channel_event_dto(GraphExecutionStreamEvent::RunOutput(
         RunOutputMessage::Status(crate::node_system::runtime::RunOutputStatusEvent {
             run_id,
@@ -275,7 +245,8 @@ fn run_output_channel_adapter_uses_a_separate_exact_wire_shape() {
             source_graph_path,
             source_node_id,
         }),
-    ));
+    ))
+    .unwrap();
 
     assert_eq!(
         serde_json::to_value(output).unwrap(),
