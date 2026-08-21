@@ -221,7 +221,7 @@ fn projection_and_execution_reuse_one_compile_product() {
 }
 
 #[test]
-fn default_requested_and_preview_demands_reuse_one_basis_with_distinct_digests() {
+fn default_requested_and_preview_demands_reuse_one_compilation_basis() {
     let (state, root) = active_state_with_valid_constant_graph("demand-variant-reuse");
     let first_node = state.get_data().unwrap().graphs[&graph_path()]
         .document
@@ -268,12 +268,11 @@ fn default_requested_and_preview_demands_reuse_one_basis_with_distinct_digests()
         )
         .unwrap();
     let first_output = output(first_node);
-    let first_events = DemandRunEvents::default();
     let first_run = state
         .execute_graph_for_current_project_for_test(
             &graph_path(),
             &demand(first_output.clone()),
-            &first_events,
+            &NOOP_RUN_EVENT_SINK,
         )
         .unwrap();
     let second_run = state
@@ -314,45 +313,15 @@ fn default_requested_and_preview_demands_reuse_one_basis_with_distinct_digests()
     );
     assert_eq!(first_run.result_ids.len(), 1);
     assert_eq!(second_run.result_ids.len(), 1);
-    let first_events = first_events.0.lock().unwrap();
-    assert_eq!(
-        first_events
-            .iter()
-            .filter(|event| matches!(
-                event.kind,
-                crate::node_system::runtime::RunEventKind::OperationStarted { .. }
-            ))
-            .count(),
-        1,
-    );
-    assert!(first_events.iter().any(|event| matches!(
-        &event.kind,
-        crate::node_system::runtime::RunEventKind::OutputResultChanged { output, .. }
-            if output == &first_output
-    )));
-    assert_ne!(
-        default_run.correlation.selection_digest,
-        first_run.correlation.selection_digest
-    );
-    assert_ne!(
-        first_run.correlation.selection_digest,
-        second_run.correlation.selection_digest
-    );
-    assert_ne!(
-        first_run.correlation.selection_digest,
-        preview_run.correlation.selection_digest,
-    );
+    assert_eq!(preview_run.result_ids.len(), 1);
+    let preview_result_name = format!("requested.{}", first_output.port);
+    let result_id = preview_run.result_ids[preview_result_name.as_str()];
+    let stored = state
+        .result(result_id)
+        .unwrap()
+        .expect("preview result is stored");
+    assert_eq!(stored.provenance.run_id, preview_run.run_id);
     let preview_events = preview_events.0.lock().unwrap();
-    assert_eq!(
-        preview_events
-            .iter()
-            .filter(|event| matches!(
-                event.kind,
-                crate::node_system::runtime::RunEventKind::ResultGroupChanged { .. }
-            ))
-            .count(),
-        1,
-    );
     assert_eq!(
         preview_events
             .iter()

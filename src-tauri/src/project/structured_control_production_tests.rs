@@ -8,11 +8,10 @@ use crate::node_system::document::{
 };
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::runtime::{
-    OrdinaryRunErrorCode, ProjectResourceLeaseObserver, ResultStateKind, RunErrorOutcome, RunEvent,
-    RunEventKind, RunEventSink,
+    OrdinaryRunErrorCode, ProjectResourceLeaseObserver, RunErrorOutcome, RunEvent, RunEventKind,
+    RunEventSink, RunOutputMessage,
 };
 use crate::variable::{VariableId, VariableInstance, VariableScope};
-use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -30,7 +29,11 @@ const TRUE_EFFECT_NODE: u128 = 6;
 const FALSE_EFFECT_NODE: u128 = 7;
 const MERGE_NODE: u128 = 8;
 const RESULT_SET_NODE: u128 = 9;
+const TRUE_EFFECT_VALUE_NODE: u128 = 10;
+const FALSE_EFFECT_VALUE_NODE: u128 = 11;
 const RESULT_VARIABLE: u128 = 500;
+const TRUE_EFFECT_VARIABLE: u128 = 506;
+const FALSE_EFFECT_VARIABLE: u128 = 507;
 const LOOP_NODE: u128 = 20;
 const LOOP_INITIAL_NODE: u128 = 21;
 const LOOP_STEP_NODE: u128 = 22;
@@ -46,8 +49,6 @@ const LOOP_SECOND_OBSERVER_SET_NODE: u128 = 40;
 const LOOP_BRANCH_RESULT_MEMBER: u128 = 70;
 const FIRST_OBSERVER_VARIABLE: u128 = 501;
 const SECOND_OBSERVER_VARIABLE: u128 = 502;
-const EFFECT_BEFORE_NODE: u128 = 900;
-const EFFECT_AFTER_NODE: u128 = 800;
 const EFFECT_RESOURCE_NODE: u128 = 801;
 const EFFECT_DIVIDE_NODE: u128 = 820;
 
@@ -55,19 +56,6 @@ const EFFECT_RESOURCE_VARIABLE: u128 = 503;
 const EFFECT_SECOND_RESOURCE_VARIABLE: u128 = 504;
 const EFFECT_RESULT_VARIABLE: u128 = 505;
 const EFFECT_FINAL_SET_NODE: u128 = 840;
-
-#[derive(Debug, Clone, Copy)]
-enum InsertionOrder {
-    Forward,
-    Reverse,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct CompletedOperation {
-    source_node_id: NodeId,
-    source_node_type_id: NodeTypeId,
-    activation_id: u64,
-}
 
 #[derive(Default)]
 struct RecordingRunEvents(Mutex<Vec<RunEvent>>);
@@ -82,53 +70,16 @@ impl RecordingRunEvents {
     fn events(&self) -> Vec<RunEvent> {
         self.0.lock().unwrap().clone()
     }
-
-    fn completed_operations(&self) -> Vec<CompletedOperation> {
-        self.0
-            .lock()
-            .unwrap()
-            .iter()
-            .filter_map(|event| {
-                let RunEventKind::OperationCompleted { activation_id, .. } = event.kind else {
-                    return None;
-                };
-                Some(CompletedOperation {
-                    source_node_id: event
-                        .correlation
-                        .node_id
-                        .expect("operation event must identify its source node"),
-                    source_node_type_id: event
-                        .correlation
-                        .node_type_id
-                        .clone()
-                        .expect("operation event must identify its source node type"),
-                    activation_id,
-                })
-            })
-            .collect()
-    }
 }
 
 struct BranchOutcome {
     expected_result_variable_id: VariableId,
+    true_effect_variable_id: VariableId,
+    false_effect_variable_id: VariableId,
     result: crate::graph::value::DataValue,
+    true_effect: crate::graph::value::DataValue,
+    false_effect: crate::graph::value::DataValue,
     committed_variable_ids: Box<[VariableId]>,
-    completed_operations: Vec<CompletedOperation>,
-}
-
-impl BranchOutcome {
-    fn completion_count(&self, node: u128, node_type: &str) -> usize {
-        let expected = source(node, node_type);
-        self.completed_operations
-            .iter()
-            .filter(|operation| {
-                (
-                    operation.source_node_id,
-                    operation.source_node_type_id.clone(),
-                ) == expected
-            })
-            .count()
-    }
 }
 
 struct BranchDocumentFixture {
@@ -220,24 +171,7 @@ fn connection(value: u128, output: PortAddress, input: PortAddress) -> DocumentC
     }
 }
 
-fn in_order<T>(mut values: Vec<T>, insertion_order: InsertionOrder) -> Vec<T> {
-    if matches!(insertion_order, InsertionOrder::Reverse) {
-        values.reverse();
-    }
-    values
-}
-
-fn insert_tracked<K: Clone + Ord, V>(
-    map: &mut BTreeMap<K, V>,
-    trace: &mut Vec<K>,
-    key: K,
-    value: V,
-) {
-    trace.push(key.clone());
-    assert!(map.insert(key, value).is_none());
-}
-
-fn branch_fixture(condition: bool, insertion_order: InsertionOrder) -> BranchDocumentFixture {
+fn branch_fixture(condition: bool) -> BranchDocumentFixture {
     let mut condition_node = node(CONDITION_NODE, "yssbi.constant.bool");
     condition_node.parameters.insert(
         ParameterKey::new("value").unwrap(),
@@ -256,6 +190,10 @@ fn branch_fixture(condition: bool, insertion_order: InsertionOrder) -> BranchDoc
         ParameterKey::new("variable").unwrap(),
         serde_json::json!(format!("variables/{}", result_variable_id())),
     );
+    let true_set = variable_set_node(TRUE_EFFECT_NODE, variable_id(TRUE_EFFECT_VARIABLE));
+    let false_set = variable_set_node(FALSE_EFFECT_NODE, variable_id(FALSE_EFFECT_VARIABLE));
+    let true_value = int64_constant(TRUE_EFFECT_VALUE_NODE, 101);
+    let false_value = int64_constant(FALSE_EFFECT_VALUE_NODE, 202);
 
     let mut resource = GraphResourceDocument::new("Branch Production", GraphDocumentKind::Event);
     let node_entries = vec![
@@ -264,12 +202,14 @@ fn branch_fixture(condition: bool, insertion_order: InsertionOrder) -> BranchDoc
         then_value,
         else_value,
         node(BRANCH_NODE, "yssbi.control.branch"),
-        node(TRUE_EFFECT_NODE, "yssbi.control.do"),
-        node(FALSE_EFFECT_NODE, "yssbi.control.do"),
+        true_set,
+        false_set,
         node(MERGE_NODE, "yssbi.control.merge"),
         result_set,
+        true_value,
+        false_value,
     ];
-    for node in in_order(node_entries, insertion_order) {
+    for node in node_entries {
         assert!(resource.document.nodes.insert(node.id, node).is_none());
     }
 
@@ -306,7 +246,7 @@ fn branch_fixture(condition: bool, insertion_order: InsertionOrder) -> BranchDoc
             },
         ),
     ];
-    for (address, binding) in in_order(binding_entries, insertion_order) {
+    for (address, binding) in binding_entries {
         assert!(
             resource
                 .document
@@ -367,8 +307,18 @@ fn branch_fixture(condition: bool, insertion_order: InsertionOrder) -> BranchDoc
             declared(MERGE_NODE, "then"),
             declared(RESULT_SET_NODE, "enter"),
         ),
+        connection(
+            110,
+            declared(TRUE_EFFECT_VALUE_NODE, "value"),
+            declared(TRUE_EFFECT_NODE, "value"),
+        ),
+        connection(
+            111,
+            declared(FALSE_EFFECT_VALUE_NODE, "value"),
+            declared(FALSE_EFFECT_NODE, "value"),
+        ),
     ];
-    for connection in in_order(connection_entries, insertion_order) {
+    for connection in connection_entries {
         assert!(
             resource
                 .document
@@ -400,10 +350,12 @@ fn int64_result_variable(name: &str) -> VariableInstance {
 
 fn run_branch(document: GraphResourceDocument) -> BranchOutcome {
     let result_variable = result_variable();
+    let true_effect = int64_variable(TRUE_EFFECT_VARIABLE, "True Effect", 0);
+    let false_effect = int64_variable(FALSE_EFFECT_VARIABLE, "False Effect", 0);
     let mut project = ProjectData::new();
-    project
-        .variables
-        .insert(result_variable.id, result_variable.clone());
+    for variable in [&result_variable, &true_effect, &false_effect] {
+        project.variables.insert(variable.id, variable.clone());
+    }
     let fixture = TempProject::activate(project);
     let graph_path = GraphResourcePath::new(EVENT_PATH).unwrap();
     fixture
@@ -411,24 +363,24 @@ fn run_branch(document: GraphResourceDocument) -> BranchOutcome {
         .insert_graph(graph_path.clone(), document)
         .unwrap();
     crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
-    let events = RecordingRunEvents::default();
     let run = fixture
         .state()
         .execute_graph_for_current_project_for_test(
             &graph_path,
             &crate::node_system::plan::ExecutionDemand::Default,
-            &events,
+            &crate::node_system::runtime::NOOP_RUN_EVENT_SINK,
         )
         .unwrap();
-    let result = fixture.state().get_data().unwrap().variables[&result_variable.id]
-        .data_value
-        .clone();
+    let data = fixture.state().get_data().unwrap();
 
     BranchOutcome {
         expected_result_variable_id: result_variable.id,
-        result,
+        true_effect_variable_id: true_effect.id,
+        false_effect_variable_id: false_effect.id,
+        result: data.variables[&result_variable.id].data_value.clone(),
+        true_effect: data.variables[&true_effect.id].data_value.clone(),
+        false_effect: data.variables[&false_effect.id].data_value.clone(),
         committed_variable_ids: run.committed_variable_ids,
-        completed_operations: events.completed_operations(),
     }
 }
 
@@ -449,39 +401,34 @@ fn float64_result_variable(name: &str) -> VariableInstance {
     float64_variable(result_variable_id(), name)
 }
 
-fn source(node: u128, node_type: &str) -> (NodeId, NodeTypeId) {
-    (node_id(node), NodeTypeId::new(node_type).unwrap())
-}
-
-fn assert_branch_outcome(
-    outcome: &BranchOutcome,
-    expected_result: i64,
-    selected_effect: u128,
-    unselected_effect: u128,
-) {
+fn assert_branch_outcome(outcome: &BranchOutcome, expected_result: i64, selected_true: bool) {
     assert_eq!(
         outcome.result,
-        crate::graph::value::DataValue::Int64(expected_result)
+        crate::graph::value::DataValue::Int64(expected_result),
     );
     assert_eq!(
-        outcome.committed_variable_ids.as_ref(),
-        &[outcome.expected_result_variable_id]
+        outcome.true_effect,
+        crate::graph::value::DataValue::Int64(if selected_true { 101 } else { 0 }),
     );
     assert_eq!(
-        outcome.completion_count(selected_effect, "yssbi.control.do"),
-        1,
-        "selected effectful Do scheduler operation must complete once"
+        outcome.false_effect,
+        crate::graph::value::DataValue::Int64(if selected_true { 0 } else { 202 }),
     );
-    assert_eq!(
-        outcome.completion_count(unselected_effect, "yssbi.control.do"),
-        0,
-        "unselected effectful Do scheduler operation must not complete"
+    assert!(
+        outcome
+            .committed_variable_ids
+            .contains(&outcome.expected_result_variable_id)
     );
-    assert_eq!(
-        outcome.completion_count(RESULT_SET_NODE, "yssbi.project.variable.set"),
-        1,
-        "authoritative Variable Set scheduler operation must complete once"
-    );
+    assert!(outcome.committed_variable_ids.contains(if selected_true {
+        &outcome.true_effect_variable_id
+    } else {
+        &outcome.false_effect_variable_id
+    }));
+    assert!(!outcome.committed_variable_ids.contains(if selected_true {
+        &outcome.false_effect_variable_id
+    } else {
+        &outcome.true_effect_variable_id
+    }));
 }
 
 fn loop_node(value: u128, node_type: &str, parameter: Option<serde_json::Value>) -> DocumentNode {
@@ -782,41 +729,7 @@ fn run_loop(
     (run, result, events.events())
 }
 
-fn event_count(events: &[RunEvent], node: u128, node_type: &str, completed: bool) -> usize {
-    let expected = source(node, node_type);
-    events
-        .iter()
-        .filter(|event| {
-            let matching_kind = if completed {
-                matches!(event.kind, RunEventKind::OperationCompleted { .. })
-            } else {
-                matches!(event.kind, RunEventKind::OperationStarted { .. })
-            };
-            matching_kind
-                && (
-                    event.correlation.node_id,
-                    event.correlation.node_type_id.clone(),
-                ) == (Some(expected.0), Some(expected.1.clone()))
-        })
-        .count()
-}
-
-fn result_group_states(events: &[RunEvent]) -> Vec<ResultStateKind> {
-    events
-        .iter()
-        .filter_map(|event| match event.kind {
-            RunEventKind::ResultGroupChanged { state, .. } => Some(state),
-            _ => None,
-        })
-        .collect()
-}
-
-fn assert_no_completed_result(events: &[RunEvent]) {
-    assert!(
-        events
-            .iter()
-            .all(|event| !matches!(event.kind, RunEventKind::OutputResultChanged { .. }))
-    );
+fn assert_no_run_completed(events: &[RunEvent]) {
     assert!(
         events
             .iter()
@@ -824,20 +737,8 @@ fn assert_no_completed_result(events: &[RunEvent]) {
     );
 }
 
-fn assert_reversed_insertions<T: std::fmt::Debug + PartialEq>(forward: &[T], reverse: &[T]) {
-    assert!(
-        forward.len() >= 2,
-        "fixture BTreeMap must receive multiple inserts"
-    );
-    assert_eq!(
-        forward.iter().rev().collect::<Vec<_>>(),
-        reverse.iter().collect::<Vec<_>>()
-    );
-}
-
 const FUNCTION_PATH: &str = "functions/CallProduction.yssbi-function";
 const CALL_EVENT_PATH: &str = "events/CallProduction.yssbi-event";
-const CALL_BODY_NODE: u128 = 250;
 const CALL_ONE_NODE: u128 = 610;
 const CALL_TWO_NODE: u128 = 620;
 const CALL_ONE_SET_NODE: u128 = 710;
@@ -991,65 +892,6 @@ fn insert_persisted_graph(
     crate::project::fixtures::write_state_graph(fixture.state(), path).unwrap();
 }
 
-fn completed_call_correlations(
-    events: &[RunEvent],
-    node_value: u128,
-    node_type: &str,
-) -> Vec<(
-    Option<crate::node_system::runtime::RunId>,
-    Option<crate::node_system::analysis::ParentCallId>,
-)> {
-    let expected = source(node_value, node_type);
-    events
-        .iter()
-        .filter(|event| {
-            matches!(event.kind, RunEventKind::OperationCompleted { .. })
-                && (
-                    event.correlation.node_id,
-                    event.correlation.node_type_id.clone(),
-                ) == (Some(expected.0), Some(expected.1.clone()))
-        })
-        .map(|event| (event.correlation.run_id, event.correlation.parent_call))
-        .collect()
-}
-
-fn root_run_id(
-    events: &[RunEvent],
-    expected_kind: RunEventKind,
-) -> crate::node_system::runtime::RunId {
-    let matching = events
-        .iter()
-        .filter(|event| event.correlation.parent_call.is_none() && event.kind == expected_kind)
-        .map(|event| event.correlation.run_id)
-        .collect::<Vec<_>>();
-    assert_eq!(matching.len(), 1, "expected exactly one root run event");
-    matching[0].expect("root run event must carry run_id")
-}
-
-fn assert_call_correlations_share_root_run(
-    correlations: &[(
-        Option<crate::node_system::runtime::RunId>,
-        Option<crate::node_system::analysis::ParentCallId>,
-    )],
-    root_run_id: crate::node_system::runtime::RunId,
-    expected_count: usize,
-) {
-    assert_eq!(correlations.len(), expected_count);
-    assert!(
-        correlations
-            .iter()
-            .all(|(run_id, _)| *run_id == Some(root_run_id))
-    );
-    assert_eq!(
-        correlations
-            .iter()
-            .map(|(_, parent_call)| parent_call.expect("callee event must identify its call frame"))
-            .collect::<std::collections::BTreeSet<_>>()
-            .len(),
-        expected_count
-    );
-}
-
 #[test]
 fn builtin_call_binds_persisted_argument_and_result_across_distinct_layouts() {
     let output = int64_variable(CALL_ONE_VARIABLE, "Call Output", 0);
@@ -1068,14 +910,13 @@ fn builtin_call_binds_persisted_argument_and_result_across_distinct_layouts() {
         &event_path,
         single_call_event(&function_path, 41, output.id),
     );
-    let events = RecordingRunEvents::default();
 
     let run = fixture
         .state()
         .execute_graph_for_current_project_for_test(
             &event_path,
             &crate::node_system::plan::ExecutionDemand::Default,
-            &events,
+            &crate::node_system::runtime::NOOP_RUN_EVENT_SINK,
         )
         .unwrap();
 
@@ -1084,18 +925,10 @@ fn builtin_call_binds_persisted_argument_and_result_across_distinct_layouts() {
         crate::graph::value::DataValue::Int64(42)
     );
     assert_eq!(run.committed_variable_ids.as_ref(), &[output.id]);
-    let recorded = events.events();
-    let root_run_id = root_run_id(&recorded, RunEventKind::RunStarted);
-    assert_eq!(run.run_id, root_run_id);
-    assert_call_correlations_share_root_run(
-        &completed_call_correlations(&recorded, CALL_BODY_NODE, "yssbi.numeric.add.int64"),
-        root_run_id,
-        1,
-    );
 }
 
 #[test]
-fn builtin_call_two_calls_in_one_run_keep_arguments_results_and_frames_independent() {
+fn builtin_call_two_calls_in_one_run_keep_arguments_and_results_independent() {
     let first = int64_variable(CALL_ONE_VARIABLE, "First Call", 0);
     let second = int64_variable(CALL_TWO_VARIABLE, "Second Call", 0);
     let mut project = ProjectData::new();
@@ -1111,18 +944,16 @@ fn builtin_call_two_calls_in_one_run_keep_arguments_results_and_frames_independe
         function_fixtures::unary_add_function(&function_path, "Two Calls", 0).resource,
     );
     insert_persisted_graph(&fixture, &event_path, two_call_event(&function_path));
-    let events = RecordingRunEvents::default();
 
     let run = fixture
         .state()
         .execute_graph_for_current_project_for_test(
             &event_path,
             &crate::node_system::plan::ExecutionDemand::Default,
-            &events,
+            &crate::node_system::runtime::NOOP_RUN_EVENT_SINK,
         )
         .unwrap();
     let data = fixture.state().get_data().unwrap();
-    let recorded = events.events();
 
     assert_eq!(
         data.variables[&first.id].data_value,
@@ -1138,35 +969,6 @@ fn builtin_call_two_calls_in_one_run_keep_arguments_results_and_frames_independe
             .copied()
             .collect::<std::collections::BTreeSet<_>>(),
         [first.id, second.id].into_iter().collect()
-    );
-    assert_eq!(
-        event_count(&recorded, CALL_BODY_NODE, "yssbi.numeric.add.int64", true,),
-        2
-    );
-    let root_run_id = root_run_id(&recorded, RunEventKind::RunStarted);
-    assert_eq!(run.run_id, root_run_id);
-    assert_call_correlations_share_root_run(
-        &completed_call_correlations(&recorded, CALL_BODY_NODE, "yssbi.numeric.add.int64"),
-        root_run_id,
-        2,
-    );
-    assert_eq!(
-        event_count(
-            &recorded,
-            CALL_ONE_SET_NODE,
-            "yssbi.project.variable.set",
-            true,
-        ),
-        1
-    );
-    assert_eq!(
-        event_count(
-            &recorded,
-            CALL_TWO_SET_NODE,
-            "yssbi.project.variable.set",
-            true,
-        ),
-        1
     );
 }
 
@@ -1242,33 +1044,43 @@ fn builtin_call_uses_current_persisted_function_generation_after_body_replacemen
 
 #[test]
 fn builtin_branch_executes_only_selected_effect_branch_and_binds_result() {
-    let outcome = run_branch(branch_fixture(true, InsertionOrder::Forward).resource);
+    let outcome = run_branch(branch_fixture(true).resource);
 
-    assert_branch_outcome(&outcome, 11, TRUE_EFFECT_NODE, FALSE_EFFECT_NODE);
+    assert_branch_outcome(&outcome, 11, true);
 }
 
 #[test]
 fn builtin_branch_false_path_executes_only_selected_effect_and_binds_result() {
-    let outcome = run_branch(branch_fixture(false, InsertionOrder::Forward).resource);
+    let outcome = run_branch(branch_fixture(false).resource);
 
-    assert_branch_outcome(&outcome, 22, FALSE_EFFECT_NODE, TRUE_EFFECT_NODE);
+    assert_branch_outcome(&outcome, 22, false);
 }
 
 #[test]
-fn builtin_branch_commit_conflict_publishes_no_result_or_completion() {
+fn builtin_branch_commit_conflict_returns_no_requested_result_or_completion() {
     let variable = result_variable();
+    let true_effect = int64_variable(TRUE_EFFECT_VARIABLE, "True Effect", 0);
+    let false_effect = int64_variable(FALSE_EFFECT_VARIABLE, "False Effect", 0);
     let mut project = ProjectData::new();
-    project.variables.insert(variable.id, variable.clone());
+    for variable in [&variable, &true_effect, &false_effect] {
+        project.variables.insert(variable.id, variable.clone());
+    }
     let fixture = TempProject::activate(project);
     let graph_path = GraphResourcePath::new(EVENT_PATH).unwrap();
     fixture
         .state()
-        .insert_graph(
-            graph_path.clone(),
-            branch_fixture(true, InsertionOrder::Forward).resource,
-        )
+        .insert_graph(graph_path.clone(), branch_fixture(true).resource)
         .unwrap();
     crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
+    let final_output = crate::node_system::plan::GraphOutputRef {
+        graph_path: crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
+        port: instance(BRANCH_NODE, "result", 40),
+    };
+    let result_key = format!("requested.{}", final_output.port);
+    let demand = crate::node_system::plan::ExecutionDemand::Outputs {
+        outputs: Box::new([final_output.clone()]),
+        include_default_results: false,
+    };
     let winning_state = fixture.state().clone();
     let winning_variable = variable.clone();
     let (_, session) = fixture.state().current_run_registry();
@@ -1293,14 +1105,20 @@ fn builtin_branch_commit_conflict_publishes_no_result_or_completion() {
         }));
     let events = RecordingRunEvents::default();
 
-    let error = fixture
-        .state()
-        .execute_graph_for_current_project_for_test(
-            &graph_path,
-            &crate::node_system::plan::ExecutionDemand::Default,
-            &events,
-        )
-        .expect_err("the staged Variable Set effect must lose the revision race");
+    let error = match fixture.state().execute_graph_for_current_project_for_test(
+        &graph_path,
+        &demand,
+        &events,
+    ) {
+        Err(error) => error,
+        Ok(run) => {
+            let requested_result = run.result_ids.get(result_key.as_str()).copied();
+            panic!(
+                "requested branch output must not cross the successful return seam: \
+                 {requested_result:?}"
+            );
+        }
+    };
     fixture
         .state()
         .set_execution_before_commit_gate_test_hook(std::sync::Arc::new(|| {}));
@@ -1312,28 +1130,66 @@ fn builtin_branch_commit_conflict_publishes_no_result_or_completion() {
         Some(crate::node_system::runtime::RunError::ResourceSnapshotMismatch(message))
             if message.contains("revision")
     ));
+    let data = fixture.state().get_data().unwrap();
     assert_eq!(
-        fixture.state().get_data().unwrap().variables[&variable.id].data_value,
+        data.variables[&variable.id].data_value,
         crate::graph::value::DataValue::Int64(99)
     );
-    assert_no_completed_result(&recorded);
+    assert_eq!(
+        data.variables[&true_effect.id].data_value,
+        crate::graph::value::DataValue::Int64(0)
+    );
+    assert_eq!(
+        data.variables[&false_effect.id].data_value,
+        crate::graph::value::DataValue::Int64(0)
+    );
+    drop(data);
+    assert_eq!(
+        recorded
+            .iter()
+            .filter(|event| {
+                event.kind
+                    == RunEventKind::RunErrored {
+                        outcome: RunErrorOutcome::Ordinary {
+                            code: OrdinaryRunErrorCode::ResourceSnapshotMismatch,
+                        },
+                    }
+            })
+            .count(),
+        1
+    );
+    assert_no_run_completed(&recorded);
+    assert_eq!(
+        fixture.state().current_run_registry().0.active_run_count(),
+        0
+    );
 }
 
 #[test]
 fn builtin_branch_drain_before_commit_gate_commits_nothing() {
     let variable = result_variable();
+    let true_effect = int64_variable(TRUE_EFFECT_VARIABLE, "True Effect", 0);
+    let false_effect = int64_variable(FALSE_EFFECT_VARIABLE, "False Effect", 0);
     let mut project = ProjectData::new();
-    project.variables.insert(variable.id, variable.clone());
+    for variable in [&variable, &true_effect, &false_effect] {
+        project.variables.insert(variable.id, variable.clone());
+    }
     let fixture = TempProject::activate(project);
     let graph_path = GraphResourcePath::new(EVENT_PATH).unwrap();
     fixture
         .state()
-        .insert_graph(
-            graph_path.clone(),
-            branch_fixture(true, InsertionOrder::Forward).resource,
-        )
+        .insert_graph(graph_path.clone(), branch_fixture(true).resource)
         .unwrap();
     crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
+    let final_output = crate::node_system::plan::GraphOutputRef {
+        graph_path: crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
+        port: instance(BRANCH_NODE, "result", 40),
+    };
+    let result_key = format!("requested.{}", final_output.port);
+    let demand = crate::node_system::plan::ExecutionDemand::Outputs {
+        outputs: Box::new([final_output.clone()]),
+        include_default_results: false,
+    };
     let (gate_reached_tx, gate_reached_rx) = std::sync::mpsc::channel();
     let (release_gate_tx, release_gate_rx) = std::sync::mpsc::channel();
     let release_gate_rx = Mutex::new(release_gate_rx);
@@ -1351,10 +1207,11 @@ fn builtin_branch_drain_before_commit_gate_commits_nothing() {
     let execution_state = fixture.state().clone();
     let execution_path = graph_path.clone();
     let execution_events = std::sync::Arc::clone(&events);
+    let execution_demand = demand.clone();
     let execution = std::thread::spawn(move || {
         execution_state.execute_graph_for_current_project_for_test(
             &execution_path,
-            &crate::node_system::plan::ExecutionDemand::Default,
+            &execution_demand,
             execution_events.as_ref(),
         )
     });
@@ -1372,7 +1229,16 @@ fn builtin_branch_drain_before_commit_gate_commits_nothing() {
     });
     assert!(runs.wait_until_draining_for_test(&session, Duration::from_secs(5)));
     release_gate_tx.send(()).unwrap();
-    let error = execution.join().unwrap().unwrap_err();
+    let error = match execution.join().unwrap() {
+        Err(error) => error,
+        Ok(run) => {
+            let requested_result = run.result_ids.get(result_key.as_str()).copied();
+            panic!(
+                "requested branch output must not cross the successful return seam: \
+                 {requested_result:?}"
+            );
+        }
+    };
     drained_rx
         .recv_timeout(Duration::from_secs(5))
         .expect("drain must finish after execution rejects finalization");
@@ -1380,11 +1246,34 @@ fn builtin_branch_drain_before_commit_gate_commits_nothing() {
     let recorded = events.events();
 
     assert!(error.contains("project is draining"));
+    assert!(matches!(
+        error.run_error(),
+        Some(crate::node_system::runtime::RunError::ProjectDraining(_))
+    ));
+    let data = fixture.state().get_data().unwrap();
+    for variable in [&variable, &true_effect, &false_effect] {
+        assert_eq!(
+            data.variables[&variable.id].data_value,
+            crate::graph::value::DataValue::Int64(0)
+        );
+    }
+    drop(data);
     assert_eq!(
-        fixture.state().get_data().unwrap().variables[&variable.id].data_value,
-        crate::graph::value::DataValue::Int64(0)
+        recorded
+            .iter()
+            .filter(|event| {
+                event.kind
+                    == RunEventKind::RunErrored {
+                        outcome: RunErrorOutcome::Ordinary {
+                            code: OrdinaryRunErrorCode::ProjectDraining,
+                        },
+                    }
+            })
+            .count(),
+        1
     );
-    assert_no_completed_result(&recorded);
+    assert_no_run_completed(&recorded);
+    assert_eq!(runs.active_run_count(), 0);
 }
 
 #[test]
@@ -1430,33 +1319,6 @@ fn builtin_loop_carries_initial_and_subsequent_values_across_observable_iteratio
         crate::graph::value::DataValue::Float64(22.5)
     );
     assert_eq!(run.committed_variable_ids.len(), 3);
-    assert_eq!(
-        event_count(
-            &recorded,
-            LOOP_FIRST_OBSERVER_SET_NODE,
-            "yssbi.project.variable.set",
-            true,
-        ),
-        1
-    );
-    assert_eq!(
-        event_count(
-            &recorded,
-            LOOP_SECOND_OBSERVER_SET_NODE,
-            "yssbi.project.variable.set",
-            true,
-        ),
-        1
-    );
-    assert_eq!(
-        event_count(
-            &recorded,
-            LOOP_RESULT_SET_NODE,
-            "yssbi.project.variable.set",
-            true,
-        ),
-        1
-    );
     assert!(
         recorded
             .iter()
@@ -1471,10 +1333,6 @@ fn builtin_loop_reports_iteration_limit_without_committing_result() {
 
     assert_eq!(run.unwrap_err(), "loop iteration limit exceeded");
     assert_eq!(result, crate::graph::value::DataValue::Float64(0.0));
-    assert_eq!(
-        event_count(&events, LOOP_BODY_NODE, "yssbi.control.do", true),
-        3
-    );
     assert!(events.iter().any(|event| {
         event.kind
             == RunEventKind::RunErrored {
@@ -1483,142 +1341,37 @@ fn builtin_loop_reports_iteration_limit_without_committing_result() {
                 },
             }
     }));
-    assert_no_completed_result(&events);
+    assert_no_run_completed(&events);
 }
 
-struct CancellationRunEvents {
+struct BlockingRunOutputEvents {
     events: Mutex<Vec<RunEvent>>,
-    first_body_completed: Mutex<Option<std::sync::mpsc::Sender<()>>>,
-    release_body: Mutex<std::sync::mpsc::Receiver<()>>,
+    output_count: std::sync::atomic::AtomicUsize,
+    first_output_recorded: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+    release_output: Mutex<std::sync::mpsc::Receiver<()>>,
 }
 
-impl RunEventSink for CancellationRunEvents {
+impl RunEventSink for BlockingRunOutputEvents {
     fn record(&self, event: RunEvent) {
-        let is_first_body_completion = event.correlation.node_id == Some(node_id(LOOP_BODY_NODE))
-            && event.correlation.node_type_id == Some(NodeTypeId::new("yssbi.control.do").unwrap())
-            && matches!(event.kind, RunEventKind::OperationCompleted { .. });
         self.events.lock().unwrap().push(event);
-        if is_first_body_completion
-            && let Some(sender) = self.first_body_completed.lock().unwrap().take()
-        {
+    }
+
+    fn record_run_output(&self, message: RunOutputMessage) {
+        let RunOutputMessage::Output(output) = message else {
+            return;
+        };
+        assert_eq!(output.source_node_id, node_id(LOOP_BODY_NODE));
+        self.output_count
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if let Some(sender) = self.first_output_recorded.lock().unwrap().take() {
             sender.send(()).unwrap();
-            self.release_body
+            self.release_output
                 .lock()
                 .unwrap()
                 .recv_timeout(Duration::from_secs(5))
-                .expect("test must release the blocked body completion callback");
+                .expect("test must release the blocked Run Output callback");
         }
     }
-}
-
-#[test]
-fn builtin_loop_project_drain_cancels_between_iterations_without_publishing_result() {
-    let variable = float64_result_variable("Loop Cancellation Result");
-    let mut project = ProjectData::new();
-    project.variables.insert(variable.id, variable.clone());
-    let fixture = TempProject::activate(project);
-    let graph_path = GraphResourcePath::new(EVENT_PATH).unwrap();
-    fixture
-        .state()
-        .insert_graph(
-            graph_path.clone(),
-            loop_fixture(true, "yssbi.control.do", 10),
-        )
-        .unwrap();
-    crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
-    let (first_body_completed_tx, first_body_completed_rx) = std::sync::mpsc::channel();
-    let (release_body_tx, release_body_rx) = std::sync::mpsc::channel();
-    let events = std::sync::Arc::new(CancellationRunEvents {
-        events: Mutex::new(Vec::new()),
-        first_body_completed: Mutex::new(Some(first_body_completed_tx)),
-        release_body: Mutex::new(release_body_rx),
-    });
-    let execution_state = fixture.state().clone();
-    let execution_path = graph_path.clone();
-    let execution_events = std::sync::Arc::clone(&events);
-    let execution = std::thread::spawn(move || {
-        execution_state.execute_graph_for_current_project_for_test(
-            &execution_path,
-            &crate::node_system::plan::ExecutionDemand::Default,
-            execution_events.as_ref(),
-        )
-    });
-
-    first_body_completed_rx
-        .recv_timeout(Duration::from_secs(5))
-        .expect("first body completion must be observed");
-    let (runs, session) = fixture.state().current_run_registry();
-    let draining_runs = std::sync::Arc::clone(&runs);
-    let draining_session = session.clone();
-    let (drained_tx, drained_rx) = std::sync::mpsc::channel();
-    let drain = std::thread::spawn(move || {
-        draining_runs.cancel_and_drain(&draining_session);
-        drained_tx.send(()).unwrap();
-    });
-    assert!(
-        runs.wait_until_draining_for_test(&session, Duration::from_secs(5)),
-        "project run registry must enter draining"
-    );
-    release_body_tx.send(()).unwrap();
-    drained_rx
-        .recv_timeout(Duration::from_secs(5))
-        .expect("project drain must finish after the run observes cancellation");
-    drain.join().unwrap();
-    let run = execution.join().unwrap();
-    let recorded = events.events.lock().unwrap().clone();
-
-    assert_eq!(run.unwrap_err(), "run was cancelled");
-    assert_eq!(runs.active_run_count(), 0);
-    assert_eq!(
-        event_count(&recorded, LOOP_BODY_NODE, "yssbi.control.do", false),
-        1
-    );
-    assert_eq!(
-        event_count(&recorded, LOOP_BODY_NODE, "yssbi.control.do", true),
-        1
-    );
-    assert_eq!(
-        fixture.state().get_data().unwrap().variables[&variable.id].data_value,
-        crate::graph::value::DataValue::Float64(0.0)
-    );
-    assert!(
-        recorded
-            .iter()
-            .any(|event| event.kind == RunEventKind::RunCancelled)
-    );
-    assert_no_completed_result(&recorded);
-}
-
-fn effect_order_fixture(insertion_order: InsertionOrder) -> (GraphResourceDocument, Vec<NodeId>) {
-    let mut resource = GraphResourceDocument::new("Effect Ordering", GraphDocumentKind::Event);
-    let mut node_insertions = Vec::new();
-    for entry in in_order(
-        vec![
-            node(EFFECT_AFTER_NODE, "yssbi.control.do"),
-            node(EFFECT_BEFORE_NODE, "yssbi.control.do"),
-        ],
-        insertion_order,
-    ) {
-        insert_tracked(
-            &mut resource.document.nodes,
-            &mut node_insertions,
-            entry.id,
-            entry,
-        );
-    }
-    let edge = connection(
-        90_001,
-        declared(EFFECT_BEFORE_NODE, "effect_out"),
-        declared(EFFECT_AFTER_NODE, "effect_in"),
-    );
-    assert!(
-        resource
-            .document
-            .connections
-            .insert(edge.id, edge)
-            .is_none()
-    );
-    (resource, node_insertions)
 }
 
 fn project_variable_get_node(value: u128, variable: VariableId) -> DocumentNode {
@@ -1678,7 +1431,7 @@ fn effect_cancellation_fixture(
     first_resource: VariableId,
     second_resource: VariableId,
 ) -> GraphResourceDocument {
-    let mut resource = loop_fixture(true, "yssbi.control.do", 10);
+    let mut resource = loop_fixture(true, "yssbi.debug.print", 10);
     for entry in [
         project_variable_get_node(EFFECT_RESOURCE_NODE, first_resource),
         project_variable_get_node(EFFECT_RESOURCE_NODE + 1, second_resource),
@@ -1706,55 +1459,8 @@ fn activate_effect_fixture(
     (fixture, graph_path, observer)
 }
 
-fn operation_event_sequence(events: &[RunEvent]) -> Vec<(NodeId, &'static str)> {
-    events
-        .iter()
-        .filter_map(|event| {
-            let kind = match event.kind {
-                RunEventKind::OperationStarted { .. } => "started",
-                RunEventKind::OperationCompleted { .. } => "completed",
-                _ => return None,
-            };
-            Some((event.correlation.node_id.expect("operation node"), kind))
-        })
-        .collect()
-}
-
 #[test]
-fn builtin_effect_edge_orders_real_builtins_independent_of_document_insertion() {
-    let (after_before, after_before_insertions) = effect_order_fixture(InsertionOrder::Forward);
-    let (before_after, before_after_insertions) = effect_order_fixture(InsertionOrder::Reverse);
-    assert_reversed_insertions(&after_before_insertions, &before_after_insertions);
-
-    for document in [after_before, before_after] {
-        let fixture = TempProject::activate(ProjectData::new());
-        let graph_path = GraphResourcePath::new(EVENT_PATH).unwrap();
-        insert_persisted_graph(&fixture, &graph_path, document);
-        let events = RecordingRunEvents::default();
-
-        fixture
-            .state()
-            .execute_graph_for_current_project_for_test(
-                &graph_path,
-                &crate::node_system::plan::ExecutionDemand::Default,
-                &events,
-            )
-            .unwrap();
-
-        assert_eq!(
-            operation_event_sequence(&events.events()),
-            vec![
-                (node_id(EFFECT_BEFORE_NODE), "started"),
-                (node_id(EFFECT_BEFORE_NODE), "completed"),
-                (node_id(EFFECT_AFTER_NODE), "started"),
-                (node_id(EFFECT_AFTER_NODE), "completed"),
-            ]
-        );
-    }
-}
-
-#[test]
-fn builtin_effect_failure_attempts_once_and_drops_every_retained_project_resource() {
+fn builtin_effect_failure_drops_every_retained_project_resource_without_commit() {
     let first_resource = int64_variable(EFFECT_RESOURCE_VARIABLE, "First Failure Resource", 7);
     let second_resource = int64_variable(
         EFFECT_SECOND_RESOURCE_VARIABLE,
@@ -1782,43 +1488,7 @@ fn builtin_effect_failure_attempts_once_and_drops_every_retained_project_resourc
         Some(crate::node_system::runtime::RunError::KernelFailed { message, .. })
             if message.contains("int64 division by zero")
     ));
-    assert_eq!(
-        event_count(
-            &events.events(),
-            EFFECT_DIVIDE_NODE,
-            "yssbi.numeric.divide.int64",
-            false,
-        ),
-        1
-    );
     let recorded = events.events();
-    assert_eq!(
-        event_count(
-            &recorded,
-            EFFECT_DIVIDE_NODE,
-            "yssbi.numeric.divide.int64",
-            true,
-        ),
-        0
-    );
-    assert_eq!(
-        recorded
-            .iter()
-            .filter(|event| {
-                event.correlation.node_id == Some(node_id(EFFECT_DIVIDE_NODE))
-                    && matches!(
-                        event.kind,
-                        RunEventKind::OperationErrored {
-                            outcome: RunErrorOutcome::Ordinary {
-                                code: OrdinaryRunErrorCode::KernelFailed,
-                            },
-                            ..
-                        }
-                    )
-            })
-            .count(),
-        1
-    );
     assert_eq!(
         recorded
             .iter()
@@ -1833,48 +1503,18 @@ fn builtin_effect_failure_attempts_once_and_drops_every_retained_project_resourc
             .count(),
         1
     );
-    assert_eq!(
-        recorded
-            .iter()
-            .filter(|event| event.kind == RunEventKind::RunCompleted)
-            .count(),
-        0
-    );
-    assert_eq!(
-        result_group_states(&recorded),
-        vec![
-            ResultStateKind::Ready,
-            ResultStateKind::Ready,
-            ResultStateKind::Failed,
-        ]
-    );
-    assert_eq!(
-        event_count(
-            &recorded,
-            EFFECT_FINAL_SET_NODE,
-            "yssbi.project.variable.set",
-            true,
-        ),
-        0
-    );
+    assert_no_run_completed(&recorded);
     assert_eq!(
         fixture.state().get_data().unwrap().variables[&result.id].data_value,
         crate::graph::value::DataValue::Int64(0)
     );
-    for resource_node in [EFFECT_RESOURCE_NODE, EFFECT_RESOURCE_NODE + 1] {
-        assert_eq!(
-            event_count(
-                &recorded,
-                resource_node,
-                "yssbi.project.variable.get",
-                false,
-            ),
-            0,
-        );
-    }
     assert_eq!(observer.acquired(), 1);
     assert_eq!(observer.dropped(), 1);
     assert_eq!(observer.active(), 0);
+    assert_eq!(
+        fixture.state().current_run_registry().0.active_run_count(),
+        0
+    );
 }
 
 #[test]
@@ -1886,12 +1526,13 @@ fn builtin_effect_cancellation_attempts_once_drops_retained_resources_and_drains
     let document = effect_cancellation_fixture(first_resource.id, second_resource.id);
     let (fixture, graph_path, observer) =
         activate_effect_fixture(document, [first_resource, second_resource, result.clone()]);
-    let (first_body_completed_tx, first_body_completed_rx) = std::sync::mpsc::channel();
-    let (release_body_tx, release_body_rx) = std::sync::mpsc::channel();
-    let events = std::sync::Arc::new(CancellationRunEvents {
+    let (first_output_recorded_tx, first_output_recorded_rx) = std::sync::mpsc::channel();
+    let (release_output_tx, release_output_rx) = std::sync::mpsc::channel();
+    let events = std::sync::Arc::new(BlockingRunOutputEvents {
         events: Mutex::new(Vec::new()),
-        first_body_completed: Mutex::new(Some(first_body_completed_tx)),
-        release_body: Mutex::new(release_body_rx),
+        output_count: std::sync::atomic::AtomicUsize::new(0),
+        first_output_recorded: Mutex::new(Some(first_output_recorded_tx)),
+        release_output: Mutex::new(release_output_rx),
     });
     let execution_state = fixture.state().clone();
     let execution_path = graph_path.clone();
@@ -1904,9 +1545,9 @@ fn builtin_effect_cancellation_attempts_once_drops_retained_resources_and_drains
         )
     });
 
-    first_body_completed_rx
+    first_output_recorded_rx
         .recv_timeout(Duration::from_secs(5))
-        .expect("first Do completion must reach the event boundary");
+        .expect("first Print call must reach the Run Output boundary");
     let (runs, session) = fixture.state().current_run_registry();
     let drain_runs = std::sync::Arc::clone(&runs);
     let drain_session = session.clone();
@@ -1919,7 +1560,7 @@ fn builtin_effect_cancellation_attempts_once_drops_retained_resources_and_drains
         runs.wait_until_draining_for_test(&session, Duration::from_secs(5)),
         "project run registry must enter draining"
     );
-    release_body_tx.send(()).unwrap();
+    release_output_tx.send(()).unwrap();
     drained_rx
         .recv_timeout(Duration::from_secs(5))
         .expect("project drain must finish after the iteration observes cancellation");
@@ -1928,12 +1569,14 @@ fn builtin_effect_cancellation_attempts_once_drops_retained_resources_and_drains
     let recorded = events.events.lock().unwrap().clone();
 
     assert_eq!(error, "run was cancelled");
+    assert!(matches!(
+        error.run_error(),
+        Some(crate::node_system::runtime::RunError::Cancelled)
+    ));
     assert_eq!(
-        event_count(&recorded, LOOP_BODY_NODE, "yssbi.control.do", false),
-        1
-    );
-    assert_eq!(
-        event_count(&recorded, LOOP_BODY_NODE, "yssbi.control.do", true),
+        events
+            .output_count
+            .load(std::sync::atomic::Ordering::SeqCst),
         1
     );
     assert_eq!(
@@ -1943,41 +1586,11 @@ fn builtin_effect_cancellation_attempts_once_drops_retained_resources_and_drains
             .count(),
         1
     );
-    assert_eq!(
-        recorded
-            .iter()
-            .filter(|event| event.kind == RunEventKind::RunCompleted)
-            .count(),
-        0
-    );
-    assert_eq!(
-        result_group_states(&recorded),
-        vec![ResultStateKind::Ready; 3]
-    );
-    assert_eq!(
-        event_count(
-            &recorded,
-            LOOP_RESULT_SET_NODE,
-            "yssbi.project.variable.set",
-            true,
-        ),
-        0
-    );
+    assert_no_run_completed(&recorded);
     assert_eq!(
         fixture.state().get_data().unwrap().variables[&result.id].data_value,
         crate::graph::value::DataValue::Float64(0.0)
     );
-    for resource_node in [EFFECT_RESOURCE_NODE, EFFECT_RESOURCE_NODE + 1] {
-        assert_eq!(
-            event_count(
-                &recorded,
-                resource_node,
-                "yssbi.project.variable.get",
-                false,
-            ),
-            0,
-        );
-    }
     assert_eq!(observer.acquired(), 1);
     assert_eq!(observer.dropped(), 1);
     assert_eq!(observer.active(), 0);

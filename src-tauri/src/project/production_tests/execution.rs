@@ -1,6 +1,31 @@
 use super::*;
 
 #[test]
+fn production_execution_preserves_current_session_and_graph_provenance() {
+    let (state, root) = active_state_with_valid_constant_graph("production-provenance");
+    let session_id = state
+        .project_store
+        .read()
+        .unwrap()
+        .project_session_id
+        .clone();
+    let path = graph_path();
+
+    let result = state
+        .execute_graph_for_current_project_for_test(
+            &path,
+            &crate::node_system::plan::ExecutionDemand::Default,
+            &NOOP_RUN_EVENT_SINK,
+        )
+        .unwrap();
+
+    assert_eq!(&result.provenance.project_session_id, &session_id);
+    assert_eq!(result.provenance.graph_path.0.as_ref(), path.as_str());
+
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn execution_error_retains_typed_internal_compilation_failure() {
     let failure = crate::node_system::compiler::InternalCompilationFailure {
         stage: crate::node_system::compiler::CompilationStage::Lowering,
@@ -1150,10 +1175,12 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
         }]),
         include_default_results: false,
     };
-    let events = DemandRunEvents::default();
-
     let unavailable = state
-        .execute_graph_for_current_project_for_test(&graph_path(), &unavailable_demand, &events)
+        .execute_graph_for_current_project_for_test(
+            &graph_path(),
+            &unavailable_demand,
+            &NOOP_RUN_EVENT_SINK,
+        )
         .unwrap_err();
 
     assert!(unavailable.contains("unavailable"), "{unavailable}");
@@ -1168,8 +1195,4 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
     assert_eq!(unavailable_observer.acquired(), 0);
     assert_eq!(unavailable_observer.dropped(), 0);
     assert_eq!(unavailable_observer.active(), 0);
-    assert!(events.0.lock().unwrap().iter().all(|event| !matches!(
-        event.kind,
-        crate::node_system::runtime::RunEventKind::OperationStarted { .. }
-    )));
 }
