@@ -1,3 +1,3 @@
-export { portAddressKey } from './portAddressKey';
+export { graphOutputKey, portAddressKey } from './portAddressKey';
 export { toProjectionEntities } from './toProjectionEntities';
 export type * from './types';
