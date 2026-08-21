@@ -8,7 +8,7 @@ const pendingMutations = new Map<string, PendingMutationRecord>();
 const invalidatedMutationIds = new Set<string>();
 const settlementWaitersByGraph = new Map<string, Set<() => void>>();
 
-function hasPendingMutationForGraph(graphPath: string): boolean {
+export function hasPendingGraphMutations(graphPath: string): boolean {
   for (const record of pendingMutations.values()) {
     if (record.graphPath === graphPath) return true;
   }
@@ -16,7 +16,7 @@ function hasPendingMutationForGraph(graphPath: string): boolean {
 }
 
 function resolveGraphSettlementWaiters(graphPath: string): void {
-  if (hasPendingMutationForGraph(graphPath)) return;
+  if (hasPendingGraphMutations(graphPath)) return;
   const waiters = settlementWaitersByGraph.get(graphPath);
   if (!waiters) return;
   settlementWaitersByGraph.delete(graphPath);
@@ -24,7 +24,7 @@ function resolveGraphSettlementWaiters(graphPath: string): void {
 }
 
 export function waitForPendingGraphMutations(graphPath: string): Promise<void> {
-  if (!hasPendingMutationForGraph(graphPath)) return Promise.resolve();
+  if (!hasPendingGraphMutations(graphPath)) return Promise.resolve();
   return new Promise((resolve) => {
     const waiters = settlementWaitersByGraph.get(graphPath) ?? new Set();
     waiters.add(resolve);

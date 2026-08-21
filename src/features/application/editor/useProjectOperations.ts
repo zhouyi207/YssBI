@@ -24,6 +24,10 @@ import {
   type GraphRunOutcomeState,
 } from './observeGraphRunEvent';
 import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
+import {
+  hasPendingGraphMutations,
+  waitForPendingGraphMutations,
+} from '@/features/application/editorMutation/pendingMutationRegistry';
 import { resultRef } from '@/features/core/resultSource';
 import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
 import {
@@ -230,6 +234,11 @@ export function useProjectOperations() {
       project = captureProjectIdentity();
     } catch {
       return;
+    }
+
+    if (hasPendingGraphMutations(graphPath)) {
+      await waitForPendingGraphMutations(graphPath);
+      if (!isCurrentProjectIdentity(project)) return;
     }
 
     try {

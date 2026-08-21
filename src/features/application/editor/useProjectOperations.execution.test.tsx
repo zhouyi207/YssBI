@@ -10,6 +10,11 @@ import {
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import type { RunEvent } from '@/shared/types/dto/runEvent';
 import { openInspectableResult } from '@/features/application/execution/openInspectableResult';
+import {
+  completePendingMutation,
+  registerPendingMutation,
+  resetPendingMutations,
+} from '@/features/application/editorMutation/pendingMutationRegistry';
 import { useProjectOperations } from './useProjectOperations';
 
 const projectInstanceId = 'project-instance-1';
@@ -87,6 +92,7 @@ describe('useProjectOperations execution demand', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     clearProjectLifecycle();
+    resetPendingMutations();
     startProjectLifecycle(projectInstanceId);
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -104,6 +110,7 @@ describe('useProjectOperations execution demand', () => {
     act(() => root.unmount());
     container.remove();
     vi.restoreAllMocks();
+    resetPendingMutations();
     clearProjectLifecycle();
   });
 
@@ -119,6 +126,23 @@ describe('useProjectOperations execution demand', () => {
       expect.any(Function),
       expect.any(Function),
     );
+  });
+
+  it('waits for pending graph edits before starting execution', async () => {
+    registerPendingMutation({
+      operationId: 'pending-message-edit',
+      graphPath,
+      baseRevision: 1,
+    });
+
+    const execution = operations.executeGraph();
+    await Promise.resolve();
+    expect(ProjectService.executeGraphDocument).not.toHaveBeenCalled();
+
+    completePendingMutation('pending-message-edit');
+    await act(async () => execution);
+
+    expect(ProjectService.executeGraphDocument).toHaveBeenCalledOnce();
   });
 
   it('opens only the backend-requested result window', async () => {
