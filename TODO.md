@@ -385,9 +385,11 @@ src/app/appConfig/appLinks.ts
   分组和重新停靠。迁移时保持 `resourceRef`、`panelInstanceId` 与
   `groupId` 分离，保留编辑器脏数据关闭确认和布局恢复，并直接删除被
   替代的外层 Gridview、嵌套 Dockview 与兼容拓扑，不建立第二套布局
-  事实源。
+  事实源。同时 logs 中的子面板也使用 dockview 来处理
 
 ## v1.0 待办
+
+`v2` 原本用于区分旧持久化格式，但既然明确要求**不迁移、不兼容、直接删除旧路径**，继续维护版本号没有价值，反而暗示未来会做 schema migration。
 
 ### 窗口跨窗同步
 
