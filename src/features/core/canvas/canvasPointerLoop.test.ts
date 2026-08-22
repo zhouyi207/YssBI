@@ -329,6 +329,20 @@ describe('canvas pointer loop', () => {
     expect(useGraphDataStore.getState().graphEntities[graphPath].nodes['local-node'].position).toEqual({ x: 10, y: 20 });
   });
 
+  it('does not submit a node move when the pointer is released without moving', () => {
+    useGraphInteractionStore.getState().startInteraction(graphPath, {
+      type: 'draggingNodes',
+      session: { groupId: 'group-1', pointerId: 0, nodeId: 'local-node', lastX: 10, lastY: 20, moved: false, nodeIds: ['local-node'], delta: { x: 0, y: 0 } },
+    });
+    registerCanvasPointerScope({ graphPath, groupId: 'group-1', pointerId: 0 });
+
+    window.dispatchEvent(new PointerEvent('pointerup', { clientX: 10, clientY: 20, button: 0 }));
+
+    expect(executeCommand).not.toHaveBeenCalled();
+    expect(useGraphInteractionStore.getState().positionOverrides[graphPath]).toBeUndefined();
+    expect(getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, 'group-1')).toEqual({ type: 'idle' });
+  });
+
   it.each([
     ['drawingConnection', 'ConnectPins'],
     ['movingConnections', 'MoveConnections'],

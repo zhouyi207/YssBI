@@ -13,9 +13,9 @@ import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creat
 /**
  * Build drag data for sidebar items (variables, functions, events, data).
  *
- * Event / function graphs use `GRAPH_RESOURCE` — drop on editor canvas or TabBar opens
- * the graph tab (canvas: target group; TabBar: pinned at insert index). Shift-dropping a
- * function resolves its backend-issued Catalog descriptor before creating a Call node.
+ * Event / function graphs use `GRAPH_RESOURCE` so the drop target can resolve the
+ * current backend-issued Catalog descriptor. Event resources open their graph when
+ * dropped on the canvas; function resources create a Call Function node there.
  */
 export function buildSidebarDragData(
   id: string,

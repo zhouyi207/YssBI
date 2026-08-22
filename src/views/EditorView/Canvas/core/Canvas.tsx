@@ -59,7 +59,7 @@ export default function Canvas({ mode }: CanvasProps) {
       selectedNodeIds,
       selectedConnectionIds,
     },
-    resources: { variables, functions },
+    resources: { variables },
     interaction: {
       onCanvasPointerDown,
       onNodePointerDown,
@@ -132,7 +132,6 @@ export default function Canvas({ mode }: CanvasProps) {
     groupId,
     graphPath: interactive ? activeTabId : null,
     variables,
-    functions,
     setContextMenu,
     setPendingConnection,
     createNode,
@@ -175,6 +174,11 @@ export default function Canvas({ mode }: CanvasProps) {
     }
   }, [activeTabId, groupId, setSelectedConnectionIds]);
 
+  const closePalette = useCallback(() => {
+    setContextMenu(null);
+    setPendingConnection(null);
+  }, [setContextMenu, setPendingConnection]);
+
   const overlayModel = useMemo((): CanvasOverlaysModel => ({
     graph: activeGraph
       ? { kind: activeGraph.kind, graphPath: activeGraph.graphPath }
@@ -188,6 +192,7 @@ export default function Canvas({ mode }: CanvasProps) {
           graphRevision,
           sourcePort,
           onSelect: handlePaletteSelect,
+          onClose: closePalette,
         }
       : { kind: 'hidden' },
     variable: variableDropMenu
@@ -215,6 +220,7 @@ export default function Canvas({ mode }: CanvasProps) {
     activeTabId,
     cancelGraphExecution,
     clearGraphArtifacts,
+    closePalette,
     contextMenu,
     executeGraph,
     graphRevision,

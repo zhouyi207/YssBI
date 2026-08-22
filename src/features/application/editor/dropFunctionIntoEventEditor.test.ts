@@ -1,14 +1,23 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DRAG_TYPES } from '@/features/core/dnd';
-import { useSidebarDragStore } from '@/features/core/sidebarDrag';
+import { canvasDropHandlerStore, useSidebarDragStore } from '@/features/core/sidebarDrag';
+
+vi.mock('@/features/application/editor/canvasDrop', () => ({
+  canCreateFunctionNodeInGraph: vi.fn(() => true),
+}));
+vi.mock('@/features/application/editor/switchEditorTab', () => ({
+  activateEditorGroup: vi.fn(),
+}));
 import {
   resolveDropIntoEditorDragState,
   resolveDropPointerFromDragEnd,
+  tryDropFunctionIntoCanvas,
 } from './dropFunctionIntoEventEditor';
 
 describe('dropFunctionIntoEventEditor', () => {
   beforeEach(() => {
     useSidebarDragStore.getState().setActiveDrag(null);
+    canvasDropHandlerStore.setHandler('group-a', null);
   });
 
   it('resolveDropPointerFromDragEnd uses activator position plus delta', () => {
@@ -49,6 +58,34 @@ describe('dropFunctionIntoEventEditor', () => {
       },
       x: 300,
       y: 400,
+    });
+  });
+
+  it('routes a function resource to the canvas handler without requiring Shift', async () => {
+    const handler = vi.fn(async () => true);
+    canvasDropHandlerStore.setHandler('group-a', handler);
+
+    const dragState = {
+      type: DRAG_TYPES.GRAPH_RESOURCE,
+      sidebarResource: {
+        id: 'functions/Helper.yssbi-function',
+        name: 'Helper',
+        type: 'function' as const,
+      },
+      x: 240,
+      y: 180,
+    };
+
+    await expect(tryDropFunctionIntoCanvas('group-a', dragState, {
+      shiftKey: false,
+      altKey: false,
+      ctrlKey: false,
+    })).resolves.toBe(true);
+
+    expect(handler).toHaveBeenCalledWith(dragState, {
+      shiftKey: false,
+      altKey: false,
+      ctrlKey: false,
     });
   });
 });

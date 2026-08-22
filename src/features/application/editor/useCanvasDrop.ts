@@ -16,7 +16,7 @@ import {
   isNodeTemplateDragState,
   type SidebarDragState,
 } from '@/features/core/dnd';
-import type { EditorFunctions, EditorVariables } from '@/features/core/editor';
+import type { EditorVariables } from '@/features/core/editor';
 import {
   clientToWorldInCanvas,
   findResourceNodeSpawnTemplate,
@@ -33,7 +33,6 @@ interface UseCanvasDropParams {
   groupId: string;
   graphPath: string | null;
   variables: EditorVariables;
-  functions: EditorFunctions;
   setContextMenu: (menu: { x: number; y: number; visible: boolean } | null) => void;
   setPendingConnection: (pin: Pin | null) => void;
   createNode: CreateNodeFn;
@@ -74,14 +73,10 @@ export function useCanvasDrop({
         return;
       }
 
-      setContextMenu(null);
       setPendingConnection(null);
-      if (variableDropMenu) {
-        setVariableDropMenu(null);
-      }
     };
     return addGlobalEventListener(window, "pointerdown", handleClickOutside, { capture: true });
-  }, [enabled, canvasElementRef, setContextMenu, setPendingConnection, variableDropMenu]);
+  }, [enabled, canvasElementRef, setPendingConnection]);
 
   const handleNodeAddInput = useCallback(
     (nodeId: string) => {
@@ -155,13 +150,16 @@ export function useCanvasDrop({
   );
 
   const handleSidebarCanvasDrop = useCallback(
-    async (dragState: SidebarDragState, event: Pick<MouseEvent | PointerEvent, 'altKey' | 'ctrlKey' | 'shiftKey'>) => {
+    async (dragState: SidebarDragState) => {
       const canvas = canvasElementRef.current;
       if (!canvas || !graphPath || !isPointInsideCanvas(canvas, dragState.x, dragState.y)) return false;
 
       let template = isNodeTemplateDragState(dragState) ? dragState.template : null;
       if (isGraphResourceDragState(dragState)) {
-        if (!event.shiftKey || dragState.sidebarResource.type !== 'function') return false;
+        if (
+          dragState.sidebarResource.type !== 'function'
+          || dragState.sidebarResource.id === graphPath
+        ) return false;
         template = catalog
           ? findResourceNodeSpawnTemplate(catalog.items, dragState.sidebarResource.id, 'function')
           : null;
@@ -186,9 +184,7 @@ export function useCanvasDrop({
 
   useEffect(() => {
     if (!enabled) return;
-    canvasDropHandlerStore.setHandler(groupId, (dragState, event) =>
-      handleSidebarCanvasDrop(dragState, event as MouseEvent),
-    );
+    canvasDropHandlerStore.setHandler(groupId, (dragState) => handleSidebarCanvasDrop(dragState));
     return () => canvasDropHandlerStore.setHandler(groupId, null);
   }, [enabled, groupId, handleSidebarCanvasDrop]);
 

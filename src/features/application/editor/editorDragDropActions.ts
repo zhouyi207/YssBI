@@ -6,12 +6,15 @@ import { clearEditorDragSession } from './useEditorDragPreviewMonitor';
 import {
   resolveDropIntoEditorDragState,
   resolveDropPointerFromDragEnd,
-  tryDropFunctionIntoEventCanvas,
+  tryDropFunctionIntoCanvas,
 } from './dropFunctionIntoEventEditor';
 import { activateEditorGroup } from './switchEditorTab';
 import { canvasDropHandlerStore, useSidebarDragStore } from '@/features/core/sidebarDrag';
 import type { SidebarDragPayload } from '@/features/core/dnd';
-import { isSidebarSpawnDropAllowed } from './sidebarSpawnDropPolicy';
+import {
+  findSidebarDropCanvasAtPointer,
+  isSidebarSpawnDropAllowed,
+} from './sidebarSpawnDropPolicy';
 import {
   isGraphResourceDragPayload,
   isNodeTemplateDragData,
@@ -31,12 +34,22 @@ export function readEditorDragModifiers(event: DragEndEvent): {
   return readDragModifiers(event);
 }
 
-function resolveCanvasDropGroupId(event: DragEndEvent): string | null {
+function resolveCanvasDropGroupId(
+  event: DragEndEvent,
+  dropPointer: { x: number; y: number } | null,
+): string | null {
   const overData = event.over?.data.current;
-  if (overData && typeof overData === 'object' && 'groupId' in overData) {
-    return String((overData as { groupId: string }).groupId);
+  if (
+    overData
+    && typeof overData === 'object'
+    && 'groupId' in overData
+    && typeof (overData as { groupId?: unknown }).groupId === 'string'
+  ) {
+    return (overData as { groupId: string }).groupId;
   }
-  return null;
+  return dropPointer
+    ? findSidebarDropCanvasAtPointer(dropPointer.x, dropPointer.y)?.groupId ?? null
+    : null;
 }
 
 async function executeSidebarSpawnDragEnd(
@@ -56,10 +69,10 @@ async function executeSidebarSpawnDragEnd(
 
   if (isGraphResourceDragPayload(activeData)) {
     const { sidebarResource } = activeData;
-    const groupId = resolveCanvasDropGroupId(event);
+    const groupId = resolveCanvasDropGroupId(event, dropPointer);
     const dropState = resolveDropIntoEditorDragState(sidebarResource, dropPointer, capturedSidebarDrag);
-    if (groupId && dropState && modifiers.shiftKey) {
-      const handled = await tryDropFunctionIntoEventCanvas(groupId, dropState, modifiers);
+    if (groupId && dropState && sidebarResource.type === 'function') {
+      const handled = await tryDropFunctionIntoCanvas(groupId, dropState, modifiers);
       if (handled) {
         clearEditorDragSession();
         return;
@@ -71,7 +84,7 @@ async function executeSidebarSpawnDragEnd(
   }
 
   if (isNodeTemplateDragData(activeData)) {
-    const groupId = resolveCanvasDropGroupId(event);
+    const groupId = resolveCanvasDropGroupId(event, dropPointer);
     if (groupId && capturedSidebarDrag && isNodeTemplateDragState(capturedSidebarDrag)) {
       void activateEditorGroup(groupId);
       const handler = canvasDropHandlerStore.getHandler(groupId);

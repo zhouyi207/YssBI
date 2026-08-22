@@ -8,7 +8,6 @@ import { useCanvasInteraction } from '@/features/core/canvas';
 import { useVariableStore } from '@/features/core/dataStore';
 import {
   useEditorGroupWorkspace,
-  useFunctionCatalog,
 } from '@/features/core/editor';
 import type { Pin } from '@/shared/types/domain';
 import { prepareEditorGroupForInteraction } from './editorGroupInteraction';
@@ -32,7 +31,6 @@ export function useEditorCanvas({ mode }: UseEditorCanvasOptions): EditorCanvasS
   const sessionCommands = useEditorSessionCommandsContext();
   const groupWorkspace = useEditorGroupWorkspace();
   const variables = useVariableStore((state) => state.variables);
-  const functions = useFunctionCatalog();
   const mutationHandlers = useCanvasMutationHandlers();
   const interactive = mode === 'interactive';
 
@@ -135,8 +133,8 @@ export function useEditorCanvas({ mode }: UseEditorCanvasOptions): EditorCanvasS
   ]);
 
   const resources = useMemo(
-    (): EditorCanvasResourcesSlice => ({ variables, functions }),
-    [functions, variables],
+    (): EditorCanvasResourcesSlice => ({ variables }),
+    [variables],
   );
 
   const interaction = useMemo(

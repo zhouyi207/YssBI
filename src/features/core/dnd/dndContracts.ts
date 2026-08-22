@@ -179,7 +179,7 @@ export type NodeTemplateDragState = {
   y: number;
 };
 
-/** Sidebar 拖拽进行中写入 store 的 graph-resource 态（落画布开 tab） */
+/** Sidebar 拖拽进行中写入 store 的 graph-resource 态（函数创建 Call 节点，事件打开图） */
 export type GraphResourceDragState = {
   type: typeof DRAG_TYPES.GRAPH_RESOURCE;
   sidebarResource: GraphResourceDragData;

@@ -216,6 +216,7 @@ function installPointerLoop(): () => void {
       const scale = deps.viewportRef.current?.scale || 1;
       const dx = (event.clientX - session.lastX) / scale;
       const dy = (event.clientY - session.lastY) / scale;
+      if (!session.moved && dx === 0 && dy === 0) return;
       const delta = { x: session.delta.x + dx, y: session.delta.y + dy };
       const positions: Record<string, { x: number; y: number }> = {};
       for (const nodeId of session.nodeIds) {

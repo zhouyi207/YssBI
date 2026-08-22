@@ -10,6 +10,5 @@ export {
   type SpawnFromTemplateContext,
 } from './spawnFromTemplate';
 export {
-  canDropFunctionIntoEventGraph,
-  dropFunctionCallIntoEventGraph,
+  canCreateFunctionNodeInGraph,
 } from './dropFunctionIntoEventGraph';

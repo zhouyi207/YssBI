@@ -6,13 +6,10 @@ import {
   type GraphResourceDragState,
   type SidebarDragState,
 } from '@/features/core/dnd';
-import { canDropFunctionIntoEventGraph } from '@/features/application/editor/canvasDrop';
+import { canCreateFunctionNodeInGraph } from '@/features/application/editor/canvasDrop';
 import { canvasDropHandlerStore } from '@/features/core/sidebarDrag';
 import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
 import { useSidebarDragStore } from '@/features/core/sidebarDrag';
-import { resolveTabDisplayName } from '@/features/application/editor/resolveTabDisplayName';
-import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
-import type { LayoutTab } from '@/shared/types/ui';
 
 export function resolveDropPointerFromDragEnd(event: Pick<DragEndEvent, 'activatorEvent' | 'delta'>): {
   x: number;
@@ -43,24 +40,13 @@ export function resolveFunctionDragState(
   return buildFunctionGraphResourceDragState(resource.id, resource.name, clientX, clientY);
 }
 
-export function resolveFunctionDragStateFromTab(
-  tab: LayoutTab,
-  clientX: number,
-  clientY: number,
-): GraphResourceDragState | null {
-  if (tab.type !== 'function') return null;
-  const name = resolveTabDisplayName({ kind: 'function', id: tab.id }, tab.id);
-  return buildFunctionGraphResourceDragState(tab.id, name, clientX, clientY);
-}
-
-export async function tryDropFunctionIntoEventCanvas(
+export async function tryDropFunctionIntoCanvas(
   groupId: string,
   dragState: SidebarDragState,
   modifiers: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean },
 ): Promise<boolean> {
-  if (!modifiers.shiftKey) return false;
   if (dragState.type !== DRAG_TYPES.GRAPH_RESOURCE) return false;
-  if (!canDropFunctionIntoEventGraph(groupId, dragState.sidebarResource, true)) return false;
+  if (!canCreateFunctionNodeInGraph(groupId, dragState.sidebarResource)) return false;
 
   const handler = canvasDropHandlerStore.getHandler(groupId);
   if (!handler) return false;
@@ -91,17 +77,4 @@ export function resolveDropIntoEditorDragState(
   const resolvedPointer = pointer ?? readSidebarDragPointer();
   if (!resolvedPointer) return null;
   return resolveFunctionDragState(resource, resolvedPointer.x, resolvedPointer.y);
-}
-
-export function resolveDropIntoEditorDragStateFromTab(
-  tab: LayoutTab,
-  pointer?: { x: number; y: number } | null,
-): SidebarDragState | null {
-  const resolvedPointer = pointer ?? readSidebarDragPointer();
-  if (!resolvedPointer) return null;
-  return resolveFunctionDragStateFromTab(tab, resolvedPointer.x, resolvedPointer.y);
-}
-
-export function resolveFunctionTabForDrop(tabId: string): LayoutTab | null {
-  return locateLayoutTab(tabId)?.tab ?? null;
 }

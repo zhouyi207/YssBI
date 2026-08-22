@@ -112,7 +112,7 @@ export interface EditorCanvasWorkspaceSlice {
 
 export type EditorCanvasResourcesSlice = Pick<
   EditorSessionResourcesSlice,
-  'variables' | 'functions'
+  'variables'
 >;
 
 export interface EditorCanvasInteractionSlice {
