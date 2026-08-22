@@ -2,7 +2,9 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { getLocalizedSearchIndex } from '@/features/core/nodeCatalog/localizedSearchIndex';
 import type { LocalizedNodeCatalogState } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 const historyAvailability = vi.hoisted(() => ({
   activeTabId: null as string | null,
@@ -18,37 +20,46 @@ const catalogState = vi.hoisted(() => ({
 }));
 
 function readyCatalogState(): LocalizedNodeCatalogState {
+  const catalog = {
+    projectInstanceId: 'project-1',
+    registryFingerprint: 'registry-1',
+    resourcePublicationRevision: 1,
+    locale: 'en-US',
+    categories: [
+      { categoryId: 'math', parentCategoryId: null, order: 10, title: 'Math', searchText: 'math' },
+    ],
+    items: [
+      {
+        nodeTypeId: 'yssbi.numeric.add.int64',
+        title: 'Add',
+        description: null,
+        documentation: null,
+        categoryId: 'math',
+        iconId: 'math',
+        styleId: 'default',
+        aliases: [],
+        technicalTerms: [],
+        backendSearchText: ['add'],
+        resourceNames: [],
+        ports: [],
+        parameters: [],
+        creation: { kind: 'static' as const, nodeTypeId: 'yssbi.numeric.add.int64' },
+      },
+    ],
+  };
   return {
     status: 'ready',
     error: null,
-    catalog: {
-      projectInstanceId: 'project-1',
-      registryFingerprint: 'registry-1',
-      resourcePublicationRevision: 1,
-      locale: 'en-US',
-      categories: [],
-      items: [
-        {
-          nodeTypeId: 'yssbi.numeric.add.int64',
-          title: 'Add',
-          description: null,
-          documentation: null,
-          categoryId: 'math',
-          iconId: 'math',
-          styleId: 'default',
-          aliases: [],
-          technicalTerms: [],
-          backendSearchText: ['add'],
-          resourceNames: [],
-          ports: [],
-          parameters: [],
-          creation: { kind: 'static', nodeTypeId: 'yssbi.numeric.add.int64' },
-        },
-      ],
-    },
-    searchIndex: null,
+    catalog,
+    searchIndex: getLocalizedSearchIndex(catalog),
     refresh: vi.fn(),
   };
+}
+
+function setInputValue(input: HTMLInputElement, value: string): void {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
 vi.mock('@dnd-kit/core', () => ({
@@ -56,6 +67,19 @@ vi.mock('@dnd-kit/core', () => ({
     draggableInputs.push(input);
     return { attributes: {}, listeners: {}, setNodeRef: vi.fn() };
   },
+}));
+
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: (options: { count: number; getItemKey: (index: number) => string | number }) => ({
+    getTotalSize: () => options.count * 32,
+    getVirtualItems: () => Array.from({ length: options.count }, (_, index) => ({
+      index,
+      key: options.getItemKey(index),
+      start: index * 32,
+      size: 32,
+    })),
+    measureElement: vi.fn(),
+  }),
 }));
 
 vi.mock('react-i18next', async (importOriginal) => ({
@@ -107,10 +131,19 @@ describe('Sidebar tab-level empty states', () => {
   });
 
   it('renders all Catalog items as draggable templates', () => {
-    act(() => root.render(<SidebarNodesTab />));
+    act(() => root.render(
+      <TooltipProvider>
+        <SidebarNodesTab />
+      </TooltipProvider>,
+    ));
+
+    const input = host.querySelector('input');
+    expect(input).not.toBeNull();
+    act(() => setInputValue(input!, 'add'));
 
     expect(host.textContent).toContain('Add');
-    expect(host.textContent).toContain('yssbi.numeric.add.int64');
+    expect(host.textContent).not.toContain('yssbi.numeric.add.int64');
+    expect(host.querySelector('[title="yssbi.numeric.add.int64"]')).not.toBeNull();
 
     expect(draggableInputs).toContainEqual({
       id: 'sidebar-item-node-static:yssbi.numeric.add.int64',
@@ -139,7 +172,11 @@ describe('Sidebar tab-level empty states', () => {
       refresh: vi.fn(),
     };
 
-    act(() => root.render(<SidebarNodesTab />));
+    act(() => root.render(
+      <TooltipProvider>
+        <SidebarNodesTab />
+      </TooltipProvider>,
+    ));
 
     expect(host.textContent).toContain('Node catalog unavailable');
     expect(host.textContent).toContain('[catalog_backend_failed]');

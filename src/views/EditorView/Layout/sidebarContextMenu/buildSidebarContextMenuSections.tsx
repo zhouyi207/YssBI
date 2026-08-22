@@ -1,14 +1,14 @@
 import type { TFunction } from "i18next";
 import { VscAdd, VscChevronRight, VscCopy, VscEdit, VscFolderOpened, VscTrash } from "react-icons/vsc";
 import { DEFAULT_VARIABLE_NAME } from "@/shared/constants/defaultResourceNames";
-import type { ContextMenuSection } from "@/shared/ui/contextMenu";
+import type { ActionMenuSection } from "@/shared/ui/actionMenu";
 import type { SidebarContextMenuActions, SidebarContextMenuState } from "./sidebarContextMenuTypes";
 
 export function buildSidebarContextMenuSections(
   contextMenu: SidebarContextMenuState | null,
   actions: SidebarContextMenuActions,
   t: TFunction
-): ContextMenuSection[] {
+): ActionMenuSection[] {
   if (!contextMenu) return [];
   const target = contextMenu.target;
 

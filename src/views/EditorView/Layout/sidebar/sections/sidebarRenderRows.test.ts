@@ -2,50 +2,35 @@ import { describe, expect, it } from 'vitest';
 import type { SidebarPanelModel } from '@/features/core/sidebar';
 import { flattenSidebarPanelModel } from './sidebarRenderRows';
 
-const emptyGraphs: SidebarPanelModel = {
+const emptyData: SidebarPanelModel = {
   sections: [
     {
-      key: 'graphsEvent',
-      label: 'Event',
+      key: 'dataData',
+      label: 'Data',
       expanded: true,
       rows: [],
-      emptyMessage: 'No events',
-    },
-    {
-      key: 'graphsFunction',
-      label: 'Function',
-      expanded: false,
-      rows: [],
-      emptyMessage: 'No functions',
+      emptyMessage: 'No data',
     },
   ],
 };
 
 describe('flattenSidebarPanelModel', () => {
   it('emits section empty rows only for expanded empty sections', () => {
-    expect(flattenSidebarPanelModel(emptyGraphs)).toEqual([
+    expect(flattenSidebarPanelModel(emptyData)).toEqual([
       {
         kind: 'section',
-        rowKey: 'section:graphsEvent',
-        sectionKey: 'graphsEvent',
+        rowKey: 'section:dataData',
+        sectionKey: 'dataData',
         level: 0,
-        label: 'Event',
+        label: 'Data',
         expanded: true,
       },
       {
         kind: 'sectionEmpty',
-        rowKey: 'section-empty:graphsEvent',
-        sectionKey: 'graphsEvent',
+        rowKey: 'section-empty:dataData',
+        sectionKey: 'dataData',
         level: 1,
-        message: 'No events',
-      },
-      {
-        kind: 'section',
-        rowKey: 'section:graphsFunction',
-        sectionKey: 'graphsFunction',
-        level: 0,
-        label: 'Function',
-        expanded: false,
+        message: 'No data',
       },
     ]);
   });

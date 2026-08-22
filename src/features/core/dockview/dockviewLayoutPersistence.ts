@@ -1,5 +1,10 @@
 import type { SerializedGridviewComponent } from 'dockview-react';
-import { useWorkbenchStore, workbenchGridPort, type WorkbenchUIState } from '@/features/core/workbench';
+import {
+  isSidebarTabId,
+  useWorkbenchStore,
+  workbenchGridPort,
+  type WorkbenchUIState,
+} from '@/features/core/workbench';
 import { editorDockviewPort } from './dockviewEditorPort';
 import { panelDockviewPort } from './panelDockviewPort';
 import type { DockviewLayout } from './types';
@@ -85,8 +90,13 @@ export async function hydrateDockviewLayout(): Promise<boolean> {
 
     if (value.preferences) {
       const current = useWorkbenchStore.getState();
+      const persistedSidebarTab = value.preferences.sidebarCurrentTab;
       useWorkbenchStore.setState({
-        sidebarCurrentTab: value.preferences.sidebarCurrentTab ?? current.sidebarCurrentTab,
+        sidebarCurrentTab: persistedSidebarTab === undefined
+          ? current.sidebarCurrentTab
+          : isSidebarTabId(persistedSidebarTab)
+            ? persistedSidebarTab
+            : 'project',
         sidebarUserHidden: value.preferences.sidebarUserHidden ?? current.sidebarUserHidden,
         detailUserHidden: value.preferences.detailUserHidden ?? current.detailUserHidden,
         isSettingsOpen: value.preferences.isSettingsOpen ?? current.isSettingsOpen,

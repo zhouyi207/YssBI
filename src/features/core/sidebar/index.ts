@@ -1,29 +1,19 @@
 export {
   useSidebarStore,
   SIDEBAR_SECTION_DEFAULTS,
+  PROJECT_TREE_CATEGORY_IDS,
+  PROJECT_TREE_EXPANSION_DEFAULTS,
   type SidebarSectionKey,
+  type ProjectTreeCategoryId,
 } from './sidebarStore';
 export { mergeExpandedSections, resolveSectionExpanded } from './sidebarSectionState';
 export { useSidebarSectionExpandSnapshot } from './useSidebarSectionExpandSnapshot';
 export {
   SIDEBAR_FLAT_ROW_HEIGHT,
   type SidebarDatabaseItemRow,
-  type SidebarEmptyStateModel,
-  type SidebarGraphItemRow,
-  type SidebarGroupItemRow,
   type SidebarItemRow,
-  type SidebarNodeItemRow,
   type SidebarPanelModel,
   type SidebarSectionActionConfig,
   type SidebarSectionModel,
-  type SidebarTreeModel,
-  type SidebarVariableItemRow,
-  type SidebarWorksheetItemRow,
-  buildGraphsSidebarModel,
-  buildVariablesSidebarModel,
   buildDataSidebarModel,
-  buildChartsSidebarModel,
-  buildNodesSidebarModel,
-  nodeGroupKey,
-  resolveGroupExpanded,
 } from './flatRows';

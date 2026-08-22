@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { usePositionedContextMenu } from "@/shared/ui/contextMenu";
+import { usePositionedActionMenu } from "@/shared/ui/actionMenu";
 import type { SidebarContextMenuTarget, SidebarInputDialogState } from "../sidebarContextMenu/sidebarContextMenuTypes";
 import { formatInlineUserError } from '@/features/application/userErrorSummary';
 
@@ -8,9 +8,9 @@ export function useSidebarContextMenu() {
   const { t } = useTranslation();
   const {
     contextMenu,
-    openContextMenu,
-    closeContextMenu,
-  } = usePositionedContextMenu<SidebarContextMenuTarget>();
+    openActionMenu,
+    closeActionMenu,
+  } = usePositionedActionMenu<SidebarContextMenuTarget>();
   const [inputDialog, setInputDialog] = useState<SidebarInputDialogState | null>(null);
 
   const openInputDialog = useCallback((
@@ -47,8 +47,8 @@ export function useSidebarContextMenu() {
 
   return {
     contextMenu,
-    openContextMenu,
-    closeContextMenu,
+    openActionMenu,
+    closeActionMenu,
     inputDialog,
     openInputDialog,
     submitInputDialog,

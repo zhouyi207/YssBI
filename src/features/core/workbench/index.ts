@@ -5,6 +5,7 @@ export {
 export {
   PANEL_VIEW_IDS,
   SIDEBAR_TAB_IDS,
+  isSidebarTabId,
 } from './workbenchTypes';
 export {
   DEFAULT_WORKBENCH_DETAIL_WIDTH,

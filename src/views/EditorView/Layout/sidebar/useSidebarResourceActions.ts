@@ -1,6 +1,7 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorSessionCommandsContext } from '@/features/application/editor';
+import { resolveActiveProjectGraph } from '@/features/application/sidebar';
 import { updateVariableAction } from '@/features/application/dataManagement/variableActions';
 import { renameResource } from '@/features/application/resource/resourceActions';
 import {
@@ -12,8 +13,11 @@ import { openDatabaseEditorWindow } from '@/features/application/window';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
+import { useFunctionCatalog } from '@/features/core/editor';
+import { editorDockviewPort, useDockviewPortSnapshot } from '@/features/core/dockview';
+import { getActiveLayoutTab } from '@/features/core/layout';
+import { useGraphResourcesByKind } from '@/features/core/resource';
 import type { GraphResourceType } from '../sidebarContextMenu/sidebarContextMenuTypes';
-import { useSidebarVariableScope } from './useSidebarVariableScope';
 
 type OpenInputDialog = (
   title: string,
@@ -24,7 +28,15 @@ type OpenInputDialog = (
 
 export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
   const { t } = useTranslation();
-  const { scopePath, graphType } = useSidebarVariableScope();
+  const events = useGraphResourcesByKind('event');
+  const functions = useFunctionCatalog();
+  useDockviewPortSnapshot(editorDockviewPort);
+  const activeGroupId = editorDockviewPort.getActiveGroupId() ?? null;
+  const activeTab = activeGroupId ? getActiveLayoutTab(activeGroupId)?.tab ?? null : null;
+  const activeProjectGraph = useMemo(
+    () => resolveActiveProjectGraph({ events, functions, activeTab }),
+    [activeTab, events, functions],
+  );
   const {
     renameGraph,
     duplicateGraph,
@@ -84,13 +96,34 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
   }, []);
 
   const demoteVariable = useCallback(async (id: string) => {
-    if (!scopePath || !graphType) return;
+    if (!activeProjectGraph) return;
     const scope =
-      graphType === 'function'
-        ? { type: 'function' as const, functionPath: scopePath }
-        : { type: 'event' as const, eventPath: scopePath };
+      activeProjectGraph.kind === 'function'
+        ? { type: 'function' as const, functionPath: activeProjectGraph.path }
+        : { type: 'event' as const, eventPath: activeProjectGraph.path };
     await updateVariableAction(id, { scope });
-  }, [graphType, scopePath]);
+  }, [activeProjectGraph]);
+
+  const addProjectVariable = useCallback(async (
+    name?: string,
+    type: string = 'Int64',
+    isGlobal: boolean = false,
+  ) => {
+    if (!isGlobal && !activeProjectGraph) return null;
+    return addVariable(
+      name,
+      type,
+      isGlobal,
+      activeProjectGraph
+        ? {
+            graphScope: {
+              graphPath: activeProjectGraph.path,
+              graphType: activeProjectGraph.kind,
+            },
+          }
+        : undefined,
+    );
+  }, [activeProjectGraph, addVariable]);
 
   const renameDatabaseItem = useCallback((id: string, name: string) => {
     openInputDialog(t('contextMenu.dialog.renameDataTitle'), name, async (nextName) => {
@@ -142,7 +175,7 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     deleteVariableItem,
     promoteVariable,
     demoteVariable,
-    canDemoteVariable: Boolean(scopePath && graphType),
+    canDemoteVariable: activeProjectGraph !== null,
     renameDatabaseItem,
     deleteDatabaseItem,
     renameWorksheetItem,
@@ -150,7 +183,7 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
     revealInExplorer,
     openVariableContextMenuTarget,
     resolveDatabaseName,
-    addVariable,
+    addVariable: addProjectVariable,
     addEvent,
     addFunction,
     createGraph,

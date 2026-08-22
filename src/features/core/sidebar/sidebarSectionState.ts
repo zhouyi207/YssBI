@@ -1,16 +1,16 @@
 /** Default expanded state when a section key is absent from persisted storage. */
 export const SIDEBAR_SECTION_DEFAULTS = {
-  graphsEvent: true,
-  graphsFunction: false,
-  variablesLocal: true,
-  variablesGlobal: false,
   dataData: true,
-  chartsWorksheets: true,
-  commandsUndo: true,
-  commandsRedo: false,
 } as const;
 
-export type SidebarSectionKey = keyof typeof SIDEBAR_SECTION_DEFAULTS;
+export type SidebarSectionKey = string;
+type SupportedSidebarSectionKey = keyof typeof SIDEBAR_SECTION_DEFAULTS;
+
+export function isSupportedSidebarSectionKey(
+  key: string,
+): key is SupportedSidebarSectionKey {
+  return key === 'dataData';
+}
 
 /** Resolve whether a sidebar section is expanded from store state + defaults. */
 export function resolveSectionExpanded(
@@ -18,12 +18,19 @@ export function resolveSectionExpanded(
   key: SidebarSectionKey,
 ): boolean {
   if (key in expandedSections) return expandedSections[key];
-  return SIDEBAR_SECTION_DEFAULTS[key] ?? false;
+  return key in SIDEBAR_SECTION_DEFAULTS
+    ? SIDEBAR_SECTION_DEFAULTS[key as keyof typeof SIDEBAR_SECTION_DEFAULTS]
+    : false;
 }
 
 /** Merge persisted section flags with defaults (no accordion coercion). */
 export function mergeExpandedSections(
-  expandedSections: Record<string, boolean>,
+  expandedSections: Readonly<Record<string, unknown>>,
 ): Record<string, boolean> {
-  return { ...SIDEBAR_SECTION_DEFAULTS, ...expandedSections };
+  const dataData = expandedSections.dataData;
+  return {
+    dataData: typeof dataData === 'boolean'
+      ? dataData
+      : SIDEBAR_SECTION_DEFAULTS.dataData,
+  };
 }

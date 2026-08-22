@@ -2,8 +2,12 @@ import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorSessionResources } from '@/features/application/editor';
 
-import { useWorkbenchStore } from '@/features/core/workbench';
-import { ContextMenu } from '@/shared/ui/contextMenu';
+import { useWorkbenchStore, type SidebarTabId } from '@/features/core/workbench';
+import {
+  PROJECT_TREE_CATEGORY_IDS,
+  type ProjectTreeCategoryId,
+} from '@/features/core/sidebar/projectTreeState';
+import { ActionMenu } from '@/shared/ui/actionMenu';
 import {
   buildSidebarContextMenuSections,
   useSidebarContextMenu,
@@ -13,39 +17,29 @@ import { workbenchPanelHeaderClass, workbenchPanelHeaderTitleClass } from './wor
 import { SidebarNodesTab } from './sidebar/tabs/SidebarNodesTab';
 import { SidebarRenameDialog } from './sidebar/SidebarRenameDialog';
 import { useSidebarResourceActions } from './sidebar/useSidebarResourceActions';
-import { SidebarGraphsTab } from './sidebar/tabs/SidebarGraphsTab';
-import { SidebarVariablesTab } from './sidebar/tabs/SidebarVariablesTab';
 import { SidebarDataTab } from './sidebar/tabs/SidebarDataTab';
-import { SidebarChartsTab } from './sidebar/tabs/SidebarChartsTab';
 import { SidebarCommandsTab } from './sidebar/tabs/SidebarCommandsTab';
+import { SidebarProjectTab } from './sidebar/tabs/SidebarProjectTab';
+import type { SidebarProjectTreeActions } from './sidebar/rows/SidebarProjectTreeRow';
 
-type SidebarTab = 'graphs' | 'nodes' | 'variables' | 'data' | 'commands' | 'charts';
-
-const TAB_TITLE_KEYS: Record<SidebarTab, string> = {
-  graphs: 'activityBar.graphs',
+const TAB_TITLE_KEYS: Record<SidebarTabId, string> = {
+  project: 'activityBar.project',
   nodes: 'activityBar.nodes',
-  variables: 'activityBar.variables',
   data: 'activityBar.data',
   commands: 'activityBar.commands',
-  charts: 'activityBar.charts',
 };
 
 function Sidebar() {
   const { t } = useTranslation();
 
-  const currentTab = useWorkbenchStore((state) => state.sidebarCurrentTab) as SidebarTab;
+  const currentTab = useWorkbenchStore((state) => state.sidebarCurrentTab);
 
-  const {
-    variables,
-    functions,
-    events,
-    dataframes,
-  } = useEditorSessionResources();
+  const { dataframes } = useEditorSessionResources();
 
   const {
     contextMenu,
-    closeContextMenu,
-    openContextMenu,
+    closeActionMenu,
+    openActionMenu,
     inputDialog,
     openInputDialog,
     submitInputDialog,
@@ -89,59 +83,73 @@ function Sidebar() {
       e: React.MouseEvent,
       target: { type: 'graph'; id: string; name: string; graphType: GraphResourceType },
     ) => {
-      openContextMenu(e, target);
+      openActionMenu(e, target);
     },
-    [openContextMenu],
-  );
-
-  const openGraphSectionContextMenu = useCallback(
-    (e: React.MouseEvent, target: { type: 'section'; graphType: GraphResourceType }) => {
-      openContextMenu(e, target);
-    },
-    [openContextMenu],
+    [openActionMenu],
   );
 
   const openVariableContextMenu = useCallback(
     (e: React.MouseEvent, id: string, name: string) => {
-      openContextMenu(e, actions.openVariableContextMenuTarget(id, name));
+      openActionMenu(e, actions.openVariableContextMenuTarget(id, name));
     },
-    [actions, openContextMenu],
-  );
-
-  const openVariableSectionContextMenu = useCallback(
-    (e: React.MouseEvent, isGlobal: boolean) => {
-      openContextMenu(e, { type: 'variableSection', isGlobal });
-    },
-    [openContextMenu],
+    [actions, openActionMenu],
   );
 
   const openDatabaseContextMenu = useCallback(
     (e: React.MouseEvent, id: string, name: string) => {
-      openContextMenu(e, { type: 'database', id, name: actions.resolveDatabaseName(id, name) });
+      openActionMenu(e, { type: 'database', id, name: actions.resolveDatabaseName(id, name) });
     },
-    [actions, openContextMenu],
+    [actions, openActionMenu],
   );
 
   const openDataSectionContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      openContextMenu(e, { type: 'dataSection' });
+      openActionMenu(e, { type: 'dataSection' });
     },
-    [openContextMenu],
-  );
-
-  const openWorksheetSectionContextMenu = useCallback(
-    (e: React.MouseEvent) => {
-      openContextMenu(e, { type: 'worksheetSection' });
-    },
-    [openContextMenu],
+    [openActionMenu],
   );
 
   const openWorksheetContextMenu = useCallback(
     (e: React.MouseEvent, worksheetPath: string, name: string) => {
-      openContextMenu(e, { type: 'worksheet', worksheetPath, name });
+      openActionMenu(e, { type: 'worksheet', worksheetPath, name });
     },
-    [openContextMenu],
+    [openActionMenu],
   );
+
+  const openProjectCategoryContextMenu = useCallback(
+    (event: React.MouseEvent, categoryId: ProjectTreeCategoryId) => {
+      switch (categoryId) {
+        case PROJECT_TREE_CATEGORY_IDS.events:
+          openActionMenu(event, { type: 'section', graphType: 'event' });
+          return;
+        case PROJECT_TREE_CATEGORY_IDS.functions:
+          openActionMenu(event, { type: 'section', graphType: 'function' });
+          return;
+        case PROJECT_TREE_CATEGORY_IDS.worksheets:
+          openActionMenu(event, { type: 'worksheetSection' });
+          return;
+        case PROJECT_TREE_CATEGORY_IDS.activeGraphVariables:
+          openActionMenu(event, { type: 'variableSection', isGlobal: false });
+          return;
+        case PROJECT_TREE_CATEGORY_IDS.globalVariables:
+          openActionMenu(event, { type: 'variableSection', isGlobal: true });
+          return;
+      }
+    },
+    [openActionMenu],
+  );
+
+  const projectTreeActions: SidebarProjectTreeActions = {
+    onAddEvent: () => void actions.addEvent(),
+    onAddFunction: () => void actions.addFunction(),
+    onAddWorksheet: () => void actions.addWorksheet(),
+    onAddVariable: (isGlobal) => void actions.addVariable(undefined, 'Int64', isGlobal),
+    onCategoryContextMenu: openProjectCategoryContextMenu,
+    onGraphContextMenu: openGraphContextMenu,
+    onVariableContextMenu: openVariableContextMenu,
+    onWorksheetContextMenu: openWorksheetContextMenu,
+    onOpenWorksheet: actions.openWorksheet,
+  };
 
   return (
     <div
@@ -156,27 +164,9 @@ function Sidebar() {
         </div>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-0">
-          {currentTab === 'graphs' && (
-            <SidebarGraphsTab
-              events={events as Record<string, { name: string }>}
-              functions={functions as Record<string, { name: string }>}
-              onAddEvent={() => void actions.addEvent()}
-              onAddFunction={() => void actions.addFunction()}
-              onOpenContextMenu={openGraphSectionContextMenu}
-              onGraphContextMenu={openGraphContextMenu}
-            />
-          )}
+          {currentTab === 'project' && <SidebarProjectTab actions={projectTreeActions} />}
 
           {currentTab === 'nodes' && <SidebarNodesTab />}
-
-          {currentTab === 'variables' && (
-            <SidebarVariablesTab
-              variables={variables}
-              onAddVariable={(name, dataType, isGlobal) => void actions.addVariable(name, dataType, isGlobal)}
-              onSectionContextMenu={openVariableSectionContextMenu}
-              onVariableContextMenu={openVariableContextMenu}
-            />
-          )}
 
           {currentTab === 'data' && (
             <SidebarDataTab
@@ -188,23 +178,14 @@ function Sidebar() {
           )}
 
           {currentTab === 'commands' && <SidebarCommandsTab />}
-
-          {currentTab === 'charts' && (
-            <SidebarChartsTab
-              onAddWorksheet={() => void actions.addWorksheet()}
-              onOpenWorksheet={actions.openWorksheet}
-              onSectionContextMenu={openWorksheetSectionContextMenu}
-              onWorksheetContextMenu={openWorksheetContextMenu}
-            />
-          )}
         </div>
       </div>
 
       {contextMenu && (
-        <ContextMenu
+        <ActionMenu
           position={{ x: contextMenu.x, y: contextMenu.y }}
           sections={contextMenuSections}
-          onClose={closeContextMenu}
+          onClose={closeActionMenu}
         />
       )}
 

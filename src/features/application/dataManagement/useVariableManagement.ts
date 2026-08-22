@@ -2,13 +2,20 @@ import { useCallback } from 'react';
 import { lookupGraphResourceKind, useResourceStore } from '@/features/core/resource';
 import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
-import { useSidebarStore } from '@/features/core/sidebar';
+import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from '@/features/core/sidebar';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
 import {
   createVariableAction,
   deleteVariableAction,
   updateVariableAction,
 } from '@/features/application/dataManagement/variableActions';
+
+export interface VariableCreationOptions {
+  graphScope?: {
+    graphPath: string;
+    graphType: 'event' | 'function';
+  };
+}
 
 /**
  * Variable Management Hook
@@ -32,23 +39,27 @@ export function useVariableManagement() {
     name?: string,
     type: string = 'Int64',
     isGlobal: boolean = false,
+    options?: VariableCreationOptions,
   ) => {
+    const explicitGraphScope = options?.graphScope;
     const created = await createVariableAction({
       name,
       type,
       isGlobal,
-      activeGraphPath: isGlobal ? null : localGraphPath,
-      graphType: isGlobal ? undefined : graphType,
+      activeGraphPath: isGlobal ? null : (explicitGraphScope?.graphPath ?? localGraphPath),
+      graphType: isGlobal ? undefined : (explicitGraphScope?.graphType ?? graphType),
     });
     if (created) {
-      switchSidebarTab('variables');
+      switchSidebarTab('project');
       const sidebar = useSidebarStore.getState();
-      if (isGlobal) {
-        sidebar.setSectionExpanded('variablesGlobal', true);
-      } else {
-        sidebar.setSectionExpanded('variablesLocal', true);
-      }
+      sidebar.setProjectTreeCategoryExpanded(
+        isGlobal
+          ? PROJECT_TREE_CATEGORY_IDS.globalVariables
+          : PROJECT_TREE_CATEGORY_IDS.activeGraphVariables,
+        true,
+      );
     }
+    return created;
   }, [localGraphPath, graphType, switchSidebarTab]);
 
   const updateVariable = useCallback(async (id: string, data: Parameters<typeof updateVariableAction>[1]) => {

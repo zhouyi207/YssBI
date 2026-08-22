@@ -1,5 +1,5 @@
 import type { RevealProjectResourceRequest } from "@/services/project/projectService";
-import type { PositionedContextMenuState } from "@/shared/ui/contextMenu";
+import type { PositionedActionMenuState } from "@/shared/ui/actionMenu";
 
 export type GraphResourceType = "event" | "function";
 
@@ -13,7 +13,7 @@ export type SidebarContextMenuTarget =
   | { type: "worksheetSection" }
   | { type: "worksheet"; worksheetPath: string; name: string };
 
-export type SidebarContextMenuState = PositionedContextMenuState<SidebarContextMenuTarget>;
+export type SidebarContextMenuState = PositionedActionMenuState<SidebarContextMenuTarget>;
 
 export interface SidebarInputDialogState {
   title: string;

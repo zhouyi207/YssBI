@@ -1,16 +1,14 @@
 export { PANEL_VIEW_IDS } from '@/features/core/layout/panelPartModel';
 export type { PanelViewId } from '@/features/core/layout/panelPartModel';
 
-export const SIDEBAR_TAB_IDS = [
-  'graphs',
-  'nodes',
-  'variables',
-  'data',
-  'commands',
-  'charts',
-] as const;
+export const SIDEBAR_TAB_IDS = ['project', 'nodes', 'data', 'commands'] as const;
 
 export type SidebarTabId = (typeof SIDEBAR_TAB_IDS)[number];
+
+export function isSidebarTabId(value: unknown): value is SidebarTabId {
+  return typeof value === 'string'
+    && (SIDEBAR_TAB_IDS as readonly string[]).includes(value);
+}
 
 
 /**

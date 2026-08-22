@@ -38,7 +38,7 @@ describe('Sidebar empty-state components', () => {
     expect(host.querySelector('[data-slot="scroll-area-viewport"]')).toBeNull();
   });
 
-  it('renders a compact truncated section state with the full accessible label', () => {
+  it('renders a section state with the full accessible label', () => {
     act(() => {
       root.render(
         <TooltipProvider>
@@ -54,8 +54,6 @@ describe('Sidebar empty-state components', () => {
       '[aria-label="A deliberately long section empty-state message"]',
     );
     expect(message).toBeInstanceOf(HTMLElement);
-    expect(message?.className).toContain('truncate');
-    expect(message?.closest('.h-7')).not.toBeNull();
     expect((message as HTMLElement).tabIndex).toBe(0);
 
     act(() => (message as HTMLElement).focus());

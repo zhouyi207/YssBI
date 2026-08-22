@@ -16,6 +16,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/features/core/workbench', () => ({
+  isSidebarTabId: (value: unknown) => (
+    typeof value === 'string'
+    && ['project', 'nodes', 'data', 'commands'].includes(value)
+  ),
   workbenchGridPort: {
     restore: mocks.workbenchRestore,
     serialize: mocks.workbenchSerialize,
@@ -60,7 +64,7 @@ describe('dockview layout hydration', () => {
     mocks.panelRestore.mockResolvedValue(undefined);
     mocks.editorWhenReady.mockResolvedValue(undefined);
     mocks.getWorkbenchState.mockReturnValue({
-      sidebarCurrentTab: 'graphs',
+      sidebarCurrentTab: 'project',
       sidebarUserHidden: true,
       panelCollapsed: true,
       detailUserHidden: false,
@@ -84,7 +88,7 @@ describe('dockview layout hydration', () => {
           bottom: { size: 320, visible: true, collapsed: true },
         },
       },
-      preferences: { sidebarUserHidden: true },
+      preferences: { sidebarCurrentTab: 'variables', sidebarUserHidden: true },
     }));
   });
 
@@ -127,5 +131,14 @@ describe('dockview layout hydration', () => {
       },
     }));
     expect(mocks.setWorkbenchState).not.toHaveBeenCalled();
+  });
+
+  it('falls back to Project when persisted preferences contain a removed sidebar tab', async () => {
+    await expect(hydrateDockviewLayout()).resolves.toBe(true);
+
+    expect(mocks.setWorkbenchState).toHaveBeenCalledWith(expect.objectContaining({
+      sidebarCurrentTab: 'project',
+      sidebarUserHidden: true,
+    }));
   });
 });

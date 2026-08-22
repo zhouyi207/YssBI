@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
 import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
-import { useSidebarStore } from '@/features/core/sidebar';
+import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from '@/features/core/sidebar';
 import {
   createGraphResource,
   duplicateGraphResource,
@@ -66,8 +66,11 @@ export function useGraphManagement(
         await openCreatedGraph(id, 'event');
       }
 
-      switchSidebarTab('graphs');
-      useSidebarStore.getState().setSectionExpanded('graphsEvent', true);
+      switchSidebarTab('project');
+      useSidebarStore.getState().setProjectTreeCategoryExpanded(
+        PROJECT_TREE_CATEGORY_IDS.events,
+        true,
+      );
     } catch (error) {
       const message = formatErrorMessage(error);
       logger.graph.error(`Failed to create event: ${message}`, 'GraphManagement');
@@ -102,8 +105,11 @@ export function useGraphManagement(
         await openCreatedGraph(id, 'function');
       }
 
-      switchSidebarTab('graphs');
-      useSidebarStore.getState().setSectionExpanded('graphsFunction', true);
+      switchSidebarTab('project');
+      useSidebarStore.getState().setProjectTreeCategoryExpanded(
+        PROJECT_TREE_CATEGORY_IDS.functions,
+        true,
+      );
     } catch (error) {
       const message = formatErrorMessage(error);
       logger.graph.error(`Failed to create function: ${message}`, 'GraphManagement');

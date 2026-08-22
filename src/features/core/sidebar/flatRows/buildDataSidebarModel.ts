@@ -7,7 +7,7 @@ export function buildDataSidebarModel(params: {
   expandedSections: Record<string, boolean>;
   labels: { data: string; noData: string };
 }): SidebarPanelModel {
-  const items: SidebarItemRow[] = Object.entries(params.dataframes ?? {}).map(([id, data]) => ({
+  const items: SidebarItemRow[] = Object.entries(params.dataframes).map(([id, data]) => ({
     kind: 'database',
     rowKey: `database:${id}`,
     level: 1,

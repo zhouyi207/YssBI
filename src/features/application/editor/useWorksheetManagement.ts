@@ -10,6 +10,7 @@ import { captureProjectCommandContext } from '@/features/application/projectComm
 
 
 import { useSidebarTab } from './useSidebarTab';
+import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from '@/features/core/sidebar';
 import { buildWorksheetLayoutTab } from '@/features/core/layout/layoutTabModel';
 import { openEditorTab } from './openEditorTab';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
@@ -91,7 +92,11 @@ export function useWorksheetManagement(
 
         await commitFileFirstResourceIndex();
         if (!context.isCurrent()) return;
-        switchSidebarTab('charts');
+        switchSidebarTab('project');
+        useSidebarStore.getState().setProjectTreeCategoryExpanded(
+          PROJECT_TREE_CATEGORY_IDS.worksheets,
+          true,
+        );
         await openWorksheet(createdState.path, createdState.name);
         if (!context.isCurrent()) return;
       } catch (error) {
@@ -133,7 +138,11 @@ export function useWorksheetManagement(
       if (!context.isCurrent()) return;
       await commitFileFirstResourceIndex();
       if (!context.isCurrent()) return;
-      switchSidebarTab('charts');
+      switchSidebarTab('project');
+      useSidebarStore.getState().setProjectTreeCategoryExpanded(
+        PROJECT_TREE_CATEGORY_IDS.worksheets,
+        true,
+      );
       await openWorksheet(duplicatedState.path, duplicatedState.name);
     } catch (error) {
       if (context && !context.isCurrent()) return;
@@ -176,6 +185,10 @@ export function useOpenWorksheet() {
       focusDetail: { kind: 'worksheet', worksheetPath },
     });
 
-    switchSidebarTab('charts');
+    switchSidebarTab('project');
+    useSidebarStore.getState().setProjectTreeCategoryExpanded(
+      PROJECT_TREE_CATEGORY_IDS.worksheets,
+      true,
+    );
   }, [switchSidebarTab]);
 }

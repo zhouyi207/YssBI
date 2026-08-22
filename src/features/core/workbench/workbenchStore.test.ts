@@ -41,15 +41,15 @@ describe('workbenchStore', () => {
   it('tracks sidebar tab and user visibility intent without layout state', () => {
     const commands = useWorkbenchStore.getState();
 
-    commands.toggleSidebarTab('graphs');
+    commands.toggleSidebarTab('project');
     expect(uiState()).toMatchObject({
-      sidebarCurrentTab: 'graphs',
+      sidebarCurrentTab: 'project',
       sidebarUserHidden: true,
     });
 
-    commands.toggleSidebarTab('charts');
+    commands.toggleSidebarTab('commands');
     expect(uiState()).toMatchObject({
-      sidebarCurrentTab: 'charts',
+      sidebarCurrentTab: 'commands',
       sidebarUserHidden: false,
     });
 
@@ -86,7 +86,7 @@ describe('workbenchStore', () => {
 
   it('resets only the workbench UI projection', () => {
     const commands = useWorkbenchStore.getState();
-    commands.showSidebarTab('variables');
+    commands.showSidebarTab('data');
     commands.setDetailUserHidden(true);
     commands.setSettingsOpen(true);
     commands.setNodeDocumentationOpen(true);

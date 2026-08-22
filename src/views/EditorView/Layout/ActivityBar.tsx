@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { PiGraph } from "react-icons/pi";
-import { HiVariable } from "react-icons/hi2";
-import { VscDatabase, VscGraphLine, VscLibrary, VscSettingsGear, VscTerminal } from "react-icons/vsc";
+import { VscDatabase, VscLibrary, VscProject, VscSettingsGear, VscTerminal } from "react-icons/vsc";
 import { useWorkbenchStore, type SidebarTabId } from '@/features/core/workbench';
 import { toggleSidebarTab as persistToggleSidebarTab } from "@/features/core/layout/workbenchLayoutService";
 import { Button } from "@/components/ui/button";
@@ -75,20 +73,14 @@ export function ActivityBar({ side = 'left' }: { side?: 'left' | 'right' }) {
         side === 'right' ? 'border-l border-[var(--strong-border)]' : 'border-r border-[var(--strong-border)]',
       )}
     >
-      <ActivityIcon {...iconProps("graphs", t("activityBar.graphs"))}>
-        <PiGraph size={20} />
+      <ActivityIcon {...iconProps("project", t("activityBar.project"))}>
+        <VscProject size={20} />
       </ActivityIcon>
       <ActivityIcon {...iconProps("nodes", t("activityBar.nodes"))}>
         <VscLibrary size={20} />
       </ActivityIcon>
-      <ActivityIcon {...iconProps("variables", t("activityBar.variables"))}>
-        <HiVariable size={20} />
-      </ActivityIcon>
       <ActivityIcon {...iconProps("data", t("activityBar.data"))}>
         <VscDatabase size={20} />
-      </ActivityIcon>
-      <ActivityIcon {...iconProps("charts", t("activityBar.charts"))}>
-        <VscGraphLine size={20} />
       </ActivityIcon>
       <div className="my-1 h-px w-6 bg-[var(--strong-border)]" />
       <ActivityIcon {...iconProps("commands", t("activityBar.commands"))}>

@@ -7,7 +7,7 @@ import type {
 
 /** Default non-layout workbench UI state; Dockview remains authoritative for placement. */
 export const DEFAULT_WORKBENCH_UI_STATE: Readonly<WorkbenchUIState> = {
-  sidebarCurrentTab: 'graphs',
+  sidebarCurrentTab: 'project',
   sidebarUserHidden: false,
   detailUserHidden: false,
   isSettingsOpen: false,

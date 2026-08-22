@@ -8,7 +8,6 @@ import {
 } from '@/features/core/sidebar';
 import { SidebarTabPanel } from '../sections/SidebarTabPanel';
 import { SidebarFlatRowPanel } from '../sections/SidebarFlatRowPanel';
-import { noopSidebarHandler } from '../sections/sidebarFlatRowContext';
 
 export function SidebarDataTab({
   dataframes,
@@ -56,7 +55,6 @@ export function SidebarDataTab({
         model={model}
         sectionActions={sectionActions}
         onToggleSection={toggleSection}
-        onToggleGroup={noopSidebarHandler}
         onDatabaseContextMenu={onDatabaseContextMenu}
       />
     </SidebarTabPanel>

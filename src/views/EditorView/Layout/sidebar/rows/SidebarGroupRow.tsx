@@ -33,7 +33,6 @@ export function SidebarGroupRow({
       tabIndex={0}
       aria-expanded={expanded}
       onClick={(e) => {
-        if ((e.target as HTMLElement).closest('[data-add-btn]')) return;
         e.stopPropagation();
         onToggle();
       }}
@@ -52,7 +51,6 @@ export function SidebarGroupRow({
       <span className={sidebarItemLabelClass()}>{label}</span>
       {onAdd ? (
         <Button
-          data-add-btn
           type="button"
           variant="ghost"
           size="icon-sm"
