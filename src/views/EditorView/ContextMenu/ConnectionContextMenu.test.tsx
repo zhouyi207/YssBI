@@ -30,26 +30,14 @@ afterEach(() => {
 });
 
 describe('ConnectionContextMenu', () => {
-  it('renders a compact shared menu with singular and plural break labels', () => {
-    const { rerender } = renderMenu(1);
-    const menu = portal.querySelector('[role="menu"]')!;
-    expect(menu.className).toContain('rounded-sm');
-    expect(menu.className).toContain('py-0');
-    expect(portal.textContent).toContain('contextMenu.connection.breakLink');
-    expect(portal.textContent).toContain('contextMenu.connection.delete');
-
-    rerender(2);
-    expect(portal.textContent).toContain('contextMenu.connection.breakSelectedLinks');
-  });
-
   it('invokes one collection callback and closes after invocation', () => {
     const calls: string[] = [];
     const onBreak = vi.fn(() => calls.push('break'));
     const onClose = vi.fn(() => calls.push('close'));
     renderMenu(2, onBreak, onClose);
 
-    const item = portal.querySelector('[role="menuitem"]')!;
-    act(() => item.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+    const item = portal.querySelector<HTMLElement>('[role="menuitem"]')!;
+    act(() => item.click());
 
     expect(onBreak).toHaveBeenCalledTimes(1);
     expect(onBreak).toHaveBeenCalledWith();

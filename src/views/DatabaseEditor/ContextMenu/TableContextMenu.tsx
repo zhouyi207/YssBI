@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ContextMenu, type ContextMenuSection } from '@/shared/ui/contextMenu';
+import { ActionMenu, type ActionMenuSection } from '@/shared/ui/actionMenu';
 
 export interface ContextMenuState {
   x: number;
@@ -41,7 +41,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
     && menu.rowIndex !== undefined
     && selectedRowIndices.includes(menu.rowIndex);
 
-  const sections = useMemo((): ContextMenuSection[] => {
+  const sections = useMemo((): ActionMenuSection[] => {
     if ((menu.type === 'cell' || menu.type === 'row') && menu.rowIndex !== undefined) {
       const r = menu.rowIndex;
       return [
@@ -145,7 +145,7 @@ export const TableContextMenu: React.FC<TableContextMenuProps> = ({
   }
 
   return (
-    <ContextMenu
+    <ActionMenu
       position={{ x: menu.x, y: menu.y }}
       sections={sections}
       onClose={onClose}

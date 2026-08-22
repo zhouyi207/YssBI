@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import { useProjectPicker, type ManagedProject } from '@/features/application/project';
 import { usePersistedWindow } from '@/features/application/window';
-import { ContextMenu, usePositionedContextMenu } from '@/shared/ui/contextMenu';
+import { ActionMenu, usePositionedActionMenu } from '@/shared/ui/actionMenu';
 import { DeleteProjectConfirmDialog } from './DeleteProjectConfirmDialog';
 import { NewProjectModal } from './NewProjectModal';
 import { ProjectLibrary } from './ProjectLibrary';
@@ -57,13 +57,13 @@ export function ProjectPickerScreen() {
 
   const {
     contextMenu,
-    openContextMenu,
-    closeContextMenu,
-  } = usePositionedContextMenu<ProjectPickerContextMenuTarget>();
+    openActionMenu,
+    closeActionMenu,
+  } = usePositionedActionMenu<ProjectPickerContextMenuTarget>();
 
   const openListContextMenu = useCallback((event: MouseEvent) => {
-    openContextMenu(event, { kind: 'list' });
-  }, [openContextMenu]);
+    openActionMenu(event, { kind: 'list' });
+  }, [openActionMenu]);
 
   const retryPageIssue = useCallback(() => {
     if (!pageIssue) return;
@@ -208,7 +208,7 @@ export function ProjectPickerScreen() {
             onListContextMenu={openListContextMenu}
             onProjectContextMenu={(event, project) => {
               setSelectedId(project.id);
-              openContextMenu(event, { kind: 'project', project });
+              openActionMenu(event, { kind: 'project', project });
             }}
           />
         </main>
@@ -227,10 +227,10 @@ export function ProjectPickerScreen() {
       </div>
 
       {contextMenu ? (
-        <ContextMenu
+        <ActionMenu
           position={{ x: contextMenu.x, y: contextMenu.y }}
           sections={contextMenuSections}
-          onClose={closeContextMenu}
+          onClose={closeActionMenu}
         />
       ) : null}
     </div>

@@ -11,13 +11,13 @@ import {
   VscWarning,
 } from "react-icons/vsc";
 import type { ManagedProject } from "@/features/application/project";
-import type { ContextMenuSection } from "@/shared/ui/contextMenu";
+import type { ActionMenuSection } from "@/shared/ui/actionMenu";
 import type { ProjectPickerContextMenuActions, ProjectPickerContextMenuState } from "./projectPickerContextMenuTypes";
 
 function buildListContextMenuSections(
   actions: ProjectPickerContextMenuActions,
   t: TFunction,
-): ContextMenuSection[] {
+): ActionMenuSection[] {
   return [
     {
       items: [
@@ -58,7 +58,7 @@ function buildProjectContextMenuSections(
   project: ManagedProject,
   actions: ProjectPickerContextMenuActions,
   t: TFunction,
-): ContextMenuSection[] {
+): ActionMenuSection[] {
   const isFavorite = Boolean(project.isFavorite);
 
   return [
@@ -110,7 +110,7 @@ export function buildProjectPickerContextMenuSections(
   contextMenu: ProjectPickerContextMenuState | null,
   actions: ProjectPickerContextMenuActions,
   t: TFunction,
-): ContextMenuSection[] {
+): ActionMenuSection[] {
   if (!contextMenu) return [];
 
   if (contextMenu.target.kind === "list") {

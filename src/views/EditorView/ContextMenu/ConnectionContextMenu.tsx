@@ -2,13 +2,13 @@ import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscDebugDisconnect, VscTrash } from 'react-icons/vsc';
 import {
-  ContextMenu,
-  type ContextMenuPosition,
-  type ContextMenuSection,
-} from '@/shared/ui/contextMenu';
+  ActionMenu,
+  type ActionMenuPosition,
+  type ActionMenuSection,
+} from '@/shared/ui/actionMenu';
 
 export interface ConnectionContextMenuProps {
-  position: ContextMenuPosition;
+  position: ActionMenuPosition;
   selectedCount: number;
   onBreak: () => void;
   onClose: () => void;
@@ -21,7 +21,7 @@ export const ConnectionContextMenu: React.FC<ConnectionContextMenuProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation();
-  const sections = useMemo((): ContextMenuSection[] => [{
+  const sections = useMemo((): ActionMenuSection[] => [{
     items: [
       {
         id: 'break',
@@ -42,5 +42,5 @@ export const ConnectionContextMenu: React.FC<ConnectionContextMenuProps> = ({
     ],
   }], [onBreak, selectedCount, t]);
 
-  return <ContextMenu position={position} sections={sections} onClose={onClose} />;
+  return <ActionMenu position={position} sections={sections} onClose={onClose} />;
 };

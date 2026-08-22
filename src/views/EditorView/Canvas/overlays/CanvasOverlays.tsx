@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { getOverlayPortalRoot } from '@/shared/ui/overlayPortalRoot';
-import { ContextMenu } from '@/shared/ui/contextMenu';
+import { ActionMenu } from '@/shared/ui/actionMenu';
 import { NodePalette } from '../../Layout/NodePalette';
 import { PinResultSearch } from './PinResultSearchPalette';
 import { CanvasExecutionToolbar } from './CanvasExecutionToolbar';
@@ -23,6 +23,7 @@ export type CanvasPaletteOverlayModel =
       graphRevision: number | null;
       sourcePort: PortAddressDto | null;
       onSelect: (descriptor: NodeCreationDescriptor, locale: string) => void;
+      onClose: () => void;
     };
 
 export type CanvasVariableOverlayModel =
@@ -77,22 +78,21 @@ export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }
 
       {palette.kind === 'visible'
         ? createPortal(
-            <div className="menu-container">
-              <NodePalette
-                x={palette.x}
-                y={palette.y}
-                graphPath={palette.graphPath}
-                graphRevision={palette.graphRevision}
-                sourcePort={palette.sourcePort}
-                onSelect={palette.onSelect}
-              />
-            </div>,
+            <NodePalette
+              x={palette.x}
+              y={palette.y}
+              graphPath={palette.graphPath}
+              graphRevision={palette.graphRevision}
+              sourcePort={palette.sourcePort}
+              onSelect={palette.onSelect}
+              onClose={palette.onClose}
+            />,
             getOverlayPortalRoot(),
           )
         : null}
 
       {variable.kind === 'visible' ? (
-        <ContextMenu
+        <ActionMenu
           position={{ x: variable.x, y: variable.y }}
           sections={[
             {

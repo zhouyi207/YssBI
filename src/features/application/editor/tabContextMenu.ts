@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import type { TFunction } from 'i18next';
 import { VscCheckAll, VscClearAll, VscClose, VscCloseAll } from 'react-icons/vsc';
 import { isGraphResourceDirty } from '@/features/core/resource';
-import type { ContextMenuSection } from '@/shared/ui/contextMenu';
+import type { ActionMenuSection } from '@/shared/ui/actionMenu';
 import type { LayoutTab } from '@/shared/types/ui';
 import {
   closeAllTabsInGroup,
@@ -11,10 +11,6 @@ import {
   closeTab,
 } from './tabCommands';
 import { listDockviewGroupTabs } from './dockviewTabProjection';
-
-export interface TabContextMenuActions {
-  revealInSidebar?: (tab: LayoutTab) => void;
-}
 
 function groupHasSavedTabs(groupId: string): boolean {
   return listDockviewGroupTabs(groupId).some((tab) =>
@@ -26,9 +22,8 @@ export function buildTabContextMenuSections(
   groupId: string,
   tab: LayoutTab,
   t: TFunction,
-  actions?: TabContextMenuActions,
-): ContextMenuSection[] {
-  const sections: ContextMenuSection[] = [
+): ActionMenuSection[] {
+  const sections: ActionMenuSection[] = [
     {
       items: [{
         id: 'close',
@@ -61,16 +56,6 @@ export function buildTabContextMenuSections(
       ],
     },
   ];
-
-  if (actions?.revealInSidebar && (tab.type === 'event' || tab.type === 'function')) {
-    sections.push({
-      items: [{
-        id: 'reveal',
-        label: t('tabBar.contextMenu.revealInSidebar'),
-        onClick: () => actions.revealInSidebar?.(tab),
-      }],
-    });
-  }
 
   return sections;
 }

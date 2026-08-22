@@ -57,8 +57,8 @@ describe('NodeContextMenu', () => {
     renderMenu(capabilities, { onDuplicate });
 
     const duplicate = item('duplicate')!;
-    expect(duplicate.disabled).toBe(!enabled);
-    act(() => duplicate.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+    expect(duplicate.hasAttribute('data-disabled')).toBe(!enabled);
+    act(() => duplicate.click());
     expect(onDuplicate).toHaveBeenCalledTimes(enabled ? 1 : 0);
   });
 
@@ -68,16 +68,16 @@ describe('NodeContextMenu', () => {
       { hasLinks: false },
     );
 
-    expect(item('copy')?.disabled).toBe(false);
-    expect(item('cut')?.disabled).toBe(true);
-    expect(item('delete')?.disabled).toBe(true);
-    expect(item('breakAllLinks')?.disabled).toBe(true);
-    expect(item('selectLinkedNodes')?.disabled).toBe(true);
+    expect(item('copy')?.hasAttribute('data-disabled')).toBe(false);
+    expect(item('cut')?.hasAttribute('data-disabled')).toBe(true);
+    expect(item('delete')?.hasAttribute('data-disabled')).toBe(true);
+    expect(item('breakAllLinks')?.hasAttribute('data-disabled')).toBe(true);
+    expect(item('selectLinkedNodes')?.hasAttribute('data-disabled')).toBe(true);
   });
 });
 
-function item(label: string): HTMLButtonElement | undefined {
-  return [...portal.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+function item(label: string): HTMLElement | undefined {
+  return [...portal.querySelectorAll<HTMLElement>('[role="menuitem"]')]
     .find((button) => button.textContent?.includes(`contextMenu.node.${label}`));
 }
 

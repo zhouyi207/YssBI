@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { VscCopy, VscLink, VscTrash } from "react-icons/vsc";
-import { ContextMenu, type ContextMenuPosition, type ContextMenuSection } from "@/shared/ui/contextMenu";
+import { ActionMenu, type ActionMenuPosition, type ActionMenuSection } from "@/shared/ui/actionMenu";
 import type { NodeCapabilitiesDto } from '@/shared/types/dto/editorProjection';
 
 export interface NodeContextMenuProps {
-  position: ContextMenuPosition;
+  position: ActionMenuPosition;
   capabilities?: Pick<NodeCapabilitiesDto, 'managed' | 'canCopy' | 'canDelete'>;
   hasLinks?: boolean;
   onCopy: () => void;
@@ -34,7 +34,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   const canDelete = capabilities?.managed === false && capabilities.canDelete === true;
   const canCut = canCopy && canDelete;
 
-  const sections = useMemo((): ContextMenuSection[] => {
+  const sections = useMemo((): ActionMenuSection[] => {
     const n = (key: string) => t(`contextMenu.node.${key}`);
     return [
       {
@@ -66,7 +66,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   }, [t, canCopy, canCut, canDelete, hasLinks, onCopy, onCut, onDuplicate, onDelete, onBreakAllLinks, onSelectLinked]);
 
   return (
-    <ContextMenu
+    <ActionMenu
       position={position}
       sections={sections}
       onClose={onClose}

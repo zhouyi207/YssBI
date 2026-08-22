@@ -43,9 +43,9 @@ describe('PinContextMenu', () => {
   it('preserves disabled state for unavailable supported actions', () => {
     renderMenu({ removable: false, hasLinks: false, canReset: false });
 
-    expect(item('breakLinks')?.disabled).toBe(true);
-    expect(item('resetValue')?.disabled).toBe(true);
-    expect(item('removePin')?.disabled).toBe(true);
+    expect(item('breakLinks')?.hasAttribute('data-disabled')).toBe(true);
+    expect(item('resetValue')?.hasAttribute('data-disabled')).toBe(true);
+    expect(item('removePin')?.hasAttribute('data-disabled')).toBe(true);
   });
 
   it('invokes enabled break, reset, view, and remove actions', () => {
@@ -71,21 +71,36 @@ describe('PinContextMenu', () => {
       ['view', onView],
       ['removePin', onRemove],
     ] as const) {
-      act(() => item(label)?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+      renderMenu({
+        removable: true,
+        hasLinks: true,
+        canReset: true,
+        onBreakLinks,
+        onResetValue,
+        showView: true,
+        viewEnabled: true,
+        onView,
+        onRemove,
+      }, label);
+      act(() => item(label)?.click());
       expect(callback).toHaveBeenCalledOnce();
     }
   });
 });
 
-function item(label: string): HTMLButtonElement | undefined {
-  return [...portal.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+function item(label: string): HTMLElement | undefined {
+  return [...portal.querySelectorAll<HTMLElement>('[role="menuitem"]')]
     .find((button) => button.textContent?.includes(`contextMenu.pin.${label}`));
 }
 
-function renderMenu(overrides: Partial<React.ComponentProps<typeof PinContextMenu>> = {}): void {
+function renderMenu(
+  overrides: Partial<React.ComponentProps<typeof PinContextMenu>> = {},
+  key?: string,
+): void {
   act(() => {
     root.render(
       <PinContextMenu
+        key={key}
         position={{ x: 0, y: 0 }}
         onClose={vi.fn()}
         {...overrides}

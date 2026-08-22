@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   type ComponentProps,
   type ComponentType,
@@ -15,7 +16,7 @@ import {
 import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
 import { buildTabContextMenuSections } from '@/features/application/editor/tabContextMenu';
 import type { DockviewPanelParams } from '@/features/core/dockview';
-import { ContextMenu, usePositionedContextMenu } from '@/shared/ui/contextMenu';
+import { ActionMenu, usePositionedActionMenu } from '@/shared/ui/actionMenu';
 import type { LayoutTab } from '@/shared/types';
 
 interface EditorTabContextTarget {
@@ -39,13 +40,24 @@ export function DockviewEditorTab(
   const {
     contextMenu,
     setContextMenu,
-    closeContextMenu,
-  } = usePositionedContextMenu<EditorTabContextTarget>();
+    closeActionMenu,
+  } = usePositionedActionMenu<EditorTabContextTarget>();
   const tabContentRef = useRef<HTMLDivElement>(null);
   const requestClose = useCallback(() => {
     const tab = props.params.layoutTab;
     void closeEditorTab(tab.resourceRef, props.api.group.id);
   }, [props.api, props.params.layoutTab]);
+
+  const actionMenuSections = useMemo(
+    () => contextMenu
+      ? buildTabContextMenuSections(
+          contextMenu.target.groupId,
+          contextMenu.target.tab,
+          t,
+        )
+      : [],
+    [contextMenu, t],
+  );
 
   useEffect(() => {
     const tabShell = tabContentRef.current?.closest<HTMLElement>('.dv-tab');
@@ -76,14 +88,10 @@ export function DockviewEditorTab(
         closeActionOverride={requestClose}
       />
       {contextMenu ? (
-        <ContextMenu
+        <ActionMenu
           position={{ x: contextMenu.x, y: contextMenu.y }}
-          sections={buildTabContextMenuSections(
-            contextMenu.target.groupId,
-            contextMenu.target.tab,
-            t,
-          )}
-          onClose={closeContextMenu}
+          sections={actionMenuSections}
+          onClose={closeActionMenu}
         />
       ) : null}
     </>

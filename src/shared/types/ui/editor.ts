@@ -126,25 +126,6 @@ export class Node implements UINode {
 
 
 /**
- * 上下文菜单状态
- */
-export interface ContextMenuState {
-    x: number;
-    y: number;
-    items: ContextMenuItem[];
-}
-
-/**
- * 上下文菜单项
- */
-export interface ContextMenuItem {
-    label: string;
-    action: () => void;
-    disabled?: boolean;
-    divider?: boolean;
-}
-
-/**
  * 待处理的连接
  * 表示正在创建但尚未完成的连接
  */

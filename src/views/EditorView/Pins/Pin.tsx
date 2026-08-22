@@ -381,9 +381,6 @@ export const Pin: React.FC<PinProps> = (props) => {
           {...pinConnectionFeedbackAttributes(connectionFeedback)}
           data-validation-warning={validationWarning ? 'true' : undefined}
           onContextMenu={handleContextMenu}
-          onPointerDown={(e) => {
-            if (contextMenu && e.button === 0) setContextMenu(null);
-          }}
         >
       {/* Pin Icon Container - 唯一连接锚点 */}
       <div
@@ -396,7 +393,6 @@ export const Pin: React.FC<PinProps> = (props) => {
           ${pinConnectionFeedbackClass(connectionFeedback)}
         `}
         onPointerDown={(e) => {
-          if (contextMenu && e.button === 0) setContextMenu(null);
           if (!onPinPointerDown) return;
           e.stopPropagation();
           e.preventDefault();

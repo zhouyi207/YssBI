@@ -10,7 +10,6 @@ import { DataTable } from './Table';
 import { TableContextMenu } from './ContextMenu';
 import type { ContextMenuState } from './ContextMenu';
 import { logger } from '@/utils/appLogger';
-import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -167,12 +166,6 @@ export const DatabaseEditorWindow: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
-
-  // Dismiss context menu on any click
-  useEffect(() => {
-    const dismiss = () => setContextMenu(null);
-    return addGlobalEventListener(window, 'click', dismiss);
   }, []);
 
   // Context menu handler

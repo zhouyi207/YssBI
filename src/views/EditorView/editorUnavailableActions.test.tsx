@@ -53,11 +53,11 @@ describe('unavailable node actions', () => {
       );
     });
 
-    const buttons = [...document.querySelectorAll('button')];
-    const cut = buttons.find((button) => button.textContent?.includes('contextMenu.node.cut'));
-    const deleteButton = buttons.find((button) => button.textContent?.includes('contextMenu.node.delete'));
-    expect((cut as HTMLButtonElement | undefined)?.disabled).toBe(true);
-    expect((deleteButton as HTMLButtonElement | undefined)?.disabled).toBe(true);
+    const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    const cut = items.find((item) => item.textContent?.includes('contextMenu.node.cut'));
+    const deleteButton = items.find((item) => item.textContent?.includes('contextMenu.node.delete'));
+    expect(cut?.hasAttribute('data-disabled')).toBe(true);
+    expect(deleteButton?.hasAttribute('data-disabled')).toBe(true);
     cut?.click();
     deleteButton?.click();
     expect(onCut).not.toHaveBeenCalled();
@@ -82,10 +82,10 @@ describe('unavailable node actions', () => {
       );
     });
 
-    const duplicate = [...document.querySelectorAll('button')]
+    const duplicate = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
       .find((button) => button.textContent?.includes('contextMenu.node.duplicate')) as HTMLButtonElement;
-    expect(duplicate.disabled).toBe(false);
-    act(() => duplicate.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
+    expect(duplicate.hasAttribute('data-disabled')).toBe(false);
+    act(() => duplicate.click());
     expect(onDuplicate).toHaveBeenCalledOnce();
   });
 
@@ -106,10 +106,10 @@ describe('unavailable node actions', () => {
       );
     });
 
-    const buttons = [...document.querySelectorAll('button')];
-    const cut = buttons.find((button) => button.textContent?.includes('contextMenu.node.cut'));
-    const deleteButton = buttons.find((button) => button.textContent?.includes('contextMenu.node.delete'));
-    expect((cut as HTMLButtonElement | undefined)?.disabled).toBe(true);
-    expect((deleteButton as HTMLButtonElement | undefined)?.disabled).toBe(false);
+    const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+    const cut = items.find((item) => item.textContent?.includes('contextMenu.node.cut'));
+    const deleteButton = items.find((item) => item.textContent?.includes('contextMenu.node.delete'));
+    expect(cut?.hasAttribute('data-disabled')).toBe(true);
+    expect(deleteButton?.hasAttribute('data-disabled')).toBe(false);
   });
 });

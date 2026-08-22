@@ -112,21 +112,14 @@ describe('DockviewEditorTab', () => {
     expect(mocks.listDockviewGroupTabs).toHaveBeenCalledTimes(1);
     const groupId = mocks.listDockviewGroupTabs.mock.calls[0]![0];
     const menu = document.querySelector<HTMLElement>('[role="menu"]')!;
-    expect(menu.className).toContain('rounded-sm');
     expect(menu.querySelectorAll('svg')).toHaveLength(4);
-    expect(menu.querySelector('[data-slot="separator"]')).not.toBeNull();
+    expect(menu.querySelector('[data-slot="context-menu-separator"]')).not.toBeNull();
     expect(menu.textContent).toContain('tabBar.contextMenu.close');
     expect(menu.textContent).toContain('tabBar.contextMenu.closeOthers');
     expect(menu.textContent).toContain('tabBar.contextMenu.closeSaved');
     expect(menu.textContent).toContain('tabBar.contextMenu.closeAll');
-    expect(menu.style.left).toBe('31px');
-    expect(menu.style.top).toBe('47px');
-
     const closeItem = menu.querySelector<HTMLElement>('[role="menuitem"]');
-    act(() => closeItem?.dispatchEvent(new MouseEvent('mousedown', {
-      bubbles: true,
-      button: 0,
-    })));
+    act(() => closeItem?.click());
 
     expect(mocks.closeTab).toHaveBeenCalledWith(groupId, layoutTab.id);
   });

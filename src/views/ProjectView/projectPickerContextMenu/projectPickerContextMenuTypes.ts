@@ -1,12 +1,12 @@
 import type { ManagedProject } from "@/features/application/project";
-import type { PositionedContextMenuState } from "@/shared/ui/contextMenu";
+import type { PositionedActionMenuState } from "@/shared/ui/actionMenu";
 
 export type ProjectPickerContextMenuTarget =
   | { kind: "project"; project: ManagedProject }
   | { kind: "list" };
 
 export type ProjectPickerContextMenuState =
-  PositionedContextMenuState<ProjectPickerContextMenuTarget>;
+  PositionedActionMenuState<ProjectPickerContextMenuTarget>;
 
 export interface ProjectPickerContextMenuActions {
   openProject: (path: string) => void;
