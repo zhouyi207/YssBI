@@ -1,6 +1,10 @@
-export type { NodeCatalogItem } from './types';
-export { catalogItemKey } from './types';
-export { filterCatalogItems } from './filterCatalogItems';
+export {
+  catalogItemKey,
+  type LocalizedCatalogCategory,
+  type LocalizedCatalogItem,
+  type LocalizedCatalogParameter,
+  type LocalizedCatalogPort,
+} from './catalogItem';
 export {
   BUILTIN_NODE_TYPE_IDS,
   isCallFunctionNodeType,
@@ -10,9 +14,9 @@ export {
   type VariableNodeTypeId,
 } from './identity';
 export {
-  NODE_CATALOG_ROW_HEIGHT,
-  buildTreeFromItems,
-  flattenTree,
-  type FlatRow,
-  type TreeCategory,
-} from './nodeCatalogTree';
+  buildLocalizedCatalogTree,
+  collectLocalizedCatalogCategoryIds,
+  flattenLocalizedCatalogTree,
+  type LocalizedCatalogBrowserRow,
+  type LocalizedCatalogTreeNode,
+} from './localizedCatalogTree';

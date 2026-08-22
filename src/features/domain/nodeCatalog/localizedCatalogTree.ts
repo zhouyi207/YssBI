@@ -2,12 +2,27 @@ import type {
   LocalizedCatalogItemDto,
   LocalizedCategoryDto,
 } from '@/shared/types/dto/localizedCatalog';
+import { catalogItemKey } from './catalogItem';
 
 export interface LocalizedCatalogTreeNode {
   category: LocalizedCategoryDto;
   children: LocalizedCatalogTreeNode[];
   items: LocalizedCatalogItemDto[];
 }
+
+export type LocalizedCatalogBrowserRow =
+  | {
+      kind: 'category';
+      rowKey: string;
+      category: LocalizedCategoryDto;
+      depth: number;
+    }
+  | {
+      kind: 'item';
+      rowKey: string;
+      item: LocalizedCatalogItemDto;
+      depth: number;
+    };
 
 function compareCategories(
   left: LocalizedCatalogTreeNode,
@@ -23,7 +38,8 @@ function compareItems(
   right: LocalizedCatalogItemDto,
 ): number {
   return left.title.localeCompare(right.title)
-    || left.nodeTypeId.localeCompare(right.nodeTypeId);
+    || left.nodeTypeId.localeCompare(right.nodeTypeId)
+    || catalogItemKey(left).localeCompare(catalogItemKey(right));
 }
 
 export function buildLocalizedCatalogTree(
@@ -76,4 +92,46 @@ export function buildLocalizedCatalogTree(
     }
   }
   return [...new Set(populatedRoots)].sort(compareCategories);
+}
+
+export function collectLocalizedCatalogCategoryIds(
+  tree: readonly LocalizedCatalogTreeNode[],
+): Set<string> {
+  const categoryIds = new Set<string>();
+  const visit = (node: LocalizedCatalogTreeNode) => {
+    categoryIds.add(node.category.categoryId);
+    node.children.forEach(visit);
+  };
+  tree.forEach(visit);
+  return categoryIds;
+}
+
+export function flattenLocalizedCatalogTree(
+  tree: readonly LocalizedCatalogTreeNode[],
+  expandedCategoryIds: ReadonlySet<string>,
+): LocalizedCatalogBrowserRow[] {
+  const rows: LocalizedCatalogBrowserRow[] = [];
+
+  const visit = (node: LocalizedCatalogTreeNode, depth: number) => {
+    rows.push({
+      kind: 'category',
+      rowKey: `category:${node.category.categoryId}`,
+      category: node.category,
+      depth,
+    });
+    if (!expandedCategoryIds.has(node.category.categoryId)) return;
+
+    node.items.forEach((item) => {
+      rows.push({
+        kind: 'item',
+        rowKey: `item:${catalogItemKey(item)}`,
+        item,
+        depth: depth + 1,
+      });
+    });
+    node.children.forEach((child) => visit(child, depth + 1));
+  };
+
+  tree.forEach((node) => visit(node, 0));
+  return rows;
 }

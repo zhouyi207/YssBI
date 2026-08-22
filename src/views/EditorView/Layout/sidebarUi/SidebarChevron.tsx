@@ -1,4 +1,4 @@
-import { VscChevronDown } from "react-icons/vsc";
+import { VscChevronRight } from "react-icons/vsc";
 import { cn } from "@/lib/utils";
 
 export const SIDEBAR_CHEVRON_SIZE = 12 as const;
@@ -18,9 +18,9 @@ export function SidebarChevron({
         "shrink-0 text-muted-foreground transition-transform duration-150 ease-out",
         className,
       )}
-      style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+      style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)" }}
     >
-      <VscChevronDown size={size} />
+      <VscChevronRight size={size} />
     </span>
   );
 }

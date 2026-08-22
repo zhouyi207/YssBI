@@ -20,7 +20,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { nodeCatalogErrorText } from '@/features/application/nodeCatalog/nodeCatalogErrorPresentation';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
-import type { LocalizedCatalogItem } from '@/features/domain/nodeCatalog/catalogItem';
+import {
+  catalogItemKey,
+  type LocalizedCatalogItem,
+} from '@/features/domain/nodeCatalog/catalogItem';
 import { MarkdownRenderer } from '@/shared/ui/MarkdownRenderer';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { detailProseClass } from './Detail/shared/detailStyles';
@@ -28,12 +31,6 @@ import { detailProseClass } from './Detail/shared/detailStyles';
 interface NodeDocumentationModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
-
-function documentationItemKey(item: LocalizedCatalogItem): string {
-  return item.creation.kind === 'static'
-    ? `static:${item.nodeTypeId}`
-    : `${item.creation.kind}:${item.nodeTypeId}:${item.resourcePath}`;
 }
 
 function normalizeDocumentationQuery(value: string): string {
@@ -154,7 +151,7 @@ export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentation
     () => searchDocumentationItems(catalog?.items ?? [], query),
     [catalog, query],
   );
-  const selectedItem = catalog?.items.find((item) => documentationItemKey(item) === selectedKey) ?? null;
+  const selectedItem = catalog?.items.find((item) => catalogItemKey(item) === selectedKey) ?? null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -209,7 +206,7 @@ export function NodeDocumentationModal({ open, onOpenChange }: NodeDocumentation
                     </EmptyHeader>
                   </Empty>
                 ) : items.map((item) => {
-                  const key = documentationItemKey(item);
+                  const key = catalogItemKey(item);
                   const selected = key === selectedKey;
                   return (
                     <Button

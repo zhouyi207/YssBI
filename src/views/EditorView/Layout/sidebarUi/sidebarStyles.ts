@@ -11,7 +11,7 @@ export const SIDEBAR_ROW_LEADING_SLOT_CLASS =
 /** Standard row height (28px) — must match SIDEBAR_FLAT_ROW_HEIGHT. */
 export const SIDEBAR_ROW_HEIGHT_CLASS = "h-7" as const;
 
-/** Fixed trailing slot for group headers (add button or spacer). */
+/** Fixed trailing slot for section headers (add button or spacer). */
 export const SIDEBAR_ROW_TRAILING_SLOT_CLASS = "size-6 shrink-0" as const;
 
 /** Left indent for sidebar rows (16px base + 16px per depth level). */
@@ -43,11 +43,6 @@ export function sidebarItemLabelClass() {
   return "min-w-0 flex-1 truncate text-[12px] leading-normal font-normal tracking-tight";
 }
 
-/** Variable type badge / command timestamp — capped so rows don't raise sidebar min-content width. */
-export function sidebarTrailingMetaClass() {
-  return "min-w-0 max-w-[4.5rem] shrink truncate text-[10px] text-muted-foreground/70";
-}
-
 export function sidebarVariableTypeBadgeClass(isSelected = false) {
   return cn(
     "min-w-0 max-w-[40%] shrink truncate flex items-center gap-1 px-1 py-0.5 text-[10px] font-normal",
@@ -62,7 +57,7 @@ export function sidebarRowActionClass(isSelected = false) {
   );
 }
 
-/** Bottom search bar shell in node catalog sidebar. */
-export function nodeCatalogSearchShellClass() {
-  return "min-w-0 shrink-0 border-t border-border/50 bg-[var(--sidebar-bg)] px-2 py-2";
+/** Top search bar shell in a sidebar tree. */
+export function sidebarTreeSearchShellClass() {
+  return "min-w-0 shrink-0 border-b border-border/60 bg-[var(--sidebar-bg)] px-2 py-2";
 }

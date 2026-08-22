@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LocalizedNodeCatalogState } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { getLocalizedSearchIndex } from '@/features/core/nodeCatalog/localizedSearchIndex';
 import type { LocalizedCatalogResponse } from '@/features/core/nodeCatalog/nodeCatalogStore';
+import { useNodeCatalogTreeStore } from '@/features/core/nodeCatalog/nodeCatalogTreeStore';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { NodePalette } from './NodePalette';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -33,6 +35,8 @@ vi.mock('react-i18next', () => ({
       'common.incidentId': 'Incident ID',
       'nodeCatalog.loadError': 'Node catalog unavailable',
       'canvas.nodePalette.searchPlaceholder': 'Search nodes...',
+      'canvas.nodePalette.collapseAll': 'Collapse All',
+      'canvas.nodePalette.expandAll': 'Expand All',
       'canvas.nodePalette.noMatches': 'No matches found',
     }[key] ?? key),
   }),
@@ -147,9 +151,11 @@ describe('NodePalette', () => {
   let host: HTMLDivElement;
   let root: Root;
   const onSelect = vi.fn<(descriptor: NodeCreationDescriptor, locale: string) => void>();
+  const onClose = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+    useNodeCatalogTreeStore.getState().reset();
     catalogState.current = readyState();
     compatibleCatalogState.current = {
       status: 'idle', error: null, catalog: null, searchIndex: null, refresh: vi.fn(),
@@ -165,8 +171,56 @@ describe('NodePalette', () => {
   });
 
   function renderPalette(): void {
-    act(() => root.render(<NodePalette x={12} y={34} onSelect={onSelect} />));
+    act(() => root.render(
+      <TooltipProvider>
+        <NodePalette x={12} y={34} onSelect={onSelect} onClose={onClose} />
+      </TooltipProvider>,
+    ));
   }
+
+  it('dismisses when pointerdown happens outside the palette', () => {
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    renderPalette();
+
+    act(() => outside.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
+
+    expect(onClose).toHaveBeenCalledOnce();
+    outside.remove();
+  });
+
+  it('toggles all categories and disables the toggle while searching', () => {
+    renderPalette();
+
+    expect(host.querySelector('[data-sidebar-tree-search]')).not.toBeNull();
+    const toggle = host.querySelector<HTMLButtonElement>('[data-sidebar-tree-expand-toggle]');
+    const statistics = host.querySelector<HTMLButtonElement>(
+      '[data-catalog-category-id="statistics"]',
+    );
+    expect(toggle?.disabled).toBe(false);
+    expect(statistics?.disabled).toBe(false);
+    expect(host.textContent).toContain('逻辑回归');
+    expect(toggle?.getAttribute('aria-label')).toBe('Collapse All');
+
+    act(() => toggle?.click());
+    expect(host.textContent).not.toContain('逻辑回归');
+    expect(host.textContent).not.toContain('加法');
+    expect(host.textContent).not.toContain('打印');
+    expect(toggle?.getAttribute('aria-label')).toBe('Expand All');
+
+    act(() => toggle?.click());
+    expect(host.textContent).toContain('逻辑回归');
+    expect(host.textContent).toContain('加法');
+    expect(host.textContent).toContain('打印');
+    expect(toggle?.getAttribute('aria-label')).toBe('Collapse All');
+
+    const input = host.querySelector('input')!;
+    act(() => setInputValue(input, 'logit'));
+    expect(toggle?.disabled).toBe(true);
+    expect(statistics?.disabled).toBe(true);
+    expect(statistics?.getAttribute('aria-disabled')).toBe('true');
+    expect(host.textContent).toContain('逻辑回归');
+  });
 
   it('uses only the backend-compatible catalog for an edge-drop palette', () => {
     const compatibleCatalog = {
@@ -183,18 +237,20 @@ describe('NodePalette', () => {
     };
 
     act(() => root.render(
-      <NodePalette
-        x={12}
-        y={34}
-        graphPath="events/Main.yssbi-event"
-        graphRevision={7}
-        sourcePort={{
-          kind: 'declared',
-          nodeId: '00000000-0000-0000-0000-000000000101',
-          portKey: 'value',
-        }}
-        onSelect={onSelect}
-      />,
+      <TooltipProvider>
+        <NodePalette
+          x={12}
+          y={34}
+          graphPath="events/Main.yssbi-event"
+          graphRevision={7}
+          sourcePort={{
+            kind: 'declared',
+            nodeId: '00000000-0000-0000-0000-000000000101',
+            portKey: 'value',
+          }}
+          onSelect={onSelect}
+        />
+      </TooltipProvider>,
     ));
 
     expect(host.textContent).toContain('打印');
@@ -255,6 +311,24 @@ describe('NodePalette', () => {
     expect(host.textContent).toContain('打印');
   });
 
+  it('renders categories as controlled Collapsible rows and expands search ancestors', () => {
+    renderPalette();
+
+    const statistics = host.querySelector<HTMLButtonElement>(
+      'button[data-catalog-category-id="statistics"]',
+    );
+    expect(statistics).not.toBeNull();
+    expect(statistics?.getAttribute('aria-expanded')).toBe('true');
+
+    const input = host.querySelector('input');
+    act(() => setInputValue(input!, 'logit'));
+
+    const regression = host.querySelector<HTMLButtonElement>(
+      'button[data-catalog-category-id="statistics.regression"]',
+    );
+    expect(regression?.getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('renders child categories beneath their parent in declared order', () => {
     renderPalette();
 
@@ -268,7 +342,8 @@ describe('NodePalette', () => {
     ]);
     const regression = host.querySelector('[data-catalog-category-id="statistics.regression"]');
     expect(regression?.getAttribute('data-catalog-depth')).toBe('1');
-    expect(regression?.textContent).toContain('逻辑回归');
+    expect(host.querySelector('[data-catalog-item-key="item:static:statistics.logit.fit"]')?.textContent)
+      .toContain('逻辑回归');
   });
 
   it.each([
@@ -362,7 +437,11 @@ describe('NodePalette', () => {
       status: 'ready', error: null, catalog: refreshed,
       searchIndex: getLocalizedSearchIndex(refreshed), refresh: vi.fn(),
     };
-    act(() => root.render(<NodePalette x={12} y={34} onSelect={onSelect} />));
+    act(() => root.render(
+      <TooltipProvider>
+        <NodePalette x={12} y={34} onSelect={onSelect} />
+      </TooltipProvider>,
+    ));
     expect(host.textContent).toContain('刷新 Other');
 
     const localized = {
@@ -376,9 +455,13 @@ describe('NodePalette', () => {
       status: 'ready', error: null, catalog: localized,
       searchIndex: getLocalizedSearchIndex(localized), refresh: vi.fn(),
     };
-    act(() => root.render(<NodePalette x={12} y={34} onSelect={onSelect} />));
+    act(() => root.render(
+      <TooltipProvider>
+        <NodePalette x={12} y={34} onSelect={onSelect} />
+      </TooltipProvider>,
+    ));
     expect(host.textContent).toContain('Call Other');
-    expect(host.querySelectorAll('button')).toHaveLength(1);
+    expect(host.querySelectorAll('button[data-catalog-item-key]')).toHaveLength(1);
   });
 
   it('selects a resource descriptor without reconstructing its opaque identity', () => {
