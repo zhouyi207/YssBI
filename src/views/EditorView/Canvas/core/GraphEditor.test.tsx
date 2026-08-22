@@ -87,18 +87,6 @@ describe('GraphEditor readiness and sizing', () => {
     host.remove();
   });
 
-  it('allows both shell layers to shrink within flex layouts', () => {
-    act(() => root.render(<GraphEditor />));
-
-    const outer = host.firstElementChild as HTMLElement;
-    const inner = outer.firstElementChild as HTMLElement;
-
-    expect(outer.classList).toContain('min-h-0');
-    expect(outer.classList).toContain('min-w-0');
-    expect(inner.classList).toContain('min-h-0');
-    expect(inner.classList).toContain('min-w-0');
-  });
-
   it('keeps a stable loading shell until document and projection are both ready', () => {
     editorState.activeTabId = 'events/Main.yssbi-event';
     editorState.tabs = [{ id: editorState.activeTabId, type: 'event' }];

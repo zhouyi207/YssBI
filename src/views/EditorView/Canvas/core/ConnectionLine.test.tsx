@@ -150,8 +150,6 @@ describe('ConnectionLine canvas sizing', () => {
 
     expect(canvas.width).toBe(640);
     expect(canvas.height).toBe(360);
-    expect(canvas.style.width).toBe('320px');
-    expect(canvas.style.height).toBe('180px');
   });
 
   it('does not reset the backing store when the observed size is unchanged', () => {

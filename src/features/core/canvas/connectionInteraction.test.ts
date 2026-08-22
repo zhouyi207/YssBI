@@ -52,7 +52,7 @@ describe('connectionInteraction', () => {
     expect(resolveConnectionFeedback(candidateSource, candidateTarget, ids)).toEqual(expected);
   });
 
-  it('merges, sorts, and deduplicates both occupied endpoint incumbents for visuals', () => {
+  it('merges, sorts, and deduplicates both occupied endpoint incumbents', () => {
     const occupiedSource = pin({
       ...source,
       connections: { ...capability, current: 2, canAppend: false, canReplace: true },

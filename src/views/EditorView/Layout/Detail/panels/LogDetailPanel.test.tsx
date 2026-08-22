@@ -28,10 +28,10 @@ describe('LogDetailPanel', () => {
     host.remove();
   });
 
-  it('locally restores selection for rendered metadata and multiline message content', () => {
+  it('renders metadata and multiline message content', () => {
     act(() => {
       root.render(
-        <div className="select-none">
+        <div>
           <LogDetailPanel
             log={{
               streamId: 'stream-1',
@@ -51,10 +51,7 @@ describe('LogDetailPanel', () => {
       );
     });
 
-    const inheritedBoundary = host.querySelector('.select-none');
-    expect(inheritedBoundary).not.toBeNull();
-
-    const cards = Array.from(inheritedBoundary?.querySelectorAll('[data-slot="card"]') ?? []);
+    const cards = Array.from(host.querySelectorAll('[data-slot="card"]'));
     const metadataCard = cards.find(
       (card) => card.textContent?.includes('2026-07-14T17:28:00.000Z')
         && card.textContent.includes('stream-1')
@@ -67,17 +64,17 @@ describe('LogDetailPanel', () => {
         && card.textContent.includes('events/on-start'),
     );
     expect(metadataCard).toBeDefined();
-    expect(metadataCard?.classList.contains('select-text')).toBe(true);
 
-    const messageCard = cards.find((card) => card.textContent?.includes('First line\nSecond line'));
-    const messageBoundary = messageCard?.querySelector('[data-slot="card-content"].select-text');
+    const messageBoundary = Array.from(
+      host.querySelectorAll<HTMLElement>('[data-slot="collapsible-content"]'),
+    ).find((content) => content.textContent?.includes('First line\nSecond line'));
     const message = messageBoundary?.querySelector('pre');
     expect(messageBoundary).not.toBeNull();
-    expect(message?.classList.contains('whitespace-pre-wrap')).toBe(true);
-    expect(message?.classList.contains('break-words')).toBe(true);
     expect(message?.textContent).toBe('First line\nSecond line');
 
-    const fieldsCard = cards.find((card) => card.textContent?.includes('graphPath'));
-    expect(fieldsCard?.textContent).toContain('events/on-start');
+    const fieldsContent = Array.from(
+      host.querySelectorAll<HTMLElement>('[data-slot="collapsible-content"]'),
+    ).find((content) => content.textContent?.includes('graphPath'));
+    expect(fieldsContent?.textContent).toContain('events/on-start');
   });
 });

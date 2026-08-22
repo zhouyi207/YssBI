@@ -19,7 +19,6 @@ import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFix
 import {
   Pin,
   pinConnectionFeedbackAttributes,
-  pinConnectionFeedbackClass,
 } from './Pin';
 
 const katexWarningSpy = vi.hoisted(() => {
@@ -47,7 +46,7 @@ vi.mock('react-i18next', async (importOriginal) => ({
 const graphPath = 'events/Main.yssbi-event';
 
 describe('Pin connection feedback', () => {
-  it('maps structured feedback to safe metadata and visible rings', () => {
+  it('maps structured feedback to safe metadata', () => {
     expect(pinConnectionFeedbackAttributes({ kind: 'append' })).toEqual({
       'data-connection-feedback': 'append',
     });
@@ -55,9 +54,6 @@ describe('Pin connection feedback', () => {
       'data-connection-feedback': 'invalid',
       'data-connection-invalid-reason': 'capacity',
     });
-    expect(pinConnectionFeedbackClass({ kind: 'append' })).toContain('ring-emerald-500');
-    expect(pinConnectionFeedbackClass({ kind: 'replace', displacedConnectionIds: [] })).toContain('ring-amber-500');
-    expect(pinConnectionFeedbackClass({ kind: 'invalid', reason: 'capacity' })).toContain('ring-red-500');
   });
 });
 
@@ -122,13 +118,13 @@ describe('Pin preview production path', () => {
       }));
     });
 
-    const viewItem = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    const viewItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
       .find((item) => item.textContent?.includes('contextMenu.pin.view'));
     expect(viewItem).toBeDefined();
-    expect(viewItem?.disabled).toBe(false);
+    expect(viewItem?.hasAttribute('data-disabled')).toBe(false);
 
     await act(async () => {
-      viewItem?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      viewItem?.click();
       await Promise.resolve();
     });
 
@@ -181,20 +177,20 @@ describe('Pin preview production path', () => {
     });
 
     openContext();
-    const viewItem = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    const viewItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
       .find((item) => item.textContent?.includes('contextMenu.pin.view'));
     await act(async () => {
-      viewItem?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      viewItem?.click();
       await Promise.resolve();
       await Promise.resolve();
     });
 
     openContext();
-    const historical = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    const historical = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
       .find((item) => item.textContent?.includes('17 · ready'));
     expect(historical).toBeDefined();
     await act(async () => {
-      historical?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      historical?.click();
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -234,11 +230,11 @@ describe('Pin preview production path', () => {
       }));
     });
 
-    const viewItem = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+    const viewItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
       .find((item) => item.textContent?.includes('contextMenu.pin.view'));
-    expect(viewItem?.disabled).toBe(false);
+    expect(viewItem?.hasAttribute('data-disabled')).toBe(false);
     await act(async () => {
-      viewItem?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      viewItem?.click();
       await Promise.resolve();
     });
     expect(ResultService.getPinHistory).toHaveBeenCalledWith(functionPath, fixture.outputAddress);

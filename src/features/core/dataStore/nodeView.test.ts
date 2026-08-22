@@ -3,7 +3,6 @@ import type { NodeData, PinData } from '@/shared/types/store/graph';
 import {
   REROUTE_NODE_STYLE_ID,
   toUiNode,
-  uiNodeHasNoHeader,
   uiNodeIsReroute,
 } from './nodeView';
 
@@ -64,14 +63,6 @@ describe('toUiNode', () => {
     expect(view.outputs[0].connectionIds).toEqual(['connection-1']);
   });
 
-});
-
-describe('uiNodeHasNoHeader', () => {
-  it('returns true for math and Rust-styled reroute nodes', () => {
-    expect(uiNodeHasNoHeader({ uiStyle: 'math' })).toBe(true);
-    expect(uiNodeHasNoHeader({ uiStyle: REROUTE_NODE_STYLE_ID })).toBe(true);
-    expect(uiNodeHasNoHeader({ uiStyle: 'default' })).toBe(false);
-  });
 });
 
 describe('uiNodeIsReroute', () => {

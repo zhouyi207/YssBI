@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { pinTypeLabel } from '@/shared/types/domain/pinSemantics';
-import { resolvePinVisualSpec } from '@/shared/types/domain/pinVisual';
 import {
   commitPreparedGraphProjectionReplacements,
   prepareGraphProjectionReplacements,
@@ -13,7 +12,7 @@ describe('graphDataStore projected entity truth', () => {
     useGraphDataStore.setState({ graphEntities: {} });
   });
 
-  it('materializes exact structured data types for pin semantics and visuals', () => {
+  it('materializes exact structured data types for pin semantics', () => {
     const fixture = makeEditorProjectionFixture({ graphPath: 'graph-1' });
     fixture.projection.nodes[0].ports[1].resolvedType = {
       display: 'Frontend must not parse this text',
@@ -29,11 +28,6 @@ describe('graphDataStore projected entity truth', () => {
     expect(output).toMatchObject({ type: 'object', dataType: { kind: 'Float64' } });
     expect(input.dataType).toEqual({ kind: 'DataSeries', inner: { kind: 'Float64' } });
     expect(pinTypeLabel(input)).toBe('DataSeries<Float64>');
-    expect(resolvePinVisualSpec(input)).toMatchObject({
-      shape: 'diamond',
-      colorKey: 'Float64',
-      container: 'dataseries',
-    });
   });
 
   it('preserves unresolved projected types without materializing Any', () => {

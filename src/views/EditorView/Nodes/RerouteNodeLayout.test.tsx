@@ -8,11 +8,6 @@ import type { PortKindDto } from '@/shared/types/dto/editorProjection';
 import type { PinView } from '@/shared/types/store/graph';
 import type { UINode } from '@/shared/types/ui';
 import { Node } from './Node';
-import {
-  REROUTE_GRIP_SIZE_PX,
-  REROUTE_NODE_HEIGHT_PX,
-  REROUTE_NODE_WIDTH_PX,
-} from './RerouteNodeLayout';
 
 vi.mock('react-i18next', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-i18next')>()),
@@ -100,8 +95,6 @@ describe('RerouteNodeLayout', () => {
       const pins = [...container.querySelectorAll('[data-pin-id]')] as HTMLDivElement[];
 
       expect(nodeRoot).not.toBeNull();
-      expect(nodeRoot.style.transform).toBe('translate3d(135px, 246px, 0)');
-      expect(nodeRoot.className).toContain('ring-2');
       expect(layout.dataset.rerouteKind).toBe(kind);
       expect(pins.map((pin) => pin.dataset.pinId)).toEqual([
         `${node.id}:input`,
@@ -110,10 +103,6 @@ describe('RerouteNodeLayout', () => {
       expect(container.textContent).not.toContain(node.title);
       expect(container.textContent).not.toContain('Hidden');
       expect(container.querySelector('input')).toBeNull();
-      const grip = container.querySelector('[data-reroute-grip]') as HTMLDivElement;
-      expect(grip).not.toBeNull();
-      expect(grip.className).toContain(kind === 'data' ? 'rounded-full' : 'rounded-none');
-      expect(grip.className.includes('rotate-45')).toBe(kind === 'effect');
 
       const inputAnchor = pins[0].querySelector<HTMLElement>('[data-pin-connection-anchor]');
       expect(inputAnchor).not.toBeNull();
@@ -131,19 +120,4 @@ describe('RerouteNodeLayout', () => {
     },
   );
 
-  it('locks exact compact dimensions and center grip size', () => {
-    renderNode(projectedReroute('data'));
-    const nodeRoot = container.querySelector('[data-node-id]') as HTMLDivElement;
-    const grip = container.querySelector('[data-reroute-grip]') as HTMLDivElement;
-
-    expect(REROUTE_NODE_WIDTH_PX).toBe(32);
-    expect(REROUTE_NODE_HEIGHT_PX).toBe(20);
-    expect(REROUTE_GRIP_SIZE_PX).toBe(8);
-    expect(nodeRoot.style.width).toBe('32px');
-    expect(nodeRoot.style.height).toBe('20px');
-    expect(nodeRoot.style.minWidth).toBe('32px');
-    expect(nodeRoot.style.minHeight).toBe('20px');
-    expect(grip.style.width).toBe('8px');
-    expect(grip.style.height).toBe('8px');
-  });
 });

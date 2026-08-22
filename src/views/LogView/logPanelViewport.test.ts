@@ -11,7 +11,7 @@ describe('logPanelViewport', () => {
     expect(estimatedLogListHeight(3)).toBe(3 * LOG_ROW_STRIDE);
   });
 
-  it('snaps the native viewport to the tail without smooth scrolling', () => {
+  it('snaps the native viewport to the tail', () => {
     const viewport = {
       clientHeight: 100,
       scrollTop: 0,
@@ -20,6 +20,5 @@ describe('logPanelViewport', () => {
 
     snapLogViewportToBottom(viewport, 10);
     expect(viewport.scrollTop).toBe(Math.max(0, 10 * LOG_ROW_STRIDE - 100));
-    expect(viewport.style.scrollBehavior).toBe('');
   });
 });

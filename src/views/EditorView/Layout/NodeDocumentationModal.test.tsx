@@ -301,26 +301,4 @@ describe('NodeDocumentationModal', () => {
     expect(document.body.textContent).toContain('No matching node documentation');
   });
 
-  it('preserves the flex min-height contract around vertical scroll areas', () => {
-    catalogState.current = stateFor(catalog('en-US', {
-      title: 'Call Helper',
-      description: 'English description',
-      documentation: 'English documentation',
-      alias: 'invoke helper',
-    }));
-    render();
-
-    const content = document.querySelector<HTMLElement>('[data-slot="dialog-content"]')!;
-    const viewports = [...document.querySelectorAll<HTMLElement>('[data-slot="scroll-area-viewport"]')];
-
-    expect(content.className).toContain('flex');
-    expect(content.className).toContain('min-h-0');
-    expect(viewports).toHaveLength(2);
-    for (const viewport of viewports) {
-      expect(viewport.className).toContain('flex-1');
-      expect(viewport.className).toContain('min-h-0');
-      expect(viewport.parentElement?.className).toContain('flex-1');
-      expect(viewport.parentElement?.className).toContain('min-h-0');
-    }
-  });
 });

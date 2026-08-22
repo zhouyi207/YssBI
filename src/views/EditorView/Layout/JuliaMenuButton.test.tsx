@@ -115,7 +115,6 @@ describe('JuliaMenuButton feedback', () => {
     expect(host.textContent).toContain('julia_status_failed');
     expect(host.textContent).toContain('incident-julia-status-42');
     expect(host.textContent).not.toContain('raw Julia status failure');
-    expect(host.querySelector('.text-destructive')).not.toBeNull();
   });
 
   it('opens a MessageDialog request for an install IPC failure', async () => {

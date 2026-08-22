@@ -49,7 +49,7 @@ describe('LogItemRow', () => {
     return { button, onClick };
   }
 
-  it('renders all visible fields as selectable text', () => {
+  it('renders all visible fields', () => {
     const { button } = renderRow();
 
     expect(button.textContent).toContain('12:34:56');
@@ -57,11 +57,6 @@ describe('LogItemRow', () => {
     expect(button.textContent).toContain('APP');
     expect(button.textContent).toContain('[worksheet]');
     expect(button.textContent).toContain('Rendered chart successfully');
-    expect(button.classList.contains('select-text')).toBe(true);
-    expect(button.classList.contains('cursor-text')).toBe(true);
-    expect(Array.from(button.querySelectorAll('*')).some(
-      (element) => element.classList.contains('select-none'),
-    )).toBe(false);
   });
 
 

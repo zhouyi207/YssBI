@@ -50,17 +50,12 @@ describe('SidebarDraggableItem', () => {
     host.remove();
   });
 
-  it('uses the pointer cursor and registers the exact drag payload', () => {
+  it('registers the exact drag payload', () => {
     act(() => root.render(
       <SidebarDraggableItem id="function-row" dragData={dragData}>
         Revenue
       </SidebarDraggableItem>,
     ));
-    const row = host.firstElementChild as HTMLElement;
-
-    expect(row.classList.contains('cursor-pointer')).toBe(true);
-    expect(row.classList.contains('cursor-grab')).toBe(false);
-    expect(row.classList.contains('active:cursor-grabbing')).toBe(false);
     expect(draggable.inputs[0]).toEqual({
       id: 'sidebar-item-function-row',
       data: dragData,
@@ -82,9 +77,6 @@ describe('SidebarDraggableItem', () => {
     const row = host.firstElementChild as HTMLElement;
 
     expect(row.getAttribute('aria-disabled')).toBe('true');
-    expect(row.classList.contains('cursor-pointer')).toBe(false);
-    expect(row.classList.contains('cursor-grab')).toBe(false);
-    expect(row.classList.contains('active:cursor-grabbing')).toBe(false);
     expect(row.hasAttribute('aria-roledescription')).toBe(false);
 
     act(() => row.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));

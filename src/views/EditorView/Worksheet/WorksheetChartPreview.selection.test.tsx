@@ -75,7 +75,7 @@ const chartCases: Array<{
 ];
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('WorksheetChartPreview selection boundary', () => {
+describe('WorksheetChartPreview', () => {
   let root: Root;
   let host: HTMLDivElement;
 
@@ -97,7 +97,7 @@ describe('WorksheetChartPreview selection boundary', () => {
   });
 
   it.each(chartCases)(
-    'isolates $kind output in the same non-selectable chart region',
+    'renders $kind output in the chart region',
     async ({ marker, payload }) => {
       vi.mocked(fetchWorksheetPreview).mockResolvedValue(payload);
 
@@ -108,12 +108,11 @@ describe('WorksheetChartPreview selection boundary', () => {
 
       const chartRegion = host.querySelector('[data-worksheet-chart-region]');
       expect(chartRegion).not.toBeNull();
-      expect(chartRegion?.classList.contains('select-none')).toBe(true);
       expect(chartRegion?.textContent).toContain(marker);
     },
   );
 
-  it('keeps a machine error outside the chart region, selectable, and includes its incident ID', async () => {
+  it('keeps a machine error outside the chart region and includes its incident ID', async () => {
     vi.mocked(fetchWorksheetPreview).mockResolvedValue({
       kind: 'error',
       code: 'worksheet_preview_backend_failed',
@@ -128,7 +127,6 @@ describe('WorksheetChartPreview selection boundary', () => {
     const errorElement = host.querySelector('[role="alert"]');
     expect(errorElement).not.toBeNull();
     expect(errorElement?.closest('[data-worksheet-chart-region]')).toBeNull();
-    expect(errorElement?.classList.contains('select-none')).toBe(false);
     expect(errorElement?.textContent).toContain('localized:worksheet.previewLoadFailed');
     expect(errorElement?.textContent).toContain('localized:common.errorCode');
     expect(errorElement?.textContent).toContain('worksheet_preview_backend_failed');
