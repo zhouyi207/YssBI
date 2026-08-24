@@ -10,9 +10,12 @@
 EditorWindow
 ├─ Menubar
 ├─ body
-│  ├─ Activity Bar（可位于左侧或右侧）
 │  └─ root Dockview
-│     ├─ native left edge group：Resources 的 home
+│     ├─ native left Activity edge group
+│     │  ├─ Project
+│     │  ├─ Nodes
+│     │  ├─ Data
+│     │  └─ Commands
 │     ├─ grid groups：editor、Result 与 tool panels 可混排和分割
 │     ├─ native right edge group：Details、Inspect、Result 的 contextual home
 │     └─ native bottom edge group
@@ -21,7 +24,7 @@ EditorWindow
 └─ Status Bar
 ```
 
-Menubar、Activity Bar、Status Bar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载 Resources、editor、Result、Details、Inspect、Logs 与 Output。
+Menubar、Status Bar、dialogs 与 modal overlays 位于 root Dockview 外。工作台层只有一个 root `DockviewReact`；它直接承载四个受限 Activity panels、editor、Result、Details、Inspect、Logs 与 Output。Activity panel tabs 使用 Dockview 原生 vertical header，只能在 `workbench-edge-left` 内重排；普通 panel 不能拖入该 group，Activity panel 不能拖出。
 
 root Dockview 是以下物理事实的唯一 authority：
 
@@ -31,18 +34,21 @@ root Dockview 是以下物理事实的唯一 authority：
 - active group 与 active panel；
 - edge group 的位置、可见性、尺寸和 collapsed state。
 
-`useWorkbenchStore` 只保存 `sidebarCurrentTab`、Settings/Dialog 等非 placement UI state。Zustand 不保存 panel placement、visibility、sizes、tab order、active state 或 edge collapse 的镜像。
+`useWorkbenchStore` 只保存 Settings/Dialog 等非 placement UI state。Zustand 不保存 panel placement、visibility、sizes、tab order、Activity active tab 或 edge collapse 的镜像。
 
 直接 invariant：工作台不存在 `Gridview`、shell Dockview 或 editor nested Dockview compatibility model，也不存在第二套 application-owned topology。root 内的 native Dockview drag/drop 是 panel 移动、分组和排序的物理 authority；floating groups 与 browser popouts 禁用。
 
 ## 2. Root panel 角色与默认 home
 
-root group 可以混合承载不同角色。角色决定内容和应用语义，不限制 panel 必须留在某种 group：
+root group 可以混合承载不同角色；唯一例外是 Activity group。角色决定内容和应用语义，Activity group 还受到固定成员和 drop policy 约束：
 
 | 角色 | 内容 | deterministic home |
 |---|---|---|
 | `editor` | Graph/Function/Worksheet editor | 当前 central grid group |
-| `view:resources` | Resources | left edge |
+| `view:project` | Project activity panel | left Activity edge |
+| `view:nodes` | Nodes activity panel | left Activity edge |
+| `view:data` | Data activity panel | left Activity edge |
+| `view:commands` | Commands activity panel | left Activity edge |
 | `view:details` | contextual Details | right edge |
 | `view:inspect` | contextual Inspect | right edge |
 | `result` | 一个可检查结果 | right edge |
@@ -51,11 +57,11 @@ root group 可以混合承载不同角色。角色决定内容和应用语义，
 
 默认空布局建立 central grid group，并放置：
 
-- Resources：left edge，宽度 `260`；
+- Project、Nodes、Data、Commands：同一个 left Activity edge group，宽度 `292`，默认顺序为 Project → Nodes → Data → Commands；
 - Logs、Output：bottom edge，高度 `200`，顺序为 Logs → Output；
 - bottom edge header 位于底部，因此 content 在上、tabs 在下。
 
-right edge 在首个 contextual panel 出现时建立，默认宽度 `320`。Details 与 Inspect 是按上下文延迟创建的 singleton；无有效 Details/Inspect context 时不会创建。Result 允许多个实例，但每个 `resultKey` 只对应一个 canonical panel。
+right edge 在首个 contextual panel 出现时建立，默认宽度 `320`。Details 与 Inspect 是按上下文延迟创建的 singleton；无有效 Details/Inspect context 时不会创建。Result 允许多个实例，但每个 `resultKey` 只对应一个 canonical panel。Activity panels 始终由默认布局安装，不能由 close coordinator 删除；Activity edge 的可见性通过 root edge 的 visible/collapsed state 控制。
 
 ## 3. 唯一有界 nested Dockview：Logs
 
@@ -100,7 +106,8 @@ result → { role, resultKey, resultId, title, presentation, source }
 
 Singleton 与 multi-instance contract：
 
-- Resources、Details、Inspect、Logs、Output 由 `viewId` 保证 singleton；
+- Project、Nodes、Data、Commands、Details、Inspect、Logs、Output 由 `viewId` 保证 singleton；
+- Project、Nodes、Data、Commands 随默认 Activity group 安装且保持存在；
 - Details、Inspect 只在上下文有效时 lazy ensure；
 - Result 按 `resultKey` upsert，同 key 更新 metadata 并 reveal，多个不同 `resultKey` 同时存在；
 - `resultId` 可以在同一个 `resultKey` panel 上更新，而不改变其 `panelInstanceId`。
@@ -174,13 +181,13 @@ Reveal 已存在的 panel 时保持其实际位置，不把它搬回 determinist
 
 Reset 使用一个 runtime shadow layout transaction，并保留既有 editor、Result 与 panel identities：
 
-- Resources 回到 left edge；
+- Project、Nodes、Data、Commands 回到同一个 left Activity edge group，并恢复 Activity tab 顺序；
 - editor panels 按 deterministic snapshot order 集中到 central grid group；
 - 已存在的 Details、Inspect、Result 回到 right edge；reset 不凭空创建 Details/Inspect；
 - Logs、Output 回到 bottom edge，恢复 Logs → Output 顺序与 bottom tabs；
-- left/right/bottom 恢复 `260/320/200`，相关 edge 展开；
+- left/right/bottom 恢复 `292/320/200`，相关 edge 展开；
 - main Logs nested Dockview 恢复七 domain 默认布局；
-- 优先恢复 reset 前 physically active editor，其次恢复仍有效的 focused editor，再次选择第一个 editor；无 editor 时激活 Resources。
+- 优先恢复 reset 前 physically active editor，其次恢复仍有效的 focused editor，再次选择第一个 editor；无 editor 时激活 Project。
 
 ### 7.3 Project replacement
 
@@ -190,7 +197,7 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 - 所有 Result；
 - Details 与 Inspect。
 
-随后清理 editor pane/session 与 project-scoped detail state。Resources、Logs、Output 及 Logs domain layout 保留；持久化 root 中的同类 project-scoped panels 也会被 scrub，避免新 project hydration 打开旧 project 内容。
+随后清理 editor pane/session 与 project-scoped detail state。Project、Nodes、Data、Commands、Logs、Output 及 Logs domain layout 保留；持久化 root 中的 editor、Result、Details、Inspect 会被 scrub，避免新 project hydration 打开旧 project 内容。
 
 ## 8. Persistence contract
 
@@ -200,31 +207,27 @@ Project replacement 先使 pending root operations、hydration generation 与 re
 yssbi-workbench-layout:<window-label>
 ```
 
-value 是 exact、unversioned envelope：
+value 是 exact envelope；不包含版本字段：
 
 ```text
 {
   root: SerializedDockview,
   nested: {
     logs: SerializedDockview
-  },
-  preferences: {
-    sidebarCurrentTab: SidebarTabId
   }
 }
 ```
 
 Persistence invariant：
 
-- payload 没有 `version` field，也不使用 versioned key；
-- 实现不读取其他 layout key，没有 migration 或 previous-format reader；
-- top-level、`nested` 与 `preferences` 只接受上述字段；
+- payload 没有 `version` field，也不使用 versioned key；当前格式不做迁移、不兼容旧 envelope，也不保留旧 reader；
+- top-level 只接受 `root` 与 `nested`，`nested` 只接受 `logs`；
 - root 与 `nested.logs` 独立验证；某一 snapshot 非法时只把该部分恢复为默认布局；
-- 任一 root、main Logs 或 `sidebarCurrentTab` 变化都会调度完整 payload 写入；window close 在当前 hydration 与 FIFO idle 后直接 flush；
-- Details、Inspect、Result 是 session-only panels，写入前从 `root` snapshot 及其空 topology 中剔除；
+- 任一 root 或 main Logs 变化都会调度完整 payload 写入；window close 在当前 hydration 与 FIFO idle 后直接 flush；
+- Details、Inspect、Result 是 session-only panels，写入前从 `root` snapshot 及其空 topology 中剔除；Activity panels 作为持久化 root topology 的固定 left edge 成员保留；
 - main Logs nested snapshot 持久化，ephemeral standalone Logs 不持久化。
 
-未来若出现 breaking persistence format，使用新的 semantic storage key。当前 key 下不增加 version field、migration 或 alternate reader。
+若未来需要 breaking persistence format，必须直接使用新的 semantic storage key；当前 key 下不增加版本字段、迁移逻辑或 alternate reader。
 
 ## 9. 视觉尺寸层级
 

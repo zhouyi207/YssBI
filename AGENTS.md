@@ -125,8 +125,11 @@ graph compilation/execution, databases, results, and scientific orchestration.
   domain topology. Do not add Gridview, nested editor/shell compatibility hosts,
   layout facades or mirrors, versioned layout payloads, Zen mode, or
   `panelPosition` settings.
-- Keep menubar, activity bar, status bar, and modals outside the root Dockview.
-  Preserve the bottom edge group's native Dockview header and collapse behavior.
+- Keep menubar, status bar, and modals outside the root Dockview. The root owns
+  one native left Activity edge group containing only Project, Nodes, Data, and
+  Commands; those tabs may reorder inside that group but cannot enter or leave
+  it, and ordinary panels cannot enter it. Preserve the bottom edge group's
+  native Dockview header and collapse behavior.
 - Application stores may keep non-placement panel metadata and pane-local state
   keyed by `panelInstanceId`; panel, group, resource, graph, and node identities
   remain distinct and opaque.
