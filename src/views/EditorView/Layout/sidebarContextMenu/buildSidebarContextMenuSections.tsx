@@ -78,14 +78,38 @@ export function buildSidebarContextMenuSections(
   }
 
   if (target.type === "variableSection") {
+    if (target.isGlobal === undefined) {
+      return [
+        {
+          items: [
+            {
+              id: "new-local-variable",
+              label: t("contextMenu.sidebar.newLocalVariable"),
+              icon: <VscAdd size={12} />,
+              onClick: () => void actions.addVariable(DEFAULT_VARIABLE_NAME, "Int64", false),
+            },
+            {
+              id: "new-global-variable",
+              label: t("contextMenu.sidebar.newGlobalVariable"),
+              icon: <VscAdd size={12} />,
+              onClick: () => void actions.addVariable(DEFAULT_VARIABLE_NAME, "Int64", true),
+            },
+          ],
+        },
+      ];
+    }
+
+    const isGlobal = target.isGlobal;
     return [
       {
         items: [
           {
             id: "new-variable",
-            label: t("contextMenu.sidebar.newVariable"),
+            label: isGlobal
+              ? t("contextMenu.sidebar.newGlobalVariable")
+              : t("contextMenu.sidebar.newLocalVariable"),
             icon: <VscAdd size={12} />,
-            onClick: () => void actions.addVariable(DEFAULT_VARIABLE_NAME, "Int64", target.isGlobal),
+            onClick: () => void actions.addVariable(DEFAULT_VARIABLE_NAME, "Int64", isGlobal),
           },
         ],
       },

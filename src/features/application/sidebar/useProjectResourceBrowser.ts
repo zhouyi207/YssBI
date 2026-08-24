@@ -79,10 +79,8 @@ export function useProjectResourceBrowser() {
       events: t('sidebar.projectTree.categories.events'),
       functions: t('sidebar.projectTree.categories.functions'),
       worksheets: t('sidebar.projectTree.categories.worksheets'),
-      activeGraphVariables: (graphName) => t(
-        'sidebar.projectTree.categories.activeGraphVariables',
-        { name: graphName },
-      ),
+      variables: t('sidebar.projectTree.categories.variables'),
+      localVariables: t('sidebar.projectTree.categories.localVariables'),
       globalVariables: t('sidebar.projectTree.categories.globalVariables'),
       noEvents: t('sidebar.noEvents'),
       noFunctions: t('sidebar.noFunctions'),

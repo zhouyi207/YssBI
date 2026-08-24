@@ -43,6 +43,26 @@ describe('buildSidebarContextMenuSections', () => {
       .toMatchObject({ disabled: true, title: 'sidebar.noActiveGraph' });
   });
 
+  it('offers both variable scopes from the Variables folder', () => {
+    const actions = sidebarActions();
+    const sections = buildSidebarContextMenuSections({
+      x: 10,
+      y: 20,
+      target: { type: 'variableSection' },
+    }, actions, t);
+    const items = sections.flatMap((section) => section.items);
+
+    expect(items.map((item) => item.id)).toEqual([
+      'new-local-variable',
+      'new-global-variable',
+    ]);
+
+    items.find((item) => item.id === 'new-local-variable')?.onClick?.();
+    items.find((item) => item.id === 'new-global-variable')?.onClick?.();
+    expect(actions.addVariable).toHaveBeenNthCalledWith(1, 'New Variable', 'Int64', false);
+    expect(actions.addVariable).toHaveBeenNthCalledWith(2, 'New Variable', 'Int64', true);
+  });
+
   it('exposes authoritative worksheet rename with the opaque path and Rust-provided name', () => {
     const actions = sidebarActions();
     const sections = buildSidebarContextMenuSections({

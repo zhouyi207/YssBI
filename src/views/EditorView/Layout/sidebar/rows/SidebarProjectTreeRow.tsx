@@ -36,7 +36,7 @@ function categoryAddConfig(
   categoryId: ProjectTreeCategoryId,
   actions: SidebarProjectTreeActions,
   t: ReturnType<typeof useTranslation>['t'],
-): { onAdd: () => void; ariaLabel: string } {
+): { onAdd: () => void; ariaLabel: string } | null {
   switch (categoryId) {
     case PROJECT_TREE_CATEGORY_IDS.events:
       return { onAdd: actions.onAddEvent, ariaLabel: t('canvas.newEventGraph') };
@@ -47,15 +47,17 @@ function categoryAddConfig(
         onAdd: actions.onAddWorksheet,
         ariaLabel: t('contextMenu.sidebar.newWorksheet'),
       };
-    case PROJECT_TREE_CATEGORY_IDS.activeGraphVariables:
+    case PROJECT_TREE_CATEGORY_IDS.variables:
+      return null;
+    case PROJECT_TREE_CATEGORY_IDS.localVariables:
       return {
         onAdd: () => actions.onAddVariable(false),
-        ariaLabel: t('contextMenu.sidebar.newVariable'),
+        ariaLabel: t('contextMenu.sidebar.newLocalVariable'),
       };
     case PROJECT_TREE_CATEGORY_IDS.globalVariables:
       return {
         onAdd: () => actions.onAddVariable(true),
-        ariaLabel: t('contextMenu.sidebar.newVariable'),
+        ariaLabel: t('contextMenu.sidebar.newGlobalVariable'),
       };
   }
 }
@@ -79,7 +81,7 @@ export function SidebarProjectTreeRow({
 
   switch (row.kind) {
     case 'category': {
-      const { onAdd, ariaLabel } = categoryAddConfig(row.categoryId, actions, t);
+      const addConfig = categoryAddConfig(row.categoryId, actions, t);
       return (
         <SidebarTreeCategoryRow
           categoryId={row.categoryId}
@@ -89,21 +91,21 @@ export function SidebarProjectTreeRow({
           interactionDisabled={categoryInteractionDisabled}
           onExpandedChange={(expanded) => onCategoryExpandedChange(row.categoryId, expanded)}
           onContextMenu={(event) => actions.onCategoryContextMenu(event, row.categoryId)}
-          trailing={
+          trailing={addConfig ? (
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-label={ariaLabel}
+              aria-label={addConfig.ariaLabel}
               onClick={(event) => {
                 event.stopPropagation();
-                onAdd();
+                addConfig.onAdd();
               }}
               className="size-6 shrink-0 p-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100"
             >
               <VscAdd size={SIDEBAR_ROW_ICON_SIZE} />
             </Button>
-          }
+          ) : undefined}
         />
       );
     }

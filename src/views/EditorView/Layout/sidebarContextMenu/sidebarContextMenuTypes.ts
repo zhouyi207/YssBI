@@ -7,7 +7,7 @@ export type SidebarContextMenuTarget =
   | { type: "graph"; id: string; name: string; graphType: GraphResourceType }
   | { type: "section"; graphType: GraphResourceType }
   | { type: "variable"; id: string; name: string; isGlobal: boolean }
-  | { type: "variableSection"; isGlobal: boolean }
+  | { type: "variableSection"; isGlobal?: boolean }
   | { type: "database"; id: string; name: string }
   | { type: "dataSection" }
   | { type: "worksheetSection" }

@@ -128,7 +128,10 @@ function Sidebar() {
         case PROJECT_TREE_CATEGORY_IDS.worksheets:
           openActionMenu(event, { type: 'worksheetSection' });
           return;
-        case PROJECT_TREE_CATEGORY_IDS.activeGraphVariables:
+        case PROJECT_TREE_CATEGORY_IDS.variables:
+          openActionMenu(event, { type: 'variableSection' });
+          return;
+        case PROJECT_TREE_CATEGORY_IDS.localVariables:
           openActionMenu(event, { type: 'variableSection', isGlobal: false });
           return;
         case PROJECT_TREE_CATEGORY_IDS.globalVariables:

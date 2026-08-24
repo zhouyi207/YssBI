@@ -72,6 +72,21 @@ describe('useVariableManagement', () => {
     }));
     expect(mocks.switchSidebarTab).toHaveBeenCalledWith('project');
     expect(useSidebarStore.getState().projectTreeExpandedCategories)
-      .toMatchObject({ 'project.activeGraphVariables': true });
+      .toMatchObject({
+        'project.variables': true,
+        'project.localVariables': true,
+      });
+  });
+
+  it('expands the Variables and global folders for a global variable', async () => {
+    await act(async () => {
+      await actions.addVariable('Theme', 'String', true);
+    });
+
+    expect(useSidebarStore.getState().projectTreeExpandedCategories)
+      .toMatchObject({
+        'project.variables': true,
+        'project.globalVariables': true,
+      });
   });
 });

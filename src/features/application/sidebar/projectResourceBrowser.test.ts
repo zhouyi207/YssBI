@@ -15,7 +15,8 @@ const labels: ProjectResourceBrowserInput['labels'] = {
   events: 'Events',
   functions: 'Functions',
   worksheets: 'Worksheets',
-  activeGraphVariables: (name) => `${name} variables`,
+  variables: 'Variables',
+  localVariables: 'Local',
   globalVariables: 'Global variables',
   noEvents: 'No events',
   noFunctions: 'No functions',
@@ -56,7 +57,7 @@ function input(
 }
 
 describe('project resource browser', () => {
-  it('keeps categories in fixed order and includes global variable rows', () => {
+  it('keeps categories in fixed order and groups variable scopes under Variables', () => {
     const projection = buildProjectResourceBrowser(input({
       events: { 'events/Main': { name: 'Main event' } },
       functions: { 'functions/Compute': { name: 'Compute' } },
@@ -70,13 +71,14 @@ describe('project resource browser', () => {
       PROJECT_TREE_CATEGORY_IDS.events,
       PROJECT_TREE_CATEGORY_IDS.functions,
       PROJECT_TREE_CATEGORY_IDS.worksheets,
-      PROJECT_TREE_CATEGORY_IDS.activeGraphVariables,
+      PROJECT_TREE_CATEGORY_IDS.variables,
+      PROJECT_TREE_CATEGORY_IDS.localVariables,
       PROJECT_TREE_CATEGORY_IDS.globalVariables,
     ]);
     expect(projection.rows).toContainEqual({
       kind: 'variable',
       rowKey: 'variable:global:variables/global',
-      level: 1,
+      level: 2,
       id: 'global',
       resourcePath: 'variables/global',
       name: 'Shared value',
@@ -105,15 +107,27 @@ describe('project resource browser', () => {
     })).toBeNull();
   });
 
-  it('omits the local variables category without an active graph', () => {
+  it('keeps an empty Local category without an active graph', () => {
     const projection = buildProjectResourceBrowser(input({
       localVariables: { local: variable('local', 'Local value') },
     }));
 
-    expect(projection.rows.some((row) => (
-      row.kind === 'category'
-      && row.categoryId === PROJECT_TREE_CATEGORY_IDS.activeGraphVariables
-    ))).toBe(false);
+    expect(projection.rows).toContainEqual({
+      kind: 'category',
+      rowKey: `category:${PROJECT_TREE_CATEGORY_IDS.localVariables}`,
+      categoryId: PROJECT_TREE_CATEGORY_IDS.localVariables,
+      level: 1,
+      label: 'Local',
+      expanded: true,
+    });
+    expect(projection.rows).toContainEqual({
+      kind: 'empty',
+      rowKey: `empty:${PROJECT_TREE_CATEGORY_IDS.localVariables}`,
+      categoryId: PROJECT_TREE_CATEGORY_IDS.localVariables,
+      level: 2,
+      message: 'No local variables',
+    });
+    expect(projection.rows.some((row) => row.kind === 'variable')).toBe(false);
   });
 
   it('retains an empty active-graph variables category', () => {
@@ -123,17 +137,25 @@ describe('project resource browser', () => {
 
     expect(projection.rows).toContainEqual({
       kind: 'category',
-      rowKey: `category:${PROJECT_TREE_CATEGORY_IDS.activeGraphVariables}`,
-      categoryId: PROJECT_TREE_CATEGORY_IDS.activeGraphVariables,
+      rowKey: `category:${PROJECT_TREE_CATEGORY_IDS.variables}`,
+      categoryId: PROJECT_TREE_CATEGORY_IDS.variables,
       level: 0,
-      label: 'Main event variables',
+      label: 'Variables',
+      expanded: true,
+    });
+    expect(projection.rows).toContainEqual({
+      kind: 'category',
+      rowKey: `category:${PROJECT_TREE_CATEGORY_IDS.localVariables}`,
+      categoryId: PROJECT_TREE_CATEGORY_IDS.localVariables,
+      level: 1,
+      label: 'Local',
       expanded: true,
     });
     expect(projection.rows).toContainEqual({
       kind: 'empty',
-      rowKey: `empty:${PROJECT_TREE_CATEGORY_IDS.activeGraphVariables}`,
-      categoryId: PROJECT_TREE_CATEGORY_IDS.activeGraphVariables,
-      level: 1,
+      rowKey: `empty:${PROJECT_TREE_CATEGORY_IDS.localVariables}`,
+      categoryId: PROJECT_TREE_CATEGORY_IDS.localVariables,
+      level: 2,
       message: 'No local variables',
     });
   });
@@ -152,11 +174,13 @@ describe('project resource browser', () => {
 
     expect(projection.rows.filter((row) => row.kind === 'category').map((row) => row.categoryId)).toEqual([
       PROJECT_TREE_CATEGORY_IDS.events,
-      PROJECT_TREE_CATEGORY_IDS.activeGraphVariables,
+      PROJECT_TREE_CATEGORY_IDS.variables,
+      PROJECT_TREE_CATEGORY_IDS.localVariables,
     ]);
     expect(projection.expandedCategoryIds).toEqual(new Set([
       PROJECT_TREE_CATEGORY_IDS.events,
-      PROJECT_TREE_CATEGORY_IDS.activeGraphVariables,
+      PROJECT_TREE_CATEGORY_IDS.variables,
+      PROJECT_TREE_CATEGORY_IDS.localVariables,
     ]));
     expect(expandedCategoryIds).toEqual(new Set([PROJECT_TREE_CATEGORY_IDS.functions]));
     expect(projection.allCategoriesExpanded).toBe(true);

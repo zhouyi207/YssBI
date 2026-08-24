@@ -50,11 +50,15 @@ const actions = {
 };
 
 function categoryRow(categoryId: ProjectTreeCategoryId): ProjectResourceBrowserRow {
+  const level = categoryId === PROJECT_TREE_CATEGORY_IDS.localVariables
+    || categoryId === PROJECT_TREE_CATEGORY_IDS.globalVariables
+    ? 1
+    : 0;
   return {
     kind: 'category',
     rowKey: `category:${categoryId}`,
     categoryId,
-    level: 0,
+    level,
     label: `Projected ${categoryId}`,
     expanded: true,
   };
@@ -71,16 +75,17 @@ function renderBrowser({
     PROJECT_TREE_CATEGORY_IDS.events,
     PROJECT_TREE_CATEGORY_IDS.functions,
     PROJECT_TREE_CATEGORY_IDS.worksheets,
-    ...(activeGraph ? [PROJECT_TREE_CATEGORY_IDS.activeGraphVariables] : []),
+    PROJECT_TREE_CATEGORY_IDS.variables,
+    PROJECT_TREE_CATEGORY_IDS.localVariables,
     PROJECT_TREE_CATEGORY_IDS.globalVariables,
   ];
   const rows = categoryIds.map(categoryRow);
-  if (activeGraph && Object.keys(localVariables).length === 0) {
-    rows.splice(4, 0, {
+  if (Object.keys(localVariables).length === 0) {
+    rows.splice(5, 0, {
       kind: 'empty',
-      rowKey: `empty:${PROJECT_TREE_CATEGORY_IDS.activeGraphVariables}`,
-      categoryId: PROJECT_TREE_CATEGORY_IDS.activeGraphVariables,
-      level: 1,
+      rowKey: `empty:${PROJECT_TREE_CATEGORY_IDS.localVariables}`,
+      categoryId: PROJECT_TREE_CATEGORY_IDS.localVariables,
+      level: 2,
       message: 'No local variables',
     });
   }
@@ -138,7 +143,8 @@ describe('SidebarProjectTab', () => {
       `Projected ${PROJECT_TREE_CATEGORY_IDS.events}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.functions}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.worksheets}`,
-      `Projected ${PROJECT_TREE_CATEGORY_IDS.activeGraphVariables}`,
+      `Projected ${PROJECT_TREE_CATEGORY_IDS.variables}`,
+      `Projected ${PROJECT_TREE_CATEGORY_IDS.localVariables}`,
       `Projected ${PROJECT_TREE_CATEGORY_IDS.globalVariables}`,
     ]);
     expect(host.querySelector('input')?.getAttribute('placeholder'))
@@ -153,7 +159,8 @@ describe('SidebarProjectTab', () => {
         </TooltipProvider>
       </I18nextProvider>,
     ));
-    expect(host.textContent).not.toContain('Current graph variables');
+    expect(host.textContent).toContain(`Projected ${PROJECT_TREE_CATEGORY_IDS.localVariables}`);
+    expect(host.textContent).toContain('No local variables');
 
     renderBrowser({ activeGraph: { path: 'events/Main.yssbi-event', kind: 'event', name: 'Main' }, localVariables: {} });
     act(() => root.render(

@@ -52,10 +52,10 @@ export function useVariableManagement() {
     if (created) {
       switchSidebarTab('project');
       const sidebar = useSidebarStore.getState();
-      sidebar.setProjectTreeCategoryExpanded(
+      sidebar.setProjectTreeCategoriesExpanded(
         isGlobal
-          ? PROJECT_TREE_CATEGORY_IDS.globalVariables
-          : PROJECT_TREE_CATEGORY_IDS.activeGraphVariables,
+          ? [PROJECT_TREE_CATEGORY_IDS.variables, PROJECT_TREE_CATEGORY_IDS.globalVariables]
+          : [PROJECT_TREE_CATEGORY_IDS.variables, PROJECT_TREE_CATEGORY_IDS.localVariables],
         true,
       );
     }
