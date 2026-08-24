@@ -6,16 +6,12 @@ import {
 export const DRAG_TYPES = {
   NODE_TEMPLATE: "node-template",
   GRAPH_RESOURCE: "graph-resource",
-  TAB: "tab",
-  EDITOR_GROUP: "editor-group",
-  LEAF: "leaf",
 } as const;
 
 export type DragType = (typeof DRAG_TYPES)[keyof typeof DRAG_TYPES];
 
 export const DROP_TYPES = {
   CANVAS: "canvas",
-  TABBAR: "tabbar",
 } as const;
 
 /** Backend-issued descriptor forwarded unchanged when a template is dropped. */
@@ -44,31 +40,10 @@ export type GraphResourceDragPayload = {
   sidebarResource: GraphResourceDragData;
 };
 
-export type TabDragData = {
-  type: typeof DRAG_TYPES.TAB;
-  tabId: string;
-  sourceNodeId: string;
-  /** Multi-select tab drag — all tab ids moved together. */
-  draggedTabIds?: string[];
-};
-
-export type EditorGroupDragData = {
-  type: typeof DRAG_TYPES.EDITOR_GROUP;
-  sourceNodeId: string;
-};
-
-export type LeafDragData = {
-  type: typeof DRAG_TYPES.LEAF;
-  node: { id: string };
-};
-
 /** dnd-kit `active.data.current` 已知 drag source 联合类型 */
 export type CanvasDragPayload =
   | NodeTemplateDragData
-  | GraphResourceDragPayload
-  | TabDragData
-  | EditorGroupDragData
-  | LeafDragData;
+  | GraphResourceDragPayload;
 
 /** Sidebar / palette 产生的可落画布 payload */
 export type SidebarDragPayload = NodeTemplateDragData | GraphResourceDragPayload;
@@ -78,16 +53,6 @@ export type CanvasDropData = {
   groupId: string;
 };
 
-export type TabbarDropData = {
-  dropType: typeof DROP_TYPES.TABBAR;
-  targetNodeId: string;
-  targetTabIndex: number;
-};
-
-export type KnownDropData =
-  | CanvasDropData
-  | TabbarDropData;
-
 export const CANVAS_DROP_ZONE_ID_PREFIX = "canvas-drop-zone-";
 
 export function getCanvasDropZoneId(groupId: string) {
@@ -96,10 +61,6 @@ export function getCanvasDropZoneId(groupId: string) {
 
 export function isCanvasDrop(data: unknown): data is CanvasDropData {
   return (data as { dropType?: unknown } | null)?.dropType === DROP_TYPES.CANVAS;
-}
-
-export function isTabbarDrop(data: unknown): data is TabbarDropData {
-  return (data as { dropType?: unknown } | null)?.dropType === DROP_TYPES.TABBAR;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -129,28 +90,9 @@ export function isGraphResourceDragPayload(data: unknown): data is GraphResource
   return resource.type === "event" || resource.type === "function";
 }
 
-export function isTabDragData(data: unknown): data is TabDragData {
-  if (!hasDragType(data, DRAG_TYPES.TAB)) return false;
-  return typeof data.tabId === "string" && typeof data.sourceNodeId === "string";
-}
-
-export function isEditorGroupDragData(data: unknown): data is EditorGroupDragData {
-  if (!hasDragType(data, DRAG_TYPES.EDITOR_GROUP)) return false;
-  return typeof data.sourceNodeId === "string";
-}
-
-export function isLeafDragData(data: unknown): data is LeafDragData {
-  if (!hasDragType(data, DRAG_TYPES.LEAF)) return false;
-  const node = data.node;
-  return isRecord(node) && typeof node.id === "string";
-}
-
 export function parseCanvasDragPayload(data: unknown): CanvasDragPayload | null {
   if (isNodeTemplateDragData(data)) return data;
   if (isGraphResourceDragPayload(data)) return data;
-  if (isTabDragData(data)) return data;
-  if (isEditorGroupDragData(data)) return data;
-  if (isLeafDragData(data)) return data;
   return null;
 }
 

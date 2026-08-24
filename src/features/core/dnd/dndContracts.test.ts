@@ -8,7 +8,6 @@ import {
   isNodeTemplateDragData,
   isNodeTemplateDragState,
   isSidebarSpawnDrag,
-  isTabDragData,
   parseCanvasDragPayload,
 } from './dndContracts';
 
@@ -52,12 +51,6 @@ describe('parseCanvasDragPayload', () => {
     } as const;
 
     expect(isNodeTemplateDragData(payload)).toBe(true);
-  });
-
-  it('accepts tab drag data', () => {
-    const payload = { type: 'tab', tabId: 't1', sourceNodeId: 'g1' } as const;
-    expect(isTabDragData(payload)).toBe(true);
-    expect(parseCanvasDragPayload(payload)?.type).toBe('tab');
   });
 
   it('rejects missing and extra NodeSpawnTemplate fields', () => {
