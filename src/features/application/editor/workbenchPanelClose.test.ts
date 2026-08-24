@@ -335,7 +335,10 @@ function viewPanel(
   groupId = 'group-a',
 ): WorkbenchPanelInfo {
   const components = {
-    resources: 'Resources',
+    project: 'Project',
+    nodes: 'Nodes',
+    data: 'Data',
+    commands: 'Commands',
     details: 'Details',
     inspect: 'Inspect',
     logs: 'Logs',
@@ -614,13 +617,11 @@ describe('workbench panel close coordinator', () => {
   it('allows projectless tool closes but rejects project-scoped panels', async () => {
     mocks.project.available = false;
     seedPanels([
-      viewPanel('resources-a', 'resources'),
       viewPanel('logs-a', 'logs'),
       viewPanel('output-a', 'output'),
     ]);
 
     await expect(requestCloseWorkbenchPanels([
-      'resources-a',
       'logs-a',
       'output-a',
     ])).resolves.toBe(true);

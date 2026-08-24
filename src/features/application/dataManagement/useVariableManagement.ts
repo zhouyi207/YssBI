@@ -3,7 +3,7 @@ import { lookupGraphResourceKind, useResourceStore } from '@/features/core/resou
 import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEditorGroup';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
 import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from '@/features/core/sidebar';
-import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
+import { revealWorkbenchView } from '@/features/application/layout/workbenchLayoutActions';
 import {
   createVariableAction,
   deleteVariableAction,
@@ -22,7 +22,7 @@ export interface VariableCreationOptions {
  * Binds UI state and delegates CRUD to variable application actions.
  */
 export function useVariableManagement() {
-  const switchSidebarTab = useSidebarTab();
+
   const { activeTabId, tabs } = useActiveEditorGroup();
   const variablesGraphScopePath = useEditorStore((s) => s.variablesGraphScopePath);
   const localGraphPath = variablesGraphScopePath ?? activeTabId;
@@ -50,7 +50,7 @@ export function useVariableManagement() {
       graphType: isGlobal ? undefined : (explicitGraphScope?.graphType ?? graphType),
     });
     if (created) {
-      switchSidebarTab('project');
+      void revealWorkbenchView('project');
       const sidebar = useSidebarStore.getState();
       sidebar.setProjectTreeCategoriesExpanded(
         isGlobal
@@ -60,7 +60,7 @@ export function useVariableManagement() {
       );
     }
     return created;
-  }, [localGraphPath, graphType, switchSidebarTab]);
+  }, [localGraphPath, graphType]);
 
   const updateVariable = useCallback(async (id: string, data: Parameters<typeof updateVariableAction>[1]) => {
     await updateVariableAction(id, data);

@@ -29,6 +29,25 @@ type GridWithMaximizedNode = SerializedDockview['grid'] & {
   maximizedNode?: unknown;
 };
 
+const ACTIVITY_PANELS: Readonly<Record<string, TestPanel>> = {
+  project: {
+    component: 'Project',
+    metadata: { role: 'view', viewId: 'project' },
+  },
+  nodes: {
+    component: 'Nodes',
+    metadata: { role: 'view', viewId: 'nodes' },
+  },
+  data: {
+    component: 'Data',
+    metadata: { role: 'view', viewId: 'data' },
+  },
+  commands: {
+    component: 'Commands',
+    metadata: { role: 'view', viewId: 'commands' },
+  },
+};
+
 function gridWithMaximizedNode(layout: SerializedDockview): GridWithMaximizedNode {
   return layout.grid as GridWithMaximizedNode;
 }
@@ -55,7 +74,13 @@ function rootLayout(
     },
   },
 ): SerializedDockview {
-  const panelIds = Object.keys(panels);
+  const allPanels = { ...panels, ...ACTIVITY_PANELS };
+  const panelIds = Object.keys(allPanels);
+  const activityPanelIds = Object.entries(allPanels)
+    .filter(([, panel]) => panel.metadata.role === 'view'
+      && ['project', 'nodes', 'data', 'commands'].includes(String(panel.metadata.viewId)))
+    .map(([id]) => id);
+  const gridPanelIds = panelIds.filter((id) => !activityPanelIds.includes(id));
   return {
     grid: {
       root: {
@@ -64,8 +89,8 @@ function rootLayout(
           type: 'leaf',
           data: {
             id: 'grid-main',
-            views: panelIds,
-            ...(panelIds[0] === undefined ? {} : { activeView: panelIds[0] }),
+            views: gridPanelIds,
+            ...(gridPanelIds[0] === undefined ? {} : { activeView: gridPanelIds[0] }),
           },
         }],
       },
@@ -73,7 +98,7 @@ function rootLayout(
       width: 1200,
       orientation: 'HORIZONTAL',
     },
-    panels: Object.fromEntries(Object.entries(panels).map(([id, panel]) => [
+    panels: Object.fromEntries(Object.entries(allPanels).map(([id, panel]) => [
       id,
       {
         id,
@@ -85,6 +110,19 @@ function rootLayout(
     activeGroup: 'grid-main',
     floatingGroups: [],
     popoutGroups: [],
+    edgeGroups: {
+      left: {
+        size: 292,
+        visible: true,
+        collapsed: false,
+        group: {
+          id: 'workbench-edge-left',
+          views: activityPanelIds,
+          activeView: activityPanelIds[0],
+          headerPosition: 'left',
+        },
+      },
+    },
   } as unknown as SerializedDockview;
 }
 
@@ -92,7 +130,6 @@ function payload(root: unknown, logs: unknown = createDefaultLogsDockviewLayout(
   return {
     root,
     nested: { logs },
-    preferences: { sidebarCurrentTab: 'project' },
   };
 }
 
@@ -124,17 +161,16 @@ describe('workbench layout persistence', () => {
 
     expect(workbenchLayoutStorageKey('main')).toBe('yssbi-workbench-layout:main');
     expect(workbenchLayoutStorageKey('')).toBe('yssbi-workbench-layout:main');
-    expect(createPersistedWorkbenchLayout(root, logs, 'project')).toEqual({
+    expect(createPersistedWorkbenchLayout(root, logs)).toEqual({
       root,
       nested: { logs },
-      preferences: { sidebarCurrentTab: 'project' },
     });
-    expect(createPersistedWorkbenchLayout(root, logs, 'project')).not.toHaveProperty('version');
+    expect(createPersistedWorkbenchLayout(root, logs)).not.toHaveProperty('version');
     expect(parsePersistedWorkbenchLayout({
       ...payload(root, logs) as Record<string, unknown>,
       version: 1,
     })).toBeNull();
-    expect(parsePersistedWorkbenchLayout({ root, nested: { logs } })).toBeNull();
+    expect(parsePersistedWorkbenchLayout({ root, nested: { logs } })).not.toBeNull();
   });
 
   it('defines one deterministic default Logs group with all seven domains', () => {
@@ -184,13 +220,13 @@ describe('workbench layout persistence', () => {
     metadata.legacyId = 'editor';
 
     const duplicateSingleton = rootLayout({
-      resourcesOne: {
-        component: 'Resources',
-        metadata: { role: 'view', viewId: 'resources' },
+      projectOne: {
+        component: 'Project',
+        metadata: { role: 'view', viewId: 'project' },
       },
-      resourcesTwo: {
-        component: 'Resources',
-        metadata: { role: 'view', viewId: 'resources' },
+      projectTwo: {
+        component: 'Project',
+        metadata: { role: 'view', viewId: 'project' },
       },
     });
     const details = rootLayout({
@@ -432,6 +468,17 @@ describe('workbench layout persistence', () => {
       ],
     };
     layout.edgeGroups = {
+      left: {
+        size: 292,
+        visible: true,
+        collapsed: false,
+        group: {
+          id: 'workbench-edge-left',
+          views: ['project', 'nodes', 'data', 'commands'],
+          activeView: 'project',
+          headerPosition: 'left',
+        },
+      },
       right: {
         size: 320,
         visible: true,
@@ -459,7 +506,14 @@ describe('workbench layout persistence', () => {
 
     expect(layout).toEqual(original);
     expect(persisted).not.toBe(layout);
-    expect(Object.keys(persisted.panels)).toEqual(['editor', 'logs']);
+    expect(Object.keys(persisted.panels)).toEqual([
+      'editor',
+      'logs',
+      'project',
+      'nodes',
+      'data',
+      'commands',
+    ]);
     expect(persisted.grid.root).toEqual({
       type: 'branch',
       data: [{
@@ -473,6 +527,12 @@ describe('workbench layout persistence', () => {
     });
     expect(gridWithMaximizedNode(persisted).maximizedNode).toBeUndefined();
     expect(persisted.edgeGroups?.right).toBeUndefined();
+    expect(persisted.edgeGroups?.left?.group).toEqual({
+      id: 'workbench-edge-left',
+      views: ['project', 'nodes', 'data', 'commands'],
+      activeView: 'project',
+      headerPosition: 'left',
+    });
     expect(persisted.edgeGroups?.bottom?.group).toEqual({
       id: 'logs-edge',
       views: ['logs'],
@@ -511,10 +571,6 @@ describe('workbench layout persistence', () => {
           source: null,
         },
       },
-      resources: {
-        component: 'Resources',
-        metadata: { role: 'view', viewId: 'resources' },
-      },
       logs: {
         component: 'Logs',
         metadata: { role: 'view', viewId: 'logs' },
@@ -542,18 +598,14 @@ describe('workbench layout persistence', () => {
     };
     layout.edgeGroups = {
       left: {
-        size: 260,
+        size: 292,
         visible: true,
         collapsed: false,
         group: {
-          id: 'resources-edge',
-          views: ['resources', 'details'],
-          activeView: 'details',
-          tabGroups: [{
-            id: 'resources-tabs',
-            collapsed: false,
-            panelIds: ['resources', 'details'],
-          }],
+          id: 'workbench-edge-left',
+          views: ['project', 'nodes', 'data', 'commands'],
+          activeView: 'project',
+          headerPosition: 'left',
         },
       },
       bottom: {
@@ -579,23 +631,26 @@ describe('workbench layout persistence', () => {
     const scrubbed = scrubProjectScopedRootLayout(layout);
 
     expect(layout).toEqual(original);
-    expect(Object.keys(scrubbed.panels)).toEqual(['resources', 'logs', 'output']);
+    expect(Object.keys(scrubbed.panels)).toEqual([
+      'logs',
+      'output',
+      'project',
+      'nodes',
+      'data',
+      'commands',
+    ]);
     expect(scrubbed.grid.root).toEqual({ type: 'branch', data: [] });
     expect(gridWithMaximizedNode(scrubbed).maximizedNode).toBeUndefined();
     expect(scrubbed.edgeGroups).toEqual({
       left: {
-        size: 260,
+        size: 292,
         visible: true,
         collapsed: false,
         group: {
-          id: 'resources-edge',
-          views: ['resources'],
-          activeView: 'resources',
-          tabGroups: [{
-            id: 'resources-tabs',
-            collapsed: false,
-            panelIds: ['resources'],
-          }],
+          id: 'workbench-edge-left',
+          views: ['project', 'nodes', 'data', 'commands'],
+          activeView: 'project',
+          headerPosition: 'left',
         },
       },
       bottom: {

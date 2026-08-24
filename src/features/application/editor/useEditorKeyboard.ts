@@ -22,6 +22,7 @@ import {
 import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
 import { requestCloseWorkbenchPanel } from './workbenchPanelClose';
 import {
+  toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup,
   toggleWorkbenchView,
 } from '@/features/application/layout/workbenchLayoutActions';
@@ -256,7 +257,7 @@ export function useEditorKeyboard(): void {
 
       if (isControlKey && key === 'b') {
         event.preventDefault();
-        void toggleWorkbenchView('resources');
+        void toggleActivityWorkbenchGroup();
         return;
       }
 

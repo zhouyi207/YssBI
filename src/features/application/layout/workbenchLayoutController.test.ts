@@ -21,8 +21,10 @@ import type {
   WorkbenchDockviewPort,
   WorkbenchPanelInfo,
 } from '@/features/core/dockview/workbenchDockviewPort';
-import type { WorkbenchViewId } from '@/features/core/dockview/workbenchPanelModel';
-import type { SidebarTabId } from '@/features/core/workbench/workbenchTypes';
+import type {
+  WorkbenchComponentId,
+  WorkbenchViewId,
+} from '@/features/core/dockview/workbenchPanelModel';
 import { createWorkbenchLayoutController } from './workbenchLayoutController';
 
 type Listener = () => void;
@@ -59,14 +61,45 @@ function getOnlyGridGroup(layout: SerializedDockview): MutableGroup {
 }
 
 function rootLayout(
-  panelId = 'resources',
-  viewId: WorkbenchViewId = 'resources',
+  panelId = 'logs-default',
+  viewId: WorkbenchViewId = 'logs',
 ): SerializedDockview {
-  const component = viewId === 'resources'
-    ? 'Resources'
-    : viewId === 'logs'
-      ? 'Logs'
-      : 'Output';
+  const components: Record<WorkbenchViewId, string> = {
+    project: 'Project',
+    nodes: 'Nodes',
+    data: 'Data',
+    commands: 'Commands',
+    details: 'Details',
+    inspect: 'Inspect',
+    logs: 'Logs',
+    output: 'Output',
+  };
+  const activityPanels = {
+    'project-stable': {
+      id: 'project-stable',
+      contentComponent: 'Project',
+      title: 'Project',
+      params: { metadata: { role: 'view', viewId: 'project' } },
+    },
+    'nodes-stable': {
+      id: 'nodes-stable',
+      contentComponent: 'Nodes',
+      title: 'Nodes',
+      params: { metadata: { role: 'view', viewId: 'nodes' } },
+    },
+    'data-stable': {
+      id: 'data-stable',
+      contentComponent: 'Data',
+      title: 'Data',
+      params: { metadata: { role: 'view', viewId: 'data' } },
+    },
+    'commands-stable': {
+      id: 'commands-stable',
+      contentComponent: 'Commands',
+      title: 'Commands',
+      params: { metadata: { role: 'view', viewId: 'commands' } },
+    },
+  };
   return {
     grid: {
       root: {
@@ -83,14 +116,28 @@ function rootLayout(
     panels: {
       [panelId]: {
         id: panelId,
-        contentComponent: component,
-        title: component,
+        contentComponent: components[viewId],
+        title: components[viewId],
         params: { metadata: { role: 'view', viewId } },
       },
+      ...activityPanels,
     },
     activeGroup: 'grid-main',
     floatingGroups: [],
     popoutGroups: [],
+    edgeGroups: {
+      left: {
+        size: 292,
+        visible: true,
+        collapsed: false,
+        group: {
+          id: 'workbench-edge-left',
+          views: ['project-stable', 'nodes-stable', 'data-stable', 'commands-stable'],
+          activeView: 'project-stable',
+          headerPosition: 'left',
+        },
+      },
+    },
   } as unknown as SerializedDockview;
 }
 
@@ -126,11 +173,29 @@ function projectRootLayout(): SerializedDockview {
           },
         },
       },
-      'resources-stable': {
-        id: 'resources-stable',
-        contentComponent: 'Resources',
-        title: 'Resources',
-        params: { metadata: { role: 'view', viewId: 'resources' } },
+      'project-stable': {
+        id: 'project-stable',
+        contentComponent: 'Project',
+        title: 'Project',
+        params: { metadata: { role: 'view', viewId: 'project' } },
+      },
+      'nodes-stable': {
+        id: 'nodes-stable',
+        contentComponent: 'Nodes',
+        title: 'Nodes',
+        params: { metadata: { role: 'view', viewId: 'nodes' } },
+      },
+      'data-stable': {
+        id: 'data-stable',
+        contentComponent: 'Data',
+        title: 'Data',
+        params: { metadata: { role: 'view', viewId: 'data' } },
+      },
+      'commands-stable': {
+        id: 'commands-stable',
+        contentComponent: 'Commands',
+        title: 'Commands',
+        params: { metadata: { role: 'view', viewId: 'commands' } },
       },
       'logs-stable': {
         id: 'logs-stable',
@@ -150,13 +215,14 @@ function projectRootLayout(): SerializedDockview {
     popoutGroups: [],
     edgeGroups: {
       left: {
-        size: 260,
+        size: 292,
         visible: true,
         collapsed: false,
         group: {
-          id: 'resources-edge',
-          views: ['resources-stable'],
-          activeView: 'resources-stable',
+          id: 'workbench-edge-left',
+          views: ['project-stable', 'nodes-stable', 'data-stable', 'commands-stable'],
+          activeView: 'project-stable',
+          headerPosition: 'left',
         },
       },
       bottom: {
@@ -189,7 +255,7 @@ function emptyRootLayout(): SerializedDockview {
 
 function invalidRootLayout(): SerializedDockview {
   const layout = rootLayout();
-  layout.panels.resources.contentComponent = 'Output';
+  layout.panels['logs-default'].contentComponent = 'Output';
   return layout;
 }
 
@@ -216,21 +282,25 @@ function invalidLogsLayout(): SerializedDockview {
 function storedPayload(
   root: unknown = rootLayout(),
   logs: unknown = createDefaultLogsDockviewLayout(),
-  sidebarCurrentTab: SidebarTabId = 'nodes',
 ): string {
   return JSON.stringify({
     root,
     nested: { logs },
-    preferences: { sidebarCurrentTab },
   });
 }
 
-function panelInfo(viewId: 'resources' | 'logs' | 'output'): WorkbenchPanelInfo {
-  const component = viewId === 'resources'
-    ? 'Resources'
-    : viewId === 'logs'
-      ? 'Logs'
-      : 'Output';
+function panelInfo(viewId: WorkbenchViewId): WorkbenchPanelInfo {
+  const components = {
+    project: 'Project',
+    nodes: 'Nodes',
+    data: 'Data',
+    commands: 'Commands',
+    details: 'Details',
+    inspect: 'Inspect',
+    logs: 'Logs',
+    output: 'Output',
+  } as const satisfies Record<WorkbenchViewId, WorkbenchComponentId>;
+  const component = components[viewId];
   return {
     panelInstanceId: `view:${viewId}`,
     groupId: 'grid-main',
@@ -298,7 +368,7 @@ function createFakePort(
   let hydrated = false;
   let hydrationEpoch = 0;
   let idle: Promise<void> = Promise.resolve();
-  let serialized = rootLayout('serialized-resources');
+  let serialized = rootLayout('serialized-output', 'output');
 
   const subscribe = vi.fn((listener: Listener) => {
     order.push('port.subscribe');
@@ -314,16 +384,16 @@ function createFakePort(
   });
   const ensureView = vi.fn(async ({ viewId }: { viewId: WorkbenchViewId }) => {
     order.push(`port.ensureView:${viewId}`);
-    if (viewId !== 'resources' && viewId !== 'logs' && viewId !== 'output') {
+    if (!['project', 'nodes', 'data', 'commands', 'logs', 'output'].includes(viewId)) {
       throw new Error(`unexpected default view ${viewId}`);
     }
     return panelInfo(viewId);
   });
   const configureEdge = vi.fn(async (request: {
-    position: 'left' | 'bottom';
+    position: 'left' | 'bottom' | 'top' | 'right';
     size: number;
     collapsed: boolean;
-    headerPosition?: 'top' | 'bottom';
+    headerPosition?: 'top' | 'bottom' | 'left' | 'right';
   }) => {
     order.push(`port.configureEdge:${request.position}`);
     return {
@@ -380,16 +450,16 @@ function createFakePort(
   });
   const layoutEnsureView = vi.fn(({ viewId }: { viewId: WorkbenchViewId }) => {
     recordLayoutOperation(`layout.ensureView:${viewId}`);
-    if (viewId !== 'resources' && viewId !== 'logs' && viewId !== 'output') {
+    if (!['project', 'nodes', 'data', 'commands', 'logs', 'output'].includes(viewId)) {
       throw new Error(`unexpected default view ${viewId}`);
     }
     return panelInfo(viewId);
   });
   const layoutConfigureEdge = vi.fn((request: {
-    position: 'left' | 'bottom';
+    position: 'left' | 'bottom' | 'top' | 'right';
     size: number;
     collapsed: boolean;
-    headerPosition?: 'top' | 'bottom';
+    headerPosition?: 'top' | 'bottom' | 'left' | 'right';
   }) => {
     recordLayoutOperation(`layout.configureEdge:${request.position}`);
     return {
@@ -516,31 +586,6 @@ function createStorage(order: string[], raw: string | null) {
   return { values, getItem, setItem };
 }
 
-function createSidebarPreference(order: string[]) {
-  let current: SidebarTabId = 'project';
-  const listeners = new Set<Listener>();
-  const get = vi.fn(() => current);
-  const set = vi.fn((value: SidebarTabId) => {
-    order.push(`sidebar.set:${value}`);
-    if (current === value) return;
-    current = value;
-    [...listeners].forEach((listener) => listener());
-  });
-  const subscribe = vi.fn((listener: Listener) => {
-    order.push('sidebar.subscribe');
-    listeners.add(listener);
-    return () => {
-      order.push('sidebar.unsubscribe');
-      listeners.delete(listener);
-    };
-  });
-  return {
-    get,
-    set,
-    subscribe,
-    change(value: SidebarTabId): void { set(value); },
-  };
-}
 
 type HarnessOptions = {
   readonly raw?: string | null;
@@ -556,13 +601,11 @@ function createHarness(options: HarnessOptions = {}) {
   const fakePort = createFakePort(order, options.outputMoveGate);
   const logsController = createLogsDockviewLayoutController();
   const storage = createStorage(order, options.raw ?? null);
-  const sidebarPreference = createSidebarPreference(order);
   const controller = createWorkbenchLayoutController({
     port: fakePort.port,
     internal: fakePort.internal,
     logsController,
     storage,
-    sidebarPreference,
     ...(options.read ? { read: options.read } : {}),
     debounceMs: options.debounceMs ?? 25,
   });
@@ -572,7 +615,6 @@ function createHarness(options: HarnessOptions = {}) {
     fakePort,
     logsController,
     storage,
-    sidebarPreference,
     controller,
   };
 }
@@ -612,7 +654,7 @@ describe('WorkbenchLayoutController hydration', () => {
 
     expect(harness.root.fromJSON).not.toHaveBeenCalled();
     expect(harness.fakePort.layoutEnsureView.mock.calls.map(([request]) => request.viewId))
-      .toEqual(['resources', 'logs', 'output']);
+      .toEqual(['project', 'data', 'nodes', 'commands', 'logs', 'output']);
   });
 
   it('installs startup defaults behind hydration before queued application work', async () => {
@@ -637,17 +679,20 @@ describe('WorkbenchLayoutController hydration', () => {
     expect(harness.fakePort.ensureView).not.toHaveBeenCalled();
     expect(harness.fakePort.configureEdge).not.toHaveBeenCalled();
     expect(harness.fakePort.move).not.toHaveBeenCalled();
-    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(9);
+    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(15);
     expect(harness.fakePort.layoutOperationHydrationStates.every((state) => state === false))
       .toBe(true);
     expect(harness.fakePort.layoutEnsureView.mock.calls.map(([request]) => request.viewId))
-      .toEqual(['resources', 'logs', 'output']);
+      .toEqual(['project', 'data', 'nodes', 'commands', 'logs', 'output']);
     expect(harness.fakePort.layoutConfigureEdge.mock.calls.map(([request]) => request)).toEqual([
-      { position: 'left', size: 260, collapsed: false },
+      { position: 'left', size: 292, collapsed: false, headerPosition: 'left' },
       { position: 'bottom', size: 200, collapsed: false, headerPosition: 'bottom' },
     ]);
     expect(harness.fakePort.layoutMove.mock.calls.map(([request]) => request)).toEqual([
-      { panelInstanceId: 'view:resources', groupId: 'edge-left', index: 0 },
+      { panelInstanceId: 'view:project', groupId: 'edge-left', index: 0 },
+      { panelInstanceId: 'view:data', groupId: 'edge-left', index: 1 },
+      { panelInstanceId: 'view:nodes', groupId: 'edge-left', index: 2 },
+      { panelInstanceId: 'view:commands', groupId: 'edge-left', index: 3 },
       { panelInstanceId: 'view:logs', groupId: 'edge-bottom', index: 0 },
       { panelInstanceId: 'view:output', groupId: 'edge-bottom', index: 1 },
     ]);
@@ -680,7 +725,7 @@ describe('WorkbenchLayoutController hydration', () => {
     expect(harness.fakePort.installHydrationLayout).not.toHaveBeenCalled();
     expect(harness.fakePort.runLayoutTransaction).toHaveBeenCalledOnce();
     expect(harness.fakePort.completeHydration).not.toHaveBeenCalled();
-    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(9);
+    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(15);
     expect(harness.fakePort.layoutOperationHydrationStates.every((state) => state === true))
       .toBe(true);
   });
@@ -713,7 +758,7 @@ describe('WorkbenchLayoutController hydration', () => {
   });
 
   it('refuses startup restore when the bound root is not empty', async () => {
-    const existing = rootLayout('existing-resources');
+    const existing = rootLayout('existing-tool');
     const saved = rootLayout('saved-logs', 'logs');
     const harness = createHarness({
       raw: storedPayload(saved),
@@ -727,7 +772,7 @@ describe('WorkbenchLayoutController hydration', () => {
     expect(harness.fakePort.internal.completeHydration).toHaveBeenCalledOnce();
   });
 
-  it('starts root, Logs, and sidebar subscriptions only after hydration', async () => {
+  it('starts root and Logs subscriptions only after hydration', async () => {
     const read = createDeferred<string | null>();
     const harness = createHarness({ read: () => read.promise });
     const logsSubscribe = vi.spyOn(harness.logsController, 'subscribe');
@@ -735,14 +780,12 @@ describe('WorkbenchLayoutController hydration', () => {
 
     expect(harness.fakePort.subscribe).not.toHaveBeenCalled();
     expect(logsSubscribe).not.toHaveBeenCalled();
-    expect(harness.sidebarPreference.subscribe).not.toHaveBeenCalled();
 
     read.resolve(storedPayload());
     await harness.controller.whenHydrated();
 
     expect(harness.fakePort.subscribe).toHaveBeenCalledOnce();
     expect(logsSubscribe).toHaveBeenCalledOnce();
-    expect(harness.sidebarPreference.subscribe).toHaveBeenCalledOnce();
   });
 });
 
@@ -769,7 +812,6 @@ describe('WorkbenchLayoutController persistence', () => {
     expect(JSON.parse(raw)).toEqual({
       root: serializedRoot,
       nested: { logs: changedLogs },
-      preferences: { sidebarCurrentTab: 'nodes' },
     });
   });
 
@@ -823,11 +865,9 @@ describe('WorkbenchLayoutController persistence', () => {
 
     expect(harness.fakePort.serialize).not.toHaveBeenCalled();
     expect(harness.order).toEqual([
-      'sidebar.set:nodes',
       'root.fromJSON',
       'internal.completeHydration',
       'port.subscribe',
-      'sidebar.subscribe',
       'internal.whenIdle',
       'logs.capture',
       'root.toJSON',
@@ -865,7 +905,7 @@ describe('WorkbenchLayoutController persistence', () => {
     const previousRoot = projectRootLayout();
     const savedLogs = logsLayout('execution');
     const harness = createHarness({
-      raw: storedPayload(previousRoot, savedLogs, 'nodes'),
+      raw: storedPayload(previousRoot, savedLogs),
       rootLayout: previousRoot,
     });
     await bindAndHydrate(harness);
@@ -886,7 +926,10 @@ describe('WorkbenchLayoutController persistence', () => {
     expect(replacementRoot.fromJSON).toHaveBeenCalledOnce();
     const restoredRoot = replacementRoot.fromJSON.mock.calls[0]![0];
     expect(Object.keys(restoredRoot.panels)).toEqual([
-      'resources-stable',
+      'project-stable',
+      'nodes-stable',
+      'data-stable',
+      'commands-stable',
       'logs-stable',
       'output-stable',
     ]);
@@ -895,7 +938,6 @@ describe('WorkbenchLayoutController persistence', () => {
     expect(restoredRoot.edgeGroups).toEqual(previousRoot.edgeGroups);
     expect(restoredRoot.activeGroup).toBe('bottom-tools');
     expect(harness.logsController.getLatestSnapshot()).toEqual(savedLogs);
-    expect(harness.sidebarPreference.set).toHaveBeenLastCalledWith('nodes');
   });
 
   it('does not overwrite storage when unbound before hydration succeeds', async () => {

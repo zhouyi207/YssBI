@@ -12,7 +12,10 @@ import {
   scrubProjectScopedRootLayout,
   workbenchLayoutStorageKey,
 } from '@/features/core/dockview/workbenchLayoutPersistence';
-import { WORKBENCH_EDGE_SIZES } from '@/features/core/dockview/workbenchDockviewDefaults';
+import {
+  WORKBENCH_ACTIVITY_DEFAULT_ORDER,
+  WORKBENCH_EDGE_SIZES,
+} from '@/features/core/dockview/workbenchDockviewDefaults';
 import {
   createWorkbenchDockviewPort,
   workbenchDockviewInternal,
@@ -23,8 +26,7 @@ import {
   workbenchDockviewPort,
   type WorkbenchDockviewPort,
 } from '@/features/core/dockview/workbenchDockviewPort';
-import { useWorkbenchStore } from '@/features/core/workbench/workbenchStore';
-import type { SidebarTabId } from '@/features/core/workbench/workbenchTypes';
+
 
 export interface ProjectResourcesReadyContext {
   isCurrent(): boolean;
@@ -46,11 +48,6 @@ export interface WorkbenchLayoutController {
 
 type LayoutStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
-type SidebarPreference = {
-  get(): SidebarTabId;
-  set(value: SidebarTabId): void;
-  subscribe(listener: () => void): () => void;
-};
 
 type LayoutReader = (key: string) => string | null | Promise<string | null>;
 
@@ -59,7 +56,6 @@ type ControllerDependencies = {
   readonly internal?: WorkbenchDockviewInternal;
   readonly logsController?: LogsDockviewLayoutController;
   readonly storage?: LayoutStorage;
-  readonly sidebarPreference?: SidebarPreference;
   readonly read?: LayoutReader;
   readonly debounceMs?: number;
 };
@@ -104,18 +100,6 @@ const browserStorage: LayoutStorage = {
   },
 };
 
-const workbenchSidebarPreference: SidebarPreference = {
-  get: () => useWorkbenchStore.getState().sidebarCurrentTab,
-  set: (value) => useWorkbenchStore.getState().setSidebarCurrentTab(value),
-  subscribe(listener) {
-    let current = useWorkbenchStore.getState().sidebarCurrentTab;
-    return useWorkbenchStore.subscribe((state) => {
-      if (state.sidebarCurrentTab === current) return;
-      current = state.sidebarCurrentTab;
-      listener();
-    });
-  },
-};
 
 function createHydrationCycle(
   epoch: number,
@@ -147,16 +131,15 @@ function rootIsEmpty(api: DockviewApi): boolean {
 
 function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void {
   transaction.ensureCentralGroup();
-  const resources = transaction.ensureView({
-    viewId: 'resources',
-    title: 'Resources',
-  });
+  const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
+    transaction.ensureView({ viewId, title: viewId[0].toUpperCase() + viewId.slice(1) }));
   const logs = transaction.ensureView({ viewId: 'logs', title: 'Logs' });
   const output = transaction.ensureView({ viewId: 'output', title: 'Output' });
   const left = transaction.configureEdge({
     position: 'left',
     size: WORKBENCH_EDGE_SIZES.left,
     collapsed: false,
+    headerPosition: 'left',
   });
   const bottom = transaction.configureEdge({
     position: 'bottom',
@@ -164,10 +147,12 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
     collapsed: false,
     headerPosition: 'bottom',
   });
-  transaction.move({
-    panelInstanceId: resources.panelInstanceId,
-    groupId: left.groupId,
-    index: 0,
+  activityPanels.forEach((panel, index) => {
+    transaction.move({
+      panelInstanceId: panel.panelInstanceId,
+      groupId: left.groupId,
+      index,
+    });
   });
   transaction.move({
     panelInstanceId: logs.panelInstanceId,
@@ -220,8 +205,6 @@ export function createWorkbenchLayoutController(
   const logsController = dependencies.logsController
     ?? createLogsDockviewLayoutController();
   const storage = dependencies.storage ?? browserStorage;
-  const sidebarPreference = dependencies.sidebarPreference
-    ?? workbenchSidebarPreference;
   const read = dependencies.read ?? ((key: string) => storage.getItem(key));
   const debounceMs = dependencies.debounceMs
     ?? DEFAULT_PERSISTENCE_DEBOUNCE_MS;
@@ -338,7 +321,6 @@ export function createWorkbenchLayoutController(
     const payload = createPersistedWorkbenchLayout(
       root,
       logsController.getLatestSnapshot(),
-      sidebarPreference.get(),
     );
     storage.setItem(currentBound.key, JSON.stringify(payload));
   };
@@ -384,7 +366,6 @@ export function createWorkbenchLayoutController(
     persistenceDisposers = [
       port.subscribe(schedule),
       logsController.subscribe(schedule),
-      sidebarPreference.subscribe(schedule),
     ];
   };
 
@@ -500,8 +481,6 @@ export function createWorkbenchLayoutController(
       : DEFAULT_LOGS_DOCKVIEW_LAYOUT;
     if (!stageLogsLayout(cycle, logsRestoreEpoch, logsLayout)) return;
 
-    if (parsed) sidebarPreference.set(parsed.preferences.sidebarCurrentTab);
-    if (!isCurrentCycle(cycle) || bound !== currentBound) return;
 
     if (parsed?.root.status !== 'valid') {
       if (rootIsEmpty(currentBound.api)) {
@@ -711,5 +690,4 @@ export const workbenchLayoutController = createWorkbenchLayoutController({
   internal: workbenchDockviewInternal,
   logsController: logsDockviewLayoutController,
   storage: browserStorage,
-  sidebarPreference: workbenchSidebarPreference,
 });

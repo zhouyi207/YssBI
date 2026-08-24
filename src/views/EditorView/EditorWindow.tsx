@@ -1,9 +1,10 @@
 import { useWorkbenchStore } from '@/features/core/workbench';
 import { useTranslation } from "react-i18next";
-import { ActivityBar } from "./Layout/ActivityBar";
+
 import { BottomBar } from "./Layout/BottomBar";
 import { Menubar } from "./Layout/Menubar";
 import { Workspace } from "./Layout/Workspace";
+import { WorkbenchActivityPanelsProvider } from './Layout/WorkbenchActivityPanels';
 import { useAppInitialization } from "@/features/application/initialization";
 import { LoadStatus } from "@/shared/types/ui";
 import { useProjectSync } from "@/features/application/initialization";
@@ -13,7 +14,7 @@ import {
   useEditorWindowCloseGuard,
 } from "@/features/application/editor";
 import { useWorkbenchLayout } from "@/features/application/layout/useWorkbenchLayout";
-import { useActivityBarLayout } from "@/features/application/settings/useActivityBarLayout";
+
 import { useEditorWindowGeometryPersistence } from "@/features/application/window";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { SettingsView } from "./Layout/SettingsView";
@@ -25,24 +26,20 @@ function EditorWindowReady() {
   const isNodeDocumentationOpen = useWorkbenchStore((state) => state.isNodeDocumentationOpen);
   const setSettingsOpen = useWorkbenchStore((state) => state.setSettingsOpen);
   const setNodeDocumentationOpen = useWorkbenchStore((state) => state.setNodeDocumentationOpen);
-  const activityBar = useActivityBarLayout();
-
   useWorkbenchLayout();
   useProjectSync();
   useProjectionLocaleSync();
 
   useEditorKeyboard();
 
-  const showActivityBar = activityBar.visible;
-  const activityBarOnRight = activityBar.side === "right";
 
   return (
     <div className="flex h-screen w-full flex-col bg-[var(--workbench-bg)] text-foreground" data-yssbi-workbench>
       <Menubar />
       <div className="isolate flex min-h-0 flex-1 overflow-hidden">
-        {showActivityBar && !activityBarOnRight ? <ActivityBar side="left" /> : null}
-        <Workspace />
-        {showActivityBar && activityBarOnRight ? <ActivityBar side="right" /> : null}
+        <WorkbenchActivityPanelsProvider>
+          <Workspace />
+        </WorkbenchActivityPanelsProvider>
       </div>
       <BottomBar />
       <NodeDocumentationModal open={isNodeDocumentationOpen} onOpenChange={setNodeDocumentationOpen} />

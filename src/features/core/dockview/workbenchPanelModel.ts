@@ -4,8 +4,17 @@ import type {
 } from '@/shared/types/dto/result';
 import type { LayoutTab } from '@/shared/types/layout/layout';
 
+export const WORKBENCH_ACTIVITY_VIEW_IDS = [
+  'project',
+  'data',
+  'nodes',
+  'commands',
+] as const;
+
+export type WorkbenchActivityViewId = (typeof WORKBENCH_ACTIVITY_VIEW_IDS)[number];
+
 export const WORKBENCH_VIEW_IDS = [
-  'resources',
+  ...WORKBENCH_ACTIVITY_VIEW_IDS,
   'details',
   'inspect',
   'logs',
@@ -17,7 +26,10 @@ export type EditorResourceKind = 'event' | 'function' | 'worksheet';
 export type WorkbenchComponentId =
   | 'GraphEditor'
   | 'WorksheetEditor'
-  | 'Resources'
+  | 'Project'
+  | 'Nodes'
+  | 'Data'
+  | 'Commands'
   | 'Details'
   | 'Inspect'
   | 'Result'
@@ -60,6 +72,9 @@ const EDITOR_RESOURCE_KINDS = new Set<EditorResourceKind>([
   'function',
   'worksheet',
 ]);
+const WORKBENCH_ACTIVITY_VIEW_ID_SET = new Set<WorkbenchActivityViewId>(
+  WORKBENCH_ACTIVITY_VIEW_IDS,
+);
 const WORKBENCH_VIEW_ID_SET = new Set<WorkbenchViewId>(WORKBENCH_VIEW_IDS);
 const RESULT_PLOT_KINDS = new Set([
   'scatter',
@@ -88,7 +103,10 @@ const RESULT_REPORT_KINDS = new Set([
 ]);
 
 const COMPONENT_BY_VIEW_ID: Readonly<Record<WorkbenchViewId, WorkbenchComponentId>> = {
-  resources: 'Resources',
+  project: 'Project',
+  nodes: 'Nodes',
+  data: 'Data',
+  commands: 'Commands',
   details: 'Details',
   inspect: 'Inspect',
   logs: 'Logs',
@@ -156,6 +174,18 @@ function isGraphOutputRef(value: unknown): value is GraphOutputRefDto {
     && hasKnownKeys(value, ['graphPath', 'port'])
     && isNonEmptyString(value.graphPath)
     && isPortAddress(value.port);
+}
+
+export function isWorkbenchActivityViewId(
+  value: string,
+): value is WorkbenchActivityViewId {
+  return WORKBENCH_ACTIVITY_VIEW_ID_SET.has(value as WorkbenchActivityViewId);
+}
+
+export function isWorkbenchActivityMetadata(
+  metadata: WorkbenchPanelMetadata | undefined,
+): metadata is ViewPanelMetadata & { readonly viewId: WorkbenchActivityViewId } {
+  return metadata?.role === 'view' && isWorkbenchActivityViewId(metadata.viewId);
 }
 
 export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPanelMetadata {

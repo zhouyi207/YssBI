@@ -1,20 +1,18 @@
 import type { SerializedDockview } from 'dockview-react';
 
-import {
-  SIDEBAR_TAB_IDS,
-  type SidebarTabId,
-} from '@/features/core/workbench/workbenchTypes';
 import { isValidLogsDockviewLayout } from './logsDockviewLayout';
 import {
   componentForWorkbenchMetadata,
+  isWorkbenchActivityMetadata,
   isWorkbenchPanelMetadata,
+  WORKBENCH_ACTIVITY_VIEW_IDS,
   type WorkbenchPanelMetadata,
 } from './workbenchPanelModel';
+import { WORKBENCH_ACTIVITY_GROUP_ID } from './workbenchDockviewDefaults';
 
 export interface PersistedWorkbenchLayout {
   readonly root: SerializedDockview;
   readonly nested: { readonly logs: SerializedDockview };
-  readonly preferences: { readonly sidebarCurrentTab: SidebarTabId };
 }
 
 export type ParsedLayoutPart<T> =
@@ -24,10 +22,7 @@ export type ParsedLayoutPart<T> =
 export interface ParsedPersistedWorkbenchLayout {
   readonly root: ParsedLayoutPart<SerializedDockview>;
   readonly logs: ParsedLayoutPart<SerializedDockview>;
-  readonly preferences: { readonly sidebarCurrentTab: SidebarTabId };
 }
-
-const SIDEBAR_TAB_ID_SET = new Set<SidebarTabId>(SIDEBAR_TAB_IDS);
 const EDGE_POSITIONS = ['top', 'bottom', 'left', 'right'] as const;
 
 type UnknownRecord = Record<string, unknown>;
@@ -38,8 +33,14 @@ type GridWithMaximizedNode = SerializedDockview['grid'] & {
 
 interface TopologyValidationState {
   readonly panelIds: ReadonlySet<string>;
+  readonly activityPanelIds: ReadonlySet<string>;
   readonly referencedPanelIds: Set<string>;
   readonly groupIds: Set<string>;
+}
+
+interface ValidatedRootPanels {
+  readonly panelIds: ReadonlySet<string>;
+  readonly activityPanelIds: ReadonlySet<string>;
 }
 
 interface PrunedGridNode {
@@ -120,10 +121,11 @@ function validatePanelShape(panelId: string, panel: unknown): panel is UnknownRe
     && isOptionalBoolean(panel.pinned);
 }
 
-function validateRootPanels(candidate: unknown): ReadonlySet<string> | undefined {
+function validateRootPanels(candidate: unknown): ValidatedRootPanels | undefined {
   if (!isRecord(candidate)) return undefined;
 
   const panelIds = new Set<string>();
+  const activityPanelIds = new Set<string>();
   const singletonViews = new Set<string>();
   for (const [panelId, panel] of Object.entries(candidate)) {
     if (!isNonEmptyString(panelId) || !validatePanelShape(panelId, panel)) return undefined;
@@ -134,10 +136,11 @@ function validateRootPanels(candidate: unknown): ReadonlySet<string> | undefined
     if (metadata.role === 'view') {
       if (singletonViews.has(metadata.viewId)) return undefined;
       singletonViews.add(metadata.viewId);
+      if (isWorkbenchActivityMetadata(metadata)) activityPanelIds.add(panelId);
     }
     panelIds.add(panelId);
   }
-  return panelIds;
+  return { panelIds, activityPanelIds };
 }
 
 function validateTabGroups(value: unknown, groupViews: ReadonlySet<string>): boolean {
@@ -306,6 +309,52 @@ function validateEdgeGroups(candidate: unknown, state: TopologyValidationState):
   return true;
 }
 
+function validateActivityTopology(
+  layout: UnknownRecord,
+  state: TopologyValidationState,
+): boolean {
+  if (state.activityPanelIds.size !== WORKBENCH_ACTIVITY_VIEW_IDS.length) return false;
+  const left = isRecord(layout.edgeGroups)
+    && isRecord(layout.edgeGroups.left)
+    && isRecord(layout.edgeGroups.left.group)
+    ? layout.edgeGroups.left.group
+    : undefined;
+  if (!left
+    || left.id !== WORKBENCH_ACTIVITY_GROUP_ID
+    || left.headerPosition !== 'left'
+    || left.locked !== undefined
+    || left.tabGroups !== undefined
+    || !Array.isArray(left.views)) return false;
+
+  const leftViews = new Set(left.views);
+  if (leftViews.size !== WORKBENCH_ACTIVITY_VIEW_IDS.length
+    || leftViews.size !== state.activityPanelIds.size
+    || [...leftViews].some((panelId) => !state.activityPanelIds.has(panelId))
+    || typeof left.activeView !== 'string'
+    || !leftViews.has(left.activeView)) return false;
+
+  let activityInGrid = false;
+  if (!isRecord(layout.grid) || !isRecord(layout.grid.root)) return false;
+  visitGridGroups(layout.grid.root, (group) => {
+    if (Array.isArray(group.views)
+      && group.views.some((panelId) => typeof panelId === 'string'
+        && state.activityPanelIds.has(panelId))) activityInGrid = true;
+  });
+  if (activityInGrid) return false;
+
+  const edgeGroups = isRecord(layout.edgeGroups) ? layout.edgeGroups : {};
+  for (const position of EDGE_POSITIONS) {
+    if (position === 'left') continue;
+    const edge = edgeGroups[position];
+    const group = isRecord(edge) && isRecord(edge.group) ? edge.group : undefined;
+    if (group
+      && Array.isArray(group.views)
+      && group.views.some((panelId) => typeof panelId === 'string'
+        && state.activityPanelIds.has(panelId))) return false;
+  }
+  return true;
+}
+
 function isValidRootLayout(candidate: unknown): candidate is SerializedDockview {
   if (!isRecord(candidate) || !hasOnlyKeys(candidate, [
     'grid',
@@ -320,17 +369,19 @@ function isValidRootLayout(candidate: unknown): candidate is SerializedDockview 
   if (candidate.popoutGroups !== undefined
     && (!Array.isArray(candidate.popoutGroups) || candidate.popoutGroups.length > 0)) return false;
 
-  const panelIds = validateRootPanels(candidate.panels);
-  if (!panelIds) return false;
+  const validatedPanels = validateRootPanels(candidate.panels);
+  if (!validatedPanels) return false;
   const state: TopologyValidationState = {
-    panelIds,
+    panelIds: validatedPanels.panelIds,
+    activityPanelIds: validatedPanels.activityPanelIds,
     referencedPanelIds: new Set(),
     groupIds: new Set(),
   };
   if (!validateGrid(candidate.grid, state) || !validateEdgeGroups(candidate.edgeGroups, state)) {
     return false;
   }
-  if (state.referencedPanelIds.size !== panelIds.size) return false;
+  if (state.referencedPanelIds.size !== validatedPanels.panelIds.size
+    || !validateActivityTopology(candidate, state)) return false;
   return candidate.activeGroup === undefined
     || (isNonEmptyString(candidate.activeGroup) && state.groupIds.has(candidate.activeGroup));
 }
@@ -510,12 +561,10 @@ export function workbenchLayoutStorageKey(label: string): string {
 export function createPersistedWorkbenchLayout(
   root: SerializedDockview,
   logs: SerializedDockview,
-  sidebarCurrentTab: SidebarTabId,
 ): PersistedWorkbenchLayout {
   return {
     root: prepareRootLayoutForPersistence(root),
     nested: { logs: structuredClone(logs) },
-    preferences: { sidebarCurrentTab },
   };
 }
 
@@ -523,17 +572,12 @@ export function parsePersistedWorkbenchLayout(
   candidate: unknown,
 ): ParsedPersistedWorkbenchLayout | null {
   if (!isRecord(candidate)
-    || !hasExactKeys(candidate, ['root', 'nested', 'preferences'])
+    || !hasExactKeys(candidate, ['root', 'nested'])
     || !isRecord(candidate.nested)
-    || !hasExactKeys(candidate.nested, ['logs'])
-    || !isRecord(candidate.preferences)
-    || !hasExactKeys(candidate.preferences, ['sidebarCurrentTab'])
-    || typeof candidate.preferences.sidebarCurrentTab !== 'string'
-    || !SIDEBAR_TAB_ID_SET.has(candidate.preferences.sidebarCurrentTab as SidebarTabId)) {
+    || !hasExactKeys(candidate.nested, ['logs'])) {
     return null;
   }
 
-  const sidebarCurrentTab = candidate.preferences.sidebarCurrentTab as SidebarTabId;
   return {
     root: isValidRootLayout(candidate.root)
       ? { status: 'valid', value: candidate.root }
@@ -541,7 +585,6 @@ export function parsePersistedWorkbenchLayout(
     logs: isValidLogsDockviewLayout(candidate.nested.logs)
       ? { status: 'valid', value: candidate.nested.logs }
       : { status: 'invalid' },
-    preferences: { sidebarCurrentTab },
   };
 }
 

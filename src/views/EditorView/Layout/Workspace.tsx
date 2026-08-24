@@ -40,6 +40,7 @@ import { useSidebarDragStore } from '@/features/core/sidebarDrag';
 import { resolveYssbiDockviewTheme } from '@/shared/theme/dockviewTheme';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { WatermarkView } from '../Canvas/overlays/WatermarkView';
+import { WorkbenchActivityActions } from './WorkbenchActivityActions';
 import { WorkbenchDockviewTab } from './WorkbenchDockviewTab';
 import { workbenchDockviewComponents } from './WorkbenchDockviewPanels';
 import { WorkspaceDragOverlay } from './WorkspaceDragOverlay';
@@ -143,6 +144,7 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref
             className="yssbi-root-dockview-instance h-full w-full"
             components={workbenchDockviewComponents}
             defaultTabComponent={WorkbenchDockviewTab}
+            rightHeaderActionsComponent={WorkbenchActivityActions}
             watermarkComponent={WorkbenchDockviewWatermark}
             disableFloatingGroups
             theme={resolveYssbiDockviewTheme(themeMode)}

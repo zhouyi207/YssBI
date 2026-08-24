@@ -103,7 +103,7 @@ export const enUS = {
     },
   },
   panel: {
-    resources: "Resources",
+    primarySideBar: "Primary Side Bar",
     details: "Details",
     inspect: "Inspect",
     logs: "Logs",
@@ -618,7 +618,7 @@ export const enUS = {
       exportPath: "Export Path",
       colorTheme: "Color Theme",
       language: "Language",
-      activityBarPosition: "Activity Bar Position",
+
       smoothScroll: "Smooth Scroll",
       titleBarStyle: "Title Bar Style",
       workbenchBackground: "Workbench Background",
@@ -661,7 +661,7 @@ export const enUS = {
       exportPath: "Default directory where the project will be exported.",
       colorTheme: "Controls the overall color theme of the editor.",
       language: "Controls the application interface language.",
-      activityBarPosition: "Controls the visibility and position of the activity bar.",
+
       smoothScroll: "Enable smooth scrolling for scroll areas (lists, settings, sidebars).",
       titleBarStyle: "Use custom in-app title bar or the native OS window frame.",
       workbenchBackground: "The primary background color of the editor environment.",

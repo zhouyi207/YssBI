@@ -43,7 +43,10 @@ describe('workbench panel metadata', () => {
       metadata: ViewPanelMetadata;
       component: WorkbenchComponentId;
     }[] = [
-      { metadata: { role: 'view', viewId: 'resources' }, component: 'Resources' },
+      { metadata: { role: 'view', viewId: 'project' }, component: 'Project' },
+      { metadata: { role: 'view', viewId: 'nodes' }, component: 'Nodes' },
+      { metadata: { role: 'view', viewId: 'data' }, component: 'Data' },
+      { metadata: { role: 'view', viewId: 'commands' }, component: 'Commands' },
       { metadata: { role: 'view', viewId: 'details' }, component: 'Details' },
       { metadata: { role: 'view', viewId: 'inspect' }, component: 'Inspect' },
       { metadata: { role: 'view', viewId: 'logs' }, component: 'Logs' },
@@ -128,7 +131,7 @@ describe('workbench panel metadata', () => {
       },
       { role: 'view', viewId: 'result' },
       { role: 'view', viewId: 'settings' },
-      { role: 'unknown', viewId: 'resources' },
+      { role: 'unknown', viewId: 'obsolete-view' },
       {
         role: 'result',
         resultKey: '',

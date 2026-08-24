@@ -103,7 +103,7 @@ export const zhCN = {
     },
   },
   panel: {
-    resources: "资源",
+    primarySideBar: "主侧栏",
     details: "详细信息",
     inspect: "检查",
     logs: "日志",
@@ -618,7 +618,7 @@ export const zhCN = {
       exportPath: "导出路径",
       colorTheme: "颜色主题",
       language: "语言",
-      activityBarPosition: "活动栏位置",
+
       smoothScroll: "平滑滚动",
       titleBarStyle: "标题栏样式",
       workbenchBackground: "工作区背景",
@@ -661,7 +661,7 @@ export const zhCN = {
       exportPath: "项目默认导出目录。",
       colorTheme: "控制编辑器整体颜色主题。",
       language: "控制应用界面语言。",
-      activityBarPosition: "控制活动栏的位置和可见性。",
+
       smoothScroll: "为滚动区域（列表、设置、侧栏等）启用平滑滚动。",
       titleBarStyle: "使用应用内自绘标题栏或操作系统原生窗口边框。",
       workbenchBackground: "编辑器工作区的主背景色。",

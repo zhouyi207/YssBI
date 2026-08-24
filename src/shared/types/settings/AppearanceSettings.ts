@@ -8,7 +8,7 @@ export interface AppearanceSettings {
     lastLightColorTheme: string;
     lastDarkColorTheme: string;
     language: AppLanguage;
-    activityBarPosition: string;
+
     smoothScroll: boolean;
     titleBarStyle: TitleBarStyle;
 }

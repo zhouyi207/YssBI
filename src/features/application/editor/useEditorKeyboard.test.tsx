@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   activate: vi.fn(async () => true),
   requestCloseWorkbenchPanel: vi.fn(async () => true),
   toggleWorkbenchView: vi.fn(async () => true),
+  toggleActivityWorkbenchGroup: vi.fn(async () => undefined),
   toggleBottomWorkbenchGroup: vi.fn(async () => undefined),
   clearSelection: vi.fn(),
   cancelCanvasInteraction: vi.fn(),
@@ -103,6 +104,7 @@ vi.mock('./workbenchPanelClose', () => ({
 }));
 vi.mock('@/features/application/layout/workbenchLayoutActions', () => ({
   toggleWorkbenchView: mocks.toggleWorkbenchView,
+  toggleActivityWorkbenchGroup: mocks.toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup: mocks.toggleBottomWorkbenchGroup,
 }));
 vi.mock('@/features/core/layout/layoutTabQueries', () => ({
@@ -334,8 +336,8 @@ describe('useEditorKeyboard', () => {
     keydown('i', { ctrlKey: true });
     keydown('`', { ctrlKey: true });
 
-    expect(mocks.toggleWorkbenchView).toHaveBeenNthCalledWith(1, 'resources');
-    expect(mocks.toggleWorkbenchView).toHaveBeenNthCalledWith(2, 'inspect');
+    expect(mocks.toggleActivityWorkbenchGroup).toHaveBeenCalledOnce();
+    expect(mocks.toggleWorkbenchView).toHaveBeenCalledWith('inspect');
     expect(mocks.toggleBottomWorkbenchGroup).toHaveBeenCalledOnce();
   });
 });

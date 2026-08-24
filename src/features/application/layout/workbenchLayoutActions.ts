@@ -4,6 +4,7 @@ import { requestCloseWorkbenchPanel } from '@/features/application/editor/workbe
 import { logsDockviewLayoutController } from '@/features/core/dockview/logsDockviewLayoutController';
 import {
   orderWorkbenchPanelIdsForReset,
+  WORKBENCH_ACTIVITY_DEFAULT_ORDER,
   WORKBENCH_EDGE_SIZES,
 } from '@/features/core/dockview/workbenchDockviewDefaults';
 import { workbenchDockviewInternal } from '@/features/core/dockview/workbenchDockviewInternal';
@@ -11,14 +12,20 @@ import {
   workbenchDockviewPort,
   type WorkbenchPanelInfo,
 } from '@/features/core/dockview/workbenchDockviewPort';
-import type { WorkbenchViewId } from '@/features/core/dockview/workbenchPanelModel';
+import {
+  isWorkbenchActivityMetadata,
+  type WorkbenchViewId,
+} from '@/features/core/dockview/workbenchPanelModel';
 import { useEditorStore } from '@/features/core/editor';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { workbenchLayoutController } from './workbenchLayoutController';
 import { showWorkbenchLayoutError } from './workbenchLayoutErrorFeedback';
 
 const VIEW_TITLE_KEYS = {
-  resources: 'panel.resources',
+  project: 'activityBar.project',
+  nodes: 'activityBar.nodes',
+  data: 'activityBar.data',
+  commands: 'activityBar.commands',
   details: 'panel.details',
   inspect: 'panel.inspect',
   logs: 'panel.logs',
@@ -64,8 +71,49 @@ export async function revealWorkbenchView(
 
 export async function toggleWorkbenchView(viewId: WorkbenchViewId): Promise<boolean> {
   const existing = findWorkbenchView(viewId);
+  if (existing && isWorkbenchActivityMetadata(existing.metadata)) {
+    return (await revealWorkbenchView(viewId)) !== null;
+  }
   if (existing) return requestCloseWorkbenchPanel(existing.panelInstanceId);
   return (await revealWorkbenchView(viewId)) !== null;
+}
+
+function activityPanelsInGroup(groupId: string): boolean {
+  const panels = workbenchDockviewPort.listGroupPanels(groupId);
+  return panels.length === WORKBENCH_ACTIVITY_DEFAULT_ORDER.length
+    && panels.every((panel) => isWorkbenchActivityMetadata(panel.metadata));
+}
+
+async function ensureActivityWorkbenchGroup(): Promise<void> {
+  await workbenchDockviewInternal.runLayoutTransaction((tx) => {
+    const panels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
+      tx.ensureView(viewRequest(viewId)));
+    const left = tx.configureEdge({
+      position: 'left',
+      size: WORKBENCH_EDGE_SIZES.left,
+      collapsed: false,
+      headerPosition: 'left',
+    });
+    panels.forEach((panel, index) => {
+      tx.move({ panelInstanceId: panel.panelInstanceId, groupId: left.groupId, index });
+    });
+    const project = panels.find((panel) =>
+      panel.metadata.role === 'view' && panel.metadata.viewId === 'project');
+    if (project) tx.activate(project.panelInstanceId);
+  });
+}
+
+export async function toggleActivityWorkbenchGroup(): Promise<void> {
+  try {
+    const left = workbenchDockviewPort.getEdgeState('left');
+    if (left.exists && left.groupId && activityPanelsInGroup(left.groupId)) {
+      await workbenchDockviewPort.setEdgeCollapsed('left', left.visible && !left.collapsed);
+      return;
+    }
+    await ensureActivityWorkbenchGroup();
+  } catch (error) {
+    showWorkbenchLayoutError(error);
+  }
 }
 
 export async function toggleBottomWorkbenchGroup(): Promise<void> {
@@ -118,13 +166,15 @@ export async function resetWorkbenchLayout(): Promise<void> {
       ) ?? ordered.find((panel) => panel.metadata.role === 'editor');
 
       const editors = ordered.filter((panel) => panel.metadata.role === 'editor');
-      const resources = tx.ensureView(viewRequest('resources'));
+      const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
+        tx.ensureView(viewRequest(viewId)));
       const logs = tx.ensureView(viewRequest('logs'));
       const output = tx.ensureView(viewRequest('output'));
       const left = tx.configureEdge({
         position: 'left',
         size: WORKBENCH_EDGE_SIZES.left,
         collapsed: false,
+        headerPosition: 'left',
       });
       const bottom = tx.configureEdge({
         position: 'bottom',
@@ -143,10 +193,12 @@ export async function resetWorkbenchLayout(): Promise<void> {
         });
       }
 
-      tx.move({
-        panelInstanceId: resources.panelInstanceId,
-        groupId: left.groupId,
-        index: 0,
+      activityPanels.forEach((panel, index) => {
+        tx.move({
+          panelInstanceId: panel.panelInstanceId,
+          groupId: left.groupId,
+          index,
+        });
       });
       tx.move({
         panelInstanceId: logs.panelInstanceId,
@@ -187,7 +239,9 @@ export async function resetWorkbenchLayout(): Promise<void> {
         }
       }
 
-      tx.activate(editorToRestore?.panelInstanceId ?? resources.panelInstanceId);
+      const project = activityPanels.find((panel) =>
+        panel.metadata.role === 'view' && panel.metadata.viewId === 'project');
+      tx.activate(editorToRestore?.panelInstanceId ?? project?.panelInstanceId ?? '');
     });
     logsDockviewLayoutController.resetToDefault();
   } catch (error) {

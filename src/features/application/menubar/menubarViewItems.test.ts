@@ -9,7 +9,7 @@ const t = ((key: string) => key) as never;
 
 function actions(): MenubarViewMenuActions {
   return {
-    toggleResources: vi.fn(),
+    toggleActivityGroup: vi.fn(),
     toggleDetails: vi.fn(),
     toggleInspect: vi.fn(),
     toggleLogs: vi.fn(),
@@ -20,7 +20,7 @@ function actions(): MenubarViewMenuActions {
 
 function state(overrides: Partial<MenubarViewState> = {}): MenubarViewState {
   return {
-    resourcesOpen: true,
+    activityGroupOpen: true,
     detailsOpen: false,
     detailsContextValid: false,
     inspectOpen: false,
@@ -37,7 +37,7 @@ describe('buildViewMenuItems', () => {
     const items = buildViewMenuItems(t, state({ bottomCollapsed: true }), actions());
 
     expect(items.map((item) => item.label)).toEqual([
-      'panel.resources',
+      'panel.primarySideBar',
       'panel.details',
       'panel.inspect',
       'panel.logs',

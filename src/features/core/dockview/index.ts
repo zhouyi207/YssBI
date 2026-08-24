@@ -3,8 +3,11 @@ export { getPaneSelection, useEditorPaneStateStore } from './editorPaneStateStor
 export type { EditorPaneSelection } from './editorPaneStateStore';
 export {
   componentForWorkbenchMetadata,
+  isWorkbenchActivityMetadata,
+  isWorkbenchActivityViewId,
   isWorkbenchPanelMetadata,
   layoutTabFromEditorMetadata,
+  WORKBENCH_ACTIVITY_VIEW_IDS,
   WORKBENCH_VIEW_IDS,
 } from './workbenchPanelModel';
 export type {
@@ -15,10 +18,13 @@ export type {
   WorkbenchComponentId,
   WorkbenchPanelMetadata,
   WorkbenchPanelParams,
+  WorkbenchActivityViewId,
   WorkbenchViewId,
 } from './workbenchPanelModel';
 export {
   orderWorkbenchPanelIdsForReset,
+  WORKBENCH_ACTIVITY_DEFAULT_ORDER,
+  WORKBENCH_ACTIVITY_GROUP_ID,
   WORKBENCH_EDGE_GROUP_IDS,
   WORKBENCH_EDGE_SIZES,
   WORKBENCH_HOME_EDGE,

@@ -9,10 +9,12 @@ import { useTranslation } from 'react-i18next';
 import {
   VscClose,
   VscCloseAll,
-  VscFiles,
+  VscDatabase,
   VscGraphLine,
   VscInfo,
   VscInspect,
+  VscLibrary,
+  VscProject,
   VscOutput,
   VscPreview,
   VscSymbolEvent,
@@ -28,6 +30,7 @@ import {
 } from '@/features/application/editor/workbenchPanelClose';
 import { buildTabContextMenuSections } from '@/features/application/editor/tabContextMenu';
 import {
+  isWorkbenchActivityViewId,
   layoutTabFromEditorMetadata,
   workbenchDockviewPort,
   type WorkbenchPanelInfo,
@@ -49,7 +52,10 @@ interface WorkbenchTabContextTarget {
 }
 
 const VIEW_ICONS: Readonly<Record<WorkbenchViewId, IconType>> = {
-  resources: VscFiles,
+  project: VscProject,
+  nodes: VscLibrary,
+  data: VscDatabase,
+  commands: VscTerminal,
   details: VscInfo,
   inspect: VscInspect,
   logs: VscTerminal,
@@ -129,6 +135,7 @@ export function WorkbenchDockviewTab(
   const metadata = props.params.metadata;
   const panelTitle = usePanelTitle(props.api);
   const title = titleForMetadata(metadata, panelTitle);
+  const isActivityTab = metadata.role === 'view' && isWorkbenchActivityViewId(metadata.viewId);
   const { Icon, key: iconKey } = iconForMetadata(metadata);
   const editorDocumentKey = metadata.role === 'editor'
     ? resourceKey({ id: metadata.resourceRef, kind: metadata.resourceKind })
@@ -148,7 +155,21 @@ export function WorkbenchDockviewTab(
   }, [props.api]);
 
   useEffect(() => {
-    const tabShell = tabContentRef.current?.closest<HTMLElement>('.dv-tab');
+    const tabContent = tabContentRef.current;
+    if (!tabContent) return;
+
+    if (isActivityTab) {
+      const handleActivityClick = (event: MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        props.api.setActive();
+        if (props.api.group.api.isCollapsed()) props.api.group.api.expand();
+      };
+      tabContent.addEventListener('click', handleActivityClick);
+      return () => tabContent.removeEventListener('click', handleActivityClick);
+    }
+
+    const tabShell = tabContent.closest<HTMLElement>('.dv-tab');
     if (!tabShell) return;
 
     let middleButtonDown = false;
@@ -205,7 +226,26 @@ export function WorkbenchDockviewTab(
       tabShell.removeEventListener('auxclick', handleAuxClick);
       tabShell.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [metadata, props.api, requestClose, setContextMenu]);
+  }, [isActivityTab, metadata, props.api, requestClose, setContextMenu]);
+
+  if (isActivityTab) {
+    return (
+      <div
+        ref={tabContentRef}
+        className="dv-default-tab"
+        data-workbench-activity-tab
+        data-workbench-activity-separator={metadata.viewId === 'commands' ? 'true' : undefined}
+        data-panel-instance-id={props.api.id}
+        aria-label={title}
+        title={title}
+      >
+        <span data-workbench-activity-icon aria-hidden="true">
+          <Icon size={18} />
+        </span>
+        <span className="sr-only">{title}</span>
+      </div>
+    );
+  }
 
   const contextMenuSections = contextMenu
     ? contextMenu.target.metadata.role === 'editor'

@@ -18,7 +18,12 @@ import { GraphEditor } from '../Canvas/core/GraphEditor';
 import { WorksheetEditor } from '../Worksheet/WorksheetEditor';
 import { DetailsPane } from './Detail/DetailsPane';
 import { InspectPane } from './Detail/InspectPane';
-import Sidebar from './Sidebar';
+import {
+  WorkbenchCommandsPanel,
+  WorkbenchDataPanel,
+  WorkbenchNodesPanel,
+  WorkbenchProjectPanel,
+} from './WorkbenchActivityPanels';
 import { ResultPanel } from './result/ResultPanel';
 
 function useLivePanelGroupId(
@@ -76,7 +81,10 @@ type WorkbenchDockviewComponent = FunctionComponent<
 export const workbenchDockviewComponents = {
   GraphEditor: WorkbenchEditorPanel,
   WorksheetEditor: WorkbenchEditorPanel,
-  Resources: Sidebar,
+  Project: WorkbenchProjectPanel,
+  Nodes: WorkbenchNodesPanel,
+  Data: WorkbenchDataPanel,
+  Commands: WorkbenchCommandsPanel,
   Details: DetailsPane,
   Inspect: InspectPane,
   Result: ResultPanel,

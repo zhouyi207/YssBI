@@ -267,3 +267,191 @@
   > .dv-sash:not(.dv-disabled):is(:hover, :active, :focus-visible)::after {
   height: 2px;
 }
+
+/* Activity panels use Dockview's native left edge as the old ActivityBar rail. */
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container {
+  width: 44px;
+  min-width: 44px;
+  border-right: 1px solid var(--strong-border);
+  border-bottom: 0;
+  background: var(--sidebar-bg);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-tabs-container-vertical {
+  width: 100%;
+  height: fit-content;
+  max-height: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px;
+  overflow: hidden;
+  writing-mode: horizontal-tb;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab {
+  position: relative;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  writing-mode: horizontal-tb;
+  color: var(--muted-foreground);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab:has([data-workbench-activity-tab])::before {
+  content: none;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab:has([data-workbench-activity-tab]):hover {
+  background: transparent;
+  color: var(--foreground);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab:has([data-workbench-activity-tab]):hover
+  [data-workbench-activity-icon] {
+  background: var(--interactive-hover);
+  color: var(--foreground);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]) {
+  background: transparent;
+  color: var(--accent-color);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab])::after {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: -2px;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--accent-color);
+  content: "";
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab:has([data-workbench-activity-separator]) {
+  margin-top: 8px;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab:has([data-workbench-activity-separator])::before {
+  position: absolute;
+  top: -5px;
+  left: 8px;
+  width: 24px;
+  height: 1px;
+  background: var(--strong-border);
+  content: "";
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  [data-workbench-activity-tab] {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  writing-mode: horizontal-tb;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  [data-workbench-activity-icon] {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  line-height: 1;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tab.dv-active-tab
+  [data-workbench-activity-icon] {
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  color: var(--accent-color);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  .dv-tabs-overflow-dropdown-root {
+  display: none;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  > .dv-right-actions-container {
+  width: 44px;
+  min-height: 40px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 2px;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  [data-workbench-activity-actions] {
+  width: 40px;
+  height: 40px;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  [data-workbench-activity-settings]:hover
+  [data-workbench-activity-settings-surface] {
+  background: var(--interactive-hover);
+  color: var(--foreground);
+}

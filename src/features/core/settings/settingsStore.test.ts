@@ -38,7 +38,6 @@ const EDITOR_KEYS = [
 ];
 
 const APPEARANCE_KEYS = [
-  'activityBarPosition',
   'colorTheme',
   'language',
   'lastDarkColorTheme',

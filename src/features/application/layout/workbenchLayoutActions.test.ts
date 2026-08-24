@@ -26,6 +26,12 @@ const mocks = vi.hoisted(() => ({
     visible: false,
     collapsed: false,
   } as WorkbenchEdgeState,
+  leftEdge: {
+    position: 'left',
+    exists: false,
+    visible: false,
+    collapsed: false,
+  } as WorkbenchEdgeState,
   ensureView: vi.fn(),
   reveal: vi.fn(),
   setEdgeCollapsed: vi.fn(),
@@ -47,7 +53,9 @@ vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
     listPanels: () => mocks.panels,
     listGroupPanels: (groupId: string) =>
       mocks.panels.filter((panel) => panel.groupId === groupId),
-    getEdgeState: () => ({ ...mocks.bottomEdge }),
+    getEdgeState: (position: WorkbenchEdgePosition) => (
+      position === 'left' ? { ...mocks.leftEdge } : { ...mocks.bottomEdge }
+    ),
     ensureView: mocks.ensureView,
     reveal: mocks.reveal,
     setEdgeCollapsed: mocks.setEdgeCollapsed,
@@ -86,6 +94,7 @@ import * as layoutActions from './workbenchLayoutActions';
 const {
   resetWorkbenchLayout,
   revealWorkbenchView,
+  toggleActivityWorkbenchGroup,
   toggleBottomWorkbenchGroup,
   toggleWorkbenchView,
 } = layoutActions;
@@ -130,7 +139,10 @@ function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo['com
   }
   if (metadata.role === 'result') return 'Result';
   return ({
-    resources: 'Resources',
+    project: 'Project',
+    nodes: 'Nodes',
+    data: 'Data',
+    commands: 'Commands',
     details: 'Details',
     inspect: 'Inspect',
     logs: 'Logs',
@@ -165,7 +177,9 @@ function viewPanel(
   viewId: WorkbenchViewId,
   groupId = `edge-${viewId}`,
   location: WorkbenchPanelInfo['location'] = edgeLocation(
-    viewId === 'resources' ? 'left' : viewId === 'logs' || viewId === 'output' ? 'bottom' : 'right',
+    ['project', 'nodes', 'data', 'commands'].includes(viewId)
+      ? 'left'
+      : viewId === 'logs' || viewId === 'output' ? 'bottom' : 'right',
   ),
   active = false,
 ): WorkbenchPanelInfo {
@@ -355,7 +369,7 @@ function createTransactionHarness(
       return info(existing);
     }
 
-    const position = request.viewId === 'resources'
+    const position = ['project', 'nodes', 'data', 'commands'].includes(request.viewId)
       ? 'left'
       : request.viewId === 'logs' || request.viewId === 'output'
         ? 'bottom'
@@ -523,12 +537,19 @@ beforeEach(() => {
     visible: false,
     collapsed: false,
   };
+  mocks.leftEdge = {
+    position: 'left',
+    exists: false,
+    visible: false,
+    collapsed: false,
+  };
   mocks.transaction = null;
   mocks.ensureView.mockImplementation(async ({ viewId }: EnsureViewRequest) =>
     viewPanel(`created:${viewId}`, viewId));
   mocks.reveal.mockResolvedValue(true);
-  mocks.setEdgeCollapsed.mockImplementation(async (_position: string, collapsed: boolean) => {
-    mocks.bottomEdge = { ...mocks.bottomEdge, collapsed };
+  mocks.setEdgeCollapsed.mockImplementation(async (position: string, collapsed: boolean) => {
+    if (position === 'left') mocks.leftEdge = { ...mocks.leftEdge, collapsed };
+    else mocks.bottomEdge = { ...mocks.bottomEdge, collapsed };
     return true;
   });
   mocks.requestCloseWorkbenchPanel.mockResolvedValue(true);
@@ -548,6 +569,7 @@ describe('semantic workbench layout actions', () => {
     expect(Object.keys(layoutActions).sort()).toEqual([
       'resetWorkbenchLayout',
       'revealWorkbenchView',
+      'toggleActivityWorkbenchGroup',
       'toggleBottomWorkbenchGroup',
       'toggleWorkbenchView',
     ]);
@@ -558,6 +580,28 @@ describe('semantic workbench layout actions', () => {
 
     expect(mocks.reveal).toHaveBeenCalledWith('logs-moved');
     expect(mocks.ensureView).not.toHaveBeenCalled();
+  });
+
+  it('expands an existing but hidden Activity edge instead of collapsing it', async () => {
+    mocks.leftEdge = {
+      position: 'left',
+      exists: true,
+      groupId: 'workbench-edge-left',
+      visible: false,
+      collapsed: false,
+      size: 292,
+    };
+    mocks.panels.push(
+      viewPanel('project', 'project', 'workbench-edge-left', edgeLocation('left')),
+      viewPanel('nodes', 'nodes', 'workbench-edge-left', edgeLocation('left')),
+      viewPanel('data', 'data', 'workbench-edge-left', edgeLocation('left')),
+      viewPanel('commands', 'commands', 'workbench-edge-left', edgeLocation('left')),
+    );
+
+    await toggleActivityWorkbenchGroup();
+
+    expect(mocks.setEdgeCollapsed).toHaveBeenCalledWith('left', false);
+    expect(mocks.runLayoutTransaction).not.toHaveBeenCalled();
   });
 
   it('creates a missing default tool through its deterministic home request', async () => {
@@ -678,7 +722,15 @@ describe('resetWorkbenchLayout', () => {
     const groups: GroupSeed[] = [
       {
         groupId: 'edge-left',
-        panelInstanceIds: ['output', 'editor-left-a', 'editor-left-b'],
+        panelInstanceIds: [
+          'project',
+          'nodes',
+          'data',
+          'commands',
+          'output',
+          'editor-left-a',
+          'editor-left-b',
+        ],
         collapsed: true,
         location: edgeLocation('left'),
       },
@@ -708,12 +760,16 @@ describe('resetWorkbenchLayout', () => {
       },
       {
         groupId: 'edge-bottom',
-        panelInstanceIds: ['resources', 'editor-bottom-a', 'editor-bottom-b'],
+        panelInstanceIds: ['editor-bottom-a', 'editor-bottom-b'],
         collapsed: true,
         location: edgeLocation('bottom'),
       },
     ];
     const initial = [
+      viewPanel('project', 'project', 'edge-left', edgeLocation('left')),
+      viewPanel('nodes', 'nodes', 'edge-left', edgeLocation('left')),
+      viewPanel('data', 'data', 'edge-left', edgeLocation('left')),
+      viewPanel('commands', 'commands', 'edge-left', edgeLocation('left')),
       viewPanel('output', 'output', 'edge-left', edgeLocation('left')),
       editorPanel('editor-left-a', 'events/LeftA.yssbi-event', 'edge-left', edgeLocation('left')),
       editorPanel('editor-left-b', 'events/LeftB.yssbi-event', 'edge-left', edgeLocation('left')),
@@ -727,7 +783,6 @@ describe('resetWorkbenchLayout', () => {
       editorPanel('editor-right', 'events/Right.yssbi-event', 'edge-right', edgeLocation('right')),
       resultPanel('result-right', 'result-right', 'edge-right', edgeLocation('right')),
       viewPanel('inspect', 'inspect', 'edge-right', edgeLocation('right')),
-      viewPanel('resources', 'resources', 'edge-bottom', edgeLocation('bottom')),
       editorPanel('editor-bottom-a', 'events/BottomA.yssbi-event', 'edge-bottom', edgeLocation('bottom')),
       editorPanel('editor-bottom-b', 'events/BottomB.yssbi-event', 'edge-bottom', edgeLocation('bottom')),
     ];
@@ -752,7 +807,12 @@ describe('resetWorkbenchLayout', () => {
       'editor-bottom-a',
       'editor-bottom-b',
     ]);
-    expect(harness.groupPanelIds('edge-left')).toEqual(['resources']);
+    expect(harness.groupPanelIds('edge-left')).toEqual([
+      'project',
+      'data',
+      'nodes',
+      'commands',
+    ]);
     expect(harness.groupPanelIds('edge-bottom')).toEqual(['logs', 'output']);
     expect(harness.groupPanelIds('edge-right')).toEqual([
       'result-grid',
@@ -761,7 +821,7 @@ describe('resetWorkbenchLayout', () => {
       'inspect',
     ]);
     expect(harness.configureCalls).toEqual([
-      { position: 'left', size: 260, collapsed: false },
+      { position: 'left', size: 292, collapsed: false, headerPosition: 'left' },
       { position: 'bottom', size: 200, collapsed: false, headerPosition: 'bottom' },
       { position: 'right', size: 320, collapsed: false },
     ]);
@@ -773,12 +833,12 @@ describe('resetWorkbenchLayout', () => {
     expect(mocks.completeLayoutReset).toHaveBeenCalledWith(41);
   });
 
-  it('keeps the only central target alive by moving the first edge editor before Resources leaves', async () => {
+  it('keeps the only central target alive by moving the first edge editor before Activity leaves', async () => {
     const groups: GroupSeed[] = [
       {
         groupId: 'grid-only',
-        panelInstanceIds: ['resources'],
-        activePanelInstanceId: 'resources',
+        panelInstanceIds: ['project'],
+        activePanelInstanceId: 'project',
         active: true,
         location: gridLocation,
       },
@@ -794,7 +854,7 @@ describe('resetWorkbenchLayout', () => {
       },
     ];
     const initial = [
-      viewPanel('resources', 'resources', 'grid-only', gridLocation, true),
+      viewPanel('project', 'project', 'grid-only', gridLocation, true),
       editorPanel('editor-left', 'events/Left.yssbi-event', 'edge-left', edgeLocation('left')),
       editorPanel('editor-top', 'events/Top.yssbi-event', 'edge-top', edgeLocation('top')),
     ];
@@ -806,11 +866,11 @@ describe('resetWorkbenchLayout', () => {
     const firstEditorMove = harness.moveCalls.findIndex(
       (request) => request.panelInstanceId === 'editor-left',
     );
-    const resourcesMove = harness.moveCalls.findIndex(
-      (request) => request.panelInstanceId === 'resources',
+    const activityMove = harness.moveCalls.findIndex(
+      (request) => request.panelInstanceId === 'project',
     );
     expect(firstEditorMove).toBeGreaterThanOrEqual(0);
-    expect(firstEditorMove).toBeLessThan(resourcesMove);
+    expect(firstEditorMove).toBeLessThan(activityMove);
     expect(harness.moveCalls.every((request) => request.success)).toBe(true);
     expect(harness.hasGroup('grid-only')).toBe(true);
     expect(harness.groupPanelIds('grid-only')).toEqual(['editor-left', 'editor-top']);
@@ -880,23 +940,26 @@ describe('resetWorkbenchLayout', () => {
     expect(harness.activePanelId()).toBe('editor-first');
   });
 
-  it('activates Resources only when the reset snapshot contains no editor', async () => {
+  it('activates Project only when the reset snapshot contains no editor', async () => {
     const groups: GroupSeed[] = [{
       groupId: 'grid-only',
-      panelInstanceIds: ['resources'],
-      activePanelInstanceId: 'resources',
+      panelInstanceIds: ['project', 'nodes', 'data', 'commands'],
+      activePanelInstanceId: 'project',
       active: true,
       location: gridLocation,
     }];
     const harness = createTransactionHarness([
-      viewPanel('resources', 'resources', 'grid-only', gridLocation, true),
+      viewPanel('project', 'project', 'grid-only', gridLocation, true),
+      viewPanel('nodes', 'nodes', 'grid-only', gridLocation),
+      viewPanel('data', 'data', 'grid-only', gridLocation),
+      viewPanel('commands', 'commands', 'grid-only', gridLocation),
     ], groups);
     mocks.transaction = harness.tx;
 
     await resetWorkbenchLayout();
 
-    expect(harness.activePanelId()).toBe('resources');
-    expect(harness.activateCalls[harness.activateCalls.length - 1]).toBe('resources');
+    expect(harness.activePanelId()).toBe('project');
+    expect(harness.activateCalls[harness.activateCalls.length - 1]).toBe('project');
     expect(harness.removeCalls).toEqual([]);
   });
 });

@@ -79,6 +79,8 @@ class FakeWorkbenchDockview {
   readonly layoutFromJson = event<void>();
   readonly activeGroupChange = event<DockviewGroupPanel | undefined>();
   readonly activePanelChange = event<unknown>();
+  readonly willDrop = event<unknown>();
+  readonly willShowOverlay = event<unknown>();
   readonly addEdgeGroup = vi.fn(
     (position: EdgeGroupPosition, options: { id: string; initialSize?: number; collapsed?: boolean }) =>
       this.createEdge(position, options),
@@ -113,6 +115,8 @@ class FakeWorkbenchDockview {
       onDidLayoutFromJSON: this.layoutFromJson.subscribe,
       onDidActiveGroupChange: this.activeGroupChange.subscribe,
       onDidActivePanelChange: this.activePanelChange.subscribe,
+      onWillDrop: this.willDrop.subscribe,
+      onWillShowOverlay: this.willShowOverlay.subscribe,
       getPanel: (id: string) => self.panelRecords.get(id)?.panel,
       getGroup: (id: string) => self.groupRecords.get(id)?.dockviewGroup,
       addPanel: (options: AddPanelOptions<Record<string, unknown>>) => self.addPanel(options),
@@ -1055,13 +1059,17 @@ describe('workbench Dockview port', () => {
     const defaults = internal.installHydrationLayout(hydrationEpoch, (transaction) => {
       expect(port.isHydrated).toBe(false);
       transaction.ensureCentralGroup();
-      const resources = transaction.ensureView({ viewId: 'resources', title: 'Resources' });
+      const project = transaction.ensureView({ viewId: 'project', title: 'Project' });
+      const nodes = transaction.ensureView({ viewId: 'nodes', title: 'Nodes' });
+      const data = transaction.ensureView({ viewId: 'data', title: 'Data' });
+      const commands = transaction.ensureView({ viewId: 'commands', title: 'Commands' });
       const logs = transaction.ensureView({ viewId: 'logs', title: 'Logs' });
       const output = transaction.ensureView({ viewId: 'output', title: 'Output' });
       const left = transaction.configureEdge({
         position: 'left',
-        size: 260,
+        size: 292,
         collapsed: false,
+        headerPosition: 'left',
       });
       const bottom = transaction.configureEdge({
         position: 'bottom',
@@ -1069,10 +1077,12 @@ describe('workbench Dockview port', () => {
         collapsed: false,
         headerPosition: 'bottom',
       });
-      transaction.move({
-        panelInstanceId: resources.panelInstanceId,
-        groupId: left.groupId,
-        index: 0,
+      [project, nodes, data, commands].forEach((panel, index) => {
+        transaction.move({
+          panelInstanceId: panel.panelInstanceId,
+          groupId: left.groupId,
+          index,
+        });
       });
       transaction.move({
         panelInstanceId: logs.panelInstanceId,
@@ -1085,17 +1095,20 @@ describe('workbench Dockview port', () => {
         index: 1,
       });
       expect(port.isHydrated).toBe(false);
-      return { resources, logs, output };
+      return { project, nodes, data, commands, logs, output };
     });
 
     expect(externalSettled).toBe(false);
     expect(port.isHydrated).toBe(false);
     expect(port.listPanels().map((panel) => panel.panelInstanceId)).toEqual([
-      defaults.resources.panelInstanceId,
+      defaults.project.panelInstanceId,
+      defaults.nodes.panelInstanceId,
+      defaults.data.panelInstanceId,
+      defaults.commands.panelInstanceId,
       defaults.logs.panelInstanceId,
       defaults.output.panelInstanceId,
     ]);
-    expect(port.getPanel(defaults.resources.panelInstanceId)?.location).toEqual({
+    expect(port.getPanel(defaults.project.panelInstanceId)?.location).toEqual({
       type: 'edge',
       position: 'left',
     });

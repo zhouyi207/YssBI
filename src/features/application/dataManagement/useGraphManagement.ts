@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 
 import { DEFAULT_EVENT_NAME, DEFAULT_FUNCTION_NAME } from '@/shared/constants/defaultResourceNames';
-import { useSidebarTab } from '@/features/application/editor/useSidebarTab';
+import { revealWorkbenchView } from '@/features/application/layout/workbenchLayoutActions';
 import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from '@/features/core/sidebar';
 import {
   createGraphResource,
@@ -37,7 +37,6 @@ type OpenGraphFn = (
 export function useGraphManagement(
   openGraph: OpenGraphFn,
 ) {
-  const switchSidebarTab = useSidebarTab();
 
   const openCreatedGraph = useCallback(async (path: string, kind: 'event' | 'function') => {
     const name =
@@ -66,7 +65,7 @@ export function useGraphManagement(
         await openCreatedGraph(id, 'event');
       }
 
-      switchSidebarTab('project');
+      void revealWorkbenchView('project');
       useSidebarStore.getState().setProjectTreeCategoryExpanded(
         PROJECT_TREE_CATEGORY_IDS.events,
         true,
@@ -76,7 +75,7 @@ export function useGraphManagement(
       logger.graph.error(`Failed to create event: ${message}`, 'GraphManagement');
       throw error;
     }
-  }, [openCreatedGraph, switchSidebarTab]);
+  }, [openCreatedGraph]);
 
   const deleteEvent = useCallback(async (id: string) => {
     try {
@@ -105,7 +104,7 @@ export function useGraphManagement(
         await openCreatedGraph(id, 'function');
       }
 
-      switchSidebarTab('project');
+      void revealWorkbenchView('project');
       useSidebarStore.getState().setProjectTreeCategoryExpanded(
         PROJECT_TREE_CATEGORY_IDS.functions,
         true,
@@ -115,7 +114,7 @@ export function useGraphManagement(
       logger.graph.error(`Failed to create function: ${message}`, 'GraphManagement');
       throw error;
     }
-  }, [openCreatedGraph, switchSidebarTab]);
+  }, [openCreatedGraph]);
 
   const deleteFunction = useCallback(async (id: string) => {
     try {

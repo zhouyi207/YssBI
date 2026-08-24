@@ -1,5 +1,9 @@
 import type { SerializedDockview } from 'dockview-react';
 
+import { WORKBENCH_ACTIVITY_VIEW_IDS } from './workbenchPanelModel';
+
+export const WORKBENCH_ACTIVITY_GROUP_ID = 'workbench-edge-left';
+
 export const WORKBENCH_EDGE_GROUP_IDS = {
   left: 'workbench-edge-left',
   right: 'workbench-edge-right',
@@ -7,19 +11,24 @@ export const WORKBENCH_EDGE_GROUP_IDS = {
 } as const;
 
 export const WORKBENCH_EDGE_SIZES = {
-  left: 260,
+  left: 292,
   right: 320,
   bottom: 200,
 } as const;
 
 export const WORKBENCH_HOME_EDGE = {
-  resources: 'left',
+  project: 'left',
+  nodes: 'left',
+  data: 'left',
+  commands: 'left',
   details: 'right',
   inspect: 'right',
   logs: 'bottom',
   output: 'bottom',
   result: 'right',
 } as const;
+
+export const WORKBENCH_ACTIVITY_DEFAULT_ORDER = WORKBENCH_ACTIVITY_VIEW_IDS;
 
 export const WORKBENCH_RESET_BUCKET_ORDER = [
   'left',

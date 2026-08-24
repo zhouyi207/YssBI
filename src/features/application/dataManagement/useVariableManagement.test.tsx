@@ -8,15 +8,15 @@ import { useVariableManagement } from './useVariableManagement';
 
 const mocks = vi.hoisted(() => ({
   createVariableAction: vi.fn(),
-  switchSidebarTab: vi.fn(),
+  revealWorkbenchView: vi.fn(),
 }));
 
 vi.mock('./variableActions', () => ({
   createVariableAction: mocks.createVariableAction,
 }));
 
-vi.mock('@/features/application/editor/useSidebarTab', () => ({
-  useSidebarTab: () => mocks.switchSidebarTab,
+vi.mock('@/features/application/layout/workbenchLayoutActions', () => ({
+  revealWorkbenchView: mocks.revealWorkbenchView,
 }));
 
 vi.mock('@/features/core/editor/hooks/useActiveEditorGroup', () => ({
@@ -70,7 +70,7 @@ describe('useVariableManagement', () => {
       graphType: scope.graphType,
       isGlobal: false,
     }));
-    expect(mocks.switchSidebarTab).toHaveBeenCalledWith('project');
+    expect(mocks.revealWorkbenchView).toHaveBeenCalledWith('project');
     expect(useSidebarStore.getState().projectTreeExpandedCategories)
       .toMatchObject({
         'project.variables': true,

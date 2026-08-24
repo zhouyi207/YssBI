@@ -111,9 +111,12 @@ describe('workbench Dockview defaults', () => {
       right: 'workbench-edge-right',
       bottom: 'workbench-edge-bottom',
     });
-    expect(WORKBENCH_EDGE_SIZES).toEqual({ left: 260, right: 320, bottom: 200 });
+    expect(WORKBENCH_EDGE_SIZES).toEqual({ left: 292, right: 320, bottom: 200 });
     expect(WORKBENCH_HOME_EDGE).toEqual({
-      resources: 'left',
+      project: 'left',
+      nodes: 'left',
+      data: 'left',
+      commands: 'left',
       details: 'right',
       inspect: 'right',
       logs: 'bottom',

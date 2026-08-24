@@ -77,7 +77,7 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
     lastLightColorTheme: "Light Modern",
     lastDarkColorTheme: "Dark Modern (Default)",
     language: "zh-CN",
-    activityBarPosition: "Left",
+
     smoothScroll: true,
     titleBarStyle: "custom",
 };

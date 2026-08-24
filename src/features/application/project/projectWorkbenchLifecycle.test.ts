@@ -80,15 +80,16 @@ function panel(
     ? metadata.resourceKind === 'worksheet' ? 'WorksheetEditor' : 'GraphEditor'
     : metadata.role === 'result'
       ? 'Result'
-      : metadata.viewId === 'resources'
-        ? 'Resources'
-        : metadata.viewId === 'details'
-          ? 'Details'
-          : metadata.viewId === 'inspect'
-            ? 'Inspect'
-            : metadata.viewId === 'logs'
-              ? 'Logs'
-              : 'Output';
+      : ({
+          project: 'Project',
+          nodes: 'Nodes',
+          data: 'Data',
+          commands: 'Commands',
+          details: 'Details',
+          inspect: 'Inspect',
+          logs: 'Logs',
+          output: 'Output',
+        } as const)[metadata.viewId];
   return {
     panelInstanceId,
     groupId: 'group-main',
@@ -174,7 +175,10 @@ describe('project workbench lifecycle', () => {
       }),
       panel('details-old', { role: 'view', viewId: 'details' }),
       panel('inspect-old', { role: 'view', viewId: 'inspect' }),
-      panel('resources-stable', { role: 'view', viewId: 'resources' }),
+      panel('project-stable', { role: 'view', viewId: 'project' }),
+      panel('nodes-stable', { role: 'view', viewId: 'nodes' }),
+      panel('data-stable', { role: 'view', viewId: 'data' }),
+      panel('commands-stable', { role: 'view', viewId: 'commands' }),
       panel('logs-stable', { role: 'view', viewId: 'logs' }),
       panel('output-stable', { role: 'view', viewId: 'output' }),
     );
@@ -183,7 +187,10 @@ describe('project workbench lifecycle', () => {
     await removeProjectScopedWorkbenchPanels('project-a', owner);
 
     expect(lifecycleMocks.state.panels.map((candidate) => candidate.panelInstanceId)).toEqual([
-      'resources-stable',
+      'project-stable',
+      'nodes-stable',
+      'data-stable',
+      'commands-stable',
       'logs-stable',
       'output-stable',
     ]);

@@ -28,6 +28,7 @@ vi.mock('@/features/application/editor/tabContextMenu', () => ({
 }));
 
 vi.mock('@/features/core/dockview', () => ({
+  isWorkbenchActivityViewId: (viewId: string) => ['project', 'nodes', 'data', 'commands'].includes(viewId),
   layoutTabFromEditorMetadata: (metadata: {
     resourceRef: string;
     resourceKind: 'event' | 'function' | 'worksheet';
@@ -275,4 +276,5 @@ describe('WorkbenchDockviewTab', () => {
     ]);
     expect(mocks.requestCloseWorkbenchPanel).not.toHaveBeenCalled();
   });
+
 });

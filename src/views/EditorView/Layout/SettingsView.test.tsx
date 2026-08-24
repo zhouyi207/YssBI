@@ -79,7 +79,7 @@ vi.mock('@/features/core/settings/settingsStore', () => {
     },
     editor: { showGrid: true, autoSave: false, snapToGrid: true, fontSize: 12 },
     appearance: {
-      colorTheme: 'Dark Modern (Default)', language: 'en-US', activityBarPosition: 'Left',
+      colorTheme: 'Dark Modern (Default)', language: 'en-US',
       titleBarStyle: 'custom', smoothScroll: true,
     },
     project: { projectName: '', exportPath: '' },

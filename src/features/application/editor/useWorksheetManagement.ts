@@ -8,7 +8,7 @@ import { projectPublicationCoordinator } from '@/features/application/editorMuta
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 
 
-import { useSidebarTab } from './useSidebarTab';
+import { revealWorkbenchView } from '@/features/application/layout/workbenchLayoutActions';
 import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from '@/features/core/sidebar';
 import { buildWorksheetLayoutTab } from '@/features/core/layout/layoutTabModel';
 import {
@@ -159,8 +159,6 @@ export function useWorksheetManagement(
 }
 
 export function useOpenWorksheet() {
-  const switchSidebarTab = useSidebarTab();
-
   return useCallback(async (worksheetPath: string, _name: string) => {
     if (!useWorksheetStore.getState().documents[worksheetPath]) {
       const context = captureProjectCommandContext();
@@ -178,7 +176,7 @@ export function useOpenWorksheet() {
       await openEditorTab(buildWorksheetLayoutTab(worksheetPath), {
         focusDetail: { kind: 'worksheet', worksheetPath },
       });
-      switchSidebarTab('project');
+      void revealWorkbenchView('project');
       useSidebarStore.getState().setProjectTreeCategoryExpanded(
         PROJECT_TREE_CATEGORY_IDS.worksheets,
         true,
@@ -186,5 +184,5 @@ export function useOpenWorksheet() {
     } catch (error) {
       if (!isEditorOpenRejectionHandled(error)) throw error;
     }
-  }, [switchSidebarTab]);
+  }, []);
 }

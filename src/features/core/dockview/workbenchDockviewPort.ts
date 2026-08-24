@@ -70,7 +70,7 @@ export interface ConfigureWorkbenchEdgeRequest {
   readonly position: WorkbenchEdgePosition;
   readonly size: number;
   readonly collapsed: boolean;
-  readonly headerPosition?: 'top' | 'bottom';
+  readonly headerPosition?: 'top' | 'bottom' | 'left' | 'right';
 }
 
 export interface OpenEditorRequest {

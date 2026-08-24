@@ -9,7 +9,7 @@ export type MenubarMenuItem = {
 };
 
 export interface MenubarViewState {
-  readonly resourcesOpen: boolean;
+  readonly activityGroupOpen: boolean;
   readonly detailsOpen: boolean;
   readonly detailsContextValid: boolean;
   readonly inspectOpen: boolean;
@@ -20,7 +20,7 @@ export interface MenubarViewState {
 }
 
 export interface MenubarViewMenuActions {
-  readonly toggleResources: () => void;
+  readonly toggleActivityGroup: () => void;
   readonly toggleDetails: () => void;
   readonly toggleInspect: () => void;
   readonly toggleLogs: () => void;
@@ -36,10 +36,10 @@ export function buildViewMenuItems(
 ): MenubarMenuItem[] {
   return [
     {
-      label: t('panel.resources'),
+      label: t('panel.primarySideBar'),
       type: 'checkbox',
-      checked: state.resourcesOpen,
-      onClick: actions.toggleResources,
+      checked: state.activityGroupOpen,
+      onClick: actions.toggleActivityGroup,
     },
     {
       label: t('panel.details'),

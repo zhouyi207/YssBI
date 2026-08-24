@@ -20,6 +20,7 @@ import {
   markResourceDirty,
 } from '@/features/core/resource';
 import { resourceKey } from '@/features/core/resource/resourceTypes';
+import { canRemoveWorkbenchPanel } from '@/features/core/dockview/workbenchActivityGroup';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
@@ -107,7 +108,8 @@ function captureCloseSnapshot(
   const tokens: WorkbenchPanelCommitToken[] = [];
   for (const panelInstanceId of panelInstanceIds) {
     const panel = panelsById.get(panelInstanceId);
-    if (!panel || duplicateIds.has(panelInstanceId) || !isCanonicalTarget(panel)) return null;
+    if (!panel || duplicateIds.has(panelInstanceId) || !isCanonicalTarget(panel)
+      || !canRemoveWorkbenchPanel(panel.metadata)) return null;
     const metadata = cloneMetadata(panel.metadata);
     panels.push({ ...panel, metadata });
     tokens.push({ panelInstanceId, groupId: panel.groupId, metadata });

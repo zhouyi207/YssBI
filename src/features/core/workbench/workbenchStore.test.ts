@@ -6,13 +6,11 @@ import {
 
 function uiState() {
   const {
-    sidebarCurrentTab,
     isSettingsOpen,
     isNodeDocumentationOpen,
   } = useWorkbenchStore.getState();
 
   return {
-    sidebarCurrentTab,
     isSettingsOpen,
     isNodeDocumentationOpen,
   };
@@ -27,7 +25,7 @@ describe('workbenchStore', () => {
     const state = useWorkbenchStore.getState();
 
     expect(uiState()).toEqual(DEFAULT_WORKBENCH_UI_STATE);
-    expect(state.sidebarCurrentTab).toBe('project');
+
     expect(state).not.toHaveProperty('sidebarUserHidden');
     expect(state).not.toHaveProperty('detailUserHidden');
     expect(state).not.toHaveProperty('panelCollapsed');
@@ -36,15 +34,13 @@ describe('workbenchStore', () => {
     expect(state).not.toHaveProperty('tabs');
   });
 
-  it('updates sidebar and modal state, then resets it', () => {
+  it('updates modal state, then resets it', () => {
     const commands = useWorkbenchStore.getState();
 
-    commands.setSidebarCurrentTab('nodes');
     commands.openSettings();
     commands.setNodeDocumentationOpen(true);
 
     expect(uiState()).toEqual({
-      sidebarCurrentTab: 'nodes',
       isSettingsOpen: true,
       isNodeDocumentationOpen: true,
     });

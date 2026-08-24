@@ -6,6 +6,7 @@ import {
 import { splitEditorAtEdge } from '@/features/application/editor/editorGroupCommands';
 import {
   resetWorkbenchLayout,
+  toggleActivityWorkbenchGroup,
   toggleWorkbenchView,
 } from '@/features/application/layout/workbenchLayoutActions';
 import {
@@ -42,7 +43,11 @@ export function useMenubar() {
   const viewState = useMemo<MenubarViewState>(() => {
     const views = openViewIds();
     return {
-      resourcesOpen: views.has('resources'),
+      activityGroupOpen: (() => {
+        const edge = workbenchDockviewPort.getEdgeState('left');
+        return edge.exists && edge.visible && !edge.collapsed
+          && edge.groupId === 'workbench-edge-left';
+      })(),
       detailsOpen: views.has('details'),
       detailsContextValid,
       inspectOpen: views.has('inspect'),
@@ -81,8 +86,8 @@ export function useMenubar() {
     void openBayesWindow();
   }, []);
 
-  const toggleResources = useCallback(() => {
-    void toggleWorkbenchView('resources');
+  const toggleActivityGroup = useCallback(() => {
+    void toggleActivityWorkbenchGroup();
   }, []);
 
   const toggleDetails = useCallback(() => {
@@ -116,7 +121,7 @@ export function useMenubar() {
     handleOpenLogs,
     handleOpenBayes,
     viewActions: {
-      toggleResources,
+      toggleActivityGroup,
       toggleDetails,
       toggleInspect,
       toggleLogs,

@@ -10,6 +10,12 @@ import type {
 } from 'dockview-react';
 
 import {
+  canMoveWorkbenchPanel,
+  canRemoveWorkbenchPanel,
+  canSplitWorkbenchPanel,
+  vetoInvalidWorkbenchActivityDrop,
+} from './workbenchActivityGroup';
+import {
   WORKBENCH_EDGE_GROUP_IDS,
   WORKBENCH_EDGE_SIZES,
   WORKBENCH_HOME_EDGE,
@@ -315,6 +321,15 @@ function updatePanelMetadata(
   });
 }
 
+function defaultHeaderPositionForEdge(
+  position: WorkbenchEdgePosition,
+): 'top' | 'bottom' | 'left' | 'right' {
+  if (position === 'bottom') return 'bottom';
+  if (position === 'left') return 'left';
+  if (position === 'right') return 'right';
+  return 'top';
+}
+
 function setGroupSize(
   group: DockviewGroupPanelApi,
   position: WorkbenchEdgePosition,
@@ -383,7 +398,7 @@ function ensureHomeEdgeLive(
       collapsed: false,
     });
   }
-  if (position === 'bottom') group.setHeaderPosition('bottom');
+  group.setHeaderPosition(defaultHeaderPositionForEdge(position));
   return group;
 }
 
@@ -403,7 +418,7 @@ function configureEdgeLive(
   api.setEdgeGroupVisible(request.position, true);
   setGroupSize(group, request.position, request.size);
   const headerPosition = request.headerPosition
-    ?? (request.position === 'bottom' ? 'bottom' : undefined);
+    ?? defaultHeaderPositionForEdge(request.position);
   if (headerPosition) group.setHeaderPosition(headerPosition);
   if (request.collapsed) group.collapse();
   else group.expand();
@@ -486,7 +501,7 @@ interface ShadowEdge {
   visible: boolean;
   collapsed: boolean;
   size: number;
-  headerPosition?: 'top' | 'bottom';
+  headerPosition?: 'top' | 'bottom' | 'left' | 'right';
 }
 
 type BufferedCommand =
@@ -614,7 +629,7 @@ class ShadowWorkbenchModel {
         visible: api.isEdgeGroupVisible(position),
         collapsed: group.isCollapsed(),
         size: edgeSize(api, position, group),
-        headerPosition: group.getHeaderPosition() === 'bottom' ? 'bottom' : 'top',
+        headerPosition: group.getHeaderPosition(),
       });
     }
   }
@@ -839,6 +854,10 @@ class ShadowWorkbenchModel {
       this.violations.push('missing_source_group');
       return false;
     }
+    if (!canMoveWorkbenchPanel(panel.metadata, target.id)) {
+      this.violations.push('activity_move_not_allowed');
+      return false;
+    }
 
     const currentIndex = source.panelIds.indexOf(panel.id);
     const maximumIndex = source === target
@@ -888,7 +907,7 @@ class ShadowWorkbenchModel {
     edge.visible = true;
     edge.collapsed = request.collapsed;
     edge.headerPosition = request.headerPosition
-      ?? (request.position === 'bottom' ? 'bottom' : edge.headerPosition);
+      ?? (edge.headerPosition ?? defaultHeaderPositionForEdge(request.position));
     this.commands.push({ kind: 'configure-edge', request: { ...request } });
     return {
       position: edge.position,
@@ -955,6 +974,7 @@ class ShadowWorkbenchModel {
     for (const panelId of uniqueIds) {
       const panel = this.panels.get(panelId);
       if (!panel?.metadata) this.rejectInvalidRemove(panelId);
+      if (!canRemoveWorkbenchPanel(panel.metadata)) this.rejectInvalidRemove(panelId);
       const group = this.groups.get(panel.groupId);
       if (!group) this.rejectInvalidRemove(panelId);
       const index = group.panelIds.indexOf(panelId);
@@ -997,7 +1017,7 @@ class ShadowWorkbenchModel {
       panelIds: [],
       activePanelId: undefined,
       active: false,
-      headerPosition: position === 'bottom' ? 'bottom' : 'top',
+      headerPosition: defaultHeaderPositionForEdge(position),
     };
     const edge: ShadowEdge = {
       position,
@@ -1005,7 +1025,7 @@ class ShadowWorkbenchModel {
       visible: true,
       collapsed,
       size,
-      headerPosition: position === 'bottom' ? 'bottom' : 'top',
+      headerPosition: defaultHeaderPositionForEdge(position),
     };
     this.groups.set(groupId, group);
     this.groupOrder.push(groupId);
@@ -1262,7 +1282,7 @@ class ShadowWorkbenchModel {
           initialSize: command.size,
           collapsed: command.collapsed,
         });
-        if (command.position === 'bottom') group.setHeaderPosition('bottom');
+        group.setHeaderPosition(defaultHeaderPositionForEdge(command.position));
         return;
       }
       case 'add-panel': {
@@ -1751,8 +1771,10 @@ export function createWorkbenchDockviewPort(): {
       { groupId: request.groupId },
       () => {
         const panel = boundApi.getPanel(request.panelInstanceId);
-        if (!panel || !readMetadata(panel)) return false;
+        const metadata = panel ? readMetadata(panel) : undefined;
+        if (!panel || !metadata) return false;
         const target = requireGroup(boundApi, request.groupId);
+        if (!canMoveWorkbenchPanel(metadata, target.id)) return false;
         const source = panel.group;
         const currentIndex = source.panels.indexOf(panel);
         const maximumIndex = source.id === target.id
@@ -1779,8 +1801,10 @@ export function createWorkbenchDockviewPort(): {
       { groupId: request.referenceGroupId },
       () => {
         const panel = boundApi.getPanel(request.panelInstanceId);
-        if (!panel || !readMetadata(panel)) return false;
+        const metadata = panel ? readMetadata(panel) : undefined;
+        if (!panel || !metadata) return false;
         const reference = requireGroup(boundApi, request.referenceGroupId);
+        if (!canSplitWorkbenchPanel(metadata, reference.id)) return false;
         panel.api.moveTo({
           group: reference as DockviewGroupPanel,
           position: request.direction,
@@ -1853,6 +1877,12 @@ export function createWorkbenchDockviewPort(): {
         boundApi.onDidLayoutFromJSON(() => {
           rebindEdgeListeners();
           publish();
+        }),
+        boundApi.onWillShowOverlay((event) => {
+          vetoInvalidWorkbenchActivityDrop(event);
+        }),
+        boundApi.onWillDrop((event) => {
+          vetoInvalidWorkbenchActivityDrop(event);
         }),
         boundApi.onDidActivePanelChange(() => publish()),
         boundApi.onDidActiveGroupChange(() => publish()),
@@ -1930,7 +1960,8 @@ export function createWorkbenchDockviewPort(): {
         if (!panel
           || !metadata
           || panel.group.id !== token.groupId
-          || !metadataEqual(metadata, token.metadata)) {
+          || !metadataEqual(metadata, token.metadata)
+          || !canRemoveWorkbenchPanel(metadata)) {
           return 'stale' as const;
         }
         if (!seen.has(token.panelInstanceId)) {

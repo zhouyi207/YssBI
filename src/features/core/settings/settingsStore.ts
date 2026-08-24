@@ -50,7 +50,7 @@ function mergeSettings(settings: Partial<AppSettings>): AppSettings {
             lastLightColorTheme: settings.appearance?.lastLightColorTheme ?? DEFAULT_APPEARANCE.lastLightColorTheme,
             lastDarkColorTheme: settings.appearance?.lastDarkColorTheme ?? DEFAULT_APPEARANCE.lastDarkColorTheme,
             language: settings.appearance?.language ?? DEFAULT_APPEARANCE.language,
-            activityBarPosition: settings.appearance?.activityBarPosition ?? DEFAULT_APPEARANCE.activityBarPosition,
+
             smoothScroll: settings.appearance?.smoothScroll ?? DEFAULT_APPEARANCE.smoothScroll,
             titleBarStyle: settings.appearance?.titleBarStyle ?? DEFAULT_APPEARANCE.titleBarStyle,
         },

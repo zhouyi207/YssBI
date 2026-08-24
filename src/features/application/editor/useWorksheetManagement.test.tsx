@@ -26,7 +26,7 @@ function createDeferred<T>(): Deferred<T> {
 
 const mocks = vi.hoisted(() => ({
   openEditorTab: vi.fn(),
-  switchSidebarTab: vi.fn(),
+  revealWorkbenchView: vi.fn(),
   setProjectTreeCategoryExpanded: vi.fn(),
   handledRejection: undefined as unknown,
   documents: {
@@ -39,8 +39,8 @@ vi.mock('./openEditorTab', () => ({
   isEditorOpenRejectionHandled: (error: unknown) => error === mocks.handledRejection,
 }));
 
-vi.mock('./useSidebarTab', () => ({
-  useSidebarTab: () => mocks.switchSidebarTab,
+vi.mock('@/features/application/layout/workbenchLayoutActions', () => ({
+  revealWorkbenchView: mocks.revealWorkbenchView,
 }));
 
 vi.mock('@/features/core/sidebar', () => ({
@@ -133,14 +133,12 @@ describe('useOpenWorksheet', () => {
       await Promise.resolve();
     });
 
-    expect(mocks.switchSidebarTab).not.toHaveBeenCalled();
     expect(mocks.setProjectTreeCategoryExpanded).not.toHaveBeenCalled();
 
     deferred.resolve(openedPanel);
     await act(async () => opening);
 
-    expect(mocks.switchSidebarTab).toHaveBeenCalledOnce();
-    expect(mocks.switchSidebarTab).toHaveBeenCalledWith('project');
+    expect(mocks.revealWorkbenchView).toHaveBeenCalledWith('project');
     expect(mocks.setProjectTreeCategoryExpanded).toHaveBeenCalledWith('worksheets', true);
   });
 
@@ -154,7 +152,6 @@ describe('useOpenWorksheet', () => {
       'Summary',
     )).resolves.toBeUndefined();
 
-    expect(mocks.switchSidebarTab).not.toHaveBeenCalled();
     expect(mocks.setProjectTreeCategoryExpanded).not.toHaveBeenCalled();
   });
 });

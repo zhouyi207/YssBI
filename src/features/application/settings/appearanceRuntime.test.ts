@@ -1,10 +1,7 @@
 // @vitest-environment happy-dom
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import {
-  applySmoothScrollSetting,
-  resolveActivityBarLayout,
-} from './appearanceRuntime';
+import { applySmoothScrollSetting } from './appearanceRuntime';
 
 describe('appearanceRuntime', () => {
   beforeEach(() => {
@@ -18,10 +15,4 @@ describe('appearanceRuntime', () => {
     expect(document.documentElement.dataset.smoothScroll).toBe('false');
   });
 
-  it('resolveActivityBarLayout maps the persisted position only', () => {
-    expect(resolveActivityBarLayout('Hidden')).toEqual({ visible: false, side: 'left' });
-    expect(resolveActivityBarLayout('Left')).toEqual({ visible: true, side: 'left' });
-    expect(resolveActivityBarLayout('Right')).toEqual({ visible: true, side: 'right' });
-    expect(resolveActivityBarLayout(undefined)).toEqual({ visible: true, side: 'left' });
-  });
 });
