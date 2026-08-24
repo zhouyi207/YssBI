@@ -16,6 +16,5 @@ export interface EditorSettings {
     closeEmptyGroups?: boolean;
     /** VS Code `workbench.editor.splitSizing` */
     splitSizing?: EditorSplitSizingMode;
-    /** VS Code `workbench.editor.dragToOpenWindow` */
-    dragToOpenWindow?: boolean;
+
 }

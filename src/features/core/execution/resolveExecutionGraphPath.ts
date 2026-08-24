@@ -1,13 +1,13 @@
-import { editorDockviewPort } from '@/features/core/dockview';
-import type { LayoutTab } from '@/shared/types';
 import { getGraphByPath } from '@/features/core/dataStore';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
 
 export function resolveExecutionGraphPath(targetGraphPath?: string): string | undefined {
   if (targetGraphPath) return targetGraphPath;
 
-  const value = editorDockviewPort.getActivePanel()?.tab?.data?.layoutTab;
-  if (!value || typeof value !== 'object') return undefined;
-  return (value as LayoutTab).id;
+  const panel = workbenchDockviewPort.getActiveEditorPanel();
+  return panel?.metadata.role === 'editor'
+    ? panel.metadata.resourceRef
+    : undefined;
 }
 
 export function getExecutionEventGraph(targetGraphPath?: string) {

@@ -1,0 +1,269 @@
+[data-yssbi-root-dockview] .yssbi-dockview-theme,
+[data-yssbi-logs-dockview]
+  :is(.yssbi-dockview-theme, .dockview-theme-dark, .dockview-theme-light) {
+  --yssbi-dockview-divider: color-mix(
+    in srgb,
+    var(--strong-border) 68%,
+    transparent
+  );
+  --yssbi-dockview-idle-sash: color-mix(
+    in srgb,
+    var(--muted-foreground) 24%,
+    transparent
+  );
+  --dv-paneview-active-outline-color: var(--accent-color);
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-tabs-and-actions-container-height: var(--workbench-tab-height);
+  --dv-drag-over-background-color: color-mix(
+    in srgb,
+    var(--accent-color) 14%,
+    transparent
+  );
+  --dv-drag-over-border: 1px solid var(--accent-color);
+  --dv-drag-over-border-color: var(--accent-color);
+  --dv-edge-dock-indicator-color: var(--accent-color);
+  --dv-tabs-container-scrollbar-color: var(--muted-foreground);
+  --dv-icon-hover-background-color: var(--interactive-hover);
+  --dv-floating-box-shadow: none;
+  --dv-floating-border: 1px solid var(--yssbi-dockview-divider);
+  --dv-tab-font-size: 12px;
+  --dv-border-radius: 0px;
+  --dv-tab-margin: 0;
+  --dv-sash-color: var(--yssbi-dockview-idle-sash);
+  --dv-active-sash-color: var(--accent-color);
+  --dv-spacing-padding: 0px;
+  --dv-tab-border-radius: 0px;
+  --dv-sash-border-radius: 0px;
+  --dv-dropdown-border-radius: 0px;
+  --dv-floating-group-border: 1px solid var(--yssbi-dockview-divider);
+  --dv-group-view-background-color: var(--workbench-bg);
+  --dv-tabs-and-actions-container-background-color: var(--panel-header-bg);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--workbench-bg);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--panel-header-bg);
+  --dv-inactivegroup-visiblepanel-tab-background-color: color-mix(
+    in srgb,
+    var(--workbench-bg) 94%,
+    var(--surface-sunken)
+  );
+  --dv-inactivegroup-hiddenpanel-tab-background-color: color-mix(
+    in srgb,
+    var(--panel-header-bg) 84%,
+    var(--surface-sunken)
+  );
+  --dv-activegroup-visiblepanel-tab-color: var(--foreground);
+  --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--muted-foreground);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--muted-foreground);
+  --dv-tab-divider-color: var(--yssbi-dockview-divider);
+  --dv-separator-border: var(--yssbi-dockview-divider);
+  --dv-paneview-header-border-color: var(--yssbi-dockview-divider);
+
+  background-color: var(--workbench-bg);
+  color: var(--foreground);
+}
+
+[data-yssbi-logs-dockview]
+  :is(.yssbi-dockview-theme, .dockview-theme-dark, .dockview-theme-light) {
+  --dv-tabs-and-actions-container-height: var(--logs-tab-height);
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-tabs-and-actions-container {
+  border-bottom: 1px solid var(--yssbi-dockview-divider);
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-tabs-container.dv-horizontal
+  > .dv-tab {
+  padding: 0 8px;
+  border-bottom: 2px solid transparent;
+  letter-spacing: -0.01em;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-active-group:not([data-yssbi-logs-dockview] *)
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-horizontal
+  > .dv-tab.dv-active-tab {
+  border-bottom-color: var(--accent-color);
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-groupview.dv-groupview-header-bottom
+  > .dv-tabs-and-actions-container {
+  border-top: 1px solid var(--yssbi-dockview-divider);
+  border-bottom: 0;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-bottom:not([data-yssbi-logs-dockview] *)
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container
+  > .dv-tab.dv-active-tab {
+  margin: 3px 2px;
+  border-bottom-color: transparent;
+  border-radius: 4px;
+  background-color: var(--accent-color);
+  color: var(--primary-foreground);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-bottom:not([data-yssbi-logs-dockview] *)
+  > .dv-tabs-and-actions-container
+  .dv-tab.dv-active-tab
+  [data-workbench-tab-icon] {
+  color: currentColor;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-bottom:not([data-yssbi-logs-dockview] *)
+  > .dv-tabs-and-actions-container
+  .dv-tab.dv-active-tab
+  [data-workbench-tab-dirty] {
+  background-color: currentColor;
+}
+
+[data-yssbi-logs-dockview]
+  .dv-groupview.dv-active-group
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-horizontal
+  > .dv-tab.dv-active-tab {
+  border-bottom-color: var(--accent-color);
+}
+
+[data-yssbi-logs-dockview]
+  .dv-groupview.dv-groupview-header-bottom
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-horizontal
+  > .dv-tab {
+  border-top: 2px solid transparent;
+  border-bottom: 0;
+}
+
+[data-yssbi-logs-dockview]
+  .dv-groupview.dv-groupview-header-bottom
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-horizontal
+  > .dv-tab.dv-active-tab {
+  border-top-color: var(--accent-color);
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-tab:focus-visible,
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-tab:has(:focus-visible) {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-tab:focus-visible::after,
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-tab:has(:focus-visible)::after {
+  outline: none !important;
+}
+
+[data-yssbi-root-dockview]
+  .dv-tab:not([data-yssbi-logs-dockview] *)
+  .dv-default-tab
+  [data-workbench-tab-close] {
+  visibility: visible;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+[data-yssbi-root-dockview]
+    .dv-tab:hover
+    [data-workbench-tab-close],
+  [data-yssbi-root-dockview]
+    .dv-tab.dv-active-tab
+    [data-workbench-tab-close],
+  [data-yssbi-root-dockview]
+    .dv-tab:focus-visible
+    [data-workbench-tab-close],
+  [data-yssbi-root-dockview]
+    .dv-tab:focus-within
+    [data-workbench-tab-close] {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+@media (hover: none) {
+  [data-yssbi-root-dockview]
+    .dv-tab:not([data-yssbi-logs-dockview] *)
+    [data-workbench-tab-close] {
+    pointer-events: auto;
+    opacity: 1;
+  }
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  :is(.dv-edge-peek, .dv-auto-edge-band, .dv-keyboard-docking-hint) {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-split-view-container
+  .dv-sash-container
+  .dv-sash,
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-split-view-container
+  .dv-sash-container
+  .dv-sash:not(.dv-disabled):is(:hover, :active, :focus-visible) {
+  background-color: transparent;
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-split-view-container
+  .dv-sash-container
+  .dv-sash::after {
+  position: absolute;
+  content: "";
+  pointer-events: none;
+  background-color: var(--dv-sash-color);
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-split-view-container.dv-horizontal
+  > .dv-sash-container
+  > .dv-sash::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-split-view-container.dv-vertical
+  > .dv-sash-container
+  > .dv-sash::after {
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-split-view-container
+  .dv-sash-container
+  .dv-sash:not(.dv-disabled):is(:hover, :active, :focus-visible)::after {
+  background-color: var(--dv-active-sash-color);
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-split-view-container.dv-horizontal
+  > .dv-sash-container
+  > .dv-sash:not(.dv-disabled):is(:hover, :active, :focus-visible)::after {
+  width: 2px;
+}
+
+:is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
+  .dv-split-view-container.dv-vertical
+  > .dv-sash-container
+  > .dv-sash:not(.dv-disabled):is(:hover, :active, :focus-visible)::after {
+  height: 2px;
+}

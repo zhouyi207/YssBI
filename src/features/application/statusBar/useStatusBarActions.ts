@@ -1,8 +1,11 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
-import { editorDockviewPort } from '@/features/core/dockview';
-import { showPanelView } from '@/features/core/layout/workbenchLayoutService';
+import {
+  captureActiveEditorCommandTarget,
+  isEditorCommandTargetCurrent,
+} from '@/features/application/editor/editorCommandFocus';
+import { revealWorkbenchView } from '@/features/application/layout/workbenchLayoutActions';
 import { setViewportLive, editorViewportScope } from '@/features/core/viewport';
 
 /** Bottom bar command handlers — keeps BottomBar presentational. */
@@ -10,18 +13,18 @@ export function useStatusBarActions() {
   const { t } = useTranslation();
 
   const openLogsPanel = useCallback(() => {
-    showPanelView('logs');
+    void revealWorkbenchView('logs');
   }, []);
 
   const resetCanvasViewport = useCallback(() => {
-    const panel = editorDockviewPort.getActivePanel();
-    const value = panel?.tab?.data?.layoutTab;
-    if (!panel || !value || typeof value !== 'object') return;
-    const graphPath = (value as { id?: unknown }).id;
-    if (typeof graphPath !== 'string') return;
-    setViewportLive(editorViewportScope(panel.groupId, graphPath), { ...DEFAULT_VIEWPORT });
+    const target = captureActiveEditorCommandTarget();
+    if (!target || !isEditorCommandTargetCurrent(target)) return;
+    if (target.resourceKind !== 'event' && target.resourceKind !== 'function') return;
+    setViewportLive(
+      editorViewportScope(target.groupId, target.resourceRef),
+      { ...DEFAULT_VIEWPORT },
+    );
   }, []);
-
 
   return {
     openLogsPanel,

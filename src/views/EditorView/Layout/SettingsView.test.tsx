@@ -80,7 +80,7 @@ vi.mock('@/features/core/settings/settingsStore', () => {
     editor: { showGrid: true, autoSave: false, snapToGrid: true, fontSize: 12 },
     appearance: {
       colorTheme: 'Dark Modern (Default)', language: 'en-US', activityBarPosition: 'Left',
-      panelPosition: 'Bottom', titleBarStyle: 'custom', smoothScroll: true,
+      titleBarStyle: 'custom', smoothScroll: true,
     },
     project: { projectName: '', exportPath: '' },
     isLoading: false,
@@ -134,13 +134,17 @@ describe('SettingsView computation settings', () => {
     });
   }
 
-  async function openComputation(): Promise<void> {
+  async function openSection(section: string): Promise<void> {
     const button = [...host.querySelectorAll('button')].find((item) => (
-      item.textContent === 'settings.sections.computation'
+      item.textContent === `settings.sections.${section}`
     ));
-    if (!button) throw new Error('computation section button missing');
+    if (!button) throw new Error(`${section} section button missing`);
     click(button);
     await act(async () => { await Promise.resolve(); });
+  }
+
+  async function openComputation(): Promise<void> {
+    await openSection('computation');
   }
 
   it('disables the computation group when no project is open', async () => {
@@ -150,6 +154,14 @@ describe('SettingsView computation settings', () => {
     const group = host.querySelector('[role="group"][aria-label="settings.computation.groupLabel"]');
     expect(group?.getAttribute('aria-disabled')).toBe('true');
     expect(group?.querySelectorAll('input:disabled, select:disabled, button:disabled').length).toBeGreaterThan(0);
+  });
+
+  it('does not offer the removed panel-position appearance setting', async () => {
+    render();
+    await openSection('appearance');
+
+    expect(host.textContent).not.toContain('settings.labels.panelPosition');
+    expect(host.textContent).not.toContain('settings.descriptions.panelPosition');
   });
 
   it('shows tolerance formula help, Listwise/Reject, Apply, and recommended reset', async () => {

@@ -9,7 +9,7 @@ export type WindowTitleBarProps = ComponentProps<'div'> & {
 };
 
 /**
- * 统一窗口标题栏壳层，与 Editor Menubar 一致：h-10、workbench 背景、底边与阴影。
+ * 统一窗口标题栏壳层，与 Editor Menubar 一致：共享标题栏高度、workbench 背景与真实底边。
  * 右上角不与 CSS 圆角对齐——关闭钮直角贴边，由系统窗口圆角裁剪（与 Edit 页相同）。
  */
 export function WindowTitleBar({
@@ -45,9 +45,9 @@ export function WindowTitleBar({
       data-tauri-drag-region
       onMouseDownCapture={handleMouseDownCapture}
       className={cn(
-        'flex h-10 shrink-0 items-stretch border-b border-[var(--strong-border)] bg-[var(--panel-header-bg)] text-foreground shadow-[0_1px_0_rgb(0_0_0/0.08)] select-none',
+        'flex h-(--titlebar-height) shrink-0 items-stretch border-b border-(--strong-border) bg-(--panel-header-bg) text-foreground select-none',
         childWindow && 'z-50',
-        elevated ? 'relative z-[100]' : 'relative',
+        elevated ? 'relative z-100' : 'relative',
         className,
       )}
       {...props}

@@ -8,7 +8,7 @@ export function BottomBar() {
 
   return (
     <footer
-      className="flex h-7 shrink-0 items-center justify-between overflow-hidden border-t border-[var(--strong-border)] bg-[var(--panel-header-bg)] text-[11px] font-medium text-[var(--panel-fg)]"
+      className="flex h-(--statusbar-height) shrink-0 items-center justify-between overflow-hidden border-t border-(--strong-border) bg-(--panel-header-bg) text-[11px] font-medium text-foreground"
       aria-label={t("bottomBar.ariaLabel")}
     >
       <div className="flex h-full min-w-0 items-center">

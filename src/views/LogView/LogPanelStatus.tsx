@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useLogPanelContext } from './logPanelContext';
+import { useLogWorkspaceContext } from './logWorkspaceContext';
 
 const STATUS_COLOR = {
   connecting: 'bg-amber-400 animate-pulse',
@@ -7,18 +7,22 @@ const STATUS_COLOR = {
   error: 'bg-red-400',
 } as const;
 
-export function LogPanelStatus() {
+export interface LogPanelStatusProps {
+  readonly filteredLogCount: number;
+}
+
+export function LogPanelStatus({ filteredLogCount }: LogPanelStatusProps) {
   const { t } = useTranslation();
-  const { filteredLogs, total, subscriptionStatus } = useLogPanelContext();
+  const { logs, subscriptionStatus } = useLogWorkspaceContext();
 
   return (
     <div className="flex min-w-0 items-center gap-2 text-[11px] text-muted-foreground">
       <span
-        className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATUS_COLOR[subscriptionStatus]}`}
+        className={`size-1.5 shrink-0 rounded-full ${STATUS_COLOR[subscriptionStatus]}`}
         aria-hidden
       />
       <span className="truncate">
-        {t('log.showCount', { filtered: filteredLogs.length, total })}
+        {t('log.showCount', { filtered: filteredLogCount, total: logs.length })}
       </span>
     </div>
   );

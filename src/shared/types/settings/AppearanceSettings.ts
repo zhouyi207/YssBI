@@ -9,7 +9,6 @@ export interface AppearanceSettings {
     lastDarkColorTheme: string;
     language: AppLanguage;
     activityBarPosition: string;
-    panelPosition: string;
     smoothScroll: boolean;
     titleBarStyle: TitleBarStyle;
 }

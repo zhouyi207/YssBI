@@ -11,7 +11,6 @@ export interface EditorPartOptions {
   alwaysShowEditorActions: boolean;
   closeEmptyGroups: boolean;
   splitSizing: EditorSplitSizingMode;
-  dragToOpenWindow: boolean;
 }
 
 export const DEFAULT_EDITOR_PART_OPTIONS: EditorPartOptions = {
@@ -20,7 +19,6 @@ export const DEFAULT_EDITOR_PART_OPTIONS: EditorPartOptions = {
   alwaysShowEditorActions: false,
   closeEmptyGroups: true,
   splitSizing: 'auto',
-  dragToOpenWindow: true,
 };
 
 export function readEditorPartOptions(): EditorPartOptions {
@@ -31,7 +29,6 @@ export function readEditorPartOptions(): EditorPartOptions {
     alwaysShowEditorActions: editor.alwaysShowEditorActions ?? DEFAULT_EDITOR_PART_OPTIONS.alwaysShowEditorActions,
     closeEmptyGroups: editor.closeEmptyGroups ?? DEFAULT_EDITOR_PART_OPTIONS.closeEmptyGroups,
     splitSizing: editor.splitSizing ?? DEFAULT_EDITOR_PART_OPTIONS.splitSizing,
-    dragToOpenWindow: editor.dragToOpenWindow ?? DEFAULT_EDITOR_PART_OPTIONS.dragToOpenWindow,
   };
 }
 

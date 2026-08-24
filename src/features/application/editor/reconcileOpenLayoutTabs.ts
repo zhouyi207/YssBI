@@ -1,15 +1,31 @@
-import { editorDockviewPort, useEditorPaneStateStore } from '@/features/core/dockview';
+import { useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
+import { workbenchDockviewInternal } from '@/features/core/dockview/workbenchDockviewInternal';
+import {
+  workbenchDockviewPort,
+  type WorkbenchPanelCommitToken,
+} from '@/features/core/dockview/workbenchDockviewPort';
 import { resourceKey, useResourceStore } from '@/features/core/resource';
-import { layoutTabFromDockviewPanel } from './dockviewTabProjection';
 
-/** Remove restored Dockview panels whose project resources no longer exist. */
-export function reconcileOpenLayoutTabsWithResources(): void {
+/** Atomically remove restored editors whose project resources are absent after hydration. */
+export async function reconcileOpenLayoutTabsWithResources(): Promise<void> {
   const resources = useResourceStore.getState().resources;
-  for (const panel of editorDockviewPort.listPanels()) {
-    const tab = layoutTabFromDockviewPanel(panel);
-    if (!tab || (tab.type !== 'event' && tab.type !== 'function' && tab.type !== 'worksheet')) continue;
-    if (resources[resourceKey({ id: tab.id, kind: tab.type })]) continue;
-    useEditorPaneStateStore.getState().release(panel.panelInstanceId);
-    void editorDockviewPort.remove(panel.panelInstanceId);
-  }
+  const stalePanels = workbenchDockviewPort.listPanels().filter((panel) => {
+    if (panel.metadata.role !== 'editor') return false;
+    return !resources[resourceKey({
+      id: panel.metadata.resourceRef,
+      kind: panel.metadata.resourceKind,
+    })];
+  });
+  if (stalePanels.length === 0) return;
+
+  const tokens: WorkbenchPanelCommitToken[] = stalePanels.map((panel) => ({
+    panelInstanceId: panel.panelInstanceId,
+    groupId: panel.groupId,
+    metadata: structuredClone(panel.metadata),
+  }));
+  const outcome = await workbenchDockviewInternal.commitRemove(tokens);
+  if (outcome !== 'committed') return;
+
+  const paneState = useEditorPaneStateStore.getState();
+  for (const panel of stalePanels) paneState.release(panel.panelInstanceId);
 }

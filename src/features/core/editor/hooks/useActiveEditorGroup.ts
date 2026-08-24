@@ -1,12 +1,12 @@
-import { editorDockviewPort, useDockviewPortSnapshot } from '@/features/core/dockview';
-import { DEFAULT_EDITOR_GROUP_ID } from '@/features/core/layout/workbenchLayoutDefaults';
-import { useEditorGroupPlacement } from './useEditorGroupPlacement';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { useDockviewPortSnapshot } from '@/features/core/dockview/useDockviewPortSnapshot';
 import { createGraphSelection } from '@/features/core/layout/layoutTabQueries';
+import { useEditorGroupPlacement } from './useEditorGroupPlacement';
 
 export function useActiveEditorGroup(overrideGroupId?: string | null) {
-  useDockviewPortSnapshot(editorDockviewPort);
-  const focusedEditorGroupId = editorDockviewPort.getActiveGroupId() ?? null;
-  const groupId = overrideGroupId ?? focusedEditorGroupId ?? DEFAULT_EDITOR_GROUP_ID;
+  useDockviewPortSnapshot(workbenchDockviewPort);
+  const focusedEditorGroupId = workbenchDockviewPort.getActiveEditorPanel()?.groupId ?? null;
+  const groupId = overrideGroupId ?? focusedEditorGroupId;
   const placement = useEditorGroupPlacement(groupId);
 
   return {

@@ -1,10 +1,17 @@
-import type { LayoutTab } from '@/shared/types';
+import { showWorkbenchLayoutError } from '@/features/application/layout/workbenchLayoutErrorFeedback';
 import type { DetailFocus } from '@/features/core/editor/detail/types';
-import { editorDockviewPort } from '@/features/core/dockview';
-import { applyTabPinState, findPreviewTabInTabs } from '@/features/core/layout/layoutTabModel';
+import type { EditorResourceKind } from '@/features/core/dockview/workbenchPanelModel';
+import {
+  WorkbenchLayoutError,
+  workbenchDockviewPort,
+  type WorkbenchPanelInfo,
+} from '@/features/core/dockview/workbenchDockviewPort';
+import type { LayoutTab } from '@/shared/types';
+
+import { resolveEditorOpenTargetGroupId } from './editorOpenTarget';
+import { requestCloseWorkbenchPanels } from './workbenchPanelClose';
 import { resolveTabDisplayName } from './resolveTabDisplayName';
-import { ensureDetailVisible } from './ensureDetailVisible';
-import { focusDetails } from './rightSidebarActions';
+import { revealDetails } from './rightSidebarActions';
 
 export interface OpenEditorTabOptions {
   targetGroupId?: string;
@@ -14,77 +21,97 @@ export interface OpenEditorTabOptions {
   pinned?: boolean;
 }
 
-let panelSequence = 0;
+const handledOpenRejections = new WeakSet<Error>();
 
-function createPanelInstanceId(): string {
-  panelSequence += 1;
-  return `editor-panel-${panelSequence}`;
+function editorResourceKind(tab: LayoutTab): EditorResourceKind {
+  if (tab.type === 'event' || tab.type === 'function' || tab.type === 'worksheet') {
+    return tab.type;
+  }
+  throw new WorkbenchLayoutError('invalid_panel_metadata');
 }
 
-function tabFromPanel(panel: ReturnType<typeof editorDockviewPort.listPanels>[number]): LayoutTab | null {
-  const data = panel.tab?.data?.layoutTab;
-  if (!data || typeof data !== 'object') return null;
-  return data as unknown as LayoutTab;
+function markOpenRejectionHandled(error: Error): Error {
+  handledOpenRejections.add(error);
+  return error;
 }
 
-/** Open or activate an editor panel. Dockview owns group topology and placement. */
-export function openEditorTab(tab: LayoutTab, options?: OpenEditorTabOptions): void {
-  const pinned = options?.pinned !== false;
-  const tabToOpen = applyTabPinState(tab, pinned);
-  const existing = editorDockviewPort.findPanelsByResource(tab.id)[0];
+function handledPreviewCloseRejection(): Error {
+  return markOpenRejectionHandled(new Error('editor preview close did not commit'));
+}
 
-  if (existing) {
-    if (existing.tab) {
-      const currentTab = tabFromPanel(existing);
-      if (currentTab?.pinned === false && pinned) {
-        void editorDockviewPort.updateTab(existing.panelInstanceId, {
-          ...existing.tab,
-          data: { ...existing.tab.data, layoutTab: { ...currentTab, pinned: true } },
-        });
-      }
+function presentOpenRejection(error: unknown): Error {
+  const rejection = error instanceof Error
+    ? error
+    : new WorkbenchLayoutError('panel_open_failed');
+  if (!handledOpenRejections.has(rejection)) {
+    showWorkbenchLayoutError(rejection);
+    handledOpenRejections.add(rejection);
+  }
+  return rejection;
+}
+
+export function isEditorOpenRejectionHandled(error: unknown): boolean {
+  return error instanceof Error && handledOpenRejections.has(error);
+}
+
+async function replacePreviewPanel(
+  tab: LayoutTab,
+  targetGroupId: string,
+): Promise<string> {
+  const groupPanels = workbenchDockviewPort.listGroupPanels(targetGroupId);
+  const preview = groupPanels.find((panel) =>
+    panel.metadata.role === 'editor'
+      && panel.metadata.resourceRef !== tab.id
+      && panel.metadata.pinned === false);
+  if (!preview) return targetGroupId;
+
+  const wasSolePanel = groupPanels.length === 1;
+  if (!await requestCloseWorkbenchPanels([preview.panelInstanceId])) {
+    throw handledPreviewCloseRejection();
+  }
+  return wasSolePanel
+    ? resolveEditorOpenTargetGroupId(targetGroupId)
+    : targetGroupId;
+}
+
+/** Open or activate an editor panel through the canonical workbench authority. */
+export async function openEditorTab(
+  tab: LayoutTab,
+  options?: OpenEditorTabOptions,
+): Promise<WorkbenchPanelInfo> {
+  const requestedPinned = options?.pinned !== false;
+  let panel: WorkbenchPanelInfo;
+
+  try {
+    let targetGroupId = await resolveEditorOpenTargetGroupId(options?.targetGroupId);
+    const existing = workbenchDockviewPort.findEditorPanelsByResource(tab.id)[0];
+    if (!requestedPinned && !existing) {
+      targetGroupId = await replacePreviewPanel(tab, targetGroupId);
     }
-    if (options?.targetGroupId && existing.groupId !== options.targetGroupId) {
-      void editorDockviewPort.move({
-        panelInstanceId: existing.panelInstanceId,
-        groupId: options.targetGroupId,
-        index: options.insertIndex,
-      });
-    } else {
-      void editorDockviewPort.activate(existing.panelInstanceId);
-    }
-  } else {
-    if (!pinned) replacePreviewPanel(options?.targetGroupId);
-    const title = resolveTabDisplayName(
-      tab.type === 'event' || tab.type === 'function' || tab.type === 'worksheet'
-        ? { id: tab.id, kind: tab.type }
-        : null,
-      tab.id,
-    );
-    void editorDockviewPort.open({
-      panelInstanceId: createPanelInstanceId(),
-      component: tab.component,
-      title,
-      groupId: options?.targetGroupId,
+
+    const preserveExistingPreviewState = !requestedPinned
+      && existing?.metadata.role === 'editor';
+    const pinned = preserveExistingPreviewState
+      ? existing.metadata.pinned ?? false
+      : requestedPinned;
+    const sticky = preserveExistingPreviewState
+      ? existing.metadata.sticky
+      : tab.sticky;
+    const resourceKind = editorResourceKind(tab);
+    panel = await workbenchDockviewPort.openEditor({
+      resourceRef: tab.id,
+      resourceKind,
+      title: resolveTabDisplayName({ id: tab.id, kind: resourceKind }, tab.id),
+      pinned,
+      ...(sticky === undefined ? {} : { sticky }),
+      targetGroupId,
       index: options?.insertIndex,
-      tab: {
-        resourceRef: tab.id,
-        kind: tab.type,
-        data: { layoutTab: tabToOpen },
-      },
+      mode: 'reuse-resource',
     });
+  } catch (error) {
+    throw presentOpenRejection(error);
   }
 
-  if (options?.focusDetail) focusDetails(options.focusDetail);
-  ensureDetailVisible();
-}
-
-function replacePreviewPanel(groupId?: string): void {
-  const panels = editorDockviewPort
-    .listPanels()
-    .filter((panel) => !groupId || panel.groupId === groupId);
-  const tabs = panels.map(tabFromPanel).filter((tab): tab is LayoutTab => tab !== null);
-  const preview = findPreviewTabInTabs(tabs);
-  if (!preview) return;
-  const panel = panels.find((candidate) => candidate.tab?.resourceRef === preview.id);
-  if (panel) void editorDockviewPort.remove(panel.panelInstanceId);
+  if (options?.focusDetail) await revealDetails(options.focusDetail);
+  return panel;
 }

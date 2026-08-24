@@ -46,12 +46,12 @@ export function LogItemRow({
       type="button"
       onClick={handleClick}
       className={[
-        'group flex w-full cursor-text select-text items-center gap-2.5 border-b border-border/30 px-3 py-1.5 text-left transition-colors',
-        isSelected ? 'bg-[var(--accent-color)]/8' : 'hover:bg-muted/30',
+        'group flex w-full cursor-text select-text items-center gap-2.5 border-b border-border/20 px-3 py-1.5 text-left transition-colors',
+        isSelected ? 'bg-primary/10' : 'hover:bg-muted/30',
       ].join(' ')}
       style={{ minHeight: LOG_ITEM_HEIGHT }}
     >
-      <span className="w-[52px] shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/80">
+      <span className="w-13 shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground/80">
         {formatDiagnosticTime(log.timestamp)}
       </span>
       <span
@@ -65,7 +65,7 @@ export function LogItemRow({
         {LOG_DOMAIN_LABELS[log.domain] ?? log.domain.toUpperCase()}
       </span>
       {log.source ? (
-        <span className="max-w-[88px] shrink-0 truncate font-mono text-[10px] text-sky-500/80">
+        <span className="max-w-22 shrink-0 truncate font-mono text-[10px] text-primary/80">
           [{log.source}]
         </span>
       ) : null}

@@ -3,23 +3,39 @@
  * 组合 useEditorCanvasActions、useEditorUIActions
  * 并提供 refs 供 canvas pointer loop 使用（viewportRef 为 EditorViewport 快照）
  */
-import { useRef, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
-import { getViewport, subscribeToViewport, editorViewportScope } from '@/features/core/viewport';
+import {
+  commitViewport,
+  editorViewportScope,
+  getViewport,
+  setViewportLive,
+  subscribeToViewport,
+  type EditorViewport,
+} from '@/features/core/viewport';
 import { useActiveEditorGroup } from './useActiveEditorGroup';
-import { useEditorCanvasActions } from './useEditorCanvasActions';
 import { useEditorUIActions } from './useEditorUIActions';
 
 type ActiveEditorGroup = ReturnType<typeof useActiveEditorGroup>;
 
 export function useEditorActions(active: ActiveEditorGroup) {
-  const editorGroupId = active.focusedEditorGroupId ?? active.groupId;
-  const activeGroupIdRef = useRef(editorGroupId);
-  const activeTabIdRef = useRef(active.activeTabId);
+  const editorGroupId = active.groupId;
+  const activeGroupIdRef = useRef<string | null>(editorGroupId);
+  const activeTabIdRef = useRef<string | null>(active.activeTabId);
   activeGroupIdRef.current = editorGroupId;
   activeTabIdRef.current = active.activeTabId;
 
-  const canvasActions = useEditorCanvasActions(activeGroupIdRef, activeTabIdRef);
+  const setCanvas = useCallback((
+    updater: EditorViewport | ((previous: EditorViewport) => EditorViewport),
+    targetGraphPath?: string,
+  ) => {
+    const groupId = activeGroupIdRef.current;
+    const graphPath = targetGraphPath ?? activeTabIdRef.current;
+    if (!groupId || !graphPath) return;
+    const scope = editorViewportScope(groupId, graphPath);
+    setViewportLive(scope, updater);
+    commitViewport(scope);
+  }, []);
   const uiActions = useEditorUIActions();
 
   const viewportScope =
@@ -41,7 +57,7 @@ export function useEditorActions(active: ActiveEditorGroup) {
     activeGroupIdRef,
     activeTabIdRef,
     viewportRef,
-    ...canvasActions,
+    setCanvas,
     ...uiActions,
   };
 }

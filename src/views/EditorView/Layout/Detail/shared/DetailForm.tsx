@@ -14,8 +14,14 @@ interface DetailFormProps {
 
 export function DetailForm({ children, className }: DetailFormProps) {
   return (
-    <Card className={cn('rounded-lg bg-card/80 py-0 shadow-xs', detailTableClass, className)}>
-      <CardContent className="space-y-2 p-3">{children}</CardContent>
+    <Card
+      className={cn(
+        'rounded-none border-0 bg-transparent py-0 shadow-none',
+        detailTableClass,
+        className,
+      )}
+    >
+      <CardContent className="flex flex-col gap-1 px-3 py-2">{children}</CardContent>
     </Card>
   );
 }
@@ -102,7 +108,7 @@ export function DetailReadonlyField({
         as="div"
         tone={tone}
         className={cn(
-          'flex min-h-8 min-w-0 items-center justify-end truncate rounded-md border border-transparent px-3 py-1 text-right',
+          'flex min-h-8 min-w-0 items-center justify-end truncate px-2 py-1 text-right',
           className,
         )}
       >

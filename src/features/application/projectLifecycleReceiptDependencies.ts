@@ -1,12 +1,18 @@
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import type { ProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceipt';
+import {
+  ProjectLifecycleProtocolError,
+  type ProjectLifecycleReceiptDependencies,
+} from '@/features/application/projectLifecycleReceipt';
 import {
   commitPreparedAuthoritativeProjectLoad,
   prepareAuthoritativeProjectLoad,
   useProjectIOStore,
 } from '@/features/core/dataStore/projectIOStore';
 import { ProjectService } from '@/services/project/projectService';
-import { captureProjectIdentity } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import {
+  captureProjectIdentity,
+  isProjectLifecycleStateCurrent,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import {
   revokeAllPinPreviewLeases,
   useExecutionStore,
@@ -20,21 +26,25 @@ export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleRec
       return {
         projectInstanceId: prepared.index.projectInstanceId,
         publicationRevision: prepared.index.publicationRevision,
-        commit: () => {
-          commitPreparedAuthoritativeProjectLoad(prepared);
+        commit: async () => {
+          await commitPreparedAuthoritativeProjectLoad(prepared);
         },
       };
     },
     refreshRegistry: () => ProjectService.listRegisteredProjects(),
-    clearProject: () => {
+    clearProject: async (owner) => {
+      if (!isProjectLifecycleStateCurrent(owner)) return;
       clearCanvasInteractionProject();
+      if (!isProjectLifecycleStateCurrent(owner)) return;
       revokeAllPinPreviewLeases();
+      if (!isProjectLifecycleStateCurrent(owner)) return;
       useExecutionStore.setState({
         graphs: {},
         playbackGraphPath: null,
         isPlaying: false,
       });
-      useProjectIOStore.getState().loadProjectFromData(
+      if (!isProjectLifecycleStateCurrent(owner)) return;
+      await useProjectIOStore.getState().loadProjectFromData(
         {
           variables: {},
           graphs: {},
@@ -42,8 +52,12 @@ export function createProjectLifecycleReceiptDependencies(): ProjectLifecycleRec
           metadata: { exportTime: '' },
         },
         null,
+        owner,
       );
-      useProjectIOStore.setState({ projectInstanceId: null });
+      if (isProjectLifecycleStateCurrent(owner)
+        && useProjectIOStore.getState().projectInstanceId !== owner.projectInstanceId) {
+        throw new ProjectLifecycleProtocolError('Project clear retained an unexpected store identity');
+      }
     },
     markProjectStale: () => projectPublicationCoordinator.markProjectProjectionStale(),
   };

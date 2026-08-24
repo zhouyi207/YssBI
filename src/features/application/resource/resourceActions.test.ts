@@ -7,7 +7,6 @@ import { DatabaseService } from '@/services/database/databaseService';
 import { GraphService } from '@/services/graph/graphService';
 import { WorksheetService } from '@/services/worksheet/worksheetService';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { closeEditorTab } from '@/features/application/editor/closeEditorTab';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { deleteResource, renameResource } from './resourceActions';
 
@@ -18,9 +17,6 @@ vi.mock('@/features/application/editorMutation/projectPublicationCoordinator', (
   },
 }));
 
-vi.mock('@/features/application/editor/closeEditorTab', () => ({
-  closeEditorTab: vi.fn(async () => true),
-}));
 
 function databaseResult(afterName: string | null, operationId: string) {
   const before = {
@@ -254,13 +250,12 @@ describe('renameResource project ownership', () => {
     );
   });
 
-  it('submits the authoritative delete publication without starting a competing tab unload', async () => {
+  it('submits the authoritative delete publication', async () => {
     const committed = deleteResult('project-instance-current');
     vi.spyOn(GraphService, 'removeGraph').mockResolvedValue(committed);
 
     await deleteResource({ id: 'events/Old.yssbi-event', kind: 'event' });
 
-    expect(closeEditorTab).not.toHaveBeenCalled();
     expect(GraphService.removeGraph).toHaveBeenCalledWith(
       'project-instance-current',
       'events/Old.yssbi-event',

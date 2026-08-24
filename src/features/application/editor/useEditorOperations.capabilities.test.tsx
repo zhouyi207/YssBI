@@ -2,8 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearProjectLifecycle, startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { useEditorStore } from '@/features/core/editor';
 import type { ClipboardSubgraphDto } from '@/shared/types/dto/clipboardSubgraph';
 import type { GraphMutationCommandResult } from '@/features/core/history/types';
 import { useEditorOperations } from './useEditorOperations';
@@ -12,15 +10,10 @@ import { EDITOR_MUTATION_CAPABILITIES } from './editorMutationAvailability';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
+  activeRole: 'editor' as 'editor' | 'result' | 'view',
   activeGroupId: 'group-a' as string | null,
   activeResourceByGroup: new Map<string, string>(),
   selectionByGroup: new Map<string, string[]>(),
-  hookState: {
-    activeTabId: 'events/main.yssbi-event' as string | null,
-    groupId: 'group-a',
-    selectedNodeIds: ['node-a', 'node-b'],
-    selectedConnectionIds: [] as string[],
-  },
   canCopyNode: vi.fn((_graphPath: string, _nodeId: string) => true),
   canDeleteNode: vi.fn((_graphPath: string, _nodeId: string) => true),
   exportEditorSubgraph: vi.fn(),
@@ -28,14 +21,31 @@ const mocks = vi.hoisted(() => ({
   readGraphClipboard: vi.fn(),
   executeCommandWithResult: vi.fn(),
   updateSelectedConnectionIds: vi.fn(),
+  setInspectionContext: vi.fn(),
+  revealInspect: vi.fn(async () => undefined),
   graphError: vi.fn(),
 }));
 
-vi.mock('@/features/core/editor/hooks/useActiveEditorGroup', () => ({
-  useActiveEditorGroup: () => mocks.hookState,
-}));
-vi.mock('@/features/core/dockview', () => ({
-  editorDockviewPort: { getActiveGroupId: () => mocks.activeGroupId },
+vi.mock('./editorCommandFocus', () => ({
+  captureActiveEditorCommandTarget: () => {
+    const groupId = mocks.activeGroupId;
+    const resourceRef = groupId ? mocks.activeResourceByGroup.get(groupId) : undefined;
+    if (mocks.activeRole !== 'editor' || !groupId || !resourceRef) return null;
+    return {
+      panelInstanceId: `editor-${groupId}`,
+      groupId,
+      resourceRef,
+      resourceKind: 'event' as const,
+    };
+  },
+  isEditorCommandTargetCurrent: (target: {
+    panelInstanceId: string;
+    groupId: string;
+    resourceRef: string;
+  }) => mocks.activeRole === 'editor'
+    && mocks.activeGroupId === target.groupId
+    && target.panelInstanceId === `editor-${target.groupId}`
+    && mocks.activeResourceByGroup.get(target.groupId) === target.resourceRef,
 }));
 vi.mock('@/features/core/layout', () => ({
   getActiveLayoutTab: (groupId: string) => {
@@ -46,9 +56,14 @@ vi.mock('@/features/core/layout', () => ({
     nodeIds: new Set(mocks.selectionByGroup.get(groupId) ?? []),
     connectionIds: new Set<string>(),
   }),
-  updateEditorGroupSelectedNodeIds: (value: string[] | ((previous: string[]) => string[]), groupId = 'group-a') => {
+  updateEditorGroupSelectedNodeIds: (
+    value: string[] | ((previous: string[]) => string[]),
+    groupId = 'group-a',
+  ) => {
     const previous = mocks.selectionByGroup.get(groupId) ?? [];
-    mocks.selectionByGroup.set(groupId, typeof value === 'function' ? value(previous) : value);
+    const nodeIds = typeof value === 'function' ? value(previous) : value;
+    mocks.selectionByGroup.set(groupId, nodeIds);
+    return { groupId, nodeIds };
   },
   updateEditorGroupSelectedConnectionIds: mocks.updateSelectedConnectionIds,
 }));
@@ -80,6 +95,10 @@ vi.mock('@/features/application/editorMutation/safeGraphMutation', () => ({
 vi.mock('./edgeOperations', () => ({ disconnectConnectionsById: vi.fn() }));
 vi.mock('@/features/core/dataStore/graphDataStore', () => ({
   useGraphDataStore: { getState: vi.fn(() => ({ getGraphNodePins: () => [] })) },
+}));
+vi.mock('./rightSidebarActions', () => ({
+  setInspectionContext: mocks.setInspectionContext,
+  revealInspect: mocks.revealInspect,
 }));
 vi.mock('@/utils/appLogger', () => ({
   logger: {
@@ -138,17 +157,14 @@ describe('useEditorOperations authoritative subgraph workflows', () => {
     mocks.readGraphClipboard.mockReset();
     mocks.executeCommandWithResult.mockReset();
     mocks.updateSelectedConnectionIds.mockReset();
+    mocks.setInspectionContext.mockReset();
+    mocks.revealInspect.mockReset();
+    mocks.revealInspect.mockResolvedValue(undefined);
     mocks.graphError.mockReset();
-    clearProjectLifecycle();
-    startProjectLifecycle('project-a');
+    mocks.activeRole = 'editor';
     mocks.activeGroupId = 'group-a';
     mocks.activeResourceByGroup = new Map([['group-a', graphPath]]);
     mocks.selectionByGroup = new Map([['group-a', ['node-a', 'node-b']]]);
-    mocks.hookState.activeTabId = graphPath;
-    mocks.hookState.groupId = 'group-a';
-    mocks.hookState.selectedNodeIds = ['node-a', 'node-b'];
-    mocks.hookState.selectedConnectionIds = [];
-    useEditorStore.setState({ detailFocus: null, rightSidebarTab: 'details' });
     mocks.canCopyNode.mockReturnValue(true);
     mocks.canDeleteNode.mockReturnValue(true);
     mocks.exportEditorSubgraph.mockResolvedValue(snapshot);
@@ -164,21 +180,16 @@ describe('useEditorOperations authoritative subgraph workflows', () => {
 
   afterEach(() => {
     act(() => root.unmount());
-    clearProjectLifecycle();
   });
 
   it('enables paste and duplicate capabilities', () => {
     expect(EDITOR_MUTATION_CAPABILITIES).toMatchObject({ pasteNodes: true, duplicateNodes: true });
   });
 
-  it('coordinates connection selection with Inspect and clears stale node focus', () => {
+  it('passively synchronizes connection selection without revealing Inspect', () => {
     mocks.updateSelectedConnectionIds.mockReturnValueOnce({
       groupId: 'group-a',
       connectionIds: ['connection-a'],
-    });
-    useEditorStore.setState({
-      rightSidebarTab: 'result',
-      detailFocus: { kind: 'node', id: 'stale-node', graphPath },
     });
 
     act(() => operations.setSelectedConnectionIds(['connection-a', 'connection-a'], 'group-a'));
@@ -187,10 +198,17 @@ describe('useEditorOperations authoritative subgraph workflows', () => {
       ['connection-a', 'connection-a'],
       'group-a',
     );
-    expect(useEditorStore.getState()).toMatchObject({
-      rightSidebarTab: 'inspect',
-      detailFocus: null,
-    });
+    expect(mocks.setInspectionContext).toHaveBeenCalledWith(graphPath, []);
+    expect(mocks.revealInspect).not.toHaveBeenCalled();
+  });
+
+  it('denies direct canvas operations while a Result is physically active', async () => {
+    mocks.activeRole = 'result';
+
+    await act(async () => operations.copyNodes(['node-a', 'node-b']));
+
+    expect(mocks.exportEditorSubgraph).not.toHaveBeenCalled();
+    expect(mocks.writeGraphClipboard).not.toHaveBeenCalled();
   });
 
   it('copies by awaiting backend export before system clipboard write', async () => {

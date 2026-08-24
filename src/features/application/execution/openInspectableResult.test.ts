@@ -1,17 +1,34 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { openPresentationWindow } from '@/features/application/window';
-import { startProjectLifecycle, clearProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { useEditorStore } from '@/features/core/editor';
+import { resultPanelKey } from '@/features/domain/result';
+import {
+  clearProjectLifecycle,
+  startProjectLifecycle,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { useExecutionStore } from '@/features/core/execution';
-import { useResultWorkspaceStore } from '@/features/core/resultWorkspace';
 import { ResultService } from '@/services/result/resultService';
 import type { ResultDescriptor } from '@/shared/types/dto/result';
-import { openInspectableResult } from './openInspectableResult';
+
+const mocks = vi.hoisted(() => ({
+  upsertResult: vi.fn(),
+  showWorkbenchLayoutError: vi.fn(),
+}));
 
 vi.mock('@/features/application/window', () => ({
   openPresentationWindow: vi.fn(),
   presentationWindowPayloadFromDescriptor: vi.fn(() => ({ route: '/plot', windowTitle: 'Plot' })),
 }));
+
+vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
+  workbenchDockviewPort: { upsertResult: mocks.upsertResult },
+}));
+
+vi.mock('@/features/application/layout/workbenchLayoutErrorFeedback', () => ({
+  showWorkbenchLayoutError: mocks.showWorkbenchLayoutError,
+}));
+
+import { openInspectableResult } from './openInspectableResult';
 
 const descriptor: ResultDescriptor = {
   resultId: '17',
@@ -44,31 +61,46 @@ const plotDescriptor: ResultDescriptor = {
 
 const t = ((key: string) => key) as never;
 
+beforeEach(() => {
+  vi.restoreAllMocks();
+  mocks.upsertResult.mockReset();
+  mocks.upsertResult.mockResolvedValue({ panelInstanceId: 'result-panel' });
+  mocks.showWorkbenchLayoutError.mockReset();
+  clearProjectLifecycle();
+  startProjectLifecycle('project-1');
+
+  vi.spyOn(ResultService, 'getDescriptor').mockResolvedValue(descriptor);
+});
+
 describe('openInspectableResult', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    clearProjectLifecycle();
-    startProjectLifecycle('project-1');
-    useResultWorkspaceStore.getState().reset();
-    useEditorStore.setState({ rightSidebarTab: 'details', detailFocus: null });
-    vi.spyOn(ResultService, 'getDescriptor').mockResolvedValue(descriptor);
+  it('atomically upserts the logical Result panel', async () => {
+    await expect(openInspectableResult({ kind: 'result', resultId: '17' }, t))
+      .resolves.toBe(true);
+
+    expect(mocks.upsertResult).toHaveBeenCalledOnce();
+    expect(mocks.upsertResult).toHaveBeenCalledWith({
+      resultKey: resultPanelKey(descriptor),
+      resultId: '17',
+      title: 'Node result',
+      presentation: { kind: 'inspector' },
+      source: descriptor.provenance.output,
+    });
+
   });
 
-  it('opens a non-plot descriptor in the Result workspace', async () => {
-    await expect(openInspectableResult({ kind: 'result', resultId: '17' }, t)).resolves.toBe(true);
-    expect(useResultWorkspaceStore.getState().activeTabKey).not.toBeNull();
-    expect(useEditorStore.getState().rightSidebarTab).toBe('result');
-  });
-
-  it('opens a plot descriptor in the Result workspace without opening a window', async () => {
+  it('routes plot descriptors through the same root Result upsert without opening a window', async () => {
     vi.mocked(ResultService.getDescriptor).mockResolvedValueOnce(plotDescriptor);
 
-    await expect(openInspectableResult({ kind: 'result', resultId: '18' }, t)).resolves.toBe(true);
+    await expect(openInspectableResult({ kind: 'result', resultId: '18' }, t))
+      .resolves.toBe(true);
 
-    expect(useEditorStore.getState().rightSidebarTab).toBe('result');
-    expect(Object.values(useResultWorkspaceStore.getState().tabs)).toContainEqual(
-      expect.objectContaining({ resultId: '18', presentation: plotDescriptor.presentation }),
-    );
+    expect(mocks.upsertResult).toHaveBeenCalledWith({
+      resultKey: resultPanelKey(plotDescriptor),
+      resultId: '18',
+      title: 'Scatter result',
+      presentation: { kind: 'plot', chart: 'scatter' },
+      source: plotDescriptor.provenance.output,
+    });
     expect(openPresentationWindow).not.toHaveBeenCalled();
   });
 
@@ -107,8 +139,7 @@ describe('openInspectableResult', () => {
     await expect(pending).resolves.toBe(false);
     expect(recordPinHistory).not.toHaveBeenCalled();
     expect(ResultService.getDescriptor).not.toHaveBeenCalled();
-    expect(useResultWorkspaceStore.getState().order).toEqual([]);
-    expect(useEditorStore.getState().rightSidebarTab).toBe('details');
+    expect(mocks.upsertResult).not.toHaveBeenCalled();
   });
 
   it('drops a descriptor that settles after the project identity changes', async () => {
@@ -131,7 +162,17 @@ describe('openInspectableResult', () => {
     settleDescriptor(descriptor);
 
     await expect(pending).resolves.toBe(false);
-    expect(useResultWorkspaceStore.getState().order).toEqual([]);
-    expect(useEditorStore.getState().rightSidebarTab).toBe('details');
+    expect(mocks.upsertResult).not.toHaveBeenCalled();
+  });
+
+  it('maps root Result upsert failures through typed layout feedback', async () => {
+    const failure = new Error('private Dockview failure');
+    mocks.upsertResult.mockRejectedValueOnce(failure);
+
+    await expect(openInspectableResult({ kind: 'result', resultId: '17' }, t))
+      .resolves.toBe(false);
+
+    expect(mocks.showWorkbenchLayoutError).toHaveBeenCalledOnce();
+    expect(mocks.showWorkbenchLayoutError).toHaveBeenCalledWith(failure);
   });
 });

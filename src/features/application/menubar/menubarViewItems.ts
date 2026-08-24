@@ -4,56 +4,72 @@ export type MenubarMenuItem = {
   label: string;
   shortcut?: string;
   onClick?: () => void;
-  type?: 'item' | 'separator';
+  type?: 'item' | 'checkbox' | 'separator';
+  checked?: boolean;
 };
 
-export type MenubarShellVisibilityState = {
-  isSidebarVisible: boolean;
-  isDetailVisible: boolean;
-  isLogPanelVisible: boolean;
-  zenMode: boolean;
-};
+export interface MenubarViewState {
+  readonly resourcesOpen: boolean;
+  readonly detailsOpen: boolean;
+  readonly detailsContextValid: boolean;
+  readonly inspectOpen: boolean;
+  readonly inspectContextValid: boolean;
+  readonly logsOpen: boolean;
+  readonly outputOpen: boolean;
+  readonly bottomCollapsed: boolean;
+}
 
-export type MenubarShellVisibilityActions = {
-  toggleSidebar: () => void;
-  toggleDetail: () => void;
-  toggleLogPanel: () => void;
-  toggleZenMode: () => void;
-};
+export interface MenubarViewMenuActions {
+  readonly toggleResources: () => void;
+  readonly toggleDetails: () => void;
+  readonly toggleInspect: () => void;
+  readonly toggleLogs: () => void;
+  readonly toggleOutput: () => void;
+  readonly resetLayout: () => void;
+}
 
-export type MenubarViewMenuActions = MenubarShellVisibilityActions & {
-  resetLayout: () => void;
-};
-
-/** View → shell visibility + reset chrome layout (VS Code View menu parity). */
+/** View menu projected from live root Dockview panels, never mirrored visibility state. */
 export function buildViewMenuItems(
   t: TFunction,
-  state: MenubarShellVisibilityState,
+  state: MenubarViewState,
   actions: MenubarViewMenuActions,
 ): MenubarMenuItem[] {
   return [
     {
-      label: state.isSidebarVisible ? t('menubar.hidePrimarySideBar') : t('menubar.showPrimarySideBar'),
-      shortcut: 'Ctrl+B',
-      onClick: actions.toggleSidebar,
+      label: t('panel.resources'),
+      type: 'checkbox',
+      checked: state.resourcesOpen,
+      onClick: actions.toggleResources,
     },
     {
-      label: state.isDetailVisible ? t('menubar.hideSecondarySideBar') : t('menubar.showSecondarySideBar'),
-      shortcut: 'Ctrl+I',
-      onClick: actions.toggleDetail,
+      label: t('panel.details'),
+      type: 'checkbox',
+      checked: state.detailsOpen,
+      onClick: state.detailsOpen || state.detailsContextValid
+        ? actions.toggleDetails
+        : undefined,
     },
     {
-      label: state.isLogPanelVisible ? t('menubar.collapsePanel') : t('menubar.expandPanel'),
-      shortcut: 'Ctrl+`',
-      onClick: actions.toggleLogPanel,
+      label: t('panel.inspect'),
+      type: 'checkbox',
+      checked: state.inspectOpen,
+      onClick: state.inspectOpen || state.inspectContextValid
+        ? actions.toggleInspect
+        : undefined,
     },
-    { label: '-' },
     {
-      label: state.zenMode ? t('menubar.exitZenMode') : t('menubar.enterZenMode'),
-      shortcut: 'Ctrl+K Z',
-      onClick: actions.toggleZenMode,
+      label: t('panel.logs'),
+      type: 'checkbox',
+      checked: state.logsOpen,
+      onClick: actions.toggleLogs,
     },
-    { label: '-' },
+    {
+      label: t('panel.output'),
+      type: 'checkbox',
+      checked: state.outputOpen,
+      onClick: actions.toggleOutput,
+    },
+    { label: '-', type: 'separator' },
     {
       label: t('menubar.resetLayout'),
       onClick: actions.resetLayout,

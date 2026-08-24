@@ -55,7 +55,7 @@ export function WindowMenuBar({ toolbar, windowActions, className, children, ...
         return (
             <WindowTitleBar elevated className={cn("menubar-container", className)} {...props}>
                 {children}
-                <div className="min-w-[20px] flex-1 self-stretch" data-tauri-drag-region />
+                <div className="min-w-5 flex-1 self-stretch" data-tauri-drag-region />
                 {(toolbar || windowActions) ? (
                     <WindowTitleBarActions>
                         {toolbar}
@@ -69,7 +69,7 @@ export function WindowMenuBar({ toolbar, windowActions, className, children, ...
     return (
         <div
             className={cn(
-                "menubar-container flex h-10 shrink-0 items-stretch border-b border-[var(--strong-border)] bg-[var(--panel-header-bg)] shadow-[0_1px_0_rgb(0_0_0/0.08)] select-none",
+                "menubar-container flex h-(--titlebar-height) shrink-0 items-stretch border-b border-(--strong-border) bg-(--panel-header-bg) text-foreground select-none",
                 className,
             )}
             {...props}

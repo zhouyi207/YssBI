@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import type { PanelInstanceId } from './types';
+
+type EditorPanePanelId = string;
 
 export interface EditorPaneSelection {
   selectedNodeIds: string[];
@@ -7,11 +8,11 @@ export interface EditorPaneSelection {
 }
 
 interface EditorPaneState {
-  selections: Record<PanelInstanceId, EditorPaneSelection>;
-  setSelectedNodeIds(panelInstanceId: PanelInstanceId, ids: string[]): void;
-  setSelectedConnectionIds(panelInstanceId: PanelInstanceId, ids: string[]): void;
-  clearSelection(panelInstanceId: PanelInstanceId): void;
-  release(panelInstanceId: PanelInstanceId): void;
+  selections: Record<EditorPanePanelId, EditorPaneSelection>;
+  setSelectedNodeIds(panelInstanceId: EditorPanePanelId, ids: string[]): void;
+  setSelectedConnectionIds(panelInstanceId: EditorPanePanelId, ids: string[]): void;
+  clearSelection(panelInstanceId: EditorPanePanelId): void;
+  release(panelInstanceId: EditorPanePanelId): void;
   reset(): void;
 }
 
@@ -44,7 +45,7 @@ export const useEditorPaneStateStore = create<EditorPaneState>((set) => ({
   reset: () => set({ selections: {} }),
 }));
 
-export function getPaneSelection(panelInstanceId: PanelInstanceId | undefined): EditorPaneSelection {
+export function getPaneSelection(panelInstanceId: EditorPanePanelId | undefined): EditorPaneSelection {
   if (!panelInstanceId) return emptySelection();
   return useEditorPaneStateStore.getState().selections[panelInstanceId] ?? emptySelection();
 }

@@ -1,10 +1,10 @@
-import { editorDockviewPort } from '@/features/core/dockview';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
 
-/** Activate a Dockview panel by resource identity within an editor group. */
+/** Activate a canonical editor panel by resource identity within an editor group. */
 export function applyEditorTabSelection(groupId: string, resourceId: string | null): void {
   if (!resourceId) return;
-  const panel = editorDockviewPort
-    .findPanelsByResource(resourceId)
+  const panel = workbenchDockviewPort
+    .findEditorPanelsByResource(resourceId)
     .find((candidate) => candidate.groupId === groupId);
-  if (panel) void editorDockviewPort.activate(panel.panelInstanceId);
+  if (panel) void workbenchDockviewPort.activate(panel.panelInstanceId);
 }

@@ -1,4 +1,3 @@
-
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_WORKSHEET_NAME } from '@/shared/constants/defaultResourceNames';
@@ -12,7 +11,10 @@ import { captureProjectCommandContext } from '@/features/application/projectComm
 import { useSidebarTab } from './useSidebarTab';
 import { PROJECT_TREE_CATEGORY_IDS, useSidebarStore } from '@/features/core/sidebar';
 import { buildWorksheetLayoutTab } from '@/features/core/layout/layoutTabModel';
-import { openEditorTab } from './openEditorTab';
+import {
+  isEditorOpenRejectionHandled,
+  openEditorTab,
+} from './openEditorTab';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import { showBlockingIpcError } from './blockingErrorDialog';
 
@@ -63,7 +65,6 @@ export function useWorksheetManagement(
   openWorksheet: (worksheetPath: string, name: string) => Promise<void>,
 ) {
   const { t } = useTranslation();
-  const switchSidebarTab = useSidebarTab();
 
   const addWorksheet = useCallback(
     async (databaseId?: string) => {
@@ -92,21 +93,17 @@ export function useWorksheetManagement(
 
         await commitFileFirstResourceIndex();
         if (!context.isCurrent()) return;
-        switchSidebarTab('project');
-        useSidebarStore.getState().setProjectTreeCategoryExpanded(
-          PROJECT_TREE_CATEGORY_IDS.worksheets,
-          true,
-        );
         await openWorksheet(createdState.path, createdState.name);
         if (!context.isCurrent()) return;
       } catch (error) {
         if (context && !context.isCurrent()) return;
         rollbackStagedWorksheetDocument(stagedDocument);
+        if (isEditorOpenRejectionHandled(error)) return;
         showBlockingIpcError(error, 'create_worksheet', (code) =>
           t('notifications.worksheet.createFailed', { error: code }));
       }
     },
-    [openWorksheet, switchSidebarTab, t],
+    [openWorksheet, t],
   );
 
   const duplicateWorksheet = useCallback(async (worksheetPath: string) => {
@@ -138,19 +135,15 @@ export function useWorksheetManagement(
       if (!context.isCurrent()) return;
       await commitFileFirstResourceIndex();
       if (!context.isCurrent()) return;
-      switchSidebarTab('project');
-      useSidebarStore.getState().setProjectTreeCategoryExpanded(
-        PROJECT_TREE_CATEGORY_IDS.worksheets,
-        true,
-      );
       await openWorksheet(duplicatedState.path, duplicatedState.name);
     } catch (error) {
       if (context && !context.isCurrent()) return;
       rollbackStagedWorksheetDocument(stagedDocument);
+      if (isEditorOpenRejectionHandled(error)) return;
       showBlockingIpcError(error, 'duplicate_worksheet', (code) =>
         t('notifications.worksheet.duplicateFailed', { error: code }));
     }
-  }, [openWorksheet, switchSidebarTab, t]);
+  }, [openWorksheet, t]);
 
   const ensureWorksheetLoaded = useCallback(async (worksheetPath: string) => {
     const cached = useWorksheetStore.getState().documents[worksheetPath];
@@ -181,14 +174,17 @@ export function useOpenWorksheet() {
       }
     }
 
-    openEditorTab(buildWorksheetLayoutTab(worksheetPath), {
-      focusDetail: { kind: 'worksheet', worksheetPath },
-    });
-
-    switchSidebarTab('project');
-    useSidebarStore.getState().setProjectTreeCategoryExpanded(
-      PROJECT_TREE_CATEGORY_IDS.worksheets,
-      true,
-    );
+    try {
+      await openEditorTab(buildWorksheetLayoutTab(worksheetPath), {
+        focusDetail: { kind: 'worksheet', worksheetPath },
+      });
+      switchSidebarTab('project');
+      useSidebarStore.getState().setProjectTreeCategoryExpanded(
+        PROJECT_TREE_CATEGORY_IDS.worksheets,
+        true,
+      );
+    } catch (error) {
+      if (!isEditorOpenRejectionHandled(error)) throw error;
+    }
   }, [switchSidebarTab]);
 }

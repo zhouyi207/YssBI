@@ -1,4 +1,15 @@
+import type { LogDomainId } from '@/features/core/log/logDomains';
 import type { DiagnosticLevel } from '@/shared/types/dto/diagnostics';
+
+export const LOG_DOMAIN_TITLE_KEYS = {
+  all: 'log.domains.all',
+  application: 'log.domains.application',
+  execution: 'log.domains.execution',
+  system: 'log.domains.system',
+  graph: 'log.domains.graph',
+  data: 'log.domains.data',
+  ui: 'log.domains.ui',
+} as const satisfies Record<LogDomainId, string>;
 
 export const LOG_DOMAIN_LABELS: Record<string, string> = {
   application: 'APP',

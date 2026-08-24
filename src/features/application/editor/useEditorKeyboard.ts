@@ -1,24 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { editorDockviewPort } from '@/features/core/dockview';
 import {
   clearEditorGroupGraphSelection,
-  getActiveLayoutTab,
   getEditorGroupGraphSelection,
-  resolveEditorTargetGroupId,
 } from '@/features/core/layout/layoutTabQueries';
 import { getViewport, editorViewportScope } from '@/features/core/viewport';
-import { isAppModalOpen, useModifierKeyStore } from '@/features/core/keyboard';
-import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
-import {
-  exitZenMode,
-  isZenModeActive,
-  toggleZenMode,
-} from '@/features/core/layout/workbenchZenMode';
-import {
-  toggleDetailVisibility,
-  togglePanelCollapsed,
-  toggleSidebarVisibility,
-} from '@/features/core/layout/workbenchLayoutService';
+import { useModifierKeyStore } from '@/features/core/keyboard';
 import { useWorkbenchStore } from '@/features/core/workbench';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { useHistoryStore } from '@/features/core/history';
@@ -26,192 +12,272 @@ import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/
 import { cancelCanvasInteraction } from '@/features/core/canvas/canvasInteractionCleanup';
 import { useEditorStore } from '@/features/core/editor';
 import { EDITOR_MUTATION_CAPABILITIES } from './editorMutationAvailability';
-import { listDockviewGroupTabs } from './dockviewTabProjection';
 import { useEditorSessionCommandsContext } from './EditorSessionContext';
+import {
+  captureActiveEditorCommandTarget,
+  isEditorCommandTargetCurrent,
+  shouldIgnoreEditorShortcutEvent,
+  type EditorCommandTarget,
+} from './editorCommandFocus';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { requestCloseWorkbenchPanel } from './workbenchPanelClose';
+import {
+  toggleBottomWorkbenchGroup,
+  toggleWorkbenchView,
+} from '@/features/application/layout/workbenchLayoutActions';
 
-function getActiveCanvasLocalPoint(clientX: number, clientY: number) {
-  const groupId = resolveEditorTargetGroupId();
-  const element = document.querySelector(`[data-editor-group-id="${groupId}"]`);
+function currentEditorCommandTarget(): EditorCommandTarget | null {
+  const target = captureActiveEditorCommandTarget();
+  return target && isEditorCommandTargetCurrent(target) ? target : null;
+}
+
+function getActiveCanvasLocalPoint(
+  target: EditorCommandTarget,
+  clientX: number,
+  clientY: number,
+) {
+  const element = document.querySelector(`[data-editor-group-id="${target.groupId}"]`);
   if (!(element instanceof HTMLElement)) return { x: 0, y: 0 };
   const rect = element.getBoundingClientRect();
-  const graphPath = getActiveLayoutTab(groupId)?.activeTabId;
-  const viewport = graphPath
-    ? getViewport(editorViewportScope(groupId, graphPath))
-    : DEFAULT_VIEWPORT;
+  const viewport = getViewport(editorViewportScope(target.groupId, target.resourceRef));
   return {
     x: (clientX - rect.left - viewport.x) / viewport.scale,
     y: (clientY - rect.top - viewport.y) / viewport.scale,
   };
 }
 
+function cyclePhysicalPanel(backward: boolean): boolean {
+  const activePanel = workbenchDockviewPort.getActivePanel();
+  if (!activePanel) return false;
+  const panels = workbenchDockviewPort.listGroupPanels(activePanel.groupId);
+  if (panels.length < 2) return false;
+  const currentIndex = panels.findIndex(
+    (panel) => panel.panelInstanceId === activePanel.panelInstanceId,
+  );
+  if (currentIndex < 0) return false;
+  const offset = backward ? -1 : 1;
+  const nextIndex = (currentIndex + offset + panels.length) % panels.length;
+  void workbenchDockviewPort.activate(panels[nextIndex].panelInstanceId);
+  return true;
+}
+
 /** Mounts the editor window's single ordered global keyboard shortcut listener set. */
 export function useEditorKeyboard(): void {
   const commands = useEditorSessionCommandsContext();
   const lastMousePosRef = useRef({ x: 0, y: 0 });
-  const pendingCtrlKRef = useRef(false);
-  const pendingCtrlKTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const setModifierKeys = useModifierKeyStore.getState().setModifierKeys;
     const resetModifierKeys = useModifierKeyStore.getState().resetModifierKeys;
 
-    const handlePointerMove = (e: PointerEvent) => {
-      lastMousePosRef.current = { x: e.clientX, y: e.clientY };
+    const handlePointerMove = (event: PointerEvent) => {
+      lastMousePosRef.current = { x: event.clientX, y: event.clientY };
     };
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      setModifierKeys({ altKey: e.altKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      setModifierKeys({
+        altKey: event.altKey,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+      });
 
-      if (isAppModalOpen()) {
+      if (shouldIgnoreEditorShortcutEvent(event)) return;
+
+      const isControlKey = event.ctrlKey || event.metaKey;
+      const key = event.key.toLowerCase();
+
+      if (event.key === 'Escape') {
+        const target = currentEditorCommandTarget();
+        if (!target || target.resourceKind === 'worksheet') return;
+        const interaction = getCanvasInteraction(
+          useGraphInteractionStore.getState(),
+          target.resourceRef,
+          target.groupId,
+        );
+        if (interaction.type !== 'idle') {
+          event.preventDefault();
+          cancelCanvasInteraction(target.resourceRef, target.groupId);
+          if (interaction.type === 'pendingNodeCreation') {
+            useEditorStore.getState().setContextMenu(null);
+          }
+          return;
+        }
+        const selection = getEditorGroupGraphSelection(target.groupId);
+        if (selection.connectionIds.size > 0 || selection.nodeIds.size > 0) {
+          event.preventDefault();
+          clearEditorGroupGraphSelection(target.groupId);
+        }
         return;
       }
 
-      if (e.key === 'Escape') {
-        const groupId = editorDockviewPort.getActiveGroupId();
-        const graphPath = groupId ? getActiveLayoutTab(groupId)?.activeTabId : null;
-        if (graphPath && groupId) {
-          const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
-          if (interaction.type !== 'idle') {
-            e.preventDefault();
-            cancelCanvasInteraction(graphPath, groupId);
-            if (interaction.type === 'pendingNodeCreation') {
-              useEditorStore.getState().setContextMenu(null);
-            }
-            return;
-          }
-        }
-        if (groupId) {
-          const selection = getEditorGroupGraphSelection(groupId);
-          if (selection.connectionIds.size > 0 || selection.nodeIds.size > 0) {
-            e.preventDefault();
-            clearEditorGroupGraphSelection(groupId);
-            return;
-          }
-        }
-        if (isZenModeActive()) {
-          e.preventDefault();
-          exitZenMode();
-          return;
-        }
-      }
-
-      if (e.key === 'F1') {
-        e.preventDefault();
+      if (event.key === 'F1') {
+        event.preventDefault();
         useWorkbenchStore.getState().setNodeDocumentationOpen(true);
         return;
       }
 
-      const isInput =
-        document.activeElement?.tagName === "INPUT" ||
-        document.activeElement?.tagName === "TEXTAREA" ||
-        (document.activeElement as HTMLElement)?.isContentEditable;
-
-      const isControlKey = e.ctrlKey || e.metaKey;
-
-      if (isInput) {
-        // Only allow specific global shortcuts in input fields
-        const allowedInInput =
-          (isControlKey && ["s", "z", "y", "n", "o", "w", "`"].includes(e.key.toLowerCase())) ||
-          (isControlKey && e.key === "Tab");
-
-        if (!allowedInInput) return;
+      if (!event.repeat && isControlKey && key === 'a') {
+        const target = currentEditorCommandTarget();
+        if (!target) return;
+        event.preventDefault();
+        void commands.selectAllNodes(target);
+        return;
       }
 
-      // Keyboard shortcuts
-      if (!e.repeat && isControlKey && e.key.toLowerCase() === 'a') {
-        if (commands.selectAllNodes()) e.preventDefault();
-      } else if (
-        !e.repeat && !isControlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f'
-      ) {
-        if (commands.focusSelectedNodes()) e.preventDefault();
-      } else if (!e.repeat && !isControlKey && !e.altKey && !e.shiftKey && e.key === 'Home') {
-        if (commands.fitCompleteGraph()) e.preventDefault();
-      } else if (e.key === "Delete" || e.key === "Backspace") {
-        commands.deleteSelected();
-      } else if (isControlKey && e.key.toLowerCase() === "z") {
+      if (!event.repeat && !isControlKey && !event.altKey && !event.shiftKey && key === 'f') {
+        const target = currentEditorCommandTarget();
+        if (target && commands.focusSelectedNodes(target)) event.preventDefault();
+        return;
+      }
+
+      if (!event.repeat && !isControlKey && !event.altKey && !event.shiftKey && event.key === 'Home') {
+        const target = currentEditorCommandTarget();
+        if (target && commands.fitCompleteGraph(target)) event.preventDefault();
+        return;
+      }
+
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        const target = currentEditorCommandTarget();
+        if (!target) return;
+        event.preventDefault();
+        void commands.deleteSelected(target);
+        return;
+      }
+
+      if (isControlKey && key === 'z') {
+        const target = currentEditorCommandTarget();
+        if (!target) return;
         const { canUndo, canRedo, pending } = useHistoryStore.getState();
-        if (e.shiftKey) {
-          if (canRedo && !pending) commands.redo();
-        } else if (canUndo && !pending) commands.undo();
-      } else if (isControlKey && e.key.toLowerCase() === "y") {
+        if (event.shiftKey ? canRedo && !pending : canUndo && !pending) {
+          event.preventDefault();
+          if (event.shiftKey) void commands.redo(target);
+          else void commands.undo(target);
+        }
+        return;
+      }
+
+      if (isControlKey && key === 'y') {
+        const target = currentEditorCommandTarget();
+        if (!target) return;
         const { canRedo, pending } = useHistoryStore.getState();
-        if (canRedo && !pending) commands.redo();
-      } else if (isControlKey && e.key.toLowerCase() === "c") {
-        e.preventDefault();
-        if (!e.repeat) commands.copy();
-      } else if (isControlKey && e.key.toLowerCase() === "x") {
-        e.preventDefault();
-        if (!e.repeat) commands.cut();
-      } else if (isControlKey && e.key.toLowerCase() === "v") {
-        e.preventDefault();
-        if (!e.repeat && EDITOR_MUTATION_CAPABILITIES.pasteNodes) {
-          commands.paste(getActiveCanvasLocalPoint(lastMousePosRef.current.x, lastMousePosRef.current.y));
+        if (canRedo && !pending) {
+          event.preventDefault();
+          void commands.redo(target);
         }
-      } else if (isControlKey && e.key.toLowerCase() === "d") {
-        e.preventDefault();
-        if (!e.repeat && EDITOR_MUTATION_CAPABILITIES.duplicateNodes) commands.duplicateSelected();
-      } else if (isControlKey && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        if (e.shiftKey) commands.saveGraphAs();
-        else commands.saveGraph();
-      } else if (isControlKey && e.key.toLowerCase() === "o") {
-        e.preventDefault();
-        commands.importGraph();
-      } else if (isControlKey && e.key.toLowerCase() === "n") {
-        e.preventDefault();
-        commands.addEvent(undefined, { openAfterCreate: true });
-      } else if (isControlKey && e.key.toLowerCase() === "w") {
-        e.preventDefault();
-        const activeTabId = editorDockviewPort.getActivePanel()?.tab?.resourceRef;
-        if (activeTabId) commands.closeTab(activeTabId);
-      } else if (isControlKey && e.key === "Tab") {
-        e.preventDefault();
-        const gid = editorDockviewPort.getActiveGroupId();
-        if (gid) {
-          const tabs = listDockviewGroupTabs(gid);
-          const activeTabId = getActiveLayoutTab(gid)?.activeTabId;
-          if (tabs.length > 1 && activeTabId) {
-            const currentIndex = tabs.findIndex((t) => t.id === activeTabId);
-            const nextIndex = e.shiftKey
-              ? (currentIndex - 1 + tabs.length) % tabs.length
-              : (currentIndex + 1) % tabs.length;
-            commands.setActiveTabId(tabs[nextIndex].id);
-          }
+        return;
+      }
+
+      if (isControlKey && key === 'c') {
+        const target = currentEditorCommandTarget();
+        if (!target) return;
+        event.preventDefault();
+        if (!event.repeat) void commands.copy(target);
+        return;
+      }
+
+      if (isControlKey && key === 'x') {
+        const target = currentEditorCommandTarget();
+        if (!target) return;
+        event.preventDefault();
+        if (!event.repeat) void commands.cut(target);
+        return;
+      }
+
+      if (isControlKey && key === 'v') {
+        const target = currentEditorCommandTarget();
+        if (!target) return;
+        event.preventDefault();
+        if (!event.repeat && EDITOR_MUTATION_CAPABILITIES.pasteNodes) {
+          const point = getActiveCanvasLocalPoint(
+            target,
+            lastMousePosRef.current.x,
+            lastMousePosRef.current.y,
+          );
+          void commands.paste(point, target);
         }
-      } else if (isControlKey && e.key === "\\") {
-        e.preventDefault();
-        const gid = editorDockviewPort.getActiveGroupId();
-        if (gid) commands.splitEditorRight(gid);
-      } else if (isControlKey && e.key.toLowerCase() === 'b') {
-        e.preventDefault();
-        toggleSidebarVisibility();
-      } else if (isControlKey && e.key.toLowerCase() === 'i') {
-        e.preventDefault();
-        toggleDetailVisibility();
-      } else if (isControlKey && e.key === "`") {
-        e.preventDefault();
-        togglePanelCollapsed();
-      } else if (isControlKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        pendingCtrlKRef.current = true;
-        if (pendingCtrlKTimerRef.current) clearTimeout(pendingCtrlKTimerRef.current);
-        pendingCtrlKTimerRef.current = setTimeout(() => {
-          pendingCtrlKRef.current = false;
-          pendingCtrlKTimerRef.current = null;
-        }, 2000);
-      } else if (pendingCtrlKRef.current && e.key.toLowerCase() === 'z') {
-        e.preventDefault();
-        pendingCtrlKRef.current = false;
-        if (pendingCtrlKTimerRef.current) {
-          clearTimeout(pendingCtrlKTimerRef.current);
-          pendingCtrlKTimerRef.current = null;
+        return;
+      }
+
+      if (isControlKey && key === 'd') {
+        const target = currentEditorCommandTarget();
+        if (!target) return;
+        event.preventDefault();
+        if (!event.repeat && EDITOR_MUTATION_CAPABILITIES.duplicateNodes) {
+          void commands.duplicateSelected(target);
         }
-        toggleZenMode();
+        return;
+      }
+
+      if (isControlKey && key === 's') {
+        if (event.shiftKey) {
+          event.preventDefault();
+          void commands.saveGraphAs();
+          return;
+        }
+        const target = currentEditorCommandTarget();
+        if (!target || !isEditorCommandTargetCurrent(target)) return;
+        event.preventDefault();
+        void commands.saveGraph(target);
+        return;
+      }
+
+      if (isControlKey && key === 'o') {
+        event.preventDefault();
+        void commands.importGraph();
+        return;
+      }
+
+      if (isControlKey && key === 'n') {
+        event.preventDefault();
+        void commands.addEvent(undefined, { openAfterCreate: true });
+        return;
+      }
+
+      if (isControlKey && key === 'w') {
+        const activePanel = workbenchDockviewPort.getActivePanel();
+        if (!activePanel) return;
+        event.preventDefault();
+        void requestCloseWorkbenchPanel(activePanel.panelInstanceId);
+        return;
+      }
+
+      if (isControlKey && event.key === 'Tab') {
+        if (cyclePhysicalPanel(event.shiftKey)) event.preventDefault();
+        return;
+      }
+
+      if (isControlKey && event.key === '\\') {
+        const target = currentEditorCommandTarget();
+        if (!target || !isEditorCommandTargetCurrent(target)) return;
+        event.preventDefault();
+        commands.splitEditorRight(target.groupId);
+        return;
+      }
+
+      if (isControlKey && key === 'b') {
+        event.preventDefault();
+        void toggleWorkbenchView('resources');
+        return;
+      }
+
+      if (isControlKey && key === 'i') {
+        event.preventDefault();
+        void toggleWorkbenchView('inspect');
+        return;
+      }
+
+      if (isControlKey && event.key === '`') {
+        event.preventDefault();
+        void toggleBottomWorkbenchGroup();
       }
     };
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      setModifierKeys({ altKey: e.altKey, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey });
+    const handleKeyUp = (event: KeyboardEvent) => {
+      setModifierKeys({
+        altKey: event.altKey,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+      });
     };
 
     const handleBlur = () => {
@@ -228,7 +294,6 @@ export function useEditorKeyboard(): void {
       cleanupKeyUp();
       cleanupPointerMove();
       cleanupBlur();
-      if (pendingCtrlKTimerRef.current) clearTimeout(pendingCtrlKTimerRef.current);
     };
   }, [commands]);
 }

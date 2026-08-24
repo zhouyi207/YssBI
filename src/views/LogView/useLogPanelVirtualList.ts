@@ -1,31 +1,36 @@
-import { useCallback, useLayoutEffect, useRef } from 'react';
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  type UIEvent,
+} from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from '@/app/appConfig/default';
 import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 import { isLogViewportPinnedToBottom } from './logPanelScroll';
 import { snapLogViewportToBottom } from './logPanelViewport';
-import type { LogPanelVariant } from './useLogPanelController';
 
-interface UseLogPanelVirtualListOptions {
-  logs: DiagnosticRecordDto[];
-  autoScroll: boolean;
-  variant: LogPanelVariant;
-  refreshScrollToken: number;
+export type LogPanelPresentation = 'embedded' | 'standalone';
+
+export interface UseLogPanelVirtualListOptions {
+  readonly filteredLogs: readonly DiagnosticRecordDto[];
+  readonly autoScroll: boolean;
+  readonly presentation: LogPanelPresentation;
+  readonly refreshScrollToken: number;
 }
 
 export function useLogPanelVirtualList({
-  logs,
+  filteredLogs,
   autoScroll,
-  variant,
   refreshScrollToken,
 }: UseLogPanelVirtualListOptions) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const pinnedToBottomRef = useRef(true);
-  const logsRef = useRef(logs);
-  logsRef.current = logs;
+  const filteredLogsRef = useRef(filteredLogs);
+  filteredLogsRef.current = filteredLogs;
 
   const virtualizer = useVirtualizer({
-    count: logs.length,
+    count: filteredLogs.length,
     getScrollElement: () => viewportRef.current,
     estimateSize: () => LOG_ITEM_HEIGHT + LOG_ITEM_GAP,
     overscan: 8,
@@ -34,7 +39,7 @@ export function useLogPanelVirtualList({
   const snapToBottom = useCallback(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
-    snapLogViewportToBottom(viewport, logsRef.current.length);
+    snapLogViewportToBottom(viewport, filteredLogsRef.current.length);
     pinnedToBottomRef.current = true;
   }, []);
 
@@ -45,7 +50,7 @@ export function useLogPanelVirtualList({
   useLayoutEffect(() => {
     if (!autoScroll || !pinnedToBottomRef.current) return;
     snapToBottom();
-  }, [logs, autoScroll, snapToBottom]);
+  }, [filteredLogs, autoScroll, snapToBottom]);
 
   useLayoutEffect(() => {
     if (!autoScroll) {
@@ -59,7 +64,7 @@ export function useLogPanelVirtualList({
     if (autoScroll) snapToBottom();
   }, [refreshScrollToken, autoScroll, snapToBottom]);
 
-  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+  const handleScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
     pinnedToBottomRef.current = isLogViewportPinnedToBottom(
       scrollTop,
@@ -70,14 +75,14 @@ export function useLogPanelVirtualList({
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
-    if (!viewport || variant !== 'embedded') return;
+    if (!viewport) return;
     const observer = new ResizeObserver(() => {
       virtualizer.measure();
       if (autoScroll && pinnedToBottomRef.current) snapToBottom();
     });
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, [autoScroll, snapToBottom, variant, virtualizer]);
+  }, [autoScroll, snapToBottom, virtualizer]);
 
   return { viewportRef, virtualizer, handleScroll };
 }

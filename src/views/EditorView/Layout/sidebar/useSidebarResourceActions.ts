@@ -8,13 +8,13 @@ import {
   renameWorksheetResource,
   revealProjectResourceInExplorer,
 } from '@/features/application/sidebar/sidebarResourceActions';
-import { deleteWorksheetWithConfirm } from '@/features/application/editor/closeEditorTab';
+import { deleteWorksheetWithConfirm } from '@/features/application/editor/worksheetDelete';
 import { openDatabaseEditorWindow } from '@/features/application/window';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
 import { useFunctionCatalog } from '@/features/core/editor';
-import { editorDockviewPort, useDockviewPortSnapshot } from '@/features/core/dockview';
+import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { getActiveLayoutTab } from '@/features/core/layout';
 import { useGraphResourcesByKind } from '@/features/core/resource';
 import type { GraphResourceType } from '../sidebarContextMenu/sidebarContextMenuTypes';
@@ -30,9 +30,10 @@ export function useSidebarResourceActions(openInputDialog: OpenInputDialog) {
   const { t } = useTranslation();
   const events = useGraphResourcesByKind('event');
   const functions = useFunctionCatalog();
-  useDockviewPortSnapshot(editorDockviewPort);
-  const activeGroupId = editorDockviewPort.getActiveGroupId() ?? null;
-  const activeTab = activeGroupId ? getActiveLayoutTab(activeGroupId)?.tab ?? null : null;
+  const focusedSession = useGraphSessionStore((state) => state.focusedSession);
+  const activeTab = focusedSession
+    ? getActiveLayoutTab(focusedSession.groupId)?.tab ?? null
+    : null;
   const activeProjectGraph = useMemo(
     () => resolveActiveProjectGraph({ events, functions, activeTab }),
     [activeTab, events, functions],

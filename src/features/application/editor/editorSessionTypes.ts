@@ -10,6 +10,7 @@ import type { EditorViewport } from '@/features/core/viewport';
 import type { GraphSelection } from '@/features/core/layout';
 import type { CanvasMutationOutcome } from '@/features/core/canvas';
 import type { Pin } from '@/shared/types/domain/pin';
+import type { EditorCommandTarget } from './editorCommandFocus';
 import type { useEditorOperations } from './useEditorOperations';
 import type { useTabManagement } from './useTabManagement';
 import type { useOpenWorksheet, useWorksheetManagement } from './useWorksheetManagement';
@@ -40,9 +41,9 @@ export interface EditorSessionLayoutBindings {
 
 export type EditorSessionHistoryActions = ReturnType<typeof useEditorOperations>;
 export interface EditorSessionCanvasActions {
-  selectAllNodes(): boolean;
-  focusSelectedNodes(): boolean;
-  fitCompleteGraph(): boolean;
+  selectAllNodes(target: EditorCommandTarget): Promise<boolean>;
+  focusSelectedNodes(target: EditorCommandTarget): boolean;
+  fitCompleteGraph(target: EditorCommandTarget): boolean;
 }
 
 export type EditorSessionHistoryAvailability = {

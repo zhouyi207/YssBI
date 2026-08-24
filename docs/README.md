@@ -8,7 +8,7 @@ when they remain useful to the current architecture.
 
 - [System architecture](architecture/ARCHITECTURE.md)
 
-- [Editor grid architecture](architecture/EDITOR_GRID_ARCHITECTURE.md)
+- [Workbench Dockview architecture](architecture/WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
 - [Diagnostics, errors, traces, and output](architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 
 ## Implementation notes

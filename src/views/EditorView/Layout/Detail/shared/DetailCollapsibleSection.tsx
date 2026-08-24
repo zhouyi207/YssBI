@@ -22,14 +22,19 @@ export function DetailCollapsibleSection({
   contentClassName,
 }: DetailCollapsibleSectionProps) {
   return (
-    <Collapsible defaultOpen={defaultOpen} className="border-b border-border/60">
+    <Collapsible
+      defaultOpen={defaultOpen}
+      className="group/collapsible border-b border-border/60"
+    >
       <CollapsibleTrigger asChild>
         <Button
           type="button"
           variant="ghost"
-          className="h-auto w-full justify-between gap-3 rounded-none px-1 py-2 text-left hover:bg-transparent aria-expanded:bg-transparent aria-expanded:text-inherit dark:aria-expanded:bg-transparent"
+          className="h-7 w-full justify-between gap-3 rounded-none px-3 py-0 text-left hover:bg-transparent aria-expanded:bg-transparent aria-expanded:text-inherit dark:aria-expanded:bg-transparent"
         >
-          <DetailText className="min-w-0 truncate font-semibold">{title}</DetailText>
+          <DetailText className="min-w-0 truncate text-xs font-semibold text-foreground">
+            {title}
+          </DetailText>
           <svg
             className="size-3.5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-180"
             viewBox="0 0 24 24"
@@ -42,7 +47,7 @@ export function DetailCollapsibleSection({
           </svg>
         </Button>
       </CollapsibleTrigger>
-      <CollapsibleContent className={cn('px-1 pb-3 pt-2', contentClassName)}>
+      <CollapsibleContent className={cn('px-3 pb-2 pt-1', contentClassName)}>
         {children}
       </CollapsibleContent>
     </Collapsible>

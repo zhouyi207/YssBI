@@ -3,6 +3,7 @@ import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import {
   captureProjectLifecycleState,
   isProjectLifecycleStateCurrent,
+  type ProjectLifecycleStateSnapshot,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import type {
   LifecycleMutationKind,
@@ -13,13 +14,13 @@ import type {
 export interface PreparedProjectLifecycleTransition {
   readonly projectInstanceId: string;
   readonly publicationRevision: number;
-  commit(): void;
+  commit(): Promise<void>;
 }
 
 export interface ProjectLifecycleReceiptDependencies {
   prepareProjectTransition(): Promise<PreparedProjectLifecycleTransition | null>;
   refreshRegistry(): Promise<ProjectRecordRow[]>;
-  clearProject(): void;
+  clearProject(owner: ProjectLifecycleStateSnapshot): Promise<void>;
   markProjectStale(): void;
 }
 
@@ -49,7 +50,7 @@ interface ProjectLifecycleRegistryEntry extends PendingProjectLifecycleOperation
   settled?: ProjectLifecycleReceiptSettlement;
   notificationClaimed: boolean;
   expiresAt?: number;
-  transition?: { projectInstanceId: string | null; coordinatorEpoch: number };
+  transition?: ProjectLifecycleStateSnapshot;
 }
 
 const MAX_PENDING_LIFECYCLE_OPERATIONS = 128;
@@ -93,10 +94,7 @@ function ownsLifecycle(projectInstanceId: string | null, coordinatorEpoch: numbe
 
 function entryIsCurrent(entry: ProjectLifecycleRegistryEntry): boolean {
   if (entry.transition) {
-    return ownsLifecycle(
-      entry.transition.projectInstanceId,
-      entry.transition.coordinatorEpoch,
-    );
+    return isProjectLifecycleStateCurrent(entry.transition);
   }
   return ownsLifecycle(entry.projectInstanceId, entry.coordinatorEpoch);
 }
@@ -161,12 +159,12 @@ function validateReceipt(
   entry.fingerprint = fingerprint;
 }
 
-function captureOwnedTransition(entry: ProjectLifecycleRegistryEntry): void {
+function captureOwnedTransition(
+  entry: ProjectLifecycleRegistryEntry,
+): ProjectLifecycleStateSnapshot {
   const lifecycle = captureProjectLifecycleState();
-  entry.transition = {
-    projectInstanceId: lifecycle.projectInstanceId,
-    coordinatorEpoch: lifecycle.epoch,
-  };
+  entry.transition = lifecycle;
+  return lifecycle;
 }
 
 function assertEntryCurrent(entry: ProjectLifecycleRegistryEntry): void {
@@ -201,7 +199,7 @@ async function rehydrateAndTransition(
       `operation '${entry.operationId}' prepared an unexpected project identity`,
     );
   }
-  prepared.commit();
+  await prepared.commit();
   if (useProjectIOStore.getState().projectInstanceId !== prepared.projectInstanceId) {
     throw new ProjectLifecycleProtocolError(
       `operation '${entry.operationId}' committed an unexpected project store identity`,
@@ -224,8 +222,15 @@ async function processReceipt(
 
   if (result.kind === 'delete' && result.invalidation.project) {
     assertEntryCurrent(entry);
-    dependencies.clearProject();
-    captureOwnedTransition(entry);
+    projectPublicationCoordinator.cancelProject();
+    const owner = captureOwnedTransition(entry);
+    await dependencies.clearProject(owner);
+    if (!isProjectLifecycleStateCurrent(owner)) return { status: 'stale', result };
+    if (useProjectIOStore.getState().projectInstanceId !== owner.projectInstanceId) {
+      throw new ProjectLifecycleProtocolError(
+        `operation '${entry.operationId}' cleared an unexpected project store identity`,
+      );
+    }
   } else if (result.kind === 'saveAs'
     && result.invalidation.project
     && (result.outcome === 'committed' || result.outcome === 'activationFailed')) {

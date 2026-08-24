@@ -1,27 +1,32 @@
-import { useEffect, useMemo, useRef } from "react";
-import { useShallow } from "zustand/react/shallow";
-import { useTranslation } from "react-i18next";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
-import { useExecutionStore } from "@/features/core/execution/useExecutionStore";
+import { useEffect, useMemo, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
+import { useTranslation } from 'react-i18next';
 import {
-  editorDockviewPort,
-  useDockviewPortSnapshot,
-  useEditorPaneStateStore,
-} from "@/features/core/dockview";
-import { getViewport, subscribeToViewport, editorViewportScope, type ViewportScope } from "@/features/core/viewport";
-import type { LayoutTab } from "@/shared/types/ui";
+  captureActiveEditorCommandTarget,
+  isEditorCommandTargetCurrent,
+} from '@/features/application/editor/editorCommandFocus';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
+import { useDockviewPortSnapshot } from '@/features/core/dockview/useDockviewPortSnapshot';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { useExecutionStore } from '@/features/core/execution/useExecutionStore';
+import {
+  getViewport,
+  subscribeToViewport,
+  editorViewportScope,
+  type ViewportScope,
+} from '@/features/core/viewport';
 import {
   createBuiltInStatusBarItems,
   useStatusBarSnapshot,
   type StatusBarItemsSnapshot,
   type StatusBarRenderContext,
-} from "@/features/core/statusBar";
-import { useStatusBarActions } from "./useStatusBarActions";
-import { useJuliaWorkerStatus } from "./useJuliaWorkerStatus";
-
+} from '@/features/core/statusBar';
+import { useStatusBarActions } from './useStatusBarActions';
+import { useJuliaWorkerStatus } from './useJuliaWorkerStatus';
 
 function formatViewportStatus(scope: ViewportScope | null) {
-  if (!scope) return "X 0 Y 0 100%";
+  if (!scope) return 'X 0 Y 0 100%';
   const viewport = getViewport(scope);
   return `X ${Math.round(viewport.x)} Y ${Math.round(viewport.y)} ${Math.round(viewport.scale * 100)}%`;
 }
@@ -46,20 +51,23 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
   const actions = useStatusBarActions();
   const juliaWorker = useJuliaWorkerStatus();
 
-  useDockviewPortSnapshot(editorDockviewPort);
-  const activePanel = editorDockviewPort.getActivePanel();
-  const selectedNodeIds = useEditorPaneStateStore((state) =>
-    activePanel ? state.selections[activePanel.panelInstanceId]?.selectedNodeIds : undefined,
-  );
-  const editor = useMemo(() => {
-    const value = activePanel?.tab?.data?.layoutTab;
-    const activeTab = value && typeof value === "object" ? value as LayoutTab : null;
-    return {
-      activeEditorGroupId: activePanel?.groupId ?? null,
-      activeTabId: activeTab?.id ?? null,
-      selectedCount: selectedNodeIds?.length ?? 0,
-    };
-  }, [activePanel, selectedNodeIds]);
+  useDockviewPortSnapshot(workbenchDockviewPort);
+  const capturedTarget = captureActiveEditorCommandTarget();
+  const editorTarget = capturedTarget && isEditorCommandTargetCurrent(capturedTarget)
+    ? capturedTarget
+    : null;
+  const graphTarget = editorTarget
+    && (editorTarget.resourceKind === 'event' || editorTarget.resourceKind === 'function')
+    ? editorTarget
+    : null;
+  const selectedNodeIds = useEditorPaneStateStore((state) => (
+    graphTarget ? state.selections[graphTarget.panelInstanceId]?.selectedNodeIds : undefined
+  ));
+  const editor = useMemo(() => ({
+    activeEditorGroupId: graphTarget?.groupId ?? null,
+    activeTabId: graphTarget?.resourceRef ?? null,
+    selectedCount: selectedNodeIds?.length ?? 0,
+  }), [graphTarget, selectedNodeIds]);
 
   const graphStats = useGraphDataStore(
     useShallow((state) => {
@@ -82,9 +90,8 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
     }),
   );
 
-
   const executionStatus = useExecutionStore((state) =>
-    editor.activeTabId ? state.graphs[editor.activeTabId]?.status ?? "idle" : "idle",
+    editor.activeTabId ? state.graphs[editor.activeTabId]?.status ?? 'idle' : 'idle',
   );
 
   const ctx = useMemo<StatusBarRenderContext>(
@@ -104,18 +111,17 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
   );
 
   const builtIn = useMemo(
-    () =>
-      createBuiltInStatusBarItems({
-        openLogsPanel: actions.openLogsPanel,
-        resetCanvasViewport: actions.resetCanvasViewport,
-        executionTooltip: actions.executionTooltip,
-        viewportTooltip: actions.viewportTooltip,
-        renderViewportStatus: (groupId, graphPath) => (
-          <ViewportStatus
-            scope={graphPath ? editorViewportScope(groupId, graphPath) : null}
-          />
-        ),
-      }),
+    () => createBuiltInStatusBarItems({
+      openLogsPanel: actions.openLogsPanel,
+      resetCanvasViewport: actions.resetCanvasViewport,
+      executionTooltip: actions.executionTooltip,
+      viewportTooltip: actions.viewportTooltip,
+      renderViewportStatus: (groupId, graphPath) => (
+        <ViewportStatus
+          scope={groupId && graphPath ? editorViewportScope(groupId, graphPath) : null}
+        />
+      ),
+    }),
     [
       actions.openLogsPanel,
       actions.resetCanvasViewport,

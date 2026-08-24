@@ -3,8 +3,10 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ResultViewPresentationProvider } from '@/features/core/resultSource/resultViewPresentation';
 import type { ResultDescriptor } from '@/shared/types/dto/result';
 import { ReportView } from './ReportView';
+import { ReportLayout } from './shared/ReportLayout';
 
 const { logError } = vi.hoisted(() => ({ logError: vi.fn() }));
 
@@ -84,6 +86,29 @@ describe('ReportView', () => {
   afterEach(() => {
     act(() => root.unmount());
     container.remove();
+  });
+
+  it('omits the report title when embedded but keeps it standalone', () => {
+    act(() => {
+      root.render(
+        <ResultViewPresentationProvider presentation="embedded">
+          <ReportLayout title="Embedded report">
+            <p>Report body</p>
+          </ReportLayout>
+        </ResultViewPresentationProvider>,
+      );
+    });
+    expect(container.querySelector('h1')).toBeNull();
+    expect(container.textContent).toContain('Report body');
+
+    act(() => {
+      root.render(
+        <ReportLayout title="Standalone report">
+          <p>Report body</p>
+        </ReportLayout>,
+      );
+    });
+    expect(container.querySelector('h1')?.textContent).toBe('Standalone report');
   });
 
   it('logs an actionable diagnostic for a malformed canonical OLS report', () => {

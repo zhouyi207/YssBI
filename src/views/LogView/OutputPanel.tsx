@@ -25,15 +25,15 @@ export function OutputPanel() {
 
   if (!graphPath) {
     return (
-      <div className="flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
+      <div className="flex h-full items-center justify-center bg-background px-4 text-xs text-muted-foreground">
         {t('panel.outputNoGraph')}
       </div>
     );
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--workbench-bg)] text-[var(--workbench-fg)]">
-      <div className="flex h-8 shrink-0 items-center justify-between border-b border-border/40 px-2">
+    <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
+      <div className="flex h-(--panel-toolbar-height) shrink-0 items-center justify-between border-b border-border/20 bg-background px-2">
         <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">
           {graphPath}
         </span>
@@ -46,7 +46,7 @@ export function OutputPanel() {
           tooltip={t('panel.outputClear')}
           aria-label={t('panel.outputClear')}
         >
-          <FiTrash2 size={14} />
+          <FiTrash2 />
         </ToolbarIconButton>
       </div>
 
@@ -65,15 +65,15 @@ export function OutputPanel() {
             {output.entries.map((entry) => (
               <div
                 key={`${entry.runId}:${entry.sequence}`}
-                className="grid grid-cols-[4rem_4rem_minmax(10rem,1fr)] items-start gap-2 border-b border-border/20 px-3 py-1.5 last:border-b-0"
+                className="grid grid-cols-[4rem_4rem_minmax(10rem,1fr)] items-start gap-2 border-b border-border/10 px-3 py-1.5 last:border-b-0"
               >
                 <span className="text-right text-muted-foreground">{entry.sequence}</span>
-                <span className={entry.stream === 'stderr' ? 'text-red-400' : 'text-blue-400'}>
+                <span className={entry.stream === 'stderr' ? 'text-destructive' : 'text-primary'}>
                   {entry.stream}
                 </span>
                 <div className="min-w-0">
                   {'text' in entry ? (
-                    <pre className="whitespace-pre-wrap break-words text-foreground">{entry.text}</pre>
+                    <pre className="whitespace-pre-wrap wrap-break-word text-foreground">{entry.text}</pre>
                   ) : (
                     <span className="text-amber-500">
                       {t(entry.status === 'truncated'

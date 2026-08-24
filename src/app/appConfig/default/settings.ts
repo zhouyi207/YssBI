@@ -70,7 +70,6 @@ export const DEFAULT_EDITOR: EditorSettings = {
     alwaysShowEditorActions: false,
     closeEmptyGroups: true,
     splitSizing: 'auto',
-    dragToOpenWindow: true,
 };
 
 export const DEFAULT_APPEARANCE: AppearanceSettings = {
@@ -79,7 +78,6 @@ export const DEFAULT_APPEARANCE: AppearanceSettings = {
     lastDarkColorTheme: "Dark Modern (Default)",
     language: "zh-CN",
     activityBarPosition: "Left",
-    panelPosition: "Bottom",
     smoothScroll: true,
     titleBarStyle: "custom",
 };

@@ -26,8 +26,9 @@ export function StatusBarItem({
           : undefined
       }
       className={cn(
-        "flex h-full items-center gap-1.5 px-2 text-muted-foreground transition-colors hover:bg-[var(--hover-bg)] hover:text-foreground",
-        interactive && "cursor-pointer",
+        "flex h-full items-center gap-1.5 px-2 text-muted-foreground transition-colors",
+        interactive &&
+          "cursor-pointer outline-none hover:bg-(--hover-bg) hover:text-foreground focus-visible:bg-(--hover-bg) focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         item.className,
       )}
     >

@@ -1,8 +1,69 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchDockviewPort';
+import { buildGraphResourceMeta } from '@/features/core/resource';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
 import { prepareSynchronousPublicationCommit } from './resourceMutationResult';
+import { commitEditorDockviewPublication } from './editorDockviewPublicationCommit';
+
+const dockviewMocks = vi.hoisted(() => {
+  const panels: WorkbenchPanelInfo[] = [];
+  const releasePane = vi.fn();
+  const remapResource = vi.fn((from: string, to: string) => {
+    for (let index = 0; index < panels.length; index += 1) {
+      const panel = panels[index];
+      if (panel.metadata.role !== 'editor' || panel.metadata.resourceRef !== from) continue;
+      panels[index] = {
+        ...panel,
+        metadata: { ...panel.metadata, resourceRef: to },
+      };
+    }
+    return panels.filter((panel) =>
+      panel.metadata.role === 'editor' && panel.metadata.resourceRef === to).length;
+  });
+  const removePanels = vi.fn((panelInstanceIds: readonly string[]) => {
+    const removed = new Set(panelInstanceIds);
+    for (let index = panels.length - 1; index >= 0; index -= 1) {
+      if (removed.has(panels[index].panelInstanceId)) panels.splice(index, 1);
+    }
+  });
+  const transaction = {
+    listPanels: () => panels,
+    remapResource,
+    removePanels,
+  };
+  const runPublicationTransaction = vi.fn(async (
+    operation: (value: typeof transaction) => unknown | Promise<unknown>,
+  ) => operation(transaction));
+
+  return {
+    panels,
+    ready: true,
+    releasePane,
+    remapResource,
+    removePanels,
+    runPublicationTransaction,
+  };
+});
+
+vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
+  workbenchDockviewPort: {
+    get isReady() { return dockviewMocks.ready; },
+  },
+}));
+
+vi.mock('@/features/core/dockview/workbenchDockviewInternal', () => ({
+  workbenchDockviewInternal: {
+    runPublicationTransaction: dockviewMocks.runPublicationTransaction,
+  },
+}));
+
+vi.mock('@/features/core/dockview/editorPaneStateStore', () => ({
+  useEditorPaneStateStore: {
+    getState: () => ({ release: dockviewMocks.releasePane }),
+  },
+}));
 
 const caller = 'events/Caller.yssbi-event';
 const oldTarget = 'functions/Old.yssbi-function';
@@ -13,6 +74,9 @@ function callerSnapshot() {
 
 describe('resource mutation projection replacement protocol', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    dockviewMocks.ready = true;
+    dockviewMocks.panels.splice(0);
     useGraphDataStore.setState({ graphEntities: {} });
     const projection = makeEditorProjectionFixture({
       graphPath: caller,
@@ -61,5 +125,74 @@ describe('resource mutation projection replacement protocol', () => {
     expect(callerSnapshot()).toEqual(before);
     expect(useGraphDataStore.getState().graphEntities[caller]?.nodes['call-1']?.subGraphPath)
       .toBe(oldTarget);
+  });
+});
+
+function editorPanel(
+  panelInstanceId: string,
+  resourceRef: string,
+): WorkbenchPanelInfo {
+  return {
+    panelInstanceId,
+    groupId: 'editor-group',
+    component: 'GraphEditor',
+    title: resourceRef,
+    metadata: { role: 'editor', resourceRef, resourceKind: 'function' },
+    active: false,
+    location: { type: 'grid' },
+  };
+}
+
+function logsPanel(): WorkbenchPanelInfo {
+  return {
+    panelInstanceId: 'logs-panel',
+    groupId: 'editor-group',
+    component: 'Logs',
+    title: 'Logs',
+    metadata: { role: 'view', viewId: 'logs' },
+    active: true,
+    location: { type: 'grid' },
+  };
+}
+
+describe('editor Dockview publication commit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    dockviewMocks.ready = true;
+    dockviewMocks.panels.splice(
+      0,
+      dockviewMocks.panels.length,
+      editorPanel('moved-panel', 'functions/Old.yssbi-function'),
+      editorPanel('stale-panel', 'functions/Deleted.yssbi-function'),
+      logsPanel(),
+    );
+  });
+
+  it('commits shadow remap/removal and business stores before releasing stale pane state', async () => {
+    const movedPath = 'functions/New.yssbi-function';
+    const movedResource = buildGraphResourceMeta('function', movedPath, 'New');
+    const commitBusinessStores = vi.fn();
+
+    await commitEditorDockviewPublication(
+      [{ from: 'functions/Old.yssbi-function', to: movedPath }],
+      { [movedResource.uri]: movedResource },
+      commitBusinessStores,
+    );
+
+    expect(dockviewMocks.runPublicationTransaction).toHaveBeenCalledOnce();
+    expect(dockviewMocks.remapResource).toHaveBeenCalledWith(
+      'functions/Old.yssbi-function',
+      movedPath,
+    );
+    expect(dockviewMocks.removePanels).toHaveBeenCalledWith(['stale-panel']);
+    expect(commitBusinessStores).toHaveBeenCalledOnce();
+    expect(dockviewMocks.panels.map((panel) => panel.panelInstanceId))
+      .toEqual(['moved-panel', 'logs-panel']);
+    expect(dockviewMocks.panels[0].metadata).toMatchObject({
+      role: 'editor',
+      resourceRef: movedPath,
+    });
+    expect(dockviewMocks.releasePane).toHaveBeenCalledOnce();
+    expect(dockviewMocks.releasePane).toHaveBeenCalledWith('stale-panel');
   });
 });

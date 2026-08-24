@@ -68,7 +68,7 @@ export function DetailsPane() {
       return <DataDetailPanel dataframe={model.dataframe} />;
     case 'empty':
       return (
-        <div className="flex h-full min-h-0 flex-col bg-background/40">
+        <div className="flex h-full min-h-0 flex-col bg-background">
           <DetailEmptyState />
         </div>
       );

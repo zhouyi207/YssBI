@@ -62,11 +62,10 @@ function dependencies(
     prepareProjectTransition: vi.fn(async () => ({
       projectInstanceId: 'project-b',
       publicationRevision: 0,
-      commit: () => startProject('project-b', 0),
+      commit: async () => startProject('project-b', 0),
     })),
     refreshRegistry: vi.fn(async () => []),
-    clearProject: vi.fn(() => {
-      projectPublicationCoordinator.cancelProject();
+    clearProject: vi.fn(async () => {
       useProjectIOStore.setState({ projectInstanceId: null });
     }),
     markProjectStale: vi.fn(),
@@ -121,6 +120,44 @@ describe('project lifecycle pending receipt registry', () => {
     },
   );
 
+  it('keeps event-first active delete ownership while direct delivery joins the deferred clear', async () => {
+    const pending = registerPendingProjectLifecycleOperation({ kind: 'delete' });
+    const result = receipt(pending.operationId, {
+      kind: 'delete',
+      newProjectInstanceId: null,
+    });
+    const clear = deferred<void>();
+    let clearOwner: unknown;
+    const deps = dependencies({
+      clearProject: vi.fn(async (...args: unknown[]) => {
+        [clearOwner] = args;
+        await clear.promise;
+        useProjectIOStore.setState({ projectInstanceId: null });
+      }),
+    });
+
+    new ProjectLifecycleCommittedHandler(deps).handle({ result: structuredClone(result) });
+    await vi.waitFor(() => expect(deps.clearProject).toHaveBeenCalledOnce());
+    const ownerWhileDeferred = projectPublicationCoordinator.getSnapshotForTests();
+    const remainedCurrentWhileDeferred = pending.isCurrent();
+    const direct = applyProjectLifecycleReceipt(result, 'direct', deps);
+    await Promise.resolve();
+    clear.resolve();
+
+    await expect(direct).resolves.toMatchObject({ status: 'duplicate' });
+    expect(remainedCurrentWhileDeferred).toBe(true);
+    expect(ownerWhileDeferred.projectInstanceId).toBeNull();
+    expect(clearOwner).toEqual({
+      projectInstanceId: null,
+      epoch: ownerWhileDeferred.epoch,
+    });
+    expect(Object.isFrozen(clearOwner)).toBe(true);
+    expect(deps.clearProject).toHaveBeenCalledOnce();
+    expect(deps.refreshRegistry).toHaveBeenCalledOnce();
+    expect(claimProjectLifecycleNotification(pending.operationId)).toBe(true);
+    expect(claimProjectLifecycleNotification(pending.operationId)).toBe(false);
+  });
+
   it('allows direct delivery to retry when event-first processing fails', async () => {
     const pending = registerPendingProjectLifecycleOperation({ kind: 'saveAs' });
     const result = receipt(pending.operationId);
@@ -144,7 +181,7 @@ describe('project lifecycle pending receipt registry', () => {
     const hydration = deferred<{
       projectInstanceId: string;
       publicationRevision: number;
-      commit(): void;
+      commit(): Promise<void>;
     } | null>();
     const eventDeps = dependencies({ prepareProjectTransition: vi.fn(() => hydration.promise) });
     const directDeps = dependencies();
@@ -165,7 +202,7 @@ describe('project lifecycle pending receipt registry', () => {
     hydration.resolve({
       projectInstanceId: 'project-b',
       publicationRevision: 0,
-      commit: () => startProject('project-b', 0),
+      commit: async () => startProject('project-b', 0),
     });
     await vi.waitFor(() => expect(eventDeps.refreshRegistry).toHaveBeenCalledOnce());
   });

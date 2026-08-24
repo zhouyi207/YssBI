@@ -7,20 +7,14 @@ import {
 function uiState() {
   const {
     sidebarCurrentTab,
-    sidebarUserHidden,
-    detailUserHidden,
     isSettingsOpen,
     isNodeDocumentationOpen,
-    zenMode,
   } = useWorkbenchStore.getState();
 
   return {
     sidebarCurrentTab,
-    sidebarUserHidden,
-    detailUserHidden,
     isSettingsOpen,
     isNodeDocumentationOpen,
-    zenMode,
   };
 }
 
@@ -29,69 +23,33 @@ describe('workbenchStore', () => {
     useWorkbenchStore.getState().resetWorkbenchUIState();
   });
 
-  it('starts from the non-layout workbench defaults', () => {
+  it('keeps only non-placement workbench UI state', () => {
+    const state = useWorkbenchStore.getState();
+
     expect(uiState()).toEqual(DEFAULT_WORKBENCH_UI_STATE);
-    expect(useWorkbenchStore.getState()).not.toHaveProperty('panelCollapsed');
-    expect(uiState()).not.toHaveProperty('pixelSize');
-    expect(uiState()).not.toHaveProperty('nodes');
-    expect(uiState()).not.toHaveProperty('activeEditorGroupId');
-    expect(uiState()).not.toHaveProperty('tabs');
+    expect(state.sidebarCurrentTab).toBe('project');
+    expect(state).not.toHaveProperty('sidebarUserHidden');
+    expect(state).not.toHaveProperty('detailUserHidden');
+    expect(state).not.toHaveProperty('panelCollapsed');
+    expect(state).not.toHaveProperty('zenMode');
+    expect(state).not.toHaveProperty('activeEditorGroupId');
+    expect(state).not.toHaveProperty('tabs');
   });
 
-  it('tracks sidebar tab and user visibility intent without layout state', () => {
+  it('updates sidebar and modal state, then resets it', () => {
     const commands = useWorkbenchStore.getState();
 
-    commands.toggleSidebarTab('project');
-    expect(uiState()).toMatchObject({
-      sidebarCurrentTab: 'project',
-      sidebarUserHidden: true,
-    });
-
-    commands.toggleSidebarTab('commands');
-    expect(uiState()).toMatchObject({
-      sidebarCurrentTab: 'commands',
-      sidebarUserHidden: false,
-    });
-
-    commands.setSidebarUserHidden(true);
-    commands.showSidebarTab('nodes');
-    expect(uiState()).toMatchObject({
-      sidebarCurrentTab: 'nodes',
-      sidebarUserHidden: false,
-    });
-  });
-
-  it('updates detail, modal, and zen UI state independently', () => {
-    const commands = useWorkbenchStore.getState();
-
-    commands.toggleDetailVisibilityPreference();
+    commands.setSidebarCurrentTab('nodes');
     commands.openSettings();
     commands.setNodeDocumentationOpen(true);
-    commands.enterZenMode();
 
     expect(uiState()).toEqual({
-      ...DEFAULT_WORKBENCH_UI_STATE,
-      detailUserHidden: true,
+      sidebarCurrentTab: 'nodes',
       isSettingsOpen: true,
       isNodeDocumentationOpen: true,
-      zenMode: true,
     });
 
-    commands.exitZenMode();
-    expect(uiState()).toMatchObject({
-      detailUserHidden: true,
-      zenMode: false,
-    });
-  });
-
-  it('resets only the workbench UI projection', () => {
-    const commands = useWorkbenchStore.getState();
-    commands.showSidebarTab('data');
-    commands.setDetailUserHidden(true);
-    commands.setSettingsOpen(true);
-    commands.setNodeDocumentationOpen(true);
-    commands.toggleZenMode();
-
+    commands.closeSettings();
     commands.resetWorkbenchUIState();
 
     expect(uiState()).toEqual(DEFAULT_WORKBENCH_UI_STATE);

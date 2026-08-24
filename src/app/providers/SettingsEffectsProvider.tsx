@@ -69,7 +69,6 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
             ? {
                 workbenchForeground: "#e7ebf3",
                 panelBackground: theme.sidebarBackground,
-                panelForeground: "#e7ebf3",
                 mutedForeground: "#929db0",
                 border: "rgba(148, 163, 184, 0.16)",
                 hoverBackground: "color-mix(in srgb, var(--accent-color) 11%, transparent)",
@@ -85,7 +84,6 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
             : {
                 workbenchForeground: "#202938",
                 panelBackground: theme.sidebarBackground,
-                panelForeground: "#202938",
                 mutedForeground: "#596579",
                 border: "#d7dee9",
                 hoverBackground: "color-mix(in srgb, var(--accent-color) 9%, transparent)",
@@ -105,9 +103,7 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
         // 主要背景色
         root.style.setProperty("--workbench-bg", theme.workbenchBackground);
         root.style.setProperty("--sidebar-bg", theme.sidebarBackground);
-        root.style.setProperty("--workbench-fg", surface.workbenchForeground);
         root.style.setProperty("--panel-bg", surface.panelBackground);
-        root.style.setProperty("--panel-fg", surface.panelForeground);
         root.style.setProperty("--surface-raised", surface.raisedBackground);
         root.style.setProperty("--surface-sunken", surface.sunkenBackground);
         root.style.setProperty("--panel-header-bg", surface.panelHeaderBackground);

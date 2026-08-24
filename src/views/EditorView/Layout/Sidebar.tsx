@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useEditorSessionResources } from '@/features/application/editor';
 
-import { useWorkbenchStore, type SidebarTabId } from '@/features/core/workbench';
+import { useWorkbenchStore } from '@/features/core/workbench';
 import {
   PROJECT_TREE_CATEGORY_IDS,
   type ProjectTreeCategoryId,
@@ -13,7 +13,6 @@ import {
   useSidebarContextMenu,
   type GraphResourceType,
 } from './sidebarContextMenu';
-import { workbenchPanelHeaderClass, workbenchPanelHeaderTitleClass } from './workbenchPanelHeaderStyles';
 import { SidebarNodesTab } from './sidebar/tabs/SidebarNodesTab';
 import { SidebarRenameDialog } from './sidebar/SidebarRenameDialog';
 import { useSidebarResourceActions } from './sidebar/useSidebarResourceActions';
@@ -22,12 +21,6 @@ import { SidebarCommandsTab } from './sidebar/tabs/SidebarCommandsTab';
 import { SidebarProjectTab } from './sidebar/tabs/SidebarProjectTab';
 import type { SidebarProjectTreeActions } from './sidebar/rows/SidebarProjectTreeRow';
 
-const TAB_TITLE_KEYS: Record<SidebarTabId, string> = {
-  project: 'activityBar.project',
-  nodes: 'activityBar.nodes',
-  data: 'activityBar.data',
-  commands: 'activityBar.commands',
-};
 
 function Sidebar() {
   const { t } = useTranslation();
@@ -156,16 +149,10 @@ function Sidebar() {
 
   return (
     <div
-      className="sidebar-container relative z-30 flex h-full w-full min-w-0 overflow-hidden select-none bg-[var(--sidebar-bg)]"
+      className="sidebar-container relative z-30 flex h-full w-full min-w-0 select-none overflow-hidden bg-sidebar"
       style={{ pointerEvents: 'auto' }}
     >
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[var(--sidebar-bg)]">
-        <div className={workbenchPanelHeaderClass}>
-          <span className={workbenchPanelHeaderTitleClass}>
-            {currentTab ? t(TAB_TITLE_KEYS[currentTab]) : ''}
-          </span>
-        </div>
-
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-sidebar">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-0">
           {currentTab === 'project' && <SidebarProjectTab actions={projectTreeActions} />}
 

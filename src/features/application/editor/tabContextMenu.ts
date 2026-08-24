@@ -12,6 +12,12 @@ import {
 } from './tabCommands';
 import { listDockviewGroupTabs } from './dockviewTabProjection';
 
+export interface TabContextMenuTarget {
+  readonly panelInstanceId: string;
+  readonly groupId: string;
+  readonly tab: LayoutTab;
+}
+
 function groupHasSavedTabs(groupId: string): boolean {
   return listDockviewGroupTabs(groupId).some((tab) =>
     (tab.type === 'event' || tab.type === 'function' || tab.type === 'worksheet')
@@ -19,17 +25,17 @@ function groupHasSavedTabs(groupId: string): boolean {
 }
 
 export function buildTabContextMenuSections(
-  groupId: string,
-  tab: LayoutTab,
+  target: TabContextMenuTarget,
   t: TFunction,
 ): ActionMenuSection[] {
+  const { groupId, panelInstanceId } = target;
   const sections: ActionMenuSection[] = [
     {
       items: [{
         id: 'close',
         label: t('tabBar.contextMenu.close'),
         icon: createElement(VscClose, { size: 12 }),
-        onClick: () => void closeTab(groupId, tab.id),
+        onClick: () => void closeTab(panelInstanceId),
       }],
     },
     {
@@ -38,7 +44,7 @@ export function buildTabContextMenuSections(
           id: 'close-others',
           label: t('tabBar.contextMenu.closeOthers'),
           icon: createElement(VscCloseAll, { size: 12 }),
-          onClick: () => void closeOtherTabs(groupId, tab.id),
+          onClick: () => void closeOtherTabs(groupId, panelInstanceId),
         },
         {
           id: 'close-saved',

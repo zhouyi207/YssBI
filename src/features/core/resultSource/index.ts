@@ -25,6 +25,11 @@ export {
 export { resolveResultRenderer } from './resolveRenderer';
 export { useResultValue } from './useResultValue';
 export { usePagedResultRows } from './usePagedResultRows';
+export {
+  ResultViewPresentationProvider,
+  useResultViewPresentation,
+  type ResultViewPresentation,
+} from './resultViewPresentation';
 export { UnifiedResultView } from './components/UnifiedResultView';
 export { ReportResultView } from './components/ReportResultView';
 export { ResultViewShell } from './components/ResultViewShell';

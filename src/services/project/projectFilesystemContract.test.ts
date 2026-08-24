@@ -575,7 +575,7 @@ const workflowFiles = [
   'src/features/core/dataStore/projectIOStore.ts',
   'src/features/application/editorProjection/graphProjectionCoordinator.ts',
   'src/features/application/editor/graphDocumentUnload.ts',
-  'src/features/application/editor/closeGraphTab.ts',
+  'src/features/application/editor/worksheetDelete.ts',
   'src/features/application/editor/saveAllDirtyGraphs.ts',
 
   'src/features/application/editor/useProjectOperations.ts',

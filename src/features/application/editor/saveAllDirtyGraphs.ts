@@ -1,55 +1,66 @@
 import i18n from 'i18next';
-import { GraphService } from '@/services/graph/graphService';
-import { editorDockviewPort } from '@/features/core/dockview';
-import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
-import { isGraphResourceDirty, markResourceDirty } from '@/features/core/resource';
-import { logger } from '@/utils/appLogger';
+
 import { warnCallFunctionIssuesBeforeSave } from '@/features/application/graphDiagnostics/warnCallFunctionIssues';
 import {
   captureSettledGraphSaveCommandContext,
   isGraphSaveCommandRevisionCurrent,
   type GraphSaveCommandContext,
 } from '@/features/application/projectCommandContext';
-import { layoutTabFromDockviewPanel } from './dockviewTabProjection';
-import { resolveTabDisplayName } from './resolveTabDisplayName';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import {
+  isResourceDocumentDirty,
+  markResourceDirty,
+  resourceKey,
+} from '@/features/core/resource';
+import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+import { GraphService } from '@/services/graph/graphService';
+import { logger } from '@/utils/appLogger';
+
 import { showBlockingIpcError, showBlockingMessage } from './blockingErrorDialog';
+import { resolveTabDisplayName } from './resolveTabDisplayName';
 
 interface DirtyEditorDocument {
-  graphPath: string;
+  resourceRef: string;
   title: string;
-  type: 'event' | 'function' | 'worksheet';
+  resourceKind: 'event' | 'function' | 'worksheet';
 }
 
 function collectDirtyEditorDocuments(): DirtyEditorDocument[] {
   const seen = new Set<string>();
   const dirty: DirtyEditorDocument[] = [];
-  for (const panel of editorDockviewPort.listPanels()) {
-    const tab = layoutTabFromDockviewPanel(panel);
-    if (!tab || (tab.type !== 'event' && tab.type !== 'function' && tab.type !== 'worksheet')) continue;
-    if (seen.has(tab.id) || !isGraphResourceDirty(tab.id, tab.type)) continue;
-    seen.add(tab.id);
+  for (const panel of workbenchDockviewPort.listPanels()) {
+    if (panel.metadata.role !== 'editor') continue;
+    const { resourceRef, resourceKind } = panel.metadata;
+    const key = resourceKey({ id: resourceRef, kind: resourceKind });
+    if (seen.has(key) || !isResourceDocumentDirty({ id: resourceRef, kind: resourceKind })) {
+      continue;
+    }
+    seen.add(key);
     dirty.push({
-      graphPath: tab.id,
-      title: resolveTabDisplayName({ id: tab.id, kind: tab.type }, tab.id),
-      type: tab.type,
+      resourceRef,
+      resourceKind,
+      title: resolveTabDisplayName(
+        { id: resourceRef, kind: resourceKind },
+        panel.title ?? resourceRef,
+      ),
     });
   }
   return dirty;
 }
 
-/** Persist every dirty document currently projected by Dockview. */
+/** Persist every dirty document currently projected by canonical editor metadata. */
 export async function saveAllDirtyGraphs(): Promise<boolean> {
   const dirty = collectDirtyEditorDocuments();
   if (dirty.length === 0) return true;
 
-  for (const tab of dirty) {
+  for (const document of dirty) {
     let context: GraphSaveCommandContext | undefined;
     try {
-      if (tab.type === 'worksheet') {
-        const saved = await useWorksheetStore.getState().saveDocument(tab.graphPath);
+      if (document.resourceKind === 'worksheet') {
+        const saved = await useWorksheetStore.getState().saveDocument(document.resourceRef);
         if (!saved) {
           showBlockingMessage(i18n.t('notifications.editor.documentSaveFailed', {
-            title: tab.title,
+            title: document.title,
             error: 'worksheet_save_not_committed',
           }));
           return false;
@@ -57,28 +68,31 @@ export async function saveAllDirtyGraphs(): Promise<boolean> {
         continue;
       }
 
-      warnCallFunctionIssuesBeforeSave(tab.graphPath);
-      context = await captureSettledGraphSaveCommandContext(tab.graphPath);
+      warnCallFunctionIssuesBeforeSave(document.resourceRef);
+      context = await captureSettledGraphSaveCommandContext(document.resourceRef);
       await GraphService.saveProjectGraph(
         context.projectInstanceId,
-        tab.graphPath,
+        document.resourceRef,
         context.expectedRevision,
         context.operationId,
       );
-      if (!isGraphSaveCommandRevisionCurrent(context, tab.graphPath)) return false;
-      markResourceDirty({ id: tab.graphPath, kind: tab.type }, false);
+      if (!isGraphSaveCommandRevisionCurrent(context, document.resourceRef)) return false;
+      markResourceDirty({
+        id: document.resourceRef,
+        kind: document.resourceKind,
+      }, false);
     } catch (error) {
       if (context && !context.isCurrent()) return false;
       const message = error instanceof Error ? error.message : String(error);
       logger.app.error(
-        `Failed to save graph '${tab.title}' (${tab.graphPath}): ${message}`,
+        `Failed to save graph '${document.title}' (${document.resourceRef}): ${message}`,
         'saveAllDirtyGraphs',
       );
       showBlockingIpcError(
         error,
-        tab.type === 'worksheet' ? 'save_worksheet' : 'save_project_graph',
+        document.resourceKind === 'worksheet' ? 'save_worksheet' : 'save_project_graph',
         (code) => i18n.t('notifications.editor.documentSaveFailed', {
-          title: tab.title,
+          title: document.title,
           error: code,
         }),
       );

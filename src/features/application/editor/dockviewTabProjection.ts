@@ -1,20 +1,22 @@
-import { editorDockviewPort, type DockviewPanelInfo } from '@/features/core/dockview';
+import { layoutTabFromEditorMetadata } from '@/features/core/dockview/workbenchPanelModel';
+import {
+  workbenchDockviewPort,
+  type WorkbenchPanelInfo,
+} from '@/features/core/dockview/workbenchDockviewPort';
 import type { LayoutTab } from '@/shared/types/ui';
 
-export function layoutTabFromDockviewPanel(panel: DockviewPanelInfo | undefined): LayoutTab | null {
-  const value = panel?.tab?.data?.layoutTab;
-  return value && typeof value === 'object' ? value as unknown as LayoutTab : null;
+export function layoutTabFromDockviewPanel(
+  panel: WorkbenchPanelInfo | undefined,
+): LayoutTab | null {
+  return panel?.metadata.role === 'editor'
+    ? layoutTabFromEditorMetadata(panel.metadata)
+    : null;
 }
 
-export function listDockviewGroupPanels(groupId: string): DockviewPanelInfo[] {
-  const group = editorDockviewPort.listGroups().find((candidate) => candidate.groupId === groupId);
-  if (!group) return [];
-  const panelsById = new Map(
-    editorDockviewPort.listPanels().map((panel) => [panel.panelInstanceId, panel]),
-  );
-  return group.panelInstanceIds
-    .map((panelId) => panelsById.get(panelId))
-    .filter((panel): panel is DockviewPanelInfo => panel !== undefined);
+export function listDockviewGroupPanels(groupId: string): WorkbenchPanelInfo[] {
+  return workbenchDockviewPort
+    .listGroupPanels(groupId)
+    .filter((panel) => panel.metadata.role === 'editor');
 }
 
 export function listDockviewGroupTabs(groupId: string): LayoutTab[] {
@@ -23,8 +25,11 @@ export function listDockviewGroupTabs(groupId: string): LayoutTab[] {
     .filter((tab): tab is LayoutTab => tab !== null);
 }
 
-export function findDockviewPanel(resourceId: string, groupId?: string): DockviewPanelInfo | undefined {
-  return editorDockviewPort
-    .findPanelsByResource(resourceId)
-    .find((panel) => !groupId || panel.groupId === groupId);
+export function findDockviewPanel(
+  resourceId: string,
+  groupId?: string,
+): WorkbenchPanelInfo | undefined {
+  return workbenchDockviewPort
+    .findEditorPanelsByResource(resourceId)
+    .find((panel) => groupId === undefined || panel.groupId === groupId);
 }

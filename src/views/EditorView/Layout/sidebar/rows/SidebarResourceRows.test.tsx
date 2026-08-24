@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   catalogState: null as LocalizedNodeCatalogState | null,
   draggableInputs: [] as Array<{ data: unknown; disabled?: boolean }>,
   dragPointerDown: vi.fn(),
+  revealDetails: vi.fn(),
 }));
 
 vi.mock('@dnd-kit/core', () => ({
@@ -31,7 +32,9 @@ vi.mock('@dnd-kit/core', () => ({
 vi.mock('@/features/application/nodeCatalog/useLocalizedNodeCatalog', () => ({
   useLocalizedNodeCatalog: () => mocks.catalogState,
 }));
-vi.mock('@/features/application/editor', () => ({ focusDetails: vi.fn() }));
+vi.mock('@/features/application/editor/rightSidebarActions', () => ({
+  revealDetails: mocks.revealDetails,
+}));
 vi.mock('@/features/application/window', () => ({ openDatabaseEditorWindow: vi.fn() }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -111,6 +114,7 @@ describe('resource sidebar rows', () => {
     vi.clearAllMocks();
     mocks.draggableInputs.length = 0;
     mocks.catalogState = catalogState();
+    mocks.revealDetails.mockResolvedValue(undefined);
     useVariableStore.getState().clear();
     useDatabaseStore.getState().clear();
     useProjectIOStore.setState({ refreshResourceIndex: vi.fn().mockResolvedValue(true) });
@@ -186,6 +190,25 @@ describe('resource sidebar rows', () => {
     });
     const dragData = input?.data as { template?: { descriptor?: unknown } };
     expect(dragData.template?.descriptor).toBe(databaseSource);
+  });
+
+  it('explicitly reveals Details for variable and database row clicks', async () => {
+    renderVariable();
+    await act(async () => {
+      host.firstElementChild?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    renderDatabase();
+    await act(async () => {
+      host.firstElementChild?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(mocks.revealDetails.mock.calls.map(([focus]) => focus)).toEqual([
+      { kind: 'variable', id: 'variable-id' },
+      { kind: 'data', id: 'database-id' },
+    ]);
   });
 
   it('shows the localized load failure tooltip from machine state', () => {

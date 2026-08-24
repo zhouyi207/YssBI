@@ -7,7 +7,7 @@ import {
 } from '@/features/application/sidebar';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { findResourceNodeSpawnTemplate } from '@/features/application/editor/canvasDrop';
-import { focusDetails } from '@/features/application/editor';
+import { revealDetails } from '@/features/application/editor/rightSidebarActions';
 import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
 import type { DataType } from '@/shared/types/domain/dataType';
 import { safeDataTypeColor, safeDataTypeDisplay } from '../../sidebarUtils';
@@ -75,9 +75,9 @@ export const SidebarVariableRow = memo(function SidebarVariableRow({
       indentDepth={indentDepth}
       icon={<VscSymbolVariable size={SIDEBAR_ROW_ICON_SIZE} style={{ color: iconColor }} />}
       label={name}
-      onClick={(e) => {
+      onClick={async (e) => {
         e.stopPropagation();
-        focusDetails({ kind: 'variable', id });
+        await revealDetails({ kind: 'variable', id });
       }}
       onContextMenu={onContextMenu}
       trailing={

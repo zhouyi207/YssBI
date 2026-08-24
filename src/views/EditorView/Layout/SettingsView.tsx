@@ -105,12 +105,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
         { label: t("settings.options.hidden"), value: "Hidden" },
     ];
 
-    const panelPositionOptions = [
-        { label: t("settings.options.bottom"), value: "Bottom" },
-        { label: t("settings.options.left"), value: "Left" },
-        { label: t("settings.options.right"), value: "Right" },
-    ];
-
     const titleBarStyleOptions = [
         { label: t("settings.options.titleBarCustom"), value: "custom" },
         { label: t("settings.options.titleBarNative"), value: "native" },
@@ -446,16 +440,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                                     options={activityBarOptions}
                                     value={appearance.activityBarPosition}
                                     onChange={(val) => updateAppearance({ activityBarPosition: val })}
-                                />
-                                <SettingItem
-                                    label={t("settings.labels.panelPosition")}
-                                    description={t("settings.descriptions.panelPosition")}
-                                    type="select"
-                                    options={panelPositionOptions}
-                                    value={appearance.panelPosition}
-                                    onChange={(val) => {
-                                        updateAppearance({ panelPosition: val });
-                                    }}
                                 />
                                 <SettingItem
                                     label={t("settings.labels.titleBarStyle")}

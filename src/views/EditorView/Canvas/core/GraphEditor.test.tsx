@@ -3,6 +3,7 @@
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GroupContext } from '@/features/core/editor';
 import { GraphEditor } from './GraphEditor';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -24,7 +25,7 @@ vi.mock('@/features/application/editor', () => ({
 vi.mock('@/features/core/editor', async () => {
   const { createContext } = await import('react');
   return {
-    GroupContext: createContext<string | null>('group-a'),
+    GroupContext: createContext<string | null>(null),
     useEditorGroupWorkspace: () => ({
       activeTabId: editorState.activeTabId,
       tabs: editorState.tabs,
@@ -62,8 +63,18 @@ vi.mock('@/features/core/resource', () => ({
 vi.mock('./Canvas', () => ({ default: () => <div data-canvas /> }));
 vi.mock('../overlays/WatermarkView', () => ({ WatermarkView: () => <div data-watermark /> }));
 vi.mock('./CanvasDropZone', () => ({
-  CanvasDropZone: ({ children }: { children: ReactNode }) => <div data-drop-zone>{children}</div>,
+  CanvasDropZone: ({ children, groupId }: { children: ReactNode; groupId: string }) => (
+    <div data-drop-zone data-group-id={groupId}>{children}</div>
+  ),
 }));
+
+function scopedGraphEditor(key?: string) {
+  return (
+    <GroupContext.Provider value="group-a">
+      <GraphEditor key={key} />
+    </GroupContext.Provider>
+  );
+}
 
 describe('GraphEditor readiness and sizing', () => {
   let host: HTMLDivElement;
@@ -87,23 +98,36 @@ describe('GraphEditor readiness and sizing', () => {
     host.remove();
   });
 
+  it('allows both shell layers to shrink within flex layouts', () => {
+    act(() => root.render(scopedGraphEditor()));
+
+    const outer = host.firstElementChild as HTMLElement;
+    const inner = outer.firstElementChild as HTMLElement;
+
+    expect(outer.classList).toContain('min-h-0');
+    expect(outer.classList).toContain('min-w-0');
+    expect(inner.classList).toContain('min-h-0');
+    expect(inner.classList).toContain('min-w-0');
+    expect(host.querySelector('[data-drop-zone]')?.getAttribute('data-group-id')).toBe('group-a');
+  });
+
   it('keeps a stable loading shell until document and projection are both ready', () => {
     editorState.activeTabId = 'events/Main.yssbi-event';
     editorState.tabs = [{ id: editorState.activeTabId, type: 'event' }];
     editorState.loadStatus = 'loading';
 
-    act(() => root.render(<GraphEditor />));
+    act(() => root.render(scopedGraphEditor()));
 
     expect(host.querySelector('[data-graph-loading]')).not.toBeNull();
     expect(host.querySelector('[data-canvas]')).toBeNull();
 
     editorState.projectionReady = true;
-    act(() => root.render(<GraphEditor key="projection-ready" />));
+    act(() => root.render(scopedGraphEditor('projection-ready')));
     expect(host.querySelector('[data-canvas]')).toBeNull();
 
     editorState.documentLoaded = true;
     editorState.loadStatus = 'ready';
-    act(() => root.render(<GraphEditor key="document-ready" />));
+    act(() => root.render(scopedGraphEditor('document-ready')));
     expect(host.querySelector('[data-graph-loading]')).toBeNull();
     expect(host.querySelector('[data-canvas]')).not.toBeNull();
   });
@@ -113,7 +137,7 @@ describe('GraphEditor readiness and sizing', () => {
     editorState.tabs = [{ id: editorState.activeTabId, type: 'event' }];
     editorState.loadStatus = 'error';
 
-    act(() => root.render(<GraphEditor />));
+    act(() => root.render(scopedGraphEditor()));
 
     expect(host.querySelector('[data-graph-loading]')).toBeNull();
     expect(host.querySelector('[data-graph-load-error]')).not.toBeNull();
@@ -128,7 +152,7 @@ describe('GraphEditor readiness and sizing', () => {
     editorState.documentStale = true;
     editorState.loadStatus = 'error';
 
-    act(() => root.render(<GraphEditor />));
+    act(() => root.render(scopedGraphEditor()));
 
     expect(host.querySelector('[data-graph-load-error]')).not.toBeNull();
     expect(host.querySelector('[data-canvas]')).toBeNull();

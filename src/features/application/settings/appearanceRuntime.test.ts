@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { describe, expect, it, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   applySmoothScrollSetting,
   resolveActivityBarLayout,
@@ -18,14 +18,10 @@ describe('appearanceRuntime', () => {
     expect(document.documentElement.dataset.smoothScroll).toBe('false');
   });
 
-  it('resolveActivityBarLayout hides the bar in Zen mode', () => {
-    expect(resolveActivityBarLayout('Left', true)).toEqual({ visible: false, side: 'left' });
-    expect(resolveActivityBarLayout('Right', true)).toEqual({ visible: false, side: 'left' });
-  });
-
-  it('resolveActivityBarLayout maps position settings', () => {
-    expect(resolveActivityBarLayout('Hidden', false)).toEqual({ visible: false, side: 'left' });
-    expect(resolveActivityBarLayout('Left', false)).toEqual({ visible: true, side: 'left' });
-    expect(resolveActivityBarLayout('Right', false)).toEqual({ visible: true, side: 'right' });
+  it('resolveActivityBarLayout maps the persisted position only', () => {
+    expect(resolveActivityBarLayout('Hidden')).toEqual({ visible: false, side: 'left' });
+    expect(resolveActivityBarLayout('Left')).toEqual({ visible: true, side: 'left' });
+    expect(resolveActivityBarLayout('Right')).toEqual({ visible: true, side: 'right' });
+    expect(resolveActivityBarLayout(undefined)).toEqual({ visible: true, side: 'left' });
   });
 });

@@ -7,6 +7,11 @@
 
 :root {
   --titlebar-height: 36px;
+  --workbench-tab-height: 32px;
+  --workbench-edge-collapsed-size: 32px;
+  --logs-tab-height: 30px;
+  --panel-toolbar-height: 28px;
+  --statusbar-height: 26px;
   --workbench-bg: #f5f7fa;
   --sidebar-bg: #edf1f6;
   --surface-raised: #ffffff;
@@ -217,51 +222,6 @@ input[type="number"] {
   z-index: 30 !important;
 }
 
-/* Dockview inherits the same surface hierarchy as the rest of the workbench. */
-[data-yssbi-workbench],
-[data-yssbi-workbench] .dockview-theme-dark,
-[data-yssbi-workbench] .dockview-theme-light {
-  --dv-paneview-active-outline-color: var(--accent-color);
-  --dv-tabs-and-actions-container-font-size: 12px;
-  --dv-tabs-and-actions-container-height: var(--titlebar-height);
-  --dv-drag-over-background-color: color-mix(in srgb, var(--accent-color) 16%, transparent);
-  --dv-drag-over-border-color: var(--accent-color);
-  --dv-edge-dock-indicator-color: var(--accent-color);
-  --dv-tabs-container-scrollbar-color: var(--muted-foreground);
-  --dv-icon-hover-background-color: var(--interactive-hover);
-  --dv-tab-font-size: 12px;
-  --dv-sash-color: transparent;
-  --dv-active-sash-color: var(--accent-color);
-  --dv-group-view-background-color: var(--workbench-bg);
-  --dv-tabs-and-actions-container-background-color: var(--panel-header-bg);
-  --dv-activegroup-visiblepanel-tab-background-color: var(--workbench-bg);
-  --dv-activegroup-hiddenpanel-tab-background-color: var(--panel-header-bg);
-  --dv-inactivegroup-visiblepanel-tab-background-color: var(--workbench-bg);
-  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--panel-header-bg);
-  --dv-tab-divider-color: var(--strong-border);
-  --dv-activegroup-visiblepanel-tab-color: var(--foreground);
-  --dv-activegroup-hiddenpanel-tab-color: var(--muted-foreground);
-  --dv-inactivegroup-visiblepanel-tab-color: var(--muted-foreground);
-  --dv-inactivegroup-hiddenpanel-tab-color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
-  --dv-separator-border: var(--strong-border);
-  --dv-paneview-header-border-color: var(--strong-border);
-  background: var(--workbench-bg);
-  color: var(--foreground);
-}
-
-[data-yssbi-workbench] .dv-tabs-and-actions-container {
-  border-bottom: 1px solid var(--strong-border);
-}
-
-[data-yssbi-panel-dock] .dv-groupview-header-bottom > .dv-tabs-and-actions-container {
-  border-top: 1px solid var(--strong-border);
-  border-bottom: 0;
-}
-
-
-[data-yssbi-workbench] .dv-tab {
-  letter-spacing: -0.01em;
-}
 
 @keyframes project-flow-signal {
   to { stroke-dashoffset: -42; }

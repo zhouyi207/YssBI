@@ -1,1 +1,1 @@
-export { useEditorStore, type RightSidebarTab } from './useEditorStore';
+export { useEditorStore } from './useEditorStore';

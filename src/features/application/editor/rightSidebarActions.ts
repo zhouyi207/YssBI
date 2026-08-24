@@ -1,33 +1,42 @@
 import type { DetailFocus } from '@/features/core/editor';
 import { useEditorStore } from '@/features/core/editor';
 import { setVariablesGraphScopeFromResource } from '@/features/core/editor/detail/variablesGraphScope';
-import { ensureDetailVisible } from './ensureDetailVisible';
+import { revealWorkbenchView } from '@/features/application/layout/workbenchLayoutActions';
 
-export function focusDetails(focus: DetailFocus): void {
+export function setDetailContext(focus: DetailFocus | null): void {
   const store = useEditorStore.getState();
-  store.setDetailFocus(focus);
-  store.setRightSidebarTab('details');
-  if (focus.kind === 'event' || focus.kind === 'function') {
+  if (focus) store.setDetailFocus(focus);
+  else store.clearDetailFocus();
+
+  if (focus?.kind === 'event' || focus?.kind === 'function') {
     setVariablesGraphScopeFromResource(focus.path);
   }
-  ensureDetailVisible();
 }
 
-export function focusCanvasSelection(
+export function setInspectionContext(
   graphPath: string,
   selectedNodeIds: readonly string[],
 ): void {
   const store = useEditorStore.getState();
-  if (selectedNodeIds.length === 1) {
-    store.setDetailFocus({ kind: 'node', id: selectedNodeIds[0], graphPath });
+  const [nodeId] = selectedNodeIds;
+  if (selectedNodeIds.length === 1 && graphPath.length > 0 && nodeId?.length > 0) {
+    store.setDetailFocus({ kind: 'node', id: nodeId, graphPath });
   } else if (store.detailFocus?.kind === 'node') {
     store.clearDetailFocus();
   }
-  store.setRightSidebarTab('inspect');
-  ensureDetailVisible();
 }
 
-export function focusResultSidebar(): void {
-  useEditorStore.getState().setRightSidebarTab('result');
-  ensureDetailVisible();
+export async function revealDetails(focus: DetailFocus): Promise<void> {
+  setDetailContext(focus);
+  await revealWorkbenchView('details');
+}
+
+export async function revealInspect(
+  graphPath: string,
+  selectedNodeIds: readonly string[],
+): Promise<void> {
+  setInspectionContext(graphPath, selectedNodeIds);
+  const [nodeId] = selectedNodeIds;
+  if (selectedNodeIds.length !== 1 || graphPath.length === 0 || !nodeId) return;
+  await revealWorkbenchView('inspect');
 }

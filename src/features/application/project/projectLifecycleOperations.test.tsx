@@ -4,13 +4,17 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import type { ProjectLifecycleStateSnapshot } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import {
   registerPendingProjectLifecycleOperation,
   resetProjectLifecycleReceiptHandlerForTests,
 } from '@/features/application/projectLifecycleReceipt';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import {
+  loadActivatedProject,
+  useProjectIOStore,
+} from '@/features/core/dataStore/projectIOStore';
 import { useEditorStore } from '@/features/core/editor';
-import { useResultWorkspaceStore } from '@/features/core/resultWorkspace';
+import { useResourceStore } from '@/features/core/resource';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { ProjectLifecycleCommittedHandler } from '@/features/core/sync/handlers/ProjectEventHandler';
 import { ProjectService } from '@/services/project/projectService';
@@ -20,7 +24,7 @@ import type {
   LifecycleMutationResultDto,
   ProjectRecordRow,
 } from '@/shared/types/dto/project';
-import type { ResultDescriptor } from '@/shared/types/dto/result';
+
 import { useProjectOperations } from '@/features/application/editor/useProjectOperations';
 import { useProjectPicker } from './useProjectPicker';
 import { saveAllDirtyGraphs } from '@/features/application/editor/saveAllDirtyGraphs';
@@ -31,6 +35,7 @@ import {
 } from '@/features/application/testHelpers/coreApplicationPorts';
 import { applyProjectLifecycleReceipt } from '@/features/application/projectLifecycleReceipt';
 import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
+import { removeProjectScopedWorkbenchPanels } from './projectWorkbenchLifecycle';
 
 const navigate = vi.fn();
 
@@ -128,6 +133,25 @@ function activeTerminalRowRejectionReceipt(
   };
 }
 
+function mockProjectBHydration(): void {
+  vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-b/metadata.yssbi');
+  vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({
+    databases: {},
+    variables: {},
+  });
+  vi.spyOn(ProjectService, 'getProjectIndex').mockResolvedValue({
+    projectInstanceId: 'project-b',
+    publicationRevision: 0,
+    history: { canUndo: false, canRedo: false },
+    projectName: 'Project B',
+    graphs: [],
+    variables: [],
+    worksheets: [],
+    databases: [],
+    exportTime: '',
+  });
+}
+
 function projectReceipt(
   operationId: string,
   kind: 'create' | 'delete',
@@ -210,7 +234,10 @@ describe('project lifecycle initiating operations', () => {
   });
 
 
-  it('resets project-scoped right sidebar state after authoritative replacement', async () => {
+  it('resets project-scoped editor context after authoritative replacement', async () => {
+    installCoreApplicationTestPorts({
+      projectIO: { removeProjectScopedWorkbenchPanels },
+    });
     const direct = deferred<LifecycleMutationResultDto | null>();
     const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
     vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-b/metadata.yssbi');
@@ -226,26 +253,8 @@ describe('project lifecycle initiating operations', () => {
       databases: [],
       exportTime: '',
     });
-    useResultWorkspaceStore.getState().openResult({
-      resultId: 'stale-result',
-      state: { kind: 'ready' },
-      provenance: {
-        runId: 'stale-run',
-        activationId: 'stale-activation',
-        graphPath: 'events/Stale.yssbi-event',
-        graphRevision: '1',
-        nodeId: 'stale-node',
-        output: null,
-        createdAtMs: '1787270400000',
-      },
-      presentation: { kind: 'inspector' },
-      valueKind: 'scalar',
-      metadata: null,
-      totalCount: null,
-      title: 'Stale result',
-    } satisfies ResultDescriptor);
+
     useEditorStore.setState({
-      rightSidebarTab: 'result',
       detailFocus: {
         kind: 'node',
         id: 'stale-node',
@@ -264,14 +273,109 @@ describe('project lifecycle initiating operations', () => {
       await completion;
     });
 
-    const resultWorkspace = useResultWorkspaceStore.getState();
-    expect(resultWorkspace.order).toEqual([]);
-    expect(resultWorkspace.activeTabKey).toBeNull();
-    expect(resultWorkspace.tabs).toEqual({});
+
     expect(useEditorStore.getState()).toMatchObject({
-      rightSidebarTab: 'details',
       detailFocus: null,
+      variablesGraphScopePath: null,
     });
+  });
+
+  it('publishes the new resource snapshot only after old workbench cleanup resolves', async () => {
+    const cleanup = deferred<void>();
+    const order: string[] = [];
+    const removeProjectScopedWorkbenchPanels = vi.fn(async (
+      _previousProjectInstanceId: string,
+      _owner: ProjectLifecycleStateSnapshot,
+    ) => {
+      order.push('cleanup:start');
+      await cleanup.promise;
+      order.push('cleanup:complete');
+    });
+    installCoreApplicationTestPorts({
+      projectIO: { removeProjectScopedWorkbenchPanels },
+    });
+    const direct = deferred<LifecycleMutationResultDto | null>();
+    const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
+    mockProjectBHydration();
+    const unsubscribe = useResourceStore.subscribe(() => {
+      order.push('resources:published');
+    });
+
+    let completion!: Promise<void>;
+    await act(async () => {
+      completion = operations.saveGraphAs();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(saveAs).toHaveBeenCalledOnce());
+    await act(async () => {
+      direct.resolve(saveAsReceipt(saveAs.mock.calls[0][1]));
+      await vi.waitFor(() => expect(removeProjectScopedWorkbenchPanels).toHaveBeenCalledOnce());
+    });
+    const cleanupAuthority = projectPublicationCoordinator.getSnapshotForTests();
+    expect(removeProjectScopedWorkbenchPanels.mock.calls[0]).toEqual([
+      'project-a',
+      {
+        projectInstanceId: cleanupAuthority.projectInstanceId,
+        epoch: cleanupAuthority.epoch,
+      },
+    ]);
+    expect(Object.isFrozen(removeProjectScopedWorkbenchPanels.mock.calls[0][1])).toBe(true);
+
+    expect(order).toEqual(['cleanup:start']);
+    expect(useProjectIOStore.getState().projectInstanceId).toBe('project-a');
+
+    await act(async () => {
+      cleanup.resolve();
+      await completion;
+    });
+    unsubscribe();
+
+    expect(order.indexOf('cleanup:complete')).toBeLessThan(
+      order.indexOf('resources:published'),
+    );
+    expect(useProjectIOStore.getState().projectInstanceId).toBe('project-b');
+  });
+
+  it('performs no authoritative store writes when cleanup is superseded', async () => {
+    const cleanup = deferred<void>();
+    const removeProjectScopedWorkbenchPanels = vi.fn(async (
+      _previousProjectInstanceId: string,
+      _owner: ProjectLifecycleStateSnapshot,
+    ) => {
+      await cleanup.promise;
+    });
+    installCoreApplicationTestPorts({
+      projectIO: { removeProjectScopedWorkbenchPanels },
+    });
+    const direct = deferred<LifecycleMutationResultDto | null>();
+    const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
+    mockProjectBHydration();
+    const projectWrites = vi.spyOn(useProjectIOStore, 'setState');
+    const resourceWrites = vi.spyOn(useResourceStore, 'setState');
+    const projectBefore = useProjectIOStore.getState();
+    const resourcesBefore = useResourceStore.getState();
+
+    let completion!: Promise<void>;
+    await act(async () => {
+      completion = operations.saveGraphAs();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(saveAs).toHaveBeenCalledOnce());
+    await act(async () => {
+      direct.resolve(saveAsReceipt(saveAs.mock.calls[0][1]));
+      await vi.waitFor(() => expect(removeProjectScopedWorkbenchPanels).toHaveBeenCalledOnce());
+    });
+
+    projectPublicationCoordinator.startProject('project-c', 0);
+    await act(async () => {
+      cleanup.resolve();
+      await completion;
+    });
+
+    expect(projectWrites).not.toHaveBeenCalled();
+    expect(resourceWrites).not.toHaveBeenCalled();
+    expect(useProjectIOStore.getState()).toBe(projectBefore);
+    expect(useResourceStore.getState()).toBe(resourcesBefore);
   });
 
   it('gives a mismatching direct save-as DTO zero initiating effects', async () => {
@@ -501,6 +605,119 @@ describe('project lifecycle initiating operations', () => {
       expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
     },
   );
+
+  it('keeps project B authoritative when it supersedes a deferred active delete clear', async () => {
+    const activeRecord = record('active-record', 'C:/project-a/metadata.yssbi');
+    vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([activeRecord]);
+    await act(async () => {
+      await picker.refresh();
+    });
+    await vi.waitFor(() => expect(picker.currentProjectId).toBe('active-record'));
+
+    const cleanup = deferred<void>();
+    const cleanupAuthorities: Array<{ projectInstanceId: string | null; epoch: number }> = [];
+    let cleanupCall = 0;
+    const removeWorkbenchPanels = vi.fn(async (
+      ..._args: Parameters<typeof removeProjectScopedWorkbenchPanels>
+    ) => {
+      const authority = projectPublicationCoordinator.getSnapshotForTests();
+      cleanupAuthorities.push({
+        projectInstanceId: authority.projectInstanceId,
+        epoch: authority.epoch,
+      });
+      cleanupCall += 1;
+      if (cleanupCall === 1) await cleanup.promise;
+    });
+    installCoreApplicationTestPorts({
+      projectIO: {
+        acceptProjectActivation: (projectInstanceId, revision) =>
+          projectPublicationCoordinator.acceptProjectActivation(projectInstanceId, revision),
+        startPublication: (projectInstanceId, revision) =>
+          projectPublicationCoordinator.startProject(projectInstanceId, revision),
+        removeProjectScopedWorkbenchPanels: removeWorkbenchPanels,
+      },
+    });
+
+    const request = deferred<LifecycleMutationResultDto>();
+    const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles')
+      .mockReturnValue(request.promise);
+    let completion!: ReturnType<typeof picker.deleteProjectFiles>;
+    await act(async () => {
+      completion = picker.deleteProjectFiles('active-record');
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
+    await act(async () => {
+      request.resolve(projectReceipt(remove.mock.calls[0][2], 'delete', { active: true }));
+      await vi.waitFor(() => expect(removeWorkbenchPanels).toHaveBeenCalledOnce());
+    });
+
+    mockProjectBHydration();
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
+      projectInstanceId: 'project-b',
+      publicationRevision: 0,
+      history: { canUndo: false, canRedo: false },
+      projectName: 'Project B',
+      graphs: [{
+        path: 'events/ProjectB.yssbi-event',
+        name: 'Project B graph',
+        type: 'event',
+        revision: 1,
+      }],
+      variables: [],
+      worksheets: [],
+      databases: [],
+      exportTime: '',
+    });
+    await act(async () => {
+      await loadActivatedProject({
+        path: 'C:/project-b/metadata.yssbi',
+        projectInstanceId: 'project-b',
+        activationRevision: 10_000,
+      });
+    });
+    expect(useProjectIOStore.getState().projectInstanceId).toBe('project-b');
+    expect(useResourceStore.getState().graphOrder).toEqual([
+      'events/ProjectB.yssbi-event',
+    ]);
+
+    const observedProjectIdentities: Array<string | null> = [];
+    const observedResourceOrders: string[][] = [];
+    const unsubscribeProject = useProjectIOStore.subscribe((state) => {
+      observedProjectIdentities.push(state.projectInstanceId);
+    });
+    const unsubscribeResources = useResourceStore.subscribe((state) => {
+      observedResourceOrders.push([...state.graphOrder]);
+    });
+    const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
+    let outcome!: Awaited<ReturnType<typeof picker.deleteProjectFiles>>;
+    await act(async () => {
+      cleanup.resolve();
+      outcome = await completion;
+    });
+    unsubscribeProject();
+    unsubscribeResources();
+
+    expect(outcome).toEqual({ status: 'stale' });
+    expect(useProjectIOStore.getState().projectInstanceId).toBe('project-b');
+    expect(useResourceStore.getState().graphOrder).toEqual([
+      'events/ProjectB.yssbi-event',
+    ]);
+    expect(observedProjectIdentities).not.toContain(null);
+    expect(observedResourceOrders).not.toContainEqual([]);
+    expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls);
+    expect(removeWorkbenchPanels).toHaveBeenCalledTimes(2);
+    expect(removeWorkbenchPanels.mock.calls[0]).toEqual([
+      'project-a',
+      cleanupAuthorities[0],
+    ]);
+    expect(removeWorkbenchPanels.mock.calls[1]).toEqual([
+      'project-a',
+      cleanupAuthorities[1],
+    ]);
+    expect(Object.isFrozen(removeWorkbenchPanels.mock.calls[0][1])).toBe(true);
+    expect(Object.isFrozen(removeWorkbenchPanels.mock.calls[1][1])).toBe(true);
+  });
 
   it('recovers active delete cleared list from event when direct rejects', async () => {
     const activeRecord = record('active-record', 'C:/project-a/metadata.yssbi');

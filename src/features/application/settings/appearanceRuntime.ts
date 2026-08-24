@@ -22,9 +22,8 @@ export function syncColorThemePreset(
 
 export function resolveActivityBarLayout(
   activityBarPosition: string | undefined,
-  zenMode: boolean,
 ): ActivityBarLayout {
-  if (zenMode || activityBarPosition === 'Hidden') {
+  if (activityBarPosition === 'Hidden') {
     return { visible: false, side: 'left' };
   }
   return {

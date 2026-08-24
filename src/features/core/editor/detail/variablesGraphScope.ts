@@ -1,12 +1,16 @@
-import { editorDockviewPort } from '@/features/core/dockview';
-import type { LayoutTab } from '@/shared/types';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
 import { useEditorStore } from '../stores/useEditorStore';
 
 function readActiveGraphTab(): { id: string; type: 'event' | 'function' } | null {
-  const value = editorDockviewPort.getActivePanel()?.tab?.data?.layoutTab;
-  const tab = value && typeof value === 'object' ? value as LayoutTab : null;
-  if (tab?.type === 'event' || tab?.type === 'function') {
-    return { id: tab.id, type: tab.type };
+  const panel = workbenchDockviewPort.getActiveEditorPanel();
+  if (
+    panel?.metadata.role === 'editor'
+    && (panel.metadata.resourceKind === 'event' || panel.metadata.resourceKind === 'function')
+  ) {
+    return {
+      id: panel.metadata.resourceRef,
+      type: panel.metadata.resourceKind,
+    };
   }
   return null;
 }

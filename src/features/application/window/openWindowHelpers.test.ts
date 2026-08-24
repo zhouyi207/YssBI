@@ -36,6 +36,22 @@ describe('window opening helpers', () => {
     expect(JSON.stringify(appError.mock.calls)).not.toContain('sensitive native window failure');
   });
 
+  it('opens Logs with backend geometry and no fallback coordinates', async () => {
+    createPersistedWindow.mockResolvedValueOnce(undefined);
+
+    await openLogsWindow();
+
+    expect(createPersistedWindow).toHaveBeenCalledWith(expect.objectContaining({
+      geometry: { source: 'backend', kind: 'logs' },
+      label: 'logs-test',
+      url: 'index.html#/logs',
+    }));
+    const options = createPersistedWindow.mock.calls[0]?.[0] as {
+      geometry: Record<string, unknown>;
+    };
+    expect(Object.keys(options.geometry).sort()).toEqual(['kind', 'source']);
+  });
+
   it('records and rethrows a presentation window failure', async () => {
     const failure = new Error('sensitive presentation window failure');
     createPersistedWindow.mockRejectedValueOnce(failure);

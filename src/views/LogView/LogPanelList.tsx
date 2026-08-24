@@ -7,27 +7,37 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from '@/components/ui/empty';
+import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 import { LogPanelVirtualList } from './LogPanelVirtualList';
-import { useLogPanelContext } from './logPanelContext';
+import type { LogPanelPresentation } from './useLogPanelVirtualList';
 
-export function LogPanelList() {
+export interface LogPanelListProps {
+  readonly filteredLogs: readonly DiagnosticRecordDto[];
+  readonly totalLogCount: number;
+  readonly isInitialLoad: boolean;
+  readonly autoScroll: boolean;
+  readonly refreshScrollToken: number;
+  readonly presentation: LogPanelPresentation;
+  readonly selectedIndex: number | null;
+  readonly onSelectLog: (log: DiagnosticRecordDto) => void;
+}
+
+export function LogPanelList({
+  filteredLogs,
+  totalLogCount,
+  isInitialLoad,
+  autoScroll,
+  refreshScrollToken,
+  presentation,
+  selectedIndex,
+  onSelectLog,
+}: LogPanelListProps) {
   const { t } = useTranslation();
-  const {
-    filteredLogs,
-    logs,
-    isInitialLoad,
-    activeLogDomainTab,
-    autoScroll,
-    refreshScrollToken,
-    variant,
-    selectedIndex,
-    handleSelectLog,
-  } = useLogPanelContext();
 
   if (isInitialLoad) {
     return (
-      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-[var(--workbench-bg)] text-muted-foreground">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-[var(--accent-color)] border-t-transparent" />
+      <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center gap-3 bg-background text-muted-foreground">
+        <div className="size-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         <p className="text-xs">{t('log.loadingLogs')}</p>
       </div>
     );
@@ -35,14 +45,14 @@ export function LogPanelList() {
 
   if (filteredLogs.length === 0) {
     return (
-      <Empty className="relative min-h-0 rounded-none bg-[var(--workbench-bg)] px-6">
+      <Empty className="relative min-h-0 rounded-none bg-background px-6">
         <EmptyHeader>
           <EmptyMedia variant="icon" className="text-muted-foreground">
             <VscFile />
           </EmptyMedia>
-          <EmptyTitle>{logs.length === 0 ? t('log.noLogs') : t('log.noMatches')}</EmptyTitle>
+          <EmptyTitle>{totalLogCount === 0 ? t('log.noLogs') : t('log.noMatches')}</EmptyTitle>
           <EmptyDescription>
-            {logs.length === 0 ? t('log.runGraphHint') : t('log.adjustFilterHint')}
+            {totalLogCount === 0 ? t('log.runGraphHint') : t('log.adjustFilterHint')}
           </EmptyDescription>
         </EmptyHeader>
       </Empty>
@@ -51,13 +61,12 @@ export function LogPanelList() {
 
   return (
     <LogPanelVirtualList
-      key={activeLogDomainTab}
-      logs={filteredLogs}
+      filteredLogs={filteredLogs}
       autoScroll={autoScroll}
       refreshScrollToken={refreshScrollToken}
-      variant={variant}
+      presentation={presentation}
       selectedIndex={selectedIndex}
-      onSelectLog={handleSelectLog}
+      onSelectLog={onSelectLog}
     />
   );
 }

@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FiTrash2, FiFilter, FiSearch, FiChevronDown, FiChevronUp, FiX } from 'react-icons/fi';
+import {
+  FiChevronDown,
+  FiChevronUp,
+  FiFilter,
+  FiSearch,
+  FiTrash2,
+} from 'react-icons/fi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -11,9 +17,9 @@ import {
   getLogLevelBackground,
   getLogLevelColor,
 } from './logPresentation';
-import { useLogPanelContext } from './logPanelContext';
+import { useLogWorkspaceContext } from './logWorkspaceContext';
 
-const LOG_FILTER_LEVELS: DiagnosticLevel[] = [...DIAGNOSTIC_LEVELS];
+const LOG_FILTER_LEVELS: readonly DiagnosticLevel[] = DIAGNOSTIC_LEVELS;
 
 export function LogPanelToolbar() {
   const { t } = useTranslation();
@@ -27,29 +33,25 @@ export function LogPanelToolbar() {
     setSearchText,
     refreshLogs,
     clearLogs,
-    handleClose,
-    variant,
-  } = useLogPanelContext();
-
-  const getLevelColor = getLogLevelColor;
-  const getLevelBgColor = getLogLevelBackground;
+  } = useLogWorkspaceContext();
 
   return (
     <div
-      className="flex shrink-0 items-center gap-0.5"
-      onPointerDown={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
+      className="flex h-full max-h-(--logs-tab-height) min-h-0 shrink-0 items-center gap-0.5"
+      onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
     >
       <ToolbarIconButton
         type="button"
         variant="ghost"
         size="icon-sm"
-        onClick={() => refreshLogs()}
+        onClick={refreshLogs}
         disabled={loading}
+        aria-label={t('log.refresh')}
         tooltip={t('log.refresh')}
       >
         <svg
-          className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`}
+          className={loading ? 'animate-spin' : undefined}
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -69,10 +71,12 @@ export function LogPanelToolbar() {
         variant="ghost"
         size="icon-sm"
         onClick={() => setAutoScroll(!autoScroll)}
-        className={autoScroll ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
+        aria-label={autoScroll ? t('log.autoScrollEnabled') : t('log.autoScrollDisabled')}
+        aria-pressed={autoScroll}
+        className={autoScroll ? 'text-primary' : 'text-muted-foreground'}
         tooltip={autoScroll ? t('log.autoScrollEnabled') : t('log.autoScrollDisabled')}
       >
-        {autoScroll ? <FiChevronDown size={14} /> : <FiChevronUp size={14} />}
+        {autoScroll ? <FiChevronDown /> : <FiChevronUp />}
       </ToolbarIconButton>
 
       <Popover open={filterOpen} onOpenChange={setFilterOpen}>
@@ -83,23 +87,32 @@ export function LogPanelToolbar() {
                 type="button"
                 variant="ghost"
                 size="icon-sm"
-                className={filterOpen ? 'text-[var(--accent-color)]' : 'text-muted-foreground'}
+                className={filterOpen ? 'text-primary' : 'text-muted-foreground'}
                 aria-label={t('log.filter')}
+                aria-pressed={filterOpen}
               >
-                <FiFilter size={14} />
+                <FiFilter />
               </Button>
             </TooltipTrigger>
           </PopoverTrigger>
           <TooltipContent side="bottom">{t('log.filter')}</TooltipContent>
         </Tooltip>
-        <PopoverContent align="end" className="w-[290px] gap-3 p-3" onClick={(e) => e.stopPropagation()}>
+        <PopoverContent
+          align="end"
+          className="w-72.5 gap-3 p-3"
+          onClick={(event) => event.stopPropagation()}
+        >
           <div className="relative">
-            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={14} />
+            <FiSearch
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
             <Input
               type="text"
               placeholder={t('log.searchPlaceholder')}
-              value={filter?.searchText ?? ''}
-              onChange={(e) => setSearchText(e.target.value)}
+              aria-label={t('log.searchPlaceholder')}
+              value={filter.searchText}
+              onChange={(event) => setSearchText(event.target.value)}
               className="h-8 pl-9 text-xs"
             />
           </div>
@@ -108,18 +121,24 @@ export function LogPanelToolbar() {
               {t('log.level')}
             </div>
             <div className="flex flex-nowrap gap-1.5">
-              {LOG_FILTER_LEVELS.map((level) => (
-                <Button
-                  type="button"
-                  variant={filter?.levels?.has(level) ? 'secondary' : 'outline'}
-                  size="sm"
-                  key={level}
-                  onClick={() => toggleLevel(level)}
-                  className={`h-6 px-2 text-[10px] ${filter?.levels?.has(level) ? `${getLevelBgColor(level)} ${getLevelColor(level)} border-current` : 'text-muted-foreground'}`}
-                >
-                  {level.toUpperCase()}
-                </Button>
-              ))}
+              {LOG_FILTER_LEVELS.map((level) => {
+                const enabled = filter.levels.has(level);
+                return (
+                  <Button
+                    type="button"
+                    variant={enabled ? 'secondary' : 'outline'}
+                    size="sm"
+                    key={level}
+                    onClick={() => toggleLevel(level)}
+                    aria-pressed={enabled}
+                    className={`h-6 px-2 text-[10px] ${enabled
+                      ? `${getLogLevelBackground(level)} ${getLogLevelColor(level)} border-current`
+                      : 'text-muted-foreground'}`}
+                  >
+                    {level.toUpperCase()}
+                  </Button>
+                );
+              })}
             </div>
           </div>
         </PopoverContent>
@@ -130,23 +149,12 @@ export function LogPanelToolbar() {
         variant="ghost"
         size="icon-sm"
         onClick={clearLogs}
+        aria-label={t('log.clear')}
         className="text-muted-foreground hover:text-destructive"
         tooltip={t('log.clear')}
       >
-        <FiTrash2 size={14} />
+        <FiTrash2 />
       </ToolbarIconButton>
-
-      {variant === 'standalone' ? (
-        <ToolbarIconButton
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={handleClose}
-          tooltip={t('log.closeWindow')}
-        >
-          <FiX size={14} />
-        </ToolbarIconButton>
-      ) : null}
     </div>
   );
 }

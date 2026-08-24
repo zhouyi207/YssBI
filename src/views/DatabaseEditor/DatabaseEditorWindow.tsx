@@ -192,7 +192,7 @@ export const DatabaseEditorWindow: React.FC = () => {
   );
 
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--workbench-bg)] text-[var(--workbench-fg)] font-sans">
+    <div className="flex h-screen w-full flex-col overflow-hidden bg-background text-foreground font-sans">
       <TitleBar
         dataframes={dfOptions}
         selectedDataframeId={selectedDfId}

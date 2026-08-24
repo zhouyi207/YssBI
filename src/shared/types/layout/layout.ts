@@ -7,7 +7,7 @@
 
 
 /** 编辑器 Tab 语义类型（与 ResourceKind / DetailFocus 对齐） */
-export type LayoutTabType = 'event' | 'function' | 'worksheet' | 'project' | 'setting';
+export type LayoutTabType = 'event' | 'function' | 'worksheet';
 
 /** Tab 挂载的编辑器组件名 */
 export type LayoutTabComponent = 'GraphEditor' | 'WorksheetEditor';

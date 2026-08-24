@@ -4,14 +4,23 @@
  */
 
 import { useMemo } from 'react';
+import { useDockviewPortSnapshot } from '@/features/core/dockview/useDockviewPortSnapshot';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
 import type { EditorGroupSnapshot } from '@/shared/types';
-import { editorDockviewPort, useDockviewPortSnapshot } from '@/features/core/dockview';
 
 export function useEditorGroups(): EditorGroupSnapshot[] {
-  const { revision } = useDockviewPortSnapshot(editorDockviewPort);
+  const { revision } = useDockviewPortSnapshot(workbenchDockviewPort);
 
-  return useMemo(
-    () => editorDockviewPort.listGroups().map(({ groupId }): EditorGroupSnapshot => ({ id: groupId })),
-    [revision],
-  );
+  return useMemo(() => {
+    const editorGroupIds = new Set(
+      workbenchDockviewPort
+        .listPanels()
+        .filter((panel) => panel.metadata.role === 'editor')
+        .map((panel) => panel.groupId),
+    );
+    return workbenchDockviewPort
+      .listGroups()
+      .filter((group) => editorGroupIds.has(group.groupId))
+      .map(({ groupId }): EditorGroupSnapshot => ({ id: groupId }));
+  }, [revision]);
 }

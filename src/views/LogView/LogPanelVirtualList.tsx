@@ -2,30 +2,32 @@ import { LOG_ITEM_GAP, LOG_ITEM_HEIGHT } from '@/app/appConfig/default';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 import { LogItemRow } from './LogItemRow';
-import { useLogPanelVirtualList } from './useLogPanelVirtualList';
-import type { LogPanelVariant } from './useLogPanelController';
+import {
+  useLogPanelVirtualList,
+  type LogPanelPresentation,
+} from './useLogPanelVirtualList';
 
 export interface LogPanelVirtualListProps {
-  logs: DiagnosticRecordDto[];
-  autoScroll: boolean;
-  refreshScrollToken: number;
-  variant: LogPanelVariant;
-  selectedIndex: number | null;
-  onSelectLog: (index: number) => void;
+  readonly filteredLogs: readonly DiagnosticRecordDto[];
+  readonly autoScroll: boolean;
+  readonly refreshScrollToken: number;
+  readonly presentation: LogPanelPresentation;
+  readonly selectedIndex: number | null;
+  readonly onSelectLog: (log: DiagnosticRecordDto) => void;
 }
 
 export function LogPanelVirtualList({
-  logs,
+  filteredLogs,
   autoScroll,
   refreshScrollToken,
-  variant,
+  presentation,
   selectedIndex,
   onSelectLog,
 }: LogPanelVirtualListProps) {
   const { viewportRef, virtualizer, handleScroll } = useLogPanelVirtualList({
-    logs,
+    filteredLogs,
     autoScroll,
-    variant,
+    presentation,
     refreshScrollToken,
   });
 
@@ -34,12 +36,12 @@ export function LogPanelVirtualList({
       viewportRef={viewportRef}
       onViewportScroll={handleScroll}
       orientation="vertical"
-      className="relative min-h-0 flex-1 bg-[var(--workbench-bg)]"
+      className="relative min-h-0 flex-1 bg-background"
     >
       <div className="py-0.5">
         <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {
-            const log = logs[virtualRow.index];
+            const log = filteredLogs[virtualRow.index];
             if (!log) return null;
             return (
               <div
@@ -57,7 +59,7 @@ export function LogPanelVirtualList({
                 <LogItemRow
                   log={log}
                   isSelected={selectedIndex === virtualRow.index}
-                  onClick={() => onSelectLog(virtualRow.index)}
+                  onClick={() => onSelectLog(log)}
                 />
               </div>
             );

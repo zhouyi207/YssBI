@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useFunctionCatalog } from '@/features/core/editor';
-import { editorDockviewPort, useDockviewPortSnapshot } from '@/features/core/dockview';
+import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { useProjectIOStore, useVariableStore } from '@/features/core/dataStore';
 import { useGraphResourcesByKind } from '@/features/core/resource';
@@ -23,7 +23,7 @@ export function useProjectResourceBrowser() {
   const variables = useVariableStore((state) => state.variables);
   const worksheets = useWorksheetStore((state) => state.index);
   const projectInstanceId = useProjectIOStore((state) => state.projectInstanceId);
-  useDockviewPortSnapshot(editorDockviewPort);
+  const focusedSession = useGraphSessionStore((state) => state.focusedSession);
   const projectTreeQuery = useSidebarStore((state) => state.projectTreeQuery);
   const projectTreeExpandedCategories = useSidebarStore(
     (state) => state.projectTreeExpandedCategories,
@@ -38,8 +38,9 @@ export function useProjectResourceBrowser() {
   const resetProjectTreeQuery = useSidebarStore((state) => state.resetProjectTreeQuery);
   const previousProjectInstanceId = useRef<string | null | undefined>(undefined);
 
-  const activeGroupId = editorDockviewPort.getActiveGroupId() ?? null;
-  const activeTab = activeGroupId ? getActiveLayoutTab(activeGroupId)?.tab ?? null : null;
+  const activeTab = focusedSession
+    ? getActiveLayoutTab(focusedSession.groupId)?.tab ?? null
+    : null;
   const activeGraph = useMemo(
     () => resolveActiveProjectGraph({ events, functions, activeTab }),
     [activeTab, events, functions],

@@ -1,11 +1,13 @@
 import { useMemo } from 'react';
 import type { EditorSessionCanvasActions } from './editorSessionTypes';
-import { focusCanvasSelection } from './rightSidebarActions';
+import { revealInspect } from './rightSidebarActions';
+import {
+  isEditorCommandTargetCurrent,
+  type EditorCommandTarget,
+} from './editorCommandFocus';
 import { collectCanvasNodeWorldBounds } from '@/features/core/canvas';
 import { useGraphDataStore } from '@/features/core/dataStore';
-import { editorDockviewPort } from '@/features/core/dockview';
 import {
-  getActiveLayoutTab,
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedNodeIds,
 } from '@/features/core/layout/layoutTabQueries';
@@ -21,6 +23,7 @@ import {
 } from '@/features/core/viewport';
 
 interface ActiveGraphContext {
+  target: EditorCommandTarget;
   graphPath: string;
   groupId: string;
   scope: ViewportScope;
@@ -30,21 +33,23 @@ interface ActiveGraphCanvas extends ActiveGraphContext {
   canvasElement: HTMLElement;
 }
 
-function activeGraphContext(): ActiveGraphContext | null {
-  const groupId = editorDockviewPort.getActiveGroupId();
-  if (!groupId) return null;
-
-  const active = getActiveLayoutTab(groupId);
-  if (!active || (active.tab.type !== 'event' && active.tab.type !== 'function')) return null;
-  const graphPath = active.activeTabId;
-  if (!getDocumentState({ id: graphPath, kind: active.tab.type })?.loaded) return null;
+function activeGraphContext(target: EditorCommandTarget): ActiveGraphContext | null {
+  if (!isEditorCommandTargetCurrent(target)) return null;
+  if (target.resourceKind !== 'event' && target.resourceKind !== 'function') return null;
+  const graphPath = target.resourceRef;
+  if (!getDocumentState({ id: graphPath, kind: target.resourceKind })?.loaded) return null;
   if (!useGraphDataStore.getState().graphEntities[graphPath]) return null;
 
-  return { graphPath, groupId, scope: editorViewportScope(groupId, graphPath) };
+  return {
+    target,
+    graphPath,
+    groupId: target.groupId,
+    scope: editorViewportScope(target.groupId, graphPath),
+  };
 }
 
-function activeGraphCanvas(): ActiveGraphCanvas | null {
-  const context = activeGraphContext();
+function activeGraphCanvas(target: EditorCommandTarget): ActiveGraphCanvas | null {
+  const context = activeGraphContext(target);
   if (!context) return null;
   const canvasElement = [...document.querySelectorAll<HTMLElement>('[data-editor-group-id]')]
     .find((element) => element.dataset.editorGroupId === context.groupId);
@@ -58,7 +63,7 @@ function fitCanvasNodes(context: ActiveGraphCanvas, nodeIds?: readonly string[])
     viewport,
     nodeIds,
   });
-  if (!bounds) return false;
+  if (!bounds || !isEditorCommandTargetCurrent(context.target)) return false;
 
   const canvasRect = context.canvasElement.getBoundingClientRect();
   const next = fitWorldBounds(bounds, { width: canvasRect.width, height: canvasRect.height });
@@ -70,33 +75,30 @@ function fitCanvasNodes(context: ActiveGraphCanvas, nodeIds?: readonly string[])
 
 export function useGraphCanvasCommands(): EditorSessionCanvasActions {
   return useMemo(() => ({
-    selectAllNodes(): boolean {
-      const context = activeGraphContext();
+    async selectAllNodes(target: EditorCommandTarget): Promise<boolean> {
+      const context = activeGraphContext(target);
       if (!context) return false;
       const bucket = useGraphDataStore.getState().graphEntities[context.graphPath];
       const selectableNodeIds = bucket.graphNodes.filter(
         (nodeId) => bucket.nodes[nodeId]?.capabilities?.managed === false,
       );
-      if (selectableNodeIds.length === 0) return false;
+      if (selectableNodeIds.length === 0 || !isEditorCommandTargetCurrent(target)) return false;
       const update = updateEditorGroupSelectedNodeIds(selectableNodeIds, context.groupId);
-      if (!update) return false;
-      const active = getActiveLayoutTab(update.groupId);
-      if (active?.tab.type === 'event' || active?.tab.type === 'function') {
-        focusCanvasSelection(active.activeTabId, update.nodeIds);
-      }
+      if (!update || !isEditorCommandTargetCurrent(target)) return false;
+      await revealInspect(context.graphPath, update.nodeIds);
       return true;
     },
 
-    focusSelectedNodes(): boolean {
-      const context = activeGraphCanvas();
+    focusSelectedNodes(target: EditorCommandTarget): boolean {
+      const context = activeGraphCanvas(target);
       if (!context) return false;
       const nodeIds = [...getEditorGroupGraphSelection(context.groupId).nodeIds];
       if (nodeIds.length === 0) return false;
       return fitCanvasNodes(context, nodeIds);
     },
 
-    fitCompleteGraph(): boolean {
-      const context = activeGraphCanvas();
+    fitCompleteGraph(target: EditorCommandTarget): boolean {
+      const context = activeGraphCanvas(target);
       return context ? fitCanvasNodes(context) : false;
     },
   }), []);

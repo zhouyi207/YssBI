@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Suspense } from 'react';
+import { useResultViewPresentation } from '@/features/core/resultSource/resultViewPresentation';
 import { SectionHeader } from './RegressionShared';
 import { REPORT_SECTION_ICONS, type ReportSectionIcon } from './reportIcons';
 
@@ -30,13 +31,23 @@ export function ReportLayout({
   children: ReactNode;
   size?: ReportLayoutSize;
 }) {
+  const presentation = useResultViewPresentation();
+  const showHeading = presentation === 'standalone';
+
   return (
     <div className={`mx-auto p-6 ${LAYOUT_SIZE_CLASS[size]}`}>
-      <div className="mb-6">
-        <h1 className="mb-2 text-xl font-bold text-foreground">{title}</h1>
-        {badges ? <div className="flex flex-wrap items-center gap-3">{badges}</div> : null}
-        {subtitle ? <div className="mt-1">{subtitle}</div> : null}
-      </div>
+      {showHeading ? (
+        <div className="mb-6">
+          <h1 className="mb-2 text-xl font-bold text-foreground">{title}</h1>
+          {badges ? <div className="flex flex-wrap items-center gap-3">{badges}</div> : null}
+          {subtitle ? <div className="mt-1">{subtitle}</div> : null}
+        </div>
+      ) : badges || subtitle ? (
+        <div className="mb-4">
+          {badges ? <div className="flex flex-wrap items-center gap-3">{badges}</div> : null}
+          {subtitle ? <div className="mt-1">{subtitle}</div> : null}
+        </div>
+      ) : null}
       {children}
     </div>
   );
@@ -82,7 +93,7 @@ export function ReportSubheading({
       <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{title}</span>
       {trailing ??
         (timingMs != null ? (
-          <span className="font-mono text-[10px] text-[var(--accent-color)]">{timingMs} ms</span>
+          <span className="font-mono text-[10px] text-primary">{timingMs} ms</span>
         ) : null)}
     </div>
   );

@@ -1,51 +1,62 @@
-import type { LayoutTab } from '@/shared/types';
+import { getPaneSelection, useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
+import { layoutTabFromEditorMetadata } from '@/features/core/dockview/workbenchPanelModel';
 import {
-  editorDockviewPort,
-  getPaneSelection,
-  useEditorPaneStateStore,
-} from '@/features/core/dockview';
-import { DEFAULT_EDITOR_GROUP_ID } from './workbenchLayoutDefaults';
+  workbenchDockviewPort,
+  type WorkbenchPanelInfo,
+} from '@/features/core/dockview/workbenchDockviewPort';
+import type { LayoutTab } from '@/shared/types';
 
 export type LocatedLayoutTab = { nodeId: string; tab: LayoutTab };
 export interface LayoutGroupContext { activeEditorGroupId: string | null }
 
-
-function readTab(value: unknown): LayoutTab | null {
-  return value && typeof value === 'object' ? value as LayoutTab : null;
+function panelTab(panel: WorkbenchPanelInfo | undefined): LayoutTab | null {
+  return panel?.metadata.role === 'editor'
+    ? layoutTabFromEditorMetadata(panel.metadata)
+    : null;
 }
 
-function panelTab(panel: ReturnType<typeof editorDockviewPort.listPanels>[number]): LayoutTab | null {
-  return readTab(panel.tab?.data?.layoutTab);
+function activeEditorPanelInGroup(groupId: string): WorkbenchPanelInfo | undefined {
+  const activePanelInstanceId = workbenchDockviewPort
+    .listGroups()
+    .find((group) => group.groupId === groupId)
+    ?.activePanelInstanceId;
+  if (!activePanelInstanceId) return undefined;
+  return workbenchDockviewPort
+    .listGroupPanels(groupId)
+    .find((panel) => panel.panelInstanceId === activePanelInstanceId
+      && panel.metadata.role === 'editor');
 }
 
 export function resolveEditorTargetGroupId(explicitGroupId?: string | null): string {
-  const groups = editorDockviewPort.listGroups();
-  const candidates = [explicitGroupId, editorDockviewPort.getActiveGroupId()];
-  for (const id of candidates) {
-    if (id && groups.some((group) => group.groupId === id)) return id;
-  }
-  return groups[0]?.groupId ?? DEFAULT_EDITOR_GROUP_ID;
+  const groupIds = new Set(
+    workbenchDockviewPort.listGroups().map((group) => group.groupId),
+  );
+  if (explicitGroupId && groupIds.has(explicitGroupId)) return explicitGroupId;
+  const activeEditorGroupId = workbenchDockviewPort.getActiveEditorPanel()?.groupId;
+  return activeEditorGroupId && groupIds.has(activeEditorGroupId)
+    ? activeEditorGroupId
+    : '';
 }
 
 export function locateLayoutTab(tabId: string, nodeId?: string): LocatedLayoutTab | null {
-  const panel = editorDockviewPort
-    .findPanelsByResource(tabId)
-    .find((candidate) => !nodeId || candidate.groupId === nodeId);
-  const tab = panel ? panelTab(panel) : null;
+  const panel = workbenchDockviewPort
+    .findEditorPanelsByResource(tabId)
+    .find((candidate) => nodeId === undefined || candidate.groupId === nodeId);
+  const tab = panelTab(panel);
   return panel && tab ? { nodeId: panel.groupId, tab } : null;
 }
 
 export function getActiveLayoutTab(groupId: string): { activeTabId: string; tab: LayoutTab } | null {
-  const group = editorDockviewPort.listGroups().find((candidate) => candidate.groupId === groupId);
-  const panel = editorDockviewPort
-    .listPanels()
-    .find((candidate) => candidate.panelInstanceId === group?.activePanelInstanceId);
-  const tab = panel ? panelTab(panel) : null;
+  const panel = activeEditorPanelInGroup(groupId);
+  const tab = panelTab(panel);
   return panel && tab ? { activeTabId: tab.id, tab } : null;
 }
 
 export function resolveEditorGroupId(groupId?: string | null, context?: LayoutGroupContext): string | null {
-  return groupId ?? context?.activeEditorGroupId ?? editorDockviewPort.getActiveGroupId() ?? null;
+  return groupId
+    ?? context?.activeEditorGroupId
+    ?? workbenchDockviewPort.getActiveEditorPanel()?.groupId
+    ?? null;
 }
 
 export interface GraphSelection {
@@ -58,7 +69,7 @@ export function createGraphSelection(nodeIds: readonly string[], connectionIds: 
 }
 
 function activePanelInstanceId(groupId: string): string | undefined {
-  return editorDockviewPort.listGroups().find((group) => group.groupId === groupId)?.activePanelInstanceId;
+  return activeEditorPanelInGroup(groupId)?.panelInstanceId;
 }
 
 export function getEditorGroupGraphSelection(groupId: string): GraphSelection {

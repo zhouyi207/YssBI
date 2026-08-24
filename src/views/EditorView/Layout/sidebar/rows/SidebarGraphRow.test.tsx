@@ -6,6 +6,8 @@ import { DRAG_TYPES } from '@/features/core/dnd';
 
 const mocks = vi.hoisted(() => ({
   listItemProps: [] as Array<Record<string, unknown>>,
+  openGraphInEditor: vi.fn(),
+  revealDetails: vi.fn(),
 }));
 
 vi.mock('../../sidebarUi', () => ({
@@ -22,10 +24,10 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipContent: ({ children }: { children: React.ReactNode }) => children,
 }));
 vi.mock('@/features/application/editor/openGraphInEditor', () => ({
-  openGraphInEditor: vi.fn(),
+  openGraphInEditor: mocks.openGraphInEditor,
 }));
-vi.mock('@/features/application/editor', () => ({
-  focusDetails: vi.fn(),
+vi.mock('@/features/application/editor/rightSidebarActions', () => ({
+  revealDetails: mocks.revealDetails,
 }));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -40,7 +42,9 @@ describe('SidebarGraphRow', () => {
   let root: Root;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     mocks.listItemProps.length = 0;
+    mocks.revealDetails.mockResolvedValue(undefined);
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -73,5 +77,37 @@ describe('SidebarGraphRow', () => {
       type: DRAG_TYPES.GRAPH_RESOURCE,
       sidebarResource: functionResource,
     });
+  });
+
+  it('explicitly reveals graph Details before completing the row click action', async () => {
+    act(() => root.render(
+      <SidebarGraphRow
+        id="events/Main.yssbi-event"
+        name="Main"
+        graphType="event"
+        onContextMenu={vi.fn()}
+      />,
+    ));
+    const onClick = mocks.listItemProps[0]?.onClick as
+      | ((event: { stopPropagation(): void }) => Promise<void>)
+      | undefined;
+    const stopPropagation = vi.fn();
+
+    await act(async () => {
+      await onClick?.({ stopPropagation });
+    });
+
+    expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(mocks.revealDetails).toHaveBeenCalledWith({
+      kind: 'event',
+      path: 'events/Main.yssbi-event',
+    });
+    expect(mocks.openGraphInEditor).toHaveBeenCalledWith(
+      'events/Main.yssbi-event',
+      'Main',
+      'event',
+      undefined,
+      { pinned: false },
+    );
   });
 });

@@ -5,8 +5,6 @@ import {
   loadActivatedProject,
   resolveActiveProjectPath,
 } from '@/features/core/dataStore';
-import { editorDockviewPort } from '@/features/core/dockview';
-import { getActiveLayoutTab, resolveEditorGroupId } from '@/features/core/layout/layoutTabQueries';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { markResourceDirty } from '@/features/core/resource';
 import {
@@ -57,6 +55,11 @@ import {
 } from '@/features/application/projectLifecycleReceipt';
 import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
 import { showBlockingIpcError, showBlockingMessage } from './blockingErrorDialog';
+import {
+  captureActiveEditorCommandTarget,
+  isEditorCommandTargetCurrent,
+  type EditorCommandTarget,
+} from './editorCommandFocus';
 
 /**
  * Project Operations Hook
@@ -121,31 +124,26 @@ export function useProjectOperations() {
     }
   }, [t]);
 
-  const saveGraph = useCallback(async () => {
+  const saveGraph = useCallback(async (requestedTarget?: EditorCommandTarget) => {
+    const target = requestedTarget ?? captureActiveEditorCommandTarget();
+    if (!target) {
+      showBlockingMessage(t('notifications.project.openResourceBeforeSaving'));
+      return;
+    }
+    if (!isEditorCommandTargetCurrent(target)) return;
+
     let context: GraphSaveCommandContext | undefined;
     try {
       const projectPath = await resolveActiveProjectPath();
+      if (!isEditorCommandTargetCurrent(target)) return;
       if (!projectPath) {
         showBlockingMessage(t('notifications.project.notLoaded'));
         return;
       }
 
-      const editorGroupId = resolveEditorGroupId();
-      if (!editorGroupId) {
-        showBlockingMessage(t('notifications.project.openResourceBeforeSaving'));
-        return;
-      }
-
-      const active = getActiveLayoutTab(editorGroupId);
-      const activeTabId = active?.activeTabId;
-      if (!activeTabId) {
-        showBlockingMessage(t('notifications.project.openResourceBeforeSaving'));
-        return;
-      }
-
-      const activeTab = active?.tab;
-      if (activeTab?.type === 'worksheet') {
-        const saved = await useWorksheetStore.getState().saveDocument(activeTabId);
+      if (target.resourceKind === 'worksheet') {
+        const saved = await useWorksheetStore.getState().saveDocument(target.resourceRef);
+        if (!isEditorCommandTargetCurrent(target)) return;
         if (!saved) {
           showBlockingMessage(t('notifications.project.saveFailed', {
             error: 'worksheet_save_not_committed',
@@ -154,24 +152,21 @@ export function useProjectOperations() {
         return;
       }
 
-      if (activeTab?.type !== 'event' && activeTab?.type !== 'function') {
-        showBlockingMessage(t('notifications.project.openResourceBeforeSaving'));
-        return;
-      }
+      warnCallFunctionIssuesBeforeSave(target.resourceRef);
 
-      warnCallFunctionIssuesBeforeSave(activeTabId);
-
-      context = await captureSettledGraphSaveCommandContext(activeTabId);
+      context = await captureSettledGraphSaveCommandContext(target.resourceRef);
+      if (!isEditorCommandTargetCurrent(target)) return;
       await GraphService.saveProjectGraph(
         context.projectInstanceId,
-        activeTabId,
+        target.resourceRef,
         context.expectedRevision,
         context.operationId,
       );
-      if (!isGraphSaveCommandRevisionCurrent(context, activeTabId)) return;
-      markResourceDirty({ id: activeTabId, kind: activeTab.type }, false);
+      if (!isEditorCommandTargetCurrent(target)) return;
+      if (!isGraphSaveCommandRevisionCurrent(context, target.resourceRef)) return;
+      markResourceDirty({ id: target.resourceRef, kind: target.resourceKind }, false);
     } catch (e) {
-      if (context && !context.isCurrent()) return;
+      if (!isEditorCommandTargetCurrent(target) || (context && !context.isCurrent())) return;
       logger.app.error(String(e), 'ProjectOperations');
       showBlockingIpcError(e, 'save_project_graph', (code) =>
         t('notifications.project.saveFailed', { error: code }));
@@ -191,8 +186,6 @@ export function useProjectOperations() {
         return;
       }
 
-      // 清空 Dockview 中的当前编辑器面板，用户从侧栏自行打开资源。
-      await editorDockviewPort.reset();
     } catch (e) {
       logger.app.error(String(e), 'ProjectOperations');
       showBlockingIpcError(e, 'load_project_to_state', (code) =>

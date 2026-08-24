@@ -1,32 +1,45 @@
-export { createDockviewEditorPort, editorDockviewPort } from './dockviewEditorPort';
-export type { DockviewEditorPort } from './dockviewEditorPort';
-export { createPanelDockviewPort, panelDockviewPort } from './panelDockviewPort';
-export type { PanelDockPosition, PanelDockviewPort } from './panelDockviewPort';
-export { sanitizeDockviewLayout } from './sanitizeDockviewLayout';
 export { useDockviewPortSnapshot } from './useDockviewPortSnapshot';
-export {
-  clearPersistedDockviewLayout,
-  dockviewLayoutStorageKey,
-  hydrateDockviewLayout,
-  invalidateDockviewLayoutHydration,
-  persistDockviewLayoutDebounced,
-  persistDockviewLayoutNow,
-  setDockviewLayoutWindowScope,
-} from './dockviewLayoutPersistence';
 export { getPaneSelection, useEditorPaneStateStore } from './editorPaneStateStore';
 export type { EditorPaneSelection } from './editorPaneStateStore';
+export {
+  componentForWorkbenchMetadata,
+  isWorkbenchPanelMetadata,
+  layoutTabFromEditorMetadata,
+  WORKBENCH_VIEW_IDS,
+} from './workbenchPanelModel';
 export type {
-  DockviewGroupInfo,
-  DockviewLayout,
-  DockviewPanelInfo,
-  DockviewPanelParams,
-  DockviewPortSnapshot,
-  EditorSplitEdge,
-  LayoutTabMetadata,
-  MovePanelRequest,
-  OpenPanelRequest,
-  PanelInstanceId,
-  ResourceRef,
-  SplitDirection,
-  SplitPanelRequest,
-} from './types';
+  EditorPanelMetadata,
+  EditorResourceKind,
+  ResultPanelMetadata,
+  ViewPanelMetadata,
+  WorkbenchComponentId,
+  WorkbenchPanelMetadata,
+  WorkbenchPanelParams,
+  WorkbenchViewId,
+} from './workbenchPanelModel';
+export {
+  orderWorkbenchPanelIdsForReset,
+  WORKBENCH_EDGE_GROUP_IDS,
+  WORKBENCH_EDGE_SIZES,
+  WORKBENCH_HOME_EDGE,
+  WORKBENCH_RESET_BUCKET_ORDER,
+} from './workbenchDockviewDefaults';
+export {
+  WorkbenchLayoutError,
+  workbenchDockviewPort,
+} from './workbenchDockviewPort';
+export type {
+  ConfiguredWorkbenchEdgeState,
+  ConfigureWorkbenchEdgeRequest,
+  EnsureViewRequest,
+  MoveWorkbenchPanelRequest,
+  OpenEditorRequest,
+  SplitWorkbenchPanelRequest,
+  UpsertResultRequest,
+  WorkbenchDockviewPort,
+  WorkbenchEdgePosition,
+  WorkbenchEdgeState,
+  WorkbenchGroupInfo,
+  WorkbenchLayoutErrorCode,
+  WorkbenchPanelInfo,
+} from './workbenchDockviewPort';

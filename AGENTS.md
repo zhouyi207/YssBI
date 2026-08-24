@@ -117,21 +117,19 @@ graph compilation/execution, databases, results, and scientific orchestration.
 
 ## Workbench and editor layout
 
-- Dockview is the sole authority for workbench pane topology/sizes, editor group
-  topology/sizes, panel placement/order, active group/panel, and serialized
-  layout restoration. Do not mirror those values into Zustand or recreate a
-  `LayoutTree` compatibility model.
-- `GridviewReact` owns the outer sidebar/editor-shell/detail panes. The shell
-  `DockviewReact` hosts the editor surface in its center and Logs/Output in a
-  native edge group; the nested editor `DockviewReact` owns editor groups and
-  panels. Keep menubar, activity bar, status bar, and modals outside the Dockview
-  workspace.
-- The shell edge group owns panel placement, splitter size, collapsed state, and
-  last expanded size. Collapse only the edge-group content while retaining its
-  tab bar; never emulate collapse by resizing an outer Gridview leaf to the
-  header height.
+- One root `DockviewReact` is the sole authority for all root workbench and
+  editor topology, panel placement/order, active group/panel, edge sizes and
+  collapse state, and serialized layout restoration. Do not mirror those values
+  into Zustand or another layout model.
+- The only nested Dockview is the bounded Logs workspace, and it owns only log
+  domain topology. Do not add Gridview, nested editor/shell compatibility hosts,
+  layout facades or mirrors, versioned layout payloads, Zen mode, or
+  `panelPosition` settings.
+- Keep menubar, activity bar, status bar, and modals outside the root Dockview.
+  Preserve the bottom edge group's native Dockview header and collapse behavior.
 - Application stores may keep non-placement panel metadata and pane-local state
-  keyed by `panelInstanceId`; resource identity remains separate and opaque.
+  keyed by `panelInstanceId`; panel, group, resource, graph, and node identities
+  remain distinct and opaque.
 - Route all panel closes through application dirty/save confirmation before
   removing the Dockview panel. Floating groups and browser popouts stay disabled;
   Tauri owns application windows.

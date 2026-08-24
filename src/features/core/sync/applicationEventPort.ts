@@ -8,7 +8,7 @@ export interface SyncApplicationEventPort {
     result: unknown,
     dependencies?: unknown,
   ): Promise<void>;
-  clearProject(): void;
+  clearProject(): Promise<void>;
 }
 
 let port: SyncApplicationEventPort | null = null;

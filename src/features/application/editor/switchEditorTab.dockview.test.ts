@@ -1,26 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type {
+  WorkbenchGroupInfo,
+  WorkbenchPanelInfo,
+} from '@/features/core/dockview/workbenchDockviewPort';
+
 const mocks = vi.hoisted(() => ({
-  activate: vi.fn(),
-  getActiveGroupId: vi.fn(),
-  listGroups: vi.fn(),
+  activate: vi.fn(async () => true),
+  groups: [] as WorkbenchGroupInfo[],
+  panels: [] as WorkbenchPanelInfo[],
   getFocusedGroupId: vi.fn(),
-  findPanelsByResource: vi.fn(),
+  clearFocusedSession: vi.fn(),
+  setDetailContext: vi.fn(),
 }));
 
-vi.mock('@/features/core/dockview', () => ({
-  editorDockviewPort: {
+vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
+  workbenchDockviewPort: {
     activate: mocks.activate,
-    getActiveGroupId: mocks.getActiveGroupId,
-    listGroups: mocks.listGroups,
-    findPanelsByResource: mocks.findPanelsByResource,
+    listGroups: () => mocks.groups,
+    listGroupPanels: (groupId: string) =>
+      mocks.panels.filter((panel) => panel.groupId === groupId),
+    findEditorPanelsByResource: (resourceRef: string) =>
+      mocks.panels.filter((panel) =>
+        panel.metadata.role === 'editor' && panel.metadata.resourceRef === resourceRef),
+    getActiveEditorPanel: () => mocks.panels.find((panel) => panel.active),
   },
 }));
 vi.mock('@/features/core/graphSession/graphSessionStore', () => ({
   useGraphSessionStore: {
     getState: () => ({
       getFocusedGroupId: mocks.getFocusedGroupId,
-      clearFocusedSession: vi.fn(),
+      clearFocusedSession: mocks.clearFocusedSession,
     }),
   },
 }));
@@ -31,53 +41,74 @@ vi.mock('./activateGraphTab', () => ({ activateGraphTab: vi.fn(async () => true)
 vi.mock('@/features/core/editor/detail/variablesGraphScope', () => ({
   syncVariablesGraphScopeFromActiveTab: vi.fn(),
 }));
-vi.mock('./rightSidebarActions', () => ({ focusDetails: vi.fn() }));
+vi.mock('./rightSidebarActions', () => ({ setDetailContext: mocks.setDetailContext }));
 
-import { focusEditorGroupSync, synchronizeActiveEditorTab } from './switchEditorTab';
+import {
+  activateCurrentEditorTab,
+  focusEditorGroupSync,
+  switchEditorTab,
+  synchronizeActiveEditorTab,
+} from './switchEditorTab';
 
-describe('focusEditorGroupSync Dockview activation', () => {
+function editorPanel(
+  panelInstanceId: string,
+  resourceRef: string,
+  active = false,
+  resourceKind: 'event' | 'function' | 'worksheet' = 'event',
+): WorkbenchPanelInfo {
+  return {
+    panelInstanceId,
+    groupId: 'group-a',
+    component: resourceKind === 'worksheet' ? 'WorksheetEditor' : 'GraphEditor',
+    title: resourceRef,
+    metadata: { role: 'editor', resourceRef, resourceKind },
+    active,
+    location: { type: 'grid' },
+  };
+}
+
+function group(activePanelInstanceId = 'panel-a'): WorkbenchGroupInfo {
+  return {
+    groupId: 'group-a',
+    panelInstanceIds: mocks.panels.map((panel) => panel.panelInstanceId),
+    activePanelInstanceId,
+    active: true,
+    location: { type: 'grid' },
+  };
+}
+
+describe('editor tab Dockview synchronization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getFocusedGroupId.mockReturnValue('group-a');
-    mocks.getActiveGroupId.mockReturnValue('group-a');
-    mocks.listGroups.mockReturnValue([{
-      groupId: 'group-a',
-      activePanelInstanceId: 'panel-a',
-      panelInstanceIds: ['panel-a'],
-      active: true,
-    }]);
-    mocks.findPanelsByResource.mockReturnValue([]);
+    mocks.panels = [editorPanel('panel-a', 'events/A', true)];
+    mocks.groups = [group()];
   });
 
-  it('does not reactivate the already active Dockview group', () => {
+  it('does not write to Dockview while passively focusing its already active group', () => {
     expect(focusEditorGroupSync('group-a')).toBe(false);
     expect(mocks.activate).not.toHaveBeenCalled();
   });
 
-  it('synchronizes a Dockview activation without writing activation back to Dockview', async () => {
-    mocks.findPanelsByResource.mockReturnValue([{
-      panelInstanceId: 'panel-a',
-      groupId: 'group-a',
-      active: false,
-      tab: { resourceRef: 'events/A', kind: 'event' },
-    }]);
-
+  it('synchronizes a Dockview activation with passive detail context only', async () => {
     await synchronizeActiveEditorTab('group-a', {
       id: 'events/A', type: 'event', component: 'GraphEditor',
     });
 
     expect(mocks.activate).not.toHaveBeenCalled();
+    expect(mocks.setDetailContext).toHaveBeenCalledWith({
+      kind: 'event',
+      path: 'events/A',
+    });
   });
 
-  it('lets only the latest rapid tab switch activate a panel', async () => {
-    mocks.findPanelsByResource.mockImplementation((resourceId: string) => [{
-      panelInstanceId: resourceId === 'events/A' ? 'panel-a' : 'panel-b',
-      groupId: 'group-a',
-      active: false,
-      tab: { resourceRef: resourceId, kind: 'event' },
-    }]);
+  it('lets only the latest rapid application switch activate a canonical editor panel', async () => {
+    mocks.panels = [
+      editorPanel('panel-a', 'events/A'),
+      editorPanel('panel-b', 'events/B'),
+    ];
+    mocks.groups = [group('panel-a')];
 
-    const { switchEditorTab } = await import('./switchEditorTab');
     const first = switchEditorTab('group-a', {
       id: 'events/A', type: 'event', component: 'GraphEditor',
     });
@@ -88,5 +119,28 @@ describe('focusEditorGroupSync Dockview activation', () => {
 
     expect(mocks.activate).toHaveBeenCalledTimes(1);
     expect(mocks.activate).toHaveBeenCalledWith('panel-b');
+    expect(mocks.setDetailContext).toHaveBeenLastCalledWith({
+      kind: 'event',
+      path: 'events/B',
+    });
+  });
+
+  it('hydrates a restored worksheet with passive context and no Dockview write-back', async () => {
+    mocks.panels = [editorPanel(
+      'worksheet-panel',
+      'worksheets/Summary.yssbi-worksheet',
+      true,
+      'worksheet',
+    )];
+    mocks.groups = [group('worksheet-panel')];
+
+    await expect(activateCurrentEditorTab('group-a')).resolves.toBe(true);
+
+    expect(mocks.activate).not.toHaveBeenCalled();
+    expect(mocks.setDetailContext).toHaveBeenCalledWith({
+      kind: 'worksheet',
+      worksheetPath: 'worksheets/Summary.yssbi-worksheet',
+    });
+    expect(mocks.clearFocusedSession).toHaveBeenCalledWith('group-a');
   });
 });

@@ -18,6 +18,7 @@ const loggerMocks = vi.hoisted(() => ({
 }));
 
 const loadGraphProjection = vi.hoisted(() => vi.fn<() => Promise<boolean>>());
+const removeProjectScopedWorkbenchPanels = vi.hoisted(() => vi.fn(async () => undefined));
 
 vi.mock('@/utils/appLogger', () => ({
   logger: {
@@ -40,11 +41,11 @@ function installProjectIOPort(): void {
     hydrateFunctionSignatures: () => undefined,
     resetFunctionSignatures: () => undefined,
     resetHistory: () => undefined,
-    cancelPublication: () => undefined,
     validatePublicationStart: () => undefined,
     startPublication: () => undefined,
     acceptProjectActivation: () => true,
     reconcileOpenTabs: () => undefined,
+    removeProjectScopedWorkbenchPanels,
     resetGraphProjection: () => undefined,
     beginGraphLoad: () => 1,
     loadGraphProjection,
@@ -74,6 +75,29 @@ describe('projectIOStore error references', () => {
   afterEach(() => {
     resetProjectIOApplicationPort();
     clearProjectLifecycle();
+  });
+
+  it('does not clean project panels during initial null-to-project hydration', async () => {
+    useProjectIOStore.setState({ projectInstanceId: null });
+    vi.mocked(ProjectService.getProjectIndex).mockResolvedValue({
+      projectInstanceId,
+      publicationRevision: 0,
+      history: { canUndo: false, canRedo: false },
+      projectName: 'Initial project',
+      graphs: [],
+      variables: [],
+      worksheets: [],
+      databases: [],
+      exportTime: '',
+    });
+
+    await expect(useProjectIOStore.getState().loadProject()).resolves.not.toBeNull();
+
+    expect(removeProjectScopedWorkbenchPanels).not.toHaveBeenCalled();
+    expect(useProjectIOStore.getState()).toMatchObject({
+      projectInstanceId,
+      status: LoadStatus.Ready,
+    });
   });
 
   it('maps project parser prose to an explicit contract code', async () => {

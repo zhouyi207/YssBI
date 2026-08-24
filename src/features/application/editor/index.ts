@@ -33,15 +33,12 @@ export {
   shouldSkipEditorGroupShellActivation,
 } from './editorGroupInteraction';
 export {
-  switchTab,
   closeTab,
   closeEditorGroup,
   splitEditorGroup,
-  splitEditorGroupFromPointer,
   closeOtherTabs,
   closeAllTabsInGroup,
   closeSavedTabsInGroup,
-  pinTab,
 } from './tabCommands';
 export { resolveTabDisplayName } from './resolveTabDisplayName';
 export { reconcileOpenLayoutTabsWithResources } from './reconcileOpenLayoutTabs';
@@ -56,9 +53,10 @@ export { useCanvasDrop } from './useCanvasDrop';
 export type { VariableDropMenu } from './canvasDrop';
 export { useCanvasOverlayHandlers } from './useCanvasOverlayHandlers';
 export {
-  focusCanvasSelection,
-  focusDetails,
-  focusResultSidebar,
+  revealDetails,
+  revealInspect,
+  setDetailContext,
+  setInspectionContext,
 } from './rightSidebarActions';
 export { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 export {

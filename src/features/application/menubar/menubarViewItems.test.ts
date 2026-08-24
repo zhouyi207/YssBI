@@ -1,56 +1,66 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildViewMenuItems } from './menubarViewItems';
+import {
+  buildViewMenuItems,
+  type MenubarViewMenuActions,
+  type MenubarViewState,
+} from './menubarViewItems';
 
 const t = ((key: string) => key) as never;
 
-describe('buildViewMenuItems', () => {
-  it('maps secondary side bar toggle to detail visibility action', () => {
-    const toggleDetail = vi.fn();
-    const items = buildViewMenuItems(
-      t,
-      {
-        isSidebarVisible: true,
-        isDetailVisible: false,
-        isLogPanelVisible: true,
-        zenMode: false,
-      },
-      {
-        toggleSidebar: vi.fn(),
-        toggleDetail,
-        toggleLogPanel: vi.fn(),
-        toggleZenMode: vi.fn(),
-        resetLayout: vi.fn(),
-      },
-    );
+function actions(): MenubarViewMenuActions {
+  return {
+    toggleResources: vi.fn(),
+    toggleDetails: vi.fn(),
+    toggleInspect: vi.fn(),
+    toggleLogs: vi.fn(),
+    toggleOutput: vi.fn(),
+    resetLayout: vi.fn(),
+  };
+}
 
-    const detailItem = items.find((item) => item.label === 'menubar.showSecondarySideBar');
-    expect(detailItem?.shortcut).toBe('Ctrl+I');
-    detailItem?.onClick?.();
-    expect(toggleDetail).toHaveBeenCalledOnce();
+function state(overrides: Partial<MenubarViewState> = {}): MenubarViewState {
+  return {
+    resourcesOpen: true,
+    detailsOpen: false,
+    detailsContextValid: false,
+    inspectOpen: false,
+    inspectContextValid: false,
+    logsOpen: true,
+    outputOpen: true,
+    bottomCollapsed: false,
+    ...overrides,
+  };
+}
+
+describe('buildViewMenuItems', () => {
+  it('emits only the five root views and Reset Layout with live checked state', () => {
+    const items = buildViewMenuItems(t, state({ bottomCollapsed: true }), actions());
+
+    expect(items.map((item) => item.label)).toEqual([
+      'panel.resources',
+      'panel.details',
+      'panel.inspect',
+      'panel.logs',
+      'panel.output',
+      '-',
+      'menubar.resetLayout',
+    ]);
+    expect(items[0]).toMatchObject({ type: 'checkbox', checked: true });
+    expect(items[3]).toMatchObject({ type: 'checkbox', checked: true });
+    expect(items[4]).toMatchObject({ type: 'checkbox', checked: true });
   });
 
-  it('includes reset layout at the end of the View menu', () => {
-    const resetLayout = vi.fn();
-    const items = buildViewMenuItems(
-      t,
-      {
-        isSidebarVisible: true,
-        isDetailVisible: true,
-        isLogPanelVisible: true,
-        zenMode: false,
-      },
-      {
-        toggleSidebar: vi.fn(),
-        toggleDetail: vi.fn(),
-        toggleLogPanel: vi.fn(),
-        toggleZenMode: vi.fn(),
-        resetLayout,
-      },
-    );
+  it('disables Details and Inspect only when both panel and context are absent', () => {
+    const callbacks = actions();
+    const unavailable = buildViewMenuItems(t, state(), callbacks);
+    expect(unavailable[1]?.onClick).toBeUndefined();
+    expect(unavailable[2]?.onClick).toBeUndefined();
 
-    const resetItem = items[items.length - 1];
-    expect(resetItem?.label).toBe('menubar.resetLayout');
-    resetItem?.onClick?.();
-    expect(resetLayout).toHaveBeenCalledOnce();
+    const available = buildViewMenuItems(t, state({
+      detailsOpen: true,
+      inspectContextValid: true,
+    }), callbacks);
+    expect(available[1]?.onClick).toBe(callbacks.toggleDetails);
+    expect(available[2]?.onClick).toBe(callbacks.toggleInspect);
   });
 });

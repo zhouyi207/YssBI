@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { VscDatabase, VscLibrary, VscProject, VscSettingsGear, VscTerminal } from "react-icons/vsc";
+import { activateSidebarTab } from '@/features/application/editor/useSidebarTab';
 import { useWorkbenchStore, type SidebarTabId } from '@/features/core/workbench';
-import { toggleSidebarTab as persistToggleSidebarTab } from "@/features/core/layout/workbenchLayoutService";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -30,15 +30,24 @@ const ActivityIcon = ({ active, onClick, children, title, id, side, hasPopup }: 
         aria-label={title}
         aria-pressed={active}
         aria-haspopup={hasPopup}
-        className="size-10 bg-transparent p-0 hover:bg-transparent dark:hover:bg-transparent"
+        className="relative size-10 bg-transparent p-0 hover:bg-transparent dark:hover:bg-transparent"
       >
+        {active ? (
+          <span
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute inset-y-1.5 w-0.5 rounded-full bg-(--accent-color)",
+              side === 'left' ? '-left-0.5' : '-right-0.5',
+            )}
+          />
+        ) : null}
         <span
           data-slot="activity-icon-surface"
           aria-hidden="true"
           className={cn(
-            "flex size-9 items-center justify-center rounded-md border border-transparent transition-[color,background-color,border-color]",
+            "flex size-9 items-center justify-center rounded-md transition-[color,background-color]",
             active
-              ? "border-(--accent-color)/15 bg-(--accent-color)/12 text-(--accent-color)"
+              ? "bg-(--accent-color)/12 text-(--accent-color)"
               : "text-muted-foreground group-hover/button:bg-(--interactive-hover) group-hover/button:text-foreground",
           )}
         >
@@ -53,24 +62,24 @@ const ActivityIcon = ({ active, onClick, children, title, id, side, hasPopup }: 
 export function ActivityBar({ side = 'left' }: { side?: 'left' | 'right' }) {
   const { t } = useTranslation();
   const sidebarCurrentTab = useWorkbenchStore((state) => state.sidebarCurrentTab);
-  const sidebarHidden = useWorkbenchStore((state) => state.sidebarUserHidden);
   const openSettings = useWorkbenchStore((state) => state.openSettings);
-  const activeTab = sidebarHidden ? null : sidebarCurrentTab;
-  const toggleTab = (tab: SidebarTabId) => persistToggleSidebarTab(tab);
+  const activateTab = (tab: SidebarTabId) => {
+    void activateSidebarTab(tab);
+  };
   const iconProps = (id: SidebarTabId, title: string) => ({
     id,
     title,
     side,
-    active: activeTab === id,
-    onClick: () => toggleTab(id),
+    active: sidebarCurrentTab === id,
+    onClick: () => activateTab(id),
   });
 
   return (
     <nav
       aria-label={t("activityBar.ariaLabel", { defaultValue: "Workbench" })}
       className={cn(
-        "relative flex h-full w-11 shrink-0 flex-col items-center gap-0.5 bg-[var(--sidebar-bg)] py-2",
-        side === 'right' ? 'border-l border-[var(--strong-border)]' : 'border-r border-[var(--strong-border)]',
+        "relative flex h-full w-11 shrink-0 flex-col items-center gap-0.5 bg-(--sidebar-bg) py-2",
+        side === 'right' ? 'border-l border-(--strong-border)' : 'border-r border-(--strong-border)',
       )}
     >
       <ActivityIcon {...iconProps("project", t("activityBar.project"))}>
@@ -82,7 +91,7 @@ export function ActivityBar({ side = 'left' }: { side?: 'left' | 'right' }) {
       <ActivityIcon {...iconProps("data", t("activityBar.data"))}>
         <VscDatabase size={20} />
       </ActivityIcon>
-      <div className="my-1 h-px w-6 bg-[var(--strong-border)]" />
+      <div className="my-1 h-px w-6 bg-(--strong-border)" />
       <ActivityIcon {...iconProps("commands", t("activityBar.commands"))}>
         <VscTerminal size={20} />
       </ActivityIcon>

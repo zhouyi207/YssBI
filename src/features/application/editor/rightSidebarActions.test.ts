@@ -1,58 +1,168 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useEditorStore } from '@/features/core/editor';
-import {
-  focusCanvasSelection,
-  focusDetails,
-  focusResultSidebar,
-} from './rightSidebarActions';
 
-const setVariablesGraphScopeFromResource = vi.hoisted(() => vi.fn());
-vi.mock('@/features/core/editor/detail/variablesGraphScope', () => ({
-  setVariablesGraphScopeFromResource,
+import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchDockviewPort';
+import { useEditorStore } from '@/features/core/editor';
+
+const mocks = vi.hoisted(() => ({
+  panels: [] as WorkbenchPanelInfo[],
+  ensureView: vi.fn(),
+  reveal: vi.fn(),
+  setVariablesGraphScopeFromResource: vi.fn(),
 }));
 
-describe('rightSidebarActions', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useEditorStore.setState({ detailFocus: null, rightSidebarTab: 'details' });
-  });
+vi.mock('i18next', () => ({
+  default: { t: (key: string) => key },
+}));
 
-  it('routes one exact Canvas node to Inspect', () => {
-    focusCanvasSelection('events/Main.yssbi-event', ['node-1']);
-    expect(useEditorStore.getState()).toMatchObject({
-      rightSidebarTab: 'inspect',
-      detailFocus: { kind: 'node', id: 'node-1', graphPath: 'events/Main.yssbi-event' },
-    });
-  });
+vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
+  workbenchDockviewPort: {
+    listPanels: () => mocks.panels,
+    ensureView: mocks.ensureView,
+    reveal: mocks.reveal,
+  },
+}));
 
-  it('does not choose one node for multi-selection and clears stale node focus', () => {
-    focusCanvasSelection('events/Main.yssbi-event', ['node-1']);
-    focusCanvasSelection('events/Main.yssbi-event', ['node-1', 'node-2']);
-    expect(useEditorStore.getState()).toMatchObject({
-      rightSidebarTab: 'inspect',
-      detailFocus: null,
-    });
-  });
+vi.mock('@/features/core/dockview/workbenchDockviewInternal', () => ({
+  workbenchDockviewInternal: { runLayoutTransaction: vi.fn() },
+}));
 
-  it('keeps non-node detail focus while an empty Canvas selection shows Inspect', () => {
-    useEditorStore.setState({ detailFocus: { kind: 'variable', id: 'variable-1' } });
-    focusCanvasSelection('events/Main.yssbi-event', []);
-    expect(useEditorStore.getState()).toMatchObject({
-      rightSidebarTab: 'inspect',
-      detailFocus: { kind: 'variable', id: 'variable-1' },
-    });
-  });
+vi.mock('@/features/core/dockview/logsDockviewLayoutController', () => ({
+  logsDockviewLayoutController: { resetToDefault: vi.fn() },
+}));
 
-  it('routes resources to Details and explicit results to Result', () => {
-    focusDetails({ kind: 'function', path: 'functions/F.yssbi-function' });
+vi.mock('@/features/application/layout/workbenchLayoutController', () => ({
+  workbenchLayoutController: {
+    beginLayoutReset: vi.fn(),
+    completeLayoutReset: vi.fn(),
+  },
+}));
+
+vi.mock('@/features/application/editor/workbenchPanelClose', () => ({
+  requestCloseWorkbenchPanel: vi.fn(),
+}));
+
+vi.mock('@/features/application/layout/workbenchLayoutErrorFeedback', () => ({
+  showWorkbenchLayoutError: vi.fn(),
+}));
+
+vi.mock('@/features/core/editor/detail/variablesGraphScope', () => ({
+  setVariablesGraphScopeFromResource: mocks.setVariablesGraphScopeFromResource,
+}));
+
+import {
+  revealDetails,
+  revealInspect,
+  setDetailContext,
+  setInspectionContext,
+} from './rightSidebarActions';
+
+function viewPanel(viewId: 'details' | 'inspect'): WorkbenchPanelInfo {
+  return {
+    panelInstanceId: `view:${viewId}`,
+    groupId: 'edge-right',
+    component: viewId === 'details' ? 'Details' : 'Inspect',
+    title: viewId,
+    metadata: { role: 'view', viewId },
+    active: true,
+    location: { type: 'edge', position: 'right' },
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => { resolve = next; });
+  return { promise, resolve };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.panels.splice(0);
+  mocks.reveal.mockResolvedValue(true);
+  mocks.ensureView.mockResolvedValue(viewPanel('details'));
+  useEditorStore.setState({
+    detailFocus: null,
+    variablesGraphScopePath: null,
+  });
+});
+
+describe('right sidebar context actions', () => {
+  it('updates passive Details and Inspect context without ensuring or activating a view', () => {
+    setDetailContext({ kind: 'function', path: 'functions/F.yssbi-function' });
     expect(useEditorStore.getState().detailFocus).toEqual({
       kind: 'function',
       path: 'functions/F.yssbi-function',
     });
-    expect(useEditorStore.getState().rightSidebarTab).toBe('details');
-    expect(setVariablesGraphScopeFromResource).toHaveBeenCalledWith('functions/F.yssbi-function');
+    expect(mocks.setVariablesGraphScopeFromResource)
+      .toHaveBeenCalledWith('functions/F.yssbi-function');
 
-    focusResultSidebar();
-    expect(useEditorStore.getState().rightSidebarTab).toBe('result');
+    setInspectionContext('events/Main.yssbi-event', ['node-1']);
+    expect(useEditorStore.getState().detailFocus).toEqual({
+      kind: 'node',
+      id: 'node-1',
+      graphPath: 'events/Main.yssbi-event',
+    });
+
+    setInspectionContext('events/Main.yssbi-event', ['node-1', 'node-2']);
+    expect(useEditorStore.getState().detailFocus).toBeNull();
+    setDetailContext(null);
+
+    expect(mocks.ensureView).not.toHaveBeenCalled();
+    expect(mocks.reveal).not.toHaveBeenCalled();
+  });
+
+  it('awaits explicit Details and Inspect singleton creation after publishing context', async () => {
+    const details = deferred<WorkbenchPanelInfo>();
+    mocks.ensureView.mockImplementationOnce(() => details.promise);
+    let detailsSettled = false;
+    const detailsReveal = revealDetails({ kind: 'variable', id: 'variable-1' })
+      .then(() => { detailsSettled = true; });
+
+    expect(useEditorStore.getState().detailFocus).toEqual({
+      kind: 'variable',
+      id: 'variable-1',
+    });
+    expect(mocks.ensureView).toHaveBeenCalledWith({
+      viewId: 'details',
+      title: 'panel.details',
+    });
+    await Promise.resolve();
+    expect(detailsSettled).toBe(false);
+    details.resolve(viewPanel('details'));
+    await detailsReveal;
+
+    const inspect = deferred<WorkbenchPanelInfo>();
+    mocks.ensureView.mockImplementationOnce(() => inspect.promise);
+    let inspectSettled = false;
+    const inspectReveal = revealInspect('events/Main.yssbi-event', ['node-2'])
+      .then(() => { inspectSettled = true; });
+
+    expect(useEditorStore.getState().detailFocus).toEqual({
+      kind: 'node',
+      id: 'node-2',
+      graphPath: 'events/Main.yssbi-event',
+    });
+    expect(mocks.ensureView).toHaveBeenLastCalledWith({
+      viewId: 'inspect',
+      title: 'panel.inspect',
+    });
+    await Promise.resolve();
+    expect(inspectSettled).toBe(false);
+    inspect.resolve(viewPanel('inspect'));
+    await inspectReveal;
+
+    expect(mocks.ensureView).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not create Inspect for an invalid selection or erase non-node Details context', async () => {
+    setDetailContext({ kind: 'data', id: 'database-1' });
+
+    await revealInspect('events/Main.yssbi-event', []);
+
+    expect(useEditorStore.getState().detailFocus).toEqual({
+      kind: 'data',
+      id: 'database-1',
+    });
+    expect(mocks.ensureView).not.toHaveBeenCalled();
+    expect(mocks.reveal).not.toHaveBeenCalled();
   });
 });

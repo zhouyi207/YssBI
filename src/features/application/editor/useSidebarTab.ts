@@ -1,11 +1,15 @@
 import { useCallback } from 'react';
-import { showSidebarTab as persistShowSidebarTab } from '@/features/core/layout/workbenchLayoutService';
-import type { SidebarTabId } from '@/features/core/workbench';
+import { revealWorkbenchView } from '@/features/application/layout/workbenchLayoutActions';
+import { useWorkbenchStore } from '@/features/core/workbench/workbenchStore';
+import type { SidebarTabId } from '@/features/core/workbench/workbenchTypes';
 
 export type { SidebarTabId };
 
+export async function activateSidebarTab(tab: SidebarTabId): Promise<void> {
+  useWorkbenchStore.getState().setSidebarCurrentTab(tab);
+  await revealWorkbenchView('resources');
+}
+
 export function useSidebarTab() {
-  return useCallback((tab: SidebarTabId) => {
-    persistShowSidebarTab(tab);
-  }, []);
+  return useCallback((tab: SidebarTabId) => activateSidebarTab(tab), []);
 }

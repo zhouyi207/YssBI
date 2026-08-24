@@ -4,7 +4,7 @@ import { VscSymbolEvent, VscSymbolMethod } from 'react-icons/vsc';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { openGraphInEditor } from '@/features/application/editor/openGraphInEditor';
 import { buildSidebarDragData } from '@/features/application/sidebar';
-import { focusDetails } from '@/features/application/editor';
+import { revealDetails } from '@/features/application/editor/rightSidebarActions';
 import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
 import { SidebarListItem, SidebarRowActionButton, SIDEBAR_ROW_ICON_SIZE } from '../../sidebarUi';
 import type { GraphResourceType } from '../../sidebarContextMenu';
@@ -41,10 +41,11 @@ export const SidebarGraphRow = memo(function SidebarGraphRow({
       indentDepth={indentDepth}
       icon={icon}
       label={name}
-      onClick={(e) => {
+      onClick={async (e) => {
         e.stopPropagation();
-        focusDetails({ kind: graphType, path: id });
+        const revealing = revealDetails({ kind: graphType, path: id });
         void openGraphInEditor(id, name, graphType, undefined, { pinned: false });
+        await revealing;
       }}
       onDoubleClick={(e) => {
         e.stopPropagation();

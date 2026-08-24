@@ -4,21 +4,11 @@ import { logger } from '@/utils/appLogger';
 import { normalizeIpcError } from '@/services/ipc';
 import { i18n } from '@/app/i18n';
 
-export type OpenLogsWindowOptions = {
-  fallbackX?: number;
-  fallbackY?: number;
-};
-
-export async function openLogsWindow(options?: OpenLogsWindowOptions): Promise<void> {
+export async function openLogsWindow(): Promise<void> {
   try {
     const label = createEphemeralWindowLabel('logs');
     await createPersistedWindow({
-      geometry: {
-        source: 'backend',
-        kind: 'logs',
-        fallbackX: typeof options?.fallbackX === 'number' ? options.fallbackX : undefined,
-        fallbackY: typeof options?.fallbackY === 'number' ? options.fallbackY : undefined,
-      },
+      geometry: { source: 'backend', kind: 'logs' },
       label,
       url: 'index.html#/logs',
       title: i18n.t('log.title'),

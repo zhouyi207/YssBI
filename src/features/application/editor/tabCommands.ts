@@ -1,88 +1,83 @@
-import { editorDockviewPort } from '@/features/core/dockview';
-import { locateLayoutTab } from '@/features/core/layout/layoutTabQueries';
-import { isGraphResourceDirty } from '@/features/core/resource';
-import type { LayoutTab } from '@/shared/types/ui';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
+import { isResourceDocumentDirty } from '@/features/core/resource';
+
 import { splitEditorAtEdge } from './editorGroupCommands';
-import { closeEditorTab } from './closeEditorTab';
-import { activateEditorGroup, switchEditorTab } from './switchEditorTab';
-import { layoutTabFromDockviewPanel, listDockviewGroupPanels } from './dockviewTabProjection';
+import { requestCloseWorkbenchPanels } from './workbenchPanelClose';
+import { setDetailContext } from './rightSidebarActions';
 
-async function activateDockviewGroup(groupId: string): Promise<void> {
-  if (editorDockviewPort.getActiveGroupId() === groupId) return;
-  await activateEditorGroup(groupId);
+function editorPanelsInGroup(groupId: string) {
+  return workbenchDockviewPort
+    .listGroupPanels(groupId)
+    .filter((panel) => panel.metadata.role === 'editor');
 }
 
-export async function switchTab(
+function applyPassiveCloseFallback(): void {
+  if (useEditorStore.getState().detailFocus) return;
+  const active = workbenchDockviewPort.getActiveEditorPanel();
+  if (active?.metadata.role !== 'editor') return;
+
+  const { resourceKind, resourceRef } = active.metadata;
+  if (resourceKind === 'event' || resourceKind === 'function') {
+    setDetailContext({ kind: resourceKind, path: resourceRef });
+  } else {
+    setDetailContext({ kind: 'worksheet', worksheetPath: resourceRef });
+  }
+}
+
+async function closePanelIds(panelInstanceIds: readonly string[]): Promise<boolean> {
+  if (panelInstanceIds.length === 0) return true;
+  const closed = await requestCloseWorkbenchPanels(panelInstanceIds);
+  if (closed) applyPassiveCloseFallback();
+  return closed;
+}
+
+
+export function closeTab(panelInstanceId: string): Promise<boolean> {
+  return closePanelIds([panelInstanceId]);
+}
+
+export function closeOtherTabs(
   groupId: string,
-  tabId: string,
-  tab?: LayoutTab | null,
+  keepPanelInstanceId: string,
 ): Promise<boolean> {
-  const resolved = tab?.id === tabId ? tab : locateLayoutTab(tabId, groupId)?.tab;
-  if (!resolved) return false;
-  return switchEditorTab(groupId, resolved);
+  return closePanelIds(
+    editorPanelsInGroup(groupId)
+      .filter((panel) => panel.panelInstanceId !== keepPanelInstanceId)
+      .map((panel) => panel.panelInstanceId),
+  );
 }
 
-export async function closeTab(
+export function closeAllTabsInGroup(groupId: string): Promise<boolean> {
+  return closePanelIds(
+    editorPanelsInGroup(groupId).map((panel) => panel.panelInstanceId),
+  );
+}
+
+export function closeSavedTabsInGroup(groupId: string): Promise<boolean> {
+  return closePanelIds(
+    editorPanelsInGroup(groupId)
+      .filter((panel) => panel.metadata.role === 'editor'
+        && !isResourceDocumentDirty({
+          id: panel.metadata.resourceRef,
+          kind: panel.metadata.resourceKind,
+        }))
+      .map((panel) => panel.panelInstanceId),
+  );
+}
+
+/** Physical Close Group owns every canonical panel currently in that Dockview group. */
+export function closeEditorGroup(groupId: string): Promise<boolean> {
+  return closePanelIds(
+    workbenchDockviewPort
+      .listGroupPanels(groupId)
+      .map((panel) => panel.panelInstanceId),
+  );
+}
+
+export async function splitEditorGroup(
   groupId: string,
-  tabId: string,
-  skipDirtyPrompt = false,
-): Promise<boolean> {
-  await activateDockviewGroup(groupId);
-  return closeEditorTab(tabId, groupId, skipDirtyPrompt);
-}
-
-export async function closeOtherTabs(groupId: string, keepTabId: string): Promise<boolean> {
-  await activateDockviewGroup(groupId);
-  for (const panel of listDockviewGroupPanels(groupId)) {
-    const tab = layoutTabFromDockviewPanel(panel);
-    if (!tab || tab.id === keepTabId) continue;
-    if (!await closeEditorTab(tab.id, groupId)) return false;
-  }
-  return true;
-}
-
-export async function closeAllTabsInGroup(groupId: string): Promise<boolean> {
-  await activateDockviewGroup(groupId);
-  for (const panel of listDockviewGroupPanels(groupId)) {
-    const tab = layoutTabFromDockviewPanel(panel);
-    if (tab && !await closeEditorTab(tab.id, groupId)) return false;
-  }
-  return true;
-}
-
-export async function closeSavedTabsInGroup(groupId: string): Promise<boolean> {
-  await activateDockviewGroup(groupId);
-  for (const panel of listDockviewGroupPanels(groupId)) {
-    const tab = layoutTabFromDockviewPanel(panel);
-    if (!tab || (tab.type !== 'event' && tab.type !== 'function' && tab.type !== 'worksheet')) continue;
-    if (isGraphResourceDirty(tab.id, tab.type)) continue;
-    if (!await closeEditorTab(tab.id, groupId, true)) return false;
-  }
-  return true;
-}
-
-export async function closeEditorGroup(groupId: string): Promise<boolean> {
-  return closeAllTabsInGroup(groupId);
-}
-
-export async function splitEditorGroup(groupId: string, direction: 'row' | 'col' = 'row'): Promise<void> {
-  await activateDockviewGroup(groupId);
+  direction: 'row' | 'col' = 'row',
+): Promise<void> {
   await splitEditorAtEdge(groupId, direction === 'row' ? 'right' : 'bottom');
-}
-
-export async function splitEditorGroupFromPointer(groupId: string, altPressed: boolean): Promise<void> {
-  await splitEditorAtEdge(groupId, altPressed ? 'bottom' : 'right');
-}
-
-/** Dockview tabs are persistent panels; preview pinning is no longer application-owned. */
-export async function pinTab(groupId: string, tabId: string): Promise<void> {
-  await activateDockviewGroup(groupId);
-  const panel = editorDockviewPort
-    .findPanelsByResource(tabId)
-    .find((candidate) => candidate.groupId === groupId);
-  if (panel) await editorDockviewPort.activate(panel.panelInstanceId);
-}
-
-export function locateTab(tabId: string, groupId?: string) {
-  return locateLayoutTab(tabId, groupId);
 }

@@ -1,0 +1,96 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { WorkbenchPanelInfo } from '@/features/core/dockview/workbenchDockviewPort';
+
+const mocks = vi.hoisted(() => ({
+  panels: [] as WorkbenchPanelInfo[],
+  requestCloseWorkbenchPanels: vi.fn(async () => true),
+}));
+
+vi.mock('@/features/core/dockview/workbenchDockviewPort', () => ({
+  workbenchDockviewPort: {
+    listGroupPanels: (groupId: string) =>
+      mocks.panels.filter((panel) => panel.groupId === groupId),
+    getActiveEditorPanel: () => undefined,
+  },
+}));
+
+vi.mock('@/features/core/editor/stores/useEditorStore', () => ({
+  useEditorStore: {
+    getState: () => ({ detailFocus: { kind: 'event', path: 'events/Main.yssbi-event' } }),
+  },
+}));
+
+
+vi.mock('@/features/core/resource', () => ({
+  isResourceDocumentDirty: vi.fn(() => false),
+}));
+
+
+vi.mock('./editorGroupCommands', () => ({
+  splitEditorAtEdge: vi.fn(async () => undefined),
+}));
+
+vi.mock('./rightSidebarActions', () => ({
+  setDetailContext: vi.fn(),
+}));
+
+
+vi.mock('./workbenchPanelClose', () => ({
+  requestCloseWorkbenchPanels: mocks.requestCloseWorkbenchPanels,
+}));
+
+import { closeOtherTabs, closeTab } from './tabCommands';
+
+function editorPanel(
+  panelInstanceId: string,
+  resourceRef: string,
+): WorkbenchPanelInfo {
+  return {
+    panelInstanceId,
+    groupId: 'group-a',
+    component: 'GraphEditor',
+    title: resourceRef,
+    metadata: {
+      role: 'editor',
+      resourceRef,
+      resourceKind: 'event',
+    },
+    active: panelInstanceId === 'panel-a',
+    location: { type: 'grid' },
+  };
+}
+
+describe('tabCommands physical tab targeting', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.panels = [];
+    mocks.requestCloseWorkbenchPanels.mockResolvedValue(true);
+  });
+
+  it('closes duplicate same-resource instances other than the exact kept panel', async () => {
+    mocks.panels = [
+      editorPanel('panel-a', 'events/Main.yssbi-event'),
+      editorPanel('panel-b', 'events/Main.yssbi-event'),
+      editorPanel('panel-c', 'events/Other.yssbi-event'),
+    ];
+
+    await expect(closeOtherTabs('group-a', 'panel-a')).resolves.toBe(true);
+
+    expect(mocks.requestCloseWorkbenchPanels).toHaveBeenCalledWith([
+      'panel-b',
+      'panel-c',
+    ]);
+  });
+
+  it('closes the exact physical tab when same-resource instances share a group', async () => {
+    mocks.panels = [
+      editorPanel('panel-a', 'events/Main.yssbi-event'),
+      editorPanel('panel-b', 'events/Main.yssbi-event'),
+    ];
+
+    await expect(closeTab('panel-b')).resolves.toBe(true);
+
+    expect(mocks.requestCloseWorkbenchPanels).toHaveBeenCalledWith(['panel-b']);
+  });
+});

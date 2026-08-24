@@ -34,8 +34,26 @@ function clientSettingsFingerprint(s: AppSettings): string {
 function mergeSettings(settings: Partial<AppSettings>): AppSettings {
     return {
         theme: { ...DEFAULT_THEME, ...settings.theme },
-        editor: { ...DEFAULT_EDITOR, ...settings.editor },
-        appearance: { ...DEFAULT_APPEARANCE, ...settings.appearance },
+        editor: {
+            showGrid: settings.editor?.showGrid ?? DEFAULT_EDITOR.showGrid,
+            autoSave: settings.editor?.autoSave ?? DEFAULT_EDITOR.autoSave,
+            snapToGrid: settings.editor?.snapToGrid ?? DEFAULT_EDITOR.snapToGrid,
+            fontSize: settings.editor?.fontSize ?? DEFAULT_EDITOR.fontSize,
+            openSideBySideDirection: settings.editor?.openSideBySideDirection ?? DEFAULT_EDITOR.openSideBySideDirection,
+            splitOnDragAndDrop: settings.editor?.splitOnDragAndDrop ?? DEFAULT_EDITOR.splitOnDragAndDrop,
+            alwaysShowEditorActions: settings.editor?.alwaysShowEditorActions ?? DEFAULT_EDITOR.alwaysShowEditorActions,
+            closeEmptyGroups: settings.editor?.closeEmptyGroups ?? DEFAULT_EDITOR.closeEmptyGroups,
+            splitSizing: settings.editor?.splitSizing ?? DEFAULT_EDITOR.splitSizing,
+        },
+        appearance: {
+            colorTheme: settings.appearance?.colorTheme ?? DEFAULT_APPEARANCE.colorTheme,
+            lastLightColorTheme: settings.appearance?.lastLightColorTheme ?? DEFAULT_APPEARANCE.lastLightColorTheme,
+            lastDarkColorTheme: settings.appearance?.lastDarkColorTheme ?? DEFAULT_APPEARANCE.lastDarkColorTheme,
+            language: settings.appearance?.language ?? DEFAULT_APPEARANCE.language,
+            activityBarPosition: settings.appearance?.activityBarPosition ?? DEFAULT_APPEARANCE.activityBarPosition,
+            smoothScroll: settings.appearance?.smoothScroll ?? DEFAULT_APPEARANCE.smoothScroll,
+            titleBarStyle: settings.appearance?.titleBarStyle ?? DEFAULT_APPEARANCE.titleBarStyle,
+        },
         project: { ...DEFAULT_PROJECT, ...settings.project },
     };
 }

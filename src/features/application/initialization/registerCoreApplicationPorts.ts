@@ -7,7 +7,12 @@ import { resetFunctionSignatureCoordinator } from '@/features/application/editor
 import { resetHistoryCoordinator } from '@/features/application/editorMutation/historyCoordinator';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { getPendingMutation } from '@/features/application/editorMutation/pendingMutationRegistry';
+import { bootstrapEditorGraphSession } from '@/features/application/editor/bootstrapEditorGraphSession';
 import { reconcileOpenLayoutTabsWithResources } from '@/features/application/editor/reconcileOpenLayoutTabs';
+import { workbenchLayoutController } from '@/features/application/layout/workbenchLayoutController';
+import { removeProjectScopedWorkbenchPanels } from '@/features/application/project/projectWorkbenchLifecycle';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { captureProjectLifecycleState } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import {
   beginGraphLoadLifecycle,
   invalidateGraphProjection,
@@ -25,11 +30,21 @@ export function registerCoreApplicationPorts(): void {
     hydrateFunctionSignatures: hydrateFunctionSignaturesFromProjectIndex,
     resetFunctionSignatures: resetFunctionSignatureCoordinator,
     resetHistory: resetHistoryCoordinator,
-    cancelPublication: () => projectPublicationCoordinator.cancelProject(),
     validatePublicationStart: (id, revision) => projectPublicationCoordinator.validateProjectStart(id, revision),
     startPublication: (id, revision) => projectPublicationCoordinator.startProject(id, revision),
     acceptProjectActivation: (id, revision) => projectPublicationCoordinator.acceptProjectActivation(id, revision),
-    reconcileOpenTabs: reconcileOpenLayoutTabsWithResources,
+    reconcileOpenTabs: () => {
+      workbenchLayoutController.markProjectResourcesReady(async (context) => {
+        if (!context.isCurrent()) return;
+        await reconcileOpenLayoutTabsWithResources();
+        if (!context.isCurrent()) return;
+        const active = workbenchDockviewPort.getActiveEditorPanel();
+        if (active?.metadata.role === 'editor') {
+          await bootstrapEditorGraphSession(active.groupId);
+        }
+      });
+    },
+    removeProjectScopedWorkbenchPanels,
     resetGraphProjection: resetGraphProjectionCoordinator,
     beginGraphLoad: beginGraphLoadLifecycle,
     loadGraphProjection,
@@ -54,6 +69,10 @@ export function registerCoreApplicationPorts(): void {
           ?? createProjectLifecycleReceiptDependencies(),
       );
     },
-    clearProject: () => createProjectLifecycleReceiptDependencies().clearProject(),
+    clearProject: () => {
+      projectPublicationCoordinator.cancelProject();
+      const owner = captureProjectLifecycleState();
+      return createProjectLifecycleReceiptDependencies().clearProject(owner);
+    },
   });
 }

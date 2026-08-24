@@ -171,13 +171,13 @@ export function WorksheetDetailPanel({
         )}
       </DetailForm>
 
-      <Card className="rounded-lg bg-card/80 py-0 shadow-xs">
-        <CardHeader className="px-3 py-2">
+      <Card className="rounded-none border-0 bg-transparent py-0 shadow-none">
+        <CardHeader className="h-7 border-0 px-3 py-0">
           <DetailSectionHeader level="subsection">
             {t('chartsSidebar.columns')}
           </DetailSectionHeader>
         </CardHeader>
-        <CardContent className="px-3 pb-3 pt-0">
+        <CardContent className="px-3 pb-2 pt-1">
           <DetailColumnList columns={columns} emptyMessage={t('chartsSidebar.noColumns')} />
         </CardContent>
       </Card>

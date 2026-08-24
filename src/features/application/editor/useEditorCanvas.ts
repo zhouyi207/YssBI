@@ -40,18 +40,20 @@ export function useEditorCanvas({ mode }: UseEditorCanvasOptions): EditorCanvasS
     viewportRef: sessionCommands.viewportRef,
     setSelectedNodeIds: sessionCommands.setSelectedNodeIds,
     handlers: mutationHandlers,
-    enabled: interactive,
-    uiEnabled: interactive,
+    enabled: interactive && groupWorkspace.groupId !== null,
+    uiEnabled: interactive && groupWorkspace.groupId !== null,
   });
 
   const { groupId } = groupWorkspace;
   const prepareForInteraction = useCallback(() => {
+    if (!groupId) return false;
     prepareEditorGroupForInteraction(groupId);
+    return true;
   }, [groupId]);
 
   const onCanvasPointerDown = useCallback(
     (event: ReactPointerEvent) => {
-      prepareForInteraction();
+      if (!groupId || !prepareForInteraction()) return;
       canvasInteraction.onCanvasPointerDown(event, groupId);
     },
     [canvasInteraction.onCanvasPointerDown, groupId, prepareForInteraction],
@@ -59,7 +61,7 @@ export function useEditorCanvas({ mode }: UseEditorCanvasOptions): EditorCanvasS
 
   const onNodePointerDown = useCallback(
     (nodeId: string, event: ReactPointerEvent) => {
-      prepareForInteraction();
+      if (!groupId || !prepareForInteraction()) return;
       canvasInteraction.onNodePointerDown(nodeId, event, groupId);
     },
     [canvasInteraction.onNodePointerDown, groupId, prepareForInteraction],
@@ -67,7 +69,7 @@ export function useEditorCanvas({ mode }: UseEditorCanvasOptions): EditorCanvasS
 
   const onPinPointerDown = useCallback(
     (pin: Pin, event: ReactPointerEvent) => {
-      prepareForInteraction();
+      if (!groupId || !prepareForInteraction()) return;
       canvasInteraction.onPinPointerDown(pin, event, groupId);
     },
     [canvasInteraction.onPinPointerDown, groupId, prepareForInteraction],
@@ -119,7 +121,7 @@ export function useEditorCanvas({ mode }: UseEditorCanvasOptions): EditorCanvasS
       : null;
 
     return {
-      groupId,
+      groupId: groupId as string,
       activeGraph,
       selectedNodeIds: groupWorkspace.selectedNodeIds,
       selectedConnectionIds: groupWorkspace.selectedConnectionIds,

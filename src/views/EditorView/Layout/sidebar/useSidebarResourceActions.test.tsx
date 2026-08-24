@@ -26,9 +26,15 @@ vi.mock('@/features/core/editor', () => ({
   useFunctionCatalog: () => ({}),
 }));
 
-vi.mock('@/features/core/dockview', () => ({
-  editorDockviewPort: { getActiveGroupId: () => 'group-1' },
-  useDockviewPortSnapshot: () => ({ revision: 1, ready: true }),
+vi.mock('@/features/core/graphSession/graphSessionStore', () => ({
+  useGraphSessionStore: (selector: (state: {
+    focusedSession: { groupId: string; graphPath: string };
+  }) => unknown) => selector({
+    focusedSession: {
+      groupId: 'group-1',
+      graphPath: 'worksheets/Report.yssbi-worksheet',
+    },
+  }),
 }));
 
 vi.mock('@/features/core/layout', () => ({

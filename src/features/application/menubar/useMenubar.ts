@@ -1,51 +1,73 @@
-import { useCallback } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
+import { triggerImportData } from '@/features/application/dataManagement/useDatabaseManagement';
 import {
-  editorDockviewPort,
-  panelDockviewPort,
-  useDockviewPortSnapshot,
-} from '@/features/core/dockview';
-import { useWorkbenchStore } from '@/features/core/workbench';
+  captureActiveEditorCommandTarget,
+} from '@/features/application/editor/editorCommandFocus';
+import { splitEditorAtEdge } from '@/features/application/editor/editorGroupCommands';
 import {
   resetWorkbenchLayout,
-  toggleDetailVisibility,
-  togglePanelCollapsed,
-  toggleSidebarVisibility,
-} from "@/features/core/layout/workbenchLayoutService";
-import { normalizePanelPosition } from "@/features/core/layout/panelPartLayout";
-import { useSettingsStore } from "@/features/core/settings/settingsStore";
-import { splitEditorAtEdge } from "@/features/application/editor/editorGroupCommands";
-import { triggerImportData } from "@/features/application/dataManagement/useDatabaseManagement";
+  toggleWorkbenchView,
+} from '@/features/application/layout/workbenchLayoutActions';
 import {
   openBayesWindow,
   openDatabaseEditorWindow,
   openLogsWindow,
-} from "@/features/application/window";
+} from '@/features/application/window';
 
-/** Menubar model for menu state and menu-triggered application commands. */
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import type { WorkbenchViewId } from '@/features/core/dockview/workbenchPanelModel';
+import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
+import { useWorkbenchStore } from '@/features/core/workbench/workbenchStore';
+import type { MenubarViewState } from './menubarViewItems';
+
+function openViewIds(): ReadonlySet<WorkbenchViewId> {
+  const viewIds = new Set<WorkbenchViewId>();
+  for (const panel of workbenchDockviewPort.listPanels()) {
+    if (panel.metadata.role === 'view') viewIds.add(panel.metadata.viewId);
+  }
+  return viewIds;
+}
+
+/** Menubar model projected from live root Dockview state and semantic application actions. */
 export function useMenubar() {
   const openSettings = useWorkbenchStore((state) => state.openSettings);
-  const isDetailVisible = useWorkbenchStore((state) => !state.detailUserHidden);
-  const isSidebarVisible = useWorkbenchStore((state) => !state.sidebarUserHidden);
-  const panelCollapsed = useDockviewPortSnapshot(panelDockviewPort).collapsed ?? false;
-  const isLogPanelVisible = !panelCollapsed;
-  useDockviewPortSnapshot(editorDockviewPort);
-  const activeEditorGroupId = editorDockviewPort.getActiveGroupId() ?? null;
+  const detailsContextValid = useEditorStore((state) => state.detailFocus !== null);
+  const inspectContextValid = useEditorStore((state) => state.detailFocus?.kind === 'node');
+  const dockviewSnapshot = useSyncExternalStore(
+    workbenchDockviewPort.subscribe,
+    workbenchDockviewPort.getSnapshot,
+    workbenchDockviewPort.getSnapshot,
+  );
+
+  const viewState = useMemo<MenubarViewState>(() => {
+    const views = openViewIds();
+    return {
+      resourcesOpen: views.has('resources'),
+      detailsOpen: views.has('details'),
+      detailsContextValid,
+      inspectOpen: views.has('inspect'),
+      inspectContextValid,
+      logsOpen: views.has('logs'),
+      outputOpen: views.has('output'),
+      bottomCollapsed: workbenchDockviewPort.getEdgeState('bottom').collapsed,
+    };
+  }, [dockviewSnapshot.revision, detailsContextValid, inspectContextValid]);
+
+  const editorCommandAuthorized = captureActiveEditorCommandTarget() !== null;
 
   const handleImportData = useCallback(() => {
     triggerImportData();
   }, []);
 
   const handleSplitRight = useCallback(() => {
-    if (activeEditorGroupId) {
-      void splitEditorAtEdge(activeEditorGroupId, "right");
-    }
-  }, [activeEditorGroupId]);
+    const target = captureActiveEditorCommandTarget();
+    if (target) void splitEditorAtEdge(target.groupId, 'right');
+  }, []);
 
   const handleSplitDown = useCallback(() => {
-    if (activeEditorGroupId) {
-      void splitEditorAtEdge(activeEditorGroupId, "bottom");
-    }
-  }, [activeEditorGroupId]);
+    const target = captureActiveEditorCommandTarget();
+    if (target) void splitEditorAtEdge(target.groupId, 'bottom');
+  }, []);
 
   const handleDatabaseEditor = useCallback(() => {
     void openDatabaseEditorWindow();
@@ -59,27 +81,47 @@ export function useMenubar() {
     void openBayesWindow();
   }, []);
 
+  const toggleResources = useCallback(() => {
+    void toggleWorkbenchView('resources');
+  }, []);
+
+  const toggleDetails = useCallback(() => {
+    void toggleWorkbenchView('details');
+  }, []);
+
+  const toggleInspect = useCallback(() => {
+    void toggleWorkbenchView('inspect');
+  }, []);
+
+  const toggleLogs = useCallback(() => {
+    void toggleWorkbenchView('logs');
+  }, []);
+
+  const toggleOutput = useCallback(() => {
+    void toggleWorkbenchView('output');
+  }, []);
+
   const handleResetLayout = useCallback(() => {
-    const panelPosition = normalizePanelPosition(
-      useSettingsStore.getState().appearance.panelPosition,
-    );
-    void resetWorkbenchLayout(panelPosition);
+    void resetWorkbenchLayout();
   }, []);
 
   return {
     openSettings,
-    isDetailVisible,
-    isLogPanelVisible,
-    isSidebarVisible,
+    editorCommandAuthorized,
+    viewState,
     handleImportData,
     handleSplitRight,
     handleSplitDown,
     handleDatabaseEditor,
     handleOpenLogs,
     handleOpenBayes,
-    toggleDetail: toggleDetailVisibility,
-    toggleLogPanel: togglePanelCollapsed,
-    toggleSidebar: toggleSidebarVisibility,
-    handleResetLayout,
+    viewActions: {
+      toggleResources,
+      toggleDetails,
+      toggleInspect,
+      toggleLogs,
+      toggleOutput,
+      resetLayout: handleResetLayout,
+    },
   };
 }

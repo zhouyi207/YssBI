@@ -5,7 +5,7 @@
 专项文档：
 
 - [诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
-- [Dockview/Gridview 编辑器布局](./EDITOR_GRID_ARCHITECTURE.md)
+- [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
 - [Database 实现说明](../../src-tauri/src/database/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
 - [Julia Bayes worker protocol](../../src-tauri/julia/README.md)
@@ -83,21 +83,15 @@ components/ui and shared/ui
 - `services/` 是普通 Tauri invoke 的 adapter；统一经 `src/services/ipc/invokeCommand.ts` 解析 `{ code, details, incidentId }`。
 - `components/ui/` 使用 shadcn primitives；用户可见滚动使用 `ScrollArea`。
 
-主窗口继续由 React Router、Gridview 和 Dockview 组成：
+主窗口 chrome 的层级固定为：顶部 `Menubar`（包含 title/menu/window controls），中部 flex row（按设置位于左或右的 `ActivityBar`，以及填满剩余空间的 `Workspace`），底部 `BottomBar` status bar。Settings 与 node documentation dialogs 作为 overlay 留在工作台之外。
 
-- `GridviewReact` 是 sidebar/editor-shell/detail 拓扑与尺寸的 authority。
-- shell `DockviewReact` 是 editor host 与 Logs/Output edge group 的 authority。
-- nested editor `DockviewReact` 是 editor groups、panels、tab 顺序与 active state 的 authority。
-- Zustand 不镜像上述 placement/topology。
+`Workspace` 只挂载一个 root `DockviewReact`。它是 Resources、editor、Details、Inspect、Result、Logs 和 Output 等所有顶层 panels 的 topology、group、placement、size、tab order、active state、visibility 与 collapsed state authority。唯一保留的 nested Dockview 位于 root `Logs` panel 内，其 authority 仅限 log-domain panels 的局部 topology、顺序与 active state；root 仍拥有 `Logs` panel 本身的位置、尺寸和可见状态。
 
-右侧 `Gridview` leaf 包含固定的 `Details`、`Inspect` 和 `Result` 内容 tabs：
-
-- `Details` 展示只读节点结构和 resource-specific details；resource-specific panels 可保留既有 mutation/edit 能力。
-- 节点参数编辑唯一位于 `Inspect`；它通过 Rust 投影的 parameter editors 编辑 Canvas 中唯一选中的 node。
-- `Result` 只保存 session-scoped tab metadata，并以 opaque `resultId` 从 Rust `ResultStore` 读取每个 payload。
-- 存在 provenance 时，Result tabs 使用完整 graph-output identity 作为 key；project replacement 时全部 reset。
-
-当前结果消费不依赖独立窗口 payload store。运行事件只携带 opaque `resultId`；`src/services/result/resultService.ts` 通过 `get_result_descriptor`、`get_result_value`、`get_result_page` 和 `get_pin_result_history` 读取后端 `ResultStore`。展示窗口根据 descriptor/presentation 读取同一 logical result。
+- Zustand 只保存 sidebar 当前 tab、modal 等非 placement UI 状态，不镜像任何 panel placement 或 visibility。
+- `Details` 与 `Inspect` 是按需创建的 root singleton panels，打开时从当前 editor session context 解析 resource/detail target、active editor group 和 node selection，而不是常驻右侧 leaf。
+- Result 是 root Dockview 中可并存的 multi-panel：`resultKey` 标识并 upsert logical result panel，opaque `resultId` 标识该 panel 当前从 Rust `ResultStore` 读取的 payload。
+- `Logs` 与 `Output` 默认位于 root 的 native bottom edge group；该 group 使用 bottom header position，因此 content 在上、tabs 在下，尺寸与 collapse 仍由 root Dockview 原生管理。
+- root layout 只在启动 hydration 时恢复；当前未版本化、按 window label 隔离的 key 是 `yssbi-workbench-layout:<window-label>`（空 label 回退为 `main`）。Project replacement 不会再次从该 key 恢复 root topology。
 
 ## 4. Commands → application → domain
 

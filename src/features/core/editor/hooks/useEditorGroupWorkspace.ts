@@ -1,17 +1,17 @@
 import { useContext, useMemo } from 'react';
-import { editorDockviewPort, useDockviewPortSnapshot } from '@/features/core/dockview';
-import { DEFAULT_EDITOR_GROUP_ID } from '@/features/core/layout/workbenchLayoutDefaults';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { useDockviewPortSnapshot } from '@/features/core/dockview/useDockviewPortSnapshot';
 import { createGraphSelection } from '@/features/core/layout/layoutTabQueries';
 import { GroupContext } from '../context/GroupContext';
 import { useEditorGroupPlacement } from './useEditorGroupPlacement';
 
 export function useEditorGroupWorkspace(overrideGroupId?: string | null) {
   const contextGroupId = useContext(GroupContext);
-  useDockviewPortSnapshot(editorDockviewPort);
+  useDockviewPortSnapshot(workbenchDockviewPort);
   const groupId = overrideGroupId
     ?? contextGroupId
-    ?? editorDockviewPort.getActiveGroupId()
-    ?? DEFAULT_EDITOR_GROUP_ID;
+    ?? workbenchDockviewPort.getActiveEditorPanel()?.groupId
+    ?? null;
   const placement = useEditorGroupPlacement(groupId);
 
   return useMemo(() => ({

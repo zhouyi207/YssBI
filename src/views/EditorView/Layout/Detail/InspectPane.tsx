@@ -19,7 +19,7 @@ function InspectEmpty({
   description: string;
 }) {
   return (
-    <Empty className="h-full min-h-0 rounded-none p-4">
+    <Empty className="h-full min-h-0 rounded-none bg-background p-4">
       <EmptyHeader>
         <EmptyMedia variant="icon" className="size-10 text-muted-foreground">
           <VscSettingsGear className="size-5" />

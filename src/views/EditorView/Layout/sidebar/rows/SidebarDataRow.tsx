@@ -8,7 +8,7 @@ import {
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { findResourceNodeSpawnTemplate } from '@/features/application/editor/canvasDrop';
 import { openDatabaseEditorWindow } from '@/features/application/window';
-import { focusDetails } from '@/features/application/editor';
+import { revealDetails } from '@/features/application/editor/rightSidebarActions';
 import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { SidebarListItem, SidebarRowActionButton, SIDEBAR_ROW_ICON_SIZE } from '../../sidebarUi';
@@ -70,9 +70,9 @@ export const SidebarDataRow = memo(function SidebarDataRow({
       indentDepth={indentDepth}
       icon={<VscDatabase size={SIDEBAR_ROW_ICON_SIZE} style={{ color: TYPE_ICON_COLORS.data }} />}
       label={name}
-      onClick={(e) => {
+      onClick={async (e) => {
         e.stopPropagation();
-        focusDetails({ kind: 'data', id });
+        await revealDetails({ kind: 'data', id });
       }}
       onDoubleClick={(e) => {
         e.stopPropagation();

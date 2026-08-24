@@ -1,6 +1,7 @@
 import type { GraphResourceDragData } from '@/features/core/dnd';
-import { editorDockviewPort, type SplitDirection } from '@/features/core/dockview';
-import { getActiveLayoutTab, resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
+import { layoutTabFromEditorMetadata } from '@/features/core/dockview/workbenchPanelModel';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+
 import { openGraphInEditor } from './openGraphInEditor';
 import { switchEditorTab } from './switchEditorTab';
 
@@ -9,30 +10,30 @@ export async function handleGraphResourceDrop(
   resource: GraphResourceDragData,
   targetGroupId: string,
   options?: {
-    edge?: SplitDirection;
+    edge?: 'right' | 'bottom';
     insertIndex?: number;
   },
 ): Promise<void> {
-  const resolvedGroupId = resolveEditorTargetGroupId(targetGroupId);
-  await openGraphInEditor(resource.id, resource.name, resource.type, resolvedGroupId, {
-    pinned: true,
-    insertIndex: options?.insertIndex,
-  });
+  const opened = await openGraphInEditor(
+    resource.id,
+    resource.name,
+    resource.type,
+    targetGroupId,
+    { pinned: true, insertIndex: options?.insertIndex },
+  );
+  if (!opened || !options?.edge) return;
 
-  if (!options?.edge) return;
-  const panel = editorDockviewPort
-    .findPanelsByResource(resource.id)
-    .find((candidate) => candidate.groupId === resolvedGroupId);
-  if (!panel) return;
-  const split = await editorDockviewPort.split({
-    panelInstanceId: panel.panelInstanceId,
-    referenceGroupId: resolvedGroupId,
+  const split = await workbenchDockviewPort.split({
+    panelInstanceId: opened.panelInstanceId,
+    referenceGroupId: opened.groupId,
     direction: options.edge,
   });
   if (!split) return;
-  const createdGroupId = editorDockviewPort
-    .listPanels()
-    .find((candidate) => candidate.panelInstanceId === panel.panelInstanceId)?.groupId;
-  const activeTab = createdGroupId ? getActiveLayoutTab(createdGroupId)?.tab : null;
-  if (createdGroupId && activeTab) await switchEditorTab(createdGroupId, activeTab);
+
+  const moved = workbenchDockviewPort.getPanel(opened.panelInstanceId);
+  if (moved?.metadata.role !== 'editor') return;
+  await switchEditorTab(
+    moved.groupId,
+    layoutTabFromEditorMetadata(moved.metadata),
+  );
 }
