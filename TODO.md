@@ -395,6 +395,7 @@ src/app/appConfig/appLinks.ts
 
 - [ ] 我想将 @glideapps/glide-data-grid 切换为 shadcn 中的 data table，主要是因为风格和组件和目前的 shadcn 组件不搭，同时在构建的时候还有一些其他的错误，如下。需要考虑替换的可行性；或许使用 Handsontable 替代（商用收费）
 - [ ] assistant-ui
+- [ ] 将 worksheet 重命名为 charts
 
 ```
 "/*#__PURE__*/"
