@@ -22,10 +22,10 @@ export function sidebarItemIndent(depth = 0): CSSProperties {
 function sidebarItemRowBaseClass(isSelected = false) {
   return cn(
     SIDEBAR_ROW_HEIGHT_CLASS,
-    "group flex w-full items-center gap-2 pr-2 transition-colors duration-150 ease-out",
+    "group flex w-full items-center gap-2 rounded-md pr-2 transition-colors duration-150 ease-out",
     isSelected
       ? "bg-[var(--sidebar-item-active)] text-sidebar-foreground"
-      : "hover:bg-[var(--sidebar-hover)] text-sidebar-foreground/70",
+      : "text-sidebar-foreground/70 hover:bg-[var(--sidebar-hover)] hover:text-sidebar-foreground",
   );
 }
 
@@ -39,8 +39,11 @@ export function sidebarGroupRowClass() {
   return cn(sidebarItemRowBaseClass(false), "cursor-pointer select-none");
 }
 
-export function sidebarItemLabelClass() {
-  return "min-w-0 flex-1 truncate text-[12px] leading-normal font-normal tracking-tight";
+export function sidebarItemLabelClass(isSelected = false) {
+  return cn(
+    "min-w-0 flex-1 truncate text-[12px] leading-normal tracking-tight",
+    isSelected ? "font-medium text-sidebar-foreground" : "font-normal",
+  );
 }
 
 export function sidebarVariableTypeBadgeClass(isSelected = false) {

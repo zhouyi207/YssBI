@@ -19,6 +19,7 @@ export interface SidebarTreeCategoryRowProps {
   onExpandedChange: (expanded: boolean) => void;
   trailing?: ReactNode;
   onContextMenu?: (event: MouseEvent) => void;
+  dataAttributes?: Record<string, string | number | undefined>;
 }
 
 export function SidebarTreeCategoryRow({
@@ -30,6 +31,7 @@ export function SidebarTreeCategoryRow({
   onExpandedChange,
   trailing,
   onContextMenu,
+  dataAttributes,
 }: SidebarTreeCategoryRowProps) {
   const FolderIcon = expanded ? VscFolderOpened : VscFolder;
 
@@ -42,10 +44,10 @@ export function SidebarTreeCategoryRow({
       <div
         className={cn(
           sidebarGroupRowClass(),
-          'gap-1 rounded-md text-left transition-none',
+          'gap-1 rounded-md text-left transition-none hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
           expanded
-            ? 'bg-sidebar-accent/70 text-sidebar-accent-foreground'
-            : 'hover:bg-sidebar-accent/50',
+            ? 'text-sidebar-foreground'
+            : 'text-sidebar-foreground/75',
         )}
         style={sidebarItemIndent(depth)}
         onContextMenu={onContextMenu}
@@ -56,6 +58,7 @@ export function SidebarTreeCategoryRow({
             disabled={interactionDisabled}
             aria-disabled={interactionDisabled || undefined}
             data-sidebar-tree-category-id={categoryId}
+            {...dataAttributes}
             className="flex min-w-0 flex-1 items-center gap-1 self-stretch text-left"
           >
             <span className={SIDEBAR_ROW_LEADING_SLOT_CLASS}>

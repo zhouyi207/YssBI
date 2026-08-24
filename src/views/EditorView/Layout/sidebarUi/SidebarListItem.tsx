@@ -47,7 +47,7 @@ export function SidebarListItem({
       style={sidebarItemIndent(indentDepth)}
     >
       <span className={SIDEBAR_ROW_LEADING_SLOT_CLASS}>{icon}</span>
-      <span className={sidebarItemLabelClass()}>{label}</span>
+      <span className={sidebarItemLabelClass(isSelected)}>{label}</span>
       {trailing}
     </SidebarDraggableItem>
   );

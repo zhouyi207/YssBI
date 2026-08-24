@@ -1,5 +1,9 @@
 export { SidebarChevron, SIDEBAR_CHEVRON_SIZE } from "./SidebarChevron";
 export { SidebarDraggableItem } from "./SidebarDraggableItem";
+export {
+  LocalizedCatalogTreeRow,
+  type LocalizedCatalogTreeRowProps,
+} from "./LocalizedCatalogTreeRow";
 export { SidebarListItem } from "./SidebarListItem";
 export { SidebarRowActionButton } from "./SidebarRowActionButton";
 export {
