@@ -29,3 +29,7 @@ dist-ssr
 
 # Rust / Cargo build output (all crates under repo)
 target/
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
