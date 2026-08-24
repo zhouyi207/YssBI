@@ -12,7 +12,7 @@ export const YSSBI_DOCKVIEW_DARK_THEME: DockviewTheme = {
   className: 'dockview-theme-dark yssbi-dockview-theme',
   colorScheme: 'dark',
   edgeGroupCollapsedSize: 32,
-  tabAnimation: 'smooth',
+  tabAnimation: 'default',
   dndTabIndicator: 'line',
 };
 
@@ -22,7 +22,7 @@ export const YSSBI_DOCKVIEW_LIGHT_THEME: DockviewTheme = {
   className: 'dockview-theme-light yssbi-dockview-theme',
   colorScheme: 'light',
   edgeGroupCollapsedSize: 32,
-  tabAnimation: 'smooth',
+  tabAnimation: 'default',
   dndTabIndicator: 'line',
 };
 
