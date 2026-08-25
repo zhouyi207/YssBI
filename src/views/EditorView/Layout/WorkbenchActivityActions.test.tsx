@@ -20,6 +20,10 @@ vi.mock('@/features/core/workbench', () => ({
     selector({ openSettings: mocks.openSettings }),
 }));
 
+vi.mock('./PluginActivityActions', () => ({
+  PluginActivityActions: () => null,
+}));
+
 import { WorkbenchActivityActions } from './WorkbenchActivityActions';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

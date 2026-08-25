@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { WORKBENCH_ACTIVITY_GROUP_ID } from '@/features/core/dockview/workbenchDockviewDefaults';
 import { useWorkbenchStore } from '@/features/core/workbench';
+import { PluginActivityActions } from './PluginActivityActions';
 
 function stopHeaderControlPropagation(event: { stopPropagation(): void }): void {
   event.stopPropagation();
@@ -24,10 +25,16 @@ export function WorkbenchActivityActions(props: IDockviewHeaderActionsProps) {
   return (
     <div
       data-workbench-activity-actions
-      className="flex h-full w-full shrink-0 items-center justify-center"
+      className="flex h-full w-full shrink-0 flex-col items-center justify-end"
       onPointerDown={stopHeaderControlPropagation}
       onMouseDown={stopHeaderControlPropagation}
     >
+      <PluginActivityActions />
+      <span
+        data-workbench-activity-settings-divider
+        aria-hidden="true"
+        className="my-1 h-px w-6 bg-[var(--strong-border)]"
+      />
       <Tooltip>
         <TooltipTrigger asChild>
           <Button

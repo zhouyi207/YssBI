@@ -10,7 +10,6 @@ import {
   toggleWorkbenchView,
 } from '@/features/application/layout/workbenchLayoutActions';
 import {
-  openBayesWindow,
   openDatabaseEditorWindow,
   openLogsWindow,
 } from '@/features/application/window';
@@ -82,10 +81,6 @@ export function useMenubar() {
     void openLogsWindow();
   }, []);
 
-  const handleOpenBayes = useCallback(() => {
-    void openBayesWindow();
-  }, []);
-
   const toggleActivityGroup = useCallback(() => {
     void toggleActivityWorkbenchGroup();
   }, []);
@@ -119,7 +114,6 @@ export function useMenubar() {
     handleSplitDown,
     handleDatabaseEditor,
     handleOpenLogs,
-    handleOpenBayes,
     viewActions: {
       toggleActivityGroup,
       toggleDetails,

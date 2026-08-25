@@ -33,7 +33,6 @@ import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowMenuBar } from '@/shared/ui/WindowChrome';
 import { AboutModal } from './AboutModal';
-import { JuliaMenuButton } from './JuliaMenuButton';
 
 export type MenuItem = MenubarMenuItem;
 
@@ -265,7 +264,6 @@ export function Menubar() {
     handleSplitDown,
     handleDatabaseEditor,
     handleOpenLogs,
-    handleOpenBayes,
   } = useMenubar();
 
   const currentPath = useActiveProjectPath();
@@ -414,7 +412,6 @@ export function Menubar() {
           <MenuButton id="view" label={t('menubar.view')} items={viewItems} />
           <MenuButton id="window" label={t('menubar.window')} items={windowItems} />
           <MenuButton id="tools" label={t('menubar.tools')} items={toolItems} />
-          <JuliaMenuButton onOpenBayes={handleOpenBayes} />
           <MenuButton id="help" label={t('menubar.help')} items={helpItems} />
         </div>
       </WindowMenuBar>
