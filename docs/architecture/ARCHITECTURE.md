@@ -44,6 +44,8 @@ flowchart TD
 
 `commands/` 是 transport seam，不是业务 workflow 的归属。复杂行为进入 application、project、node_system、database 或 sci module，以提高 depth、leverage 和 locality。
 
+`application/` 拥有跨 module 的 database use-case orchestration；`project/` 拥有 project/session authority、resource revision、commit 与 coherent snapshot，并直接依赖 `database/` 提供的存储和 runtime primitives。生产代码中的 `project/` 不依赖 `application/` 或 `commands/`；该约束由 Rust production-module architecture audit 执行。
+
 ## 2. 顶层目录与 authority
 
 | 路径 | 当前职责 |
@@ -51,9 +53,10 @@ flowchart TD
 | `src/` | React views、application hooks、Zustand 投影、IPC adapter 和 UI |
 | `src-tauri/src/commands/` | Tauri transport、DTO 转换、错误映射、event/channel 交付 |
 | `src-tauri/src/application/` | 跨 module 用例编排 |
-| `src-tauri/src/project/` | 项目 authority、资源事务、持久化、session 与一致性快照 |
+| `src-tauri/src/project/` | project/session authority、resource revision、事务提交与 publication、持久化协调和 coherent snapshots |
 | `src-tauri/src/node_system/` | graph document、catalog/registry、analysis、compiler、plan 与 runtime |
-| `src-tauri/src/database/` | DuckDB 数据资产、查询、编辑、统计概览与导出 |
+| `src-tauri/src/database/` | DatabaseDecl/DatabaseInstance semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
+| `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的科学计算 interface、typed models 与 backend adapters |
 | `src-tauri/sci/` | 独立 `yss-sci` Rust 数值算法 crate |
 | `src-tauri/src/julia/` | Julia runtime/worker host、typed worker errors 和 task ownership |
@@ -117,10 +120,12 @@ Command 不拥有长 workflow、文件系统事务、graph compiler、database �
 | `project_lifecycle` | load/clear/create/save-as/delete 的用例结果 | ProjectState、registry 与恢复状态编排 |
 | `catalog_compatibility` | 基于 graph revision 的兼容 catalog | coherent catalog snapshot、projection 与 currentness validation |
 | `graph_execution` | typed request、RunEvent/RunOutput delivery bridge、delivery report | 调用 ProjectState execution 并保留 terminal delivery 事实 |
-| `database` | typed import/read/mutate/save/export 用例 | project authority、DuckDB I/O、revision 和原子发布 |
+| `database` | typed import/read/mutate/save/export 用例 | 编排 ProjectState authority 与 database primitives、锁外 I/O 和最终 commit |
 | `bayes` | Bayes task、status、result/artifact 生命周期 | `BayesBackend`、project data materialization 与 owned artifacts |
 
-`database_schema`、`hypothesis` 和 `pin_preview_generation` 是更窄的 application modules。它们同样把 transport 与 domain implementation 分开。
+`database_schema` 从 coherent project resource snapshot 组合 database/variable query DTO；DuckDB runtime binding 与 storage metadata 属于 `database/`，`ColumnInfoDTO` conversion 属于 `schema/`。
+
+`hypothesis` 和 `pin_preview_generation` 是更窄的 application modules。它们同样把 transport 与 domain implementation 分开。
 
 典型链路：
 
@@ -165,6 +170,8 @@ ProjectStore
 ```
 
 `ProjectStore` 不替代 `ProjectData`。它提供不能或不应直接序列化的 runtime implementation。切换 project session 会替换这组 runtime objects，从而隔离旧 result、memo 和 run state。
+
+`database/project.duckdb` 保存 table contents、physical schema 与 display metadata 等持久化事实。活动 session 中，`ProjectData.databases` 是 database resource identity/declaration 的 authoritative index；`ProjectStore.databases` 保存 session-bound `DatabaseInstance`、metadata snapshot 与 edit history。ProjectState 拥有 project identity、resource revision、commit/currentness validation 和 publication；项目重开时从 DuckDB 用户表重建 declarations/runtime bindings。
 
 Graph resource 文件位于 `events/...` 与 `functions/...`。对未驻留 graph，磁盘文件和 graph revision ledger/index 仍声明资源存在；`ProjectData.graphs` 中缺失表示 unloaded，而不是资源不存在。
 
@@ -225,6 +232,8 @@ Graph load 先注册 resource lifecycle owner，在锁外读取/解析磁盘，�
 - `ProjectStore` 中对应的 runtime database instances。
 
 因此 graph compile/run 不会把旧 project declarations 与新 runtime store 混成一个 snapshot。Catalog、projection、history 和 execution 也使用带 project identity/revision/generation 的专用 coherent snapshots。
+
+ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database schema metadata。Database 提供 DuckDB/Polars metadata primitives，`schema/` 保持现有 `ColumnInfoDTO` conversion，Application 将结果组合进已有 query DTO。
 
 ## 6. Node system 与 graph execution
 
@@ -314,7 +323,7 @@ Rust `tracing` 是唯一 diagnostics pipeline。Recent storage、ingress、subsc
 
 IPC 只接受 `DatabaseImportSourceDTO`：`Csv`、`Parquet`、`Excel` 或 typed `Sql` engine。它不接受 runtime-only `InMemory` 或项目内部 `DuckDb` source。Command 将 import source 转换为内部 engine，再交给 `application::database`。
 
-导入结果统一物化到项目的 `database/project.duckdb`，`ProjectData.databases` 保存 `DatabaseDecl`，`ProjectStore.databases` 保存 session runtime `DatabaseInstance`。打开项目时根据 DuckDB 用户表重建 declarations/runtime instances。
+`database/project.duckdb` 保存 table contents、physical schema 与 display metadata 等持久化事实。活动 session 中，`ProjectData.databases` 是 database resource identity/declaration 的 authoritative index；`ProjectStore.databases` 保存 session-bound `DatabaseInstance`、metadata snapshot 与 edit history。ProjectState 拥有 project identity、resource revision、commit/currentness validation 和 publication；项目重开时从 DuckDB 用户表重建 declarations/runtime bindings。
 
 ### 8.2 Query 与编辑
 
@@ -324,6 +333,8 @@ DuckDB-backed instance 保持磁盘列存：
 - graph resource access 可以按列加载；
 - column statistics、distribution 与 dataset overview 使用 SQL aggregate；
 - DataView edit/undo/redo 使用增量 SQL，不先整表进入 Polars。
+
+ProjectState 在 project identity、resource revision 和 authority generation 下捕获 coherent database schema metadata。Database 提供 DuckDB/Polars metadata primitives，`schema/` 保持现有 `ColumnInfoDTO` conversion，Application 将结果组合进已有 query DTO。
 
 只有小表完整 materialization 才进入 `Loaded { dataframe, original, history }`；当前 in-memory edit threshold 为 50,000 rows。Ingest 以 50,000 rows 分批 append。
 

@@ -1,6 +1,6 @@
 # Database module
 
-`src-tauri/src/database/` 是项目数据资产、DuckDB query/edit semantics、overview 与 export 的 ownership locality。Application orchestration 位于 `src-tauri/src/application/database.rs`，Tauri transport 位于 `src-tauri/src/commands/command_dataframe/`。
+`src-tauri/src/database/` 是 DatabaseDecl/DatabaseInstance semantics、DuckDB storage、runtime binding、schema metadata、query/edit/history、overview 与 export 的 locality。Project/session authority 与 resource commit 位于 `project/`；跨 module 用例编排位于 `application/database.rs`；可序列化 wire DTO 与转换位于 `schema/`。
 
 `yss-sci` 只承载数值与统计/计量算法，不包含 database edit history、DuckDB state 或 export workflow。
 
@@ -8,9 +8,10 @@
 
 项目 tabular 数据统一物化到 `database/project.duckdb`。每个用户数据集对应一个 DuckDB table：
 
-- `ProjectData.databases` 保存 authoritative `DatabaseDecl`；
-- `ProjectStore.databases` 保存当前 project session 的 `DatabaseInstance`；
-- project activation 枚举 DuckDB 用户表并重建 declaration/runtime projection。
+- `database/project.duckdb` 保存持久化 table contents、physical schema 与 display metadata；
+- `ProjectData.databases` 保存活动 session 的 authoritative declaration index；
+- `ProjectStore.databases` 保存 session runtime `DatabaseInstance`、metadata snapshot 与 edit history；
+- project activation 从 DuckDB 用户表重建 declaration/runtime bindings。
 
 IPC import interface 是 source-only typed enum `DatabaseImportSourceDTO`：
 
@@ -40,6 +41,8 @@ Failed { error }
 ```
 
 DuckDB 是普通 production state。只有需要完整 Polars DataFrame 且 table 不超过 50,000 rows 时才进入 `Loaded`。这一 interface 将磁盘列存复杂度隐藏在 module 内，为 page query、graph resource 与 DataView 提供统一 leverage。
+
+Database module 负责 DuckDB/Polars storage metadata 与 domain `DataSchema` normalization。当前 `ColumnInfoDTO` wire contract 保持不变，其 conversion 位于 `schema/database.rs`；Application DTO enrichment 只消费该 conversion，Project 不再通过 Application 获取 schema。
 
 ## 3. DataView 编辑与 undo
 
@@ -132,6 +135,8 @@ DuckDB overview 仍准确提供：
 | File | Responsibility |
 |---|---|
 | `database_instance.rs` | State-dependent query/edit/export interface |
+| `project_storage.rs` | Project-relative DuckDB runtime binding 与 physical table/metadata removal |
+| `database_schema.rs` | DuckDB/Polars metadata 到 domain `DataSchema`/`DataType` 的 normalization |
 | `duckdb_reader.rs` | Ingest、Arrow bridge、table metadata |
 | `duckdb_editing.rs` | Incremental SQL edit/undo helpers |
 | `duckdb_column_snapshot.rs` | Bounded reversible delete-column snapshot |
