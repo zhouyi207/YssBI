@@ -15,6 +15,10 @@ graph compilation/execution, databases, results, and scientific orchestration.
 - `docs/development/LOCAL_WORKFLOW.md` owns toolchain, commands, and validation.
 - `docs/architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md` owns diagnostics, IPC
   errors, results, and program output details.
+- `docs/superpowers/` is agent-local design and planning output, not maintained
+  product documentation; do not add or commit its files unless the user
+  explicitly requests it. Long-lived project documentation belongs in
+  `docs/architecture/`, `docs/development/`, or `docs/version/`.
 - Treat `docs/version/` as history, not current implementation authority. If
   maintained documentation and code disagree, verify behavior before editing
   and update the stale documentation as part of the change.
@@ -173,6 +177,7 @@ graph compilation/execution, databases, results, and scientific orchestration.
 
 ## Local development and verification
 
+- 每项任务完成后，必须在 `TODO.md` 对应日期标题下追加多条 `- [ ] ...` 格式的修改摘要；若该日期标题不存在，则以 `## YYYY.MM.DD` 创建，且不得删除或改写既有条目。
 - Run project commands from the repository root through `pnpm` scripts. Rust
   scripts explicitly target `src-tauri/Cargo.toml`; `.cargo/config.toml` keeps
   all Cargo artifacts in the root `target/` directory. Do not create a second
