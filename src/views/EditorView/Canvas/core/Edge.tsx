@@ -17,19 +17,19 @@ const FLOW_EDGE_STYLE: Record<
   }
 > = {
   data: {
-    stroke: "#10b981",
-    flowStroke: "#6ee7b7",
-    glow: "rgba(16, 185, 129, 0.5)",
-    idleGlow: "rgba(16, 185, 129, 0.25)",
+    stroke: "var(--status-success)",
+    flowStroke: "var(--pin-numeric)",
+    glow: "color-mix(in srgb, var(--status-success) 50%, transparent)",
+    idleGlow: "color-mix(in srgb, var(--status-success) 25%, transparent)",
     flowDasharray: "14 26",
     flowAnimation: "edgeFlowData 1.2s linear infinite",
     glowAnimation: "edgeGlowData 1.6s ease-in-out infinite",
   },
   exec: {
-    stroke: "#f59e0b",
-    flowStroke: "#fde68a",
-    glow: "rgba(245, 158, 11, 0.55)",
-    idleGlow: "rgba(245, 158, 11, 0.3)",
+    stroke: "var(--status-warning)",
+    flowStroke: "var(--pin-text)",
+    glow: "color-mix(in srgb, var(--status-warning) 55%, transparent)",
+    idleGlow: "color-mix(in srgb, var(--status-warning) 30%, transparent)",
     flowDasharray: "6 10",
     flowAnimation: "edgeFlowExec 0.65s linear infinite",
     glowAnimation: "edgeGlowExec 0.9s ease-in-out infinite",
@@ -38,10 +38,10 @@ const FLOW_EDGE_STYLE: Record<
 
 /** 取数态：消费者声明 data 依赖（ConnectionActive），细虚线向 input 侧轻 pulse */
 const DATA_PULL_STYLE = {
-  stroke: "#2dd4bf",
-  flowStroke: "#99f6e4",
-  glow: "rgba(45, 212, 191, 0.35)",
-  idleGlow: "rgba(45, 212, 191, 0.18)",
+  stroke: "var(--pin-numeric)",
+  flowStroke: "var(--pin-table)",
+  glow: "color-mix(in srgb, var(--pin-numeric) 35%, transparent)",
+  idleGlow: "color-mix(in srgb, var(--pin-numeric) 18%, transparent)",
   dasharray: "4 10",
   animation: "edgePullData 1.6s linear infinite",
   glowAnimation: "edgePullGlow 2s ease-in-out infinite",
@@ -80,7 +80,7 @@ export function drawEdge(
   y1: number,
   x2: number,
   y2: number,
-  color: string = "#999",
+  color: string = "var(--muted-foreground)",
   thickness: number = 2,
   startIsInput: boolean = false
 ) {
@@ -110,7 +110,7 @@ export const Edge = React.memo<EdgeProps>(({
   y1,
   x2,
   y2,
-  color = "#999",
+  color = "var(--muted-foreground)",
   thickness = 2,
   edgeKind = "data",
   startIsInput = false,
@@ -133,7 +133,7 @@ export const Edge = React.memo<EdgeProps>(({
   const showFlow = isFlowActive && !isError;
   const highlighted = showPull || showFlow;
   const strokeColor = isError
-    ? "#ef4444"
+? "var(--status-danger)"
     : showFlow
       ? flow.stroke
       : showPull
@@ -167,7 +167,7 @@ export const Edge = React.memo<EdgeProps>(({
       <path
         d={pathData}
         fill="none"
-        stroke={replacementPreview ? '#f59e0b' : strokeColor}
+        stroke={replacementPreview ? 'var(--status-warning)' : strokeColor}
         strokeWidth={strokeW}
         strokeLinecap="round"
         strokeDasharray={showPull && !showFlow && !animatePullMotion ? DATA_PULL_STYLE.dasharray : undefined}
@@ -208,7 +208,7 @@ export const Edge = React.memo<EdgeProps>(({
           <path
             d={pathData}
             fill="none"
-            stroke={isError ? "#fca5a5" : flow.flowStroke}
+            stroke={isError ? "var(--status-danger)" : flow.flowStroke}
             strokeWidth={edgeKind === "exec" ? thickness + 3 : thickness + 2}
             strokeLinecap="round"
             className="pointer-events-none"
@@ -220,7 +220,7 @@ export const Edge = React.memo<EdgeProps>(({
           <path
             d={pathData}
             fill="none"
-            stroke={isError ? "rgba(239, 68, 68, 0.5)" : flow.glow}
+            stroke={isError ? "color-mix(in srgb, var(--status-danger) 50%, transparent)" : flow.glow}
             strokeWidth={edgeKind === "exec" ? thickness + 10 : thickness + 8}
             strokeLinecap="round"
             className="pointer-events-none"
@@ -248,7 +248,7 @@ export const Edge = React.memo<EdgeProps>(({
         <path
           d={pathData}
           fill="none"
-          stroke="rgba(239, 68, 68, 0.25)"
+          stroke="color-mix(in srgb, var(--status-danger) 25%, transparent)"
           strokeWidth={thickness + 6}
           strokeLinecap="round"
           strokeDasharray="6 4"

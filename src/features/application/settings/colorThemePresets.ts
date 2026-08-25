@@ -5,13 +5,13 @@ const THEME_BASE_KEYS = [
   'mode',
   'workbenchBackground',
   'sidebarBackground',
-  'gridLines',
-  'nodeBase',
-  'connectionLines',
-  'selectionRegion',
-  'execColor',
-  'objectColor',
-  'anyColor',
+  'nodeBackground',
+  'foreground',
+  'mutedForeground',
+  'accentColor',
+  'borderColor',
+  'gridColor',
+  'selectionColor',
 ] satisfies Array<keyof ThemeSettings>;
 
 function pickThemeBase(theme: ThemeSettings): Partial<ThemeSettings> {
@@ -49,8 +49,8 @@ export const COLOR_THEME_PRESETS: Record<ColorThemePresetId, Partial<ThemeSettin
     ...pickThemeBase(DEFAULT_DARK_THEME),
     workbenchBackground: '#000000',
     sidebarBackground: '#000000',
-    gridLines: '#141414',
-    nodeBase: '#0a0a0a',
+    nodeBackground: '#0a0a0a',
+    gridColor: '#141414',
   },
   'Light Modern': pickThemeBase(DEFAULT_LIGHT_THEME),
 };

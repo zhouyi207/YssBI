@@ -33,11 +33,11 @@ export function getNodeClassName({
   }
 
   if (hasError) {
-    return `${baseClasses} border-red-500 ring-2 ring-red-500/50 z-30`;
+    return `${baseClasses} border-[var(--status-danger)] ring-2 ring-[var(--status-danger)]/50 z-30`;
   }
 
   if (isCompleted) {
-    return `${baseClasses} border-green-500 ring-1 ring-green-500/30 z-20`;
+    return `${baseClasses} border-[var(--status-success)] ring-1 ring-[var(--status-success)]/30 z-20`;
   }
 
   return `${baseClasses} border-[var(--node-border)] z-10`;
@@ -51,11 +51,11 @@ export function getNodeBackgroundStyle({
   isCompleted,
 }: Pick<NodeClassNameOptions, 'hasError' | 'isCompleted'>): string {
   if (hasError) {
-    return "linear-gradient(135deg, var(--node-base) 0%, rgba(239, 68, 68, 0.1) 100%)";
+    return "linear-gradient(135deg, var(--node-base) 0%, color-mix(in srgb, var(--status-danger) 10%, transparent) 100%)";
   }
 
   if (isCompleted) {
-    return "linear-gradient(135deg, var(--node-base) 0%, rgba(34, 197, 94, 0.12) 100%)";
+    return "linear-gradient(135deg, var(--node-base) 0%, color-mix(in srgb, var(--status-success) 12%, transparent) 100%)";
   }
 
   return "var(--node-base)";

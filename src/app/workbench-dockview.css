@@ -148,6 +148,100 @@
   border-top-color: var(--accent-color);
 }
 
+/* Logs are a fixed tab set: keep the strip quiet, legible, and reorderable. */
+[data-yssbi-logs-dockview]
+  .dv-tabs-and-actions-container {
+  background: color-mix(
+    in srgb,
+    var(--panel-header-bg) 92%,
+    var(--workbench-bg)
+  );
+}
+
+[data-yssbi-logs-dockview]
+  .dv-tabs-container.dv-horizontal {
+  align-items: stretch;
+  gap: 2px;
+  padding: 3px 4px;
+}
+
+[data-yssbi-logs-dockview]
+  .dv-tabs-container.dv-horizontal
+  > .dv-tab {
+  min-width: 76px;
+  height: calc(var(--logs-tab-height) - 6px);
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: grab;
+  transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+}
+
+[data-yssbi-logs-dockview]
+  .dv-tabs-container.dv-horizontal
+  > .dv-tab:hover {
+  border-color: color-mix(in srgb, var(--accent-color) 20%, transparent);
+  background: color-mix(in srgb, var(--interactive-hover) 72%, transparent);
+  color: var(--foreground);
+}
+
+[data-yssbi-logs-dockview]
+  .dv-tabs-container.dv-horizontal
+  > .dv-tab.dv-active-tab {
+  border-color: color-mix(in srgb, var(--accent-color) 34%, var(--yssbi-dockview-divider));
+  background: color-mix(in srgb, var(--accent-color) 12%, var(--workbench-bg));
+  color: var(--foreground);
+  cursor: default;
+}
+
+[data-yssbi-logs-dockview]
+  .dv-tab
+  .dv-default-tab {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-yssbi-logs-dockview]
+  .dv-tab
+  .dv-default-tab-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-yssbi-logs-dockview]
+  .dv-tab
+  .dv-default-tab-action {
+  display: none;
+}
+
+[data-yssbi-logs-dockview]
+  [data-yssbi-logs-header-actions] {
+  margin: 3px 4px 3px 2px;
+  border-left: 1px solid var(--yssbi-dockview-divider);
+  padding-left: 5px;
+  background: transparent;
+}
+
+[data-yssbi-logs-dockview]
+  [data-yssbi-logs-header-actions]
+  button {
+  color: var(--muted-foreground);
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+[data-yssbi-logs-dockview]
+  [data-yssbi-logs-header-actions]
+  button:hover {
+  color: var(--foreground);
+}
+
 :is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
   .dv-tab:focus-visible,
 :is([data-yssbi-root-dockview], [data-yssbi-logs-dockview])
@@ -444,7 +538,23 @@
   > .dv-tabs-and-actions-container
   [data-workbench-activity-actions] {
   width: 40px;
-  height: 40px;
+  min-height: 40px;
+  height: auto;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  [data-workbench-plugin-actions]
+  [data-workbench-plugin-action]:hover
+  [data-workbench-plugin-action-surface],
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-left
+  > .dv-tabs-and-actions-container
+  [data-workbench-plugin-action][aria-expanded="true"]
+  [data-workbench-plugin-action-surface] {
+  background: var(--interactive-hover);
+  color: var(--foreground);
 }
 
 [data-yssbi-root-dockview]

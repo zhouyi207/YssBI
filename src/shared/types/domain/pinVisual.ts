@@ -77,15 +77,16 @@ export function resolvePinRenderStyle(
   spec: PinVisualSpec,
   isConnected: boolean,
   baseColor: string,
+  mutedForeground: string,
 ): PinRenderStyle {
   const isExec = spec.edgeKind === 'exec';
   return {
     fill: isConnected
       ? baseColor
       : isExec
-        ? 'rgba(0,0,0,0.1)'
-        : 'rgba(0,0,0,0.05)',
-    stroke: isExec && !isConnected ? '#666' : baseColor,
+        ? 'color-mix(in srgb, var(--muted-foreground) 10%, transparent)'
+        : 'color-mix(in srgb, var(--muted-foreground) 5%, transparent)',
+    stroke: isExec && !isConnected ? mutedForeground : baseColor,
     strokeWidth: isExec ? 1.5 : 2,
   };
 }

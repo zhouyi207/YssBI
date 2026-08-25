@@ -3,7 +3,7 @@
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft } from 'd3';
-import { useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartSeriesColors, useChartThemeColors } from '@/shared/theme/chartTheme';
 import type { DidEventStudyPoint } from '@/shared/types/report';
 
 const MARGIN = { top: 20, right: 16, bottom: 36, left: 52 };
@@ -16,6 +16,7 @@ export const DidEventStudyChart: React.FC<{
   const svgRef = useRef<SVGSVGElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const chartTheme = useChartThemeColors();
+  const seriesColors = useChartSeriesColors();
 
   useEffect(() => {
     const el = containerRef.current;
@@ -135,7 +136,7 @@ export const DidEventStudyChart: React.FC<{
           .attr('x2', x)
           .attr('y1', y1)
           .attr('y2', y2)
-          .attr('stroke', '#22d3ee')
+          .attr('stroke', seriesColors.primary)
           .attr('stroke-width', 1.5)
           .attr('stroke-linecap', 'round');
         const cap = 4;
@@ -144,22 +145,22 @@ export const DidEventStudyChart: React.FC<{
           .attr('x2', x + cap)
           .attr('y1', y1)
           .attr('y2', y1)
-          .attr('stroke', '#22d3ee')
+          .attr('stroke', seriesColors.primary)
           .attr('stroke-width', 1.5);
         g.append('line')
           .attr('x1', x - cap)
           .attr('x2', x + cap)
           .attr('y1', y2)
           .attr('y2', y2)
-          .attr('stroke', '#22d3ee')
+          .attr('stroke', seriesColors.primary)
           .attr('stroke-width', 1.5);
       }
       g.append('circle')
         .attr('cx', x)
         .attr('cy', y)
         .attr('r', d.is_reference ? dotR - 0.5 : dotR)
-        .attr('fill', d.is_reference ? chartTheme.tick : '#22d3ee')
-        .attr('stroke', d.is_reference ? '#d1d5db' : '#a5f3fc')
+        .attr('fill', d.is_reference ? chartTheme.tick : seriesColors.primary)
+        .attr('stroke', chartTheme.axis)
         .attr('stroke-width', 1.2);
     }
 
@@ -171,12 +172,12 @@ export const DidEventStudyChart: React.FC<{
       g.append('path')
         .attr('d', pathD)
         .attr('fill', 'none')
-        .attr('stroke', '#22d3ee')
+        .attr('stroke', seriesColors.primary)
         .attr('stroke-width', 1)
         .attr('opacity', 0.35)
         .attr('stroke-linejoin', 'round');
     }
-  }, [points, size, treatLabel, chartTheme]);
+  }, [points, size, treatLabel, chartTheme, seriesColors]);
 
   if (!points.length) return null;
 

@@ -1,10 +1,12 @@
 // src/hooks/useTheme.ts
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
-import { useShallow } from 'zustand/react/shallow';
+import { resolveThemeTokens } from '@/shared/theme/themeTokens';
+import { useMemo } from 'react';
 
 export const useTheme = () => {
-    return useSettingsStore(useShallow((s) => ({
-        theme: s.theme,
-        updateTheme: s.updateTheme,
-    })));
+    const theme = useSettingsStore((s) => s.theme);
+    const updateTheme = useSettingsStore((s) => s.updateTheme);
+    const tokens = useMemo(() => resolveThemeTokens(theme), [theme]);
+
+    return { theme, tokens, updateTheme };
 };

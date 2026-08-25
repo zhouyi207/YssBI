@@ -9,6 +9,7 @@ import { Pin } from "@/shared/types/domain";
 import { resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { getConnectPreview, subscribeConnectPreview } from '@/features/core/canvas/connectPreview';
 import type { ConnectionFeedback } from '@/features/core/canvas/connectionInteraction';
+import type { ThemeStatusPalette } from '@/shared/theme/themeTokens';
 
 export function connectionFeedbackAttributes(feedback: ConnectionFeedback | null) {
     if (!feedback) return {};
@@ -20,10 +21,14 @@ export function connectionFeedbackAttributes(feedback: ConnectionFeedback | null
         : { 'data-connection-feedback': feedback.kind };
 }
 
-export function connectionFeedbackColor(feedback: ConnectionFeedback | null, fallback: string): string {
+export function connectionFeedbackColor(
+    feedback: ConnectionFeedback | null,
+    fallback: string,
+    palette: Pick<ThemeStatusPalette, 'success' | 'warning' | 'danger'>,
+): string {
     if (!feedback) return fallback;
-    if (feedback.kind === 'invalid') return '#ef4444';
-    return feedback.kind === 'replace' ? '#f59e0b' : '#22c55e';
+    if (feedback.kind === 'invalid') return palette.danger;
+    return feedback.kind === 'replace' ? palette.warning : palette.success;
 }
 
 export const ConnectionLine = ({
@@ -40,18 +45,18 @@ export const ConnectionLine = ({
     menuPos?: { x: number; y: number } | null;
 }) => {
     const lineCanvasRef = useRef<HTMLCanvasElement>(null);
-    const { theme } = useTheme();
+    const { tokens } = useTheme();
 
     const getPinWorldPosRef = useRef(getPinWorldPos);
     const getCanvasLocalPointRef = useRef(getCanvasLocalPoint);
-    const themeRef = useRef(theme);
+    const themeTokensRef = useRef(tokens);
     const pendingConnectionRef = useRef(pendingConnection);
     const menuPosRef = useRef(menuPos);
     const renderRef = useRef<() => void>(() => {});
 
     useEffect(() => { getPinWorldPosRef.current = getPinWorldPos; }, [getPinWorldPos]);
     useEffect(() => { getCanvasLocalPointRef.current = getCanvasLocalPoint; }, [getCanvasLocalPoint]);
-    useEffect(() => { themeRef.current = theme; }, [theme]);
+    useEffect(() => { themeTokensRef.current = tokens; }, [tokens]);
     useEffect(() => { pendingConnectionRef.current = pendingConnection; }, [pendingConnection]);
     useEffect(() => { menuPosRef.current = menuPos; }, [menuPos]);
 
@@ -92,7 +97,7 @@ export const ConnectionLine = ({
             if (!activeStart || !endWorld) return;
 
             const viewport = viewportScope ? getViewport(viewportScope) : { x: 0, y: 0, scale: 1 };
-            const currentTheme = themeRef.current;
+            const currentTheme = themeTokensRef.current;
 
             ctx.save();
             ctx.translate(viewport.x, viewport.y);
@@ -107,7 +112,8 @@ export const ConnectionLine = ({
                     endWorld.x, endWorld.y,
                     connectionFeedbackColor(
                         connectPreview?.feedback ?? null,
-                        activeStart.ui?.color ?? getPinTypeColor(colorKey, currentTheme),
+                        getPinTypeColor(colorKey, currentTheme),
+                        currentTheme.status,
                     ),
                     2,
                     activeStart.direction === "input"

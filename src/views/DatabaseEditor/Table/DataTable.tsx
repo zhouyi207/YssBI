@@ -30,6 +30,7 @@ import type {
   DatabaseGridSelection,
 } from '@/features/application/databaseEditor';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
+import { resolveThemeTokens } from '@/shared/theme/themeTokens';
 import type { ColumnInfo, DatabaseRow } from '@/shared/types/dto/database';
 import {
   DATABASE_EDITOR_MIN_COLUMNS,
@@ -138,6 +139,7 @@ export const DataTable: React.FC<DataTableProps> = ({
 }) => {
   const { t } = useTranslation();
   const appTheme = useSettingsStore((state) => state.theme);
+  const themeTokens = useMemo(() => resolveThemeTokens(appTheme), [appTheme]);
   const gridRef = useRef<AgGridReact<DatabaseGridRow>>(null);
   const pasteInFlightRef = useRef(false);
 
@@ -199,11 +201,11 @@ export const DataTable: React.FC<DataTableProps> = ({
     const active = isGridCellActive(current, rowIndex, columnIndex);
     return {
       backgroundColor: selected
-        ? `color-mix(in srgb, ${appTheme.selectionRegion} 16%, transparent)`
+        ? `color-mix(in srgb, ${themeTokens.selection} 16%, transparent)`
         : 'transparent',
-      boxShadow: active ? `inset 0 0 0 1px ${appTheme.accentColor}` : 'none',
+      boxShadow: active ? `inset 0 0 0 1px ${themeTokens.accent}` : 'none',
     };
-  }, [appTheme.accentColor, appTheme.selectionRegion]);
+  }, [themeTokens.accent, themeTokens.selection]);
 
   const gridColumns = useMemo<ColDef<DatabaseGridRow>[]>(() => {
     const realColumns = columns.map<ColDef<DatabaseGridRow>>((column, columnIndex) => ({

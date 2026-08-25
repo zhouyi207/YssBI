@@ -11,9 +11,9 @@ export function safeDataTypeDisplay(dataType: unknown): string {
 }
 
 export function safeDataTypeColor(dataType: unknown): string {
-  if (typeof dataType === "string") return PIN_COLORS[dataType] ?? "rgba(156,163,175,0.7)";
+  if (typeof dataType === "string") return PIN_COLORS[dataType] ?? "var(--muted-foreground)";
   if (dataType && typeof dataType === "object" && "kind" in dataType) {
-    return PIN_COLORS[(dataType as DataType).kind] ?? "rgba(156,163,175,0.7)";
+    return PIN_COLORS[(dataType as DataType).kind] ?? "var(--muted-foreground)";
   }
-  return "rgba(156,163,175,0.7)";
+  return "var(--muted-foreground)";
 }

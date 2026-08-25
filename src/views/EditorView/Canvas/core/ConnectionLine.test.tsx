@@ -77,9 +77,10 @@ describe('ConnectionLine feedback', () => {
       'data-connection-feedback': 'invalid',
       'data-connection-invalid-reason': 'type-mismatch',
     });
-    expect(connectionFeedbackColor({ kind: 'append' }, '#000')).toBe('#22c55e');
-    expect(connectionFeedbackColor({ kind: 'replace', displacedConnectionIds: [] }, '#000')).toBe('#f59e0b');
-    expect(connectionFeedbackColor({ kind: 'invalid', reason: 'capacity' }, '#000')).toBe('#ef4444');
+    const palette = { success: '#22c55e', warning: '#f59e0b', danger: '#ef4444' };
+    expect(connectionFeedbackColor({ kind: 'append' }, '#000', palette)).toBe(palette.success);
+    expect(connectionFeedbackColor({ kind: 'replace', displacedConnectionIds: [] }, '#000', palette)).toBe(palette.warning);
+    expect(connectionFeedbackColor({ kind: 'invalid', reason: 'capacity' }, '#000', palette)).toBe(palette.danger);
   });
 });
 

@@ -73,7 +73,6 @@ export interface EdgeData {
   targetNodeId?: string;
   colorKey: string;
   edgeKind: 'exec' | 'data';
-  pinColor?: string;
 }
 
 export function buildEdgeData(
@@ -96,7 +95,6 @@ export function buildEdgeData(
       targetNodeId: toPin?.nodeId,
       colorKey: visual.colorKey,
       edgeKind: visual.edgeKind,
-      pinColor: fromPin.ui?.color,
     });
   }
   return result;
@@ -115,7 +113,7 @@ export const EdgesOverlay = React.memo(function EdgesOverlay(props: EdgesOverlay
   const interaction = props.mode === 'interactive' ? props : null;
   const selectedNodeIds = interaction?.selectedNodeIds ?? EMPTY_SELECTED_IDS;
   const selectedConnectionIds = interaction?.selectedConnectionIds ?? EMPTY_SELECTED_IDS;
-  const { theme } = useTheme();
+  const { tokens } = useTheme();
   const visual = useSyncExternalStore(subscribeExecutionVisual, getExecutionVisual, getExecutionVisual);
   const getScopedConnectPreview = () => getConnectPreview({ graphPath, groupId });
   const connectPreview = useSyncExternalStore(
@@ -268,7 +266,7 @@ export const EdgesOverlay = React.memo(function EdgesOverlay(props: EdgesOverlay
         // data：先取数、后流动；ConnectionFlow 仅在 pin 已有值时由后端发出
         const isPullActive = edge.edgeKind === 'data' && hasPull && !hasFlow && !isError;
         const isFlowActive = edge.edgeKind === 'exec' ? hasPull : hasFlow;
-        const color = edge.pinColor ?? getPinTypeColor(edge.colorKey, theme);
+        const color = getPinTypeColor(edge.colorKey, tokens);
         const edgeKind = edge.edgeKind;
 
         return (

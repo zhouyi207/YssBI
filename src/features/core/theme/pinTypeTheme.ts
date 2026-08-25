@@ -1,50 +1,62 @@
-import type { ThemeSettings } from "@/shared/types/settings";
+import type {
+  PinSemanticCategory,
+  ResolvedThemeTokens,
+} from '@/shared/theme/themeTokens';
 
-/** Pin 类型到 ThemeSettings 键的显式映射 */
-const PIN_TYPE_TO_THEME_KEY: Record<string, keyof ThemeSettings> = {
-  exec: "execColor",
-  Int32: "int32Color",
-  Int64: "int64Color",
-  Float32: "float32Color",
-  Float64: "float64Color",
-  bool: "boolColor",
-  Boolean: "boolColor",
-  string: "stringColor",
-  String: "stringColor",
-  object: "objectColor",
-  Object: "objectColor",
-  array: "arrayColor",
-  Array: "arrayColor",
-  dataframe: "dataframeColor",
-  DataFrame: "dataframeColor",
-  dataseries: "dataseriesColor",
-  DataSeries: "dataseriesColor",
-  date: "dateColor",
-  Date: "dateColor",
-  datetime: "datetimeColor",
-  DateTime: "datetimeColor",
-  Datetime: "datetimeColor",
-  time: "datetimeColor",
-  Time: "datetimeColor",
-  categorical: "categoricalColor",
-  Categorical: "categoricalColor",
-  any: "anyColor",
-  Any: "anyColor",
-  oneof: "oneofColor",
-  OneOf: "oneofColor",
-  struct: "structColor",
-  Struct: "structColor",
+const PIN_TYPE_TO_CATEGORY: Record<string, PinSemanticCategory> = {
+  exec: 'exec',
+  Int8: 'numeric',
+  Int16: 'numeric',
+  Int32: 'numeric',
+  Int64: 'numeric',
+  UInt32: 'numeric',
+  UInt64: 'numeric',
+  Float32: 'numeric',
+  Float64: 'numeric',
+  int8: 'numeric',
+  int16: 'numeric',
+  int32: 'numeric',
+  int64: 'numeric',
+  uint32: 'numeric',
+  uint64: 'numeric',
+  float: 'numeric',
+  float32: 'numeric',
+  float64: 'numeric',
+  numeric: 'numeric',
+  bool: 'boolean',
+  Boolean: 'boolean',
+  string: 'text',
+  String: 'text',
+  date: 'temporal',
+  Date: 'temporal',
+  datetime: 'temporal',
+  DateTime: 'temporal',
+  Datetime: 'temporal',
+  time: 'temporal',
+  Time: 'temporal',
+  dataframe: 'table',
+  DataFrame: 'table',
+  dataseries: 'table',
+  DataSeries: 'table',
+  object: 'object',
+  Object: 'object',
+  array: 'object',
+  Array: 'object',
+  categorical: 'object',
+  Categorical: 'object',
+  any: 'object',
+  Any: 'object',
+  oneof: 'object',
+  OneOf: 'object',
+  struct: 'object',
+  Struct: 'object',
+  Null: 'object',
 };
 
-/** 获取 pin 类型对应的主题颜色键 */
-export function getPinTypeThemeKey(pinType: string): keyof ThemeSettings {
-  const key = PIN_TYPE_TO_THEME_KEY[pinType];
-  if (key) return key;
-  return "anyColor";
+export function getPinTypeCategory(pinType: string): PinSemanticCategory {
+  return PIN_TYPE_TO_CATEGORY[pinType] ?? PIN_TYPE_TO_CATEGORY[pinType.toLowerCase()] ?? 'object';
 }
 
-/** 获取 pin 类型对应的颜色值 */
-export function getPinTypeColor(pinType: string, theme: ThemeSettings): string {
-  const key = getPinTypeThemeKey(pinType);
-  return theme[key] ?? theme.connectionLines ?? "#6b6b6b";
+export function getPinTypeColor(pinType: string, tokens: ResolvedThemeTokens): string {
+  return tokens.pins[getPinTypeCategory(pinType)];
 }

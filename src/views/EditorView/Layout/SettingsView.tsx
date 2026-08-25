@@ -467,191 +467,80 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                                 </Button>
                             </div>
 
-                            <div className="mb-8">
-                                <h3 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">{t("settings.groups.editorUi")}</h3>
-                                <div className="space-y-6">
-                                    <SettingItem
-                                        label={t("settings.labels.workbenchBackground")}
-                                        description={t("settings.descriptions.workbenchBackground")}
-                                        type="color"
-                                        value={theme.workbenchBackground}
-                                        onChange={(val: string) => updateTheme({ workbenchBackground: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.sidebarBackground")}
-                                        description={t("settings.descriptions.sidebarBackground")}
-                                        type="color"
-                                        value={theme.sidebarBackground}
-                                        onChange={(val: string) => updateTheme({ sidebarBackground: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.accentColor")}
-                                        description={t("settings.descriptions.accentColor")}
-                                        type="color"
-                                        value={theme.accentColor}
-                                        onChange={(val: string) => updateTheme({ accentColor: val })}
-                                    />
-                                </div>
-                            </div>
+                            <ColorGroup title={t("settings.groups.surfaces")}>
+                                <SettingItem
+                                    label={t("settings.labels.workbenchBackground")}
+                                    description={t("settings.descriptions.workbenchBackground")}
+                                    type="color"
+                                    value={theme.workbenchBackground}
+                                    onChange={(val: string) => updateTheme({ workbenchBackground: val })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.sidebarBackground")}
+                                    description={t("settings.descriptions.sidebarBackground")}
+                                    type="color"
+                                    value={theme.sidebarBackground}
+                                    onChange={(val: string) => updateTheme({ sidebarBackground: val })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.nodeBackground")}
+                                    description={t("settings.descriptions.nodeBackground")}
+                                    type="color"
+                                    value={theme.nodeBackground}
+                                    onChange={(val: string) => updateTheme({ nodeBackground: val })}
+                                />
+                            </ColorGroup>
 
-                            <div>
-                                <h3 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">{t("settings.groups.canvasElements")}</h3>
-                                <div className="space-y-6">
-                                    <SettingItem
-                                        label={t("settings.labels.gridLines")}
-                                        description={t("settings.descriptions.gridLines")}
-                                        type="color"
-                                        value={theme.gridLines}
-                                        onChange={(val: string) => updateTheme({ gridLines: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.nodeBaseColor")}
-                                        description={t("settings.descriptions.nodeBaseColor")}
-                                        type="color"
-                                        value={theme.nodeBase}
-                                        onChange={(val: string) => updateTheme({ nodeBase: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.connectionLines")}
-                                        description={t("settings.descriptions.connectionLines")}
-                                        type="color"
-                                        value={theme.connectionLines}
-                                        onChange={(val: string) => updateTheme({ connectionLines: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.selectionRegion")}
-                                        description={t("settings.descriptions.selectionRegion")}
-                                        type="color"
-                                        value={theme.selectionRegion}
-                                        onChange={(val: string) => updateTheme({ selectionRegion: val })}
-                                    />
-                                </div>
-                            </div>
+                            <ColorGroup title={t("settings.groups.content")}>
+                                <SettingItem
+                                    label={t("settings.labels.foreground")}
+                                    description={t("settings.descriptions.foreground")}
+                                    type="color"
+                                    value={theme.foreground}
+                                    onChange={(val: string) => updateTheme({ foreground: val })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.mutedForeground")}
+                                    description={t("settings.descriptions.mutedForeground")}
+                                    type="color"
+                                    value={theme.mutedForeground}
+                                    onChange={(val: string) => updateTheme({ mutedForeground: val })}
+                                />
+                            </ColorGroup>
 
-                            <div>
-                                <h3 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">{t("settings.groups.pinColors")}</h3>
-                                <div className="space-y-6">
-                                    <SettingItem
-                                        label={t("settings.labels.executionColor")}
-                                        description={t("settings.descriptions.executionColor")}
-                                        type="color"
-                                        value={theme.execColor}
-                                        onChange={(val: string) => updateTheme({ execColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.booleanColor")}
-                                        description={t("settings.descriptions.booleanColor")}
-                                        type="color"
-                                        value={theme.boolColor}
-                                        onChange={(val: string) => updateTheme({ boolColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.int32Color")}
-                                        description={t("settings.descriptions.int32Color")}
-                                        type="color"
-                                        value={theme.int32Color}
-                                        onChange={(val: string) => updateTheme({ int32Color: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.int64Color")}
-                                        description={t("settings.descriptions.int64Color")}
-                                        type="color"
-                                        value={theme.int64Color}
-                                        onChange={(val: string) => updateTheme({ int64Color: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.float32Color")}
-                                        description={t("settings.descriptions.float32Color")}
-                                        type="color"
-                                        value={theme.float32Color}
-                                        onChange={(val: string) => updateTheme({ float32Color: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.float64Color")}
-                                        description={t("settings.descriptions.float64Color")}
-                                        type="color"
-                                        value={theme.float64Color}
-                                        onChange={(val: string) => updateTheme({ float64Color: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.stringColor")}
-                                        description={t("settings.descriptions.stringColor")}
-                                        type="color"
-                                        value={theme.stringColor}
-                                        onChange={(val: string) => updateTheme({ stringColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.dateColor")}
-                                        description={t("settings.descriptions.dateColor")}
-                                        type="color"
-                                        value={theme.dateColor}
-                                        onChange={(val: string) => updateTheme({ dateColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.dateTimeColor")}
-                                        description={t("settings.descriptions.dateTimeColor")}
-                                        type="color"
-                                        value={theme.datetimeColor}
-                                        onChange={(val: string) => updateTheme({ datetimeColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.categoricalColor")}
-                                        description={t("settings.descriptions.categoricalColor")}
-                                        type="color"
-                                        value={theme.categoricalColor}
-                                        onChange={(val: string) => updateTheme({ categoricalColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.objectColor")}
-                                        description={t("settings.descriptions.objectColor")}
-                                        type="color"
-                                        value={theme.objectColor}
-                                        onChange={(val: string) => updateTheme({ objectColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.anyColor")}
-                                        description={t("settings.descriptions.anyColor")}
-                                        type="color"
-                                        value={theme.anyColor}
-                                        onChange={(val: string) => updateTheme({ anyColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.oneOfColor")}
-                                        description={t("settings.descriptions.oneOfColor")}
-                                        type="color"
-                                        value={theme.oneofColor}
-                                        onChange={(val: string) => updateTheme({ oneofColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.dataFrameColor")}
-                                        description={t("settings.descriptions.dataFrameColor")}
-                                        type="color"
-                                        value={theme.dataframeColor}
-                                        onChange={(val: string) => updateTheme({ dataframeColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.dataSeriesColor")}
-                                        description={t("settings.descriptions.dataSeriesColor")}
-                                        type="color"
-                                        value={theme.dataseriesColor}
-                                        onChange={(val: string) => updateTheme({ dataseriesColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.arrayColor")}
-                                        description={t("settings.descriptions.arrayColor")}
-                                        type="color"
-                                        value={theme.arrayColor}
-                                        onChange={(val: string) => updateTheme({ arrayColor: val })}
-                                    />
-                                    <SettingItem
-                                        label={t("settings.labels.structColor")}
-                                        description={t("settings.descriptions.structColor")}
-                                        type="color"
-                                        value={theme.structColor}
-                                        onChange={(val: string) => updateTheme({ structColor: val })}
-                                    />
-                                </div>
-                            </div>
+                            <ColorGroup title={t("settings.groups.interaction")}>
+                                <SettingItem
+                                    label={t("settings.labels.accentColor")}
+                                    description={t("settings.descriptions.accentColor")}
+                                    type="color"
+                                    value={theme.accentColor}
+                                    onChange={(val: string) => updateTheme({ accentColor: val })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.selectionColor")}
+                                    description={t("settings.descriptions.selectionColor")}
+                                    type="color"
+                                    value={theme.selectionColor}
+                                    onChange={(val: string) => updateTheme({ selectionColor: val })}
+                                />
+                            </ColorGroup>
+
+                            <ColorGroup title={t("settings.groups.structure")}>
+                                <SettingItem
+                                    label={t("settings.labels.borderColor")}
+                                    description={t("settings.descriptions.borderColor")}
+                                    type="color"
+                                    value={theme.borderColor}
+                                    onChange={(val: string) => updateTheme({ borderColor: val })}
+                                />
+                                <SettingItem
+                                    label={t("settings.labels.gridColor")}
+                                    description={t("settings.descriptions.gridColor")}
+                                    type="color"
+                                    value={theme.gridColor}
+                                    onChange={(val: string) => updateTheme({ gridColor: val })}
+                                />
+                            </ColorGroup>
                         </div>
                     </div>
                 );
@@ -695,18 +584,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                 </div>
             ) : null}
 
-            <div className="flex-1 flex overflow-hidden min-h-0">
+            <div className="flex min-h-0 flex-1 overflow-hidden max-[720px]:flex-col">
                 {/* Sidebar Navigation */}
-                <aside className="w-64 border-r border-border bg-[var(--sidebar-bg)] shrink-0 flex flex-col min-h-0">
-                    <ScrollArea className="flex-1 pt-4 min-h-0" orientation="vertical">
-                    <nav className="px-4 space-y-0.5">
+                <aside className="flex min-h-0 w-64 shrink-0 flex-col border-r border-border bg-[var(--sidebar-bg)] max-[720px]:h-12 max-[720px]:w-full max-[720px]:border-b max-[720px]:border-r-0">
+                    <ScrollArea className="min-h-0 flex-1 pt-4 max-[720px]:pt-0" orientation="vertical">
+                    <nav className="space-y-0.5 px-4 max-[720px]:flex max-[720px]:gap-1 max-[720px]:space-y-0 max-[720px]:overflow-x-auto max-[720px]:px-2 max-[720px]:py-1">
                         {visibleSections.map(section => (
                             <Button
                                 type="button"
                                 variant={activeSection === section.id ? "secondary" : "ghost"}
                                 key={section.id}
                                 onClick={() => void requestSection(section.id)}
-                                className="w-full justify-start"
+                                className="w-full justify-start max-[720px]:w-auto max-[720px]:shrink-0"
                             >
                                 {section.label}
                             </Button>
@@ -716,9 +605,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onRequestClose, onDi
                 </aside>
 
                 {/* Main Content Area */}
-                <main className="flex-1 min-h-0 flex flex-col">
+                <main className="flex min-h-0 min-w-0 flex-1 flex-col">
                     <ScrollArea className="flex-1 min-h-0" orientation="vertical">
-                    <div className="max-w-4xl space-y-4 px-12 py-8">
+                    <div className="w-full max-w-4xl space-y-4 px-12 py-8 max-[720px]:px-4 max-[720px]:py-4">
                         {sectionResetError?.section === activeSection ? (
                             <Alert data-settings-section-reset-error variant="destructive">
                                 <VscError aria-hidden="true" />
@@ -785,6 +674,15 @@ type SettingItemProps =
         value?: string;
         onChange?: (val: string) => void;
     });
+
+const ColorGroup: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+    <div className="mb-8">
+        <h3 className="mb-4 text-[11px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">
+            {title}
+        </h3>
+        <div className="space-y-6">{children}</div>
+    </div>
+);
 
 const SettingItem: React.FC<SettingItemProps> = (props) => {
     const { label, description, type, placeholder, disabled } = props;

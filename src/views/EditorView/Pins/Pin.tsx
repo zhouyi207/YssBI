@@ -97,7 +97,6 @@ export const Pin: React.FC<PinProps> = (props) => {
     direction,
     connected = false,
     linkCount = 0,
-    ui,
     metaData,
     graphPath,
     groupId,
@@ -120,18 +119,18 @@ export const Pin: React.FC<PinProps> = (props) => {
   } = props;
 
   const { t } = useTranslation();
-  const { theme: appTheme } = useTheme();
+  const { tokens } = useTheme();
   const isConnected = connected || linkCount > 0 || (isActive ?? false);
   const pinSemantics = useMemo(
     () => ({ type: type ?? 'object', dataType }),
     [type, dataType],
   );
   const visualSpec = useMemo(() => resolvePinVisualSpec(pinSemantics), [pinSemantics]);
-  const baseColor = ui?.color ?? getPinTypeColor(visualSpec.colorKey, appTheme);
+  const baseColor = getPinTypeColor(visualSpec.colorKey, tokens);
 
   const renderStyle = useMemo(
-    () => resolvePinRenderStyle(visualSpec, isConnected, baseColor),
-    [visualSpec, isConnected, baseColor],
+    () => resolvePinRenderStyle(visualSpec, isConnected, baseColor, tokens.mutedForeground),
+    [visualSpec, isConnected, baseColor, tokens.mutedForeground],
   );
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);

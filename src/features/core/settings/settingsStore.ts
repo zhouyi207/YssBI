@@ -15,7 +15,8 @@ import {
 } from "@/app/appConfig/default";
 import { logger } from '@/utils/appLogger';
 
-const SETTINGS_STORAGE_KEY = "yssbi-client-settings";
+const SETTINGS_STORAGE_KEY = "yssbi-client-settings-v2";
+const LEGACY_SETTINGS_STORAGE_KEY = "yssbi-client-settings";
 
 /** 多 WebView 窗口间同步客户端设置（主题等），与 localStorage 同源 */
 export const CLIENT_SETTINGS_UPDATED_EVENT = "client-settings-updated";
@@ -31,9 +32,26 @@ function clientSettingsFingerprint(s: AppSettings): string {
     });
 }
 
+function mergeThemeSettings(theme: Partial<ThemeSettings> | undefined): ThemeSettings {
+    const source = theme ?? {};
+    const defaults = DEFAULT_THEME;
+    return {
+        mode: source.mode === "light" ? "light" : "dark",
+        workbenchBackground: source.workbenchBackground ?? defaults.workbenchBackground,
+        sidebarBackground: source.sidebarBackground ?? defaults.sidebarBackground,
+        nodeBackground: source.nodeBackground ?? defaults.nodeBackground,
+        foreground: source.foreground ?? defaults.foreground,
+        mutedForeground: source.mutedForeground ?? defaults.mutedForeground,
+        accentColor: source.accentColor ?? defaults.accentColor,
+        borderColor: source.borderColor ?? defaults.borderColor,
+        gridColor: source.gridColor ?? defaults.gridColor,
+        selectionColor: source.selectionColor ?? defaults.selectionColor,
+    };
+}
+
 function mergeSettings(settings: Partial<AppSettings>): AppSettings {
     return {
-        theme: { ...DEFAULT_THEME, ...settings.theme },
+        theme: mergeThemeSettings(settings.theme),
         editor: {
             showGrid: settings.editor?.showGrid ?? DEFAULT_EDITOR.showGrid,
             autoSave: settings.editor?.autoSave ?? DEFAULT_EDITOR.autoSave,
@@ -64,6 +82,7 @@ function loadLocalSettings(): AppSettings {
     }
 
     try {
+        localStorage.removeItem(LEGACY_SETTINGS_STORAGE_KEY);
         const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
         if (!raw) return mergeSettings({});
         return mergeSettings(JSON.parse(raw) as Partial<AppSettings>);

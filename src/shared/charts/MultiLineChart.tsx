@@ -29,8 +29,6 @@ export interface MultiLineChartProps {
   className?: string;
 }
 
-const FALLBACK_SERIES_COLORS = ['#61afef', '#e06c75', '#98c379', '#e5c07b', '#c678dd', '#56b6c2'];
-
 function paddedDomain(values: number[]): [number, number] {
   const domain = extent(values.filter(Number.isFinite)) as [number | undefined, number | undefined];
   if (domain[0] == null || domain[1] == null) return [0, 1];
@@ -56,7 +54,7 @@ export function MultiLineChart({
   const themeSeries = useChartSeriesColors();
   const visibleSeries = useMemo(() => series.filter(item => item.points.length > 0), [series]);
   const colors = useMemo(
-    () => [themeSeries.primary, themeSeries.negative, themeSeries.secondary, ...FALLBACK_SERIES_COLORS],
+    () => themeSeries.palette,
     [themeSeries],
   );
 

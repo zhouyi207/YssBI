@@ -69,13 +69,10 @@ vi.mock('@/shared/ui', () => ({
 vi.mock('@/features/core/settings/settingsStore', () => {
   const state = {
     theme: {
-      workbenchBackground: '#000000', sidebarBackground: '#000000', accentColor: '#000000',
-      gridLines: '#000000', nodeBase: '#000000', connectionLines: '#000000', selectionRegion: '#000000',
-      execColor: '#000000', boolColor: '#000000', int32Color: '#000000', int64Color: '#000000',
-      float32Color: '#000000', float64Color: '#000000', stringColor: '#000000', dateColor: '#000000',
-      datetimeColor: '#000000', categoricalColor: '#000000', objectColor: '#000000', anyColor: '#000000',
-      oneofColor: '#000000', dataframeColor: '#000000', dataseriesColor: '#000000', arrayColor: '#000000',
-      structColor: '#000000',
+      mode: 'dark',
+      workbenchBackground: '#000000', sidebarBackground: '#000000', nodeBackground: '#000000',
+      foreground: '#ffffff', mutedForeground: '#999999', accentColor: '#000000',
+      borderColor: '#333333', gridColor: '#222222', selectionColor: '#000000',
     },
     editor: { showGrid: true, autoSave: false, snapToGrid: true, fontSize: 12 },
     appearance: {
@@ -162,6 +159,23 @@ describe('SettingsView computation settings', () => {
 
     expect(host.textContent).not.toContain('settings.labels.panelPosition');
     expect(host.textContent).not.toContain('settings.descriptions.panelPosition');
+  });
+
+  it('exposes only semantic color controls and keeps pin colors fixed', async () => {
+    render();
+    await openSection('color');
+
+    expect(host.textContent).toContain('settings.labels.workbenchBackground');
+    expect(host.textContent).toContain('settings.labels.nodeBackground');
+    expect(host.textContent).toContain('settings.labels.foreground');
+    expect(host.textContent).toContain('settings.labels.mutedForeground');
+    expect(host.textContent).toContain('settings.labels.borderColor');
+    expect(host.textContent).toContain('settings.labels.gridColor');
+    expect(host.textContent).toContain('settings.labels.selectionColor');
+    expect(host.textContent).not.toContain('settings.groups.pinColors');
+    expect(host.textContent).not.toContain('settings.labels.executionColor');
+    expect(host.textContent).not.toContain('settings.labels.int32Color');
+    expect(host.querySelectorAll('input[type="color"]').length).toBe(9);
   });
 
   it('shows tolerance formula help, Listwise/Reject, Apply, and recommended reset', async () => {

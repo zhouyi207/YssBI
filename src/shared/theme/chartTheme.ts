@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
+import { resolveThemeTokens, type ResolvedThemeTokens } from './themeTokens';
 
 /** D3 / SVG 图表在 dark / light 下的配色（Summary、Plot 窗口共用） */
 export interface ChartThemeColors {
@@ -14,36 +15,23 @@ export interface ChartThemeColors {
   tooltipMuted: string;
 }
 
-export function getChartThemeColors(isDark: boolean): ChartThemeColors {
-  if (isDark) {
-    return {
-      canvas: '#13151a',
-      grid: '#2a2d35',
-      axis: '#3a3d45',
-      tick: '#8b8f9a',
-      label: '#6b7080',
-      zeroLine: '#4a4d55',
-      tooltipBg: '#1e2028',
-      tooltipFg: '#e0e0e0',
-      tooltipMuted: '#888888',
-    };
-  }
+export function getChartThemeColors(tokens: ResolvedThemeTokens): ChartThemeColors {
   return {
-    canvas: '#ffffff',
-    grid: '#e5e7eb',
-    axis: '#cbd5e1',
-    tick: '#64748b',
-    label: '#475569',
-    zeroLine: '#94a3b8',
-    tooltipBg: '#ffffff',
-    tooltipFg: '#111827',
-    tooltipMuted: '#64748b',
+    canvas: tokens.panelBg,
+    grid: tokens.grid,
+    axis: tokens.border,
+    tick: tokens.mutedForeground,
+    label: tokens.mutedForeground,
+    zeroLine: tokens.connection,
+    tooltipBg: tokens.surfaceRaised,
+    tooltipFg: tokens.foreground,
+    tooltipMuted: tokens.mutedForeground,
   };
 }
 
 export function useChartThemeColors(): ChartThemeColors {
-  const mode = useSettingsStore((s) => s.theme.mode);
-  return useMemo(() => getChartThemeColors(mode !== 'light'), [mode]);
+  const theme = useSettingsStore((s) => s.theme);
+  return useMemo(() => getChartThemeColors(resolveThemeTokens(theme)), [theme]);
 }
 
 /** D3 序列色：主色跟随主题 accent，其余为固定语义色 */
@@ -52,23 +40,28 @@ export interface ChartSeriesColors {
   negative: string;
   secondary: string;
   highlight: string;
+  palette: string[];
 }
 
-const SERIES_NEGATIVE = '#e06c75';
-const SERIES_SECONDARY = '#e5c07b';
-const SERIES_HIGHLIGHT = '#ef4444';
-const SERIES_PRIMARY_FALLBACK = '#569cd6';
-
-export function getChartSeriesColors(accentColor?: string): ChartSeriesColors {
+export function getChartSeriesColors(tokens: ResolvedThemeTokens): ChartSeriesColors {
   return {
-    primary: accentColor?.trim() || SERIES_PRIMARY_FALLBACK,
-    negative: SERIES_NEGATIVE,
-    secondary: SERIES_SECONDARY,
-    highlight: SERIES_HIGHLIGHT,
+    primary: tokens.accent,
+    negative: tokens.status.danger,
+    secondary: tokens.status.warning,
+    highlight: tokens.status.danger,
+    palette: [
+      tokens.accent,
+      tokens.status.danger,
+      tokens.status.success,
+      tokens.status.warning,
+      tokens.status.info,
+      tokens.pins.temporal,
+      tokens.pins.table,
+    ],
   };
 }
 
 export function useChartSeriesColors(): ChartSeriesColors {
-  const accentColor = useSettingsStore((s) => s.theme.accentColor);
-  return useMemo(() => getChartSeriesColors(accentColor), [accentColor]);
+  const theme = useSettingsStore((s) => s.theme);
+  return useMemo(() => getChartSeriesColors(resolveThemeTokens(theme)), [theme]);
 }

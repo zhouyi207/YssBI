@@ -41,7 +41,7 @@ export function dataTypeContainerOverlay(
   return undefined;
 }
 
-/** 容器类型递归到内层标量，映射 ThemeSettings 色键。 */
+/** 容器类型递归到内层标量，返回供固定引脚语义调色板解析的类型别名。 */
 export function dataTypeToThemePinType(dt: DataType): string {
   switch (dt.kind) {
     case 'Boolean':
