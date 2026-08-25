@@ -395,9 +395,7 @@ pub(in crate::project) fn snapshot_project_resources(
                 DatabaseState::Loaded { dataframe, .. } => Some((
                     id.clone(),
                     Arc::clone(dataframe),
-                    crate::application::database_schema::column_info_from_schema(
-                        dataframe.schema().as_ref(),
-                    ),
+                    crate::schema::column_info_from_schema(dataframe.schema().as_ref()),
                 )),
                 _ => None,
             })
@@ -523,7 +521,7 @@ pub(in crate::project) fn snapshot_project_resources(
             ResourceId::new(format!("databases/{id}")).map_err(|error| error.to_string())?;
         database_schemas.insert(
             resource.clone(),
-            crate::application::database_schema::column_info_from_duckdb(&metadata.columns),
+            crate::schema::column_info_from_duckdb(&metadata.columns),
         );
         runtime =
             runtime.with_duckdb_database(resource, absolute.to_string_lossy().into_owned(), table);

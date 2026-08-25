@@ -242,14 +242,10 @@ impl ProjectState {
                         }
                         let columns = match &database.state {
                             DatabaseState::DuckDb { columns, .. } => {
-                                crate::application::database_schema::column_info_from_duckdb(
-                                    columns,
-                                )
+                                crate::schema::column_info_from_duckdb(columns)
                             }
                             DatabaseState::Loaded { dataframe, .. } => {
-                                crate::application::database_schema::column_info_from_schema(
-                                    dataframe.schema().as_ref(),
-                                )
+                                crate::schema::column_info_from_schema(dataframe.schema().as_ref())
                             }
                             DatabaseState::Failed { .. } => return None,
                         };
@@ -299,9 +295,7 @@ impl ProjectState {
                     Ok(metadata) => {
                         database_schemas.insert(
                             id.clone(),
-                            crate::application::database_schema::column_info_from_duckdb(
-                                &metadata.columns,
-                            ),
+                            crate::schema::column_info_from_duckdb(&metadata.columns),
                         );
                     }
                     Err(error) => {

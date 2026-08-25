@@ -1,5 +1,4 @@
-use crate::application::database::bind_duckdb_instance;
-use crate::database::{DatabaseEngine, DatabaseInstance, DatabaseState};
+use crate::database::{DatabaseEngine, DatabaseInstance, DatabaseState, bind_duckdb_instance};
 use crate::node_system::document::ResourceRevision;
 use crate::project::{
     GraphResourcePath, NormalizedProjectRoot, ProjectData, ProjectFilesystemError,

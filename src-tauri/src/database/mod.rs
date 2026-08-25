@@ -7,6 +7,7 @@ pub mod database_engine_sql;
 pub mod database_instance;
 pub mod database_schema;
 pub mod database_state;
+pub mod project_storage;
 
 pub mod dataset_overview;
 pub mod duckdb_analytics;
@@ -29,6 +30,7 @@ pub use database_engine_sql::*;
 pub use database_instance::*;
 pub use database_schema::*;
 pub use database_state::*;
+pub use project_storage::*;
 
 pub use dataset_overview::*;
 pub use duckdb_analytics::*;

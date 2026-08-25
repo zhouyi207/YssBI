@@ -1,10 +1,9 @@
-use polars::prelude::Schema;
-
-use crate::database::{
-    DatabaseInstance, DatabaseState, DuckDbColumnMeta, database_schema::polars_dtype_to_raw_string,
-};
+use crate::database::{DatabaseInstance, DatabaseState};
 use crate::project::{ProjectFilesystemError, ProjectResourceSnapshot, ProjectState};
-use crate::schema::{ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, VariableInstanceDTO};
+use crate::schema::{
+    ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, VariableInstanceDTO,
+    column_info_from_duckdb, column_info_from_schema,
+};
 
 pub fn name_from_path(path: &str) -> String {
     std::path::Path::new(path)
@@ -16,28 +15,6 @@ pub fn name_from_path(path: &str) -> String {
 
 pub fn database_display_name(instance: &DatabaseInstance) -> String {
     instance.decl.name.clone()
-}
-
-pub fn column_info_from_schema(schema: &Schema) -> Vec<ColumnInfoDTO> {
-    schema
-        .iter_names()
-        .filter_map(|name| {
-            schema.get(name).map(|dt| ColumnInfoDTO {
-                name: name.to_string(),
-                dtype: polars_dtype_to_raw_string(dt),
-            })
-        })
-        .collect()
-}
-
-pub fn column_info_from_duckdb(columns: &[DuckDbColumnMeta]) -> Vec<ColumnInfoDTO> {
-    columns
-        .iter()
-        .map(|col| ColumnInfoDTO {
-            name: col.name.clone(),
-            dtype: col.dtype.clone(),
-        })
-        .collect()
 }
 
 #[derive(Debug)]

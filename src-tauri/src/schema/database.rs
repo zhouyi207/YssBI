@@ -16,6 +16,30 @@ pub struct ColumnInfoDTO {
     pub dtype: String,
 }
 
+pub fn column_info_from_schema(schema: &polars::prelude::Schema) -> Vec<ColumnInfoDTO> {
+    schema
+        .iter_names()
+        .filter_map(|name| {
+            schema.get(name).map(|dtype| ColumnInfoDTO {
+                name: name.to_string(),
+                dtype: crate::database::database_schema::polars_dtype_to_raw_string(dtype),
+            })
+        })
+        .collect()
+}
+
+pub fn column_info_from_duckdb(
+    columns: &[crate::database::DuckDbColumnMeta],
+) -> Vec<ColumnInfoDTO> {
+    columns
+        .iter()
+        .map(|column| ColumnInfoDTO {
+            name: column.name.clone(),
+            dtype: column.dtype.clone(),
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseDeclDTO {

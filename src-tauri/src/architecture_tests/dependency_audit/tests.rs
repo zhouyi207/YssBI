@@ -158,3 +158,22 @@ fn invoke() {
         );
     }
 }
+
+#[test]
+fn production_project_modules_do_not_depend_on_application() {
+    let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let violations = audit_production_dependency(&source_root, "project", "application")
+        .expect("Project dependency audit must complete");
+    assert!(
+        violations.is_empty(),
+        "production Project modules must not depend on Application:\n{}",
+        violations
+            .iter()
+            .map(|violation| format!(
+                "{} [{}] -> {}",
+                violation.file, violation.module, violation.reference
+            ))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}

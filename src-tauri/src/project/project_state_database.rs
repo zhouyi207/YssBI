@@ -486,7 +486,7 @@ impl ProjectState {
             id,
             expected_revision,
         )?;
-        crate::application::database::remove_duckdb_table_if_needed(
+        crate::database::remove_duckdb_table_if_needed(
             &instance.decl.engine,
             Some(session.root.as_path()),
         )
