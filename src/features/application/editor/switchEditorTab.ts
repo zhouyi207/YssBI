@@ -6,7 +6,10 @@ import type { LayoutTab } from '@/shared/types/ui';
 
 import { activateGraphTab } from './activateGraphTab';
 import { suspendEditorGroupGraphSession } from './graphSessionLifecycle';
-import { setDetailContext } from './rightSidebarActions';
+import {
+  detailFocusForEditorResource,
+  setPassiveDetailContext,
+} from './rightSidebarActions';
 
 let editorGroupSessionChain: Promise<void> = Promise.resolve();
 let latestTabSwitchRequest = 0;
@@ -56,7 +59,7 @@ async function synchronizeTabSession(
   tab: LayoutTab,
 ): Promise<boolean> {
   if (tab.type === 'event' || tab.type === 'function') {
-    setDetailContext({ kind: tab.type, path: tab.id });
+    setPassiveDetailContext(detailFocusForEditorResource(tab.type, tab.id));
     const loaded = await activateGraphTab(tab.id, groupId);
     if (!loaded || request !== latestTabSwitchRequest) return false;
     syncVariablesGraphScopeFromActiveTab();
@@ -64,7 +67,7 @@ async function synchronizeTabSession(
   }
 
   if (tab.type === 'worksheet') {
-    setDetailContext({ kind: 'worksheet', worksheetPath: tab.id });
+    setPassiveDetailContext(detailFocusForEditorResource(tab.type, tab.id));
     const sessionStore = useGraphSessionStore.getState();
     if (sessionStore.getFocusedGroupId() === groupId) {
       sessionStore.clearFocusedSession(groupId);

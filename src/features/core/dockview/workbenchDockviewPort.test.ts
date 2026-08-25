@@ -360,6 +360,7 @@ class FakeWorkbenchDockview {
       id: options.id,
       component: options.component,
       get isActive() { return record.active; },
+      get isVisible() { return record.group.activePanel === record.panel; },
       get isPinned() { return panelApiState.pinned; },
       get location() { return record.group.location; },
       setActive: vi.fn(() => this.setActive(record)),
@@ -621,6 +622,29 @@ describe('workbench Dockview port', () => {
     expect(port.getEdgeState('bottom').collapsed).toBe(true);
     expect((await port.serialize()).edgeGroups?.bottom?.collapsed).toBe(true);
     expect(notifications).toBeGreaterThanOrEqual(4);
+  });
+
+  it('projects panel visibility independently from the globally active panel', async () => {
+    const fake = createFakeWorkbenchDockview();
+    fake.addGridGroup('grid-secondary', false);
+    const { port, internal } = createWorkbenchDockviewPort();
+    internal.bind(fake.api);
+    internal.completeHydration();
+
+    const mainPanel = await port.openEditor(editorRequest);
+    const splitPanel = await port.openEditor({
+      ...editorRequest,
+      targetGroupId: 'grid-secondary',
+    });
+
+    expect(port.getPanel(mainPanel.panelInstanceId)).toMatchObject({
+      active: false,
+      visible: true,
+    });
+    expect(port.getPanel(splitPanel.panelInstanceId)).toMatchObject({
+      active: true,
+      visible: true,
+    });
   });
 
   it('guarantees configured edge identity, geometry, header, and collapse state', async () => {

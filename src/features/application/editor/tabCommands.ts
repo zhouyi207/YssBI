@@ -4,7 +4,10 @@ import { isResourceDocumentDirty } from '@/features/core/resource';
 
 import { splitEditorAtEdge } from './editorGroupCommands';
 import { requestCloseWorkbenchPanels } from './workbenchPanelClose';
-import { setDetailContext } from './rightSidebarActions';
+import {
+  detailFocusForEditorResource,
+  setDetailContext,
+} from './rightSidebarActions';
 
 function editorPanelsInGroup(groupId: string) {
   return workbenchDockviewPort
@@ -18,11 +21,7 @@ function applyPassiveCloseFallback(): void {
   if (active?.metadata.role !== 'editor') return;
 
   const { resourceKind, resourceRef } = active.metadata;
-  if (resourceKind === 'event' || resourceKind === 'function') {
-    setDetailContext({ kind: resourceKind, path: resourceRef });
-  } else {
-    setDetailContext({ kind: 'worksheet', worksheetPath: resourceRef });
-  }
+  setDetailContext(detailFocusForEditorResource(resourceKind, resourceRef));
 }
 
 async function closePanelIds(panelInstanceIds: readonly string[]): Promise<boolean> {

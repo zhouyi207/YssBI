@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
+import { NodeDocumentationPanel } from '../node/NodeDocumentationPanel';
 import { DetailForm, DetailReadonlyField } from '../shared/DetailForm';
 
 interface NodeDefinitionDetailPanelProps {
@@ -24,6 +25,7 @@ export function NodeDefinitionDetailPanel({ nodeType }: NodeDefinitionDetailPane
           </DetailReadonlyField>
         ) : null}
       </DetailForm>
+      {item?.documentation ? <NodeDocumentationPanel markdown={item.documentation} /> : null}
     </DetailPanelShell>
   );
 }

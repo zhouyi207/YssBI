@@ -10,6 +10,7 @@ import {
   type WorkbenchPanelParams,
 } from '@/features/core/dockview';
 import { logsDockviewLayoutController } from '@/features/core/dockview/logsDockviewLayoutController';
+import { useVisibleGraphPanel } from '@/features/application/editor/useVisibleGraphPanel';
 import { GroupContext } from '@/features/core/editor';
 import { LogWorkspaceDockview } from '@/views/LogView/LogWorkspaceDockview';
 import { OutputPanel } from '@/views/LogView/OutputPanel';
@@ -58,7 +59,8 @@ export function WorkbenchEditorPanel(
       {isWorksheet ? (
         <WorksheetEditor key={`${metadata.resourceKind}:${metadata.resourceRef}`} />
       ) : (
-        <GraphEditor
+        <GraphEditorPanel
+          api={props.api}
           key={`${metadata.resourceKind}:${metadata.resourceRef}`}
           panelInstanceId={props.api.id}
           groupId={groupId}
@@ -73,6 +75,30 @@ export function WorkbenchEditorPanel(
     <GroupContext.Provider value={groupId}>{panel}</GroupContext.Provider>
   ) : (
     panel
+  );
+}
+
+function GraphEditorPanel({
+  api,
+  panelInstanceId,
+  groupId,
+  graphPath,
+  graphKind,
+}: {
+  api: IDockviewPanelProps<WorkbenchPanelParams>['api'];
+  panelInstanceId: string;
+  groupId: string;
+  graphPath: string;
+  graphKind: 'event' | 'function';
+}) {
+  useVisibleGraphPanel(api, { groupId, graphPath });
+  return (
+    <GraphEditor
+      panelInstanceId={panelInstanceId}
+      groupId={groupId}
+      graphPath={graphPath}
+      graphKind={graphKind}
+    />
   );
 }
 

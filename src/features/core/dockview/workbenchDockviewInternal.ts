@@ -194,6 +194,7 @@ function panelInfo(
   const metadata = readMetadata(panel);
   const location = readLocation(panel.group);
   if (!metadata || !location) return undefined;
+  const visible = panel.api.isVisible;
   return {
     panelInstanceId: panel.id,
     groupId: panel.group.id,
@@ -201,6 +202,7 @@ function panelInfo(
     title: panel.title,
     metadata,
     active: panel.api.isActive,
+    ...(typeof visible === 'boolean' ? { visible } : {}),
     location,
   };
 }
@@ -1395,6 +1397,7 @@ export function createWorkbenchDockviewPort(): {
   const idleWaiters = new Set<() => void>();
   const rootDisposables: Disposable[] = [];
   const edgeDisposables = new Map<WorkbenchEdgePosition, Disposable>();
+  const panelDisposables = new Map<string, Disposable>();
   type PendingOperation = {
     readonly operationGeneration: number;
     readonly bindingGeneration?: number;
@@ -1485,6 +1488,29 @@ export function createWorkbenchDockviewPort(): {
     rootDisposables.splice(0).forEach((disposable) => disposable.dispose());
     for (const disposable of edgeDisposables.values()) disposable.dispose();
     edgeDisposables.clear();
+    for (const disposable of panelDisposables.values()) disposable.dispose();
+    panelDisposables.clear();
+  };
+
+  const rebindPanelListeners = (): void => {
+    for (const disposable of panelDisposables.values()) disposable.dispose();
+    panelDisposables.clear();
+    if (!api) return;
+
+    for (const panel of api.panels) {
+      const disposables: Disposable[] = [];
+      if (typeof panel.api.onDidVisibilityChange === 'function') {
+        disposables.push(panel.api.onDidVisibilityChange(() => publish()));
+      }
+      if (typeof panel.api.onDidGroupChange === 'function') {
+        disposables.push(panel.api.onDidGroupChange(() => publish()));
+      }
+      if (disposables.length > 0) {
+        panelDisposables.set(panel.id, {
+          dispose: () => disposables.forEach((disposable) => disposable.dispose()),
+        });
+      }
+    }
   };
 
   const drain = async (): Promise<void> => {
@@ -1872,10 +1898,12 @@ export function createWorkbenchDockviewPort(): {
       rootDisposables.push(
         boundApi.onDidLayoutChange(() => {
           rebindEdgeListeners();
+          rebindPanelListeners();
           publish();
         }),
         boundApi.onDidLayoutFromJSON(() => {
           rebindEdgeListeners();
+          rebindPanelListeners();
           publish();
         }),
         boundApi.onWillShowOverlay((event) => {
@@ -1888,6 +1916,7 @@ export function createWorkbenchDockviewPort(): {
         boundApi.onDidActiveGroupChange(() => publish()),
       );
       rebindEdgeListeners();
+      rebindPanelListeners();
       publish();
       void drain();
     },

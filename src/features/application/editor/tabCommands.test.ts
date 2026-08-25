@@ -32,6 +32,11 @@ vi.mock('./editorGroupCommands', () => ({
 }));
 
 vi.mock('./rightSidebarActions', () => ({
+  detailFocusForEditorResource: (resourceKind: 'event' | 'function' | 'worksheet', resourceRef: string) => (
+    resourceKind === 'worksheet'
+      ? { kind: 'worksheet', worksheetPath: resourceRef }
+      : { kind: resourceKind, path: resourceRef }
+  ),
   setDetailContext: vi.fn(),
 }));
 

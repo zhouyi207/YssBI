@@ -53,6 +53,7 @@ import {
   revealDetails,
   revealInspect,
   setDetailContext,
+  setPassiveDetailContext,
   setInspectionContext,
 } from './rightSidebarActions';
 
@@ -108,6 +109,18 @@ describe('right sidebar context actions', () => {
 
     expect(mocks.ensureView).not.toHaveBeenCalled();
     expect(mocks.reveal).not.toHaveBeenCalled();
+  });
+
+  it('keeps explicit node focus when passive graph hydration reports the same tab', () => {
+    setInspectionContext('events/Main.yssbi-event', ['node-1']);
+
+    setPassiveDetailContext({ kind: 'event', path: 'events/Main.yssbi-event' });
+
+    expect(useEditorStore.getState().detailFocus).toEqual({
+      kind: 'node',
+      id: 'node-1',
+      graphPath: 'events/Main.yssbi-event',
+    });
   });
 
   it('awaits explicit Details and Inspect singleton creation after publishing context', async () => {

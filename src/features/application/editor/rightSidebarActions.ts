@@ -2,6 +2,17 @@ import type { DetailFocus } from '@/features/core/editor';
 import { useEditorStore } from '@/features/core/editor';
 import { setVariablesGraphScopeFromResource } from '@/features/core/editor/detail/variablesGraphScope';
 import { revealWorkbenchView } from '@/features/application/layout/workbenchLayoutActions';
+import type { LayoutTabType } from '@/shared/types/ui';
+
+export function detailFocusForEditorResource(
+  resourceKind: LayoutTabType,
+  resourceRef: string,
+): DetailFocus {
+  if (resourceKind === 'worksheet') {
+    return { kind: 'worksheet', worksheetPath: resourceRef };
+  }
+  return { kind: resourceKind, path: resourceRef };
+}
 
 export function setDetailContext(focus: DetailFocus | null): void {
   const store = useEditorStore.getState();
@@ -11,6 +22,19 @@ export function setDetailContext(focus: DetailFocus | null): void {
   if (focus?.kind === 'event' || focus?.kind === 'function') {
     setVariablesGraphScopeFromResource(focus.path);
   }
+}
+
+/** Apply tab-derived context without replacing an explicit node inspection in the same graph. */
+export function setPassiveDetailContext(focus: DetailFocus): void {
+  const current = useEditorStore.getState().detailFocus;
+  const preservesNodeFocus = (focus.kind === 'event' || focus.kind === 'function')
+    && current?.kind === 'node'
+    && current.graphPath === focus.path;
+  if (preservesNodeFocus) {
+    setVariablesGraphScopeFromResource(focus.path);
+    return;
+  }
+  setDetailContext(focus);
 }
 
 export function setInspectionContext(

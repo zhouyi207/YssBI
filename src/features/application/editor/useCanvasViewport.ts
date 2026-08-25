@@ -65,6 +65,7 @@ export function useCanvasViewport(
       resizeRafRef.current = requestAnimationFrame(bumpResizeVersion);
     });
 
+    observer.observe(root);
     for (const nodeId of graphNodeIds) {
       const el = root.querySelector(`[data-node-id="${nodeId}"]`);
       if (el) observer.observe(el);

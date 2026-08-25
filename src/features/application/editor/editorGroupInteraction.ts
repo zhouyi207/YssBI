@@ -10,6 +10,5 @@ export function shouldSkipEditorGroupShellActivation(target: EventTarget | null)
 
 /** VS Code editor MOUSE_DOWN — sync layout focus; graph hydrate continues async. */
 export function prepareEditorGroupForInteraction(groupId: string): void {
-  focusEditorGroupSync(groupId);
-  void hydrateEditorGroup(groupId);
+  if (focusEditorGroupSync(groupId)) void hydrateEditorGroup(groupId);
 }

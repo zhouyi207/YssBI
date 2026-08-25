@@ -52,7 +52,7 @@ function EditorWindowReady() {
         <DialogContent
           explicitClose
           onEscapeKeyDown={(event) => event.preventDefault()}
-          className="h-[min(760px,86vh)] max-w-[min(1120px,92vw)] p-0"
+          className="h-[min(760px,86vh)] max-w-[min(1120px,92vw)] p-0 max-[720px]:h-[92vh] max-[720px]:max-w-[96vw]"
         >
           <SettingsView onRequestClose={() => setSettingsOpen(false)} />
         </DialogContent>

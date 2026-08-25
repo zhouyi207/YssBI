@@ -41,7 +41,14 @@ vi.mock('./activateGraphTab', () => ({ activateGraphTab: vi.fn(async () => true)
 vi.mock('@/features/core/editor/detail/variablesGraphScope', () => ({
   syncVariablesGraphScopeFromActiveTab: vi.fn(),
 }));
-vi.mock('./rightSidebarActions', () => ({ setDetailContext: mocks.setDetailContext }));
+vi.mock('./rightSidebarActions', () => ({
+  detailFocusForEditorResource: (resourceKind: 'event' | 'function' | 'worksheet', resourceRef: string) => (
+    resourceKind === 'worksheet'
+      ? { kind: 'worksheet', worksheetPath: resourceRef }
+      : { kind: resourceKind, path: resourceRef }
+  ),
+  setPassiveDetailContext: mocks.setDetailContext,
+}));
 
 import {
   activateCurrentEditorTab,

@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
+import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import type { GraphEntitiesState } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
@@ -39,6 +40,7 @@ interface NodeDetailPanelProps {
 export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
   const { t } = useTranslation();
   const node = useGraphDataStore((state) => selectNodeDetailNode(state, graphPath, nodeId));
+  const { catalog } = useLocalizedNodeCatalog(Boolean(node));
   const pinObjs = useGraphDataStore(
     useShallow((state) => {
       const bucket = state.graphEntities[graphPath];
@@ -100,7 +102,9 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
     );
   }
 
-  const documentation = node.display?.description ?? node.description;
+  const catalogItem = catalog?.items.find((item) => item.nodeTypeId === node.nodeType);
+  const description = catalogItem?.description ?? node.display?.description ?? node.description;
+  const documentation = catalogItem?.documentation;
 
   return (
     <DetailPanelShell>
@@ -113,6 +117,11 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
         >
           {node.display?.title ?? node.title}
         </DetailReadonlyField>
+        {description ? (
+          <DetailReadonlyField label={t('detail.fields.description')} tone="muted">
+            {description}
+          </DetailReadonlyField>
+        ) : null}
       </DetailForm>
 
       {node.capabilities && (

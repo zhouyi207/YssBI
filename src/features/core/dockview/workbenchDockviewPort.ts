@@ -17,6 +17,8 @@ export interface WorkbenchPanelInfo {
   readonly title?: string;
   readonly metadata: WorkbenchPanelMetadata;
   readonly active: boolean;
+  /** Live Dockview visibility; omitted by transaction-only projections. */
+  readonly visible?: boolean;
   readonly location:
     | { readonly type: 'grid' }
     | { readonly type: 'edge'; readonly position: WorkbenchEdgePosition };
