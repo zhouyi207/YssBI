@@ -123,28 +123,19 @@ describe('right sidebar context actions', () => {
     });
   });
 
-  it('awaits explicit Details and Inspect singleton creation after publishing context', async () => {
-    const details = deferred<WorkbenchPanelInfo>();
-    mocks.ensureView.mockImplementationOnce(() => details.promise);
-    let detailsSettled = false;
-    const detailsReveal = revealDetails({ kind: 'variable', id: 'variable-1' })
-      .then(() => { detailsSettled = true; });
-
+  it('updates explicit Details context without ensuring or activating a view', async () => {
+    await revealDetails({ kind: 'variable', id: 'variable-1' });
     expect(useEditorStore.getState().detailFocus).toEqual({
       kind: 'variable',
       id: 'variable-1',
     });
-    expect(mocks.ensureView).toHaveBeenCalledWith({
-      viewId: 'details',
-      title: 'panel.details',
-    });
-    await Promise.resolve();
-    expect(detailsSettled).toBe(false);
-    details.resolve(viewPanel('details'));
-    await detailsReveal;
+    expect(mocks.ensureView).not.toHaveBeenCalled();
+    expect(mocks.reveal).not.toHaveBeenCalled();
+  });
 
+  it('ensures Inspect after publishing its node context', async () => {
     const inspect = deferred<WorkbenchPanelInfo>();
-    mocks.ensureView.mockImplementationOnce(() => inspect.promise);
+    mocks.ensureView.mockImplementation(() => inspect.promise);
     let inspectSettled = false;
     const inspectReveal = revealInspect('events/Main.yssbi-event', ['node-2'])
       .then(() => { inspectSettled = true; });
@@ -163,7 +154,7 @@ describe('right sidebar context actions', () => {
     inspect.resolve(viewPanel('inspect'));
     await inspectReveal;
 
-    expect(mocks.ensureView).toHaveBeenCalledTimes(2);
+    expect(mocks.ensureView).toHaveBeenCalledOnce();
   });
 
   it('does not create Inspect for an invalid selection or erase non-node Details context', async () => {

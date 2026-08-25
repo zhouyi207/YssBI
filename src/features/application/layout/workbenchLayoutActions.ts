@@ -14,6 +14,7 @@ import {
 } from '@/features/core/dockview/workbenchDockviewPort';
 import {
   isWorkbenchActivityMetadata,
+  isWorkbenchPersistentViewMetadata,
   type WorkbenchViewId,
 } from '@/features/core/dockview/workbenchPanelModel';
 import { useEditorStore } from '@/features/core/editor';
@@ -30,6 +31,7 @@ const VIEW_TITLE_KEYS = {
   inspect: 'panel.inspect',
   logs: 'panel.logs',
   output: 'panel.output',
+  diagnostics: 'panel.diagnostics',
 } as const satisfies Record<WorkbenchViewId, string>;
 
 function findWorkbenchView(viewId: WorkbenchViewId): WorkbenchPanelInfo | undefined {
@@ -39,7 +41,6 @@ function findWorkbenchView(viewId: WorkbenchViewId): WorkbenchPanelInfo | undefi
 
 function hasContextFor(viewId: WorkbenchViewId): boolean {
   const focus = useEditorStore.getState().detailFocus;
-  if (viewId === 'details') return focus !== null;
   if (viewId === 'inspect') return focus?.kind === 'node';
   return true;
 }
@@ -71,7 +72,10 @@ export async function revealWorkbenchView(
 
 export async function toggleWorkbenchView(viewId: WorkbenchViewId): Promise<boolean> {
   const existing = findWorkbenchView(viewId);
-  if (existing && isWorkbenchActivityMetadata(existing.metadata)) {
+  if (existing && (
+    isWorkbenchActivityMetadata(existing.metadata)
+    || isWorkbenchPersistentViewMetadata(existing.metadata)
+  )) {
     return (await revealWorkbenchView(viewId)) !== null;
   }
   if (existing) return requestCloseWorkbenchPanel(existing.panelInstanceId);
@@ -168,13 +172,21 @@ export async function resetWorkbenchLayout(): Promise<void> {
       const editors = ordered.filter((panel) => panel.metadata.role === 'editor');
       const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
         tx.ensureView(viewRequest(viewId)));
+      const details = tx.ensureView(viewRequest('details'));
       const logs = tx.ensureView(viewRequest('logs'));
       const output = tx.ensureView(viewRequest('output'));
+      const diagnostics = tx.ensureView(viewRequest('diagnostics'));
       const left = tx.configureEdge({
         position: 'left',
         size: WORKBENCH_EDGE_SIZES.left,
         collapsed: false,
         headerPosition: 'left',
+      });
+      const right = tx.configureEdge({
+        position: 'right',
+        size: WORKBENCH_EDGE_SIZES.right,
+        collapsed: false,
+        headerPosition: 'right',
       });
       const bottom = tx.configureEdge({
         position: 'bottom',
@@ -201,6 +213,12 @@ export async function resetWorkbenchLayout(): Promise<void> {
         });
       });
       tx.move({
+        panelInstanceId: details.panelInstanceId,
+        groupId: right.groupId,
+        index: 0,
+        activate: false,
+      });
+      tx.move({
         panelInstanceId: logs.panelInstanceId,
         groupId: bottom.groupId,
         index: 0,
@@ -209,6 +227,11 @@ export async function resetWorkbenchLayout(): Promise<void> {
         panelInstanceId: output.panelInstanceId,
         groupId: bottom.groupId,
         index: 1,
+      });
+      tx.move({
+        panelInstanceId: diagnostics.panelInstanceId,
+        groupId: bottom.groupId,
+        index: 2,
       });
 
       for (const [offset, panel] of editors.slice(1).entries()) {
@@ -222,21 +245,13 @@ export async function resetWorkbenchLayout(): Promise<void> {
       const contextual = ordered.filter((panel) =>
         panel.metadata.role === 'result'
         || (panel.metadata.role === 'view'
-          && (panel.metadata.viewId === 'details'
-            || panel.metadata.viewId === 'inspect')));
-      if (contextual.length > 0) {
-        const right = tx.configureEdge({
-          position: 'right',
-          size: WORKBENCH_EDGE_SIZES.right,
-          collapsed: false,
+          && panel.metadata.viewId === 'inspect'));
+      for (const [index, panel] of contextual.entries()) {
+        tx.move({
+          panelInstanceId: panel.panelInstanceId,
+          groupId: right.groupId,
+          index: index + 1,
         });
-        for (const [index, panel] of contextual.entries()) {
-          tx.move({
-            panelInstanceId: panel.panelInstanceId,
-            groupId: right.groupId,
-            index,
-          });
-        }
       }
 
       const project = activityPanels.find((panel) =>

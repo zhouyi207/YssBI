@@ -19,6 +19,7 @@ export const WORKBENCH_VIEW_IDS = [
   'inspect',
   'logs',
   'output',
+  'diagnostics',
 ] as const;
 
 export type WorkbenchViewId = (typeof WORKBENCH_VIEW_IDS)[number];
@@ -34,7 +35,8 @@ export type WorkbenchComponentId =
   | 'Inspect'
   | 'Result'
   | 'Logs'
-  | 'Output';
+  | 'Output'
+  | 'Diagnostics';
 
 export type EditorPanelMetadata = {
   readonly role: 'editor';
@@ -111,6 +113,7 @@ const COMPONENT_BY_VIEW_ID: Readonly<Record<WorkbenchViewId, WorkbenchComponentI
   inspect: 'Inspect',
   logs: 'Logs',
   output: 'Output',
+  diagnostics: 'Diagnostics',
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -186,6 +189,12 @@ export function isWorkbenchActivityMetadata(
   metadata: WorkbenchPanelMetadata | undefined,
 ): metadata is ViewPanelMetadata & { readonly viewId: WorkbenchActivityViewId } {
   return metadata?.role === 'view' && isWorkbenchActivityViewId(metadata.viewId);
+}
+
+export function isWorkbenchPersistentViewMetadata(
+  metadata: WorkbenchPanelMetadata | undefined,
+): metadata is ViewPanelMetadata & { readonly viewId: 'details' } {
+  return metadata?.role === 'view' && metadata.viewId === 'details';
 }
 
 export function isWorkbenchPanelMetadata(value: unknown): value is WorkbenchPanelMetadata {

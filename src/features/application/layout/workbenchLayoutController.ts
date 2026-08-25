@@ -25,6 +25,7 @@ import {
 import {
   workbenchDockviewPort,
   type WorkbenchDockviewPort,
+  type WorkbenchPanelInfo,
 } from '@/features/core/dockview/workbenchDockviewPort';
 
 
@@ -129,18 +130,93 @@ function rootIsEmpty(api: DockviewApi): boolean {
   return api.panels.length === 0;
 }
 
+function viewRequest(viewId: 'diagnostics') {
+  return { viewId, title: 'Diagnostics' } as const;
+}
+
+const DETAILS_VIEW_REQUEST = {
+  viewId: 'details',
+  title: 'Details',
+} as const;
+
+function persistedRightSidebarSize(transaction: WorkbenchLayoutTransaction): number {
+  const right = transaction.serialize().edgeGroups?.right;
+  return typeof right?.size === 'number' ? right.size : WORKBENCH_EDGE_SIZES.right;
+}
+
+function configurePermanentDetailsSidebar(
+  transaction: WorkbenchLayoutTransaction,
+  details: WorkbenchPanelInfo,
+  size = persistedRightSidebarSize(transaction),
+): void {
+  const right = transaction.configureEdge({
+    position: 'right',
+    size,
+    collapsed: false,
+    headerPosition: 'right',
+  });
+  transaction.move({
+    panelInstanceId: details.panelInstanceId,
+    groupId: right.groupId,
+    index: 0,
+    activate: false,
+  });
+}
+
+function ensurePermanentDetailsSidebar(transaction: WorkbenchLayoutTransaction): void {
+  const activePanelInstanceId = transaction.getActivePanel()?.panelInstanceId;
+  const details = transaction.ensureView(DETAILS_VIEW_REQUEST);
+  configurePermanentDetailsSidebar(transaction, details);
+  if (activePanelInstanceId && transaction.getPanel(activePanelInstanceId)) {
+    transaction.activate(activePanelInstanceId);
+  }
+}
+
+function ensureDiagnosticsViewAfterRestore(transaction: WorkbenchLayoutTransaction): void {
+  const existing = transaction.listPanels().find((panel) => (
+    panel.metadata.role === 'view' && panel.metadata.viewId === 'diagnostics'
+  ));
+  if (existing) return;
+
+  const activePanelInstanceId = transaction.getActivePanel()?.panelInstanceId;
+  const diagnostics = transaction.ensureView(viewRequest('diagnostics'));
+  const output = transaction.listPanels().find((panel) => (
+    panel.metadata.role === 'view' && panel.metadata.viewId === 'output'
+  ));
+  if (output) {
+    const outputGroupPanels = transaction.listGroupPanels(output.groupId);
+    const outputIndex = outputGroupPanels.findIndex((panel) => (
+      panel.panelInstanceId === output.panelInstanceId
+    ));
+    if (outputIndex >= 0) {
+      transaction.move({
+        panelInstanceId: diagnostics.panelInstanceId,
+        groupId: output.groupId,
+        index: outputIndex + 1,
+        activate: false,
+      });
+    }
+  }
+  if (activePanelInstanceId && transaction.getPanel(activePanelInstanceId)) {
+    transaction.activate(activePanelInstanceId);
+  }
+}
+
 function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void {
   transaction.ensureCentralGroup();
   const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
     transaction.ensureView({ viewId, title: viewId[0].toUpperCase() + viewId.slice(1) }));
+  const details = transaction.ensureView(DETAILS_VIEW_REQUEST);
   const logs = transaction.ensureView({ viewId: 'logs', title: 'Logs' });
   const output = transaction.ensureView({ viewId: 'output', title: 'Output' });
+  const diagnostics = transaction.ensureView(viewRequest('diagnostics'));
   const left = transaction.configureEdge({
     position: 'left',
     size: WORKBENCH_EDGE_SIZES.left,
     collapsed: false,
     headerPosition: 'left',
   });
+  configurePermanentDetailsSidebar(transaction, details);
   const bottom = transaction.configureEdge({
     position: 'bottom',
     size: WORKBENCH_EDGE_SIZES.bottom,
@@ -167,6 +243,11 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
     panelInstanceId: output.panelInstanceId,
     groupId: bottom.groupId,
     index: 1,
+  });
+  transaction.move({
+    panelInstanceId: diagnostics.panelInstanceId,
+    groupId: bottom.groupId,
+    index: 2,
   });
 }
 
@@ -415,6 +496,21 @@ export function createWorkbenchLayoutController(
     }
   };
 
+  const finishRestoredRoot = async (cycle: HydrationCycle): Promise<void> => {
+    try {
+      internal.installHydrationLayout(
+        cycle.internalHydrationEpoch,
+        (transaction) => {
+          ensurePermanentDetailsSidebar(transaction);
+          ensureDiagnosticsViewAfterRestore(transaction);
+        },
+      );
+    } catch {
+      // A restored root remains usable if additive view migrations fail.
+    }
+    openHydrationGateAndFinish(cycle, false);
+  };
+
   const initializeRootDefaults = async (
     cycle: HydrationCycle,
     persistCurrentLayout: boolean,
@@ -490,13 +586,13 @@ export function createWorkbenchLayoutController(
       if (rootIsEmpty(currentBound.api)) {
         await initializeRootDefaults(cycle, false);
       } else {
-        openHydrationGateAndFinish(cycle, false);
+        await finishRestoredRoot(cycle);
       }
       return;
     }
 
     if (!rootIsEmpty(currentBound.api)) {
-      openHydrationGateAndFinish(cycle, false);
+      await finishRestoredRoot(cycle);
       return;
     }
 
@@ -510,12 +606,12 @@ export function createWorkbenchLayoutController(
       if (rootIsEmpty(currentBound.api)) {
         await initializeRootDefaults(cycle, false);
       } else {
-        openHydrationGateAndFinish(cycle, false);
+        await finishRestoredRoot(cycle);
       }
       return;
     }
 
-    openHydrationGateAndFinish(cycle, false);
+    await finishRestoredRoot(cycle);
   };
 
 

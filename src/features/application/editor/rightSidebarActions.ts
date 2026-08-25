@@ -52,7 +52,6 @@ export function setInspectionContext(
 
 export async function revealDetails(focus: DetailFocus): Promise<void> {
   setDetailContext(focus);
-  await revealWorkbenchView('details');
 }
 
 export async function revealInspect(

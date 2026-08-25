@@ -32,26 +32,57 @@ src/app/appConfig/appLinks.ts
 
 ## 2026.08.25
 
+- [ ] 将 Logs 内嵌 Dockview 子 tab 固定为完整日志域集合，移除 tab 关闭 X 和中键关闭行为。
+- [ ] 删除 Logs 右侧“+”新增日志域菜单及相关新增逻辑，缺少固定域的持久化布局自动回退到完整默认布局。
+- [ ] 限制 Logs tab 仅可在同一组内交换顺序，并优化激活态、悬停态和右侧工具栏样式。
+- [ ] 增加 Rust production-module architecture audit，强制生产 Project 不依赖 Application 或 Commands，并对 raw identifier、conditional path 与代码 include 采取可验证的保守处理。
+- [ ] 将 Project-relative DuckDB runtime binding/physical removal 下移 Database，将现有 ColumnInfoDTO conversion 下移 Schema，保持事务、快照、错误与 IPC 行为不变。
+- [ ] 更新权威架构图与 Database module 文档，明确 Application 编排、Project authority、Database primitives 和 Schema wire conversion 的单向边界。
+- [ ] 执行 strict architecture policy：用 Rust/TypeScript canonical-origin 审计、exact debt 与 semantic guards 强制单向依赖，并把现有债务逐项清零。
+- [ ] 执行 Rust backend adapter boundaries：让 SCI、Database、watcher/progress 和 scientific/relational/resource ports 脱离 Graph、Project、Tauri 与具体后端。
+- [ ] 执行 Project–Graph ownership decoupling：Graph 只拥有 document/schema/catalog/compiler contract，Project 保持唯一持久化与 history authority，Application 负责 capture/plan/commit。
+- [ ] 执行 Execution runtime extraction：建立原子 Application session、Execution-owned plan/runtime/settings、RunRegistry 与两阶段 finalization，删除 Project 执行 owner。
+- [ ] 执行 Presentation/Event/Command boundaries：把 editor/result presentation 与跨域事件策略归 Application，Schema/Event 只做 wire/delivery，Tauri commands 保持薄层。
+- [ ] 执行 Frontend Application boundaries：后端状态只作不可变 projection，Application hooks/coordinators 统一 reconciliation、optimistic echo 与 use-case，UI/store 不再直连 Services/Tauri。
 - [x] 将 Canvas 编辑器交互按 `panelInstanceId` 隔离，修复同一 group 中多个 tab 共享 active tab 导致的右键创建节点、选择、连线、拖放和快捷键操作失效问题。
 - [x] 清理 Canvas 的 group 级 active tab、重复命令路由、失效拖放处理和旧的自定义 tab 移动逻辑，统一使用 Dockview 的默认移动行为。
 - [x] 删除与上述历史实现绑定的冗余测试和失效测试；保留必要的 pane 快照稳定性约束。
 - [x] 修复空 panel 选择状态返回新对象导致 React `getSnapshot` 无限更新的问题，使用稳定的空选择快照。
 - [x] 修复首次进入项目时左侧 Activity sidebar 默认激活 `commands` 的问题，默认改为激活 `project`。
+- [ ] 将现有双语节点 Markdown 以编译期 catalog 文档 registry 接入 Detail 的 documentation projection。
+- [ ] 让静态节点与资源绑定节点按当前 locale 读取 Markdown，并在语言缺失时回退英文。
+- [ ] 对没有显式 Markdown 映射的节点停止使用 i18n documentation 作为隐式 fallback，保持文档单一来源。
+- [ ] 将 `PortSpec.title` 固定为各节点结构化 pin 定义直接提供的非本地化标题。
+- [ ] 删除协议层按 `nodeType`/`key` 推导 pin title 的全局映射、特例分支和未知 key fallback。
+- [ ] 保持 Markdown 中的 pin title 与 Rust 结构化 pin 定义人工同步，不在运行时或编译期解析 Markdown title。
+- [ ] 按 ponytail 审核 pin title/Markdown 相关测试，移除 catalog 职责之外的重复文档断言并保留稳定的 projection 契约。
+- [ ] 更新 node-system golden fixtures 以反映 Markdown documentation 与结构化 `PortSpec.title`，移除已失效的 `label_key` 快照契约。
+- [ ] 合并 Markdown documentation 的正向验证到 catalog 公共 projection 测试，覆盖英文、中文与 locale 差异。
+- [ ] 移除 DataFrame 参数化节点测试中与节点参数契约无关的 documentation 断言。
+- [ ] 重新生成 node-system golden fixtures，使 Markdown documentation 与 `PortSpec.title` 成为当前契约。
+- [x] 使用的 ag-grid ~~我想将 @glideapps/glide-data-grid 切换为 shadcn 中的 data table，主要是因为风格和组件和目前的 shadcn 组件不搭，同时在构建的时候还有一些其他的错误，如下。需要考虑替换的可行性；或许使用 Handsontable 替代（商用收费）~~
+- [x] tolerance 和 num_traits
+- [x] 在前端中的 graph 中的 data pin 的类别都是 unknown，导致节点没有颜色，同时在 pin 的时候不会筛选节点，更不会自动连接节点，这个是需要修复的，可能需要完整的从后端发送类型过来避免字符串解析？这样会更加完整？这里需要仔细考虑
+- [x] 将过去的操作尽可能实现后归纳到 v0_0.md 文档
+- [ ] node 的 tooltip 功能，可以查看节点的信息
+- [ ] 在根 Dockview 的 Output 右侧新增 Diagnostics tab，集中展示当前图的节点诊断信息。
+- [ ] 按当前聚焦图的节点顺序汇总所有节点 diagnostics，并显示严重级别、节点、诊断 code 与消息。
+- [ ] 点击 Diagnostics 条目后定位对应节点并切换 Details 上下文；旧布局恢复时自动补齐缺失的 Diagnostics tab。
+- [ ] 移除 editor 顶部主题切换按钮右侧的 Details 切换按钮及其 menubar/View 菜单逻辑。
+- [ ] 将 Details 固定为根 Dockview 右侧常驻 sidebar，初始化、旧布局恢复和重置布局时自动创建并默认展开，同时保留用户调整的宽度。
+- [ ] 保留 Details Dockview tab 原有图标与文本标题样式，仅移除关闭入口，不改变 Activity bar 的纯图标样式。
+- [ ] 禁止 Details 通过关闭、上下文菜单或拖拽布局离开右侧 sidebar，并保留 Details context 更新功能。
 
 架构，不要你中有我我中有你，最好组件化？是这个意思吧？即下面的分析
 
 - [ ] snapshot 有必要吗？？？？ 还有 run id，以及每次允许之后会在 details 中出现的 developer trace 中记录的历史数据，打开会很卡。
-
 - [ ] 在更改 graph 的时候 tabbar 中的样式并没有其他变化，如果在更改后不保存关闭，那么下次打开打开的时候还是更改前的状态，这里明显是不符合逻辑的，除此之外还有其他的需要检查；同时磁盘上以及更新的符号和标签我感觉可以去掉，可以学习 vscode 的 tabbar 处理
-- [ ] 在前端中的 graph 中的 data pin 的类别都是 unknown，导致节点没有颜色，同时在 pin 的时候不会筛选节点，更不会自动连接节点，这个是需要修复的，可能需要完整的从后端发送类型过来避免字符串解析？这样会更加完整？这里需要仔细考虑
 - [ ] 在 sidebar 中创建 item 的时候首先会出现在最下方然后根据 name 移动位置，能不能直接根据 name 出现在某个位置，忽略出现在下方的过程，这样不美观
 - [ ] 目前后端节点的定义好像也不太清晰明了，需要讨论怎么处理
 - [ ] 在 graph 中的右键菜单我希望根据 section subsection 等等分类，包括 activitybar 为节点的 sidebar 中的节点也是一样，这样如果不记得名称找起来非常方便，需要讨论
 - [ ] 后续我会加入 mcp 功能方便 llm 直接调用统计方法获得数值结果，同时我会加入智能分析功能利用 llm 分析数值报告获得分析结果，在这里我初步的构想是在 activitybar 中添加一个报告的 icon，其对应的 sidebar 中显示各种数值报告的 item，然后 llm 可以对这些报告进行执行分析输出得到结果编写论文；你怎么看，目前怎么预留接口，前端应该如何设计等等需要仔细讨论和实现（在这里 data 中每一列我希望可以添加一个描述统计，意味着我们可以在导入数据的时候对 data column 添加一个文本标注，方便模型知道 data column 并进行描述统计分析一些有意义的结果并输出一些合理的假设）
 - [ ] 关于可视化层面，目前可视化的图表还不够，我希望更加的丰富；并将这些图表组件化放置在一起，哪里需要就调用避免重复实现，差异较大可以分为两个组件
-- [ ] 将过去的操作尽可能实现后归纳到 v0_0.md 文档
 - [ ] 思考是否有必要多窗口进行跨窗同步，这样就不需要什么多进程的 token 了吧
-- [ ] snapshot 有必要吗？？？？
 - [ ] graph 分为两种，一种是纯计算 graph，一种是目前这种；纯计算 graph 使用 notebook 这种形式，修改节点会污染依赖该节点的下游节点，递归污染；运行到此节点可以做到将上游阶段全部干净，
 - [ ] 我认为下面的版本信息完全没有必要
 
@@ -62,15 +93,12 @@ src/app/appConfig/appLinks.ts
             },
 
 
-- [ ] 这个问题好像只能等 rust 升级到 1.99 版本才行，大概在 10.1 期间： warning: linker stdout: 正在创建库 D:\Desktop\YssBI\target\debug\deps\yssbi.lib 和对象 D:\Desktop\YssBI\target\debug\deps\yssbi.exp
-
 ## v1.0 待办
 
 `v2` 原本用于区分旧持久化格式，但既然明确要求**不迁移、不兼容、直接删除旧路径**，继续维护版本号没有价值，反而暗示未来会做 schema migration。
 
 ### 窗口跨窗同步
 
-- [ ] 我想将 @glideapps/glide-data-grid 切换为 shadcn 中的 data table，主要是因为风格和组件和目前的 shadcn 组件不搭，同时在构建的时候还有一些其他的错误，如下。需要考虑替换的可行性；或许使用 Handsontable 替代（商用收费）
 - [ ] assistant-ui
 - [ ] 将 worksheet 重命名为 charts
 
@@ -82,7 +110,6 @@ node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_r
 ```
 ### 口语化表达
 
-- [ ] 点击更新会自动更新
 - [ ] **多数据库 DataView 直接编辑行定位抽象**：当前项目内 DuckDB 持久化表用 DuckDB `rowid` 做分页/编辑定位；后续若支持 SQLite / MySQL 等外部数据库直接编辑，需要新增 `RowLocator` / `BackendRowKey` 类能力抽象，各 backend 明确自己的稳定行键策略（DuckDB `rowid`、SQLite `rowid` 或主键、MySQL 必须主键/唯一键）；无稳定行键的外部表默认只读或先导入项目 DuckDB，避免把 DuckDB `rowid` 语义错误泛化到所有数据库
 - [ ] **Worksheet 图表切 tab 性能优化（坚持 ChartViewModel 路线）**：不要全局把所有 tab 内容 hidden 保活；继续沿用当前 preview/data 缓存方向，把昂贵工作从 React mount 生命周期中移出。后续将 `WorksheetPreviewPayload` 细化为更完整的 `ChartViewModel`（缓存数据列、聚合结果、domain、ticks、legend/tooltip 元信息等），组件重挂载时直接复用模型；绘制层避免 `svg.selectAll('*').remove()` 全量重建，尺寸变化只重算 scale/位置，大数据 scatter/line 考虑采样或 canvas 渲染；缓存使用 LRU，并在 DataView 编辑、数据版本变化或 worksheet spec 变化时精确失效
 - [ ] **变量类型切换时的值迁移 / 智能转换（暂缓）**：当前策略——切换类型且未显式提交新值时，重置为 `DataType::default_value()`；Array / Object / DataFrame / DataSeries 已用 JSON 列式编辑 + `tabular/` 存储（见 ## 2026.07.03 已勾项）。**暂不实现**跨类型自动保留或 coerce（如 Int→String、DataFrame↔Array、Object 字段映射等）；后续可考虑接入 `DataValue::coerce_to`、切换前「将丢失当前值」提示。变量类型不可选 Any。
@@ -106,7 +133,7 @@ node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_r
 - [ ] 剩余唯一标记是 Rust 执行上下文中的 get_bound_type TODO。它依赖尚未提供类型绑定状态的 GraphRuntime，当前直接返回 None 是明确的未实现能力，不适合通过猜测补丁，否则可能引入错误类型推断。
 - [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_sci::compute_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
 - [ ] **Julia 第二个迁移目标选择**：ACF/PACF 已经有 `src/sci` API、Julia worker 和 Rust/Julia golden fixture 测试；下一步不要直接上 VEC/RE MLE/DID。优先在「serial tests / Ljung-Box / DW」和「描述性统计」里选一个做第二个 PoC：输入输出简单、能复用 Arrow IPC、容易与 golden result 对齐。简化 OLS 可以排第三步，先只做 `y: Float64` + `x: Float64 matrix` + `hasIntercept`，暂不碰公式、分类变量、robust/cluster/HAC。
-- [ ] tolerance 和 num_traits
+
 - [ ] bayes 中的有很多的 errors.push(error("PREDICTOR_REQUIRED", "预测表达式尚未解析或绑定。", "boundPredictor")); 后期都是要修复的
 - [ ] bayes 中的 ast 感觉可以和 src 下的 ast 放置在一起，在这里好像有 latex -> json ast，json -> julia ast，normal formula -> json ast 等等 ast
 - [ ] bayes 长任务的通知最好是作为复用模块
@@ -175,8 +202,6 @@ ols 节点的 evaltor 逻辑有巨大的优化空间
 
 执行动画有一点bug，节点在获取数据执行其他节点的时候本身状态并没有执行完毕但是ui上显示执行完毕了
 
-node 的 tooltip 功能，可以查看节点的信息
-
 为了解决 dummy 问题，例如个体效应和时间效应的哑变量问题，可能需要在 dataseries 中添加额外信息进而去提出多出来的哑变量：计划做一个 add dummy info 节点，下方有个下拉列表或者文本框选择需要设置 dummy 的信息，仅对 dataseries 为 string 的信息管用。
 
 面板数据，可能需要对 dataframe 数据类型也加上 info，来表示个体信息和时间信息 dataseries
@@ -207,22 +232,6 @@ deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感
 [12:43:12.757][BE][DEBUG] [APP] Settings saved successfully via backend
 [12:43:12.757][BE][DEBUG] [APP] Settings saved successfully via backend
 [12:43:12.758][BE][DEBUG] [APP] Settings saved successfully via backend
-
-## node_architecture 进度
-
-
-
-| Phase | 完成度 | 当前状态 |
-|---|---:|---|
-| Phase 1：身份、协议、Registry | **100%** | Stable IDs、strict executable Registry、typed fail-fast built-in assembly、provider provenance、legacy Registry/runtime removal、one-way editor projection parsing、Rust↔TS golden contracts、fixture immutability、whole-slice reviews and fresh full verification complete |
-| Phase 2：GraphDocument 和事务 | **100%** | GraphDocument structural validation now gates file load, insertion, graph-carrying resource patches, lazy hydration, and prepared activation before authoritative effects; typed causes, descriptor-only production mutation, test-only raw helpers, projected-member atomicity, exact persistence precedence/OrderKey round-trip, stable metadata, unknown-node loadability, and MoveGraph zero-effect rejection all passed focused verification and whole-slice review |
-| Phase 3：编辑器权威投影 | **100%** | Exact descriptor、revisioned command snapshot、coherent database recovery 与唯一 Core lifecycle authority 已完成；identity cycle/shim 已移除，AST-resolved service boundary 与 stale command/event/graph/publication 行为通过最终审查 |
-| Phase 4：Rust 权威 History | **100%** | Rust 权威 History 已完成：direct/lifecycle graph cache unload 保留完整项目 History；unloaded Graph/Function/local variable 在单一 coordinator lease 下按需 hydration，并与 loaded/global resources 原子 Undo/Redo；policy/head/session/revision/residency races、rollback/recovery、精确 delta 与 post-finalize publication 均通过最终审查。History 仍为 process-local，project activation/reload/replacement 会清空 |
-| Phase 5：确定性语义分析 | **100%** | Type/Schema/dependency analysis, compile publication, immutable resource facts, scope/parameter validation, and authority races are complete; 105 canonical typed compiler diagnostics now provide complete generated localization, stable named facts, canonical stored ordering, locale-independent snapshots, alias-resistant authority audits, and deterministic non-empty invalid-graph analysis across forward/reverse/seeded insertion histories |
-| Phase 6：无环数据执行计划 | **100%** | Demand-driven roots 已完成：Stable GraphOutputRef、full-analysis/specialized-plan 分离、bounded DemandKey variants、pure/Call/structured/relational/resource 剪枝、canonical selection correlation 与顶层 Event Pin preview 均通过最终审查；前端 1137 项及完整串行 `pnpm verify` 通过。CachePolicy memoization、deadline、并行调度与 Filter/Project lineage 仍属后续 Phase 7/8 能力 |
-| Phase 7：Relational island | **100%** | Project/Filter strict authority、Catalog/UI、typed schema、exact lowering、safe lineage、stable demand 与 DataFrame-native runtime 全部完成；真实 built-in Registry/database final/preview production chain、磁盘参数回读、内部 order/dtype/nulls、UUID determinism、取消/资源清理及同节点 ParameterizedStatic UI route 通过 whole-slice 最终审查与完整 `pnpm verify`，legacy external-mask Filter/Decompose 和外部 RuntimeValue 合约保持不变 |
-| Phase 8：结构化控制与副作用 | **100%** | Branch、Loop、Call、Effect、显式 effect dependencies、64 层递归边界、独立 frame、carried values、typed cancellation、RAII 资源清理、最终化竞态及加载期 drain 均完成生产验证；独立架构审计与 fresh structured/compiler/plan/runtime/RunRegistry 串行矩阵通过，stream transport、cache、deadline 与并行调度属于后续运行平台能力 |
-| Phase 9：Catalog、搜索、可观测性 | **100%** | Static/resource Catalog、current-locale title+aliases search/docs、database recovery、canonical delta strict-wire 与 legacy inference audits 已完成；frontend 287、database integration 11 及 Rust focused matrix通过最终审查 |
 
 
 需要你确认的执行语义
@@ -1328,3 +1337,39 @@ Execution 不知道具体 UI
 [7]: https://github.com/zhouyi207/YssBI/blob/shadcn/package.json "YssBI/package.json at shadcn · zhouyi207/YssBI · GitHub"
 [8]: https://github.com/zhouyi207/YssBI/tree/shadcn/src/features "YssBI/src/features at shadcn · zhouyi207/YssBI · GitHub"
 [9]: https://github.com/zhouyi207/YssBI/tree/shadcn/.github/workflows "YssBI/.github/workflows at shadcn · zhouyi207/YssBI · GitHub"
+
+
+这种代码是不是没有什么必要
+
+
++pub fn canonical_port_title(key: &str) -> Box<str> {
+    132 +    let title = match key {
+    133 +        "value" => "Value",
+    134 +        "left" => "Left",
+    135 +        "right" => "Right",
+    136 +        "result" => "Result",
+    137 +        "input" => "Input",
+    138 +        "output" => "Output",
+    139 +        "enter" => "Enter",
+    140 +        "then" => "Then",
+    141 +        "true" => "True",
+    142 +        "false" => "False",
+    143 +        "condition" => "Condition",
+    144 +        "operands" => "Operands",
+    145 +        "source" => "Source",
+    146 +        "dataframe" => "DataFrame",
+    147 +        "series" => "Data Series",
+    148 +        "values" => "Values",
+    149 +        "samples" => "Samples",
+    150 +        "sample_count" => "Sample Count",
+    151 +        "maximum_lag" => "Maximum Lag",
+    152 +        "standard_deviation" => "Standard Deviation",
+    153 +        "lower_bound" => "Lower Bound",
+    154 +        "upper_bound" => "Upper Bound",
+    155 +        "then_source" => "Then Source",
+    156 +        "else_source" => "Else Source",
+    157 +        "initial_source" => "Initial Source",
+    158 +        "next_source" => "Next Source",
+    169 +    };
+    170 +    title.into()
+    171 +}

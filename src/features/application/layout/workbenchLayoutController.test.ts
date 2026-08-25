@@ -73,6 +73,7 @@ function rootLayout(
     inspect: 'Inspect',
     logs: 'Logs',
     output: 'Output',
+    diagnostics: 'Diagnostics',
   };
   const activityPanels = {
     'project-stable': {
@@ -299,6 +300,7 @@ function panelInfo(viewId: WorkbenchViewId): WorkbenchPanelInfo {
     inspect: 'Inspect',
     logs: 'Logs',
     output: 'Output',
+    diagnostics: 'Diagnostics',
   } as const satisfies Record<WorkbenchViewId, WorkbenchComponentId>;
   const component = components[viewId];
   return {
@@ -384,7 +386,7 @@ function createFakePort(
   });
   const ensureView = vi.fn(async ({ viewId }: { viewId: WorkbenchViewId }) => {
     order.push(`port.ensureView:${viewId}`);
-    if (!['project', 'nodes', 'data', 'commands', 'logs', 'output'].includes(viewId)) {
+    if (!['project', 'nodes', 'data', 'commands', 'details', 'logs', 'output', 'diagnostics'].includes(viewId)) {
       throw new Error(`unexpected default view ${viewId}`);
     }
     return panelInfo(viewId);
@@ -450,7 +452,7 @@ function createFakePort(
   });
   const layoutEnsureView = vi.fn(({ viewId }: { viewId: WorkbenchViewId }) => {
     recordLayoutOperation(`layout.ensureView:${viewId}`);
-    if (!['project', 'nodes', 'data', 'commands', 'logs', 'output'].includes(viewId)) {
+    if (!['project', 'nodes', 'data', 'commands', 'details', 'logs', 'output', 'diagnostics'].includes(viewId)) {
       throw new Error(`unexpected default view ${viewId}`);
     }
     return panelInfo(viewId);
@@ -475,15 +477,24 @@ function createFakePort(
     panelInstanceId: string;
     groupId: string;
     index?: number;
+    activate?: boolean;
   }) => {
     recordLayoutOperation(`layout.move:${request.panelInstanceId}`);
     return true;
   });
+  const layoutActivate = vi.fn((panelInstanceId: string) => {
+    order.push(`layout.activate:${panelInstanceId}`);
+    return true;
+  });
   const layoutTransaction = {
+    serialize: () => structuredClone(serialized),
+    getPanel: vi.fn(() => undefined),
+    getActivePanel: vi.fn(() => undefined),
     ensureCentralGroup: layoutEnsureCentralGroup,
     ensureView: layoutEnsureView,
     configureEdge: layoutConfigureEdge,
     move: layoutMove,
+    activate: layoutActivate,
   } as unknown as WorkbenchLayoutTransaction;
   const installHydrationLayout = vi.fn((
     epoch: number,
@@ -654,7 +665,7 @@ describe('WorkbenchLayoutController hydration', () => {
 
     expect(harness.root.fromJSON).not.toHaveBeenCalled();
     expect(harness.fakePort.layoutEnsureView.mock.calls.map(([request]) => request.viewId))
-      .toEqual(['project', 'data', 'nodes', 'commands', 'logs', 'output']);
+      .toEqual(['project', 'data', 'nodes', 'commands', 'details', 'logs', 'output', 'diagnostics']);
   });
 
   it('installs startup defaults behind hydration before queued application work', async () => {
@@ -679,22 +690,25 @@ describe('WorkbenchLayoutController hydration', () => {
     expect(harness.fakePort.ensureView).not.toHaveBeenCalled();
     expect(harness.fakePort.configureEdge).not.toHaveBeenCalled();
     expect(harness.fakePort.move).not.toHaveBeenCalled();
-    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(15);
+    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(20);
     expect(harness.fakePort.layoutOperationHydrationStates.every((state) => state === false))
       .toBe(true);
     expect(harness.fakePort.layoutEnsureView.mock.calls.map(([request]) => request.viewId))
-      .toEqual(['project', 'data', 'nodes', 'commands', 'logs', 'output']);
+      .toEqual(['project', 'data', 'nodes', 'commands', 'details', 'logs', 'output', 'diagnostics']);
     expect(harness.fakePort.layoutConfigureEdge.mock.calls.map(([request]) => request)).toEqual([
       { position: 'left', size: 292, collapsed: false, headerPosition: 'left' },
+      { position: 'right', size: 320, collapsed: false, headerPosition: 'right' },
       { position: 'bottom', size: 200, collapsed: false, headerPosition: 'bottom' },
     ]);
     expect(harness.fakePort.layoutMove.mock.calls.map(([request]) => request)).toEqual([
+      { panelInstanceId: 'view:details', groupId: 'edge-right', index: 0, activate: false },
       { panelInstanceId: 'view:project', groupId: 'edge-left', index: 0 },
       { panelInstanceId: 'view:data', groupId: 'edge-left', index: 1 },
       { panelInstanceId: 'view:nodes', groupId: 'edge-left', index: 2 },
       { panelInstanceId: 'view:commands', groupId: 'edge-left', index: 3 },
       { panelInstanceId: 'view:logs', groupId: 'edge-bottom', index: 0 },
       { panelInstanceId: 'view:output', groupId: 'edge-bottom', index: 1 },
+      { panelInstanceId: 'view:diagnostics', groupId: 'edge-bottom', index: 2 },
     ]);
     expect(harness.order.indexOf('layout.move:view:output')).toBeLessThan(
       harness.order.indexOf('internal.installHydrationLayout:applied'),
@@ -725,7 +739,7 @@ describe('WorkbenchLayoutController hydration', () => {
     expect(harness.fakePort.installHydrationLayout).not.toHaveBeenCalled();
     expect(harness.fakePort.runLayoutTransaction).toHaveBeenCalledOnce();
     expect(harness.fakePort.completeHydration).not.toHaveBeenCalled();
-    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(15);
+    expect(harness.fakePort.layoutOperationHydrationStates).toHaveLength(20);
     expect(harness.fakePort.layoutOperationHydrationStates.every((state) => state === true))
       .toBe(true);
   });
@@ -755,6 +769,32 @@ describe('WorkbenchLayoutController hydration', () => {
     expect(harness.fakePort.ensureCentralGroup).not.toHaveBeenCalled();
     expect(harness.logsController.getLatestSnapshot())
       .toEqual(createDefaultLogsDockviewLayout());
+  });
+
+  it('installs the permanent Details sidebar while restoring an older root layout', async () => {
+    const savedRoot = rootLayout('saved-logs', 'logs');
+    const harness = createHarness({ raw: storedPayload(savedRoot) });
+
+    await bindAndHydrate(harness);
+
+    expect(harness.root.fromJSON).toHaveBeenCalledOnce();
+    expect(harness.fakePort.installHydrationLayout).toHaveBeenCalledOnce();
+    expect(harness.fakePort.layoutEnsureView).toHaveBeenCalledWith({
+      viewId: 'details',
+      title: 'Details',
+    });
+    expect(harness.fakePort.layoutConfigureEdge).toHaveBeenCalledWith({
+      position: 'right',
+      size: 320,
+      collapsed: false,
+      headerPosition: 'right',
+    });
+    expect(harness.fakePort.layoutMove).toHaveBeenCalledWith({
+      panelInstanceId: 'view:details',
+      groupId: 'edge-right',
+      index: 0,
+      activate: false,
+    });
   });
 
   it('refuses startup restore when the bound root is not empty', async () => {
@@ -866,6 +906,10 @@ describe('WorkbenchLayoutController persistence', () => {
     expect(harness.fakePort.serialize).not.toHaveBeenCalled();
     expect(harness.order).toEqual([
       'root.fromJSON',
+      'internal.installHydrationLayout:start',
+      'layout.ensureView:details',
+      'layout.configureEdge:right',
+      'layout.move:view:details',
       'internal.completeHydration',
       'port.subscribe',
       'internal.whenIdle',

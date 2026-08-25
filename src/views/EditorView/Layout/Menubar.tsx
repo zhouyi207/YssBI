@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
-import { VscLayoutSidebarRight, VscLayoutSidebarRightOff } from 'react-icons/vsc';
 import {
   useEditorHistoryAvailability,
   useEditorSessionCommandsContext,
@@ -27,7 +26,6 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
 import { BrandLockup } from '@/shared/ui/BrandMark';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
@@ -356,8 +354,6 @@ export function Menubar() {
     { label: t('menubar.about'), onClick: () => setAboutOpen(true) },
   ];
 
-  const detailsAvailable = viewState.detailsOpen || viewState.detailsContextValid;
-
   return (
     <>
       <WindowMenuBar
@@ -381,23 +377,6 @@ export function Menubar() {
                   <circle cx="12" cy="12" r="4" strokeWidth={2} />
                 </svg>
               )}
-            </ToolbarIconButton>
-            <ToolbarIconButton
-              variant="ghost"
-              size="icon-lg"
-              onClick={viewActions.toggleDetails}
-              disabled={!detailsAvailable}
-              aria-pressed={viewState.detailsOpen}
-              className={cn(
-                'self-center',
-                viewState.detailsOpen ? 'text-foreground' : 'text-muted-foreground',
-              )}
-              tooltip={t('panel.details')}
-              aria-label={t('panel.details')}
-            >
-              {viewState.detailsOpen
-                ? <VscLayoutSidebarRight size={14} />
-                : <VscLayoutSidebarRightOff size={14} />}
             </ToolbarIconButton>
           </>
         }

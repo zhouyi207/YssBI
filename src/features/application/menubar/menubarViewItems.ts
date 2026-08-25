@@ -10,8 +10,6 @@ export type MenubarMenuItem = {
 
 export interface MenubarViewState {
   readonly activityGroupOpen: boolean;
-  readonly detailsOpen: boolean;
-  readonly detailsContextValid: boolean;
   readonly inspectOpen: boolean;
   readonly inspectContextValid: boolean;
   readonly logsOpen: boolean;
@@ -21,7 +19,6 @@ export interface MenubarViewState {
 
 export interface MenubarViewMenuActions {
   readonly toggleActivityGroup: () => void;
-  readonly toggleDetails: () => void;
   readonly toggleInspect: () => void;
   readonly toggleLogs: () => void;
   readonly toggleOutput: () => void;
@@ -40,14 +37,6 @@ export function buildViewMenuItems(
       type: 'checkbox',
       checked: state.activityGroupOpen,
       onClick: actions.toggleActivityGroup,
-    },
-    {
-      label: t('panel.details'),
-      type: 'checkbox',
-      checked: state.detailsOpen,
-      onClick: state.detailsOpen || state.detailsContextValid
-        ? actions.toggleDetails
-        : undefined,
     },
     {
       label: t('panel.inspect'),

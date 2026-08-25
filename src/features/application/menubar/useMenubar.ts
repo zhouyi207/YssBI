@@ -31,7 +31,6 @@ function openViewIds(): ReadonlySet<WorkbenchViewId> {
 /** Menubar model projected from live root Dockview state and semantic application actions. */
 export function useMenubar() {
   const openSettings = useWorkbenchStore((state) => state.openSettings);
-  const detailsContextValid = useEditorStore((state) => state.detailFocus !== null);
   const inspectContextValid = useEditorStore((state) => state.detailFocus?.kind === 'node');
   const dockviewSnapshot = useSyncExternalStore(
     workbenchDockviewPort.subscribe,
@@ -47,15 +46,13 @@ export function useMenubar() {
         return edge.exists && edge.visible && !edge.collapsed
           && edge.groupId === 'workbench-edge-left';
       })(),
-      detailsOpen: views.has('details'),
-      detailsContextValid,
       inspectOpen: views.has('inspect'),
       inspectContextValid,
       logsOpen: views.has('logs'),
       outputOpen: views.has('output'),
       bottomCollapsed: workbenchDockviewPort.getEdgeState('bottom').collapsed,
     };
-  }, [dockviewSnapshot.revision, detailsContextValid, inspectContextValid]);
+  }, [dockviewSnapshot.revision, inspectContextValid]);
 
   const editorCommandAuthorized = captureActiveEditorCommandTarget() !== null;
 
@@ -85,10 +82,6 @@ export function useMenubar() {
     void toggleActivityWorkbenchGroup();
   }, []);
 
-  const toggleDetails = useCallback(() => {
-    void toggleWorkbenchView('details');
-  }, []);
-
   const toggleInspect = useCallback(() => {
     void toggleWorkbenchView('inspect');
   }, []);
@@ -116,7 +109,6 @@ export function useMenubar() {
     handleOpenLogs,
     viewActions: {
       toggleActivityGroup,
-      toggleDetails,
       toggleInspect,
       toggleLogs,
       toggleOutput,

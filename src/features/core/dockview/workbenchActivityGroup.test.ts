@@ -17,6 +17,7 @@ const editorMetadata: WorkbenchPanelMetadata = {
   resourceRef: 'events/Main.yssbi-event',
   resourceKind: 'event',
 };
+const detailsMetadata: WorkbenchPanelMetadata = { role: 'view', viewId: 'details' };
 
 function dropEvent({
   sourceMetadata,
@@ -65,19 +66,29 @@ describe('workbench Activity group policy', () => {
       sourceGroupId: 'grid-main',
       targetGroupId: WORKBENCH_ACTIVITY_GROUP_ID,
     });
+    const persistentOutbound = dropEvent({
+      sourceMetadata: detailsMetadata,
+      sourceGroupId: 'workbench-edge-right',
+      targetGroupId: 'grid-main',
+    });
 
     expect(shouldAllowWorkbenchActivityDrop(reorder)).toBe(true);
     expect(shouldAllowWorkbenchActivityDrop(outbound)).toBe(false);
     expect(shouldAllowWorkbenchActivityDrop(inbound)).toBe(false);
+    expect(shouldAllowWorkbenchActivityDrop(persistentOutbound)).toBe(false);
     vetoInvalidWorkbenchActivityDrop(outbound);
     expect(outbound.preventDefault).toHaveBeenCalledOnce();
 
     expect(canMoveWorkbenchPanel(activityMetadata, WORKBENCH_ACTIVITY_GROUP_ID)).toBe(true);
     expect(canMoveWorkbenchPanel(activityMetadata, 'grid-main')).toBe(false);
+    expect(canMoveWorkbenchPanel(detailsMetadata, 'workbench-edge-right')).toBe(true);
+    expect(canMoveWorkbenchPanel(detailsMetadata, 'grid-main')).toBe(false);
     expect(canMoveWorkbenchPanel(editorMetadata, WORKBENCH_ACTIVITY_GROUP_ID)).toBe(false);
     expect(canSplitWorkbenchPanel(activityMetadata, 'grid-main')).toBe(false);
+    expect(canSplitWorkbenchPanel(detailsMetadata, 'workbench-edge-right')).toBe(false);
     expect(canSplitWorkbenchPanel(editorMetadata, WORKBENCH_ACTIVITY_GROUP_ID)).toBe(false);
     expect(canRemoveWorkbenchPanel(activityMetadata)).toBe(false);
+    expect(canRemoveWorkbenchPanel(detailsMetadata)).toBe(false);
     expect(canRemoveWorkbenchPanel(editorMetadata)).toBe(true);
   });
 });

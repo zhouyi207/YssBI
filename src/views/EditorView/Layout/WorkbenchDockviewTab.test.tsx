@@ -29,6 +29,9 @@ vi.mock('@/features/application/editor/tabContextMenu', () => ({
 
 vi.mock('@/features/core/dockview', () => ({
   isWorkbenchActivityViewId: (viewId: string) => ['project', 'nodes', 'data', 'commands'].includes(viewId),
+  isWorkbenchPersistentViewMetadata: (metadata: { role: string; viewId?: string }) => (
+    metadata.role === 'view' && metadata.viewId === 'details'
+  ),
   layoutTabFromEditorMetadata: (metadata: {
     resourceRef: string;
     resourceKind: 'event' | 'function' | 'worksheet';
@@ -84,6 +87,10 @@ function viewParams(): WorkbenchPanelParams {
   return { metadata: { role: 'view', viewId: 'logs' } };
 }
 
+function detailsParams(): WorkbenchPanelParams {
+  return { metadata: { role: 'view', viewId: 'details' } };
+}
+
 function resultParams(): WorkbenchPanelParams {
   return {
     metadata: {
@@ -124,6 +131,7 @@ describe('WorkbenchDockviewTab', () => {
         <DockviewReact
           components={{
             GraphEditor: TestPanel,
+            Details: TestPanel,
             Logs: TestPanel,
             Result: TestPanel,
           }}
@@ -230,6 +238,40 @@ describe('WorkbenchDockviewTab', () => {
       expect.any(Function),
     );
     expect(document.querySelector('[role="menu"]')?.textContent).toContain('document-action');
+  });
+
+  it('keeps the permanent Details tab open without a close affordance', () => {
+    renderDockview((readyApi) => {
+      readyApi.addPanel<WorkbenchPanelParams>({
+        id: 'details-a',
+        component: 'Details',
+        title: 'Details',
+        params: detailsParams(),
+      });
+    });
+
+    const content = host.querySelector<HTMLElement>('[data-panel-instance-id="details-a"]')!;
+    expect(content.querySelector('[data-workbench-tab-title]')?.textContent).toBe('Details');
+    expect(content.querySelector('[data-workbench-tab-icon="details"]')).not.toBeNull();
+    expect(content.querySelector('[data-workbench-tab-close]')).toBeNull();
+
+    const tab = tabShell('details-a');
+    const pointerDown = new MouseEvent('pointerdown', {
+      button: 1,
+      bubbles: true,
+      cancelable: true,
+    });
+    const pointerUp = new MouseEvent('pointerup', {
+      button: 1,
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      tab.dispatchEvent(pointerDown);
+      tab.dispatchEvent(pointerUp);
+    });
+
+    expect(mocks.requestCloseWorkbenchPanel).not.toHaveBeenCalled();
   });
 
   it('closes one physical mixed group through one batch request', () => {

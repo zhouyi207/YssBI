@@ -10,6 +10,7 @@ import {
   VscClose,
   VscCloseAll,
   VscDatabase,
+  VscError,
   VscGraphLine,
   VscInfo,
   VscInspect,
@@ -31,6 +32,7 @@ import {
 import { buildTabContextMenuSections } from '@/features/application/editor/tabContextMenu';
 import {
   isWorkbenchActivityViewId,
+  isWorkbenchPersistentViewMetadata,
   layoutTabFromEditorMetadata,
   workbenchDockviewPort,
   type WorkbenchPanelInfo,
@@ -60,6 +62,7 @@ const VIEW_ICONS: Readonly<Record<WorkbenchViewId, IconType>> = {
   inspect: VscInspect,
   logs: VscTerminal,
   output: VscOutput,
+  diagnostics: VscError,
 };
 
 function iconForMetadata(metadata: WorkbenchPanelMetadata): {
@@ -136,6 +139,7 @@ export function WorkbenchDockviewTab(
   const panelTitle = usePanelTitle(props.api);
   const title = titleForMetadata(metadata, panelTitle);
   const isActivityTab = metadata.role === 'view' && isWorkbenchActivityViewId(metadata.viewId);
+  const isPersistentSidebarTab = isWorkbenchPersistentViewMetadata(metadata);
   const { Icon, key: iconKey } = iconForMetadata(metadata);
   const editorDocumentKey = metadata.role === 'editor'
     ? resourceKey({ id: metadata.resourceRef, kind: metadata.resourceKind })
@@ -168,6 +172,8 @@ export function WorkbenchDockviewTab(
       tabContent.addEventListener('click', handleActivityClick);
       return () => tabContent.removeEventListener('click', handleActivityClick);
     }
+
+    if (isPersistentSidebarTab) return;
 
     const tabShell = tabContent.closest<HTMLElement>('.dv-tab');
     if (!tabShell) return;
@@ -226,7 +232,7 @@ export function WorkbenchDockviewTab(
       tabShell.removeEventListener('auxclick', handleAuxClick);
       tabShell.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [isActivityTab, metadata, props.api, requestClose, setContextMenu]);
+  }, [isActivityTab, isPersistentSidebarTab, metadata, props.api, requestClose, setContextMenu]);
 
   if (isActivityTab) {
     return (
@@ -289,23 +295,25 @@ export function WorkbenchDockviewTab(
             />
           ) : null}
         </span>
-        <button
-          type="button"
-          className="dv-default-tab-action"
-          aria-label={t('tabBar.contextMenu.close')}
-          data-workbench-tab-close
-          onPointerDown={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            requestClose();
-          }}
-        >
-          <VscClose aria-hidden />
-        </button>
+        {isPersistentSidebarTab ? null : (
+          <button
+            type="button"
+            className="dv-default-tab-action"
+            aria-label={t('tabBar.contextMenu.close')}
+            data-workbench-tab-close
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              requestClose();
+            }}
+          >
+            <VscClose aria-hidden />
+          </button>
+        )}
       </div>
       {contextMenu ? (
         <ActionMenu

@@ -86,10 +86,11 @@ function panel(
           data: 'Data',
           commands: 'Commands',
           details: 'Details',
-          inspect: 'Inspect',
-          logs: 'Logs',
-          output: 'Output',
-        } as const)[metadata.viewId];
+            inspect: 'Inspect',
+            logs: 'Logs',
+            output: 'Output',
+            diagnostics: 'Diagnostics',
+          } as const)[metadata.viewId];
   return {
     panelInstanceId,
     groupId: 'group-main',
@@ -187,6 +188,7 @@ describe('project workbench lifecycle', () => {
     await removeProjectScopedWorkbenchPanels('project-a', owner);
 
     expect(lifecycleMocks.state.panels.map((candidate) => candidate.panelInstanceId)).toEqual([
+      'details-old',
       'project-stable',
       'nodes-stable',
       'data-stable',

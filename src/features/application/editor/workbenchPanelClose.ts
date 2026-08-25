@@ -84,8 +84,7 @@ function isProjectScopedPanel(panel: WorkbenchPanelInfo): boolean {
   const metadata = panel.metadata;
   return metadata.role === 'editor'
     || metadata.role === 'result'
-    || (metadata.role === 'view'
-      && (metadata.viewId === 'details' || metadata.viewId === 'inspect'));
+    || (metadata.role === 'view' && metadata.viewId === 'inspect');
 }
 
 function captureCloseSnapshot(

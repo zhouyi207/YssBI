@@ -26,7 +26,7 @@ function ownsPreviousProject(
 function isProjectScopedPanel(panel: WorkbenchPanelInfo): boolean {
   if (panel.metadata.role === 'editor' || panel.metadata.role === 'result') return true;
   return panel.metadata.role === 'view'
-    && (panel.metadata.viewId === 'details' || panel.metadata.viewId === 'inspect');
+    && panel.metadata.viewId === 'inspect';
 }
 
 export async function removeProjectScopedWorkbenchPanels(

@@ -144,10 +144,11 @@ function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo['com
     data: 'Data',
     commands: 'Commands',
     details: 'Details',
-    inspect: 'Inspect',
-    logs: 'Logs',
-    output: 'Output',
-  } as const)[metadata.viewId];
+      inspect: 'Inspect',
+      logs: 'Logs',
+      output: 'Output',
+      diagnostics: 'Diagnostics',
+    } as const)[metadata.viewId];
 }
 
 function panel(
@@ -179,7 +180,9 @@ function viewPanel(
   location: WorkbenchPanelInfo['location'] = edgeLocation(
     ['project', 'nodes', 'data', 'commands'].includes(viewId)
       ? 'left'
-      : viewId === 'logs' || viewId === 'output' ? 'bottom' : 'right',
+      : viewId === 'logs' || viewId === 'output' || viewId === 'diagnostics'
+        ? 'bottom'
+        : 'right',
   ),
   active = false,
 ): WorkbenchPanelInfo {
@@ -371,7 +374,7 @@ function createTransactionHarness(
 
     const position = ['project', 'nodes', 'data', 'commands'].includes(request.viewId)
       ? 'left'
-      : request.viewId === 'logs' || request.viewId === 'output'
+      : request.viewId === 'logs' || request.viewId === 'output' || request.viewId === 'diagnostics'
         ? 'bottom'
         : 'right';
     const group = ensureEdge(position);
@@ -617,10 +620,15 @@ describe('semantic workbench layout actions', () => {
     });
   });
 
-  it('requires valid context only for creating Details and Inspect and preserves open context views', async () => {
-    await expect(revealWorkbenchView('details')).resolves.toBeNull();
+  it('creates permanent Details without context but still requires node context for Inspect', async () => {
+    const createdDetails = viewPanel('details-created', 'details', 'edge-right', edgeLocation('right'));
+    mocks.ensureView.mockResolvedValueOnce(createdDetails);
+    await expect(revealWorkbenchView('details')).resolves.toEqual(createdDetails);
     await expect(revealWorkbenchView('inspect')).resolves.toBeNull();
-    expect(mocks.ensureView).not.toHaveBeenCalled();
+    expect(mocks.ensureView).toHaveBeenCalledWith({
+      viewId: 'details',
+      title: 'panel.details',
+    });
 
     const openDetails = viewPanel('details-open', 'details', 'edge-right', edgeLocation('right'));
     mocks.panels.push(openDetails);
@@ -640,7 +648,7 @@ describe('semantic workbench layout actions', () => {
     await revealWorkbenchView('inspect');
 
     expect(mocks.ensureView.mock.calls.map(([request]) => request.viewId))
-      .toEqual(['details', 'inspect']);
+      .toEqual(['details', 'details', 'inspect']);
   });
 
   it('closes an existing singleton only through the batch close coordinator', async () => {
@@ -795,7 +803,10 @@ describe('resetWorkbenchLayout', () => {
 
     await resetWorkbenchLayout();
 
-    expect(harness.panelIds().sort()).toEqual(beforeIds);
+    expect(harness.panelIds().sort()).toEqual([
+      ...beforeIds,
+      'created:diagnostics:1',
+    ].sort());
     expect(harness.groupPanelIds('grid-a')).toEqual([
       'editor-left-a',
       'editor-left-b',
@@ -813,17 +824,21 @@ describe('resetWorkbenchLayout', () => {
       'nodes',
       'commands',
     ]);
-    expect(harness.groupPanelIds('edge-bottom')).toEqual(['logs', 'output']);
+    expect(harness.groupPanelIds('edge-bottom')).toEqual([
+      'logs',
+      'output',
+      'created:diagnostics:1',
+    ]);
     expect(harness.groupPanelIds('edge-right')).toEqual([
-      'result-grid',
       'details',
+      'result-grid',
       'result-right',
       'inspect',
     ]);
     expect(harness.configureCalls).toEqual([
       { position: 'left', size: 292, collapsed: false, headerPosition: 'left' },
+      { position: 'right', size: 320, collapsed: false, headerPosition: 'right' },
       { position: 'bottom', size: 200, collapsed: false, headerPosition: 'bottom' },
-      { position: 'right', size: 320, collapsed: false },
     ]);
     expect(harness.activePanelId()).toBe('editor-grid-b');
     expect(harness.removeCalls).toEqual([]);

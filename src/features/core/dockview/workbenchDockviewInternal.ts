@@ -856,7 +856,10 @@ class ShadowWorkbenchModel {
       this.violations.push('missing_source_group');
       return false;
     }
-    if (!canMoveWorkbenchPanel(panel.metadata, target.id)) {
+    const targetPosition = target.location.type === 'edge'
+      ? target.location.position
+      : target.location.type;
+    if (!canMoveWorkbenchPanel(panel.metadata, target.id, targetPosition)) {
       this.violations.push('activity_move_not_allowed');
       return false;
     }
@@ -1800,7 +1803,12 @@ export function createWorkbenchDockviewPort(): {
         const metadata = panel ? readMetadata(panel) : undefined;
         if (!panel || !metadata) return false;
         const target = requireGroup(boundApi, request.groupId);
-        if (!canMoveWorkbenchPanel(metadata, target.id)) return false;
+        const targetLocation = readLocation(target);
+        if (!targetLocation) return false;
+        const targetPosition = targetLocation.type === 'edge'
+          ? targetLocation.position
+          : targetLocation.type;
+        if (!canMoveWorkbenchPanel(metadata, target.id, targetPosition)) return false;
         const source = panel.group;
         const currentIndex = source.panels.indexOf(panel);
         const maximumIndex = source.id === target.id

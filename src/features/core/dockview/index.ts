@@ -10,6 +10,7 @@ export {
   isWorkbenchActivityMetadata,
   isWorkbenchActivityViewId,
   isWorkbenchPanelMetadata,
+  isWorkbenchPersistentViewMetadata,
   layoutTabFromEditorMetadata,
   WORKBENCH_ACTIVITY_VIEW_IDS,
   WORKBENCH_VIEW_IDS,

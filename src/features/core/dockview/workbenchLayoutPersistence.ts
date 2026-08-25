@@ -88,7 +88,7 @@ function readMetadata(panel: unknown): WorkbenchPanelMetadata | undefined {
 function isTransientWorkbenchMetadata(metadata: WorkbenchPanelMetadata): boolean {
   return metadata.role === 'result'
     || (metadata.role === 'view'
-      && (metadata.viewId === 'details' || metadata.viewId === 'inspect'));
+      && metadata.viewId === 'inspect');
 }
 
 function isProjectScopedWorkbenchMetadata(metadata: WorkbenchPanelMetadata): boolean {

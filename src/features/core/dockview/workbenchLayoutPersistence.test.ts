@@ -244,10 +244,10 @@ describe('workbench layout persistence', () => {
         metadata: { role: 'view', viewId: 'project' },
       },
     });
-    const details = rootLayout({
-      details: {
-        component: 'Details',
-        metadata: { role: 'view', viewId: 'details' },
+    const inspect = rootLayout({
+      inspect: {
+        component: 'Inspect',
+        metadata: { role: 'view', viewId: 'inspect' },
       },
     });
     const result = rootLayout({
@@ -267,7 +267,7 @@ describe('workbench layout persistence', () => {
     expect([
       unknownMetadata,
       duplicateSingleton,
-      details,
+      inspect,
       result,
     ].map(parsedRootStatus)).toEqual([
       'invalid',
@@ -459,9 +459,9 @@ describe('workbench layout persistence', () => {
         {
           type: 'leaf',
           data: {
-            id: 'grid-main',
-            views: ['editor', 'details'],
-            activeView: 'details',
+          id: 'grid-main',
+            views: ['editor'],
+            activeView: 'editor',
           },
         },
         {
@@ -499,8 +499,8 @@ describe('workbench layout persistence', () => {
         visible: true,
         group: {
           id: 'result-edge',
-          views: ['result'],
-          activeView: 'result',
+          views: ['details', 'result'],
+          activeView: 'details',
         },
       },
       bottom: {
@@ -523,6 +523,7 @@ describe('workbench layout persistence', () => {
     expect(persisted).not.toBe(layout);
     expect(Object.keys(persisted.panels)).toEqual([
       'editor',
+      'details',
       'logs',
       'project',
       'nodes',
@@ -541,7 +542,11 @@ describe('workbench layout persistence', () => {
       }],
     });
     expect(gridWithMaximizedNode(persisted).maximizedNode).toBeUndefined();
-    expect(persisted.edgeGroups?.right).toBeUndefined();
+    expect(persisted.edgeGroups?.right?.group).toEqual({
+      id: 'result-edge',
+      views: ['details'],
+      activeView: 'details',
+    });
     expect(persisted.edgeGroups?.left?.group).toEqual({
       id: 'workbench-edge-left',
       views: ['project', 'nodes', 'data', 'commands'],
@@ -638,6 +643,17 @@ describe('workbench layout persistence', () => {
           }],
         },
       },
+      right: {
+        size: 320,
+        visible: true,
+        collapsed: false,
+        group: {
+          id: 'details-edge',
+          views: ['details'],
+          activeView: 'details',
+          headerPosition: 'right',
+        },
+      },
     };
     gridWithMaximizedNode(layout).maximizedNode = { location: [0] };
     layout.activeGroup = 'project-grid';
@@ -647,6 +663,7 @@ describe('workbench layout persistence', () => {
 
     expect(layout).toEqual(original);
     expect(Object.keys(scrubbed.panels)).toEqual([
+      'details',
       'logs',
       'output',
       'project',
@@ -683,6 +700,17 @@ describe('workbench layout persistence', () => {
           }],
         },
       },
+      right: {
+        size: 320,
+        visible: true,
+        collapsed: false,
+        group: {
+          id: 'details-edge',
+          views: ['details'],
+          activeView: 'details',
+          headerPosition: 'right',
+        },
+      },
     });
     expect(scrubbed.activeGroup).toBe('tools-edge');
     expect(parsedRootStatus(scrubbed)).toBe('valid');
@@ -698,9 +726,9 @@ describe('workbench layout persistence', () => {
           resourceKind: 'event',
         },
       },
-      details: {
-        component: 'Details',
-        metadata: { role: 'view', viewId: 'details' },
+      inspect: {
+        component: 'Inspect',
+        metadata: { role: 'view', viewId: 'inspect' },
       },
     });
     layout.grid.root = {
@@ -725,9 +753,9 @@ describe('workbench layout persistence', () => {
             size: 240,
             visible: false,
             data: {
-              id: 'transient-details',
-              views: ['details'],
-              activeView: 'details',
+              id: 'transient-inspect',
+              views: ['inspect'],
+              activeView: 'inspect',
             },
           },
         ],
