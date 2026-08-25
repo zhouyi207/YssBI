@@ -20,6 +20,12 @@ pub mod tabular;
 pub mod variable;
 pub mod window_state;
 
+#[cfg(test)]
+mod test_support;
+
+#[cfg(test)]
+mod architecture_tests;
+
 use commands::*;
 use tauri::Manager;
 
