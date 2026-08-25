@@ -112,19 +112,36 @@ impl<'ast> Visit<'ast> for ForbiddenDependencyVisitor<'_> {
     }
 
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
-        if token_stream_contains_ident(&mac.tokens, self.forbidden_module) {
+        if token_stream_contains_path_ident(&mac.tokens, self.forbidden_module) {
             self.record(format!("macro-token::{}", self.forbidden_module));
         }
         visit::visit_macro(self, mac);
     }
 }
 
-fn token_stream_contains_ident(tokens: &TokenStream, expected: &str) -> bool {
-    tokens.clone().into_iter().any(|token| match token {
-        TokenTree::Group(group) => token_stream_contains_ident(&group.stream(), expected),
-        TokenTree::Ident(ident) => ident.to_string() == expected,
-        TokenTree::Literal(_) | TokenTree::Punct(_) => false,
+fn token_stream_contains_path_ident(tokens: &TokenStream, expected: &str) -> bool {
+    let tokens = tokens.clone().into_iter().collect::<Vec<_>>();
+    tokens.iter().enumerate().any(|(index, token)| match token {
+        TokenTree::Group(group) => token_stream_contains_path_ident(&group.stream(), expected),
+        TokenTree::Ident(ident) if ident.to_string() == expected => {
+            has_path_separator_before(&tokens, index) || has_path_separator_after(&tokens, index)
+        }
+        TokenTree::Ident(_) | TokenTree::Literal(_) | TokenTree::Punct(_) => false,
     })
+}
+
+fn has_path_separator_before(tokens: &[TokenTree], index: usize) -> bool {
+    index >= 2 && is_path_separator(&tokens[index - 2..index])
+}
+
+fn has_path_separator_after(tokens: &[TokenTree], index: usize) -> bool {
+    tokens
+        .get(index + 1..index + 3)
+        .is_some_and(is_path_separator)
+}
+
+fn is_path_separator(tokens: &[TokenTree]) -> bool {
+    matches!(tokens, [TokenTree::Punct(first), TokenTree::Punct(second)] if first.as_char() == ':' && second.as_char() == ':')
 }
 
 pub(super) fn item_attributes(item: &Item) -> &[syn::Attribute] {

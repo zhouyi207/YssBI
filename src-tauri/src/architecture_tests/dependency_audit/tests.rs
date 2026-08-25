@@ -65,6 +65,15 @@ mod windows_tests;
 #[cfg(any(test, feature = "fixture"))]
 mod mixed;
 
+mod inner_tests;
+
+mod macro_only;
+
+mod nested {
+    #[path = "child.rs"]
+    mod child;
+}
+
 #[cfg(test)]
 mod inline_tests {
     use crate::application::ignored_inline;
@@ -79,9 +88,12 @@ use crate::{application as app, database as data};
 
 type Handler = crate::application::Handler;
 
+#[path = "production_child.rs"]
+mod production_child;
+
 fn invoke() {
     application::run();
-    matches!((), crate::application::MacroPattern);
+    matches!((), crate::application::Type);
 }
 "#,
     );
@@ -95,6 +107,19 @@ fn invoke() {
         "use crate::application::ignored_all_test;",
     );
     fixture.write("project/mixed.rs", "use crate::application::mixed;");
+    fixture.write(
+        "project/inner_tests.rs",
+        "#![cfg(test)]\nuse crate::application::ignored_inner_test;",
+    );
+    fixture.write(
+        "project/macro_only.rs",
+        "fn emit() { trace!(application); }",
+    );
+    fixture.write("project/nested/child.rs", "use crate::application::nested;");
+    fixture.write(
+        "project/production_child.rs",
+        "use crate::application::production_child;",
+    );
 
     let violations = audit_production_dependency(&fixture.source_root, "project", "application")
         .expect("fixture dependency audit must complete");
@@ -106,10 +131,14 @@ fn invoke() {
         files,
         BTreeSet::from([
             "project/mixed.rs",
+            "project/nested/child.rs",
             "project/production.rs",
+            "project/production_child.rs",
             "project/redirected.rs",
         ])
     );
+    assert!(!files.contains("project/inner_tests.rs"));
+    assert!(!files.contains("project/macro_only.rs"));
 
     let production_references = violations
         .iter()

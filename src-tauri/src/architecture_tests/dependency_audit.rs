@@ -22,7 +22,8 @@ struct DependencyViolation {
 #[derive(Debug, Clone)]
 struct ModuleSource {
     file: PathBuf,
-    module_dir: PathBuf,
+    child_module_dir: PathBuf,
+    path_attr_dir: PathBuf,
     module_path: Vec<String>,
 }
 
@@ -61,7 +62,8 @@ fn resolve_root_module(source_root: &Path, module: &str) -> Result<ModuleSource,
     };
     let file = canonicalize_under(source_root, &file)?;
     Ok(ModuleSource {
-        module_dir: module_dir_for_file(&file),
+        child_module_dir: child_module_dir_for_file(&file),
+        path_attr_dir: path_attr_dir_for_file(&file),
         file,
         module_path: vec![module.to_owned()],
     })
@@ -83,6 +85,9 @@ fn audit_module_file(
         .map_err(|error| format!("failed to read '{}': {error}", module.file.display()))?;
     let syntax = syn::parse_file(&source)
         .map_err(|error| format!("failed to parse '{}': {error}", module.file.display()))?;
+    if is_test_only(&syntax.attrs) {
+        return Ok(());
+    }
     audit_items(source_root, &syntax.items, &module, forbidden_module, state)
 }
 
@@ -99,9 +104,14 @@ fn audit_items(
         }
         if let Item::Mod(item_mod) = item {
             if let Some((_, inline_items)) = &item_mod.content {
+                let name = item_mod.ident.to_string();
+                let path_base = explicit_module_path(module, item_mod)?
+                    .map(|path| module.path_attr_dir.join(path))
+                    .unwrap_or_else(|| module.child_module_dir.join(&name));
                 let mut inline = module.clone();
-                inline.module_dir = module.module_dir.join(item_mod.ident.to_string());
-                inline.module_path.push(item_mod.ident.to_string());
+                inline.child_module_dir = path_base.clone();
+                inline.path_attr_dir = path_base;
+                inline.module_path.push(name);
                 audit_items(source_root, inline_items, &inline, forbidden_module, state)?;
             } else {
                 let child = resolve_external_module(source_root, module, item_mod)?;
@@ -130,11 +140,7 @@ fn resolve_external_module(
 ) -> Result<ModuleSource, String> {
     let name = item.ident.to_string();
     let file = if let Some(explicit) = explicit_module_path(parent, item)? {
-        let path = parent
-            .file
-            .parent()
-            .ok_or_else(|| format!("module file '{}' has no parent", parent.file.display()))?
-            .join(explicit);
+        let path = parent.path_attr_dir.join(explicit);
         if !path.is_file() {
             return Err(format!(
                 "module '{name}' declared by '{}' was not found at '{}'",
@@ -144,8 +150,8 @@ fn resolve_external_module(
         }
         path
     } else {
-        let flat = parent.module_dir.join(format!("{name}.rs"));
-        let directory = parent.module_dir.join(&name).join("mod.rs");
+        let flat = parent.child_module_dir.join(format!("{name}.rs"));
+        let directory = parent.child_module_dir.join(&name).join("mod.rs");
         match (flat.is_file(), directory.is_file()) {
             (true, false) => flat,
             (false, true) => directory,
@@ -171,7 +177,8 @@ fn resolve_external_module(
     let mut module_path = parent.module_path.clone();
     module_path.push(name);
     Ok(ModuleSource {
-        module_dir: module_dir_for_file(&file),
+        child_module_dir: child_module_dir_for_file(&file),
+        path_attr_dir: path_attr_dir_for_file(&file),
         file,
         module_path,
     })
@@ -214,13 +221,19 @@ fn explicit_module_path(parent: &ModuleSource, item: &ItemMod) -> Result<Option<
     Ok(Some(PathBuf::from(path.value())))
 }
 
-fn module_dir_for_file(file: &Path) -> PathBuf {
+fn child_module_dir_for_file(file: &Path) -> PathBuf {
     let parent = file.parent().expect("Rust source file must have a parent");
     if file.file_name().is_some_and(|name| name == "mod.rs") {
         parent.to_path_buf()
     } else {
         parent.join(file.file_stem().expect("Rust source file must have a stem"))
     }
+}
+
+fn path_attr_dir_for_file(file: &Path) -> PathBuf {
+    file.parent()
+        .expect("Rust source file must have a parent")
+        .to_path_buf()
 }
 
 fn canonicalize(path: &Path) -> Result<PathBuf, String> {
