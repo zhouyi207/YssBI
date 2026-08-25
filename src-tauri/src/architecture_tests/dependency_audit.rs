@@ -10,7 +10,9 @@ use syn::visit::Visit;
 use syn::{Expr, ExprLit, Item, ItemMod, Lit, Meta};
 
 use self::visitor::{ForbiddenDependencyVisitor, item_attributes};
-use crate::test_support::source_audit::is_test_only;
+use crate::test_support::source_audit::{
+    has_production_cfg_attr_path, is_test_only, normalized_ident,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct DependencyViolation {
@@ -104,7 +106,7 @@ fn audit_items(
         }
         if let Item::Mod(item_mod) = item {
             if let Some((_, inline_items)) = &item_mod.content {
-                let name = item_mod.ident.to_string();
+                let name = normalized_ident(&item_mod.ident);
                 let path_base = explicit_module_path(module, item_mod)?
                     .map(|path| module.path_attr_dir.join(path))
                     .unwrap_or_else(|| module.child_module_dir.join(&name));
@@ -138,7 +140,7 @@ fn resolve_external_module(
     parent: &ModuleSource,
     item: &ItemMod,
 ) -> Result<ModuleSource, String> {
-    let name = item.ident.to_string();
+    let name = normalized_ident(&item.ident);
     let file = if let Some(explicit) = explicit_module_path(parent, item)? {
         let path = parent.path_attr_dir.join(explicit);
         if !path.is_file() {
@@ -185,6 +187,16 @@ fn resolve_external_module(
 }
 
 fn explicit_module_path(parent: &ModuleSource, item: &ItemMod) -> Result<Option<PathBuf>, String> {
+    let module_name = normalized_ident(&item.ident);
+    if has_production_cfg_attr_path(&item.attrs) {
+        let mut logical_path = parent.module_path.clone();
+        logical_path.push(module_name);
+        return Err(format!(
+            "module 'crate::{}' declared by '{}' has a production-reachable cfg_attr that can emit path",
+            logical_path.join("::"),
+            parent.file.to_string_lossy().replace('\\', "/")
+        ));
+    }
     let path_attributes = item
         .attrs
         .iter()
@@ -196,14 +208,14 @@ fn explicit_module_path(parent: &ModuleSource, item: &ItemMod) -> Result<Option<
     if path_attributes.len() != 1 {
         return Err(format!(
             "module '{}' in '{}' has multiple #[path] attributes",
-            item.ident,
+            normalized_ident(&item.ident),
             parent.file.display()
         ));
     }
     let Meta::NameValue(value) = &path_attributes[0].meta else {
         return Err(format!(
             "module '{}' in '{}' has an invalid #[path] attribute",
-            item.ident,
+            normalized_ident(&item.ident),
             parent.file.display()
         ));
     };
@@ -214,7 +226,7 @@ fn explicit_module_path(parent: &ModuleSource, item: &ItemMod) -> Result<Option<
     else {
         return Err(format!(
             "module '{}' in '{}' has a non-string #[path] attribute",
-            item.ident,
+            normalized_ident(&item.ident),
             parent.file.display()
         ));
     };

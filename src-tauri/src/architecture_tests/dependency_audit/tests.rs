@@ -52,6 +52,8 @@ fn project_dependency_audit_respects_production_module_reachability() {
         "project/mod.rs",
         r#"
 mod production;
+mod r#raw_module;
+mod included_wrapper;
 
 #[path = "redirected.rs"]
 mod redirected;
@@ -120,6 +122,27 @@ fn invoke() {
         "project/production_child.rs",
         "use crate::application::production_child;",
     );
+    fixture.write(
+        "project/raw_module.rs",
+        r#"
+use crate::r#application::raw_dependency;
+
+type RawHandler = crate::r#application::RawHandler;
+
+fn raw_macro_path() {
+    matches!((), crate::r#application::RawVariant);
+}
+"#,
+    );
+    fixture.write(
+        "project/included_wrapper.rs",
+        r#"
+include!("included_body.rs");
+const INCLUDED_TEXT: &str = include_str!("included_body.rs");
+const INCLUDED_BYTES: &[u8] = include_bytes!("included_body.rs");
+"#,
+    );
+    fixture.write("project/included_body.rs", "fn included_body() {}\n");
 
     let violations = audit_production_dependency(&fixture.source_root, "project", "application")
         .expect("fixture dependency audit must complete");
@@ -130,10 +153,12 @@ fn invoke() {
     assert_eq!(
         files,
         BTreeSet::from([
+            "project/included_wrapper.rs",
             "project/mixed.rs",
             "project/nested/child.rs",
             "project/production.rs",
             "project/production_child.rs",
+            "project/raw_module.rs",
             "project/redirected.rs",
         ])
     );
@@ -157,23 +182,83 @@ fn invoke() {
             "missing dependency reference {expected}: {production_references:?}"
         );
     }
+
+    let raw_violations = violations
+        .iter()
+        .filter(|violation| violation.file == "project/raw_module.rs")
+        .collect::<Vec<_>>();
+    assert!(
+        raw_violations
+            .iter()
+            .all(|violation| violation.module == "crate::project::raw_module")
+    );
+    assert_eq!(
+        raw_violations
+            .iter()
+            .map(|violation| violation.reference.as_str())
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from([
+            "crate::application::RawHandler",
+            "crate::application::raw_dependency",
+            "macro-token::application",
+        ])
+    );
+
+    let included_references = violations
+        .iter()
+        .filter(|violation| violation.file == "project/included_wrapper.rs")
+        .map(|violation| violation.reference.as_str())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        included_references,
+        BTreeSet::from(["macro-include!::<unexpanded>"])
+    );
+
+    let cfg_attr_fixture = FixtureTree::new("cfg-attr-path");
+    cfg_attr_fixture.write(
+        "project/mod.rs",
+        r#"
+#[cfg_attr(test, path = "test_only.rs")]
+mod harmless;
+
+#[cfg_attr(not(test), path = "production.rs")]
+mod selected;
+"#,
+    );
+    cfg_attr_fixture.write("project/harmless.rs", "fn harmless() {}\n");
+    cfg_attr_fixture.write("project/selected.rs", "fn harmless() {}\n");
+
+    let error =
+        audit_production_dependency(&cfg_attr_fixture.source_root, "project", "application")
+            .expect_err("production cfg_attr(path) must fail closed");
+    assert!(
+        error.contains("production-reachable cfg_attr")
+            && error.contains("path")
+            && error.contains("selected")
+            && error.contains("project/mod.rs"),
+        "unexpected cfg_attr(path) error: {error}"
+    );
 }
 
 #[test]
 fn production_project_modules_do_not_depend_on_application() {
     let source_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let violations = audit_production_dependency(&source_root, "project", "application")
-        .expect("Project dependency audit must complete");
-    assert!(
-        violations.is_empty(),
-        "production Project modules must not depend on Application:\n{}",
-        violations
-            .iter()
-            .map(|violation| format!(
-                "{} [{}] -> {}",
-                violation.file, violation.module, violation.reference
-            ))
-            .collect::<Vec<_>>()
-            .join("\n")
-    );
+    for forbidden_module in ["application", "commands"] {
+        let violations = audit_production_dependency(&source_root, "project", forbidden_module)
+            .unwrap_or_else(|error| {
+                panic!("Project dependency audit for {forbidden_module} must complete: {error}")
+            });
+        assert!(
+            violations.is_empty(),
+            "production Project modules must not depend on {forbidden_module}:\n{}",
+            violations
+                .iter()
+                .map(|violation| format!(
+                    "{} [{}] -> {}",
+                    violation.file, violation.module, violation.reference
+                ))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+    }
 }

@@ -1,6 +1,11 @@
+use syn::ext::IdentExt;
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
-use syn::{Meta, Token, UseTree};
+use syn::{Attribute, Meta, MetaList, Token, UseTree};
+
+pub(crate) fn normalized_ident(ident: &syn::Ident) -> String {
+    ident.unraw().to_string()
+}
 
 pub(crate) fn expand_use_tree(
     tree: &UseTree,
@@ -9,18 +14,18 @@ pub(crate) fn expand_use_tree(
 ) {
     match tree {
         UseTree::Path(path) => {
-            prefix.push(path.ident.to_string());
+            prefix.push(normalized_ident(&path.ident));
             expand_use_tree(&path.tree, prefix, paths);
             prefix.pop();
         }
         UseTree::Name(name) => {
             let mut path = prefix.clone();
-            path.push(name.ident.to_string());
+            path.push(normalized_ident(&name.ident));
             paths.push(path);
         }
         UseTree::Rename(rename) => {
             let mut path = prefix.clone();
-            path.push(rename.ident.to_string());
+            path.push(normalized_ident(&rename.ident));
             paths.push(path);
         }
         UseTree::Glob(_) => {
@@ -40,9 +45,7 @@ fn cfg_predicate_is_exclusively_test(meta: &Meta) -> bool {
     match meta {
         Meta::Path(path) => path.is_ident("test"),
         Meta::List(list) if list.path.is_ident("all") || list.path.is_ident("any") => {
-            let Ok(predicates) =
-                Punctuated::<Meta, Token![,]>::parse_terminated.parse2(list.tokens.clone())
-            else {
+            let Some(predicates) = parse_meta_list(list) else {
                 return false;
             };
             if list.path.is_ident("all") {
@@ -53,6 +56,38 @@ fn cfg_predicate_is_exclusively_test(meta: &Meta) -> bool {
         }
         Meta::List(_) | Meta::NameValue(_) => false,
     }
+}
+
+fn parse_meta_list(list: &MetaList) -> Option<Punctuated<Meta, Token![,]>> {
+    Punctuated::<Meta, Token![,]>::parse_terminated
+        .parse2(list.tokens.clone())
+        .ok()
+}
+
+fn cfg_attr_can_emit_production_path(meta: &Meta) -> bool {
+    let Meta::List(list) = meta else {
+        return false;
+    };
+    let Some(arguments) = parse_meta_list(list) else {
+        return false;
+    };
+    let Some(predicate) = arguments.first() else {
+        return false;
+    };
+    if cfg_predicate_is_exclusively_test(predicate) {
+        return false;
+    }
+    arguments.iter().skip(1).any(|attribute| {
+        attribute.path().is_ident("path")
+            || (attribute.path().is_ident("cfg_attr")
+                && cfg_attr_can_emit_production_path(attribute))
+    })
+}
+
+pub(crate) fn has_production_cfg_attr_path(attributes: &[Attribute]) -> bool {
+    attributes.iter().any(|attribute| {
+        attribute.path().is_ident("cfg_attr") && cfg_attr_can_emit_production_path(&attribute.meta)
+    })
 }
 
 pub(crate) fn is_test_only(attributes: &[syn::Attribute]) -> bool {
@@ -66,9 +101,7 @@ pub(crate) fn is_test_only(attributes: &[syn::Attribute]) -> bool {
         if !attribute.path().is_ident("cfg") {
             return false;
         }
-        let Ok(predicates) =
-            Punctuated::<Meta, Token![,]>::parse_terminated.parse2(cfg.tokens.clone())
-        else {
+        let Some(predicates) = parse_meta_list(cfg) else {
             return false;
         };
         predicates.len() == 1

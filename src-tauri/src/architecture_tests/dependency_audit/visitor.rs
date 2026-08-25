@@ -5,7 +5,7 @@ use syn::visit::{self, Visit};
 use syn::{Expr, ImplItem, Item, TraitItem};
 
 use super::DependencyViolation;
-use crate::test_support::source_audit::{expand_use_tree, is_test_only};
+use crate::test_support::source_audit::{expand_use_tree, is_test_only, normalized_ident};
 
 pub(super) struct ForbiddenDependencyVisitor<'a> {
     pub(super) forbidden_module: &'a str,
@@ -106,12 +106,20 @@ impl<'ast> Visit<'ast> for ForbiddenDependencyVisitor<'_> {
         self.inspect_segments(
             path.segments
                 .iter()
-                .map(|segment| segment.ident.to_string()),
+                .map(|segment| normalized_ident(&segment.ident)),
         );
         visit::visit_path(self, path);
     }
 
     fn visit_macro(&mut self, mac: &'ast syn::Macro) {
+        if mac
+            .path
+            .segments
+            .last()
+            .is_some_and(|segment| normalized_ident(&segment.ident) == "include")
+        {
+            self.record("macro-include!::<unexpanded>".to_owned());
+        }
         if token_stream_contains_path_ident(&mac.tokens, self.forbidden_module) {
             self.record(format!("macro-token::{}", self.forbidden_module));
         }
@@ -123,7 +131,7 @@ fn token_stream_contains_path_ident(tokens: &TokenStream, expected: &str) -> boo
     let tokens = tokens.clone().into_iter().collect::<Vec<_>>();
     tokens.iter().enumerate().any(|(index, token)| match token {
         TokenTree::Group(group) => token_stream_contains_path_ident(&group.stream(), expected),
-        TokenTree::Ident(ident) if ident.to_string() == expected => {
+        TokenTree::Ident(ident) if normalized_ident(ident) == expected => {
             has_path_separator_before(&tokens, index) || has_path_separator_after(&tokens, index)
         }
         TokenTree::Ident(_) | TokenTree::Literal(_) | TokenTree::Punct(_) => false,
