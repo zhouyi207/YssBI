@@ -1,12 +1,11 @@
 import type { RefObject } from 'react';
 
-import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
 import { getViewport, editorViewportScope } from '@/features/core/viewport';
 
 import { queryCanvasElement } from './selectionHitTargets';
 
-export function resolveTabId(groupId: string, activeTabIdRef: RefObject<string | null>): string | null {
-  return getActiveLayoutTab(groupId)?.activeTabId ?? activeTabIdRef.current ?? null;
+export function resolveTabId(activeTabIdRef: RefObject<string | null>): string | null {
+  return activeTabIdRef.current ?? null;
 }
 
 export function getCanvasWorldPoint(
@@ -14,8 +13,9 @@ export function getCanvasWorldPoint(
   graphPath: string | null,
   clientX: number,
   clientY: number,
+  panelInstanceId: string,
 ) {
-  const canvasEl = queryCanvasElement(groupId);
+  const canvasEl = queryCanvasElement(panelInstanceId);
   if (!canvasEl) {
     return { x: clientX, y: clientY };
   }

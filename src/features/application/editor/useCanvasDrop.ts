@@ -30,6 +30,7 @@ export type { VariableDropMenu } from "./canvasDrop";
 
 interface UseCanvasDropParams {
   canvasElementRef: React.RefObject<HTMLDivElement | null>;
+  panelInstanceId: string;
   groupId: string;
   graphPath: string | null;
   variables: EditorVariables;
@@ -45,6 +46,7 @@ interface UseCanvasDropParams {
  */
 export function useCanvasDrop({
   canvasElementRef,
+  panelInstanceId,
   groupId,
   graphPath,
   variables,
@@ -184,9 +186,9 @@ export function useCanvasDrop({
 
   useEffect(() => {
     if (!enabled) return;
-    canvasDropHandlerStore.setHandler(groupId, (dragState) => handleSidebarCanvasDrop(dragState));
-    return () => canvasDropHandlerStore.setHandler(groupId, null);
-  }, [enabled, groupId, handleSidebarCanvasDrop]);
+    canvasDropHandlerStore.setHandler(panelInstanceId, (dragState) => handleSidebarCanvasDrop(dragState));
+    return () => canvasDropHandlerStore.setHandler(panelInstanceId, null);
+  }, [enabled, handleSidebarCanvasDrop, panelInstanceId]);
 
   return {
     variableDropMenu,

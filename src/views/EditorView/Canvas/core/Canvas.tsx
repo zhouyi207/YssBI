@@ -7,6 +7,7 @@ import {
   useCanvasWheelZoom,
   useEditorCanvas,
 } from '@/features/application/editor';
+import type { EditorCanvasScope } from '@/features/application/editor';
 import { CanvasContextMenuProvider } from '@/features/application/editor/CanvasContextMenuContext';
 import type { CanvasContextMenuActions } from '@/features/application/editor/CanvasContextMenuContext';
 import { useNodeDragPreview } from '@/features/core/canvas/useNodeDragPreview';
@@ -29,12 +30,26 @@ import { ViewportGrid } from './ViewportGrid';
 
 const EMPTY_NODE_IDS: string[] = [];
 
-export type CanvasProps =
-  | { mode: 'interactive' }
-  | { mode: 'preview' };
+export interface CanvasProps {
+  mode: 'interactive' | 'preview';
+  panelInstanceId: string;
+  groupId: string;
+  graphPath: string;
+  graphKind: 'event' | 'function';
+}
 
-export default function Canvas({ mode }: CanvasProps) {
+export default function Canvas({
+  mode,
+  panelInstanceId,
+  groupId,
+  graphPath,
+  graphKind,
+}: CanvasProps) {
   const interactive = mode === 'interactive';
+  const scope = useMemo<EditorCanvasScope>(
+    () => ({ panelInstanceId, groupId, graphPath, graphKind }),
+    [graphKind, graphPath, groupId, panelInstanceId],
+  );
   const {
     commands: {
       copyNodes,
@@ -54,7 +69,6 @@ export default function Canvas({ mode }: CanvasProps) {
       createNode,
     },
     workspace: {
-      groupId,
       activeGraph,
       selectedNodeIds,
       selectedConnectionIds,
@@ -70,7 +84,7 @@ export default function Canvas({ mode }: CanvasProps) {
       setPendingConnection,
       insertRerouteAtConnection,
     },
-  } = useEditorCanvas({ mode });
+  } = useEditorCanvas({ mode, scope });
   const activeTabId = activeGraph?.graphPath ?? null;
 
   const gesturePinData = useGraphInteractionStore((state) => {
@@ -129,6 +143,7 @@ export default function Canvas({ mode }: CanvasProps) {
     handleVariableDropSet,
   } = useCanvasDrop({
     canvasElementRef,
+    panelInstanceId,
     groupId,
     graphPath: interactive ? activeTabId : null,
     variables,
@@ -140,6 +155,7 @@ export default function Canvas({ mode }: CanvasProps) {
 
   const { handleNodePaletteSelect } = useCanvasOverlayHandlers({
     canvasElementRef,
+    panelInstanceId,
     groupId,
     activeTabId,
     pendingConnection,
@@ -258,11 +274,12 @@ export default function Canvas({ mode }: CanvasProps) {
     setSelectedNodeIds,
   ]);
 
-  return (
-    <CanvasContextMenuProvider value={contextMenuActions}>
+  const canvasElement = (
       <div
         ref={canvasElementRef}
-        data-editor-group-id={groupId}
+        data-editor-panel-instance-id={panelInstanceId}
+        data-editor-graph-path={activeTabId ?? undefined}
+        data-editor-graph-kind={graphKind}
         className="relative w-full h-full overflow-hidden bg-[var(--workbench-bg)] select-none"
       >
         <ViewportGrid viewportScope={viewportScope} />
@@ -326,6 +343,9 @@ export default function Canvas({ mode }: CanvasProps) {
 
         {mode === 'interactive' ? <CanvasOverlays model={overlayModel} /> : null}
       </div>
-    </CanvasContextMenuProvider>
   );
+
+  return interactive
+    ? <CanvasContextMenuProvider value={contextMenuActions}>{canvasElement}</CanvasContextMenuProvider>
+    : canvasElement;
 }

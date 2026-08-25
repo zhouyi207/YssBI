@@ -50,13 +50,16 @@ export type SidebarDragPayload = NodeTemplateDragData | GraphResourceDragPayload
 
 export type CanvasDropData = {
   dropType: typeof DROP_TYPES.CANVAS;
+  panelInstanceId: string;
   groupId: string;
+  graphPath: string;
+  graphKind: 'event' | 'function';
 };
 
 export const CANVAS_DROP_ZONE_ID_PREFIX = "canvas-drop-zone-";
 
-export function getCanvasDropZoneId(groupId: string) {
-  return `${CANVAS_DROP_ZONE_ID_PREFIX}${groupId}`;
+export function getCanvasDropZoneId(panelInstanceId: string) {
+  return `${CANVAS_DROP_ZONE_ID_PREFIX}${panelInstanceId}`;
 }
 
 export function isCanvasDrop(data: unknown): data is CanvasDropData {

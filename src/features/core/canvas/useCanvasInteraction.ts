@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { getGraphByPath } from '@/features/core/dataStore';
 import {
-  getActiveLayoutTab,
   getEditorGroupGraphSelection,
   updateEditorGroupSelectedConnectionIds,
 } from '@/features/core/layout/layoutTabQueries';
@@ -9,13 +7,11 @@ import type { GraphSelection } from '@/features/core/layout';
 
 import { persistGraphViewport, editorViewportScope } from '@/features/core/viewport';
 import { useEditorStore } from '@/features/core/editor';
+import type { EditorContextMenuState } from '@/features/core/editor';
 import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
-import { executeCommand } from '@/features/core/history';
 import type { Pin } from '@/shared/types/domain';
 import type { PinData } from '@/shared/types/store/graph';
 import type { EditorViewport } from '@/features/core/viewport';
-import { logger } from '@/utils/appLogger';
-import { getPinCompatibility } from '@/shared/utils/pinCompatibility';
 
 import { getCanvasWorldPoint, resolveTabId } from './canvasInteractionUtils';
 import { attachCanvasPointerLoop, registerCanvasPointerScope } from './canvasPointerLoop';
@@ -73,8 +69,10 @@ export function resolvePinPointerAction(
 interface UseCanvasInteractionProps {
   activeGroupIdRef: React.RefObject<string>;
   activeTabIdRef: React.RefObject<string | null>;
+  panelInstanceId: string;
   viewportRef: React.RefObject<EditorViewport>;
   setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
+  setContextMenu?: (menu: EditorContextMenuState | null) => void;
   handlers: CanvasInteractionHandlers;
   enabled?: boolean;
   uiEnabled?: boolean;
@@ -83,14 +81,23 @@ interface UseCanvasInteractionProps {
 export function useCanvasInteraction({
   activeGroupIdRef,
   activeTabIdRef,
+  panelInstanceId,
   viewportRef,
   setSelectedNodeIds,
+  setContextMenu: setContextMenuOverride,
   handlers,
   enabled = true,
   uiEnabled = enabled,
 }: UseCanvasInteractionProps) {
-  const contextMenu = useEditorStore((state) => uiEnabled ? state.contextMenu : null);
-  const setContextMenu = useEditorStore((state) => state.setContextMenu);
+  const contextMenu = useEditorStore((state) => {
+    if (!uiEnabled) return null;
+    const menu = state.contextMenu;
+    return menu?.panelInstanceId === panelInstanceId && menu.graphPath === activeTabIdRef.current
+      ? menu
+      : null;
+  });
+  const storeSetContextMenu = useEditorStore((state) => state.setContextMenu);
+  const setContextMenu = setContextMenuOverride ?? storeSetContextMenu;
   const activeGraphPath = activeTabIdRef.current;
   const pendingConnection = useGraphInteractionStore((state) => {
     if (!activeGraphPath) return null;
@@ -110,7 +117,7 @@ export function useCanvasInteraction({
 
   const setPendingConnection = useCallback((pin: Pin | null) => {
     const groupId = activeGroupIdRef.current;
-    const graphPath = resolveTabId(groupId, activeTabIdRef);
+    const graphPath = resolveTabId(activeTabIdRef);
     if (!graphPath) return;
     if (!pin) {
       cancelCanvasInteraction(graphPath, groupId);
@@ -129,26 +136,6 @@ export function useCanvasInteraction({
     });
   }, [activeGroupIdRef, activeTabIdRef]);
 
-  const connectPins = useCallback(async (groupId: string, pinA: string, pinB: string) => {
-    const graphPath = resolveTabId(groupId, activeTabIdRef);
-    if (!graphPath) return;
-
-    const graph = getGraphByPath(graphPath);
-    const first = graph?.pins.find((pin) => pin.id === pinA);
-    const second = graph?.pins.find((pin) => pin.id === pinB);
-    if (first && second) {
-      const source = first.direction === 'output' ? first : second;
-      const target = first.direction === 'input' ? first : second;
-      if (getPinCompatibility(source, target) === 'incompatible') {
-        logger.graph.warn('Ignored type-mismatched pin connection attempt', 'CanvasInteraction');
-        return;
-      }
-    }
-
-    const applied = await executeCommand(graphPath, 'ConnectPins', { pinA, pinB });
-    if (!applied) logger.graph.error('Failed to connect ports', 'CanvasInteraction');
-  }, [activeTabIdRef]);
-
   const insertRerouteAtConnection = useCallback(async (
     connectionId: string,
     position: Readonly<{ x: number; y: number }>,
@@ -156,14 +143,14 @@ export function useCanvasInteraction({
     groupId: string,
     selection: DoubleClickSelectionSnapshot,
   ) => {
-    if (getActiveLayoutTab(groupId)?.activeTabId !== graphPath) return false;
+    if (activeTabIdRef.current !== graphPath) return false;
     let outcome;
     try {
       outcome = await handlers.insertRerouteAtConnection({ graphPath, connectionId, position });
     } catch {
       outcome = false as const;
     }
-    if (getActiveLayoutTab(groupId)?.activeTabId !== graphPath
+    if (activeTabIdRef.current !== graphPath
       || !selectionMatches(getEditorGroupGraphSelection(groupId), selection.temporary)) return outcome;
 
     if (outcome !== false && outcome.status === 'applied') {
@@ -175,20 +162,20 @@ export function useCanvasInteraction({
       restoreGraphSelection(groupId, selection.before, setSelectedNodeIdsRef.current);
     }
     return outcome;
-  }, [handlers]);
+  }, [activeTabIdRef, handlers]);
 
   const onCanvasPointerDown = useCallback((event: React.PointerEvent, groupId?: string) => {
     const gid = groupId ?? activeGroupIdRef.current;
-    const graphPath = resolveTabId(gid, activeTabIdRef);
+    const graphPath = resolveTabId(activeTabIdRef);
     if (!graphPath) return;
     if (event.button === 1 || event.button === 2 || (event.button === 0 && event.altKey)) {
-      registerCanvasPointerScope({ graphPath, groupId: gid, pointerId: event.pointerId });
+      registerCanvasPointerScope({ graphPath, groupId: gid, panelInstanceId, pointerId: event.pointerId });
       startCanvasInteraction(graphPath, {
         type: 'panning',
         session: { groupId: gid, pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false },
       });
     } else if (event.button === 0) {
-      registerCanvasPointerScope({ graphPath, groupId: gid, pointerId: event.pointerId });
+      registerCanvasPointerScope({ graphPath, groupId: gid, panelInstanceId, pointerId: event.pointerId });
       startCanvasInteraction(graphPath, {
         type: 'selecting',
         session: {
@@ -202,13 +189,13 @@ export function useCanvasInteraction({
         },
       });
     }
-  }, [activeGroupIdRef, activeTabIdRef]);
+  }, [activeGroupIdRef, activeTabIdRef, panelInstanceId]);
 
   const onNodePointerDown = useCallback((nodeId: string, event: React.PointerEvent, groupId?: string) => {
     event.stopPropagation();
     if (event.button !== 0) return;
     const gid = groupId ?? activeGroupIdRef.current;
-    const graphPath = resolveTabId(gid, activeTabIdRef);
+    const graphPath = resolveTabId(activeTabIdRef);
     if (!graphPath) return;
     const selected = [...getEditorGroupGraphSelection(gid).nodeIds];
     const toggleSelection = event.shiftKey || event.ctrlKey || event.metaKey;
@@ -218,18 +205,18 @@ export function useCanvasInteraction({
         : [...selected, nodeId])
       : [nodeId];
     setSelectedNodeIdsRef.current(nodeIds, gid);
-    registerCanvasPointerScope({ graphPath, groupId: gid, pointerId: event.pointerId });
+    registerCanvasPointerScope({ graphPath, groupId: gid, panelInstanceId, pointerId: event.pointerId });
     startCanvasInteraction(graphPath, {
       type: 'draggingNodes',
       session: { groupId: gid, pointerId: event.pointerId, nodeId, lastX: event.clientX, lastY: event.clientY, moved: false, nodeIds, delta: { x: 0, y: 0 } },
     });
-  }, [activeGroupIdRef, activeTabIdRef]);
+  }, [activeGroupIdRef, activeTabIdRef, panelInstanceId]);
 
   const onPinPointerDown = useCallback(async (pin: Pin, event: React.PointerEvent, groupId?: string) => {
     event.stopPropagation();
     if (event.button !== 0) return;
     const gid = groupId ?? activeGroupIdRef.current;
-    const graphPath = resolveTabId(gid, activeTabIdRef);
+    const graphPath = resolveTabId(activeTabIdRef);
     const projected = pin as PinData;
     if (!graphPath || !projected.connections || !projected.address) return;
     const action = resolvePinPointerAction(event, projected.connections);
@@ -238,8 +225,8 @@ export function useCanvasInteraction({
       return;
     }
     if (action === 'none') return;
-    const world = getCanvasWorldPoint(gid, graphPath, event.clientX, event.clientY);
-    registerCanvasPointerScope({ graphPath, groupId: gid, pointerId: event.pointerId });
+    const world = getCanvasWorldPoint(gid, graphPath, event.clientX, event.clientY, panelInstanceId);
+    registerCanvasPointerScope({ graphPath, groupId: gid, panelInstanceId, pointerId: event.pointerId });
     startCanvasInteraction(graphPath, {
       type: action === 'move' ? 'movingConnections' : 'drawingConnection',
       session: {
@@ -257,13 +244,14 @@ export function useCanvasInteraction({
         feedback: null,
       },
     });
-  }, [activeGroupIdRef, activeTabIdRef, handlers]);
+  }, [activeGroupIdRef, activeTabIdRef, handlers, panelInstanceId]);
 
   useEffect(() => {
     if (!enabled) return;
     return attachCanvasPointerLoop({
       activeGroupIdRef,
       activeTabIdRef,
+      panelInstanceId,
       viewportRef,
       setSelectedNodeIds: (updater, groupId) => setSelectedNodeIdsRef.current(updater, groupId),
       persistViewport,
@@ -271,17 +259,16 @@ export function useCanvasInteraction({
       submitConnection: handlers.submitConnection,
       reportMutationFailure: handlers.reportMutationFailure,
     });
-  }, [enabled, activeGroupIdRef, activeTabIdRef, viewportRef, persistViewport, setContextMenu, handlers]);
+  }, [enabled, activeGroupIdRef, activeTabIdRef, panelInstanceId, viewportRef, persistViewport, setContextMenu, handlers]);
 
   return useMemo(() => ({
     contextMenu: uiEnabled ? contextMenu : null,
     setContextMenu,
     pendingConnection: uiEnabled ? pendingConnection : null,
     setPendingConnection,
-    connectPins,
     insertRerouteAtConnection,
     onCanvasPointerDown,
     onNodePointerDown,
     onPinPointerDown,
-  }), [uiEnabled, contextMenu, setContextMenu, pendingConnection, setPendingConnection, connectPins, insertRerouteAtConnection, onCanvasPointerDown, onNodePointerDown, onPinPointerDown]);
+  }), [uiEnabled, contextMenu, setContextMenu, pendingConnection, setPendingConnection, insertRerouteAtConnection, onCanvasPointerDown, onNodePointerDown, onPinPointerDown]);
 }

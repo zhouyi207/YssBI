@@ -38,6 +38,7 @@ import {
 export type CanvasPointerLoopDeps = {
   activeGroupIdRef: RefObject<string>;
   activeTabIdRef: RefObject<string | null>;
+  panelInstanceId: string;
   viewportRef: RefObject<EditorViewport>;
   setSelectedNodeIds: (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => void;
   persistViewport: (scope?: { groupId: string; graphPath: string } | null) => void;
@@ -78,14 +79,14 @@ function installPointerLoop(): () => void {
   let latestEvent: PointerEvent | null = null;
   const selectionPreviewIds = new Map<string, string[]>();
   const selectionCleanupRegistrations = new Map<string, () => void>();
-  const scopeKey = (scope: CanvasInteractionScope) => `${scope.graphPath}\u0000${scope.groupId}`;
+  const scopeKey = (scope: CanvasInteractionScope) => `${scope.graphPath}\u0000${scope.groupId}\u0000${scope.panelInstanceId}`;
   const ensureSelectionCleanup = (scope: CanvasInteractionScope) => {
     const key = scopeKey(scope);
     if (selectionCleanupRegistrations.has(key)) return;
     const unregister = registerCanvasInteractionCleanup(
       { ...scope, interactionType: 'selecting' },
       () => {
-        const canvas = queryCanvasElement(scope.groupId);
+        const canvas = queryCanvasElement(scope.panelInstanceId);
         if (canvas) clearAllSelectionPreview(canvas);
         selectionPreviewIds.delete(key);
         selectionCleanupRegistrations.delete(key);
@@ -102,20 +103,23 @@ function installPointerLoop(): () => void {
     const currentScope = getCanvasPointerScope();
     return currentScope?.graphPath === scope.graphPath
       && currentScope.groupId === scope.groupId
+      && currentScope.panelInstanceId === scope.panelInstanceId
       && currentScope.pointerId === scope.pointerId
       && session.groupId === scope.groupId
       && session.pointerId === scope.pointerId
-      && resolveTabId(scope.groupId, deps.activeTabIdRef) === scope.graphPath
-      && queryCanvasElement(scope.groupId) !== null;
+      && deps.panelInstanceId === scope.panelInstanceId
+      && resolveTabId(deps.activeTabIdRef) === scope.graphPath
+      && queryCanvasElement(scope.panelInstanceId) !== null;
   };
 
   const processConnectionFrame = (
-    graphPath: string,
+    scope: CanvasInteractionScope,
     interaction: Extract<CanvasInteraction, { type: 'drawingConnection' | 'movingConnections' }>,
     event: PointerEvent,
   ) => {
+    const { graphPath } = scope;
     const { session } = interaction;
-    const canvas = queryCanvasElement(session.groupId);
+    const canvas = queryCanvasElement(scope.panelInstanceId);
     if (!canvas) return;
     const bucket = useGraphDataStore.getState().graphEntities[graphPath];
     if (!bucket) {
@@ -146,9 +150,10 @@ function installPointerLoop(): () => void {
       graphPath,
       event.clientX,
       event.clientY,
+      scope.panelInstanceId,
     );
     const snappedWorld = target.snappedCenter
-      ? getCanvasWorldPoint(session.groupId, graphPath, target.snappedCenter.x, target.snappedCenter.y)
+      ? getCanvasWorldPoint(session.groupId, graphPath, target.snappedCenter.x, target.snappedCenter.y, scope.panelInstanceId)
       : null;
     useGraphInteractionStore.getState().updateInteraction(graphPath, session.groupId, (current) =>
       current.type === interaction.type
@@ -175,6 +180,11 @@ function installPointerLoop(): () => void {
     const active = activeInteraction(event);
     if (!active) return;
     const [scope, interaction] = active;
+    if (scope.panelInstanceId !== deps.panelInstanceId) {
+      cancelCanvasInteraction(scope.graphPath, scope.groupId);
+      clearCanvasPointerScope(scope.graphPath);
+      return;
+    }
     const { graphPath } = scope;
     const store = useGraphInteractionStore.getState();
 
@@ -203,7 +213,7 @@ function installPointerLoop(): () => void {
       const session = { ...interaction.session, currentX: event.clientX, currentY: event.clientY };
       const key = scopeKey(scope);
       ensureSelectionCleanup(scope);
-      const canvas = queryCanvasElement(session.groupId);
+      const canvas = queryCanvasElement(scope.panelInstanceId);
       if (canvas) {
         const hitIds = hitTestSelection(collectSelectionHitTargets(canvas), selectionRect(session));
         const ids = unionSelectionIds(session.baseNodeIds, hitIds);
@@ -234,7 +244,7 @@ function installPointerLoop(): () => void {
         delta,
       });
     } else if (interaction.type === 'drawingConnection' || interaction.type === 'movingConnections') {
-      processConnectionFrame(graphPath, interaction, event);
+      processConnectionFrame(scope, interaction, event);
     }
   };
 
@@ -263,6 +273,11 @@ function installPointerLoop(): () => void {
     latestEvent = null;
     const [scope] = active;
     const { graphPath, groupId } = scope;
+    if (scope.panelInstanceId !== deps.panelInstanceId) {
+      cancelCanvasInteraction(graphPath, groupId);
+      clearCanvasPointerScope(graphPath);
+      return;
+    }
     processFrame(event);
     const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
     const store = useGraphInteractionStore.getState();

@@ -2,15 +2,18 @@ import { create } from 'zustand';
 
 import type { DetailFocus } from '../detail/types';
 
-interface ContextMenuState {
+export interface EditorContextMenuState {
   x: number;
   y: number;
   visible: boolean;
+  panelInstanceId?: string;
+  groupId?: string;
+  graphPath?: string;
 }
 
 interface EditorStore {
-  contextMenu: ContextMenuState | null;
-  setContextMenu: (menu: ContextMenuState | null) => void;
+  contextMenu: EditorContextMenuState | null;
+  setContextMenu: (menu: EditorContextMenuState | null) => void;
   detailFocus: DetailFocus | null;
   setDetailFocus: (focus: DetailFocus) => void;
   clearDetailFocus: () => void;

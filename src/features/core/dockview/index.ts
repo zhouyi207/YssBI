@@ -1,5 +1,9 @@
 export { useDockviewPortSnapshot } from './useDockviewPortSnapshot';
-export { getPaneSelection, useEditorPaneStateStore } from './editorPaneStateStore';
+export {
+  EMPTY_EDITOR_PANE_SELECTION,
+  getPaneSelection,
+  useEditorPaneStateStore,
+} from './editorPaneStateStore';
 export type { EditorPaneSelection } from './editorPaneStateStore';
 export {
   componentForWorkbenchMetadata,

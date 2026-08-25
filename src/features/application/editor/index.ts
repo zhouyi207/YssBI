@@ -4,6 +4,7 @@ export {
 } from './EditorSessionContext';
 export type {
   EditorCanvasMode,
+  EditorCanvasScope,
   EditorCanvasSession,
   EditorSessionResourcesSlice,
   EditorSessionDetailActionsSlice,
@@ -44,7 +45,7 @@ export { resolveTabDisplayName } from './resolveTabDisplayName';
 export { reconcileOpenLayoutTabsWithResources } from './reconcileOpenLayoutTabs';
 export { useProjectOperations } from './useProjectOperations';
 export { useEditorCanvas } from './useEditorCanvas';
-export { useIsActiveEditorGroup } from './useIsActiveEditorGroup';
+export { useIsActiveEditorPanel } from './useIsActiveEditorPanel';
 export { CanvasContextMenuProvider, useCanvasContextMenuActions, useCanvasContextMenuActionsOptional } from './CanvasContextMenuContext';
 export type { CanvasContextMenuActions } from './CanvasContextMenuContext';
 export { useCanvasViewport } from './useCanvasViewport';

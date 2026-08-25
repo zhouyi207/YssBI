@@ -37,7 +37,9 @@ function getActiveCanvasLocalPoint(
   clientX: number,
   clientY: number,
 ) {
-  const element = document.querySelector(`[data-editor-group-id="${target.groupId}"]`);
+  const element = document.querySelector(
+    `[data-editor-panel-instance-id="${target.panelInstanceId}"]`,
+  );
   if (!(element instanceof HTMLElement)) return { x: 0, y: 0 };
   const rect = element.getBoundingClientRect();
   const viewport = getViewport(editorViewportScope(target.groupId, target.resourceRef));

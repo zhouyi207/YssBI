@@ -1,41 +1,39 @@
-import { memo, useContext } from 'react';
+import { memo } from 'react';
 import Canvas from './Canvas';
-import { useIsActiveEditorGroup } from '@/features/application/editor';
-import { GroupContext, useEditorGroupWorkspace } from '@/features/core/editor';
-import { WatermarkView } from '../overlays/WatermarkView';
+import { useIsActiveEditorPanel } from '@/features/application/editor';
 import { CanvasDropZone } from './CanvasDropZone';
 import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore';
 import { resourceKey, useDocumentStateStore } from '@/features/core/resource';
+import type { EditorResourceKind } from '@/features/core/dockview';
+
+export interface GraphEditorProps {
+    panelInstanceId: string;
+    groupId: string;
+    graphPath: string;
+    graphKind: Exclude<EditorResourceKind, 'worksheet'>;
+}
 
 /**
- * Graph editor shell per editor group.
- * Always renders the active tab's canvas; inactive groups use preview mode (visible, non-interactive).
+ * Graph editor shell per Dockview panel.
+ * Each panel renders its own resource; only the physically active panel is interactive.
  */
-export const GraphEditor = memo(function GraphEditor() {
-    const groupId = useContext(GroupContext);
-    const isActiveGroup = useIsActiveEditorGroup(groupId);
-    const mode = isActiveGroup ? 'interactive' : 'preview';
-    const { activeTabId, tabs } = useEditorGroupWorkspace();
-
-    const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
-    const graphKind = activeTab?.type === 'event' || activeTab?.type === 'function'
-        ? activeTab.type
-        : null;
+export const GraphEditor = memo(function GraphEditor({
+    panelInstanceId,
+    groupId,
+    graphPath,
+    graphKind,
+}: GraphEditorProps) {
+    const mode = useIsActiveEditorPanel(panelInstanceId) ? 'interactive' : 'preview';
     const graphLoadStatus = useProjectIOStore((state) => (
-        activeTabId ? state.graphLoadStatus[activeTabId] : undefined
+        state.graphLoadStatus[graphPath]
     ));
     const graphProjectionReady = useGraphDataStore((state) => (
-        activeTabId ? state.hasGraph(activeTabId) : false
+        state.hasGraph(graphPath)
     ));
     const graphDocument = useDocumentStateStore((state) => (
-        activeTabId && graphKind
-            ? state.documents[resourceKey({ id: activeTabId, kind: graphKind })]
-            : undefined
+        state.documents[resourceKey({ id: graphPath, kind: graphKind })]
     ));
-    const resolvedTabId = tabs.length > 0 ? activeTabId : null;
-    const graphReady = resolvedTabId !== null
-        && graphKind !== null
-        && graphProjectionReady
+    const graphReady = graphProjectionReady
         && graphDocument?.loaded === true
         && graphDocument.stale === false
         && graphDocument.conflict === false
@@ -46,21 +44,27 @@ export const GraphEditor = memo(function GraphEditor() {
     return (
         <div className="flex flex-col w-full h-full min-h-0 min-w-0 overflow-hidden">
             <div className="flex-1 relative min-h-0 min-w-0 overflow-hidden">
-                {groupId ? (
-                    <CanvasDropZone groupId={groupId} mode={mode}>
-                        {resolvedTabId ? (
-                            graphReady
-                                ? <Canvas mode={mode} />
-                                : graphUnavailable
-                                    ? <div className="absolute inset-0" role="alert" data-graph-load-error />
-                                    : <div className="absolute inset-0" aria-busy="true" data-graph-loading />
-                        ) : (
-                            <WatermarkView />
-                        )}
-                    </CanvasDropZone>
-                ) : (
-                    <WatermarkView />
-                )}
+                <CanvasDropZone
+                    panelInstanceId={panelInstanceId}
+                    groupId={groupId}
+                    graphPath={graphPath}
+                    graphKind={graphKind}
+                    mode={mode}
+                >
+                    {graphReady
+                        ? (
+                            <Canvas
+                                mode={mode}
+                                panelInstanceId={panelInstanceId}
+                                groupId={groupId}
+                                graphPath={graphPath}
+                                graphKind={graphKind}
+                            />
+                        )
+                        : graphUnavailable
+                            ? <div className="absolute inset-0" role="alert" data-graph-load-error />
+                            : <div className="absolute inset-0" aria-busy="true" data-graph-loading />}
+                </CanvasDropZone>
             </div>
         </div>
     );

@@ -1,15 +1,24 @@
 import {
   useCallback,
   useMemo,
+  useRef,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
 import { useCanvasInteraction } from '@/features/core/canvas';
 import { useVariableStore } from '@/features/core/dataStore';
 import {
-  useEditorGroupWorkspace,
-} from '@/features/core/editor';
+  EMPTY_EDITOR_PANE_SELECTION,
+  getPaneSelection,
+  useEditorPaneStateStore,
+} from '@/features/core/dockview';
+import { setInspectionContext } from './rightSidebarActions';
+import type { EditorContextMenuState } from '@/features/core/editor';
 import type { Pin } from '@/shared/types/domain';
+import {
+  captureActiveEditorCommandTarget,
+  type EditorCommandTarget,
+} from './editorCommandFocus';
 import { prepareEditorGroupForInteraction } from './editorGroupInteraction';
 import { useEditorSessionCommandsContext } from './EditorSessionContext';
 import type {
@@ -17,6 +26,7 @@ import type {
   EditorCanvasInteractionSlice,
   EditorCanvasMode,
   EditorCanvasResourcesSlice,
+  EditorCanvasScope,
   EditorCanvasSession,
   EditorCanvasWorkspaceSlice,
 } from './editorSessionTypes';
@@ -24,76 +34,134 @@ import { useCanvasMutationHandlers } from './useCanvasMutationHandlers';
 
 export interface UseEditorCanvasOptions {
   mode: EditorCanvasMode;
+  scope: EditorCanvasScope;
 }
 
-/** Canvas-only editor projection. Preview mode keeps activation handlers but mounts no pointer loop. */
-export function useEditorCanvas({ mode }: UseEditorCanvasOptions): EditorCanvasSession {
+/** Canvas-only editor projection scoped to one Dockview panel and resource. */
+export function useEditorCanvas({ mode, scope }: UseEditorCanvasOptions): EditorCanvasSession {
   const sessionCommands = useEditorSessionCommandsContext();
-  const groupWorkspace = useEditorGroupWorkspace();
   const variables = useVariableStore((state) => state.variables);
+  const paneSelection = useEditorPaneStateStore((state) => (
+    state.selections[scope.panelInstanceId] ?? EMPTY_EDITOR_PANE_SELECTION
+  ));
   const mutationHandlers = useCanvasMutationHandlers();
   const interactive = mode === 'interactive';
+  const groupIdRef = useRef(scope.groupId);
+  const graphPathRef = useRef<string | null>(scope.graphPath);
+  groupIdRef.current = scope.groupId;
+  graphPathRef.current = scope.graphPath;
+
+  const setSelectedNodeIds = useCallback(
+    (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
+      if (targetGroupId && targetGroupId !== scope.groupId) return;
+      const current = getPaneSelection(scope.panelInstanceId).selectedNodeIds;
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      const nodeIds = [...new Set(next)];
+      useEditorPaneStateStore.getState().setSelectedNodeIds(scope.panelInstanceId, nodeIds);
+      setInspectionContext(scope.graphPath, nodeIds);
+    },
+    [scope.graphPath, scope.groupId, scope.panelInstanceId],
+  );
+
+  const setSelectedConnectionIds = useCallback(
+    (updater: string[] | ((prev: string[]) => string[]), targetGroupId?: string) => {
+      if (targetGroupId && targetGroupId !== scope.groupId) return;
+      const current = getPaneSelection(scope.panelInstanceId).selectedConnectionIds;
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      useEditorPaneStateStore.getState().setSelectedConnectionIds(scope.panelInstanceId, next);
+      setInspectionContext(scope.graphPath, []);
+    },
+    [scope.graphPath, scope.groupId, scope.panelInstanceId],
+  );
+
+  const setContextMenu = useCallback((menu: EditorContextMenuState | null) => {
+    sessionCommands.setContextMenu(menu
+      ? { ...menu, panelInstanceId: scope.panelInstanceId, groupId: scope.groupId, graphPath: scope.graphPath }
+      : null);
+  }, [scope.graphPath, scope.groupId, scope.panelInstanceId, sessionCommands.setContextMenu]);
+
+  const resolveCommandTarget = useCallback(
+    (target?: EditorCommandTarget) => target ?? captureActiveEditorCommandTarget() ?? undefined,
+    [],
+  );
+
+  const createNode = useCallback(
+    (descriptor: Parameters<typeof sessionCommands.createNode>[0], position: Parameters<typeof sessionCommands.createNode>[1]) => (
+      sessionCommands.createNode(
+        descriptor,
+        position,
+        resolveCommandTarget(),
+      )
+    ),
+    [resolveCommandTarget, sessionCommands.createNode],
+  );
 
   const canvasInteraction = useCanvasInteraction({
-    activeGroupIdRef: sessionCommands.activeGroupIdRef as RefObject<string>,
-    activeTabIdRef: sessionCommands.activeTabIdRef,
+    activeGroupIdRef: groupIdRef as RefObject<string>,
+    activeTabIdRef: graphPathRef,
+    panelInstanceId: scope.panelInstanceId,
     viewportRef: sessionCommands.viewportRef,
-    setSelectedNodeIds: sessionCommands.setSelectedNodeIds,
+    setSelectedNodeIds,
+    setContextMenu,
     handlers: mutationHandlers,
-    enabled: interactive && groupWorkspace.groupId !== null,
-    uiEnabled: interactive && groupWorkspace.groupId !== null,
+    enabled: interactive,
+    uiEnabled: interactive,
   });
 
-  const { groupId } = groupWorkspace;
   const prepareForInteraction = useCallback(() => {
-    if (!groupId) return false;
-    prepareEditorGroupForInteraction(groupId);
+    prepareEditorGroupForInteraction(scope.groupId);
     return true;
-  }, [groupId]);
+  }, [scope.groupId]);
 
   const onCanvasPointerDown = useCallback(
     (event: ReactPointerEvent) => {
-      if (!groupId || !prepareForInteraction()) return;
-      canvasInteraction.onCanvasPointerDown(event, groupId);
+      if (!prepareForInteraction()) return;
+      canvasInteraction.onCanvasPointerDown(event, scope.groupId);
     },
-    [canvasInteraction.onCanvasPointerDown, groupId, prepareForInteraction],
+    [canvasInteraction.onCanvasPointerDown, prepareForInteraction, scope.groupId],
   );
 
   const onNodePointerDown = useCallback(
     (nodeId: string, event: ReactPointerEvent) => {
-      if (!groupId || !prepareForInteraction()) return;
-      canvasInteraction.onNodePointerDown(nodeId, event, groupId);
+      if (!prepareForInteraction()) return;
+      canvasInteraction.onNodePointerDown(nodeId, event, scope.groupId);
     },
-    [canvasInteraction.onNodePointerDown, groupId, prepareForInteraction],
+    [canvasInteraction.onNodePointerDown, prepareForInteraction, scope.groupId],
   );
 
   const onPinPointerDown = useCallback(
     (pin: Pin, event: ReactPointerEvent) => {
-      if (!groupId || !prepareForInteraction()) return;
-      canvasInteraction.onPinPointerDown(pin, event, groupId);
+      if (!prepareForInteraction()) return;
+      canvasInteraction.onPinPointerDown(pin, event, scope.groupId);
     },
-    [canvasInteraction.onPinPointerDown, groupId, prepareForInteraction],
+    [canvasInteraction.onPinPointerDown, prepareForInteraction, scope.groupId],
   );
 
   const commands = useMemo(
     (): EditorCanvasCommandsSlice => ({
-      copyNodes: sessionCommands.copyNodes,
-      cutNodes: sessionCommands.cutNodes,
-      duplicateNodes: sessionCommands.duplicateNodes,
-      deleteNodesById: sessionCommands.deleteNodesById,
-      breakAllNodeLinks: sessionCommands.breakAllNodeLinks,
-      breakConnectionsById: sessionCommands.breakConnectionsById,
-      selectLinkedNodes: sessionCommands.selectLinkedNodes,
-      disconnectPinById: sessionCommands.disconnectPinById,
-      resetPinValue: sessionCommands.resetPinValue,
-      setSelectedNodeIds: sessionCommands.setSelectedNodeIds,
-      setSelectedConnectionIds: sessionCommands.setSelectedConnectionIds,
+      copyNodes: (nodeIds, target) => sessionCommands.copyNodes(nodeIds, resolveCommandTarget(target)),
+      cutNodes: (nodeIds, target) => sessionCommands.cutNodes(nodeIds, resolveCommandTarget(target)),
+      duplicateNodes: (nodeIds, offset, target) => sessionCommands.duplicateNodes(nodeIds, offset, resolveCommandTarget(target)),
+      deleteNodesById: (nodeIds, target) => sessionCommands.deleteNodesById(nodeIds, resolveCommandTarget(target)),
+      breakAllNodeLinks: (nodeId, target) => sessionCommands.breakAllNodeLinks(nodeId, resolveCommandTarget(target)),
+      breakConnectionsById: (connectionIds, graphPath, targetGroupId, target) => sessionCommands.breakConnectionsById(
+        connectionIds,
+        graphPath,
+        targetGroupId,
+        resolveCommandTarget(target),
+      ),
+      selectLinkedNodes: (nodeId, target) => sessionCommands.selectLinkedNodes(nodeId, resolveCommandTarget(target)),
+      disconnectPinById: (pinId, target) => sessionCommands.disconnectPinById(pinId, resolveCommandTarget(target)),
+      resetPinValue: (nodeId, pinId, target) => sessionCommands.resetPinValue(nodeId, pinId, resolveCommandTarget(target)),
+      setSelectedNodeIds,
+      setSelectedConnectionIds,
       executeGraph: sessionCommands.executeGraph,
       cancelGraphExecution: sessionCommands.cancelGraphExecution,
       clearGraphArtifacts: sessionCommands.clearGraphArtifacts,
-      createNode: sessionCommands.createNode,
+      createNode,
     }),
     [
+      resolveCommandTarget,
       sessionCommands.copyNodes,
       sessionCommands.cutNodes,
       sessionCommands.duplicateNodes,
@@ -103,36 +171,23 @@ export function useEditorCanvas({ mode }: UseEditorCanvasOptions): EditorCanvasS
       sessionCommands.selectLinkedNodes,
       sessionCommands.disconnectPinById,
       sessionCommands.resetPinValue,
-      sessionCommands.setSelectedNodeIds,
-      sessionCommands.setSelectedConnectionIds,
+      setSelectedNodeIds,
+      setSelectedConnectionIds,
       sessionCommands.executeGraph,
       sessionCommands.cancelGraphExecution,
       sessionCommands.clearGraphArtifacts,
-      sessionCommands.createNode,
+      createNode,
     ],
   );
 
   const workspace = useMemo((): EditorCanvasWorkspaceSlice => {
-    const activeTab = groupWorkspace.tabs.find(
-      (tab) => tab.id === groupWorkspace.activeTabId,
-    );
-    const activeGraph = activeTab?.type === 'event' || activeTab?.type === 'function'
-      ? { graphPath: activeTab.id, kind: activeTab.type }
-      : null;
-
     return {
-      groupId: groupId as string,
-      activeGraph,
-      selectedNodeIds: groupWorkspace.selectedNodeIds,
-      selectedConnectionIds: groupWorkspace.selectedConnectionIds,
+      groupId: scope.groupId,
+      activeGraph: { graphPath: scope.graphPath, kind: scope.graphKind },
+      selectedNodeIds: paneSelection.selectedNodeIds,
+      selectedConnectionIds: paneSelection.selectedConnectionIds,
     };
-  }, [
-    groupId,
-    groupWorkspace.activeTabId,
-    groupWorkspace.tabs,
-    groupWorkspace.selectedNodeIds,
-    groupWorkspace.selectedConnectionIds,
-  ]);
+  }, [paneSelection.selectedConnectionIds, paneSelection.selectedNodeIds, scope]);
 
   const resources = useMemo(
     (): EditorCanvasResourcesSlice => ({ variables }),
@@ -142,7 +197,7 @@ export function useEditorCanvas({ mode }: UseEditorCanvasOptions): EditorCanvasS
   const interaction = useMemo(
     (): EditorCanvasInteractionSlice => ({
       contextMenu: canvasInteraction.contextMenu,
-      setContextMenu: canvasInteraction.setContextMenu,
+      setContextMenu,
       pendingConnection: canvasInteraction.pendingConnection,
       setPendingConnection: canvasInteraction.setPendingConnection,
       onCanvasPointerDown,
@@ -152,7 +207,7 @@ export function useEditorCanvas({ mode }: UseEditorCanvasOptions): EditorCanvasS
     }),
     [
       canvasInteraction.contextMenu,
-      canvasInteraction.setContextMenu,
+      setContextMenu,
       canvasInteraction.pendingConnection,
       canvasInteraction.setPendingConnection,
       canvasInteraction.insertRerouteAtConnection,

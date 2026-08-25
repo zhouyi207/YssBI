@@ -8,7 +8,7 @@ import {
 } from '@/features/core/dnd';
 import { canCreateFunctionNodeInGraph } from '@/features/application/editor/canvasDrop';
 import { canvasDropHandlerStore } from '@/features/core/sidebarDrag';
-import { activateEditorGroup } from '@/features/application/editor/switchEditorTab';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
 import { useSidebarDragStore } from '@/features/core/sidebarDrag';
 
 export function resolveDropPointerFromDragEnd(event: Pick<DragEndEvent, 'activatorEvent' | 'delta'>): {
@@ -40,18 +40,25 @@ export function resolveFunctionDragState(
   return buildFunctionGraphResourceDragState(resource.id, resource.name, clientX, clientY);
 }
 
+export interface CanvasDropTarget {
+  panelInstanceId: string;
+  groupId: string;
+  graphPath: string;
+  graphKind: 'event' | 'function';
+}
+
 export async function tryDropFunctionIntoCanvas(
-  groupId: string,
+  target: CanvasDropTarget,
   dragState: SidebarDragState,
   modifiers: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean },
 ): Promise<boolean> {
   if (dragState.type !== DRAG_TYPES.GRAPH_RESOURCE) return false;
-  if (!canCreateFunctionNodeInGraph(groupId, dragState.sidebarResource)) return false;
+  if (!canCreateFunctionNodeInGraph(target.graphKind, target.graphPath, dragState.sidebarResource)) return false;
 
-  const handler = canvasDropHandlerStore.getHandler(groupId);
+  const handler = canvasDropHandlerStore.getHandler(target.panelInstanceId);
   if (!handler) return false;
 
-  void activateEditorGroup(groupId);
+  if (!await workbenchDockviewPort.activate(target.panelInstanceId)) return false;
   const handled = await handler(dragState, modifiers);
   return handled === true;
 }

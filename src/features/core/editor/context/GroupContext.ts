@@ -1,7 +1,4 @@
 import { createContext } from 'react';
 
-/**
- * GroupContext for scoped canvas operations
- * When a component is wrapped in GroupContext.Provider, operations will scope to that group
- */
+/** Group scope for layout-backed consumers such as the worksheet editor. */
 export const GroupContext = createContext<string | null>(null);

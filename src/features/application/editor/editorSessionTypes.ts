@@ -83,6 +83,13 @@ export type EditorSessionDetailActionsSlice = Pick<
 
 export type EditorCanvasMode = 'interactive' | 'preview';
 
+export interface EditorCanvasScope {
+  panelInstanceId: string;
+  groupId: string;
+  graphPath: string;
+  graphKind: 'event' | 'function';
+}
+
 export type EditorCanvasCommandsSlice = Pick<
   EditorSessionHistoryActions,
   | 'copyNodes'

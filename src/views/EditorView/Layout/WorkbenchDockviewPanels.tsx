@@ -6,7 +6,6 @@ import {
 import type { IDockviewPanelProps } from 'dockview-react';
 
 import {
-  layoutTabFromEditorMetadata,
   type WorkbenchComponentId,
   type WorkbenchPanelParams,
 } from '@/features/core/dockview';
@@ -48,21 +47,32 @@ export function WorkbenchEditorPanel(
   const metadata = props.params.metadata;
   if (metadata.role !== 'editor') return null;
 
-  const layoutTab = layoutTabFromEditorMetadata(metadata);
-  const EditorComponent = layoutTab.component === 'WorksheetEditor'
-    ? WorksheetEditor
-    : GraphEditor;
+  const isWorksheet = metadata.resourceKind === 'worksheet';
 
-  return (
-    <GroupContext.Provider value={groupId}>
-      <div
-        className="h-full min-h-0 w-full min-w-0 overflow-hidden bg-(--workbench-bg)"
-        data-workbench-editor-panel
-        data-panel-instance-id={props.api.id}
-      >
-        <EditorComponent key={`${layoutTab.type}:${layoutTab.id}`} />
-      </div>
-    </GroupContext.Provider>
+  const panel = (
+    <div
+      className="h-full min-h-0 w-full min-w-0 overflow-hidden bg-(--workbench-bg)"
+      data-workbench-editor-panel
+      data-panel-instance-id={props.api.id}
+    >
+      {isWorksheet ? (
+        <WorksheetEditor key={`${metadata.resourceKind}:${metadata.resourceRef}`} />
+      ) : (
+        <GraphEditor
+          key={`${metadata.resourceKind}:${metadata.resourceRef}`}
+          panelInstanceId={props.api.id}
+          groupId={groupId}
+          graphPath={metadata.resourceRef}
+          graphKind={metadata.resourceKind}
+        />
+      )}
+    </div>
+  );
+
+  return isWorksheet ? (
+    <GroupContext.Provider value={groupId}>{panel}</GroupContext.Provider>
+  ) : (
+    panel
   );
 }
 

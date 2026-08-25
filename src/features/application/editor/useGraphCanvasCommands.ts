@@ -51,8 +51,9 @@ function activeGraphContext(target: EditorCommandTarget): ActiveGraphContext | n
 function activeGraphCanvas(target: EditorCommandTarget): ActiveGraphCanvas | null {
   const context = activeGraphContext(target);
   if (!context) return null;
-  const canvasElement = [...document.querySelectorAll<HTMLElement>('[data-editor-group-id]')]
-    .find((element) => element.dataset.editorGroupId === context.groupId);
+  const canvasElement = document.querySelector<HTMLElement>(
+    `[data-editor-panel-instance-id="${context.target.panelInstanceId}"]`,
+  );
   return canvasElement ? { ...context, canvasElement } : null;
 }
 

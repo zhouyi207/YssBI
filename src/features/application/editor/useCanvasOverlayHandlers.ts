@@ -6,7 +6,7 @@ import type { Pin } from '@/shared/types/domain/pin';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { useEditorStore } from '@/features/core/editor';
 import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
-import { getActiveLayoutTab } from '@/features/core/layout/layoutTabQueries';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
 import { formatErrorMessage } from '@/shared/utils/formatErrorMessage';
 import { logger } from '@/utils/appLogger';
 import { clientToWorldInCanvas } from './canvasDrop';
@@ -35,14 +35,21 @@ function samePortAddress(left: PortAddressDto, right: PortAddressDto): boolean {
 }
 
 function interactionStillMatches(
+  panelInstanceId: string,
   groupId: string,
   graphPath: string,
   menu: { x: number; y: number },
   sourceAddress: PortAddressDto | null,
 ): boolean {
-  if (getActiveLayoutTab(groupId)?.activeTabId !== graphPath) return false;
+  const panel = workbenchDockviewPort.getPanel(panelInstanceId);
+  if (!panel?.active
+    || panel.groupId !== groupId
+    || panel.metadata.role !== 'editor'
+    || panel.metadata.resourceRef !== graphPath) return false;
   const contextMenu = useEditorStore.getState().contextMenu;
   if (!contextMenu?.visible
+    || contextMenu.panelInstanceId !== panelInstanceId
+    || contextMenu.graphPath !== graphPath
     || contextMenu.x !== menu.x
     || contextMenu.y !== menu.y) return false;
   const interaction = getCanvasInteraction(useGraphInteractionStore.getState(), graphPath, groupId);
@@ -55,6 +62,7 @@ function interactionStillMatches(
 
 export function useCanvasOverlayHandlers({
   canvasElementRef,
+  panelInstanceId,
   groupId,
   activeTabId,
   pendingConnection,
@@ -62,6 +70,7 @@ export function useCanvasOverlayHandlers({
   setPendingConnection,
 }: {
   canvasElementRef: RefObject<HTMLDivElement | null>;
+  panelInstanceId: string;
   groupId: string;
   activeTabId: string | null;
   pendingConnection: Pin | null;
@@ -96,7 +105,7 @@ export function useCanvasOverlayHandlers({
           connectFrom: sourceAddress,
         });
         if (outcome.status !== 'applied'
-          || !interactionStillMatches(groupId, activeTabId, contextMenu, sourceAddress)) return;
+          || !interactionStillMatches(panelInstanceId, groupId, activeTabId, contextMenu, sourceAddress)) return;
         setContextMenu(null);
         setPendingConnection(null);
       } catch (error) {
@@ -109,6 +118,7 @@ export function useCanvasOverlayHandlers({
     },
     [
       canvasElementRef,
+      panelInstanceId,
       groupId,
       activeTabId,
       pendingConnection,

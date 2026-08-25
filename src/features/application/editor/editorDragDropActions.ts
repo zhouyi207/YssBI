@@ -7,9 +7,10 @@ import {
   resolveDropIntoEditorDragState,
   resolveDropPointerFromDragEnd,
   tryDropFunctionIntoCanvas,
+  type CanvasDropTarget,
 } from './dropFunctionIntoEventEditor';
-import { activateEditorGroup } from './switchEditorTab';
 import { canvasDropHandlerStore, useSidebarDragStore } from '@/features/core/sidebarDrag';
+import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
 import type { SidebarDragPayload } from '@/features/core/dnd';
 import {
   findSidebarDropCanvasAtPointer,
@@ -34,21 +35,35 @@ export function readEditorDragModifiers(event: DragEndEvent): {
   return readDragModifiers(event);
 }
 
-function resolveCanvasDropGroupId(
+function resolveCanvasDropTarget(
   event: DragEndEvent,
   dropPointer: { x: number; y: number } | null,
-): string | null {
+): CanvasDropTarget | null {
   const overData = event.over?.data.current;
   if (
     overData
     && typeof overData === 'object'
+    && 'panelInstanceId' in overData
     && 'groupId' in overData
+    && 'graphPath' in overData
+    && 'graphKind' in overData
+    && typeof (overData as { panelInstanceId?: unknown }).panelInstanceId === 'string'
     && typeof (overData as { groupId?: unknown }).groupId === 'string'
+    && typeof (overData as { graphPath?: unknown }).graphPath === 'string'
+    && ((overData as { graphKind?: unknown }).graphKind === 'event'
+      || (overData as { graphKind?: unknown }).graphKind === 'function')
   ) {
-    return (overData as { groupId: string }).groupId;
+    return overData as CanvasDropTarget;
   }
-  return dropPointer
-    ? findSidebarDropCanvasAtPointer(dropPointer.x, dropPointer.y)?.groupId ?? null
+  if (!dropPointer) return null;
+  const canvas = findSidebarDropCanvasAtPointer(dropPointer.x, dropPointer.y);
+  return canvas
+    ? {
+        panelInstanceId: canvas.panelInstanceId,
+        groupId: canvas.groupId,
+        graphPath: canvas.graphPath,
+        graphKind: canvas.graphKind,
+      }
     : null;
 }
 
@@ -69,25 +84,28 @@ async function executeSidebarSpawnDragEnd(
 
   if (isGraphResourceDragPayload(activeData)) {
     const { sidebarResource } = activeData;
-    const groupId = resolveCanvasDropGroupId(event, dropPointer);
+    const target = resolveCanvasDropTarget(event, dropPointer);
     const dropState = resolveDropIntoEditorDragState(sidebarResource, dropPointer, capturedSidebarDrag);
-    if (groupId && dropState && sidebarResource.type === 'function') {
-      const handled = await tryDropFunctionIntoCanvas(groupId, dropState, modifiers);
+    if (target && dropState && sidebarResource.type === 'function') {
+      const handled = await tryDropFunctionIntoCanvas(target, dropState, modifiers);
       if (handled) {
         clearEditorDragSession();
         return;
       }
     }
-    if (groupId) await handleGraphResourceDrop(sidebarResource, groupId);
+    if (target) await handleGraphResourceDrop(sidebarResource, target.groupId);
     clearEditorDragSession();
     return;
   }
 
   if (isNodeTemplateDragData(activeData)) {
-    const groupId = resolveCanvasDropGroupId(event, dropPointer);
-    if (groupId && capturedSidebarDrag && isNodeTemplateDragState(capturedSidebarDrag)) {
-      void activateEditorGroup(groupId);
-      const handler = canvasDropHandlerStore.getHandler(groupId);
+    const target = resolveCanvasDropTarget(event, dropPointer);
+    if (target && capturedSidebarDrag && isNodeTemplateDragState(capturedSidebarDrag)) {
+      if (!await workbenchDockviewPort.activate(target.panelInstanceId)) {
+        clearEditorDragSession();
+        return;
+      }
+      const handler = canvasDropHandlerStore.getHandler(target.panelInstanceId);
       if (handler) await handler(capturedSidebarDrag, modifiers);
     }
   }

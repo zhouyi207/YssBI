@@ -6,18 +6,24 @@ import { DROP_TYPES, getCanvasDropZoneId } from "@/features/core/dnd";
  * Visual preview is rendered by `EditorDropPreviewOverlay` via `useEditorDragPreviewMonitor`.
  */
 export function CanvasDropZone({
+  panelInstanceId,
   groupId,
+  graphPath,
+  graphKind,
   mode,
   children,
 }: {
+  panelInstanceId: string;
   groupId: string;
+  graphPath: string;
+  graphKind: 'event' | 'function';
   mode: 'interactive' | 'preview';
   children: React.ReactNode;
 }) {
   const interactive = mode === 'interactive';
   const { setNodeRef } = useDroppable({
-    id: getCanvasDropZoneId(groupId),
-    data: { dropType: DROP_TYPES.CANVAS, groupId },
+    id: getCanvasDropZoneId(panelInstanceId),
+    data: { dropType: DROP_TYPES.CANVAS, panelInstanceId, groupId, graphPath, graphKind },
     disabled: !interactive,
   });
 

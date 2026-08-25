@@ -7,6 +7,11 @@ export interface EditorPaneSelection {
   selectedConnectionIds: string[];
 }
 
+export const EMPTY_EDITOR_PANE_SELECTION: EditorPaneSelection = {
+  selectedNodeIds: [],
+  selectedConnectionIds: [],
+};
+
 interface EditorPaneState {
   selections: Record<EditorPanePanelId, EditorPaneSelection>;
   setSelectedNodeIds(panelInstanceId: EditorPanePanelId, ids: string[]): void;
@@ -16,7 +21,6 @@ interface EditorPaneState {
   reset(): void;
 }
 
-const emptySelection = (): EditorPaneSelection => ({ selectedNodeIds: [], selectedConnectionIds: [] });
 const unique = (ids: readonly string[]): string[] => [...new Set(ids)];
 
 /** Pane-local UI state only; Dockview remains authoritative for panel placement. */
@@ -35,7 +39,7 @@ export const useEditorPaneStateStore = create<EditorPaneState>((set) => ({
     },
   })),
   clearSelection: (panelInstanceId) => set((state) => ({
-    selections: { ...state.selections, [panelInstanceId]: emptySelection() },
+    selections: { ...state.selections, [panelInstanceId]: { ...EMPTY_EDITOR_PANE_SELECTION } },
   })),
   release: (panelInstanceId) => set((state) => {
     const selections = { ...state.selections };
@@ -46,6 +50,7 @@ export const useEditorPaneStateStore = create<EditorPaneState>((set) => ({
 }));
 
 export function getPaneSelection(panelInstanceId: EditorPanePanelId | undefined): EditorPaneSelection {
-  if (!panelInstanceId) return emptySelection();
-  return useEditorPaneStateStore.getState().selections[panelInstanceId] ?? emptySelection();
+  if (!panelInstanceId) return EMPTY_EDITOR_PANE_SELECTION;
+  return useEditorPaneStateStore.getState().selections[panelInstanceId]
+    ?? EMPTY_EDITOR_PANE_SELECTION;
 }

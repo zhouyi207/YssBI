@@ -7,6 +7,10 @@ import { useActiveEditorGroup } from '@/features/core/editor/hooks/useActiveEdit
 import { executeCommand } from '@/features/core/history';
 import { canDeleteNode } from '@/features/core/dataStore/graphNodeSelectors';
 import { logger } from '@/utils/appLogger';
+import {
+  isEditorCommandTargetCurrent,
+  type EditorCommandTarget,
+} from '@/features/application/editor/editorCommandFocus';
 
 export function useNodeManagement() {
   const { activeTabId } = useActiveEditorGroup();
@@ -17,10 +21,15 @@ export function useNodeManagement() {
     async (
       descriptor: NodeCreationDescriptor,
       position: { x: number; y: number },
+      target?: EditorCommandTarget,
     ): Promise<boolean> => {
-      if (!activeTabId) return false;
+      const graphPath = target?.resourceRef ?? activeTabId;
+      if (!graphPath || (target && (
+        (target.resourceKind !== 'event' && target.resourceKind !== 'function')
+        || !isEditorCommandTargetCurrent(target)
+      ))) return false;
       const outcome = await createNodeFromDescriptor({
-        graphPath: activeTabId,
+        graphPath,
         locale,
         descriptor,
         position,

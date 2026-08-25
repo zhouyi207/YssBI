@@ -6,8 +6,8 @@ export interface SelectionHitTarget {
   bottom: number;
 }
 
-export function queryCanvasElement(groupId: string): HTMLElement | null {
-  return document.querySelector(`[data-editor-group-id="${groupId}"]`);
+export function queryCanvasElement(panelInstanceId: string): HTMLElement | null {
+  return document.querySelector(`[data-editor-panel-instance-id="${panelInstanceId}"]`);
 }
 
 /** Live screen bounds for marquee hit-testing (re-read each frame so pan/zoom stay in sync). */

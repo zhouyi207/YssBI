@@ -37,7 +37,12 @@ export type CanvasInteraction =
   | { type: 'movingConnections'; session: ConnectionSession }
   | { type: 'pendingNodeCreation'; session: PendingNodeCreationSession };
 
-export interface CanvasInteractionScope { graphPath: GraphPath; groupId: string; pointerId: number }
+export interface CanvasInteractionScope {
+  graphPath: GraphPath;
+  groupId: string;
+  panelInstanceId: string;
+  pointerId: number;
+}
 
 export const IDLE_CANVAS_INTERACTION: CanvasInteraction = { type: 'idle' };
 

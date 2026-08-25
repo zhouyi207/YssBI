@@ -1,5 +1,5 @@
 /**
- * Store for registering the Canvas drop handler per group.
+ * Store for registering the Canvas drop handler per Dockview panel.
  * Workspace calls this when a sidebar item is dropped on the canvas.
  */
 import { createStore } from "zustand/vanilla";
@@ -12,28 +12,28 @@ export type CanvasDropHandler = (
 
 interface CanvasDropHandlerState {
   handlers: Record<string, CanvasDropHandler | undefined>;
-  setHandler: (groupId: string, handler: CanvasDropHandler | null) => void;
+  setHandler: (panelInstanceId: string, handler: CanvasDropHandler | null) => void;
 }
 
 const dropHandlerStore = createStore<CanvasDropHandlerState>((set) => ({
   handlers: {},
-  setHandler: (groupId, handler) =>
+  setHandler: (panelInstanceId, handler) =>
     set((state) => {
       const handlers = { ...state.handlers };
       if (handler) {
-        handlers[groupId] = handler;
+        handlers[panelInstanceId] = handler;
       } else {
-        delete handlers[groupId];
+        delete handlers[panelInstanceId];
       }
       return { handlers };
     }),
 }));
 
 export const canvasDropHandlerStore = {
-  setHandler: (groupId: string, h: CanvasDropHandler | null) => {
-    dropHandlerStore.getState().setHandler(groupId, h);
+  setHandler: (panelInstanceId: string, h: CanvasDropHandler | null) => {
+    dropHandlerStore.getState().setHandler(panelInstanceId, h);
   },
-  getHandler: (groupId: string): CanvasDropHandler | null =>
-    dropHandlerStore.getState().handlers[groupId] ?? null,
+  getHandler: (panelInstanceId: string): CanvasDropHandler | null =>
+    dropHandlerStore.getState().handlers[panelInstanceId] ?? null,
   subscribe: dropHandlerStore.subscribe,
 };

@@ -11,14 +11,14 @@ features/application/editor/
 ├── editorSessionTypes.ts      # Named caller-shaped contracts
 ├── useEditorSessionCommands.ts
 ├── useEditorSessionSlices.ts  # Direct resource subscriptions and detail actions
-├── useEditorCanvas.ts         # Canvas-only commands/workspace/resources/interaction
+├── useEditorCanvas.ts         # Panel-scoped Canvas commands/workspace/resources/interaction
 ├── useEditorOperations.ts     # Clipboard, history, node ops
 ├── useTabManagement.ts        # Tab open/close/switch
 └── index.ts
 
 features/core/editor/
 ├── hooks/                     # Group workspace and narrow collection hooks
-├── context/GroupContext.ts    # Dockview group scope for Canvas
+├── context/GroupContext.ts    # Dockview group scope for layout-backed editors
 └── index.ts
 ```
 
@@ -36,15 +36,17 @@ import { EditorSessionProvider } from '@/features/application/editor';
 
 ### Canvas
 
-`Canvas.tsx` is the sole caller of the caller-shaped hook:
+`Canvas.tsx` is the sole caller of the panel-scoped hook:
 
 ```tsx
-const canvas = useEditorCanvas({ mode: 'interactive' });
+const canvas = useEditorCanvas({
+  mode: 'interactive',
+  scope: { panelInstanceId, groupId, graphPath, graphKind },
+});
 ```
 
-Use `mode: 'preview'` for an inactive Dockview group. Preview keeps the
-pointerdown activation ordering but does not mount the global pointer loop,
-drop handling, or `CanvasOverlays`.
+Use `mode: 'preview'` for an inactive Dockview panel. Preview does not mount
+the panel's context-menu actions, global pointer loop, or drop handling.
 
 `CanvasOverlays` receives a discriminated `graph` / `palette` / `variable` /
 `execution` model from Canvas and must not call editor session hooks.
@@ -67,7 +69,7 @@ const commands = useEditorSessionCommandsContext();
 | `useEditorSessionCommandsContext()` | Explicit command-slice intersection | Application consumers that need commands |
 | `useEditorSessionResources()` | Direct `useEditorCollections()` subscription for `events` / `functions` / `variables` / `dataframes` | Detail and resource lists |
 | `useEditorSessionDetailActions()` | Variable/DataFrame update commands | Detail panels |
-| `useEditorCanvas({ mode })` | Canvas-only `commands` / `workspace` / `resources` / `interaction` | **Only** `Canvas.tsx` |
+| `useEditorCanvas({ mode, scope })` | Panel-scoped Canvas `commands` / `workspace` / `resources` / `interaction` | **Only** `Canvas.tsx` |
 
 Do not rebuild a broad editor/group aggregate, spread unrelated values through
 a subtree, or mirror Dockview topology in a store. Add or reuse a named slice
