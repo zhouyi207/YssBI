@@ -154,6 +154,10 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
       index,
     });
   });
+  const project = activityPanels.find((panel) => (
+    panel.metadata.role === 'view' && panel.metadata.viewId === 'project'
+  ));
+  if (project) transaction.activate(project.panelInstanceId);
   transaction.move({
     panelInstanceId: logs.panelInstanceId,
     groupId: bottom.groupId,
