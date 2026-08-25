@@ -51,6 +51,7 @@ describe('workbench panel metadata', () => {
       { metadata: { role: 'view', viewId: 'inspect' }, component: 'Inspect' },
       { metadata: { role: 'view', viewId: 'logs' }, component: 'Logs' },
       { metadata: { role: 'view', viewId: 'output' }, component: 'Output' },
+      { metadata: { role: 'view', viewId: 'diagnostics' }, component: 'Diagnostics' },
     ];
     for (const { metadata: view, component } of viewCases) {
       expect(isWorkbenchPanelMetadata(view)).toBe(true);

@@ -14,6 +14,7 @@ import { useVisibleGraphPanel } from '@/features/application/editor/useVisibleGr
 import { GroupContext } from '@/features/core/editor';
 import { LogWorkspaceDockview } from '@/views/LogView/LogWorkspaceDockview';
 import { OutputPanel } from '@/views/LogView/OutputPanel';
+import { DiagnosticsPanel } from '@/views/LogView/DiagnosticsPanel';
 import { GraphEditor } from '../Canvas/core/GraphEditor';
 import { WorksheetEditor } from '../Worksheet/WorksheetEditor';
 import { DetailsPane } from './Detail/DetailsPane';
@@ -126,4 +127,5 @@ export const workbenchDockviewComponents = {
   Result: ResultPanel,
   Logs: MainLogsPanel,
   Output: OutputPanel,
+  Diagnostics: DiagnosticsPanel,
 } satisfies Record<WorkbenchComponentId, WorkbenchDockviewComponent>;

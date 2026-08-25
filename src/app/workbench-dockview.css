@@ -528,6 +528,9 @@
   > .dv-right-actions-container {
   width: 44px;
   min-height: 40px;
+  height: auto;
+  flex: 0 0 auto;
+  overflow: visible;
   align-items: center;
   justify-content: flex-end;
   padding: 0 2px;

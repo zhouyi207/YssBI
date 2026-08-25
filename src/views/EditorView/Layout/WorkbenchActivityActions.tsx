@@ -25,7 +25,7 @@ export function WorkbenchActivityActions(props: IDockviewHeaderActionsProps) {
   return (
     <div
       data-workbench-activity-actions
-      className="flex h-full w-full shrink-0 flex-col items-center justify-end"
+      className="flex h-auto w-full shrink-0 flex-col items-center justify-end"
       onPointerDown={stopHeaderControlPropagation}
       onMouseDown={stopHeaderControlPropagation}
     >

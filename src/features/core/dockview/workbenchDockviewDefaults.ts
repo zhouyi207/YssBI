@@ -26,6 +26,7 @@ export const WORKBENCH_HOME_EDGE = {
   logs: 'bottom',
   output: 'bottom',
   result: 'right',
+  diagnostics: 'bottom',
 } as const;
 
 export const WORKBENCH_ACTIVITY_DEFAULT_ORDER = WORKBENCH_ACTIVITY_VIEW_IDS;

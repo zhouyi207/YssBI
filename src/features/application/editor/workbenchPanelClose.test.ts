@@ -340,10 +340,11 @@ function viewPanel(
     data: 'Data',
     commands: 'Commands',
     details: 'Details',
-    inspect: 'Inspect',
-    logs: 'Logs',
-    output: 'Output',
-  } as const;
+      inspect: 'Inspect',
+      logs: 'Logs',
+      output: 'Output',
+      diagnostics: 'Diagnostics',
+    } as const;
   return {
     panelInstanceId,
     groupId,
