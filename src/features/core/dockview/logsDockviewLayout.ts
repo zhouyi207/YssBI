@@ -319,6 +319,8 @@ export function isValidLogsDockviewLayout(candidate: unknown): candidate is Seri
   for (const [panelId, panel] of Object.entries(candidate.panels)) {
     if (!isNonEmptyString(panelId) || !validateSerializedPanel(panelId, panel, domains)) return false;
   }
+  if (domains.size !== LOG_DOMAIN_ORDER.length
+    || LOG_DOMAIN_ORDER.some((domain) => !domains.has(domain))) return false;
 
   const state: TopologyValidationState = {
     panelIds: new Set(Object.keys(candidate.panels)),

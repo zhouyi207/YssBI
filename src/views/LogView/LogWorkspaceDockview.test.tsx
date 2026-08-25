@@ -2,7 +2,7 @@
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { DockviewApi, IDockviewPanel } from 'dockview-react';
+import type { DockviewApi } from 'dockview-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 
@@ -77,20 +77,6 @@ vi.mock('dockview-react', async (importOriginal) => {
         activeGroupId = group.id;
         if (publish) publishLayout();
         return group;
-      };
-
-      const removePanelInternal = (panelId: string, publish = true) => {
-        const panel = panelsById.get(panelId);
-        if (!panel) return;
-        const group = panel.group;
-        group.panels = group.panels.filter((candidate) => candidate !== panel);
-        if (group.activePanel === panel) group.activePanel = group.panels[0];
-        panelsById.delete(panelId);
-        if (group.panels.length === 0) {
-          groups = groups.filter((candidate) => candidate !== group);
-          if (activeGroupId === group.id) activeGroupId = groups[0]?.id;
-        }
-        if (publish) publishLayout();
       };
 
       const movePanelInternal = (panel: FakePanel, target: FakeGroup, publish = true) => {
@@ -169,17 +155,6 @@ vi.mock('dockview-react', async (importOriginal) => {
           return { dispose: () => layoutListeners.delete(listener) };
         },
         addGroup: (options: { id?: string } = {}) => addGroupInternal(options.id),
-        addPanel: (options: Record<string, any>) => {
-          const reference = options.position?.referenceGroup;
-          const referenceId = typeof reference === 'string' ? reference : reference?.id;
-          const target = groups.find((group) => group.id === referenceId)
-            ?? groups.find((group) => group.id === activeGroupId)
-            ?? groups[0]
-            ?? addGroupInternal(undefined, false);
-          instanceRef.current.addPanelCalls.push(options);
-          return addPanelInternal(options, target);
-        },
-        removePanel: (panel: FakePanel) => removePanelInternal(panel.id),
         fromJSON: (layout: Record<string, any>) => {
           instanceRef.current.fromJSONInputs.push(layout);
           if (layout.grid?.root?.type !== 'branch' || !Array.isArray(layout.grid.root.data)) {
@@ -259,9 +234,7 @@ vi.mock('dockview-react', async (importOriginal) => {
       instanceRef.current = {
         api,
         props,
-        addPanelCalls: [] as Array<Record<string, any>>,
         fromJSONInputs: [] as Array<Record<string, any>>,
-        removePanel: removePanelInternal,
       };
     }
 
@@ -275,6 +248,7 @@ vi.mock('dockview-react', async (importOriginal) => {
 
     const Watermark = props.watermarkComponent;
     const Actions = props.rightHeaderActionsComponent;
+    const DefaultTab = props.defaultTabComponent as React.ComponentType<Record<string, unknown>> | undefined;
     const renderedGroups = instance.api.groups.map((group: FakeGroup) => {
       const activePanel = group.activePanel;
       const Panel = activePanel ? props.components[activePanel.component] : undefined;
@@ -285,7 +259,14 @@ vi.mock('dockview-react', async (importOriginal) => {
             role: 'tab',
             'aria-selected': panel === activePanel,
             onClick: () => panel.api.setActive(),
-          }, panel.title))),
+          }, DefaultTab
+            ? React.createElement(DefaultTab, {
+              api: panel.api,
+              containerApi: instance.api,
+              params: panel.params,
+              tabLocation: 'header',
+            })
+            : panel.title))),
         Actions ? React.createElement(Actions, {
           api: group.api,
           containerApi: instance.api,
@@ -334,24 +315,6 @@ vi.mock('react-i18next', async (importOriginal) => {
   };
 });
 
-vi.mock('@/components/ui/dropdown-menu', async () => {
-  const React = await import('react');
-  return {
-    DropdownMenu: ({ children }: { children: React.ReactNode }) =>
-      React.createElement('div', { 'data-test-dropdown': true }, children),
-    DropdownMenuTrigger: ({ children }: { children: React.ReactNode }) =>
-      React.createElement(React.Fragment, null, children),
-    DropdownMenuContent: ({ children }: { children: React.ReactNode }) =>
-      React.createElement('div', { role: 'menu' }, children),
-    DropdownMenuGroup: ({ children }: { children: React.ReactNode }) =>
-      React.createElement('div', null, children),
-    DropdownMenuItem: ({ children, onSelect }: {
-      children: React.ReactNode;
-      onSelect?: () => void;
-    }) => React.createElement('button', { role: 'menuitem', onClick: onSelect }, children),
-  };
-});
-
 vi.mock('./LogPanelList', async () => {
   const React = await import('react');
   return {
@@ -387,9 +350,7 @@ import {
 type FakeDockviewInstance = {
   readonly api: DockviewApi;
   readonly props: Record<string, unknown>;
-  readonly addPanelCalls: Array<Record<string, any>>;
   readonly fromJSONInputs: Array<Record<string, any>>;
-  readonly removePanel: (panelId: string, publish?: boolean) => void;
 };
 
 function diagnostic(
@@ -492,14 +453,18 @@ describe('LogWorkspaceDockview', () => {
 
     const props = latestDockview().props;
     expect(Object.keys(props.components as object)).toEqual([LOGS_DOCKVIEW_COMPONENT_ID]);
-    expect(props).not.toHaveProperty('defaultTabComponent');
+    expect(props.defaultTabComponent).toBeTypeOf('function');
     expect(props.disableFloatingGroups).toBe(true);
     expect(props.theme).toMatchObject({
       name: 'yssbi-logs-dark',
       edgeGroupCollapsedSize: 30,
     });
     expect(props).not.toHaveProperty('onUnhandledDragOver');
-    expect(props).not.toHaveProperty('onDidDrop');
+    expect(props.onWillDrop).toBeTypeOf('function');
+
+    expect(host.querySelectorAll('[data-yssbi-logs-tab]')).toHaveLength(7);
+    expect(host.querySelectorAll('[data-yssbi-logs-tab] button')).toHaveLength(0);
+    expect(host.querySelector('button[aria-label="log.openDomain"]')).toBeNull();
 
     expect(host.querySelector('button[aria-label="log.refresh"]')).not.toBeNull();
     expect(host.querySelector('button[aria-label="log.autoScrollEnabled"]')).not.toBeNull();
@@ -517,6 +482,44 @@ describe('LogWorkspaceDockview', () => {
       .toBe(true);
   });
 
+  it('allows only same-group tab reordering drops', async () => {
+    renderWorkspace({ kind: 'ephemeral' });
+    await flushSubscription();
+    const props = latestDockview().props;
+    const onWillDrop = props.onWillDrop as ((event: {
+      kind: string;
+      group?: { id: string };
+      getData: () => { groupId: string; panelId: string | null } | undefined;
+      preventDefault: () => void;
+    }) => void);
+    const sameGroupTab = {
+      kind: 'tab',
+      group: { id: 'logs-domain-group' },
+      getData: () => ({ groupId: 'logs-domain-group', panelId: logDomainPanelId('all') }),
+      preventDefault: vi.fn(),
+    };
+    const crossGroupTab = {
+      ...sameGroupTab,
+      group: { id: 'logs-other-group' },
+      preventDefault: vi.fn(),
+    };
+    const contentDrop = {
+      ...sameGroupTab,
+      kind: 'content',
+      preventDefault: vi.fn(),
+    };
+
+    act(() => {
+      onWillDrop(sameGroupTab);
+      onWillDrop(crossGroupTab);
+      onWillDrop(contentDrop);
+    });
+
+    expect(sameGroupTab.preventDefault).not.toHaveBeenCalled();
+    expect(crossGroupTab.preventDefault).toHaveBeenCalledOnce();
+    expect(contentDrop.preventDefault).toHaveBeenCalledOnce();
+  });
+
   it('binds the main controller and unbinds the exact API with the final snapshot', () => {
     const controller = createLogsDockviewLayoutController();
     const bind = vi.spyOn(controller, 'bind');
@@ -526,14 +529,12 @@ describe('LogWorkspaceDockview', () => {
 
     expect(bind).toHaveBeenCalledOnce();
     expect(bind).toHaveBeenCalledWith(dockview.api);
-    dockview.removePanel(logDomainPanelId('ui'), false);
-
     act(() => root?.unmount());
     root = null;
 
     expect(unbind).toHaveBeenCalledOnce();
     expect(unbind).toHaveBeenCalledWith(dockview.api);
-    expect(controller.getLatestSnapshot().panels).not.toHaveProperty(logDomainPanelId('ui'));
+    expect(controller.getLatestSnapshot().panels).toHaveProperty(logDomainPanelId('ui'));
   });
 
   it('restores a fresh ephemeral default without controller or storage persistence', async () => {
@@ -583,55 +584,4 @@ describe('LogWorkspaceDockview', () => {
     expect(panelList(graphGroup).dataset.presentation).toBe('standalone');
   });
 
-  it('moves a stale reopened domain into the second invoking group without duplication', async () => {
-    renderWorkspace({ kind: 'ephemeral' });
-    await flushSubscription();
-    const dockview = latestDockview();
-    act(() => {
-      const secondGroup = dockview.api.addGroup({
-        id: 'logs-invoking-second',
-        referenceGroup: dockview.api.groups[0],
-        direction: 'right',
-      });
-      dockview.api.getPanel(logDomainPanelId('data'))?.api.moveTo({ group: secondGroup });
-      const graphPanel = dockview.api.getPanel(logDomainPanelId('graph'));
-      if (graphPanel) dockview.api.removePanel(graphPanel as IDockviewPanel);
-    });
-
-    const firstGroup = host.querySelector('[data-group-id="logs-domain-group"]');
-    const secondGroup = host.querySelector('[data-group-id="logs-invoking-second"]');
-    const firstGraphAction = [...(firstGroup?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])]
-      .find((item) => item.textContent === 'log.domains.graph');
-    const staleSecondGraphAction = [...(secondGroup?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])]
-      .find((item) => item.textContent === 'log.domains.graph');
-    if (!firstGraphAction || !staleSecondGraphAction) {
-      throw new Error('expected stale Graph actions in both groups');
-    }
-    expect(firstGroup?.querySelector('button[aria-label="log.openDomain"]')).not.toBeNull();
-    expect(secondGroup?.querySelector('button[aria-label="log.openDomain"]')).not.toBeNull();
-
-    act(() => {
-      firstGraphAction.click();
-      staleSecondGraphAction.click();
-    });
-
-    const graphPanels = dockview.api.panels.filter(
-      (panel) => panel.id === logDomainPanelId('graph'),
-    );
-    expect(graphPanels).toHaveLength(1);
-    expect(graphPanels[0]?.group.id).toBe('logs-invoking-second');
-    expect(dockview.api.getGroup('logs-invoking-second')?.activePanel?.id)
-      .toBe(logDomainPanelId('graph'));
-    expect(dockview.addPanelCalls.filter(
-      (options) => options.id === logDomainPanelId('graph'),
-    )).toEqual([expect.objectContaining({
-      component: LOGS_DOCKVIEW_COMPONENT_ID,
-      params: { domain: 'graph' },
-      title: 'Graph',
-      position: {
-        referenceGroup: 'logs-domain-group',
-        direction: 'within',
-      },
-    })]);
-  });
 });

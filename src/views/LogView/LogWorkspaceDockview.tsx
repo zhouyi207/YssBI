@@ -3,6 +3,8 @@ import {
   DockviewReact,
   type DockviewApi,
   type DockviewReadyEvent,
+  type DockviewWillDropEvent,
+  type IDockviewPanelHeaderProps,
 } from 'dockview-react';
 
 import {
@@ -13,10 +15,7 @@ import type { LogsDockviewLayoutController } from '@/features/core/dockview/logs
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import { resolveYssbiLogsDockviewTheme } from '@/shared/theme/dockviewTheme';
 import { LogDomainPanel } from './LogDomainPanel';
-import {
-  LogWorkspaceActions,
-  LogWorkspaceWatermark,
-} from './LogWorkspaceActions';
+import { LogWorkspaceActions } from './LogWorkspaceActions';
 import { LogWorkspaceProvider } from './logWorkspaceContext';
 
 const LOG_WORKSPACE_COMPONENTS = {
@@ -34,6 +33,24 @@ export interface LogWorkspaceDockviewProps {
 interface BoundMainLayout {
   readonly api: DockviewApi;
   readonly controller: LogsDockviewLayoutController;
+}
+
+function LogWorkspaceTab({ api }: IDockviewPanelHeaderProps) {
+  return (
+    <div className="dv-default-tab yssbi-logs-tab" data-yssbi-logs-tab>
+      <span className="dv-default-tab-content">{api.title}</span>
+    </div>
+  );
+}
+
+function restrictLogsTabDrop(event: DockviewWillDropEvent): void {
+  const transfer = event.getData();
+  const isSameGroupTabDrop = event.kind === 'tab'
+    && transfer?.panelId !== null
+    && transfer?.panelId !== undefined
+    && transfer.groupId === event.group?.id;
+
+  if (!isSameGroupTabDrop) event.preventDefault();
 }
 
 export function LogWorkspaceDockview({ layout }: LogWorkspaceDockviewProps) {
@@ -65,9 +82,10 @@ export function LogWorkspaceDockview({ layout }: LogWorkspaceDockviewProps) {
           className="yssbi-logs-dockview-instance h-full w-full"
           components={LOG_WORKSPACE_COMPONENTS}
           rightHeaderActionsComponent={LogWorkspaceActions}
-          watermarkComponent={LogWorkspaceWatermark}
+          defaultTabComponent={LogWorkspaceTab}
           disableFloatingGroups
           theme={resolveYssbiLogsDockviewTheme(themeMode)}
+          onWillDrop={restrictLogsTabDrop}
           onReady={onReady}
         />
       </div>

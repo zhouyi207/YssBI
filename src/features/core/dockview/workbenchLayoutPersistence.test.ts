@@ -6,6 +6,7 @@ import {
   DEFAULT_LOGS_DOCKVIEW_LAYOUT,
   LOGS_DOCKVIEW_COMPONENT_ID,
 } from './logsDockviewLayout';
+import { logDomainPanelId } from '@/features/core/log/logDomains';
 import {
   createPersistedWorkbenchLayout,
   parsePersistedWorkbenchLayout,
@@ -154,6 +155,15 @@ function duplicateLogsDomainLayout(): SerializedDockview {
   return layout;
 }
 
+function missingLogsDomainLayout(): SerializedDockview {
+  const layout = createDefaultLogsDockviewLayout();
+  const group = getOnlyGridGroup(layout);
+  const missingPanelId = logDomainPanelId('ui');
+  delete layout.panels[missingPanelId];
+  group.views = group.views.filter((panelId) => panelId !== missingPanelId);
+  return layout;
+}
+
 describe('workbench layout persistence', () => {
   it('uses the current semantic key and exact unversioned envelope', () => {
     const root = rootLayout();
@@ -200,11 +210,16 @@ describe('workbench layout persistence', () => {
     const validRoot = rootLayout();
     const validLogs = createDefaultLogsDockviewLayout();
     const invalidLogs = duplicateLogsDomainLayout();
+    const missingLogs = missingLogsDomainLayout();
 
     const rootPreserved = parsePersistedWorkbenchLayout(payload(validRoot, invalidLogs));
     expect(rootPreserved).not.toBeNull();
     expect(rootPreserved?.root).toEqual({ status: 'valid', value: validRoot });
     expect(rootPreserved?.logs).toEqual({ status: 'invalid' });
+
+    const missingLogsResult = parsePersistedWorkbenchLayout(payload(validRoot, missingLogs));
+    expect(missingLogsResult?.root.status).toBe('valid');
+    expect(missingLogsResult?.logs.status).toBe('invalid');
 
     const invalidRoot = structuredClone(validRoot);
     invalidRoot.panels.editor.contentComponent = 'WorksheetEditor';
