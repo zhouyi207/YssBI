@@ -420,7 +420,6 @@ fn validate_node(
         return Err(fail("duplicate parameter key".into()));
     }
     for port in &protocol.interface.ports {
-        require_i18n(i18n, &port.label_key).map_err(&fail)?;
         validate_type_expr(&port.value_type, types, &protocol.interface.type_parameters)
             .map_err(&fail)?;
         if let PortInstances::Derived { resolver } = &port.instances {
@@ -662,7 +661,7 @@ mod nominal_schema_tests {
         let key: &'static PortKey = Box::leak(Box::new(PortKey::new("source").unwrap()));
         let port: &'static PortSpec = Box::leak(Box::new(PortSpec {
             key: key.clone(),
-            label_key: I18nKey::new("ports.source.title").unwrap(),
+            title: "Source".into(),
             direction: PortDirection::Input,
             kind: PortKind::Data,
             value_type: TypeExpr::Unknown,

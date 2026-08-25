@@ -119,7 +119,7 @@ fn editor_mutation_registry_with(scope: NodeScope, minimum_inputs: u16) -> NodeR
         .ports(vec![
             PortSpec {
                 key: PortKey::new("output").unwrap(),
-                label_key: I18nKey::new("nodes.test.editor_mutation.output").unwrap(),
+                title: "Output".into(),
                 direction: PortDirection::Output,
                 kind: PortKind::Data,
                 value_type: TypeExpr::Unknown,
@@ -136,7 +136,7 @@ fn editor_mutation_registry_with(scope: NodeScope, minimum_inputs: u16) -> NodeR
             },
             PortSpec {
                 key: PortKey::new("inputs").unwrap(),
-                label_key: I18nKey::new("nodes.test.editor_mutation.inputs").unwrap(),
+                title: "Inputs".into(),
                 direction: PortDirection::Input,
                 kind: PortKind::Data,
                 value_type: TypeExpr::Unknown,

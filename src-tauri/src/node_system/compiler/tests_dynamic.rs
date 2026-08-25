@@ -45,7 +45,7 @@ fn protocol() -> NodeProtocol {
         .style("test")
         .ports(vec![PortSpec {
             key: PortKey::new("fields").unwrap(),
-            label_key: I18nKey::new("nodes.test.dynamic.fields").unwrap(),
+            title: "Fields".into(),
             direction: PortDirection::Input,
             kind: PortKind::Data,
             value_type: TypeExpr::Unknown,

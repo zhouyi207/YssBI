@@ -679,7 +679,6 @@ fn test_registry() -> NodeRegistry {
         protocol(
             SINGLE_SOURCE_INT,
             vec![port(
-                SINGLE_SOURCE_INT,
                 "out",
                 PortDirection::Output,
                 int_type.clone(),
@@ -691,7 +690,6 @@ fn test_registry() -> NodeRegistry {
         protocol(
             MULTI_SOURCE_INT,
             vec![port(
-                MULTI_SOURCE_INT,
                 "out",
                 PortDirection::Output,
                 int_type.clone(),
@@ -706,7 +704,6 @@ fn test_registry() -> NodeRegistry {
         protocol(
             BOUNDED_SOURCE_INT,
             vec![port(
-                BOUNDED_SOURCE_INT,
                 "out",
                 PortDirection::Output,
                 int_type.clone(),
@@ -721,7 +718,6 @@ fn test_registry() -> NodeRegistry {
         protocol(
             MULTI_SOURCE_FLOAT,
             vec![port(
-                MULTI_SOURCE_FLOAT,
                 "out",
                 PortDirection::Output,
                 float_type.clone(),
@@ -737,14 +733,12 @@ fn test_registry() -> NodeRegistry {
             SINK_INT,
             vec![
                 port(
-                    SINK_INT,
                     "single_in",
                     PortDirection::Input,
                     int_type.clone(),
                     ConnectionsPerPort::Single,
                 ),
                 port(
-                    SINK_INT,
                     "ordered_in",
                     PortDirection::Input,
                     int_type,
@@ -773,13 +767,6 @@ fn test_registry() -> NodeRegistry {
     }
     for protocol in &protocols {
         keys.insert(protocol.catalog.title_key.clone());
-        keys.extend(
-            protocol
-                .interface
-                .ports
-                .iter()
-                .map(|port| port.label_key.clone()),
-        );
     }
 
     let nodes = protocols
@@ -868,7 +855,6 @@ fn protocol(
 }
 
 fn port(
-    node_type: &str,
     key: &str,
     direction: PortDirection,
     value_type: TypeId,
@@ -876,7 +862,7 @@ fn port(
 ) -> PortSpec {
     PortSpec {
         key: PortKey::new(key).unwrap(),
-        label_key: i18n(&format!("nodes.{node_type}.ports.{key}")),
+        title: key.into(),
         direction,
         kind: PortKind::Data,
         value_type: TypeExpr::Concrete(value_type),

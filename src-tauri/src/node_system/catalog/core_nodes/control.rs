@@ -22,25 +22,25 @@ fn register_do(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyErr
         aliases: &["do", "no-op", "noop", "sequencing point"],
         zh_aliases: &["执行", "空操作", "顺序点"],
     })?;
-    add_port_messages(
-        fragment,
-        ID,
-        &[
-            ("enter", "Enter", "进入"),
-            ("effect_in", "Effect In", "副作用输入"),
-            ("then", "Then", "然后"),
-            ("effect_out", "Effect Out", "副作用输出"),
-        ],
-    )?;
     fragment.nodes.push(leaf(
         protocol(
             ID,
             "control",
             vec![
-                control_port(ID, "enter", PortDirection::Input, PortInstances::Declared)?,
-                effect_port(ID, "effect_in", PortDirection::Input)?,
-                control_port(ID, "then", PortDirection::Output, PortInstances::Declared)?,
-                effect_port(ID, "effect_out", PortDirection::Output)?,
+                control_port(
+                    "enter",
+                    "Enter",
+                    PortDirection::Input,
+                    PortInstances::Declared,
+                )?,
+                effect_port("effect_in", "Effect In", PortDirection::Input)?,
+                control_port(
+                    "then",
+                    "Then",
+                    PortDirection::Output,
+                    PortInstances::Declared,
+                )?,
+                effect_port("effect_out", "Effect Out", PortDirection::Output)?,
             ],
             vec![],
             vec![],
@@ -65,26 +65,26 @@ fn register_merge(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssembly
         aliases: &["merge", "join", "control join", "converge"],
         zh_aliases: &["合并", "汇合", "控制流汇合"],
     })?;
-    add_port_messages(
-        fragment,
-        ID,
-        &[("enter", "Enter", "进入"), ("then", "Then", "然后")],
-    )?;
     fragment.nodes.push(structural(
         protocol(
             ID,
             "control",
             vec![
                 control_port(
-                    ID,
                     "enter",
+                    "Enter",
                     PortDirection::Input,
                     PortInstances::UserCreated {
                         min: 2,
                         max: Some(8),
                     },
                 )?,
-                control_port(ID, "then", PortDirection::Output, PortInstances::Declared)?,
+                control_port(
+                    "then",
+                    "Then",
+                    PortDirection::Output,
+                    PortInstances::Declared,
+                )?,
             ],
             vec![],
             vec![],
@@ -109,20 +109,9 @@ fn register_sleep(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssembly
         aliases: &["sleep", "wait", "delay", "seconds"],
         zh_aliases: &["等待", "延迟", "秒"],
     })?;
-    add_port_messages(
-        fragment,
-        ID,
-        &[
-            ("enter", "Enter", "进入"),
-            ("effect_in", "Effect In", "副作用输入"),
-            ("duration", "Duration (seconds)", "时长（秒）"),
-            ("then", "Then", "然后"),
-            ("effect_out", "Effect Out", "副作用输出"),
-        ],
-    )?;
     let mut duration = data_port(
-        ID,
         "duration",
+        "Duration (seconds)",
         PortDirection::Input,
         concrete("core.float64")?,
     )?;
@@ -138,11 +127,21 @@ fn register_sleep(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssembly
             ID,
             "control",
             vec![
-                control_port(ID, "enter", PortDirection::Input, PortInstances::Declared)?,
-                effect_port(ID, "effect_in", PortDirection::Input)?,
+                control_port(
+                    "enter",
+                    "Enter",
+                    PortDirection::Input,
+                    PortInstances::Declared,
+                )?,
+                effect_port("effect_in", "Effect In", PortDirection::Input)?,
                 duration,
-                control_port(ID, "then", PortDirection::Output, PortInstances::Declared)?,
-                effect_port(ID, "effect_out", PortDirection::Output)?,
+                control_port(
+                    "then",
+                    "Then",
+                    PortDirection::Output,
+                    PortInstances::Declared,
+                )?,
+                effect_port("effect_out", "Effect Out", PortDirection::Output)?,
             ],
             vec![],
             vec![],
@@ -155,13 +154,13 @@ fn register_sleep(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssembly
 }
 
 fn effect_port(
-    node_id: &'static str,
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: semantic(key, PortKey::new)?,
-        label_key: port_key(node_id, key)?,
+        title: title.into(),
         direction,
         kind: PortKind::Effect,
         value_type: TypeExpr::Unknown,

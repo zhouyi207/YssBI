@@ -463,7 +463,7 @@ pub(crate) fn build_builtin_node_system_with_test_fault(
         }
         BuiltinAssemblyTestFault::InvalidProtocol(node_type) => {
             assemble_builtin_parts_with(move |_| {
-                let port = data_port("duplicate", PortDirection::Input, "core.bool")?;
+                let port = data_port("duplicate", "Duplicate", PortDirection::Input, "core.bool")?;
                 assembled_interface(
                     node_type,
                     vec![port.clone(), port],
@@ -775,7 +775,7 @@ fn constant_protocol(
     protocol(
         id,
         "constants",
-        vec![data_port("value", PortDirection::Output, ty)?],
+        vec![data_port("value", "Value", PortDirection::Output, ty)?],
         vec![ParameterSpec {
             key: sid("value", ParameterKey::new)?,
             title_key: iid("parameters.value.title")?,
@@ -803,9 +803,9 @@ fn binary_protocol(
         id,
         category,
         vec![
-            data_port("left", PortDirection::Input, input)?,
-            data_port("right", PortDirection::Input, input)?,
-            data_port("result", PortDirection::Output, output)?,
+            data_port("left", "Left", PortDirection::Input, input)?,
+            data_port("right", "Right", PortDirection::Input, input)?,
+            data_port("result", "Result", PortDirection::Output, output)?,
         ],
         vec![],
         pure(),
@@ -820,15 +820,17 @@ fn equality_protocol(id: &'static str) -> Result<NodeProtocol, BuiltinAssemblyEr
         vec![
             data_port_expr(
                 "left",
+                "Left",
                 PortDirection::Input,
                 TypeExpr::Generic(value.clone()),
             )?,
             data_port_expr(
                 "right",
+                "Right",
                 PortDirection::Input,
                 TypeExpr::Generic(value.clone()),
             )?,
-            data_port("result", PortDirection::Output, "core.bool")?,
+            data_port("result", "Result", PortDirection::Output, "core.bool")?,
         ],
         vec![value],
         vec![],
@@ -847,8 +849,8 @@ fn unary_protocol(
         id,
         category,
         vec![
-            data_port("input", PortDirection::Input, input)?,
-            data_port("result", PortDirection::Output, output)?,
+            data_port("input", "Input", PortDirection::Input, input)?,
+            data_port("result", "Result", PortDirection::Output, output)?,
         ],
         vec![],
         pure(),
@@ -885,20 +887,22 @@ fn protocol(
 
 fn data_port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     ty: &'static str,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    data_port_expr(key, direction, concrete(ty)?)
+    data_port_expr(key, title, direction, concrete(ty)?)
 }
 
 fn data_port_expr(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: sid(key, PortKey::new)?,
-        label_key: iid(leak(format!("ports.{key}.label")))?,
+        title: title.into(),
         direction,
         kind: PortKind::Data,
         value_type,
@@ -965,13 +969,6 @@ fn i18n_requirements(
             keys.insert(key.clone());
             alias_keys.insert(key.clone());
         }
-        keys.extend(
-            protocol
-                .interface
-                .ports
-                .iter()
-                .map(|port| port.label_key.clone()),
-        );
         for parameter in &protocol.parameters.parameters {
             keys.insert(parameter.title_key.clone());
             keys.extend(parameter.description_key.iter().cloned());
@@ -1010,16 +1007,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
         ("categories.logic.title", "Logic", "逻辑"),
         ("categories.control.title", "Flow Control", "流程控制"),
         ("categories.project.title", "Project", "项目"),
-        ("ports.value.label", "Value", "值"),
-        ("ports.left.label", "Left", "左值"),
-        ("ports.right.label", "Right", "右值"),
-        ("ports.result.label", "Result", "结果"),
-        ("ports.input.label", "Input", "输入"),
-        ("ports.enter.label", "Enter", "进入"),
-        ("ports.condition.label", "Condition", "条件"),
-        ("ports.true.label", "True", "真"),
-        ("ports.false.label", "False", "假"),
-        ("ports.then.label", "Then", "然后"),
         ("parameters.value.title", "Value", "值"),
         (
             "parameters.value.description",

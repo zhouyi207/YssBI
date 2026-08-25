@@ -139,7 +139,7 @@
         "nodeTypeId": "yssbi.constant.bool"
       },
       "description": "Built-in deterministic node.",
-      "documentation": "This node is part of the trusted built-in provider.",
+      "documentation": "# Boolean Constant\n\nEmits a fixed `Boolean` value configured on the node (no input pins).\n\n## Inputs\n\n| Pin | Description |\n|-----|-------------|\n| *(editor)* **Value** | Editable `true` / `false` on the node body |\n\n## Outputs\n\n| Pin | Description |\n|-----|-------------|\n| **Value** | Constant `Boolean` |\n\n## Usage\n\nSupply flags to **Branch**, **And**/**Or**, or **Set Variable**. Change the literal in the node UI without rewiring.\n",
       "iconId": "builtin.constants",
       "nodeTypeId": "yssbi.constant.bool",
       "parameters": [
@@ -187,7 +187,7 @@
         ]
       },
       "description": "Selects DataFrame columns in an explicit order.",
-      "documentation": "Selects direct source columns without renaming or derived expressions.",
+      "documentation": null,
       "iconId": "builtin.dataframe",
       "nodeTypeId": "yssbi.dataframe.project",
       "parameters": [
@@ -242,7 +242,7 @@
         "resourceRevision": 13
       },
       "description": "Performs a typed tabular operation.",
-      "documentation": "Uses stable ports and the tabular runtime API.",
+      "documentation": "# Get DataFrame\n\nLoad a project **DataFrame** from the database by node instance parameter. The node emits a **DataFrame** reference on the output pin for downstream data nodes.\n\n## Pins\n\n| Pin | Direction | Description |\n|-----|-----------|-------------|\n| **DataFrame** | Output | Reference to the selected table in the project database |\n\n## Parameters\n\n| Parameter | Description |\n|-----------|-------------|\n| **DataFrame** | Select which project database table this node loads (node inspector) |\n\n## Usage\n\nPlace **Get DataFrame** at the start of a data pipeline. Choose the target table in the node inspector, then wire **DataFrame** to **Decompose DataFrame**, **Filter DataFrame**, regression nodes, or other consumers. Schema propagation uses the selected table so dynamic pins resolve correctly downstream.\n",
       "iconId": "builtin.dataframe",
       "nodeTypeId": "yssbi.dataframe.source.get",
       "parameters": [
@@ -257,7 +257,7 @@
           "direction": "output",
           "key": "dataframe",
           "kind": "data",
-          "label": "dataframe"
+          "label": "DataFrame"
         }
       ],
       "resourceNames": [
@@ -296,7 +296,7 @@
         "resourceRevision": 11
       },
       "description": "Integrates project resources with graph execution.",
-      "documentation": "Resource identity is stored as a stable node parameter and resolved from the compilation snapshot.",
+      "documentation": "# Call Function\n\nInvokes a **function subgraph** bound to this node. Execution enters at **In** and continues from **Out** after the subgraph finishes.\n\n## Inputs\n\n| Pin | Description |\n|-----|-------------|\n| **In** (exec) | Trigger to run the linked function graph |\n\n## Outputs\n\n| Pin | Description |\n|-----|-------------|\n| **Out** (exec) | Fires when the function subgraph completes |\n\n## Usage\n\nSelect the target function in the node inspector, wire **In** from upstream exec flow, and connect **Out** to the next step. Function inputs/outputs are exposed as dynamic pins on this node.\n",
       "iconId": "builtin.project",
       "nodeTypeId": "yssbi.project.function.call",
       "parameters": [
@@ -368,7 +368,7 @@
         "resourceRevision": 12
       },
       "description": "Integrates project resources with graph execution.",
-      "documentation": "Resource identity is stored as a stable node parameter and resolved from the compilation snapshot.",
+      "documentation": "# Get Variable\n\nReads the current value of a project **variable** selected in the node inspector.\n\n## Inputs\n\n| Pin | Description |\n|-----|-------------|\n| *(inspector)* **Variable** | Variable to read (not a graph pin) |\n\n## Outputs\n\n| Pin | Description |\n|-----|-------------|\n| **Value** | Current variable contents (`Any` type; schema resolved from variable) |\n\n## Usage\n\nPick a variable in the node properties, then wire **Value** to consumers (**Convert**, regression **Y**/**X**, etc.). Re-evaluates each graph run with the latest stored value.\n",
       "iconId": "builtin.project",
       "nodeTypeId": "yssbi.project.variable.get",
       "parameters": [
@@ -403,6 +403,6 @@
   ],
   "locale": "en-US",
   "projectInstanceId": "00000000-0000-0000-0000-000000000001",
-  "registryFingerprint": "c60af510a508bb69775410ade5fcc5bf5da8662176def016086210afbe9d0e94",
+  "registryFingerprint": "6f6f86529229414b43869164a8e162d83b33b8503755b00938dc40a62a03c86c",
   "resourcePublicationRevision": 17
 }

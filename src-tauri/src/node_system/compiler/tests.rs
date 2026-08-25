@@ -82,7 +82,7 @@ fn protocol() -> NodeProtocol {
         .style("test")
         .ports(vec![PortSpec {
             key: PortKey::new("value").unwrap(),
-            label_key: I18nKey::new("nodes.test.constant.value").unwrap(),
+            title: "Value".into(),
             direction: PortDirection::Output,
             kind: PortKind::Data,
             value_type: TypeExpr::Concrete(TypeId::new("core.int64").unwrap()),
@@ -400,7 +400,7 @@ fn data_port(
 ) -> PortSpec {
     PortSpec {
         key: key(name),
-        label_key: I18nKey::new(format!("ports.{name}.label")).unwrap(),
+        title: name.into(),
         direction,
         kind: PortKind::Data,
         value_type,
@@ -427,7 +427,7 @@ fn data_port(
 fn effect_port(name: &str, direction: PortDirection) -> PortSpec {
     PortSpec {
         key: key(name),
-        label_key: I18nKey::new(format!("ports.{name}.label")).unwrap(),
+        title: name.into(),
         direction,
         kind: PortKind::Effect,
         value_type: TypeExpr::Unknown,
@@ -1264,7 +1264,7 @@ fn compile_builtin_relational_chain(graph_path: &str) -> CompileResult {
 fn control_port(name: &str, direction: PortDirection) -> PortSpec {
     PortSpec {
         key: key(name),
-        label_key: I18nKey::new(format!("ports.{name}.label")).unwrap(),
+        title: name.into(),
         direction,
         kind: PortKind::Control,
         value_type: TypeExpr::Unknown,

@@ -37,7 +37,7 @@ fn port(
 ) -> PortSpec {
     PortSpec {
         key: PortKey::new(key).unwrap(),
-        label_key: I18nKey::new(format!("nodes.test.editor_validation.{key}")).unwrap(),
+        title: key.into(),
         direction,
         kind,
         value_type: TypeExpr::Unknown,

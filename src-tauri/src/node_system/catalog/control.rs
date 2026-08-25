@@ -55,6 +55,7 @@ fn branch_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     let bool_type = TypeExpr::Concrete(sid("core.bool", TypeId::new)?);
     let mut condition = data_port(
         "condition",
+        "Condition",
         PortDirection::Input,
         bool_type.clone(),
         PortInstances::Declared,
@@ -69,24 +70,42 @@ fn branch_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.control.branch",
         vec![
-            control_port("enter", PortDirection::Input, PortInstances::Declared)?,
+            control_port(
+                "enter",
+                "Enter",
+                PortDirection::Input,
+                PortInstances::Declared,
+            )?,
             condition,
             data_port(
                 "then_source",
+                "Then Source",
                 PortDirection::Input,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
             )?,
             data_port(
                 "else_source",
+                "Else Source",
                 PortDirection::Input,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
             )?,
-            control_port("true", PortDirection::Output, PortInstances::Declared)?,
-            control_port("false", PortDirection::Output, PortInstances::Declared)?,
+            control_port(
+                "true",
+                "True",
+                PortDirection::Output,
+                PortInstances::Declared,
+            )?,
+            control_port(
+                "false",
+                "False",
+                PortDirection::Output,
+                PortInstances::Declared,
+            )?,
             data_port(
                 "result",
+                "Result",
                 PortDirection::Output,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
@@ -105,9 +124,15 @@ fn sequence_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.control.sequence",
         vec![
-            control_port("enter", PortDirection::Input, PortInstances::Declared)?,
+            control_port(
+                "enter",
+                "Enter",
+                PortDirection::Input,
+                PortInstances::Declared,
+            )?,
             control_port(
                 "then",
+                "Then",
                 PortDirection::Output,
                 PortInstances::UserCreated { min: 1, max: None },
             )?,
@@ -121,39 +146,59 @@ fn loop_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.control.loop",
         vec![
-            control_port("enter", PortDirection::Input, PortInstances::Declared)?,
+            control_port(
+                "enter",
+                "Enter",
+                PortDirection::Input,
+                PortInstances::Declared,
+            )?,
             data_port(
                 "condition",
+                "Condition",
                 PortDirection::Input,
                 TypeExpr::Concrete(sid("core.bool", TypeId::new)?),
                 PortInstances::Declared,
             )?,
             data_port(
                 "initial_source",
+                "Initial Source",
                 PortDirection::Input,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
             )?,
             data_port(
                 "next_source",
+                "Next Source",
                 PortDirection::Input,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
             )?,
             data_port(
                 "body_input",
+                "Body Input",
                 PortDirection::Output,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
             )?,
             data_port(
                 "result",
+                "Result",
                 PortDirection::Output,
                 TypeExpr::Unknown,
                 PortInstances::UserCreated { min: 0, max: None },
             )?,
-            control_port("body", PortDirection::Output, PortInstances::Declared)?,
-            control_port("then", PortDirection::Output, PortInstances::Declared)?,
+            control_port(
+                "body",
+                "Body",
+                PortDirection::Output,
+                PortInstances::Declared,
+            )?,
+            control_port(
+                "then",
+                "Then",
+                PortDirection::Output,
+                PortInstances::Declared,
+            )?,
         ],
         vec![parameter(
             "max_iterations",
@@ -218,11 +263,13 @@ fn protocol(
 
 fn control_port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     instances: PortInstances,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
+        title,
         direction,
         PortKind::Control,
         TypeExpr::Unknown,
@@ -232,15 +279,17 @@ fn control_port(
 
 fn data_port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
     instances: PortInstances,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(key, direction, PortKind::Data, value_type, instances)
+    port(key, title, direction, PortKind::Data, value_type, instances)
 }
 
 fn port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     kind: PortKind,
     value_type: TypeExpr,
@@ -248,7 +297,7 @@ fn port(
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: sid(key, PortKey::new)?,
-        label_key: iid(Box::leak(format!("ports.{key}.label").into_boxed_str()))?,
+        title: title.into(),
         direction,
         kind,
         value_type,
@@ -308,12 +357,6 @@ fn parameter(
 
 fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     for (key, en, zh) in [
-        ("ports.body.label", "Body", "循环体"),
-        ("ports.then_source.label", "Then Source", "真分支来源"),
-        ("ports.else_source.label", "Else Source", "假分支来源"),
-        ("ports.initial_source.label", "Initial Source", "初始来源"),
-        ("ports.next_source.label", "Next Source", "下一值来源"),
-        ("ports.body_input.label", "Body Input", "循环体输入"),
         (
             "parameters.max_iterations.title",
             "Maximum Iterations",

@@ -316,7 +316,7 @@ fn provider_with_member_groups(groups: serde_json::Value) -> ProviderRegistratio
     .into_iter()
     .map(|(key, instances)| PortSpec {
         key: id(key),
-        label_key: id(&format!("nodes.test.{key}")),
+        title: key.into(),
         direction: PortDirection::Input,
         kind: PortKind::Data,
         value_type: TypeExpr::Unknown,
@@ -794,7 +794,7 @@ fn validates_type_references_constructor_arity_and_classes() {
     let node = Arc::make_mut(&mut provider.nodes[0].protocol);
     node.interface.ports = vec![PortSpec {
         key: id("value"),
-        label_key: id("nodes.test.value"),
+        title: "Value".into(),
         direction: PortDirection::Output,
         kind: PortKind::Data,
         value_type: TypeExpr::Concrete(id("core.missing")),
@@ -833,7 +833,7 @@ fn validates_ports_parameters_schema_and_resolvers() {
     let node = Arc::make_mut(&mut provider.nodes[0].protocol);
     node.interface.ports = vec![PortSpec {
         key: id("derived"),
-        label_key: id("nodes.test.derived"),
+        title: "Derived".into(),
         direction: PortDirection::Output,
         kind: PortKind::Data,
         value_type: TypeExpr::Unknown,
@@ -881,7 +881,7 @@ fn provider_with_two_parameter_rename_schema() -> ProviderRegistration {
     node.interface.ports = vec![
         PortSpec {
             key: id("source"),
-            label_key: id("nodes.test.source"),
+            title: "Source".into(),
             direction: PortDirection::Input,
             kind: PortKind::Data,
             value_type: TypeExpr::Unknown,
@@ -898,7 +898,7 @@ fn provider_with_two_parameter_rename_schema() -> ProviderRegistration {
         },
         PortSpec {
             key: id("result"),
-            label_key: id("nodes.test.result"),
+            title: "Result".into(),
             direction: PortDirection::Output,
             kind: PortKind::Data,
             value_type: TypeExpr::Unknown,

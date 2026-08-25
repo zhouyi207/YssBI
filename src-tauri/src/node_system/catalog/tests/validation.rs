@@ -71,10 +71,6 @@ fn phase2_reroute_protocol_validator_rejects_each_malformed_contract() {
                 protocol.interface.ports[1].connections = ConnectionsPerPort::Single
             }),
             malformed(|protocol| {
-                protocol.interface.ports[0].label_key =
-                    crate::node_system::protocol::I18nKey::new("nodes.wrong.ports.input").unwrap()
-            }),
-            malformed(|protocol| {
                 protocol.interface.ports[0].key =
                     crate::node_system::protocol::PortKey::new("wrong").unwrap()
             }),

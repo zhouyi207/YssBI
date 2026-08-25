@@ -86,7 +86,7 @@ fn address(node: u128, port: &str) -> PortAddress {
 }
 
 fn port(
-    node_type: &str,
+    _node_type: &str,
     name: &str,
     direction: PortDirection,
     kind: PortKind,
@@ -94,7 +94,7 @@ fn port(
 ) -> PortSpec {
     PortSpec {
         key: key(name),
-        label_key: I18nKey::new(format!("nodes.{node_type}.{name}")).unwrap(),
+        title: name.into(),
         direction,
         kind,
         value_type,
@@ -307,9 +307,6 @@ fn registry() -> NodeRegistry {
         i18n.insert(node.protocol().catalog.title_key.clone());
         i18n.extend(node.protocol().catalog.description_key.iter().cloned());
         i18n.extend(node.protocol().catalog.documentation_key.iter().cloned());
-        for port in node.protocol().interface.ports.iter() {
-            i18n.insert(port.label_key.clone());
-        }
     }
     let mut provider = ProviderRegistration::new(ProviderId::new("yssbi.reroute.tests").unwrap());
     provider.types = vec![TypeRegistration {

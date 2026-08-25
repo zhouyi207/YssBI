@@ -148,6 +148,7 @@ fn interface(
         DataframeSource => Ok((
             vec![streaming_output(
                 "dataframe",
+                "DataFrame",
                 dataframe_type()?,
                 Some(derived_schema(DATAFRAME_RESOURCE_SCHEMA_RESOLVER, vec![])?),
             )?],
@@ -155,9 +156,10 @@ fn interface(
         )),
         Limit => Ok((
             vec![
-                streaming_input("source", dataframe_type()?, None)?,
+                streaming_input("source", "Source", dataframe_type()?, None)?,
                 streaming_output(
                     "result",
+                    "Result",
                     dataframe_type()?,
                     Some(SchemaExpr::Input(port_key("source")?)),
                 )?,
@@ -166,9 +168,10 @@ fn interface(
         )),
         Rename => Ok((
             vec![
-                streaming_input("source", dataframe_type()?, None)?,
+                streaming_input("source", "Source", dataframe_type()?, None)?,
                 streaming_output(
                     "result",
+                    "Result",
                     dataframe_type()?,
                     Some(SchemaExpr::Rename {
                         input: Box::new(SchemaExpr::Input(port_key("source")?)),
@@ -206,16 +209,22 @@ fn interface(
         )),
         Decompose => Ok((
             vec![
-                data_input("dataframe", dataframe_type()?, None)?,
-                derived_output("columns", series_type()?, DATAFRAME_COLUMNS_RESOLVER)?,
+                data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
+                derived_output(
+                    "columns",
+                    "Column",
+                    series_type()?,
+                    DATAFRAME_COLUMNS_RESOLVER,
+                )?,
             ],
             vec![],
         )),
         Combine => Ok((
             vec![
-                user_input("series", generic_series_type("element")?, 1)?,
+                user_input("series", "DataSeries", generic_series_type("element")?, 1)?,
                 data_output(
                     "dataframe",
+                    "DataFrame",
                     dataframe_type()?,
                     Some(SchemaExpr::Append {
                         inputs: vec![SchemaExpr::Input(port_key("series")?)],
@@ -226,10 +235,11 @@ fn interface(
         )),
         Filter => Ok((
             vec![
-                data_input("source", dataframe_type()?, None)?,
-                data_input("condition", bool_series_type()?, None)?,
+                data_input("source", "Source", dataframe_type()?, None)?,
+                data_input("condition", "Condition", bool_series_type()?, None)?,
                 data_output(
                     "result",
+                    "Result",
                     dataframe_type()?,
                     Some(SchemaExpr::Filter {
                         input: Box::new(SchemaExpr::Input(port_key("source")?)),
@@ -241,88 +251,104 @@ fn interface(
         )),
         SeriesSelect => Ok((
             vec![
-                data_input("dataframe", dataframe_type()?, None)?,
-                data_output("series", generic_series_type("element")?, None)?,
+                data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
+                data_output(
+                    "series",
+                    "DataSeries",
+                    generic_series_type("element")?,
+                    None,
+                )?,
             ],
             vec![column_parameter("column")?],
         )),
         IntRange => Ok((
             vec![
-                scalar_input("start", "core.int64")?,
-                scalar_input("end", "core.int64")?,
-                scalar_input("step", "core.int64")?,
-                data_output("series", int_series_type()?, None)?,
+                scalar_input("start", "Start", "core.int64")?,
+                scalar_input("end", "End", "core.int64")?,
+                scalar_input("step", "Step", "core.int64")?,
+                data_output("series", "DataSeries", int_series_type()?, None)?,
             ],
             vec![],
         )),
         SeriesLength | SeriesCount => Ok((
             vec![
-                data_input("series", generic_series_type("element")?, None)?,
-                data_output("value", concrete("core.int64")?, None)?,
+                data_input(
+                    "series",
+                    "DataSeries",
+                    generic_series_type("element")?,
+                    None,
+                )?,
+                data_output("value", "Value", concrete("core.int64")?, None)?,
             ],
             vec![],
         )),
         SeriesSum => Ok((
             vec![
-                data_input("series", numeric_series_type(), None)?,
-                data_output("value", numeric_scalar_type()?, None)?,
+                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_output("value", "Value", numeric_scalar_type()?, None)?,
             ],
             vec![],
         )),
         SeriesMean => Ok((
             vec![
-                data_input("series", numeric_series_type(), None)?,
-                data_output("value", float_type()?, None)?,
+                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_output("value", "Value", float_type()?, None)?,
             ],
             vec![],
         )),
         NumericCompare => Ok((
             vec![
-                data_input("left", numeric_series_type(), None)?,
-                data_input("right", numeric_series_or_scalar_type()?, None)?,
-                data_output("result", bool_series_type()?, None)?,
+                data_input("left", "Left", numeric_series_type(), None)?,
+                data_input("right", "Right", numeric_series_or_scalar_type()?, None)?,
+                data_output("result", "Result", bool_series_type()?, None)?,
             ],
             vec![],
         )),
         StringCompare => Ok((
             vec![
-                data_input("left", string_series_type()?, None)?,
-                data_input("right", string_series_or_scalar_type()?, None)?,
-                data_output("result", bool_series_type()?, None)?,
+                data_input("left", "Left", string_series_type()?, None)?,
+                data_input("right", "Right", string_series_or_scalar_type()?, None)?,
+                data_output("result", "Result", bool_series_type()?, None)?,
             ],
             vec![],
         )),
         Standardize => Ok((
             vec![
-                data_input("series", numeric_series_type(), None)?,
-                data_output("standardized", float_series_type()?, None)?,
-                data_output("mean", float_type()?, None)?,
-                data_output("standard_deviation", float_type()?, None)?,
+                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_output("standardized", "Standardized", float_series_type()?, None)?,
+                data_output("mean", "Mean", float_type()?, None)?,
+                data_output(
+                    "standard_deviation",
+                    "Standard Deviation",
+                    float_type()?,
+                    None,
+                )?,
             ],
             vec![],
         )),
         InverseStandardize => Ok((
             vec![
-                data_input("standardized", float_series_type()?, None)?,
-                scalar_input("mean", "core.float64")?,
-                scalar_input("standard_deviation", "core.float64")?,
-                data_output("series", float_series_type()?, None)?,
+                data_input("standardized", "Standardized", float_series_type()?, None)?,
+                scalar_input("mean", "Mean", "core.float64")?,
+                scalar_input("standard_deviation", "Standard Deviation", "core.float64")?,
+                data_output("series", "DataSeries", float_series_type()?, None)?,
             ],
             vec![],
         )),
         DummyInfo => Ok((
             vec![
-                data_input("source", generic_series_type("element")?, None)?,
-                data_output("result", generic_series_type("element")?, None)?,
+                data_input("source", "Source", generic_series_type("element")?, None)?,
+                data_output("result", "Result", generic_series_type("element")?, None)?,
             ],
             vec![text_parameter("base_level", false)?],
         )),
         TimeAlign => Ok((
             vec![
-                data_input("dataframe", dataframe_type()?, None)?,
-                data_input("time", generic_series_type("time")?, None)?,
+                data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
+                data_input("time", "Time", generic_series_type("time")?, None)?,
                 data_output(
                     "aligned",
+                    "Aligned",
                     dataframe_type()?,
                     Some(SchemaExpr::Input(port_key("dataframe")?)),
                 )?,
@@ -331,32 +357,38 @@ fn interface(
         )),
         TimeUnary => Ok((
             vec![
-                data_input("series", numeric_series_type(), None)?,
-                data_output("result", float_series_type()?, None)?,
+                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_output("result", "Result", float_series_type()?, None)?,
             ],
             vec![positive_integer_parameter("order", 1)?],
         )),
         TimeWindow => Ok((
             vec![
-                data_input("series", numeric_series_type(), None)?,
-                data_output("result", float_series_type()?, None)?,
+                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_output("result", "Result", float_series_type()?, None)?,
             ],
             vec![positive_integer_parameter("window", 1)?],
         )),
         TimeLag => Ok((
             vec![
-                data_input("series", generic_series_type("element")?, None)?,
-                data_output("result", generic_series_type("element")?, None)?,
+                data_input(
+                    "series",
+                    "DataSeries",
+                    generic_series_type("element")?,
+                    None,
+                )?,
+                data_output("result", "Result", generic_series_type("element")?, None)?,
             ],
             vec![positive_integer_parameter("window", 1)?],
         )),
         PanelAlign => Ok((
             vec![
-                data_input("dataframe", dataframe_type()?, None)?,
-                data_input("entity", generic_series_type("entity")?, None)?,
-                data_input("time", generic_series_type("time")?, None)?,
+                data_input("dataframe", "DataFrame", dataframe_type()?, None)?,
+                data_input("entity", "Entity", generic_series_type("entity")?, None)?,
+                data_input("time", "Time", generic_series_type("time")?, None)?,
                 data_output(
                     "aligned",
+                    "Aligned",
                     dataframe_type()?,
                     Some(derived_schema(
                         DATAFRAME_PANEL_SCHEMA_RESOLVER,
@@ -368,9 +400,9 @@ fn interface(
         )),
         PanelDifference => Ok((
             vec![
-                data_input("aligned", dataframe_type()?, None)?,
-                data_input("series", numeric_series_type(), None)?,
-                data_output("result", float_series_type()?, None)?,
+                data_input("aligned", "Aligned", dataframe_type()?, None)?,
+                data_input("series", "DataSeries", numeric_series_type(), None)?,
+                data_output("result", "Result", float_series_type()?, None)?,
             ],
             vec![positive_integer_parameter("order", 1)?],
         )),
@@ -379,18 +411,20 @@ fn interface(
 
 fn relational_ports(result_schema: SchemaExpr) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     Ok(vec![
-        streaming_input("source", dataframe_type()?, None)?,
-        streaming_output("result", dataframe_type()?, Some(result_schema))?,
+        streaming_input("source", "Source", dataframe_type()?, None)?,
+        streaming_output("result", "Result", dataframe_type()?, Some(result_schema))?,
     ])
 }
 
 fn data_input(
     key: &'static str,
+    title: &'static str,
     value_type: TypeExpr,
     schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
+        title,
         PortDirection::Input,
         value_type,
         PortInstances::Declared,
@@ -400,28 +434,32 @@ fn data_input(
 
 fn streaming_input(
     key: &'static str,
+    title: &'static str,
     value_type: TypeExpr,
     schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    let mut spec = data_input(key, value_type, schema)?;
+    let mut spec = data_input(key, title, value_type, schema)?;
     spec.consumption = Some(InputConsumption::Streaming);
     Ok(spec)
 }
 
 fn scalar_input(
     key: &'static str,
+    title: &'static str,
     type_id: &'static str,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    data_input(key, concrete(type_id)?, None)
+    data_input(key, title, concrete(type_id)?, None)
 }
 
 fn user_input(
     key: &'static str,
+    title: &'static str,
     value_type: TypeExpr,
     min: u16,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
+        title,
         PortDirection::Input,
         value_type,
         PortInstances::UserCreated { min, max: None },
@@ -431,11 +469,13 @@ fn user_input(
 
 fn data_output(
     key: &'static str,
+    title: &'static str,
     value_type: TypeExpr,
     schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
+        title,
         PortDirection::Output,
         value_type,
         PortInstances::Declared,
@@ -445,21 +485,24 @@ fn data_output(
 
 fn streaming_output(
     key: &'static str,
+    title: &'static str,
     value_type: TypeExpr,
     schema: Option<SchemaExpr>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    let mut spec = data_output(key, value_type, schema)?;
+    let mut spec = data_output(key, title, value_type, schema)?;
     spec.production = Some(OutputProduction::Streaming);
     Ok(spec)
 }
 
 fn derived_output(
     key: &'static str,
+    title: &'static str,
     value_type: TypeExpr,
     resolver: &'static str,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
+        title,
         PortDirection::Output,
         value_type,
         PortInstances::Derived {
@@ -471,6 +514,7 @@ fn derived_output(
 
 fn port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
     instances: PortInstances,
@@ -478,7 +522,7 @@ fn port(
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: port_key(key)?,
-        label_key: iid(leak(format!("ports.{key}.label")))?,
+        title: title.into(),
         direction,
         kind: PortKind::Data,
         value_type,
@@ -1172,32 +1216,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     ] {
         out.push(("en-US", key, Text(en)));
         out.push(("zh-CN", key, Text(zh)));
-    }
-    for key in [
-        "dataframe",
-        "columns",
-        "series",
-        "start",
-        "end",
-        "step",
-        "standardized",
-        "mean",
-        "standard_deviation",
-        "time",
-        "aligned",
-        "entity",
-    ] {
-        let label = leak(format!("ports.{key}.label"));
-        out.push(("en-US", label, Text(key)));
-        out.push(("zh-CN", label, Text(key)));
-    }
-    for (key, en, zh) in [
-        ("source", "Source", "源数据框"),
-        ("result", "Result", "结果"),
-    ] {
-        let label = leak(format!("ports.{key}.label"));
-        out.push(("en-US", label, Text(en)));
-        out.push(("zh-CN", label, Text(zh)));
     }
     for key in [
         "dataframe",

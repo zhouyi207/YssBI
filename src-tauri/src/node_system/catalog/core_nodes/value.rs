@@ -117,11 +117,6 @@ fn register_scalar_convert(fragment: &mut ProviderFragment) -> Result<(), Builti
         aliases: &["convert", "cast", "coerce", "type conversion"],
         zh_aliases: &["转换", "类型转换", "强制转换"],
     })?;
-    add_port_messages(
-        fragment,
-        ID,
-        &[("input", "Input", "输入"), ("output", "Output", "输出")],
-    )?;
     add_parameter_messages(
         fragment,
         ID,
@@ -155,8 +150,8 @@ fn register_scalar_convert(fragment: &mut ProviderFragment) -> Result<(), Builti
             ID,
             "conversion",
             vec![
-                data_port(ID, "input", PortDirection::Input, scalar_types.clone())?,
-                data_port(ID, "output", PortDirection::Output, scalar_types)?,
+                data_port("input", "Input", PortDirection::Input, scalar_types.clone())?,
+                data_port("output", "Output", PortDirection::Output, scalar_types)?,
             ],
             vec![],
             vec![],
@@ -198,28 +193,20 @@ fn register_series_convert(
         aliases,
         zh_aliases: &["数据序列转换", "序列类型转换"],
     })?;
-    add_port_messages(
-        fragment,
-        id,
-        &[
-            ("input", "DataSeries", "数据序列"),
-            ("output", "DataSeries", "数据序列"),
-        ],
-    )?;
     fragment.nodes.push(leaf(
         protocol(
             id,
             "conversion",
             vec![
                 data_port(
-                    id,
                     "input",
+                    "DataSeries",
                     PortDirection::Input,
                     data_series(core_type(spec.source)?)?,
                 )?,
                 data_port(
-                    id,
                     "output",
+                    "DataSeries",
                     PortDirection::Output,
                     data_series(core_type(spec.target)?)?,
                 )?,

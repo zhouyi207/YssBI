@@ -148,13 +148,6 @@ impl TestProviderBuilder {
         let mut outputs = BTreeMap::new();
         for node in self.nodes {
             keys.insert(node.protocol.catalog.title_key.clone());
-            keys.extend(
-                node.protocol
-                    .interface
-                    .ports
-                    .iter()
-                    .map(|port| port.label_key.clone()),
-            );
             let lowerer = FixedLowerer {
                 kernel: node.kernel_handle.clone(),
                 parameters: node.parameter_handle,
@@ -405,12 +398,8 @@ fn protocol(node_type: NodeTypeId, inputs: &[PortKey], outputs: &[PortKey]) -> N
     let title_key = I18nKey::new(format!("nodes.{}.title", node_type.as_str())).unwrap();
     let ports = inputs
         .iter()
-        .map(|key| port(&node_type, key, PortDirection::Input))
-        .chain(
-            outputs
-                .iter()
-                .map(|key| port(&node_type, key, PortDirection::Output)),
-        )
+        .map(|key| port(key, PortDirection::Input))
+        .chain(outputs.iter().map(|key| port(key, PortDirection::Output)))
         .collect();
     NodeProtocol {
         type_id: node_type,
@@ -441,15 +430,10 @@ fn protocol(node_type: NodeTypeId, inputs: &[PortKey], outputs: &[PortKey]) -> N
     }
 }
 
-fn port(node_type: &NodeTypeId, key: &PortKey, direction: PortDirection) -> PortSpec {
+fn port(key: &PortKey, direction: PortDirection) -> PortSpec {
     PortSpec {
         key: key.clone(),
-        label_key: I18nKey::new(format!(
-            "nodes.{}.ports.{}",
-            node_type.as_str(),
-            key.as_str()
-        ))
-        .unwrap(),
+        title: key.as_str().into(),
         direction,
         kind: PortKind::Data,
         value_type: TypeExpr::Concrete(

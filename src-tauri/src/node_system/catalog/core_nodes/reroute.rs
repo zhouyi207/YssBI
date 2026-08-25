@@ -1,6 +1,6 @@
 use super::support::{
-    BuiltinAssemblyError, NodeTextSpec, ProviderFragment, add_port_messages, effectful, protocol,
-    pure, semantic, transparent,
+    BuiltinAssemblyError, NodeTextSpec, ProviderFragment, effectful, protocol, pure, semantic,
+    transparent,
 };
 use crate::node_system::catalog::{
     CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
@@ -27,14 +27,6 @@ pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
             aliases: &[],
             zh_aliases: &[],
         })?;
-        add_port_messages(
-            fragment,
-            node_type,
-            &[
-                (REROUTE_INPUT_PORT, "Input", "输入"),
-                (REROUTE_OUTPUT_PORT, "Output", "输出"),
-            ],
-        )?;
         fragment.nodes.push(build_protocol(kind)?);
     }
     Ok(())
@@ -90,15 +82,15 @@ fn build_protocol(
         "control",
         vec![
             port(
-                node_type,
                 REROUTE_INPUT_PORT,
+                "Input",
                 PortDirection::Input,
                 kind,
                 value_type.clone(),
             )?,
             port(
-                node_type,
                 REROUTE_OUTPUT_PORT,
+                "Output",
                 PortDirection::Output,
                 kind,
                 value_type,
@@ -125,15 +117,15 @@ fn build_protocol(
 }
 
 fn port(
-    node_type: &'static str,
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     kind: PortKind,
     value_type: TypeExpr,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: semantic(key, PortKey::new)?,
-        label_key: super::support::port_key(node_type, key)?,
+        title: title.into(),
         direction,
         kind,
         value_type,

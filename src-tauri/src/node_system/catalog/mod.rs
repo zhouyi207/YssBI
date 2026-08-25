@@ -7,6 +7,7 @@ mod control;
 mod core_nodes;
 mod dataframe;
 mod distribution;
+mod documentation;
 mod localization;
 mod plot;
 mod project;

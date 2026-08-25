@@ -4,7 +4,7 @@ use super::*;
 fn valid_dynamic_output_derives_without_invalid_plan_fallback() {
     let dynamic_output = PortSpec {
         key: key("items"),
-        label_key: I18nKey::new("ports.items.label").unwrap(),
+        title: "Items".into(),
         direction: PortDirection::Output,
         kind: PortKind::Data,
         value_type: TypeExpr::Unknown,

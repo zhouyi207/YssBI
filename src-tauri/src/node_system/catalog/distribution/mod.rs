@@ -33,8 +33,7 @@ impl ScalarType {
 #[derive(Clone, Copy)]
 struct InputSpec {
     key: &'static str,
-    en: &'static str,
-    zh: &'static str,
+    title: &'static str,
     value_type: ScalarType,
 }
 
@@ -52,16 +51,10 @@ struct DistributionSpec {
 
 const F: ScalarType = ScalarType::Float64;
 const I: ScalarType = ScalarType::Int64;
-const fn input(
-    key: &'static str,
-    en: &'static str,
-    zh: &'static str,
-    value_type: ScalarType,
-) -> InputSpec {
+const fn input(key: &'static str, title: &'static str, value_type: ScalarType) -> InputSpec {
     InputSpec {
         key,
-        en,
-        zh,
+        title,
         value_type,
     }
 }
@@ -75,9 +68,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["normal distribution", "Gaussian", "random normal"],
         zh_aliases: &["正态分布", "高斯分布", "随机采样"],
         inputs: &[
-            input("mean", "Mean", "均值", F),
-            input("standard_deviation", "Standard Deviation", "标准差", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("mean", "Mean", F),
+            input("standard_deviation", "Standard Deviation", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -89,9 +82,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["continuous uniform distribution", "random uniform"],
         zh_aliases: &["连续均匀分布", "均匀采样"],
         inputs: &[
-            input("lower_bound", "Lower Bound", "下界", F),
-            input("upper_bound", "Upper Bound", "上界", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("lower_bound", "Lower Bound", F),
+            input("upper_bound", "Upper Bound", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -103,8 +96,8 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["exponential distribution", "Exp", "rate"],
         zh_aliases: &["指数分布", "率参数"],
         inputs: &[
-            input("rate", "Rate", "率参数", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("rate", "Rate", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -116,9 +109,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["gamma distribution", "shape rate"],
         zh_aliases: &["伽马分布", "形状率参数"],
         inputs: &[
-            input("shape", "Shape", "形状参数", F),
-            input("rate", "Rate", "率参数", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("shape", "Shape", F),
+            input("rate", "Rate", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -130,9 +123,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["beta distribution", "alpha beta"],
         zh_aliases: &["贝塔分布", "阿尔法贝塔"],
         inputs: &[
-            input("alpha", "Alpha", "Alpha", F),
-            input("beta", "Beta", "Beta", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("alpha", "Alpha", F),
+            input("beta", "Beta", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -148,8 +141,8 @@ const SPECS: &[DistributionSpec] = &[
         ],
         zh_aliases: &["学生t分布", "t分布", "自由度"],
         inputs: &[
-            input("degrees_of_freedom", "Degrees of Freedom", "自由度", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("degrees_of_freedom", "Degrees of Freedom", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -161,9 +154,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["Cauchy distribution", "location scale"],
         zh_aliases: &["柯西分布", "位置尺度"],
         inputs: &[
-            input("location", "Location", "位置参数", F),
-            input("scale", "Scale", "尺度参数", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("location", "Location", F),
+            input("scale", "Scale", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -179,8 +172,8 @@ const SPECS: &[DistributionSpec] = &[
         ],
         zh_aliases: &["卡方分布", "自由度"],
         inputs: &[
-            input("degrees_of_freedom", "Degrees of Freedom", "自由度", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("degrees_of_freedom", "Degrees of Freedom", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -192,9 +185,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["lognormal distribution", "log normal", "mu sigma"],
         zh_aliases: &["对数正态分布", "缪西格玛"],
         inputs: &[
-            input("mu", "Mu", "Mu", F),
-            input("sigma", "Sigma", "Sigma", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("mu", "Mu", F),
+            input("sigma", "Sigma", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -206,9 +199,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["Weibull distribution", "shape scale"],
         zh_aliases: &["威布尔分布", "形状尺度"],
         inputs: &[
-            input("shape", "Shape", "形状参数", F),
-            input("scale", "Scale", "尺度参数", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("shape", "Shape", F),
+            input("scale", "Scale", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -220,9 +213,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["Laplace distribution", "double exponential"],
         zh_aliases: &["拉普拉斯分布", "双指数分布"],
         inputs: &[
-            input("location", "Location", "位置参数", F),
-            input("scale", "Scale", "尺度参数", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("location", "Location", F),
+            input("scale", "Scale", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -234,9 +227,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["Pareto distribution", "power law"],
         zh_aliases: &["帕累托分布", "幂律分布"],
         inputs: &[
-            input("shape", "Shape", "形状参数", F),
-            input("scale", "Scale", "尺度参数", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("shape", "Shape", F),
+            input("scale", "Scale", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -248,9 +241,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["inverse gamma distribution", "reciprocal gamma"],
         zh_aliases: &["逆伽马分布", "倒数伽马"],
         inputs: &[
-            input("shape", "Shape", "形状参数", F),
-            input("scale", "Scale", "尺度参数", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("shape", "Shape", F),
+            input("scale", "Scale", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -262,10 +255,10 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["triangular distribution", "minimum maximum mode"],
         zh_aliases: &["三角分布", "最小值最大值众数"],
         inputs: &[
-            input("minimum", "Minimum", "最小值", F),
-            input("maximum", "Maximum", "最大值", F),
-            input("mode", "Mode", "众数", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("minimum", "Minimum", F),
+            input("maximum", "Maximum", F),
+            input("mode", "Mode", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -284,16 +277,14 @@ const SPECS: &[DistributionSpec] = &[
             input(
                 "numerator_degrees_of_freedom",
                 "Numerator Degrees of Freedom",
-                "分子自由度",
                 F,
             ),
             input(
                 "denominator_degrees_of_freedom",
                 "Denominator Degrees of Freedom",
-                "分母自由度",
                 F,
             ),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -305,9 +296,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["Erlang distribution", "integer shape gamma"],
         zh_aliases: &["爱尔朗分布", "整数形状伽马"],
         inputs: &[
-            input("shape", "Integer Shape", "整数形状参数", I),
-            input("rate", "Rate", "率参数", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("shape", "Integer Shape", I),
+            input("rate", "Rate", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: F,
     },
@@ -319,8 +310,8 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["Bernoulli distribution", "binary trial", "probability"],
         zh_aliases: &["伯努利分布", "二元试验", "概率"],
         inputs: &[
-            input("probability", "Success Probability", "成功概率", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("probability", "Success Probability", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: I,
     },
@@ -332,9 +323,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["binomial distribution", "trials probability"],
         zh_aliases: &["二项分布", "试验次数概率"],
         inputs: &[
-            input("trial_count", "Trial Count", "试验次数", I),
-            input("probability", "Success Probability", "成功概率", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("trial_count", "Trial Count", I),
+            input("probability", "Success Probability", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: I,
     },
@@ -346,8 +337,8 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["Poisson distribution", "lambda", "count distribution"],
         zh_aliases: &["泊松分布", "兰布达", "计数分布"],
         inputs: &[
-            input("rate", "Lambda", "Lambda", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("rate", "Lambda", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: I,
     },
@@ -359,8 +350,8 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["geometric distribution", "waiting time", "probability"],
         zh_aliases: &["几何分布", "等待次数", "概率"],
         inputs: &[
-            input("probability", "Success Probability", "成功概率", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("probability", "Success Probability", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: I,
     },
@@ -372,9 +363,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["negative binomial distribution", "Pascal distribution"],
         zh_aliases: &["负二项分布", "帕斯卡分布"],
         inputs: &[
-            input("success_count", "Success Count", "成功次数", F),
-            input("probability", "Success Probability", "成功概率", F),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("success_count", "Success Count", F),
+            input("probability", "Success Probability", F),
+            input("sample_count", "Sample Count", I),
         ],
         output: I,
     },
@@ -386,9 +377,9 @@ const SPECS: &[DistributionSpec] = &[
         aliases: &["discrete uniform distribution", "random integer"],
         zh_aliases: &["离散均匀分布", "随机整数"],
         inputs: &[
-            input("lower_bound", "Lower Bound", "下界", I),
-            input("upper_bound", "Upper Bound", "上界", I),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("lower_bound", "Lower Bound", I),
+            input("upper_bound", "Upper Bound", I),
+            input("sample_count", "Sample Count", I),
         ],
         output: I,
     },
@@ -403,15 +394,10 @@ const SPECS: &[DistributionSpec] = &[
         ],
         zh_aliases: &["超几何分布", "不放回抽样"],
         inputs: &[
-            input("population_size", "Population Size", "总体大小", I),
-            input(
-                "success_population",
-                "Successes in Population",
-                "总体成功数",
-                I,
-            ),
-            input("draw_count", "Draw Count", "抽取数", I),
-            input("sample_count", "Sample Count", "样本数", I),
+            input("population_size", "Population Size", I),
+            input("success_population", "Successes in Population", I),
+            input("draw_count", "Draw Count", I),
+            input("sample_count", "Sample Count", I),
         ],
         output: I,
     },
@@ -462,8 +448,8 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
         .iter()
         .map(|input| {
             data_port(
-                spec.id,
                 input.key,
+                input.title,
                 PortDirection::Input,
                 concrete(input.value_type.type_id())?,
             )
@@ -471,8 +457,8 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
         .collect::<Result<Vec<_>, BuiltinAssemblyError>>()?;
     let element_type = concrete(spec.output.type_id())?;
     ports.push(data_port(
-        spec.id,
         "samples",
+        "Samples",
         PortDirection::Output,
         data_series_type(element_type),
     )?);
@@ -506,14 +492,14 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
 }
 
 fn data_port(
-    id: &'static str,
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: port_key(key)?,
-        label_key: node_port_key(id, key)?,
+        title: title.into(),
         direction,
         kind: PortKind::Data,
         value_type,
@@ -586,14 +572,6 @@ fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &Dis
         ("en-US", aliases, Message::Aliases(spec.aliases)),
         ("zh-CN", aliases, Message::Aliases(spec.zh_aliases)),
     ]);
-    for input in spec.inputs {
-        let key = port_label_text(spec.id, input.key);
-        out.push(("en-US", key, Message::Text(input.en)));
-        out.push(("zh-CN", key, Message::Text(input.zh)));
-    }
-    let samples = port_label_text(spec.id, "samples");
-    out.push(("en-US", samples, Message::Text("Samples")));
-    out.push(("zh-CN", samples, Message::Text("样本")));
 }
 
 fn concrete(value: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
@@ -623,14 +601,8 @@ fn i18n_key(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
 fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
     i18n_key(key_text(id, suffix))
 }
-fn node_port_key(id: &'static str, port: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    sid(port_label_text(id, port), I18nKey::new)
-}
 fn key_text(id: &'static str, suffix: &'static str) -> &'static str {
     Box::leak(format!("nodes.{id}.{suffix}").into_boxed_str())
-}
-fn port_label_text(id: &'static str, port: &'static str) -> &'static str {
-    Box::leak(format!("nodes.{id}.ports.{port}.label").into_boxed_str())
 }
 
 #[cfg(test)]
@@ -655,8 +627,7 @@ mod tests {
                 protocol.catalog.aliases_key.as_ref(),
             ]
             .into_iter()
-            .flatten()
-            .chain(protocol.interface.ports.iter().map(|port| &port.label_key));
+            .flatten();
             for key in keys {
                 assert!(localized_keys.contains(&("en-US", key.as_str())));
                 assert!(localized_keys.contains(&("zh-CN", key.as_str())));

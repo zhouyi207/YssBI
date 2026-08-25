@@ -59,7 +59,11 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
 
 fn ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     match spec.stage {
-        Stage::Constant => Ok(vec![data_output("covariance", config_type()?)?]),
+        Stage::Constant => Ok(vec![data_output(
+            "covariance",
+            "Covariance",
+            config_type()?,
+        )?]),
         Stage::Configure => configure_ports(spec.family),
         Stage::Fit => fit_ports(spec),
         Stage::Summary => summary_ports(spec),
@@ -71,51 +75,75 @@ fn ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
 fn configure_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     if family == Family::Ols {
         return Ok(vec![
-            optional_data_input("covariance", config_type()?)?,
-            data_output("configuration", config_type()?)?,
+            optional_data_input("covariance", "Covariance", config_type()?)?,
+            data_output("configuration", "Config", config_type()?)?,
         ]);
     }
-    Ok(vec![data_output("configuration", config_type()?)?])
+    Ok(vec![data_output(
+        "configuration",
+        "Config",
+        config_type()?,
+    )?])
 }
 
 fn fit_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
-    let mut ports = vec![control_input("enter")?];
+    let mut ports = vec![control_input("enter", "Enter")?];
     if matches!(spec.family, Family::Vec) {
-        ports.push(user_data_input("variables", series_type()?, 2)?);
+        ports.push(user_data_input(
+            "variables",
+            "Variables",
+            series_type()?,
+            2,
+        )?);
     } else {
         ports.extend(regression_inputs(spec.family)?);
     }
     if spec.id == "yssbi.statistics.wls.fit" {
-        ports.push(data_input("weights", series_type()?)?);
+        ports.push(data_input("weights", "Weights", series_type()?)?);
     }
-    ports.push(optional_data_input("configuration", config_type()?)?);
-    ports.push(data_output("model", model_type(spec)?)?);
-    ports.push(data_output("fitted", float_series_type()?)?);
-    ports.push(data_output("residuals", float_series_type()?)?);
-    ports.push(control_output("then")?);
+    ports.push(optional_data_input(
+        "configuration",
+        "Config",
+        config_type()?,
+    )?);
+    ports.push(data_output("model", "Model", model_type(spec)?)?);
+    ports.push(data_output("fitted", "Fitted", float_series_type()?)?);
+    ports.push(data_output("residuals", "Residuals", float_series_type()?)?);
+    ports.push(control_output("then", "Then")?);
     Ok(ports)
 }
 
 fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     let family = spec.family;
-    let mut ports = vec![control_input("enter")?];
+    let mut ports = vec![control_input("enter", "Enter")?];
     match family {
-        Family::Adf => ports.push(data_input("test_result", result_type(Family::Adf)?)?),
+        Family::Adf => ports.push(data_input(
+            "test_result",
+            "Test Result",
+            result_type(Family::Adf)?,
+        )?),
         Family::PanelDid => {
             ports.extend(regression_inputs(Family::Panel)?);
-            ports.push(data_input("treatment", series_type()?)?);
+            ports.push(data_input("treatment", "Treatment", series_type()?)?);
         }
-        Family::Var => ports.push(user_data_input("variables", series_type()?, 2)?),
+        Family::Var => ports.push(user_data_input(
+            "variables",
+            "Variables",
+            series_type()?,
+            2,
+        )?),
         Family::Iv2sls | Family::IvLiml => {
             ports.extend(regression_inputs(family)?);
             ports.push(bounded_user_data_input(
                 "endogenous",
+                "Endogenous",
                 series_type()?,
                 1,
                 Some(1),
             )?);
             ports.push(bounded_user_data_input(
                 "instruments",
+                "Instruments",
                 series_type()?,
                 1,
                 Some(1),
@@ -123,45 +151,52 @@ fn summary_ports(spec: &NodeSpec) -> Result<Vec<PortSpec>, BuiltinAssemblyError>
         }
         _ => ports.extend(regression_inputs(family)?),
     }
-    ports.push(optional_data_input("configuration", config_type()?)?);
-    ports.push(data_output("result", summary_result_type(spec)?)?);
-    ports.push(data_output("report", report_type()?)?);
-    ports.push(control_output("then")?);
+    ports.push(optional_data_input(
+        "configuration",
+        "Config",
+        config_type()?,
+    )?);
+    ports.push(data_output("result", "Result", summary_result_type(spec)?)?);
+    ports.push(data_output("report", "Report", report_type()?)?);
+    ports.push(control_output("then", "Then")?);
     Ok(ports)
 }
 
 fn prediction_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     Ok(vec![
-        control_input("enter")?,
-        data_input("model", prediction_model_type(family)?)?,
-        user_data_input("predictors", series_type()?, 1)?,
-        data_output("prediction", float_series_type()?)?,
-        control_output("then")?,
+        control_input("enter", "Enter")?,
+        data_input("model", "Model", prediction_model_type(family)?)?,
+        user_data_input("predictors", "Predictors", series_type()?, 1)?,
+        data_output("prediction", "Prediction", float_series_type()?)?,
+        control_output("then", "Then")?,
     ])
 }
 
 fn test_ports(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
-    let mut ports = vec![control_input("enter")?];
+    let mut ports = vec![control_input("enter", "Enter")?];
     match family {
-        Family::Adf => ports.push(data_input("series", series_type()?)?),
-        Family::Var | Family::VecRank => {
-            ports.push(user_data_input("variables", series_type()?, 2)?)
-        }
-        _ => ports.push(data_input("series", series_type()?)?),
+        Family::Adf => ports.push(data_input("series", "DataSeries", series_type()?)?),
+        Family::Var | Family::VecRank => ports.push(user_data_input(
+            "variables",
+            "Variables",
+            series_type()?,
+            2,
+        )?),
+        _ => ports.push(data_input("series", "DataSeries", series_type()?)?),
     }
-    ports.push(data_output("result", result_type(family)?)?);
-    ports.push(control_output("then")?);
+    ports.push(data_output("result", "Result", result_type(family)?)?);
+    ports.push(control_output("then", "Then")?);
     Ok(ports)
 }
 
 fn regression_inputs(family: Family) -> Result<Vec<PortSpec>, BuiltinAssemblyError> {
     let mut ports = vec![
-        data_input("response", series_type()?)?,
-        user_data_input("predictors", series_type()?, 1)?,
+        data_input("response", "Response", series_type()?)?,
+        user_data_input("predictors", "Predictors", series_type()?, 1)?,
     ];
     if matches!(family, Family::Panel | Family::PanelDid) {
-        ports.push(data_input("entity", series_type()?)?);
-        ports.push(data_input("time", series_type()?)?);
+        ports.push(data_input("entity", "Entity", series_type()?)?);
+        ports.push(data_input("time", "Time", series_type()?)?);
     }
     Ok(ports)
 }
@@ -267,19 +302,23 @@ fn execution(stage: Stage) -> ExecutionSemantics {
     }
 }
 
-fn control_input(key: &'static str) -> Result<PortSpec, BuiltinAssemblyError> {
-    control_port(key, PortDirection::Input)
+fn control_input(key: &'static str, title: &'static str) -> Result<PortSpec, BuiltinAssemblyError> {
+    control_port(key, title, PortDirection::Input)
 }
-fn control_output(key: &'static str) -> Result<PortSpec, BuiltinAssemblyError> {
-    control_port(key, PortDirection::Output)
+fn control_output(
+    key: &'static str,
+    title: &'static str,
+) -> Result<PortSpec, BuiltinAssemblyError> {
+    control_port(key, title, PortDirection::Output)
 }
 fn control_port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: port_key(key)?,
-        label_key: iid(leak(format!("ports.{key}.label")))?,
+        title: title.into(),
         direction,
         kind: PortKind::Control,
         value_type: TypeExpr::Unknown,
@@ -292,9 +331,14 @@ fn control_port(
         schema: None,
     })
 }
-fn data_input(key: &'static str, value_type: TypeExpr) -> Result<PortSpec, BuiltinAssemblyError> {
+fn data_input(
+    key: &'static str,
+    title: &'static str,
+    value_type: TypeExpr,
+) -> Result<PortSpec, BuiltinAssemblyError> {
     data_port(
         key,
+        title,
         PortDirection::Input,
         value_type,
         PortInstances::Declared,
@@ -303,10 +347,12 @@ fn data_input(key: &'static str, value_type: TypeExpr) -> Result<PortSpec, Built
 }
 fn optional_data_input(
     key: &'static str,
+    title: &'static str,
     value_type: TypeExpr,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     data_port(
         key,
+        title,
         PortDirection::Input,
         value_type,
         PortInstances::Declared,
@@ -315,28 +361,36 @@ fn optional_data_input(
 }
 fn user_data_input(
     key: &'static str,
+    title: &'static str,
     value_type: TypeExpr,
     min: u16,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    bounded_user_data_input(key, value_type, min, None)
+    bounded_user_data_input(key, title, value_type, min, None)
 }
 fn bounded_user_data_input(
     key: &'static str,
+    title: &'static str,
     value_type: TypeExpr,
     min: u16,
     max: Option<u16>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     data_port(
         key,
+        title,
         PortDirection::Input,
         value_type,
         PortInstances::UserCreated { min, max },
         false,
     )
 }
-fn data_output(key: &'static str, value_type: TypeExpr) -> Result<PortSpec, BuiltinAssemblyError> {
+fn data_output(
+    key: &'static str,
+    title: &'static str,
+    value_type: TypeExpr,
+) -> Result<PortSpec, BuiltinAssemblyError> {
     data_port(
         key,
+        title,
         PortDirection::Output,
         value_type,
         PortInstances::Declared,
@@ -345,6 +399,7 @@ fn data_output(key: &'static str, value_type: TypeExpr) -> Result<PortSpec, Buil
 }
 fn data_port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
     instances: PortInstances,
@@ -352,7 +407,7 @@ fn data_port(
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: port_key(key)?,
-        label_key: iid(leak(format!("ports.{key}.label")))?,
+        title: title.into(),
         direction,
         kind: PortKind::Data,
         value_type: value_type.clone(),
@@ -807,30 +862,6 @@ fn add_shared_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     ] {
         out.push(("en-US", key, Text(en)));
         out.push(("zh-CN", key, Text(zh)));
-    }
-    for key in [
-        "covariance",
-        "configuration",
-        "response",
-        "predictors",
-        "weights",
-        "model",
-        "fitted",
-        "residuals",
-        "test_result",
-        "endogenous",
-        "instruments",
-        "entity",
-        "time",
-        "treatment",
-        "variables",
-        "report",
-        "prediction",
-        "series",
-    ] {
-        let label = leak(format!("ports.{key}.label"));
-        out.push(("en-US", label, Text(key)));
-        out.push(("zh-CN", label, Text(key)));
     }
     for key in [
         "scale",

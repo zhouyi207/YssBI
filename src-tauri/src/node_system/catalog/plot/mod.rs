@@ -145,20 +145,20 @@ pub(crate) fn build_provider_fragment() -> Result<ProviderFragment, BuiltinAssem
 }
 
 fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
-    let mut ports = vec![control_port(spec.id, "enter", PortDirection::Input)?];
+    let mut ports = vec![control_port("enter", "Enter", PortDirection::Input)?];
     match spec.inputs {
         PlotInputs::Pair => {
             ports.push(data_port(
-                spec.id,
                 "x",
+                "X",
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortInstances::Declared,
                 None,
             )?);
             ports.push(data_port(
-                spec.id,
                 "y",
+                "Y",
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortInstances::Declared,
@@ -166,16 +166,16 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             )?);
         }
         PlotInputs::NumericSeries => ports.push(data_port(
-            spec.id,
             "values",
+            "Values",
             PortDirection::Input,
             numeric_data_series_type(),
             PortInstances::Declared,
             None,
         )?),
         PlotInputs::CorrelationSeries => ports.push(data_port(
-            spec.id,
             "series",
+            "DataSeries",
             PortDirection::Input,
             numeric_data_series_type(),
             PortInstances::UserCreated { min: 2, max: None },
@@ -183,16 +183,16 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         )?),
         PlotInputs::Correlogram => {
             ports.push(data_port(
-                spec.id,
                 "values",
+                "DataSeries",
                 PortDirection::Input,
                 numeric_data_series_type(),
                 PortInstances::Declared,
                 None,
             )?);
             ports.push(data_port(
-                spec.id,
                 "maximum_lag",
+                "Lags",
                 PortDirection::Input,
                 concrete("core.int64")?,
                 PortInstances::Declared,
@@ -203,10 +203,10 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
             )?);
         }
     }
-    ports.push(control_port(spec.id, "then", PortDirection::Output)?);
+    ports.push(control_port("then", "Then", PortDirection::Output)?);
     ports.push(data_port(
-        spec.id,
         "result",
+        "Result",
         PortDirection::Output,
         concrete("core.string")?,
         PortInstances::Declared,
@@ -242,13 +242,13 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
 }
 
 fn control_port(
-    id: &'static str,
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
-        id,
         key,
+        title,
         direction,
         PortKind::Control,
         TypeExpr::Unknown,
@@ -258,16 +258,16 @@ fn control_port(
 }
 
 fn data_port(
-    id: &'static str,
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
     instances: PortInstances,
     default_value: Option<TypedValue>,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
-        id,
         key,
+        title,
         direction,
         PortKind::Data,
         value_type,
@@ -277,8 +277,8 @@ fn data_port(
 }
 
 fn port(
-    id: &'static str,
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     kind: PortKind,
     value_type: TypeExpr,
@@ -287,7 +287,7 @@ fn port(
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: port_key(key)?,
-        label_key: node_port_key(id, key)?,
+        title: title.into(),
         direction,
         kind,
         value_type,
@@ -370,32 +370,6 @@ fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &Plo
         ("en-US", aliases, Message::Aliases(spec.aliases)),
         ("zh-CN", aliases, Message::Aliases(spec.zh_aliases)),
     ]);
-    for (key, en, zh) in port_messages(spec.inputs) {
-        let label = port_label_text(spec.id, key);
-        out.push(("en-US", label, Message::Text(en)));
-        out.push(("zh-CN", label, Message::Text(zh)));
-    }
-    for (key, en, zh) in [
-        ("enter", "Enter", "进入"),
-        ("then", "Then", "然后"),
-        ("result", "Result", "结果"),
-    ] {
-        let label = port_label_text(spec.id, key);
-        out.push(("en-US", label, Message::Text(en)));
-        out.push(("zh-CN", label, Message::Text(zh)));
-    }
-}
-
-fn port_messages(inputs: PlotInputs) -> &'static [(&'static str, &'static str, &'static str)] {
-    match inputs {
-        PlotInputs::Pair => &[("x", "X", "X"), ("y", "Y", "Y")],
-        PlotInputs::NumericSeries => &[("values", "Values", "数值序列")],
-        PlotInputs::CorrelationSeries => &[("series", "Data Series", "数据序列")],
-        PlotInputs::Correlogram => &[
-            ("values", "Data Series", "数据序列"),
-            ("maximum_lag", "Maximum Lag", "最大滞后阶数"),
-        ],
-    }
 }
 
 fn concrete(value: &'static str) -> Result<TypeExpr, BuiltinAssemblyError> {
@@ -425,14 +399,8 @@ fn i18n_key(value: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
 fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
     i18n_key(key_text(id, suffix))
 }
-fn node_port_key(id: &'static str, port: &'static str) -> Result<I18nKey, BuiltinAssemblyError> {
-    sid(port_label_text(id, port), I18nKey::new)
-}
 fn key_text(id: &'static str, suffix: &'static str) -> &'static str {
     Box::leak(format!("nodes.{id}.{suffix}").into_boxed_str())
-}
-fn port_label_text(id: &'static str, port: &'static str) -> &'static str {
-    Box::leak(format!("nodes.{id}.ports.{port}.label").into_boxed_str())
 }
 
 #[cfg(test)]
@@ -457,8 +425,7 @@ mod tests {
                 protocol.catalog.aliases_key.as_ref(),
             ]
             .into_iter()
-            .flatten()
-            .chain(protocol.interface.ports.iter().map(|port| &port.label_key));
+            .flatten();
             for key in keys {
                 assert!(localized_keys.contains(&("en-US", key.as_str())));
                 assert!(localized_keys.contains(&("zh-CN", key.as_str())));

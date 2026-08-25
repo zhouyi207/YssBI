@@ -112,7 +112,10 @@ pub struct PortMemberGroupSpec {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PortSpec {
     pub key: PortKey,
-    pub label_key: I18nKey,
+    /// Stable, non-localized display title supplied by the node definition.
+    /// `key` remains the port identity; Markdown documentation mirrors this
+    /// title manually and is not parsed as a runtime source.
+    pub title: Box<str>,
     pub direction: PortDirection,
     pub kind: PortKind,
     pub value_type: TypeExpr,
@@ -509,7 +512,7 @@ mod tests {
         let value_type = TypeExpr::Concrete(TypeId::new("core.int64").unwrap());
         PortSpec {
             key: key("value"),
-            label_key: I18nKey::new("nodes.test.ports.value").unwrap(),
+            title: "Value".into(),
             direction: PortDirection::Input,
             kind: PortKind::Data,
             value_type: value_type.clone(),

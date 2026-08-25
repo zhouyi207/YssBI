@@ -115,38 +115,30 @@ fn register_series_operator(
     let numeric = numeric_value_type()?;
     let operands = if spec.operation == "add" {
         data_port_with_instances(
-            id,
             "operands",
+            "Operands",
             PortDirection::Input,
             numeric.clone(),
             PortInstances::UserCreated { min: 2, max: None },
         )?
     } else {
-        data_port(id, "left", PortDirection::Input, numeric.clone())?
+        data_port("left", "Left", PortDirection::Input, numeric.clone())?
     };
     let mut ports = vec![operands];
     if spec.operation != "add" {
-        ports.push(data_port(id, "right", PortDirection::Input, numeric)?);
+        ports.push(data_port("right", "Right", PortDirection::Input, numeric)?);
     }
     let result_type = if spec.operation == "divide" {
         data_series("core.float64")?
     } else {
         numeric_data_series_type()
     };
-    ports.push(data_port(id, "result", PortDirection::Output, result_type)?);
-    let labels = if spec.operation == "add" {
-        &[
-            ("operands", "Operands", "操作数"),
-            ("result", "Result", "结果"),
-        ][..]
-    } else {
-        &[
-            ("left", "Left", "左值"),
-            ("right", "Right", "右值"),
-            ("result", "Result", "结果"),
-        ][..]
-    };
-    add_port_messages(fragment, id, labels)?;
+    ports.push(data_port(
+        "result",
+        "Result",
+        PortDirection::Output,
+        result_type,
+    )?);
     fragment.nodes.push(leaf(
         protocol(id, "numeric", ports, vec![], vec![], vec![], pure())?,
         id,
@@ -170,11 +162,6 @@ fn register_unary(
         aliases: spec.aliases,
         zh_aliases: spec.zh_aliases,
     })?;
-    add_port_messages(
-        fragment,
-        id,
-        &[("input", "Input", "输入"), ("result", "Result", "结果")],
-    )?;
     let numeric = numeric_value_type()?;
     let output = TypeExpr::Union(vec![
         concrete("core.float64")?,
@@ -185,8 +172,8 @@ fn register_unary(
             id,
             "numeric",
             vec![
-                data_port(id, "input", PortDirection::Input, numeric)?,
-                data_port(id, "result", PortDirection::Output, output)?,
+                data_port("input", "Input", PortDirection::Input, numeric)?,
+                data_port("result", "Result", PortDirection::Output, output)?,
             ],
             vec![],
             vec![],

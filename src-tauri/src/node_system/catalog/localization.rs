@@ -451,11 +451,9 @@ impl BuiltinCatalog {
             .description_key
             .as_ref()
             .map(|key| self.text(locale, key));
-        let documentation = protocol
-            .catalog
-            .documentation_key
-            .as_ref()
-            .map(|key| self.text(locale, key));
+        let documentation =
+            crate::node_system::catalog::documentation::documentation(&protocol.type_id, locale)
+                .map(Into::into);
         let aliases = match protocol.catalog.aliases_key.as_ref() {
             Some(key) => self.aliases(locale, key),
             None => Vec::new(),
@@ -477,7 +475,7 @@ impl BuiltinCatalog {
             technical_terms,
             backend_search_text,
             resource_names: Vec::new(),
-            ports: self.localized_ports(protocol, locale),
+            ports: Self::project_ports(protocol),
             parameters: self.localized_parameters(protocol, locale),
             resource_path: None,
             resource_revision: None,
@@ -496,11 +494,9 @@ impl BuiltinCatalog {
             .description_key
             .as_ref()
             .map(|key| self.text(locale, key));
-        let documentation = protocol
-            .catalog
-            .documentation_key
-            .as_ref()
-            .map(|key| self.text(locale, key));
+        let documentation =
+            crate::node_system::catalog::documentation::documentation(&protocol.type_id, locale)
+                .map(Into::into);
         let aliases = match protocol.catalog.aliases_key.as_ref() {
             Some(key) => self.aliases(locale, key),
             None => Vec::new(),
@@ -523,7 +519,7 @@ impl BuiltinCatalog {
             technical_terms,
             backend_search_text,
             resource_names,
-            ports: self.localized_ports(protocol, locale),
+            ports: Self::project_ports(protocol),
             parameters: self.localized_parameters(protocol, locale),
             resource_path: Some(entry.resource_path.clone()),
             resource_revision: Some(entry.resource_revision),
@@ -536,10 +532,8 @@ impl BuiltinCatalog {
         }
     }
 
-    fn localized_ports(
-        &self,
+    fn project_ports(
         protocol: &crate::node_system::protocol::NodeProtocol,
-        locale: &str,
     ) -> Vec<LocalizedPortDto> {
         protocol
             .interface
@@ -547,7 +541,7 @@ impl BuiltinCatalog {
             .iter()
             .map(|port| LocalizedPortDto {
                 key: port.key.as_str().into(),
-                label: self.text(locale, &port.label_key),
+                label: port.title.clone(),
                 direction: match port.direction {
                     crate::node_system::protocol::PortDirection::Input => "input".into(),
                     crate::node_system::protocol::PortDirection::Output => "output".into(),

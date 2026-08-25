@@ -887,8 +887,6 @@ fn rename_dataframe_freezes_exact_protocol_and_localization() {
                     "nodes.yssbi.dataframe.rename.documentation",
                     "Renames the column identified by 'from' to 'to'.",
                 ),
-                ("ports.source.label", "Source"),
-                ("ports.result.label", "Result"),
                 ("parameters.from.title", "Source column"),
                 ("parameters.from.description", "Column name to rename."),
                 ("parameters.to.title", "Destination column"),
@@ -907,8 +905,6 @@ fn rename_dataframe_freezes_exact_protocol_and_localization() {
                     "nodes.yssbi.dataframe.rename.documentation",
                     "将“源列”指定的列重命名为“目标列”。",
                 ),
-                ("ports.source.label", "源数据框"),
-                ("ports.result.label", "结果"),
                 ("parameters.from.title", "源列"),
                 ("parameters.from.description", "要重命名的列名。"),
                 ("parameters.to.title", "目标列"),
@@ -987,11 +983,6 @@ fn project_and_filter_rows_are_parameterized_catalog_nodes() {
         assert_eq!(item.title.as_ref(), title);
         assert!(
             item.description
-                .as_deref()
-                .is_some_and(|value| !value.is_empty())
-        );
-        assert!(
-            item.documentation
                 .as_deref()
                 .is_some_and(|value| !value.is_empty())
         );

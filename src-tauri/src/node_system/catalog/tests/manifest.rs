@@ -453,7 +453,7 @@ fn resource_catalog_projects_localized_docs_ports_parameters_and_opaque_identity
     );
     assert!(zh_resource.ports.iter().any(|port| {
         port.key.as_ref() == "enter"
-            && port.label.as_ref() == "进入"
+            && port.label.as_ref() == "Enter"
             && port.direction.as_ref() == "input"
             && port.kind.as_ref() == "control"
     }));

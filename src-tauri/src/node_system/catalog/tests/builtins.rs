@@ -270,6 +270,30 @@ fn eligible_static_and_resource_bound_catalog_items_are_localized() {
         }
     )));
 }
+
+#[test]
+fn static_catalog_documentation_uses_localized_markdown_resources() {
+    let builtin = build_builtin_node_system().unwrap();
+    let en = builtin.catalog.localize(&builtin.registry, "en-US");
+    let zh = builtin.catalog.localize(&builtin.registry, "zh-CN");
+    let en_add = item(&en, "yssbi.numeric.add.int64");
+    let zh_add = item(&zh, "yssbi.numeric.add.int64");
+
+    assert!(
+        en_add
+            .documentation
+            .as_deref()
+            .is_some_and(|documentation| documentation.trim_start().starts_with("# Add (+)"))
+    );
+    assert!(
+        zh_add
+            .documentation
+            .as_deref()
+            .is_some_and(|documentation| documentation.trim_start().starts_with("# Add (+)"))
+    );
+    assert_ne!(en_add.documentation, zh_add.documentation);
+}
+
 #[test]
 fn builtin_factory_freezes_function_interface_nodes() {
     let builtin = build_builtin_node_system().unwrap();

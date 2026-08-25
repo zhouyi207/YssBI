@@ -20,18 +20,9 @@ fn register_print(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssembly
         aliases: &["print", "output", "debug output", "message"],
         zh_aliases: &["打印", "输出", "调试输出", "消息"],
     })?;
-    add_port_messages(
-        fragment,
-        ID,
-        &[
-            ("enter", "Enter", "进入"),
-            ("message", "Message", "消息"),
-            ("then", "Then", "然后"),
-        ],
-    )?;
     let mut message = data_port(
-        ID,
         "message",
+        "Message",
         PortDirection::Input,
         concrete("core.string")?,
     )?;
@@ -47,9 +38,19 @@ fn register_print(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssembly
             ID,
             "debug",
             vec![
-                control_port(ID, "enter", PortDirection::Input, PortInstances::Declared)?,
+                control_port(
+                    "enter",
+                    "Enter",
+                    PortDirection::Input,
+                    PortInstances::Declared,
+                )?,
                 message,
-                control_port(ID, "then", PortDirection::Output, PortInstances::Declared)?,
+                control_port(
+                    "then",
+                    "Then",
+                    PortDirection::Output,
+                    PortInstances::Declared,
+                )?,
             ],
             vec![],
             vec![],
@@ -74,15 +75,6 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
         aliases: &["view", "inspect", "preview", "data inspector"],
         zh_aliases: &["查看", "检查", "预览", "数据查看器"],
     })?;
-    add_port_messages(
-        fragment,
-        ID,
-        &[
-            ("enter", "Enter", "进入"),
-            ("data", "Data", "数据"),
-            ("then", "Then", "然后"),
-        ],
-    )?;
     let value_type = TypeParameterId::new("value").map_err(|source| {
         BuiltinAssemblyError::InvalidSemanticId {
             value: "value".into(),
@@ -94,14 +86,24 @@ fn register_view(fragment: &mut ProviderFragment) -> Result<(), BuiltinAssemblyE
             ID,
             "debug",
             vec![
-                control_port(ID, "enter", PortDirection::Input, PortInstances::Declared)?,
+                control_port(
+                    "enter",
+                    "Enter",
+                    PortDirection::Input,
+                    PortInstances::Declared,
+                )?,
                 data_port(
-                    ID,
                     "data",
+                    "Data",
                     PortDirection::Input,
                     TypeExpr::Generic(value_type.clone()),
                 )?,
-                control_port(ID, "then", PortDirection::Output, PortInstances::Declared)?,
+                control_port(
+                    "then",
+                    "Then",
+                    PortDirection::Output,
+                    PortInstances::Declared,
+                )?,
             ],
             vec![value_type],
             vec![],

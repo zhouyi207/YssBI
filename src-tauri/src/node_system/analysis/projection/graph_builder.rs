@@ -222,9 +222,8 @@ impl EditorGraphProjectionDto {
                                     }
                                 });
                                 let instance_label = port.instance_label.clone();
-                                let label = instance_label.clone().unwrap_or_else(|| {
-                                    localization.text(&spec.label_key, &DiagnosticArguments::new())
-                                });
+                                let label =
+                                    instance_label.clone().unwrap_or_else(|| spec.title.clone());
                                 Some(ResolvedPortDto {
                                     address: project_address(&port.address),
                                     template_key: port.template.as_str().into(),

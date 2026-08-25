@@ -58,7 +58,7 @@ fn subgraph_registry() -> NodeRegistry {
         .ports(vec![
             PortSpec {
                 key: PortKey::new("output").unwrap(),
-                label_key: I18nKey::new("nodes.test.editor_mutation.output").unwrap(),
+                title: "Output".into(),
                 direction: PortDirection::Output,
                 kind: PortKind::Data,
                 value_type: value_type.clone(),
@@ -75,7 +75,7 @@ fn subgraph_registry() -> NodeRegistry {
             },
             PortSpec {
                 key: PortKey::new("inputs").unwrap(),
-                label_key: I18nKey::new("nodes.test.editor_mutation.inputs").unwrap(),
+                title: "Inputs".into(),
                 direction: PortDirection::Input,
                 kind: PortKind::Data,
                 value_type,

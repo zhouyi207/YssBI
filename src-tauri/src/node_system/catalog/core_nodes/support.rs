@@ -171,24 +171,24 @@ pub(crate) fn protocol(
 }
 
 pub(crate) fn data_port(
-    node_id: &'static str,
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    data_port_with_instances(node_id, key, direction, value_type, PortInstances::Declared)
+    data_port_with_instances(key, title, direction, value_type, PortInstances::Declared)
 }
 
 pub(crate) fn data_port_with_instances(
-    node_id: &'static str,
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
     instances: PortInstances,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: semantic(key, PortKey::new)?,
-        label_key: port_key(node_id, key)?,
+        title: title.into(),
         direction,
         kind: PortKind::Data,
         value_type,
@@ -208,14 +208,14 @@ pub(crate) fn data_port_with_instances(
 }
 
 pub(crate) fn control_port(
-    node_id: &'static str,
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     instances: PortInstances,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: semantic(key, PortKey::new)?,
-        label_key: port_key(node_id, key)?,
+        title: title.into(),
         direction,
         kind: PortKind::Control,
         value_type: TypeExpr::Unknown,
@@ -284,32 +284,12 @@ pub(crate) fn effectful() -> ExecutionSemantics {
     }
 }
 
-pub(crate) fn port_key(
-    node_id: &'static str,
-    key: &'static str,
-) -> Result<I18nKey, BuiltinAssemblyError> {
-    i18n(leak(format!("nodes.{node_id}.ports.{key}.label")))
-}
-
 pub(crate) fn parameter_key(
     node_id: &'static str,
     key: &'static str,
     suffix: &'static str,
 ) -> Result<I18nKey, BuiltinAssemblyError> {
     i18n(leak(format!("nodes.{node_id}.parameters.{key}.{suffix}")))
-}
-
-pub(crate) fn add_port_messages(
-    fragment: &mut ProviderFragment,
-    node_id: &'static str,
-    entries: &[(&'static str, &'static str, &'static str)],
-) -> Result<(), BuiltinAssemblyError> {
-    for (key, en, zh) in entries {
-        let message_key = port_key(node_id, key)?;
-        fragment.text("en-US", message_key.clone(), en);
-        fragment.text("zh-CN", message_key, zh);
-    }
-    Ok(())
 }
 
 pub(crate) fn add_parameter_messages(

@@ -34,7 +34,7 @@
         "nodeTypeId": "yssbi.numeric.add.int64"
       },
       "description": "Built-in deterministic node.",
-      "documentation": "This node is part of the trusted built-in provider.",
+      "documentation": "# Add (+)\n\nElement-wise addition with scalar broadcast:\n\n$$\n\\text{Result} = a + b + \\cdots\n$$\n\nWhen any operand is a `DataSeries`, all operands are promoted to `DataSeries<Float64>`; scalars broadcast to the series length. Two scalars yield a `Float64` scalar.\n\n## Inputs\n\n| Pin | Description |\n|-----|-------------|\n| **Operands** (≥2, optional) | `Int64`, `Float64`, or numeric `DataSeries`; unnamed repeatable pins |\n\n## Outputs\n\n| Pin | Description |\n|-----|-------------|\n| **Result** | Sum as `Float64` or `DataSeries<Float64>` |\n\n## Usage\n\nChain two or more values or series into the operand pins. Mix a constant scalar with a series to add an offset column-wise. Result type follows the most general input (series wins over scalar).\n",
       "iconId": "builtin.numeric",
       "nodeTypeId": "yssbi.numeric.add.int64",
       "parameters": [],
@@ -89,7 +89,7 @@
         "resourceRevision": 23
       },
       "description": "Integrates project resources with graph execution.",
-      "documentation": "Resource identity is stored as a stable node parameter and resolved from the compilation snapshot.",
+      "documentation": "# Call Function\n\nInvokes a **function subgraph** bound to this node. Execution enters at **In** and continues from **Out** after the subgraph finishes.\n\n## Inputs\n\n| Pin | Description |\n|-----|-------------|\n| **In** (exec) | Trigger to run the linked function graph |\n\n## Outputs\n\n| Pin | Description |\n|-----|-------------|\n| **Out** (exec) | Fires when the function subgraph completes |\n\n## Usage\n\nSelect the target function in the node inspector, wire **In** from upstream exec flow, and connect **Out** to the next step. Function inputs/outputs are exposed as dynamic pins on this node.\n",
       "iconId": "builtin.project",
       "nodeTypeId": "yssbi.project.function.call",
       "parameters": [
@@ -143,6 +143,6 @@
   ],
   "locale": "en-US",
   "projectInstanceId": "00000000-0000-0000-0000-000000000017",
-  "registryFingerprint": "c60af510a508bb69775410ade5fcc5bf5da8662176def016086210afbe9d0e94",
+  "registryFingerprint": "6f6f86529229414b43869164a8e162d83b33b8503755b00938dc40a62a03c86c",
   "resourcePublicationRevision": 23
 }

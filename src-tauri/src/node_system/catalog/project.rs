@@ -88,7 +88,7 @@ pub(super) fn register(
 fn event_begin_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.event.begin",
-        vec![control_port("then", PortDirection::Output)?],
+        vec![control_port("then", "Then", PortDirection::Output)?],
         vec![],
         vec![],
         NodeScope::Event,
@@ -101,9 +101,10 @@ fn function_entry_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.function.entry",
         vec![
-            control_port("then", PortDirection::Output)?,
+            control_port("then", "Then", PortDirection::Output)?,
             derived_data_port(
                 "parameters",
+                "Parameters",
                 PortDirection::Output,
                 FUNCTION_ENTRY_PARAMETERS_RESOLVER,
             )?,
@@ -120,9 +121,10 @@ fn function_return_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.function.return",
         vec![
-            control_port("enter", PortDirection::Input)?,
+            control_port("enter", "Enter", PortDirection::Input)?,
             derived_data_port(
                 "results",
+                "Results",
                 PortDirection::Input,
                 FUNCTION_RETURN_RESULTS_RESOLVER,
             )?,
@@ -139,18 +141,20 @@ fn function_call_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.function.call",
         vec![
-            control_port("enter", PortDirection::Input)?,
+            control_port("enter", "Enter", PortDirection::Input)?,
             derived_data_port(
                 "arguments",
+                "Arguments",
                 PortDirection::Input,
                 FUNCTION_CALL_ARGUMENTS_RESOLVER,
             )?,
             derived_data_port(
                 "results",
+                "Results",
                 PortDirection::Output,
                 FUNCTION_CALL_RESULTS_RESOLVER,
             )?,
-            control_port("then", PortDirection::Output)?,
+            control_port("then", "Then", PortDirection::Output)?,
         ],
         vec![],
         vec![resource_parameter("target")?],
@@ -166,6 +170,7 @@ fn variable_get_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
         "yssbi.project.variable.get",
         vec![data_port(
             "value",
+            "Value",
             PortDirection::Output,
             TypeExpr::Generic(generic.clone()),
             PortInstances::Declared,
@@ -183,14 +188,15 @@ fn variable_set_protocol() -> Result<NodeProtocol, BuiltinAssemblyError> {
     protocol(
         "yssbi.project.variable.set",
         vec![
-            control_port("enter", PortDirection::Input)?,
+            control_port("enter", "Enter", PortDirection::Input)?,
             data_port(
                 "value",
+                "Value",
                 PortDirection::Input,
                 TypeExpr::Generic(generic.clone()),
                 PortInstances::Declared,
             )?,
-            control_port("then", PortDirection::Output)?,
+            control_port("then", "Then", PortDirection::Output)?,
         ],
         vec![generic],
         vec![resource_parameter("variable")?],
@@ -244,10 +250,12 @@ fn protocol(
 
 fn control_port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     port(
         key,
+        title,
         direction,
         PortKind::Control,
         TypeExpr::Unknown,
@@ -257,11 +265,13 @@ fn control_port(
 
 fn derived_data_port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     resolver: &'static str,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     data_port(
         key,
+        title,
         direction,
         TypeExpr::Unknown,
         PortInstances::Derived {
@@ -272,15 +282,17 @@ fn derived_data_port(
 
 fn data_port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     value_type: TypeExpr,
     instances: PortInstances,
 ) -> Result<PortSpec, BuiltinAssemblyError> {
-    port(key, direction, PortKind::Data, value_type, instances)
+    port(key, title, direction, PortKind::Data, value_type, instances)
 }
 
 fn port(
     key: &'static str,
+    title: &'static str,
     direction: PortDirection,
     kind: PortKind,
     value_type: TypeExpr,
@@ -288,7 +300,7 @@ fn port(
 ) -> Result<PortSpec, BuiltinAssemblyError> {
     Ok(PortSpec {
         key: sid(key, PortKey::new)?,
-        label_key: iid(Box::leak(format!("ports.{key}.label").into_boxed_str()))?,
+        title: title.into(),
         direction,
         kind,
         value_type,
@@ -365,9 +377,6 @@ fn node_key(id: &'static str, suffix: &'static str) -> Result<I18nKey, BuiltinAs
 
 fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>) {
     for (key, en, zh) in [
-        ("ports.parameters.label", "Parameters", "参数"),
-        ("ports.arguments.label", "Arguments", "实参"),
-        ("ports.results.label", "Results", "结果"),
         ("parameters.function.title", "Function", "函数"),
         (
             "parameters.function.description",
