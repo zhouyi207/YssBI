@@ -1425,3 +1425,6 @@ Execution 不知道具体 UI
 - [ ] 将 persisted value canonical-owner architecture guard 改为 typed required/allowed exact-origin 策略，保持五个 contract symbol 的单一 data-contract owner。
 - [ ] 允许独立 SCI `CategoricalRole` 仅来自 `src-tauri/src/sci/api/computation.rs`，同时拒绝任意 SCI owner 与 SCI 对 persisted role 的 re-export/alias。
 - [ ] 增加 focused regression，覆盖批准的双 owner 集合与未批准来源拒绝路径，并运行 Rust architecture、格式、编译及 diff 校验。
+- [ ] 为 canonical-owner production guard 增加基于 `syn::Item::Type` 的窄扫描，拒绝 Graph 对六类 persisted data-contract symbol 的 type alias。
+- [ ] 拒绝 SCI 对 persisted `CategoricalRole` 的 type alias，同时保留 `sci/api/computation.rs` 独立声明作为唯一批准 SCI owner。
+- [ ] 增加真实 Rust source fixture 回归，覆盖 Graph 六类 alias、SCI alias、独立 SCI enum 与 test-only alias 排除，并执行 focused RED/GREEN 验证。

@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
+use syn::{Item, Type};
 
 use super::cargo_targets::rust_workspace_model_from_metadata;
 use super::debt::{
@@ -447,6 +448,132 @@ struct CanonicalOwnerExpectation {
     allowed_origins: &'static [&'static str],
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct PersistedContractTypeAlias {
+    source_file: String,
+    alias: String,
+    target: String,
+}
+
+fn forbidden_persisted_contract_type_aliases(
+    repository_root: &Path,
+    modules: &[RustModule],
+) -> Result<Vec<PersistedContractTypeAlias>, ArchitectureAuditError> {
+    let source_files = modules
+        .iter()
+        .map(|module| module.repository_relative_source_file.as_str())
+        .filter(|source_file| forbidden_alias_symbols(source_file).is_some())
+        .collect::<BTreeSet<_>>();
+    let mut aliases = Vec::new();
+
+    for source_file in source_files {
+        let path = repository_root.join(source_file);
+        let source =
+            std::fs::read_to_string(&path).map_err(|source| ArchitectureAuditError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        let syntax =
+            syn::parse_file(&source).map_err(|source| ArchitectureAuditError::SourceParse {
+                path: path.clone(),
+                source,
+            })?;
+        collect_forbidden_type_aliases(source_file, &syntax.items, &mut aliases);
+    }
+
+    aliases.sort();
+    Ok(aliases)
+}
+
+fn collect_forbidden_type_aliases(
+    source_file: &str,
+    items: &[Item],
+    aliases: &mut Vec<PersistedContractTypeAlias>,
+) {
+    let Some(forbidden_symbols) = forbidden_alias_symbols(source_file) else {
+        return;
+    };
+
+    for item in items {
+        match item {
+            Item::Type(item_type)
+                if !crate::test_support::source_audit::is_test_only(&item_type.attrs) =>
+            {
+                let Some((symbol, target)) = canonical_persisted_contract_path(&item_type.ty)
+                else {
+                    continue;
+                };
+                if forbidden_symbols.contains(&symbol.as_str()) {
+                    aliases.push(PersistedContractTypeAlias {
+                        source_file: source_file.to_owned(),
+                        alias: item_type.ident.to_string(),
+                        target,
+                    });
+                }
+            }
+            Item::Mod(item_mod)
+                if !crate::test_support::source_audit::is_test_only(&item_mod.attrs) =>
+            {
+                if let Some((_, nested_items)) = &item_mod.content {
+                    collect_forbidden_type_aliases(source_file, nested_items, aliases);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn forbidden_alias_symbols(source_file: &str) -> Option<&'static [&'static str]> {
+    const PERSISTED_SYMBOLS: &[&str] = &[
+        "CategoricalRole",
+        "DataSeriesValue",
+        "DataType",
+        "DataValue",
+        "DummyInfo",
+        "TimeSeriesState",
+    ];
+    const SCI_SYMBOLS: &[&str] = &["CategoricalRole"];
+
+    if source_file.starts_with("src-tauri/src/graph/") {
+        Some(PERSISTED_SYMBOLS)
+    } else if source_file.starts_with("src-tauri/src/sci/") {
+        Some(SCI_SYMBOLS)
+    } else {
+        None
+    }
+}
+
+fn canonical_persisted_contract_path(ty: &Type) -> Option<(String, String)> {
+    let type_path = match ty {
+        Type::Group(group) => return canonical_persisted_contract_path(&group.elem),
+        Type::Paren(paren) => return canonical_persisted_contract_path(&paren.elem),
+        Type::Path(type_path) if type_path.qself.is_none() => type_path,
+        _ => return None,
+    };
+    let segments = type_path
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>();
+    let [crate_root, contract, symbol] = segments.as_slice() else {
+        return None;
+    };
+    if type_path.path.leading_colon.is_some()
+        || crate_root != "crate"
+        || contract != "data_contract"
+        || type_path
+            .path
+            .segments
+            .iter()
+            .any(|segment| !matches!(segment.arguments, syn::PathArguments::None))
+    {
+        return None;
+    }
+
+    Some((symbol.clone(), segments.join("::")))
+}
+
 fn canonical_owner_origins_are_valid(
     expectation: &CanonicalOwnerExpectation,
     actual_origins: &BTreeSet<&str>,
@@ -522,6 +649,13 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
         .expect("the real Cargo workspace must be discoverable");
     let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
         .expect("the production module graph must be discoverable");
+    let forbidden_contract_aliases =
+        forbidden_persisted_contract_type_aliases(&workspace.repository_root, &modules)
+            .expect("production persisted contract aliases must be discoverable");
+    assert!(
+        forbidden_contract_aliases.is_empty(),
+        "Graph must not alias persisted data-contract symbols, and SCI must not alias persisted CategoricalRole: {forbidden_contract_aliases:#?}"
+    );
     let classification = classify_rust_sources(&workspace.roots, &modules)
         .expect("every production source must classify exactly once");
 
@@ -672,6 +806,106 @@ fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_
         &expectation,
         &BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
     ));
+}
+
+#[test]
+fn persisted_contract_type_aliases_are_rejected_from_real_graph_and_sci_sources() {
+    const FIXTURE_PREFIX: &str = "architecture-canonical-owner-alias-";
+
+    struct SourceFixture {
+        root: PathBuf,
+    }
+
+    impl SourceFixture {
+        fn new() -> Self {
+            let root = repository_root()
+                .join("target")
+                .join(format!("{FIXTURE_PREFIX}{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).expect("alias fixture root must be created");
+            Self { root }
+        }
+
+        fn write(&self, relative: &str, source: &str) {
+            let path = self.root.join(relative);
+            assert!(path.starts_with(&self.root));
+            std::fs::create_dir_all(path.parent().expect("fixture source must have a parent"))
+                .expect("alias fixture source parent must be created");
+            std::fs::write(path, source).expect("alias fixture source must be written");
+        }
+    }
+
+    impl Drop for SourceFixture {
+        fn drop(&mut self) {
+            let safe_name = self
+                .root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(FIXTURE_PREFIX));
+            if safe_name {
+                let _ = std::fs::remove_dir_all(&self.root);
+            }
+        }
+    }
+
+    let fixture = SourceFixture::new();
+    fixture.write("src-tauri/src/lib.rs", "pub mod graph;\npub mod sci;\n");
+    fixture.write("src-tauri/src/graph/mod.rs", "pub mod value;\n");
+    fixture.write("src-tauri/src/graph/value/mod.rs", "mod aliases;\n");
+    fixture.write(
+        "src-tauri/src/graph/value/aliases.rs",
+        r#"
+pub type PersistedDataType = crate::data_contract::DataType;
+pub type PersistedDataValue = crate::data_contract::DataValue;
+pub type PersistedDataSeriesValue = crate::data_contract::DataSeriesValue;
+pub type PersistedCategoricalRole = crate::data_contract::CategoricalRole;
+pub type PersistedTimeSeriesState = crate::data_contract::TimeSeriesState;
+pub type PersistedDummyInfo = crate::data_contract::DummyInfo;
+
+#[cfg(test)]
+pub type TestOnlyAlias = crate::data_contract::DataType;
+"#,
+    );
+    fixture.write("src-tauri/src/sci/mod.rs", "pub mod api;\n");
+    fixture.write("src-tauri/src/sci/api/mod.rs", "pub mod computation;\n");
+    fixture.write(
+        "src-tauri/src/sci/api/computation.rs",
+        r#"
+pub enum CategoricalRole {
+    Individual,
+}
+
+pub type PersistedCategoricalRole = crate::data_contract::CategoricalRole;
+"#,
+    );
+    let modules = collect_production_modules(
+        &fixture.root,
+        &[ProductionRoot {
+            package_id: "fixture-package".to_owned(),
+            package: "fixture".to_owned(),
+            target: "fixture_lib".to_owned(),
+            kind: ProductionRootKind::Library,
+            source_path: fixture.root.join("src-tauri/src/lib.rs"),
+        }],
+    )
+    .expect("real alias fixture modules must be discovered");
+    let aliases = forbidden_persisted_contract_type_aliases(&fixture.root, &modules)
+        .expect("real alias fixture must be scanned");
+    let aliases = aliases
+        .iter()
+        .map(|alias| format!("{}|{}|{}", alias.source_file, alias.alias, alias.target))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        aliases,
+        vec![
+            "src-tauri/src/graph/value/aliases.rs|PersistedCategoricalRole|crate::data_contract::CategoricalRole",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDataSeriesValue|crate::data_contract::DataSeriesValue",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDataType|crate::data_contract::DataType",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDataValue|crate::data_contract::DataValue",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDummyInfo|crate::data_contract::DummyInfo",
+            "src-tauri/src/graph/value/aliases.rs|PersistedTimeSeriesState|crate::data_contract::TimeSeriesState",
+            "src-tauri/src/sci/api/computation.rs|PersistedCategoricalRole|crate::data_contract::CategoricalRole",
+        ]
+    );
 }
 
 #[test]
