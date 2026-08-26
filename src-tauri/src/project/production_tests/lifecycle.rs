@@ -7,17 +7,15 @@ fn destination_appearance_rejects_graph_move_without_authoritative_effects() {
     let to = GraphResourcePath::new("events/Destination.yssbi-event").unwrap();
     let source = GraphResourceDocument::new("Source", GraphDocumentKind::Event);
     state.insert_graph(from.clone(), source.clone()).unwrap();
-    let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        from.as_str().into(),
-    ));
-    let destination_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        to.as_str().into(),
-    ));
+    let source_key = ResourceKey::Graph(from.clone());
+    let destination_key = ResourceKey::Graph(to.clone());
     let context = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
         operation_id: OperationId::new(),
         affected_resources: vec![source_key.clone()],
-        expected_revisions: [(source_key, GraphRevision::INITIAL)].into_iter().collect(),
+        expected_revisions: [(source_key, ResourceRevision::INITIAL)]
+            .into_iter()
+            .collect(),
         expected_absent_resources: [destination_key].into_iter().collect(),
         recovery_marker: Some(state.project_recovery_marker()),
     };
@@ -280,9 +278,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
             &event,
             "en-US",
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    event.as_str().into(),
-                )),
+                ResourceKey::Graph(event.clone()),
                 GraphRevision::INITIAL,
                 OperationId::new(),
                 create_node_mutation(),
@@ -318,9 +314,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
             &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    event.as_str().into(),
-                )),
+                ResourceKey::Graph(event.clone()),
                 GraphRevision::INITIAL,
                 OperationId::new(),
                 HistoryMutation {},
@@ -331,9 +325,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
             &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    event.as_str().into(),
-                )),
+                ResourceKey::Graph(event.clone()),
                 GraphRevision::INITIAL,
                 OperationId::new(),
                 HistoryMutation {},
@@ -383,7 +375,7 @@ fn recovery_required_blocks_authoritative_entry_points_until_activation() {
             .with_database_writer(
                 &crate::project::ProjectInstanceId::from_existing("blocked".into()),
                 "missing",
-                GraphRevision::INITIAL,
+                ResourceRevision::INITIAL,
                 OperationId::new(),
                 |_, _| Ok(()),
             )
@@ -488,7 +480,7 @@ fn rename_rejects_concurrent_referenced_graph_and_variable_changes() {
         drop(data);
         concurrent_state.variable_revisions.write().unwrap().insert(
             variable_id,
-            crate::project::project_state::VariableRevisionEntry::present(GraphRevision::new(1)),
+            crate::project::project_state::VariableRevisionEntry::present(ResourceRevision::new(1)),
         );
     }));
     let project_instance_id = state.project_instance_id();
@@ -556,9 +548,7 @@ fn stale_transaction_context_has_zero_authoritative_effects() {
 fn canonical_graph_insert_lifecycle_publication_preserves_fresh_revision() {
     let (state, root) = state_with_project_path("graph-insert-lifecycle-wire-revision");
     let path = GraphResourcePath::new("events/Inserted.yssbi-event").unwrap();
-    let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        path.as_str().into(),
-    ));
+    let key = ResourceKey::Graph(path.clone());
     let operation_id = OperationId::from_uuid(uuid::Uuid::from_u128(0x803));
     let context = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
@@ -600,14 +590,12 @@ fn canonical_graph_unload_lifecycle_preserves_authoritative_revision() {
     let mut resource = GraphResourceDocument::new("Unloaded", GraphDocumentKind::Event);
     resource.document.revision = GraphRevision::new(4);
     state.insert_graph(path.clone(), resource).unwrap();
-    let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        path.as_str().into(),
-    ));
+    let key = ResourceKey::Graph(path.clone());
     let context = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
         operation_id: OperationId::new(),
         affected_resources: vec![key.clone()],
-        expected_revisions: [(key, GraphRevision::new(4))].into_iter().collect(),
+        expected_revisions: [(key, ResourceRevision::new(4))].into_iter().collect(),
         expected_absent_resources: Default::default(),
         recovery_marker: Some(state.project_recovery_marker()),
     };
@@ -716,9 +704,7 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
         .apply_graph_patch(
             &caller,
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    caller.as_str().into(),
-                )),
+                ResourceKey::Graph(caller.clone()),
                 GraphRevision::INITIAL,
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode { node: call }]),
@@ -762,18 +748,12 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
         .collect::<Vec<_>>();
     assert_eq!(graph_deltas.len(), 2);
     assert!(graph_deltas.iter().any(|delta| {
-        delta.resource
-            == ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                renamed.path.as_str().into(),
-            ))
+        delta.resource == ResourceKey::Graph(renamed.path.clone())
             && delta.from_revision == moved_before_rename
             && delta.to_revision == moved_before_rename.next()
     }));
     assert!(graph_deltas.iter().any(|delta| {
-        delta.resource
-            == ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                caller.as_str().into(),
-            ))
+        delta.resource == ResourceKey::Graph(caller.clone())
             && delta.from_revision == caller_before_rename
             && delta.to_revision == caller_before_rename.next()
     }));
@@ -867,9 +847,7 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
         .apply_graph_patch(
             &caller,
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    caller.as_str().into(),
-                )),
+                ResourceKey::Graph(caller.clone()),
                 GraphRevision::INITIAL,
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
@@ -901,7 +879,7 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
         .publication
         .deltas
         .iter()
-        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.0.as_ref() == target.as_str()))
+        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.as_str() == target.as_str()))
         .unwrap()
         .to_revision;
     let undo = state
@@ -909,9 +887,7 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
             &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    target.as_str().into(),
-                )),
+                ResourceKey::Graph(target.clone()),
                 target_revision,
                 OperationId::new(),
                 HistoryMutation {},
@@ -945,7 +921,7 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
     let source_revision = undo
         .deltas
         .iter()
-        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.0.as_ref() == source.as_str()))
+        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.as_str() == source.as_str()))
         .unwrap()
         .to_revision;
     let redo = state
@@ -953,9 +929,7 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
             &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    source.as_str().into(),
-                )),
+                ResourceKey::Graph(source.clone()),
                 source_revision,
                 OperationId::new(),
                 HistoryMutation {},
@@ -994,9 +968,7 @@ fn concurrent_history_append_during_rename_undo_rolls_back_disk_without_moving_h
             &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    target.as_str().into(),
-                )),
+                ResourceKey::Graph(target.clone()),
                 target_revision,
                 OperationId::new(),
                 HistoryMutation {},
@@ -1033,9 +1005,7 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
         .apply_graph_patch(
             &caller,
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    caller.as_str().into(),
-                )),
+                ResourceKey::Graph(caller.clone()),
                 GraphRevision::INITIAL,
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
@@ -1061,7 +1031,7 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
         .publication
         .deltas
         .iter()
-        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.0.as_ref() == caller.as_str()))
+        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.as_str() == caller.as_str()))
         .expect("unloaded caller delta");
     assert_eq!(caller_delta.from_revision, GraphRevision::new(1));
     assert_eq!(caller_delta.to_revision, GraphRevision::new(2));
@@ -1079,9 +1049,7 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
             &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    target.as_str().into(),
-                )),
+                ResourceKey::Graph(target.clone()),
                 renamed.publication.deltas[0].to_revision,
                 OperationId::new(),
                 HistoryMutation {},
@@ -1092,7 +1060,7 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
     let undo_caller = undo
         .deltas
         .iter()
-        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.0.as_ref() == caller.as_str()))
+        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.as_str() == caller.as_str()))
         .expect("unloaded caller undo delta");
     assert_eq!(undo_caller.from_revision, GraphRevision::new(2));
     assert_eq!(undo_caller.to_revision, GraphRevision::new(3));
@@ -1109,9 +1077,7 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
             &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    source.as_str().into(),
-                )),
+                ResourceKey::Graph(source.clone()),
                 undo.deltas[0].to_revision,
                 OperationId::new(),
                 HistoryMutation {},
@@ -1122,7 +1088,7 @@ fn unloaded_caller_delta_revision_and_history_follow_graph_move() {
     let redo_caller = redo
         .deltas
         .iter()
-        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.0.as_ref() == caller.as_str()))
+        .find(|delta| matches!(&delta.resource, ResourceKey::Graph(path) if path.as_str() == caller.as_str()))
         .expect("unloaded caller redo delta");
     assert_eq!(redo_caller.from_revision, GraphRevision::new(3));
     assert_eq!(redo_caller.to_revision, GraphRevision::new(4));
@@ -1160,9 +1126,7 @@ fn unloaded_rename_undo_redo_restores_disk_identity() {
             &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    target.as_str().into(),
-                )),
+                ResourceKey::Graph(target.clone()),
                 target_revision,
                 OperationId::new(),
                 HistoryMutation {},
@@ -1179,9 +1143,7 @@ fn unloaded_rename_undo_redo_restores_disk_identity() {
             &current_project_instance_id(&state),
             "en-US",
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    source.as_str().into(),
-                )),
+                ResourceKey::Graph(source.clone()),
                 source_revision,
                 OperationId::new(),
                 HistoryMutation {},
@@ -1326,7 +1288,7 @@ fn normalized_function_signature_update_is_undoable() {
         .unwrap();
     let signature = crate::node_system::document::FunctionSignature {
         parameters: vec![crate::node_system::document::FunctionParameter {
-            id: crate::node_system::document::FunctionParameterId("amount".into()),
+            id: crate::graph_document::FunctionParameterId::new("amount"),
             name: "Amount".into(),
             type_name: "float64".into(),
         }],
@@ -1343,7 +1305,7 @@ fn normalized_function_signature_update_is_undoable() {
                 ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
                     path.as_str().into(),
                 )),
-                crate::node_system::document::ResourceRevision::INITIAL,
+                crate::project::ResourceRevision::INITIAL,
                 operation_id,
                 crate::node_system::document::FunctionDocumentPatch::new(
                     Default::default(),
@@ -1409,7 +1371,7 @@ fn revisioned_signature_undo_and_redo_reject_conflicts_and_return_deltas() {
     ));
     let signature = crate::node_system::document::FunctionSignature {
         parameters: vec![crate::node_system::document::FunctionParameter {
-            id: crate::node_system::document::FunctionParameterId("value".into()),
+            id: crate::graph_document::FunctionParameterId::new("value"),
             name: "Value".into(),
             type_name: "float64".into(),
         }],

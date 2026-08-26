@@ -249,7 +249,7 @@ fn default_requested_and_preview_demands_reuse_one_compilation_basis() {
         .unwrap();
     let output = |node_id| crate::node_system::plan::GraphOutputRef {
         graph_path: document_path(),
-        port: crate::node_system::document::PortAddress::declared(
+        port: crate::graph_document::PortAddress::declared(
             node_id,
             crate::node_system::protocol::PortKey::new("value").unwrap(),
         ),
@@ -352,7 +352,7 @@ fn graph_basis_replacement_discards_old_demand_variants() {
     let demand = crate::node_system::plan::ExecutionDemand::Outputs {
         outputs: Box::new([crate::node_system::plan::GraphOutputRef {
             graph_path: document_path(),
-            port: crate::node_system::document::PortAddress::declared(
+            port: crate::graph_document::PortAddress::declared(
                 node_id,
                 crate::node_system::protocol::PortKey::new("value").unwrap(),
             ),
@@ -547,11 +547,9 @@ fn function_body_mutations_stale_dependent_callers_without_eager_slot_eviction()
             .unwrap()
             .0;
         let coordinator = state.compile_coordinator.read().unwrap().clone();
-        let caller_document_path =
-            crate::node_system::document::GraphResourcePath(caller_path.as_str().into());
+        let caller_document_path = caller_path.clone();
         assert!(coordinator.contains_slot_for_test(&caller_document_path));
-        let function_document_path =
-            crate::node_system::document::GraphResourcePath(function_path.as_str().into());
+        let function_document_path = function_path.clone();
 
         let request_resource = ResourceKey::Graph(function_document_path);
         if entry == "mutation" {
@@ -837,14 +835,14 @@ fn function_patch_remove_and_reinsert_keep_authoritative_revisions_coherent() {
     let mut original = GraphResourceDocument::new("Reinsert", GraphDocumentKind::Function);
     original.document.revision = GraphRevision::new(4);
     state.insert_graph(path.clone(), original).unwrap();
-    let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        path.as_str().into(),
-    ));
+    let key = ResourceKey::Graph(path.clone());
     let remove_context = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
         operation_id: OperationId::new(),
         affected_resources: vec![key.clone()],
-        expected_revisions: [(key.clone(), GraphRevision::new(4))].into_iter().collect(),
+        expected_revisions: [(key.clone(), ResourceRevision::new(4))]
+            .into_iter()
+            .collect(),
         expected_absent_resources: Default::default(),
         recovery_marker: Some(state.project_recovery_marker()),
     };
@@ -854,7 +852,7 @@ fn function_patch_remove_and_reinsert_keep_authoritative_revisions_coherent() {
             &remove_context,
             ResourceDocumentPatch::RemoveGraph {
                 path: path.clone(),
-                revision: GraphRevision::new(4),
+                revision: ResourceRevision::new(4),
             },
         )
         .unwrap();
@@ -936,17 +934,15 @@ fn function_move_into_tombstone_keeps_document_ledger_delta_and_projection_revis
         .write()
         .unwrap()
         .insert(to.clone(), GraphRevision::new(9));
-    let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        from.as_str().into(),
-    ));
-    let target_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        to.as_str().into(),
-    ));
+    let source_key = ResourceKey::Graph(from.clone());
+    let target_key = ResourceKey::Graph(to.clone());
     let context = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
         operation_id: OperationId::new(),
         affected_resources: vec![source_key.clone()],
-        expected_revisions: [(source_key, GraphRevision::new(2))].into_iter().collect(),
+        expected_revisions: [(source_key, ResourceRevision::new(2))]
+            .into_iter()
+            .collect(),
         expected_absent_resources: [target_key].into_iter().collect(),
         recovery_marker: Some(state.project_recovery_marker()),
     };
@@ -1087,7 +1083,7 @@ fn project_resource_authority_tracks_missing_tombstones_and_prevents_aba() {
         );
         state.variable_revisions.write().unwrap().insert(
             variable_id,
-            super::project_state::VariableRevisionEntry::present(GraphRevision::new(1)),
+            super::project_state::VariableRevisionEntry::present(ResourceRevision::new(1)),
         );
         state
             .database_authority_revisions

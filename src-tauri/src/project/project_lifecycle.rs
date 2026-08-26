@@ -1,4 +1,4 @@
-use crate::node_system::document::OperationId;
+use crate::project::OperationId;
 use crate::project::{
     DATABASE_DIR, EVENTS_DIR, FUNCTIONS_DIR, GLOBAL_VARIABLES_FILE, NormalizedProjectRoot,
     PROJECT_METADATA_FILE, PreparedProjectActivation, ProjectData, ProjectFilesystemError,
@@ -485,15 +485,17 @@ fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
 mod tests {
     use super::*;
     use crate::data_contract::{DataType, DataValue};
+    use crate::graph_document::GraphResourcePath;
+    use crate::graph_document::{DocumentNode, NodeId, NodePosition, ParameterValues};
     use crate::node_system::document::{
-        DocumentNode, GraphDocumentOperation, GraphDocumentPatch, MutationRequest, NodeId,
-        NodePosition, OperationId, ParameterValues, ResourceKey, ResourceRevision,
+        GraphDocumentOperation, GraphDocumentPatch, MutationRequest, ResourceKey,
     };
     use crate::node_system::protocol::NodeTypeId;
     use crate::project::{
-        GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
-        ProjectFilesystemFaultPoint, fixtures, load_project_from_file,
+        GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectFilesystemFaultPoint,
+        fixtures, load_project_from_file,
     };
+    use crate::project::{OperationId, ResourceRevision};
     use crate::variable::VariableScope;
     use std::time::Duration;
 
@@ -548,9 +550,7 @@ mod tests {
             .apply_graph_patch(
                 graph_path,
                 MutationRequest::new(
-                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                        graph_path.as_str().into(),
-                    )),
+                    ResourceKey::Graph(graph_path.clone()),
                     ResourceRevision::INITIAL,
                     OperationId::new(),
                     GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode { node }]),
@@ -565,9 +565,9 @@ mod tests {
         before_data: &serde_json::Value,
         before_history: crate::node_system::document::HistoryStatusDto,
         before_lengths: (usize, usize),
-        before_head: Option<crate::node_system::document::HistoryEntryId>,
+        before_head: Option<crate::project::HistoryEntryId>,
         before_revisions: &(
-            std::collections::HashMap<GraphResourcePath, ResourceRevision>,
+            std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
             std::collections::HashMap<crate::variable::VariableId, ResourceRevision>,
             std::collections::HashMap<crate::project::WorksheetResourcePath, ResourceRevision>,
         ),
@@ -606,9 +606,7 @@ mod tests {
             .apply_graph_patch(
                 &graph_path,
                 MutationRequest::new(
-                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                        graph_path.as_str().into(),
-                    )),
+                    ResourceKey::Graph(graph_path.clone()),
                     ResourceRevision::INITIAL,
                     OperationId::new(),
                     GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode { node }]),
@@ -624,7 +622,7 @@ mod tests {
         assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
         assert_eq!(
             state.revision_state_for_test().0.get(&graph_path),
-            Some(&ResourceRevision::new(1))
+            Some(&crate::graph_document::GraphRevision::new(1))
         );
 
         let _ = std::fs::remove_dir_all(root);
@@ -663,10 +661,8 @@ mod tests {
         state.graph_projection(&unloaded, "en-US").unwrap();
         state.graph_projection(&retained, "en-US").unwrap();
         let coordinator = state.compile_coordinator.read().unwrap().clone();
-        let document_path =
-            crate::node_system::document::GraphResourcePath(unloaded.as_str().into());
-        let retained_document_path =
-            crate::node_system::document::GraphResourcePath(retained.as_str().into());
+        let document_path = unloaded.clone();
+        let retained_document_path = retained.clone();
         assert!(coordinator.contains_slot_for_test(&document_path));
         assert!(coordinator.contains_slot_for_test(&retained_document_path));
         let before_status = state.history_status();
@@ -1060,7 +1056,7 @@ mod tests {
                 .rename_graph_resource_transaction(
                     &instance_id,
                     &rename_path,
-                    crate::node_system::document::ResourceRevision::INITIAL,
+                    crate::project::ResourceRevision::INITIAL,
                     "Renamed",
                     1,
                     OperationId::new(),
@@ -1072,7 +1068,7 @@ mod tests {
                 .save_worksheet_document(
                     &instance_id,
                     &worksheet_path,
-                    crate::node_system::document::ResourceRevision::INITIAL,
+                    crate::project::ResourceRevision::INITIAL,
                     OperationId::new(),
                     worksheet,
                 )

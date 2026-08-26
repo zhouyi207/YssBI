@@ -3,12 +3,12 @@ use super::dynamic_interface::{
     InterfaceResolverRequest, InterfaceResolverSet, SchemaFieldIdentityGuarantee,
 };
 use super::*;
-use crate::node_system::analysis::ResourceVersionSet;
-use crate::node_system::document::{
+use crate::graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, GraphDocument,
     GraphRevision, NodeId, NodePosition, PortAddress, PortInstanceId, SchemaFieldIdentity,
     SchemaSourceIdentity,
 };
+use crate::node_system::analysis::ResourceVersionSet;
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::*;
 use crate::node_system::registry::{ProtocolFingerprint, RegistryFingerprint};
@@ -99,8 +99,8 @@ fn resolver_id() -> InterfaceResolverId {
 
 fn locator(field: &str) -> DynamicMemberLocator {
     DynamicMemberLocator::SchemaField {
-        source: SchemaSourceIdentity("source".into()),
-        field: SchemaFieldIdentity(field.into()),
+        source: SchemaSourceIdentity::new("source"),
+        field: SchemaFieldIdentity::new(field),
     }
 }
 
@@ -268,35 +268,35 @@ fn full_compile_keeps_complete_projection_when_interface_diagnostics_block_lower
     let basis = expected_basis(&registry, &document);
     let mut stale_basis = basis.clone();
     stale_basis.graph_revision = GraphRevision::new(3);
-    let gone = crate::node_system::document::PortAddress::instance(
+    let gone = crate::graph_document::PortAddress::instance(
         node_id(),
         key("fields"),
         PortInstanceId::from_uuid(Uuid::from_u128(10)),
     );
-    let ephemeral = crate::node_system::document::PortAddress::instance(
+    let ephemeral = crate::graph_document::PortAddress::instance(
         node_id(),
         key("fields"),
         PortInstanceId::from_uuid(Uuid::from_u128(11)),
     );
     document.port_bindings.insert(
         gone.clone(),
-        crate::node_system::document::DynamicPortBinding::Resolved {
+        crate::graph_document::DynamicPortBinding::Resolved {
             origin: locator("gone"),
-            order: crate::node_system::document::OrderKey("a".into()),
-            last_known: crate::node_system::document::LastKnownPortMetadata::default(),
+            order: crate::graph_document::OrderKey::new("a"),
+            last_known: crate::graph_document::LastKnownPortMetadata::default(),
         },
     );
     document.port_bindings.insert(
         ephemeral.clone(),
-        crate::node_system::document::DynamicPortBinding::Resolved {
+        crate::graph_document::DynamicPortBinding::Resolved {
             origin: locator("ephemeral"),
-            order: crate::node_system::document::OrderKey("b".into()),
-            last_known: crate::node_system::document::LastKnownPortMetadata::default(),
+            order: crate::graph_document::OrderKey::new("b"),
+            last_known: crate::graph_document::LastKnownPortMetadata::default(),
         },
     );
     document.input_states.insert(
         ephemeral.clone(),
-        crate::node_system::document::InputState {
+        crate::graph_document::InputState {
             literal_override: Some(serde_json::json!(1)),
         },
     );
@@ -588,10 +588,10 @@ fn schema_completion_replaces_provisional_ports_projection_and_diagnostics() {
     );
     document.port_bindings.insert(
         restored.clone(),
-        crate::node_system::document::DynamicPortBinding::Orphan {
+        crate::graph_document::DynamicPortBinding::Orphan {
             origin: locator("amount"),
-            order: crate::node_system::document::OrderKey("a".into()),
-            last_known: crate::node_system::document::LastKnownPortMetadata {
+            order: crate::graph_document::OrderKey::new("a"),
+            last_known: crate::graph_document::LastKnownPortMetadata {
                 label: "Amount".into(),
                 value_type: None,
             },

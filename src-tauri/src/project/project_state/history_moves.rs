@@ -106,10 +106,8 @@ impl ProjectState {
                     )
                 })?;
                 expected_revisions.insert(
-                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                        graph_path.as_str().into(),
-                    )),
-                    revision,
+                    ResourceKey::Graph(graph_path.clone()),
+                    ResourceRevision::from_graph_revision(revision),
                 );
             }
         }
@@ -498,16 +496,10 @@ impl ProjectState {
                 Ok,
             )
             .map_err(|error| MutationConflict::History(error.to_string().into()))?;
-        if request.resource
-            != ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                source.as_str().into(),
-            ))
-        {
+        if request.resource != ResourceKey::Graph(source.clone()) {
             return Err(MutationConflict::ResourceMismatch {
                 requested: request.resource,
-                store: ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    source.as_str().into(),
-                )),
+                store: ResourceKey::Graph(source.clone()),
             });
         }
         let current_revision = loaded_source
@@ -515,15 +507,14 @@ impl ProjectState {
             .map(|resource| resource.document.revision)
             .or_else(|| self.graph_revisions.read().unwrap().get(&source).copied())
             .unwrap_or(current_moved.document.revision);
-        if current_revision != request.base_revision {
+        if ResourceRevision::from_graph_revision(current_revision) != request.base_revision {
             return Err(MutationConflict::StaleRevision {
                 base_revision: request.base_revision,
-                current_revision,
+                current_revision: ResourceRevision::from_graph_revision(current_revision),
             });
         }
-        desired_moved.document.revision =
-            checked_resource_revision(source.as_str(), current_revision)
-                .map_err(history_project_error)?;
+        desired_moved.document.revision = checked_graph_revision(source.as_str(), current_revision)
+            .map_err(history_project_error)?;
 
         let mut referenced_graphs_before = BTreeMap::new();
         let mut referenced_graphs = BTreeMap::new();
@@ -531,13 +522,14 @@ impl ProjectState {
         let mut referenced_variables = BTreeMap::new();
         let mut affected_resources = Vec::new();
         let mut expected_revisions = BTreeMap::new();
-        let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-            source.as_str().into(),
-        ));
+        let source_key = ResourceKey::Graph(source.clone());
         if loaded_source.is_some() {
             affected_resources.push(source_key.clone());
         }
-        expected_revisions.insert(source_key, current_revision);
+        expected_revisions.insert(
+            source_key,
+            ResourceRevision::from_graph_revision(current_revision),
+        );
         {
             let data = self.project_data.read().unwrap();
             let variable_revisions = self.variable_revisions.read().unwrap();
@@ -547,13 +539,14 @@ impl ProjectState {
                 };
                 let mut next = desired;
                 next.document.revision =
-                    checked_resource_revision(path.as_str(), current.document.revision)
+                    checked_graph_revision(path.as_str(), current.document.revision)
                         .map_err(history_project_error)?;
-                let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    path.as_str().into(),
-                ));
+                let key = ResourceKey::Graph(path.clone());
                 affected_resources.push(key.clone());
-                expected_revisions.insert(key, current.document.revision);
+                expected_revisions.insert(
+                    key,
+                    ResourceRevision::from_graph_revision(current.document.revision),
+                );
                 referenced_graphs_before.insert(path.clone(), current.clone());
                 referenced_graphs.insert(path, next);
             }
@@ -570,7 +563,7 @@ impl ProjectState {
                     variable_revisions
                         .get(&id)
                         .map(|entry| entry.revision)
-                        .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL),
+                        .unwrap_or(crate::project::ResourceRevision::INITIAL),
                 );
                 referenced_variables_before.insert(id, current.clone());
                 referenced_variables.insert(id, desired);
@@ -593,11 +586,12 @@ impl ProjectState {
         )
         .map_err(|error| MutationConflict::History(error.into()))?;
         for (path, before) in disk_plan.referenced_graphs_before {
-            let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                path.as_str().into(),
-            ));
+            let key = ResourceKey::Graph(path.clone());
             affected_resources.push(key.clone());
-            expected_revisions.insert(key, before.document.revision);
+            expected_revisions.insert(
+                key,
+                ResourceRevision::from_graph_revision(before.document.revision),
+            );
             referenced_graphs_before.insert(path, before);
         }
         referenced_graphs.extend(disk_plan.referenced_graphs_after);
@@ -606,11 +600,7 @@ impl ProjectState {
             operation_id: request.operation_id,
             affected_resources,
             expected_revisions,
-            expected_absent_resources: [ResourceKey::Graph(
-                crate::node_system::document::GraphResourcePath(target.as_str().into()),
-            )]
-            .into_iter()
-            .collect(),
+            expected_absent_resources: [ResourceKey::Graph(target.clone())].into_iter().collect(),
             recovery_marker: Some(self.project_recovery_marker()),
         };
         let mutations = disk_plan.mutations;

@@ -67,7 +67,7 @@ impl ProjectState {
         revisions.insert(
             id,
             crate::project::project_state::VariableRevisionEntry::present(
-                crate::node_system::document::ResourceRevision::INITIAL,
+                crate::project::ResourceRevision::INITIAL,
             ),
         );
         publication.advance_authority_generation();
@@ -89,7 +89,7 @@ impl ProjectState {
             let revision = revisions
                 .get(variable_id)
                 .map(|entry| entry.revision)
-                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
+                .unwrap_or(crate::project::ResourceRevision::INITIAL)
                 .next();
             revisions.insert(
                 *variable_id,
@@ -175,7 +175,7 @@ impl ProjectState {
         let revision = revisions
             .get(variable_id)
             .map(|entry| entry.revision)
-            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL)
+            .unwrap_or(crate::project::ResourceRevision::INITIAL)
             .next();
         revisions.insert(
             *variable_id,
@@ -190,8 +190,8 @@ impl ProjectState {
 mod tests {
     use super::*;
     use crate::data_contract::DataSeriesValue;
-    use crate::node_system::document::ResourceRevision;
     use crate::project::ProjectData;
+    use crate::project::ResourceRevision;
     use std::sync::{Arc, Mutex, mpsc};
 
     fn add_int_variable(state: &ProjectState) -> VariableInstance {

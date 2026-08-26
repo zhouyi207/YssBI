@@ -3,9 +3,11 @@ use super::common::{
 };
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, ResourceMutationResultDto, emit_project_event};
-use crate::node_system::document::{MutationRequest, OperationId, ResourceRevision};
+use crate::graph_document::GraphResourcePath;
+use crate::node_system::document::MutationRequest;
 use crate::project::project_writers::ProjectSaveResultDto;
-use crate::project::{GraphResourcePath, ProjectInstanceId, ProjectState};
+use crate::project::{OperationId, ResourceRevision};
+use crate::project::{ProjectInstanceId, ProjectState};
 use tauri::{AppHandle, State};
 
 pub(super) fn create_graph_resource_with_emitter<R: EmitOutcome>(

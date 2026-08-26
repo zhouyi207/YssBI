@@ -4,7 +4,7 @@ use super::*;
 
 fn function_targets(
     region: &crate::node_system::plan::StructuredControlRegion,
-) -> std::collections::BTreeSet<crate::node_system::document::GraphResourcePath> {
+) -> std::collections::BTreeSet<crate::graph_document::GraphResourcePath> {
     use crate::node_system::plan::{ControlStep, StructuredControlRegion};
 
     let mut targets = std::collections::BTreeSet::new();
@@ -28,9 +28,9 @@ fn function_targets(
             targets.extend(function_targets(body));
         }
         StructuredControlRegion::Call { target, .. } => {
-            targets.insert(crate::node_system::document::GraphResourcePath(
-                target.as_str().into(),
-            ));
+            if let Ok(target) = crate::graph_document::GraphResourcePath::new(target.as_str()) {
+                targets.insert(target);
+            }
         }
     }
     targets
@@ -71,7 +71,12 @@ pub(in crate::project) fn publish_function_plans(
         let document = resources
             .function_graphs
             .get(&document_path)
-            .ok_or_else(|| format!("required function '{}' is unavailable", document_path.0))?;
+            .ok_or_else(|| {
+                format!(
+                    "required function '{}' is unavailable",
+                    document_path.as_str()
+                )
+            })?;
         let snapshot =
             compiler.snapshot_with_compile_id(compile_id, document_path.clone(), document);
         let products = compiler
@@ -89,7 +94,8 @@ pub(in crate::project) fn publish_function_plans(
                     .join(", ");
                 return Err(format!(
                     "function '{}' has blocking diagnostics and cannot be published: {}",
-                    document_path.0, diagnostics
+                    document_path.as_str(),
+                    diagnostics
                 )
                 .into());
             }
@@ -100,7 +106,7 @@ pub(in crate::project) fn publish_function_plans(
         let abi = products.function_abi.clone().ok_or_else(|| {
             format!(
                 "function '{}' did not produce an Entry/Return ABI",
-                document_path.0
+                document_path.as_str()
             )
         })?;
         let plan = products.plan.ok_or_else(|| {
@@ -114,12 +120,17 @@ pub(in crate::project) fn publish_function_plans(
         })?;
         pending.extend(function_targets(&plan.root_region));
         build_run_parameters(parameters, document, &plan, computation_settings)?;
-        let resource_key = crate::node_system::analysis::ResourceKey::new(document_path.0.as_ref());
+        let resource_key = crate::node_system::analysis::ResourceKey::new(document_path.as_str());
         let version = resources
             .versions
             .get(&resource_key)
             .cloned()
-            .ok_or_else(|| format!("function '{}' has no resource version", document_path.0))?;
+            .ok_or_else(|| {
+                format!(
+                    "function '{}' has no resource version",
+                    document_path.as_str()
+                )
+            })?;
         entries.push((
             document_path.clone(),
             version,
@@ -138,7 +149,7 @@ pub(in crate::project) fn publish_function_plans(
 
 pub(in crate::project) fn build_run_parameters(
     parameters: &mut crate::node_system::runtime::CompiledParameterStore,
-    document: &crate::node_system::document::GraphDocument,
+    document: &crate::graph_document::GraphDocument,
     plan: &crate::node_system::plan::ExecutionPlan,
     computation_settings: &crate::project::ProjectComputationSettings,
 ) -> Result<(), String> {
@@ -277,7 +288,7 @@ pub(in crate::project) fn build_run_parameters(
                         if address.node_id != operation.source_node_id {
                             return None;
                         }
-                        let crate::node_system::document::PortRef::Instance { template, .. } =
+                        let crate::graph_document::PortRef::Instance { template, .. } =
                             &address.port
                         else {
                             return None;
@@ -286,24 +297,24 @@ pub(in crate::project) fn build_run_parameters(
                             return None;
                         }
                         match binding {
-                            crate::node_system::document::DynamicPortBinding::Resolved {
+                            crate::graph_document::DynamicPortBinding::Resolved {
                                 origin:
-                                    crate::node_system::document::DynamicMemberLocator::SchemaField {
+                                    crate::graph_document::DynamicMemberLocator::SchemaField {
                                         field,
                                         ..
                                     },
                                 order,
                                 ..
                             }
-                            | crate::node_system::document::DynamicPortBinding::Orphan {
+                            | crate::graph_document::DynamicPortBinding::Orphan {
                                 origin:
-                                    crate::node_system::document::DynamicMemberLocator::SchemaField {
+                                    crate::graph_document::DynamicMemberLocator::SchemaField {
                                         field,
                                         ..
                                     },
                                 order,
                                 ..
-                            } => Some((order.clone(), field.0.clone())),
+                            } => Some((order.clone(), field.as_str().into())),
                             _ => None,
                         }
                     })

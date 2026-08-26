@@ -5,7 +5,7 @@ use crate::application::database::{
 };
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, ResourceMutationCommandResultDto, emit_project_event};
-use crate::node_system::document::{OperationId, ResourceRevision};
+use crate::project::{OperationId, ResourceRevision};
 use crate::project::{ProjectInstanceId, ProjectState};
 use crate::schema::DatabaseImportSourceDTO;
 use tauri::{AppHandle, State};
@@ -654,8 +654,8 @@ mod tests {
     use super::*;
     use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseState};
     use crate::event::{Event, EventProject};
-    use crate::node_system::document::{OperationId, ResourceRevision};
     use crate::project::ProjectData;
+    use crate::project::{OperationId, ResourceRevision};
 
     struct FailingSerialize;
 

@@ -1,6 +1,6 @@
 use super::dynamic_interface::*;
+use crate::graph_document::*;
 use crate::node_system::analysis::{CompilationBasis, ResolvedPortStatus};
-use crate::node_system::document::*;
 use crate::node_system::protocol::*;
 use crate::node_system::registry::RegistryFingerprint;
 use crate::node_system::testing::TestProtocolBuilder;
@@ -35,8 +35,8 @@ fn basis(revision: u64) -> CompilationBasis<GraphRevision> {
 
 fn locator(field: &str) -> DynamicMemberLocator {
     DynamicMemberLocator::SchemaField {
-        source: SchemaSourceIdentity("source".into()),
-        field: SchemaFieldIdentity(field.into()),
+        source: SchemaSourceIdentity::new("source"),
+        field: SchemaFieldIdentity::new(field),
     }
 }
 
@@ -133,7 +133,7 @@ fn resolver_set(
 fn resolved_binding(field: &str) -> DynamicPortBinding {
     DynamicPortBinding::Resolved {
         origin: locator(field),
-        order: OrderKey("a".into()),
+        order: OrderKey::new("a"),
         last_known: LastKnownPortMetadata::default(),
     }
 }
@@ -186,7 +186,7 @@ fn resolved_ports_follow_current_member_order_before_deterministic_orphans() {
             first_bound.clone(),
             DynamicPortBinding::Resolved {
                 origin: locator("first_bound"),
-                order: OrderKey("z".into()),
+                order: OrderKey::new("z"),
                 last_known: LastKnownPortMetadata::default(),
             },
         ),
@@ -194,7 +194,7 @@ fn resolved_ports_follow_current_member_order_before_deterministic_orphans() {
             second_bound.clone(),
             DynamicPortBinding::Resolved {
                 origin: locator("second_bound"),
-                order: OrderKey("a".into()),
+                order: OrderKey::new("a"),
                 last_known: LastKnownPortMetadata::default(),
             },
         ),
@@ -202,7 +202,7 @@ fn resolved_ports_follow_current_member_order_before_deterministic_orphans() {
             orphan.clone(),
             DynamicPortBinding::Orphan {
                 origin: locator("removed"),
-                order: OrderKey("m".into()),
+                order: OrderKey::new("m"),
                 last_known: LastKnownPortMetadata {
                     label: "Removed".into(),
                     value_type: Some(TypeExpr::Unknown),
@@ -357,7 +357,7 @@ fn existing_orphan_restores_only_by_exact_locator() {
         bound.clone(),
         DynamicPortBinding::Orphan {
             origin: locator("restored"),
-            order: OrderKey("a".into()),
+            order: OrderKey::new("a"),
             last_known: LastKnownPortMetadata {
                 label: "Old label".into(),
                 value_type: None,
@@ -455,7 +455,7 @@ fn user_created_dynamic_interface_materializes_without_member_locator() {
     let graph = document(Some((
         bound.clone(),
         DynamicPortBinding::UserCreated {
-            order: OrderKey("a".into()),
+            order: OrderKey::new("a"),
         },
     )));
     let mut user_protocol = protocol();
@@ -489,7 +489,7 @@ fn user_created_dynamic_interface_binding_mismatch_is_diagnosed() {
     let graph = document(Some((
         bound.clone(),
         DynamicPortBinding::UserCreated {
-            order: OrderKey("a".into()),
+            order: OrderKey::new("a"),
         },
     )));
 

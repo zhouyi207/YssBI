@@ -196,7 +196,7 @@ fn function_signature_and_caller_graph_undo_as_one_project_transaction() {
                 ResourceRevision::INITIAL,
                 function_patch,
             ),
-            ResourcePatch::graph(graph_path.clone(), ResourceRevision::INITIAL, graph_patch),
+            ResourcePatch::graph(graph_path.clone(), GraphRevision::INITIAL, graph_patch),
         ],
     );
     let mut history = ProjectHistory::default();

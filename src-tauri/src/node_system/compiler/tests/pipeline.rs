@@ -41,7 +41,7 @@ fn compile_plan_keeps_the_exact_requested_provenance() {
         GraphCompiler::new(&registry, &Resources).with_project_session_id(session_id.clone());
     let snapshot = compiler.snapshot_with_compile_id(
         CompileId::new(41),
-        GraphResourcePath("events/main".into()),
+        GraphResourcePath::new("events/main").unwrap(),
         &document(NodeTypeId::new("yssbi.test.constant").unwrap()),
     );
     let result = compiler
@@ -95,18 +95,18 @@ fn unknown_port_and_wrong_direction_return_analysis_without_plan() {
     let unknown = PortAddress::declared(other, key("missing"));
     let output_as_input = PortAddress::declared(other, key("value"));
     graph.connections.insert(
-        crate::node_system::document::ConnectionId::from_uuid(Uuid::from_u128(3)),
+        crate::graph_document::ConnectionId::from_uuid(Uuid::from_u128(3)),
         DocumentConnection {
-            id: crate::node_system::document::ConnectionId::from_uuid(Uuid::from_u128(3)),
+            id: crate::graph_document::ConnectionId::from_uuid(Uuid::from_u128(3)),
             output: PortAddress::declared(node, key("value")),
             input: unknown,
             order: None,
         },
     );
     graph.connections.insert(
-        crate::node_system::document::ConnectionId::from_uuid(Uuid::from_u128(4)),
+        crate::graph_document::ConnectionId::from_uuid(Uuid::from_u128(4)),
         DocumentConnection {
-            id: crate::node_system::document::ConnectionId::from_uuid(Uuid::from_u128(4)),
+            id: crate::graph_document::ConnectionId::from_uuid(Uuid::from_u128(4)),
             output: PortAddress::declared(node, key("value")),
             input: output_as_input,
             order: None,
@@ -148,7 +148,7 @@ fn semantically_identical_documents_serialize_identically() {
     let registry = determinism_registry(determinism_protocols());
     let compiler = GraphCompiler::new(&registry, &Resources)
         .with_project_session_id(ProjectSessionId::new("determinism-session"));
-    let graph_path = GraphResourcePath("events/determinism".into());
+    let graph_path = GraphResourcePath::new("events/determinism").unwrap();
     let compile_id = CompileId::new(73);
     let forward_snapshot =
         compiler.snapshot_with_compile_id(compile_id, graph_path.clone(), &forward.document);

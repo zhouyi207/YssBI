@@ -21,6 +21,10 @@ use super::{
     LoweredKernel, LoweringContext, LoweringError, NodeImplementation, ValidatedNodeConfig,
     compare_diagnostics, managed_node_role_name, node_scope_name, port_kind_name,
 };
+use crate::graph_document::{
+    ConnectionId, DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, GraphDocument,
+    GraphResourcePath, GraphRevision, NodeId, PortAddress, PortRef,
+};
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
     AnalysisResourceReads, AnalysisResourceResolver, AnalysisSnapshot, AnalyzedNode,
@@ -31,10 +35,7 @@ use crate::node_system::analysis::{
     ResourceVersion, ResourceVersionSet, SemanticDependency, ValidatedSemanticGraph,
     ValidatedSemanticNode, ValidatedSemanticPort, ValueEdge,
 };
-use crate::node_system::document::{
-    ConnectionId, DynamicMemberLocator, DynamicPortBinding, FunctionDocument, FunctionParameterId,
-    GraphDocument, GraphResourcePath, GraphRevision, NodeId, PortAddress, PortRef,
-};
+use crate::node_system::document::FunctionDocument;
 use crate::node_system::plan::{
     CompiledParameterHandle, CompiledResourceRequirement, ControlStep,
     EXECUTION_SEMANTICS_SCHEMA_VERSION, EffectDependency as PlannedEffectDependency, ExecutionPlan,
@@ -487,7 +488,11 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
 
     #[cfg(test)]
     pub fn compile(&self, document: &GraphDocument) -> CompileResult {
-        let snapshot = self.snapshot(GraphResourcePath(Box::from("")), document);
+        let snapshot = self.snapshot(
+            GraphResourcePath::new("events/test.yssbi-event")
+                .expect("test graph resource path is valid"),
+            document,
+        );
         self.compile_snapshot(&snapshot, &CompileCancellationToken::new())
             .expect("a fresh cancellation token is not cancelled")
     }

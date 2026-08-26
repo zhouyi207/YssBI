@@ -36,9 +36,14 @@ impl ProjectState {
         graph_paths.sort();
         for path in graph_paths {
             let resource = &snapshot.data.graphs[&path];
-            expected.insert(graph_key(&path), resource.document.revision);
+            expected.insert(
+                graph_key(&path),
+                ResourceRevision::from_graph_revision(resource.document.revision),
+            );
             if let Some(function) = &resource.function {
-                if function.revision != resource.document.revision {
+                if function.revision
+                    != ResourceRevision::from_graph_revision(resource.document.revision)
+                {
                     return Err(prepare_error(format!(
                         "function '{}' signature and graph revisions differ",
                         path
@@ -89,7 +94,7 @@ impl ProjectState {
             .graphs
             .get(graph_path)
             .ok_or_else(|| prepare_error(format!("graph '{}' is not loaded", graph_path)))?;
-        if resource.document.revision != expected_revision {
+        if resource.document.revision != expected_revision.to_graph_revision() {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
                 message: format!("graph '{}' revision changed", graph_path),
             });

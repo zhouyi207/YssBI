@@ -1,15 +1,16 @@
 use crate::data_contract::{DataType, DataValue};
 use crate::event::ResourceMutationResultDto;
+use crate::graph_document::GraphResourcePath;
 use crate::node_system::document::{
-    FunctionResourceKey, OperationId, ResourceKey, ResourceRevision, VariableResourceKey,
-    WorksheetResourceKey,
+    FunctionResourceKey, ResourceKey, VariableResourceKey, WorksheetResourceKey,
 };
 use crate::project::{
-    GraphDocument, GraphResourcePath, ProjectData, ProjectFilesystemError,
-    ProjectFilesystemTransaction, ProjectInstanceId, ProjectSession, ProjectState,
-    ProjectTransactionContext, ResourceDocumentPatch, ResourceName, StagedFilesystemMutation,
-    WorksheetDocument, WorksheetResourcePath, allocate_unique_resource_name,
+    GraphDocument, ProjectData, ProjectFilesystemError, ProjectFilesystemTransaction,
+    ProjectInstanceId, ProjectSession, ProjectState, ProjectTransactionContext,
+    ResourceDocumentPatch, ResourceName, StagedFilesystemMutation, WorksheetDocument,
+    WorksheetResourcePath, allocate_unique_resource_name,
 };
+use crate::project::{OperationId, ResourceRevision};
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
@@ -258,9 +259,7 @@ impl CommittedProjectSave {
 }
 
 fn graph_key(path: &GraphResourcePath) -> ResourceKey {
-    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        path.as_str().into(),
-    ))
+    ResourceKey::Graph(path.clone())
 }
 
 fn function_key(path: &GraphResourcePath) -> ResourceKey {
@@ -434,14 +433,14 @@ impl ProjectState {
 mod tests {
     use super::set_writer_snapshot_test_hook;
     use crate::data_contract::{DataType, DataValue};
-    use crate::node_system::document::{
-        FunctionResourceKey, OperationId, ResourceKey, ResourceRevision, VariableResourceKey,
-    };
+    use crate::graph_document::GraphResourcePath;
+    use crate::node_system::document::{FunctionResourceKey, ResourceKey, VariableResourceKey};
     use crate::project::{
-        GraphDocument, GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
+        GraphDocument, GraphDocumentKind, GraphResourceDocument, ProjectData,
         ProjectFilesystemFaultPoint, ProjectState, ResourceName, WorksheetDocument,
         WorksheetResourcePath, fixtures,
     };
+    use crate::project::{OperationId, ResourceRevision};
     use crate::variable::VariableScope;
     use std::collections::BTreeMap;
     use std::sync::Arc;
@@ -504,9 +503,7 @@ mod tests {
     }
 
     fn graph_key(path: &GraphResourcePath) -> ResourceKey {
-        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-            path.as_str().into(),
-        ))
+        ResourceKey::Graph(path.clone())
     }
 
     #[test]
@@ -537,7 +534,7 @@ mod tests {
             let mut authority = state.project_data.write().unwrap();
             let graph = authority.graphs.get_mut(&path).unwrap();
             graph.name = "After".into();
-            graph.document.revision = ResourceRevision::new(1);
+            graph.document.revision = crate::graph_document::GraphRevision::new(1);
         }
         drop(lease);
 
@@ -674,7 +671,7 @@ mod tests {
         let project = TestProject::new("function-revision");
         let path = GraphResourcePath::new("functions/Shared.yssbi-function").unwrap();
         let mut function = GraphResourceDocument::new("Shared", GraphDocumentKind::Function);
-        function.document.revision = ResourceRevision::new(4);
+        function.document.revision = crate::graph_document::GraphRevision::new(4);
         function.function.as_mut().unwrap().revision = ResourceRevision::new(4);
         let mut data = ProjectData::new();
         data.graphs.insert(path.clone(), function);

@@ -5,10 +5,10 @@ impl ProjectState {
         &self,
         expected_project_instance_id: &ProjectInstanceId,
         graph_path: &GraphResourcePath,
-        expected_revision: crate::node_system::document::ResourceRevision,
+        expected_revision: crate::project::ResourceRevision,
         new_name: &str,
         lifecycle_token: u64,
-        operation_id: crate::node_system::document::OperationId,
+        operation_id: crate::project::OperationId,
     ) -> Result<crate::event::ResourceMutationResultDto, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         let mut ownership_lease = self.acquire_graph_rename_ownership(
@@ -50,7 +50,7 @@ impl ProjectState {
                 )
                 .map(|document| {
                     let mut graph = document.document;
-                    graph.revision = document.revision;
+                    graph.revision = document.revision.to_graph_revision();
                     (
                         GraphResourceDocument {
                             name: document.name,
@@ -95,13 +95,13 @@ impl ProjectState {
         };
         let moved_before = moved.clone();
         let source_revision = moved.document.revision;
-        if source_revision != expected_revision {
+        if ResourceRevision::from_graph_revision(source_revision) != expected_revision {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
                 message: format!("revision for '{}' changed", graph_path),
             });
         }
         moved.name = unique_name;
-        moved.document.revision = checked_resource_revision(graph_path.as_str(), source_revision)?;
+        moved.document.revision = checked_graph_revision(graph_path.as_str(), source_revision)?;
         crate::project::resource_mutations::remap_graph_document_references(
             &mut moved.document,
             graph_path.as_str(),
@@ -125,13 +125,14 @@ impl ProjectState {
         {
             let data = self.project_data.read().unwrap();
             let variable_revisions = self.variable_revisions.read().unwrap();
-            let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                graph_path.as_str().into(),
-            ));
+            let source_key = ResourceKey::Graph(graph_path.clone());
             if data.graphs.contains_key(graph_path) {
                 affected_resources.push(source_key.clone());
             }
-            expected_revisions.insert(source_key, source_revision);
+            expected_revisions.insert(
+                source_key,
+                ResourceRevision::from_graph_revision(source_revision),
+            );
             for (path, resource) in &data.graphs {
                 if path == graph_path
                     || !graph_document_references_path(&resource.document, graph_path.as_str())
@@ -145,12 +146,13 @@ impl ProjectState {
                     target.as_str(),
                 );
                 changed.document.revision =
-                    checked_resource_revision(path.as_str(), changed.document.revision)?;
-                let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    path.as_str().into(),
-                ));
+                    checked_graph_revision(path.as_str(), changed.document.revision)?;
+                let key = ResourceKey::Graph(path.clone());
                 affected_resources.push(key.clone());
-                expected_revisions.insert(key, resource.document.revision);
+                expected_revisions.insert(
+                    key,
+                    ResourceRevision::from_graph_revision(resource.document.revision),
+                );
                 referenced_graphs_before.insert(path.clone(), resource.clone());
                 referenced_graphs.insert(path.clone(), changed);
             }
@@ -185,7 +187,7 @@ impl ProjectState {
                     variable_revisions
                         .get(id)
                         .map(|entry| entry.revision)
-                        .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL),
+                        .unwrap_or(crate::project::ResourceRevision::INITIAL),
                 );
                 referenced_variables_before.insert(*id, variable.clone());
                 referenced_variables.insert(*id, changed);
@@ -215,11 +217,12 @@ impl ProjectState {
             }
         };
         for (path, before) in disk_plan.referenced_graphs_before {
-            let key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                path.as_str().into(),
-            ));
+            let key = ResourceKey::Graph(path.clone());
             affected_resources.push(key.clone());
-            expected_revisions.insert(key, before.document.revision);
+            expected_revisions.insert(
+                key,
+                ResourceRevision::from_graph_revision(before.document.revision),
+            );
             referenced_graphs_before.insert(path, before);
         }
         referenced_graphs.extend(disk_plan.referenced_graphs_after);
@@ -231,11 +234,7 @@ impl ProjectState {
             operation_id,
             affected_resources,
             expected_revisions,
-            expected_absent_resources: [ResourceKey::Graph(
-                crate::node_system::document::GraphResourcePath(target.as_str().into()),
-            )]
-            .into_iter()
-            .collect(),
+            expected_absent_resources: [ResourceKey::Graph(target.clone())].into_iter().collect(),
             recovery_marker: Some(self.project_recovery_marker()),
         };
         let mut mutations = disk_plan.mutations;
@@ -351,7 +350,7 @@ impl ProjectState {
         excluded_graphs: &std::collections::BTreeSet<GraphResourcePath>,
         known_revisions: &std::collections::HashMap<
             GraphResourcePath,
-            crate::node_system::document::ResourceRevision,
+            crate::graph_document::GraphRevision,
         >,
     ) -> Result<GraphRenameDiskPlan, String> {
         let mut plan = GraphRenameDiskPlan {
@@ -391,9 +390,8 @@ impl ProjectState {
                 .get(&entry.path)
                 .copied()
                 .unwrap_or(before.document.revision);
-            after.document.revision =
-                checked_resource_revision(entry.path.as_str(), before_revision)
-                    .map_err(|error| error.to_string())?;
+            after.document.revision = checked_graph_revision(entry.path.as_str(), before_revision)
+                .map_err(|error| error.to_string())?;
             let mut before_document = before.document;
             before_document.revision = before_revision;
             plan.referenced_graphs_before.insert(
@@ -502,9 +500,22 @@ impl ProjectState {
             });
         }
         let target = match kind {
-            crate::project::GraphDocumentKind::Event => GraphResourcePath::event(&requested),
-            crate::project::GraphDocumentKind::Function => GraphResourcePath::function(&requested),
-        };
+            crate::project::GraphDocumentKind::Event => GraphResourcePath::new(format!(
+                "{}/{}.{}",
+                crate::project::EVENTS_DIR,
+                requested.as_str(),
+                crate::project::EVENT_EXTENSION
+            )),
+            crate::project::GraphDocumentKind::Function => GraphResourcePath::new(format!(
+                "{}/{}.{}",
+                crate::project::FUNCTIONS_DIR,
+                requested.as_str(),
+                crate::project::FUNCTION_EXTENSION
+            )),
+        }
+        .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+            message: error.to_string(),
+        })?;
         Ok((target, requested.as_str().to_owned()))
     }
 

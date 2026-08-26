@@ -1,10 +1,10 @@
 use super::build_provider_fragment;
+use crate::graph_document::{NodeId, PortAddress};
 use crate::node_system::catalog::localization::Message;
 use crate::node_system::compiler::{
     CompileCancellationToken, LoweredKernel, LoweringContext, NodeImplementation,
     ValidatedNodeConfig,
 };
-use crate::node_system::document::{NodeId, PortAddress};
 use crate::node_system::plan::ValueRef;
 use crate::node_system::protocol::{PortDirection, PortKind};
 use std::collections::BTreeSet;

@@ -4,7 +4,7 @@ use super::dynamic_interface::{
     InterfaceResolverMember, InterfaceResolverOutput, InterfaceResolverRequest,
     InterfaceResolverSet, SchemaFieldIdentityGuarantee,
 };
-use crate::node_system::document::{
+use crate::graph_document::{
     DynamicMemberLocator, PortAddress, SchemaFieldIdentity, SchemaSourceIdentity,
 };
 use crate::node_system::protocol::{
@@ -63,8 +63,8 @@ impl InterfaceResolver for DataframeColumnsResolver {
             }
 
             let locator = DynamicMemberLocator::SchemaField {
-                source: SchemaSourceIdentity(source),
-                field: SchemaFieldIdentity(identity),
+                source: SchemaSourceIdentity::new(source),
+                field: SchemaFieldIdentity::new(identity),
             };
             let (element_type, diagnostic) = dataframe_field_type(field);
             let value_type = match element_type {

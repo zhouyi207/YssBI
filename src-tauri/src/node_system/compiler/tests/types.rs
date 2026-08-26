@@ -53,8 +53,8 @@ fn semantic_graph_preserves_protocol_port_order_for_kernel_abi() {
         .ports
         .iter()
         .map(|port| match &port.address.port {
-            crate::node_system::document::PortRef::Declared { key } => key.as_str(),
-            crate::node_system::document::PortRef::Instance { .. } => {
+            crate::graph_document::PortRef::Declared { key } => key.as_str(),
+            crate::graph_document::PortRef::Instance { .. } => {
                 panic!("expected declared output")
             }
         })
@@ -373,7 +373,7 @@ fn production_diagnostics_emit_canonical_protocol_enum_facts() {
     let scope_result = scope_compiler
         .compile_snapshot(
             &scope_compiler.snapshot(
-                GraphResourcePath("events/canonical-facts".into()),
+                GraphResourcePath::new("events/canonical-facts").unwrap(),
                 &scope_graph,
             ),
             &CompileCancellationToken::new(),

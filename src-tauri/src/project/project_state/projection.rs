@@ -44,10 +44,8 @@ pub(in crate::project) struct ProjectionSourceSnapshot {
     pub(in crate::project) environment: ProjectionEnvironmentSnapshot,
     pub(in crate::project) project_instance_id: String,
     pub(in crate::project) authority_generation: u64,
-    pub(in crate::project) graph_revisions: std::collections::HashMap<
-        GraphResourcePath,
-        crate::node_system::document::ResourceRevision,
-    >,
+    pub(in crate::project) graph_revisions:
+        std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
     pub(in crate::project) variable_revisions:
         std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
     pub(in crate::project) database_revisions: std::collections::HashMap<String, u64>,
@@ -359,7 +357,7 @@ impl ProjectState {
         authority_generation: u64,
         graph_revisions: std::collections::HashMap<
             GraphResourcePath,
-            crate::node_system::document::ResourceRevision,
+            crate::graph_document::GraphRevision,
         >,
         variable_revisions: std::collections::HashMap<
             crate::variable::VariableId,
@@ -477,7 +475,7 @@ pub(in crate::project) fn candidate_projection_replacement(
     .with_project_session_id(source.environment.project_session_id.clone());
     let snapshot = compiler.snapshot_with_compile_id(
         crate::node_system::analysis::CompileId::new(source.authority_generation),
-        crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
+        graph_path.clone(),
         document,
     );
     let compiled = compiler

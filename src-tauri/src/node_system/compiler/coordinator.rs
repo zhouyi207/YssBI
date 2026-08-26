@@ -1,8 +1,8 @@
 use super::{DemandPlanError, ExecutionPlanBasis, NormalizedExecutionDemand};
+use crate::graph_document::{GraphResourcePath, GraphRevision};
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CompileProjection, ResourceVersionSet,
 };
-use crate::node_system::document::{GraphResourcePath, GraphRevision};
 use crate::node_system::plan::{ExecutionDemand, ExecutionPlan};
 use crate::node_system::registry::RegistryFingerprint;
 use std::collections::{BTreeMap, VecDeque};
@@ -803,7 +803,7 @@ mod tests {
     use std::time::Duration;
 
     fn path() -> GraphResourcePath {
-        GraphResourcePath("events/main".into())
+        GraphResourcePath::new("events/main").unwrap()
     }
 
     fn basis(revision: u64, registry: u8, resource: &str) -> CompilationBasis<GraphRevision> {
@@ -1322,7 +1322,7 @@ mod tests {
     #[test]
     fn all_invalidation_cancels_every_graph_and_clears_products() {
         let coordinator = CompileCoordinator::<String, String>::new();
-        let other_path = GraphResourcePath("functions/other".into());
+        let other_path = GraphResourcePath::new("functions/other").unwrap();
         let current = basis(1, 1, "1");
         let first = started(coordinator.request(path(), current.clone()));
         let second = started(coordinator.request(other_path.clone(), current.clone()));

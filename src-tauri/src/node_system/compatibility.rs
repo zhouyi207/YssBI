@@ -1,4 +1,8 @@
 use crate::data_contract::DataType;
+use crate::graph_document::{
+    DynamicMemberLocator, FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision,
+    LastKnownPortMetadata, OrderKey, PortAddress, PortRef,
+};
 use crate::node_system::analysis::{
     EditorGraphProjectionDto, PortDirectionDto, PortKindDto, ResolvedPortDto,
     resolve_function_data_type,
@@ -6,11 +10,7 @@ use crate::node_system::analysis::{
 use crate::node_system::catalog::{
     LocalizedCatalogDto, NodeCreationDescriptor, ResourceBoundCreateArgsDto,
 };
-use crate::node_system::document::{
-    DynamicMemberLocator, EditorMutationError, EditorMutationErrorCode, FunctionParameterId,
-    GraphDocument, GraphResourcePath, GraphRevision, LastKnownPortMetadata, OrderKey, PortAddress,
-    PortAddressDto, PortRef,
-};
+use crate::node_system::document::{EditorMutationError, EditorMutationErrorCode, PortAddressDto};
 use crate::node_system::protocol::{
     ConnectionsPerPort, NodeProtocol, NodeTypeId, PortDirection, PortInstances, PortKey, PortKind,
     TypeConstructorId, TypeExpr, TypeId, TypeParameterId,
@@ -421,14 +421,14 @@ pub(crate) fn refine_source_type(
                 return;
             };
             let origin = match binding {
-                crate::node_system::document::DynamicPortBinding::Resolved { origin, .. }
-                | crate::node_system::document::DynamicPortBinding::Orphan { origin, .. } => origin,
-                crate::node_system::document::DynamicPortBinding::UserCreated { .. } => return,
+                crate::graph_document::DynamicPortBinding::Resolved { origin, .. }
+                | crate::graph_document::DynamicPortBinding::Orphan { origin, .. } => origin,
+                crate::graph_document::DynamicPortBinding::UserCreated { .. } => return,
             };
             let DynamicMemberLocator::FunctionParameter { parameter, .. } = origin else {
                 return;
             };
-            let type_name = if parameter.0.as_ref() == "return" {
+            let type_name = if parameter.as_str() == "return" {
                 signature.return_type.as_deref()
             } else {
                 signature
@@ -517,7 +517,7 @@ fn candidate_ports(
             crate::variable::VariableScope::Event { event_path }
             | crate::variable::VariableScope::Function {
                 function_path: event_path,
-            } => event_path.as_str() == graph_path.0.as_ref(),
+            } => event_path.as_str() == graph_path.as_str(),
         };
         if !in_scope {
             return Err("variable resource is out of graph scope".into());
@@ -548,7 +548,8 @@ fn candidate_ports(
     if let Some(CatalogMutationResource::Function { signature, .. }) = resource {
         let function = match descriptor {
             NodeCreationDescriptor::ResourceBound { resource_path, .. } => {
-                GraphResourcePath(resource_path.as_str().into())
+                GraphResourcePath::new(resource_path.as_str())
+                    .map_err(|_| "function resource path is invalid".to_owned())?
             }
             _ => unreachable!(),
         };
@@ -571,7 +572,7 @@ fn candidate_ports(
                             function: function.clone(),
                             parameter: parameter.id.clone(),
                         },
-                        order: OrderKey(format!("{index:05}").into()),
+                        order: OrderKey::new(format!("{index:05}")),
                         last_known: LastKnownPortMetadata {
                             label: parameter.name.clone(),
                             value_type: Some(function_type_expr(&parameter.type_name)?),
@@ -598,9 +599,9 @@ fn candidate_ports(
                 dynamic: Some(DynamicCandidate {
                     origin: DynamicMemberLocator::FunctionParameter {
                         function,
-                        parameter: FunctionParameterId("return".into()),
+                        parameter: FunctionParameterId::new("return"),
                     },
-                    order: OrderKey("00000".into()),
+                    order: OrderKey::new("00000"),
                     last_known: LastKnownPortMetadata {
                         label: return_type.to_owned(),
                         value_type: Some(function_type_expr(return_type)?),
@@ -737,9 +738,9 @@ fn applied_type(constructor: &str, element: &DataType) -> Result<TypeExpr, Strin
 }
 
 fn validate_scope(graph_path: &GraphResourcePath, protocol: &NodeProtocol) -> Result<(), String> {
-    let scope = if graph_path.0.starts_with("events/") {
+    let scope = if graph_path.as_str().starts_with("events/") {
         crate::node_system::protocol::NodeScope::Event
-    } else if graph_path.0.starts_with("functions/") {
+    } else if graph_path.as_str().starts_with("functions/") {
         crate::node_system::protocol::NodeScope::Function
     } else {
         crate::node_system::protocol::NodeScope::Any
@@ -808,8 +809,9 @@ mod tests {
     use crate::node_system::catalog::{
         CatalogResourceEntry, CatalogResourcePath, build_builtin_node_system,
     };
-    use crate::node_system::document::{FunctionParameter, FunctionSignature, ResourceRevision};
+    use crate::node_system::document::{FunctionParameter, FunctionSignature};
     use crate::node_system::protocol::NodeTypeId;
+    use crate::project::ResourceRevision;
     use std::collections::BTreeMap;
 
     fn source(data_type: DataType) -> SourcePort {
@@ -819,7 +821,7 @@ mod tests {
     fn source_expr(value_type: TypeExpr) -> SourcePort {
         SourcePort {
             address: PortAddress::declared(
-                crate::node_system::document::NodeId::new(),
+                crate::graph_document::NodeId::new(),
                 PortKey::new("value").unwrap(),
             ),
             direction: PortDirection::Output,
@@ -866,7 +868,7 @@ mod tests {
         orphan: bool,
         connections: PortConnectionCapabilityDto,
     ) -> (EditorGraphProjectionDto, PortAddressDto) {
-        let node_id = crate::node_system::document::NodeId::new();
+        let node_id = crate::graph_document::NodeId::new();
         let address = PortAddressDto::Declared {
             node_id: node_id.to_string().into(),
             port_key: "value".into(),
@@ -988,7 +990,7 @@ mod tests {
     #[test]
     fn phase1_connection_capability_create_candidate_uses_owning_type_parameters() {
         let address = PortAddress::declared(
-            crate::node_system::document::NodeId::new(),
+            crate::graph_document::NodeId::new(),
             PortKey::new("value").unwrap(),
         );
         let snapshot = EditorMutationValidationSnapshot {
@@ -1041,7 +1043,7 @@ mod tests {
         let snapshot = snapshot(Vec::new(), BTreeMap::new());
         let catalog = compatible_catalog(
             &snapshot,
-            &GraphResourcePath("events/main".into()),
+            &GraphResourcePath::new("events/main").unwrap(),
             &source(DataType::Int64),
             "en-US",
         );
@@ -1088,7 +1090,7 @@ mod tests {
         let node_type_id = NodeTypeId::new("yssbi.project.function.call").unwrap();
         let signature = FunctionSignature {
             parameters: vec![FunctionParameter {
-                id: FunctionParameterId("value".into()),
+                id: FunctionParameterId::new("value"),
                 name: "Value".into(),
                 type_name: "Int64".into(),
             }],
@@ -1115,13 +1117,13 @@ mod tests {
         );
         let int_catalog = compatible_catalog(
             &snapshot,
-            &GraphResourcePath("events/main".into()),
+            &GraphResourcePath::new("events/main").unwrap(),
             &source(DataType::Int64),
             "en-US",
         );
         let bool_catalog = compatible_catalog(
             &snapshot,
-            &GraphResourcePath("events/main".into()),
+            &GraphResourcePath::new("events/main").unwrap(),
             &source(DataType::Boolean),
             "en-US",
         );

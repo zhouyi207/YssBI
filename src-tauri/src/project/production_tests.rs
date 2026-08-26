@@ -1,21 +1,23 @@
 use super::*;
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, DynamicPortBinding, GraphRevision, InputState,
+    NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
+};
 use crate::node_system::document::{
     ClipboardNodeCreationDto, ClipboardNodeDto, ClipboardNodeId, ClipboardSubgraphDto,
-    ConnectionId, DocumentConnection, DocumentError, DocumentNode, DynamicPortBinding,
-    EditorGraphMutationDto, GraphDocumentOperation, GraphDocumentPatch, GraphMutation,
-    GraphRevision, HistoryMutation, InputState, MutationConflict, MutationRequest, NodeId,
-    NodePosition, OperationId, OrderKey, ParameterValues, PortAddress, PortInstanceId, ResourceKey,
-    ResourceRevision,
+    DocumentError, EditorGraphMutationDto, GraphDocumentOperation, GraphDocumentPatch,
+    GraphMutation, HistoryMutation, MutationConflict, MutationRequest, ResourceKey,
 };
 use crate::node_system::protocol::{NodeTypeId, PortKey};
 use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
+use crate::project::{OperationId, ResourceRevision};
 
 fn graph_path() -> GraphResourcePath {
     GraphResourcePath::new("events/Production.yssbi-event").unwrap()
 }
 
-fn document_path() -> crate::node_system::document::GraphResourcePath {
-    crate::node_system::document::GraphResourcePath(graph_path().as_str().into())
+fn document_path() -> crate::graph_document::GraphResourcePath {
+    crate::graph_document::GraphResourcePath::new(graph_path().as_str()).unwrap()
 }
 
 fn current_project_instance_id(state: &ProjectState) -> ProjectInstanceId {
@@ -32,9 +34,9 @@ fn load_graph(
 
 fn node(node_type: &str) -> DocumentNode {
     DocumentNode {
-        id: crate::node_system::document::NodeId::new(),
+        id: crate::graph_document::NodeId::new(),
         node_type: NodeTypeId::new(node_type).unwrap(),
-        position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+        position: crate::graph_document::NodePosition { x: 10.0, y: 20.0 },
         parameters: ParameterValues::new(),
         user_label: None,
     }
@@ -78,7 +80,7 @@ fn create_node_mutation() -> EditorGraphMutationDto {
         descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
             node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
         },
-        position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+        position: crate::graph_document::NodePosition { x: 10.0, y: 20.0 },
         user_label: None,
         connect_from: None,
     }
@@ -119,7 +121,7 @@ fn graph_with_dangling_endpoint(
         DocumentNode {
             id: existing_node_id,
             node_type: NodeTypeId::new("yssbi.constant.int64").unwrap(),
-            position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+            position: crate::graph_document::NodePosition { x: 10.0, y: 20.0 },
             parameters: ParameterValues::new(),
             user_label: None,
         },
@@ -233,14 +235,12 @@ fn durable_unloaded_history_fixture(
     String,
     GraphResourcePath,
     ResourceKey,
-    crate::node_system::document::NodeId,
+    crate::graph_document::NodeId,
 ) {
     let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
     let graph_path = GraphResourcePath::new(format!("events/{label}.yssbi-event")).unwrap();
-    let resource = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        graph_path.as_str().into(),
-    ));
+    let resource = ResourceKey::Graph(graph_path.clone());
     let inserted_node = node("yssbi.constant.int64");
     let inserted_node_id = inserted_node.id;
     let mut project = ProjectData::new();
@@ -292,7 +292,7 @@ pub(super) fn durable_graph_global_history_fixture(
     let graph_path = GraphResourcePath::new(format!("events/{label}.yssbi-event")).unwrap();
     let function_path =
         GraphResourcePath::new(format!("functions/{label}Observer.yssbi-function")).unwrap();
-    let graph_key = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+    let graph_key = graph_path.clone();
     let graph_patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
         node: node("yssbi.constant.int64"),
     }]);
@@ -333,7 +333,7 @@ pub(super) fn durable_graph_global_history_fixture(
             ),
             crate::node_system::document::ResourcePatch::variable(
                 variable_key,
-                GraphRevision::INITIAL,
+                ResourceRevision::INITIAL,
                 variable_patch,
             ),
         ],

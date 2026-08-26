@@ -2,7 +2,7 @@ use super::types::{
     CompilationOutcomeDto, DiagnosticDto, EditorConnectionProjectionDto, EditorGraphProjectionDto,
     EditorNodeProjectionDto, ProjectionBasis,
 };
-use crate::node_system::document::GraphRevision;
+use crate::graph_document::GraphRevision;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 

@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 
-use crate::node_system::document::ResourceRevision;
+use crate::project::ResourceRevision;
 use crate::project::{ProjectDatabaseError, ProjectFilesystemError, ProjectInstanceId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

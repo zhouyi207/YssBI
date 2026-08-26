@@ -287,7 +287,7 @@ fn call_rejects_stale_published_abi_before_entering_the_callee_frame() {
             0,
         ))])),
     );
-    callee.provenance.graph_path = GraphResourcePath("functions/callee".into());
+    callee.provenance.graph_path = GraphResourcePath::new("functions/callee").unwrap();
     let mut stale_provenance = callee.provenance.clone();
     stale_provenance.compile_id = CompileId::new(999);
     let published = Arc::new(PublishedFunctionPlan {
@@ -425,7 +425,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
             InvalidCall::OutOfBoundsParameter => {
                 let published_mut = Arc::make_mut(&mut published);
                 Arc::make_mut(&mut published_mut.abi).parameters =
-                    BTreeMap::from([(FunctionParameterId("parameter-0".into()), ValueRef::new(9))]);
+                    BTreeMap::from([(FunctionParameterId::new("parameter-0"), ValueRef::new(9))]);
                 (
                     vec![CallArgumentBinding {
                         caller_source: ValueRef::new(0),
@@ -437,7 +437,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
             InvalidCall::UnsourcedResult => {
                 let published_mut = Arc::make_mut(&mut published);
                 Arc::make_mut(&mut published_mut.abi).results =
-                    BTreeMap::from([(FunctionParameterId("result-0".into()), ValueRef::new(3))]);
+                    BTreeMap::from([(FunctionParameterId::new("result-0"), ValueRef::new(3))]);
                 (
                     vec![standard_argument],
                     vec![CallResultBinding {
@@ -450,7 +450,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
             InvalidCall::StaleResultProduction => {
                 let published_mut = Arc::make_mut(&mut published);
                 Arc::make_mut(&mut published_mut.abi).result_productions = BTreeMap::from([(
-                    FunctionParameterId("result-0".into()),
+                    FunctionParameterId::new("result-0"),
                     OutputProduction::Streaming,
                 )]);
                 (vec![standard_argument], vec![standard_result])
@@ -671,7 +671,7 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
     ]);
     let make_function = |path: &str, root_region: StructuredControlRegion, operations| {
         let mut function = plan(operations, 0, root_region);
-        function.provenance.graph_path = GraphResourcePath(path.into());
+        function.provenance.graph_path = GraphResourcePath::new(path).unwrap();
         function.provenance.basis.resource_versions = versions.clone();
         let abi = FunctionPlanAbi {
             provenance: function.provenance.clone(),
@@ -702,13 +702,13 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
     );
     let entries = vec![
         (
-            GraphResourcePath("functions/a".into()),
+            GraphResourcePath::new("functions/a").unwrap(),
             ResourceVersion::new("a-v1"),
             plan_a,
             abi_a,
         ),
         (
-            GraphResourcePath("functions/b".into()),
+            GraphResourcePath::new("functions/b").unwrap(),
             ResourceVersion::new("b-v1"),
             plan_b,
             abi_b,

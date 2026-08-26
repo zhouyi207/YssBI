@@ -5,6 +5,10 @@ use crate::commands::node_system_execution_dto::{
 use crate::event::{
     Event, EventProject, ProjectionStatusDto, ResourceMoveDto, ResourceMutationResultDto,
 };
+use crate::graph_document::{
+    DocumentNode, FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision, NodeId,
+    NodePosition, PortAddress, PortInstanceId,
+};
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{EditorGraphProjectionDto, ResourceVersionSet};
 use crate::node_system::catalog::{
@@ -13,12 +17,11 @@ use crate::node_system::catalog::{
 };
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
 use crate::node_system::document::{
-    DocumentNode, FunctionDocument, FunctionDocumentPatch, FunctionParameter, FunctionParameterId,
-    FunctionResourceKey, FunctionSignature, GraphDeltaEvent, GraphDocument, GraphDocumentPatch,
-    GraphResourcePath, GraphRevision, HistoryStatusDto, MutationRequest, NodeId, NodePosition,
-    OperationId, PortAddress, PortInstanceId, ResourceDocumentPatch, ResourceKey,
-    ResourceLifecycleKind, ResourceLifecyclePatch, ResourceLifecycleState, ResourcePathMovePatch,
-    ResourceRevision, WorksheetDocumentPatch, WorksheetDocumentState, WorksheetResourceKey,
+    FunctionDocument, FunctionDocumentPatch, FunctionParameter, FunctionResourceKey,
+    FunctionSignature, GraphDeltaEvent, GraphDocumentPatch, HistoryStatusDto, MutationRequest,
+    ResourceDocumentPatch, ResourceKey, ResourceLifecycleKind, ResourceLifecyclePatch,
+    ResourceLifecycleState, ResourcePathMovePatch, WorksheetDocumentPatch, WorksheetDocumentState,
+    WorksheetResourceKey,
 };
 use crate::node_system::plan::{EXECUTION_DEMAND_VARIANT_COUNT, ExecutionDemand, GraphOutputRef};
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
@@ -32,6 +35,7 @@ use crate::project::{
     GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectGraphIndexEntry,
     ProjectInstanceId, ProjectState,
 };
+use crate::project::{OperationId, ResourceRevision};
 
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -219,7 +223,7 @@ fn editor_projection_contract(
 
 fn contract_output(port: PortAddress) -> GraphOutputRef {
     GraphOutputRef {
-        graph_path: GraphResourcePath(GRAPH_PATH.into()),
+        graph_path: GraphResourcePath::new(GRAPH_PATH).unwrap(),
         port,
     }
 }
@@ -239,7 +243,7 @@ fn execution_wire_contract(_registry: &NodeRegistry) -> Value {
     let run_id = crate::node_system::runtime::RunId::new(UNSAFE_ID);
     let run = GraphRunIdentity {
         project_session_id: ProjectSessionId::new("contract-session"),
-        graph_path: GraphResourcePath(GRAPH_PATH.into()),
+        graph_path: GraphResourcePath::new(GRAPH_PATH).unwrap(),
         run_id,
     };
     let kinds = [
@@ -308,7 +312,8 @@ fn execution_wire_contract(_registry: &NodeRegistry) -> Value {
             .expect("production RunEvent DTO must serialize")
         })
         .collect::<Vec<_>>();
-    let source_graph_path = GraphResourcePath("functions/contract-output.yssbi-function".into());
+    let source_graph_path =
+        GraphResourcePath::new("functions/contract-output.yssbi-function").unwrap();
     let run_output_events = [
         RunOutputMessage::Output(RunOutputEvent {
             run_id,
@@ -417,7 +422,7 @@ fn project_events_contract() -> Value {
     let graph_delta = Event::Project(EventProject::GraphDelta {
         project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
         delta: GraphDeltaEvent {
-            graph_path: GraphResourcePath(GRAPH_PATH.into()),
+            graph_path: GraphResourcePath::new(GRAPH_PATH).unwrap(),
             from_revision: ResourceRevision::new(7),
             to_revision: ResourceRevision::new(7),
             caused_by: Some(operation_id),
@@ -749,7 +754,7 @@ fn function_editor_projection_rejects_empty_struct_keys() {
     for type_name in ["Struct<>", "Struct<   >"] {
         let input = FunctionDocument::new(FunctionSignature {
             parameters: vec![FunctionParameter {
-                id: FunctionParameterId("model".into()),
+                id: FunctionParameterId::new("model"),
                 name: "Model".into(),
                 type_name: type_name.into(),
             }],
@@ -776,7 +781,7 @@ fn function_editor_projection_contract() -> Value {
         revision: ResourceRevision::new(1),
         signature: FunctionSignature {
             parameters: vec![FunctionParameter {
-                id: FunctionParameterId("sales".into()),
+                id: FunctionParameterId::new("sales"),
                 name: "Observed sales".into(),
                 type_name: "DataSeries<Float64>".into(),
             }],
@@ -802,7 +807,7 @@ fn function_editor_projection_contract() -> Value {
         ProjectData::new(),
     );
     let graph_path =
-        crate::project::GraphResourcePath::new("functions/forecast.yssbi-function").unwrap();
+        crate::graph_document::GraphResourcePath::new("functions/forecast.yssbi-function").unwrap();
     state
         .insert_graph(
             graph_path.clone(),

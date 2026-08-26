@@ -10,12 +10,12 @@ use super::builtin::{
     sid,
 };
 use super::localization::{Aliases, Message, Text};
+use crate::graph_document::PortRef;
 use crate::node_system::compiler::{
     FragmentMetadata, FragmentResult, LoweredKernel, LoweredNode, LoweringContext, LoweringError,
     LoweringInvariant, NodeImplementation, NodeLowerer, RelationalInputBinding,
     RelationalNodeFragment,
 };
-use crate::node_system::document::PortRef;
 use crate::node_system::plan::{
     CompiledParameterHandle, RelationalBackendId, RelationalExpression, RelationalFragmentId,
     RelationalLiteral, RelationalOperator, RelationalOperatorIndex, RelationalProjection,

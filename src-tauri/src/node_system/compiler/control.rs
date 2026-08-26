@@ -1,5 +1,5 @@
 use super::{CompilerDiagnostic, ValidatedNodeConfig, managed_node_role_name};
-use crate::node_system::document::{
+use crate::graph_document::{
     DynamicMemberLocator, GraphResourcePath, NodeId, PortAddress, PortInstanceId, PortRef,
 };
 use crate::node_system::plan::{
@@ -368,27 +368,28 @@ impl<'a> RegionBuilder<'a> {
                 self.with_continuation(node_id, loop_region, &["then", "completed", "exit"], stop)
             }
             Some(StructuralNodeRole::Call) => {
-                let target_path = GraphResourcePath(
-                    prepared_call_target(self.nodes[&node_id].parameters)
-                        .ok_or_else(|| {
-                            issue(
-                                node_id,
-                                CompilerDiagnostic::LoweringInternalInvariant {
-                                    node_type: self.nodes[&node_id]
-                                        .protocol
-                                        .type_id
-                                        .to_string()
-                                        .into(),
-                                },
-                            )
-                        })?
-                        .into(),
-                );
-                let target = FunctionPlanHandle::new(target_path.0.clone()).map_err(|_| {
+                let target_value = prepared_call_target(self.nodes[&node_id].parameters)
+                    .ok_or_else(|| {
+                        issue(
+                            node_id,
+                            CompilerDiagnostic::LoweringInternalInvariant {
+                                node_type: self.nodes[&node_id].protocol.type_id.to_string().into(),
+                            },
+                        )
+                    })?;
+                let target_path = GraphResourcePath::new(target_value.as_ref()).map_err(|_| {
                     issue(
                         node_id,
                         CompilerDiagnostic::ControlCallTargetInvalid {
-                            function_path: target_path.0.clone(),
+                            function_path: target_value.into(),
+                        },
+                    )
+                })?;
+                let target = FunctionPlanHandle::new(target_path.as_str()).map_err(|_| {
+                    issue(
+                        node_id,
+                        CompilerDiagnostic::ControlCallTargetInvalid {
+                            function_path: target_path.as_str().into(),
                         },
                     )
                 })?;
@@ -824,7 +825,7 @@ impl<'a> RegionBuilder<'a> {
                         issue(
                             node_id,
                             CompilerDiagnostic::ControlCallAbiMemberMissing {
-                                field_name: parameter.0.clone(),
+                                field_name: parameter.as_str().into(),
                             },
                         )
                     })?;
@@ -851,7 +852,7 @@ impl<'a> RegionBuilder<'a> {
                     issue(
                         node_id,
                         CompilerDiagnostic::ControlCallAbiMemberMissing {
-                            field_name: parameter.0.clone(),
+                            field_name: parameter.as_str().into(),
                         },
                     )
                 })?;
@@ -863,7 +864,7 @@ impl<'a> RegionBuilder<'a> {
                             issue(
                                 node_id,
                                 CompilerDiagnostic::ControlCallAbiMemberMissing {
-                                    field_name: parameter.0.clone(),
+                                    field_name: parameter.as_str().into(),
                                 },
                             )
                         })?;
@@ -879,8 +880,8 @@ impl<'a> RegionBuilder<'a> {
     fn validate_call_member_bijection(
         &self,
         node_id: NodeId,
-        members: &[(crate::node_system::document::FunctionParameterId, ValueRef)],
-        expected: &BTreeMap<crate::node_system::document::FunctionParameterId, ValueRef>,
+        members: &[(crate::graph_document::FunctionParameterId, ValueRef)],
+        expected: &BTreeMap<crate::graph_document::FunctionParameterId, ValueRef>,
         role: &str,
     ) -> Result<(), ControlIssue> {
         let actual = members
@@ -893,7 +894,7 @@ impl<'a> RegionBuilder<'a> {
                 node_id,
                 CompilerDiagnostic::ControlCallMemberMissing {
                     member_role: role.into(),
-                    member_id: missing.0.clone(),
+                    member_id: missing.as_str().into(),
                 },
             ));
         }
@@ -902,7 +903,7 @@ impl<'a> RegionBuilder<'a> {
                 node_id,
                 CompilerDiagnostic::ControlCallMemberUnexpected {
                     member_role: role.into(),
-                    member_id: unexpected.0.clone(),
+                    member_id: unexpected.as_str().into(),
                 },
             ));
         }
@@ -918,7 +919,7 @@ impl<'a> RegionBuilder<'a> {
             issue(
                 node_id,
                 CompilerDiagnostic::ControlCallAbiMissing {
-                    function_path: target.0.clone(),
+                    function_path: target.as_str().into(),
                 },
             )
         })
@@ -929,8 +930,7 @@ impl<'a> RegionBuilder<'a> {
         node_id: NodeId,
         target: &GraphResourcePath,
         direction: PortDirection,
-    ) -> Result<Vec<(crate::node_system::document::FunctionParameterId, ValueRef)>, ControlIssue>
-    {
+    ) -> Result<Vec<(crate::graph_document::FunctionParameterId, ValueRef)>, ControlIssue> {
         let node = &self.nodes[&node_id];
         let mut members = BTreeMap::new();
         for (address, locator) in &node.dynamic_members {
@@ -956,7 +956,7 @@ impl<'a> RegionBuilder<'a> {
                 return Err(issue(
                     node_id,
                     CompilerDiagnostic::ControlCallLocatorTargetMismatch {
-                        function_path: function.0.clone(),
+                        function_path: function.as_str().into(),
                     },
                 ));
             }
@@ -972,8 +972,8 @@ impl<'a> RegionBuilder<'a> {
                 return Err(issue(
                     node_id,
                     CompilerDiagnostic::ControlCallLocatorDuplicate {
-                        function_path: function.0.clone(),
-                        parameter_id: parameter.0.clone(),
+                        function_path: function.as_str().into(),
+                        parameter_id: parameter.as_str().into(),
                         port: address.to_string().into(),
                     },
                 ));
@@ -1290,8 +1290,8 @@ mod tests {
             .unwrap()
             .protocol();
         let call_id = node_id(10);
-        let function_path = GraphResourcePath("functions/customer".into());
-        let parameter_id = crate::node_system::document::FunctionParameterId("customer_id".into());
+        let function_path = GraphResourcePath::new("functions/customer").unwrap();
+        let parameter_id = crate::graph_document::FunctionParameterId::new("customer_id");
         let first = PortAddress::instance(
             call_id,
             PortKey::new("arguments").unwrap(),
@@ -1336,8 +1336,8 @@ mod tests {
         assert_eq!(
             issue.diagnostic,
             CompilerDiagnostic::ControlCallLocatorDuplicate {
-                function_path: function_path.0,
-                parameter_id: parameter_id.0,
+                function_path: function_path.as_str().into(),
+                parameter_id: parameter_id.as_str().into(),
                 port: duplicate.to_string().into(),
             }
         );

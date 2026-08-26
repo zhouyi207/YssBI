@@ -307,7 +307,7 @@ fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
         let patch = EditorGraphMutationDto::AddPortInstance {
             node_id: owner,
             template: PortKey::new(requested).unwrap(),
-            order: Some(OrderKey("member".into())),
+            order: Some(OrderKey::new("member")),
         }
         .into_patch(&path, &document, &registry)
         .unwrap();
@@ -337,7 +337,7 @@ fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
     let first = EditorGraphMutationDto::AddPortInstance {
         node_id: owner,
         template: PortKey::new("result").unwrap(),
-        order: Some(OrderKey("z".into())),
+        order: Some(OrderKey::new("z")),
     }
     .into_patch(&path, &document, &registry)
     .unwrap();
@@ -351,7 +351,7 @@ fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
     let second = EditorGraphMutationDto::AddPortInstance {
         node_id: owner,
         template: PortKey::new("then_source").unwrap(),
-        order: Some(OrderKey("a".into())),
+        order: Some(OrderKey::new("a")),
     }
     .into_patch(&path, &document, &registry)
     .unwrap();
@@ -392,7 +392,7 @@ fn removing_any_group_member_atomically_removes_the_complete_member() {
         let patch = EditorGraphMutationDto::AddPortInstance {
             node_id: owner,
             template: PortKey::new("else_source").unwrap(),
-            order: Some(OrderKey(order.into())),
+            order: Some(OrderKey::new(order)),
         }
         .into_patch(&path, &document, &registry)
         .unwrap();
@@ -935,7 +935,7 @@ fn editor_connect_materializes_a_projected_input_on_the_input_side() {
         PortKey::new("inputs").unwrap(),
         PortInstanceId::from_uuid(Uuid::from_u128(1205)),
     );
-    let member = projected_member(path.0.as_ref(), document.revision, target_id);
+    let member = projected_member(path.as_str(), document.revision, target_id);
     let plan = super::ProjectedConnectPlan {
         projection_address: projected.clone(),
         direction: PortDirection::Input,
@@ -1137,7 +1137,7 @@ fn user_created_port_enforces_protocol_min_and_max() {
         .bind_port(
             first.clone(),
             DynamicPortBinding::UserCreated {
-                order: OrderKey("a".into()),
+                order: OrderKey::new("a"),
             },
         )
         .unwrap();
@@ -1145,7 +1145,7 @@ fn user_created_port_enforces_protocol_min_and_max() {
     let add_patch = EditorGraphMutationDto::AddPortInstance {
         node_id: owner,
         template: template.clone(),
-        order: Some(OrderKey("b".into())),
+        order: Some(OrderKey::new("b")),
     }
     .into_patch(&path, &document, &registry)
     .unwrap();

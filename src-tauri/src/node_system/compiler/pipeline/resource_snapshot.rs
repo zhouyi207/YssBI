@@ -80,13 +80,13 @@ impl<S: ResourceSnapshot> AnalysisResourceResolver for TrackedResourceResolver<'
         &mut self,
         path: &GraphResourcePath,
     ) -> Result<ResolvedFunction<'_>, ResourceResolutionError> {
-        let key = ResourceKey::new(path.0.clone());
+        let key = ResourceKey::new(path.as_str());
         let state = self.snapshot.observed_state(&key);
         let ResourceObservedState::Present(version) = state.clone() else {
             return Err(self.failure(
                 key,
                 state,
-                format!("function resource '{}' is missing", path.0),
+                format!("function resource '{}' is missing", path.as_str()),
             ));
         };
         let name = self.snapshot.function_name(path);
@@ -94,14 +94,14 @@ impl<S: ResourceSnapshot> AnalysisResourceResolver for TrackedResourceResolver<'
             return Err(self.failure(
                 key,
                 state,
-                format!("function resource '{}' has no signature", path.0),
+                format!("function resource '{}' has no signature", path.as_str()),
             ));
         };
         let Some(graph) = self.snapshot.function_graph_document(path) else {
             return Err(self.failure(
                 key,
                 state,
-                format!("function graph '{}' is missing", path.0),
+                format!("function graph '{}' is missing", path.as_str()),
             ));
         };
         self.successful(key.clone(), version.clone());

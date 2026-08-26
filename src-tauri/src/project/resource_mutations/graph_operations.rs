@@ -1,17 +1,17 @@
 #[cfg(test)]
 use super::ResourceMutationTestPoint;
-use crate::node_system::document::{OperationId, ResourceKey, ResourceRevision};
+use crate::graph_document::GraphResourcePath;
+use crate::node_system::document::ResourceKey;
 use crate::project::{
-    GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectFilesystemError,
-    ProjectFilesystemTransaction, ProjectInstanceId, ProjectState, ProjectTransactionContext,
-    ResourceDocumentPatch, StagedFilesystemMutation,
+    GraphDocumentKind, GraphResourceDocument, ProjectFilesystemError, ProjectFilesystemTransaction,
+    ProjectInstanceId, ProjectState, ProjectTransactionContext, ResourceDocumentPatch,
+    StagedFilesystemMutation,
 };
+use crate::project::{OperationId, ResourceRevision};
 use std::collections::{BTreeMap, HashMap};
 
 fn graph_key(path: &GraphResourcePath) -> ResourceKey {
-    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        path.as_str().into(),
-    ))
+    ResourceKey::Graph(path.clone())
 }
 
 fn resource_context(
@@ -47,7 +47,7 @@ fn build_graph_shell(
     };
     let mut shell_nodes = Vec::new();
     for (node_type, x) in shell_types {
-        let id = crate::node_system::document::NodeId::new();
+        let id = crate::graph_document::NodeId::new();
         let parameters = if kind == GraphDocumentKind::Function {
             [(
                 crate::node_system::protocol::ParameterKey::new("function").map_err(|error| {
@@ -64,14 +64,14 @@ fn build_graph_shell(
         };
         resource.document.nodes.insert(
             id,
-            crate::node_system::document::DocumentNode {
+            crate::graph_document::DocumentNode {
                 id,
                 node_type: crate::node_system::protocol::NodeTypeId::new(*node_type).map_err(
                     |error| ProjectFilesystemError::TransactionPrepareFailed {
                         message: error.to_string(),
                     },
                 )?,
-                position: crate::node_system::document::NodePosition { x: *x, y: 160.0 },
+                position: crate::graph_document::NodePosition { x: *x, y: 160.0 },
                 parameters,
                 user_label: None,
             },
@@ -79,12 +79,12 @@ fn build_graph_shell(
         shell_nodes.push(id);
     }
     if let [entry, returned] = shell_nodes.as_slice() {
-        let id = crate::node_system::document::ConnectionId::new();
+        let id = crate::graph_document::ConnectionId::new();
         resource.document.connections.insert(
             id,
-            crate::node_system::document::DocumentConnection {
+            crate::graph_document::DocumentConnection {
                 id,
-                output: crate::node_system::document::PortAddress::declared(
+                output: crate::graph_document::PortAddress::declared(
                     *entry,
                     crate::node_system::protocol::PortKey::new("then").map_err(|error| {
                         ProjectFilesystemError::TransactionPrepareFailed {
@@ -92,7 +92,7 @@ fn build_graph_shell(
                         }
                     })?,
                 ),
-                input: crate::node_system::document::PortAddress::declared(
+                input: crate::graph_document::PortAddress::declared(
                     *returned,
                     crate::node_system::protocol::PortKey::new("enter").map_err(|error| {
                         ProjectFilesystemError::TransactionPrepareFailed {
@@ -124,7 +124,7 @@ fn rebind_duplicate(
         .nodes
         .keys()
         .copied()
-        .map(|id| (id, crate::node_system::document::NodeId::new()))
+        .map(|id| (id, crate::graph_document::NodeId::new()))
         .collect::<HashMap<_, _>>();
     document.document.nodes = document
         .document
@@ -148,7 +148,7 @@ fn rebind_duplicate(
         .connections
         .into_values()
         .map(|mut connection| {
-            connection.id = crate::node_system::document::ConnectionId::new();
+            connection.id = crate::graph_document::ConnectionId::new();
             connection.output.node_id = node_ids[&connection.output.node_id];
             connection.input.node_id = node_ids[&connection.input.node_id];
             (connection.id, connection)
@@ -172,7 +172,7 @@ fn rebind_duplicate(
         .collect();
     document.name = name;
     document.revision = ResourceRevision::INITIAL;
-    document.document.revision = ResourceRevision::INITIAL;
+    document.document.revision = crate::graph_document::GraphRevision::INITIAL;
     if let Some(function) = document.function.as_mut() {
         function.revision = ResourceRevision::INITIAL;
     }
@@ -183,7 +183,7 @@ fn resource_from_disk_document(
     document: &crate::project::project_io::GraphDocument,
 ) -> GraphResourceDocument {
     let mut graph = document.document.clone();
-    graph.revision = document.revision;
+    graph.revision = document.revision.to_graph_revision();
     GraphResourceDocument {
         name: document.name.clone(),
         kind: document.kind,
@@ -206,7 +206,7 @@ fn validate_loaded_duplicate_source_authority(
     resource: &GraphResourceDocument,
     authority_revision: ResourceRevision,
 ) -> Result<(), ProjectFilesystemError> {
-    if resource.document.revision != authority_revision {
+    if resource.document.revision != authority_revision.to_graph_revision() {
         return Err(duplicate_revision_conflict(
             source,
             format!(
@@ -250,7 +250,7 @@ fn bind_unloaded_duplicate_source_authority(
                 "persisted event revision differs from the ledger revision",
             ));
         }
-        document.document.revision = authority_revision;
+        document.document.revision = authority_revision.to_graph_revision();
         return Ok(());
     }
 
@@ -283,7 +283,7 @@ fn bind_unloaded_duplicate_source_authority(
     }
 
     document.revision = authority_revision;
-    document.document.revision = authority_revision;
+    document.document.revision = authority_revision.to_graph_revision();
     document
         .function
         .as_mut()
@@ -335,7 +335,7 @@ impl ProjectState {
         .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
             message: error.to_string(),
         })?;
-        let revision = resource.document.revision;
+        let revision = ResourceRevision::from_graph_revision(resource.document.revision);
         let context = resource_context(self, session.clone(), operation_id, [], [graph_key(&path)]);
         let prepared = ProjectFilesystemTransaction::prepare_with_validator(
             context.clone(),
@@ -396,12 +396,7 @@ impl ProjectState {
             .get(source)
             .map(|graph| graph.name.clone())
             .unwrap_or_else(|| "Copy".into());
-        let source_kind =
-            source
-                .kind()
-                .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
-                    message: error.to_string(),
-                })?;
+        let source_kind = source.kind().into();
         let planning_data = self.get_data()?;
         let (_planned, _) = Self::allocate_graph_path_from_snapshot(
             None,
@@ -427,7 +422,7 @@ impl ProjectState {
         let authority_revision = authority_revision.ok_or_else(|| {
             duplicate_revision_conflict(source, "authoritative ledger revision is missing")
         })?;
-        if authority_revision != expected_revision {
+        if authority_revision != expected_revision.to_graph_revision() {
             return Err(duplicate_revision_conflict(
                 source,
                 format!(
@@ -438,7 +433,11 @@ impl ProjectState {
             ));
         }
         let source_document = if let Some(resource) = current_data.graphs.get(source) {
-            validate_loaded_duplicate_source_authority(source, resource, authority_revision)?;
+            validate_loaded_duplicate_source_authority(
+                source,
+                resource,
+                ResourceRevision::from_graph_revision(authority_revision),
+            )?;
             crate::project::project_io::snapshot_graph_document(&current_data, source).map_err(
                 |error| ProjectFilesystemError::TransactionPrepareFailed {
                     message: error.to_string(),
@@ -461,7 +460,7 @@ impl ProjectState {
             bind_unloaded_duplicate_source_authority(
                 source,
                 &mut persisted_source,
-                authority_revision,
+                ResourceRevision::from_graph_revision(authority_revision),
             )?;
             persisted_source
         };
@@ -479,10 +478,10 @@ impl ProjectState {
             &mut target_resource,
             retained_target_revision,
         )?;
-        duplicate.revision = target_revision;
+        duplicate.revision = ResourceRevision::from_graph_revision(target_revision);
         duplicate.document.revision = target_revision;
         if let Some(function) = duplicate.function.as_mut() {
-            function.revision = target_revision;
+            function.revision = ResourceRevision::from_graph_revision(target_revision);
         }
         let contents = serde_json::to_vec_pretty(&duplicate).map_err(|error| {
             ProjectFilesystemError::TransactionPrepareFailed {
@@ -520,7 +519,7 @@ impl ProjectState {
             &context,
             ResourceDocumentPatch::DeclareGraph {
                 path: target.clone(),
-                revision: target_revision,
+                revision: ResourceRevision::from_graph_revision(target_revision),
             },
         ) {
             Ok(result) => {
@@ -563,13 +562,20 @@ impl ProjectState {
                     .get(graph_path)
                     .copied()
             });
-        if tracked_revision.is_some_and(|revision| revision != expected_revision) {
+        if tracked_revision.is_some_and(|revision| {
+            ResourceRevision::from_graph_revision(revision) != expected_revision
+        }) {
             return Err(ProjectFilesystemError::ResourceRevisionConflict {
                 message: format!("revision for '{}' changed", graph_path),
             });
         }
         let expected = tracked_revision
-            .map(|revision| (graph_key(graph_path), revision))
+            .map(|revision| {
+                (
+                    graph_key(graph_path),
+                    ResourceRevision::from_graph_revision(revision),
+                )
+            })
             .into_iter();
         let context = resource_context(self, session.clone(), operation_id, expected, []);
         let lease = self.filesystem().acquire(session.root.clone())?;

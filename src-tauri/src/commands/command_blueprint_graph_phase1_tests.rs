@@ -32,7 +32,7 @@ fn command_blueprint_graph_phase1_tests_success_emits_exactly_one_complete_graph
             panic!("{} emitted a non-GraphDelta event", kind.label());
         };
         assert_eq!(project_instance_id, fixture.project_instance_id.as_str());
-        assert_eq!(delta.graph_path.0.as_ref(), fixture.graph_path.as_str());
+        assert_eq!(delta.graph_path.as_str(), fixture.graph_path.as_str());
         assert_eq!(delta.from_revision, from_revision);
         assert_eq!(delta.to_revision, from_revision.next());
         assert_eq!(delta.caused_by, Some(operation_id));

@@ -94,8 +94,8 @@ pub fn load_project_graph(
     lifecycle_token: u64,
 ) -> Result<EditorGraphProjectionDto, CommandError> {
     let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
-    let graph_path =
-        crate::project::GraphResourcePath::new(graph_path).map_err(CommandError::from)?;
+    let graph_path = crate::graph_document::GraphResourcePath::new(graph_path)
+        .map_err(|_| CommandError::expected("invalid_project_format"))?;
     state
         .load_graph_projection(
             &project_instance_id,
@@ -126,12 +126,15 @@ pub fn get_project_resource_path(
 mod tests {
     use super::*;
     use crate::data_contract::{DataType, DataValue};
+    use crate::graph_document::GraphResourcePath;
+    use crate::graph_document::GraphRevision;
     use crate::node_system::document::{
         EditorGraphMutationDto, FunctionDocumentPatch, FunctionResourceKey, FunctionSignature,
-        GraphRevision, MutationRequest, OperationId, ResourceKey,
+        MutationRequest, ResourceKey,
     };
     use crate::node_system::protocol::NodeTypeId;
-    use crate::project::{GraphResourcePath, ProjectData, ProjectInstanceId};
+    use crate::project::OperationId;
+    use crate::project::{ProjectData, ProjectInstanceId};
     use crate::variable::VariableScope;
 
     fn read_project_index_for_test(state: &ProjectState) -> ProjectIndex {
@@ -159,16 +162,14 @@ mod tests {
         graph_path: &GraphResourcePath,
     ) -> MutationRequest<EditorGraphMutationDto> {
         MutationRequest::new(
-            ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                graph_path.as_str().into(),
-            )),
+            ResourceKey::Graph(graph_path.clone()),
             GraphRevision::INITIAL,
             OperationId::new(),
             EditorGraphMutationDto::CreateNode {
                 descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
                     node_type_id: NodeTypeId::new("yssbi.constant.int64").unwrap(),
                 },
-                position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+                position: crate::graph_document::NodePosition { x: 10.0, y: 20.0 },
                 user_label: None,
                 connect_from: None,
             },
@@ -208,7 +209,8 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
         let function_path =
-            crate::project::GraphResourcePath::new("functions/Recovery.yssbi-function").unwrap();
+            crate::graph_document::GraphResourcePath::new("functions/Recovery.yssbi-function")
+                .unwrap();
         state
             .insert_graph(
                 function_path.clone(),
@@ -266,7 +268,8 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
         let function_path =
-            crate::project::GraphResourcePath::new("functions/History.yssbi-function").unwrap();
+            crate::graph_document::GraphResourcePath::new("functions/History.yssbi-function")
+                .unwrap();
         state
             .insert_graph(
                 function_path.clone(),
@@ -357,9 +360,9 @@ mod tests {
         let state = ProjectState::new();
         state.activate_project_fixture(root.to_string_lossy().into_owned(), ProjectData::new());
         let graph_path =
-            crate::project::GraphResourcePath::new("events/GraphOnly.yssbi-event").unwrap();
+            crate::graph_document::GraphResourcePath::new("events/GraphOnly.yssbi-event").unwrap();
         let function_path =
-            crate::project::GraphResourcePath::new("functions/Next.yssbi-function").unwrap();
+            crate::graph_document::GraphResourcePath::new("functions/Next.yssbi-function").unwrap();
         state
             .insert_graph(
                 graph_path.clone(),

@@ -185,7 +185,7 @@ fn insert_user_input(
     document.port_bindings.insert(
         address.clone(),
         DynamicPortBinding::UserCreated {
-            order: OrderKey(order.into()),
+            order: OrderKey::new(order),
         },
     );
     address
@@ -204,7 +204,7 @@ fn insert_connection(
             id,
             output: declared_output_address(output_node),
             input,
-            order: order.map(|value| OrderKey(value.into())),
+            order: order.map(|value| OrderKey::new(value)),
         },
     );
 }
@@ -382,7 +382,7 @@ fn subgraph_export_keeps_only_internal_connections() {
     assert_eq!(snapshot.connections.len(), 1);
     assert_eq!(
         snapshot.connections[0].order,
-        Some(OrderKey("internal-order".into())),
+        Some(OrderKey::new("internal-order")),
     );
     let wire = serde_json::to_string(&snapshot).unwrap();
     assert!(!wire.contains(&fixture.outgoing_connection.to_string()));
@@ -523,7 +523,7 @@ fn subgraph_insert_restores_dynamic_instances_literals_and_ordered_edges() {
     assert_eq!(document.connections.len(), 1);
     assert_eq!(
         document.connections.values().next().unwrap().order,
-        Some(OrderKey("internal-order".into())),
+        Some(OrderKey::new("internal-order")),
     );
 }
 
@@ -631,7 +631,7 @@ fn subgraph_insert_rejects_each_limit_plus_one() {
     let invalid_binding = || ClipboardPortBindingDto {
         address: dangling_address(),
         binding: ClipboardDynamicPortBindingDto::UserCreated {
-            order: OrderKey("limit".into()),
+            order: OrderKey::new("limit"),
         },
     };
     let invalid_connection = || ClipboardConnectionDto {
@@ -990,7 +990,7 @@ fn function_binding_fixture() -> (
     let function_path = CatalogResourcePath::new("functions/callee.yssbi-function");
     let node_type = NodeTypeId::new("yssbi.project.function.call").unwrap();
     let parameter = FunctionParameter {
-        id: FunctionParameterId("amount".into()),
+        id: FunctionParameterId::new("amount"),
         name: "Amount".into(),
         type_name: "Int64".into(),
     };
@@ -1037,10 +1037,10 @@ fn function_binding_fixture() -> (
             },
             binding: ClipboardDynamicPortBindingDto::Resolved {
                 origin: ClipboardDynamicMemberOriginDto::FunctionParameter {
-                    function: GraphResourcePath("functions/callee.yssbi-function".into()),
+                    function: GraphResourcePath::new("functions/callee.yssbi-function").unwrap(),
                     parameter: parameter.id,
                 },
-                order: OrderKey("00000".into()),
+                order: OrderKey::new("00000"),
                 last_known: ClipboardLastKnownPortMetadataDto {
                     label: "Amount".into(),
                     value_type: Some(TypeExpr::Concrete(TypeId::new("core.int64").unwrap())),
@@ -1137,10 +1137,10 @@ fn subgraph_insert_rejects_connection_with_incompatible_authoritative_function_t
         address: output_address.clone(),
         binding: ClipboardDynamicPortBindingDto::Resolved {
             origin: ClipboardDynamicMemberOriginDto::FunctionParameter {
-                function: GraphResourcePath("functions/callee.yssbi-function".into()),
-                parameter: FunctionParameterId("return".into()),
+                function: GraphResourcePath::new("functions/callee.yssbi-function").unwrap(),
+                parameter: FunctionParameterId::new("return"),
             },
-            order: OrderKey("00000".into()),
+            order: OrderKey::new("00000"),
             last_known: ClipboardLastKnownPortMetadataDto {
                 label: "Int64".into(),
                 value_type: Some(TypeExpr::Concrete(TypeId::new("core.int64").unwrap())),
@@ -1214,7 +1214,7 @@ fn subgraph_insert_rejects_resolved_function_member_absent_from_signature() {
     let ClipboardDynamicMemberOriginDto::FunctionParameter { parameter, .. } = origin else {
         unreachable!()
     };
-    *parameter = FunctionParameterId("missing".into());
+    *parameter = FunctionParameterId::new("missing");
 
     assert_clipboard_invalid(
         instantiate_subgraph(
@@ -1267,10 +1267,10 @@ fn subgraph_insert_rejects_resolved_database_field_without_field_authority() {
             },
             binding: ClipboardDynamicPortBindingDto::Resolved {
                 origin: ClipboardDynamicMemberOriginDto::SchemaField {
-                    source: SchemaSourceIdentity("databases/main".into()),
-                    field: SchemaFieldIdentity("customer_id".into()),
+                    source: SchemaSourceIdentity::new("databases/main"),
+                    field: SchemaFieldIdentity::new("customer_id"),
                 },
-                order: OrderKey("00000".into()),
+                order: OrderKey::new("00000"),
                 last_known: ClipboardLastKnownPortMetadataDto::default(),
             },
         }],
@@ -1361,7 +1361,7 @@ fn project_state_insert_subgraph_raw_json_preserves_complex_patch_projection_and
     let state = project.state();
     state.project_store.write().unwrap().node_registry = Arc::new(subgraph_registry());
     let project_graph_path =
-        crate::project::GraphResourcePath::new(export.graph_path.0.as_ref()).unwrap();
+        crate::graph_document::GraphResourcePath::new(export.graph_path.as_str()).unwrap();
     state
         .insert_graph(
             project_graph_path.clone(),
@@ -1410,7 +1410,7 @@ fn project_state_insert_subgraph_raw_json_preserves_complex_patch_projection_and
     assert_eq!(committed.connections.len(), 1);
     assert_eq!(
         committed.connections.values().next().unwrap().order,
-        Some(OrderKey("internal-order".into()))
+        Some(OrderKey::new("internal-order"))
     );
     let mut reconstructed = original.clone();
     reconstructed.apply_patch(&result.delta.payload).unwrap();

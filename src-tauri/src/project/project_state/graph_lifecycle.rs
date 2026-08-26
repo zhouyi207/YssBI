@@ -83,9 +83,22 @@ impl ProjectState {
         let allocated =
             crate::project::allocate_unique_resource_name(&requested, existing_names.iter());
         let path = match kind {
-            crate::project::GraphDocumentKind::Event => GraphResourcePath::event(&allocated),
-            crate::project::GraphDocumentKind::Function => GraphResourcePath::function(&allocated),
-        };
+            crate::project::GraphDocumentKind::Event => GraphResourcePath::new(format!(
+                "{}/{}.{}",
+                crate::project::EVENTS_DIR,
+                allocated.as_str(),
+                crate::project::EVENT_EXTENSION
+            )),
+            crate::project::GraphDocumentKind::Function => GraphResourcePath::new(format!(
+                "{}/{}.{}",
+                crate::project::FUNCTIONS_DIR,
+                allocated.as_str(),
+                crate::project::FUNCTION_EXTENSION
+            )),
+        }
+        .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+            message: error.to_string(),
+        })?;
 
         Ok((path, allocated.as_str().to_owned()))
     }

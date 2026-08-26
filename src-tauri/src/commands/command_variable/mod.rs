@@ -2,9 +2,9 @@ use crate::data_contract::{DataType, DataValue};
 use crate::error::CommandError;
 use crate::event::ResourceMutationResultDto;
 use crate::event::{Event, EventProject, emit_project_event};
-use crate::node_system::document::{OperationId, ResourceRevision};
 #[cfg(test)]
 use crate::project::project_writers::ProjectSaveResultDto;
+use crate::project::{OperationId, ResourceRevision};
 use crate::project::{ProjectInstanceId, ProjectState};
 use crate::schema::VariableInstanceDTO;
 use crate::variable::{VariableId, VariableScope};
@@ -29,7 +29,7 @@ fn persist_global_variables_with_emitter(
     project_instance_id: ProjectInstanceId,
     expected_revisions: std::collections::BTreeMap<
         crate::node_system::document::ResourceKey,
-        crate::node_system::document::ResourceRevision,
+        crate::project::ResourceRevision,
     >,
     operation_id: OperationId,
     mut emit: impl FnMut(Event),
@@ -329,10 +329,10 @@ mod tests {
     use super::*;
     use crate::event::{Event, EventProject};
     use crate::node_system::document::{
-        HistoryMutation, MutationRequest, OperationId, ResourceKey, ResourceRevision,
-        VariableResourceKey,
+        HistoryMutation, MutationRequest, ResourceKey, VariableResourceKey,
     };
     use crate::project::ProjectData;
+    use crate::project::{OperationId, ResourceRevision};
     use std::collections::BTreeMap;
 
     fn active_state(label: &str) -> (std::path::PathBuf, ProjectState, ProjectInstanceId) {
@@ -871,14 +871,14 @@ mod tests {
         std::path::PathBuf,
         ProjectState,
         ProjectInstanceId,
-        crate::project::GraphResourcePath,
+        crate::graph_document::GraphResourcePath,
     ) {
         let root = std::env::temp_dir().join(format!(
             "yssbi-local-history-{label}-{}",
             uuid::Uuid::new_v4()
         ));
         let graph_path =
-            crate::project::GraphResourcePath::new("events/Local.yssbi-event").unwrap();
+            crate::graph_document::GraphResourcePath::new("events/Local.yssbi-event").unwrap();
         let mut data = ProjectData::new();
         data.graphs.insert(
             graph_path.clone(),
@@ -899,7 +899,7 @@ mod tests {
 
     fn disk_local_variables(
         root: &std::path::Path,
-        graph_path: &crate::project::GraphResourcePath,
+        graph_path: &crate::graph_document::GraphResourcePath,
     ) -> std::collections::HashMap<VariableId, crate::variable::VariableInstance> {
         let document: crate::project::project_io::GraphDocument =
             serde_json::from_slice(&std::fs::read(root.join(graph_path.as_str())).unwrap())

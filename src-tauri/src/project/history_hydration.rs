@@ -1,12 +1,14 @@
+use crate::graph_document::GraphResourcePath;
 use crate::node_system::document::{
-    HistoryEntryId, HistoryMutation, MutationConflict, MutationRequest, ProjectDocumentState,
-    ProjectHistory, ProjectHistoryTransaction, ResourceDocumentPatch, ResourceKey,
-    ResourceRevision, VariableDocument, VariableResourceKey, WorksheetResourceKey,
+    HistoryMutation, MutationConflict, MutationRequest, ProjectDocumentState, ProjectHistory,
+    ProjectHistoryTransaction, ResourceDocumentPatch, ResourceKey, VariableDocument,
+    VariableResourceKey, WorksheetResourceKey,
 };
 use crate::project::{
-    GraphDocumentKind, GraphResourcePath, ProjectData, ProjectFilesystemCoordinator,
-    ProjectFilesystemLeaseSet, ProjectSession, WorksheetResourcePath,
+    GraphDocumentKind, ProjectData, ProjectFilesystemCoordinator, ProjectFilesystemLeaseSet,
+    ProjectSession, WorksheetResourcePath,
 };
+use crate::project::{HistoryEntryId, ResourceRevision};
 use crate::variable::{VariableInstance, VariableScope};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -25,7 +27,7 @@ pub(super) struct HistoryPreparationBasis {
     pub persistence: crate::node_system::document::HistoryPersistencePolicy,
     pub undo: bool,
     pub expected_revisions: BTreeMap<ResourceKey, ResourceRevision>,
-    pub expected_graph_revisions: BTreeMap<GraphResourcePath, ResourceRevision>,
+    pub expected_graph_revisions: BTreeMap<GraphResourcePath, crate::graph_document::GraphRevision>,
     pub residency: BTreeMap<GraphResourcePath, HistoryGraphResidency>,
 }
 
@@ -53,7 +55,8 @@ pub(super) struct HistoryPreparationSnapshot {
     authority_generation: u64,
     undo: bool,
     transaction: ProjectHistoryTransaction,
-    graph_revisions: std::collections::HashMap<GraphResourcePath, ResourceRevision>,
+    graph_revisions:
+        std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
     variable_revisions: std::collections::HashMap<
         crate::variable::VariableId,
         super::project_state::VariableRevisionEntry,
@@ -89,14 +92,14 @@ pub(super) fn discover_touched_resources(
     for change in &transaction.changes {
         match &change.resource {
             ResourceKey::Graph(key) => {
-                let path = GraphResourcePath::new(key.0.as_ref())
+                let path = GraphResourcePath::new(key.as_str())
                     .map_err(|error| format!("invalid History graph owner: {error}"))?;
                 insert_graph_residency(&mut touched.graphs, data, path);
             }
             ResourceKey::Function(key) => {
                 let path = GraphResourcePath::new(key.0.as_ref())
                     .map_err(|error| format!("invalid Function owner graph: {error}"))?;
-                if path.kind().ok() != Some(GraphDocumentKind::Function)
+                if path.kind() != crate::graph_document::GraphResourceKind::Function
                     || !known_graphs.contains(&path)
                 {
                     return Err(format!(
@@ -166,7 +169,10 @@ pub(super) fn capture_history_preparation_snapshot(
     transaction: ProjectHistoryTransaction,
     anchor: &ResourceKey,
     data: ProjectData,
-    graph_revisions: std::collections::HashMap<GraphResourcePath, ResourceRevision>,
+    graph_revisions: std::collections::HashMap<
+        GraphResourcePath,
+        crate::graph_document::GraphRevision,
+    >,
     variable_revisions: std::collections::HashMap<
         crate::variable::VariableId,
         super::project_state::VariableRevisionEntry,
@@ -215,7 +221,7 @@ fn retain_required_documents(
         .collect::<BTreeSet<_>>();
     documents.graphs.retain(|path, _| {
         required.contains(&ResourceKey::Graph(path.clone()))
-            || GraphResourcePath::new(path.0.as_ref())
+            || GraphResourcePath::new(path.as_str())
                 .ok()
                 .is_some_and(|path| touched_graphs.contains_key(&path))
     });
@@ -411,7 +417,7 @@ pub(super) fn synchronize_function_owner_revisions(
             .as_ref()
             .expect("History Function owner retains its embedded Function document")
             .revision;
-        graph.document.revision = revision;
+        graph.document.revision = revision.to_graph_revision();
     }
 }
 
@@ -431,7 +437,7 @@ fn hydrate_graph_document(
                 format!("hydrated graph '{}' has no revision authority", graph_path).into(),
             )
         })?;
-    if disk.revision != expected_graph_revision {
+    if disk.revision.to_graph_revision() != expected_graph_revision {
         return Err(MutationConflict::History(
             format!(
                 "hydrated graph '{}' revision mismatch: expected {}, found {}",
@@ -443,9 +449,9 @@ fn hydrate_graph_document(
         ));
     }
 
-    let document_key = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+    let document_key = graph_path.clone();
     let mut graph = disk.document;
-    graph.revision = disk.revision;
+    graph.revision = disk.revision.to_graph_revision();
     snapshot
         .documents
         .graphs
@@ -547,7 +553,7 @@ fn validate_loaded_graph_revisions(
                 format!("loaded graph '{}' has no revision authority", path).into(),
             )
         })?;
-        let key = crate::node_system::document::GraphResourcePath(path.as_str().into());
+        let key = path.clone();
         let actual = snapshot
             .documents
             .graphs
@@ -675,7 +681,10 @@ fn document_revision(
     resource: &ResourceKey,
 ) -> Option<ResourceRevision> {
     match resource {
-        ResourceKey::Graph(path) => documents.graphs.get(path).map(|document| document.revision),
+        ResourceKey::Graph(path) => documents
+            .graphs
+            .get(path)
+            .map(|document| ResourceRevision::from_graph_revision(document.revision)),
         ResourceKey::Function(key) => documents
             .functions
             .get(key)
@@ -801,7 +810,7 @@ pub(super) fn validate_durable_history_document(
     }
     let graph_path = GraphResourcePath::new(relative_path.to_string_lossy().replace('\\', "/"))
         .map_err(|error| error.to_string())?;
-    let kind = graph_path.kind().map_err(|error| error.to_string())?;
+    let kind = graph_path.kind().into();
     super::project_io::parse_graph_resource_document(contents, relative_path, kind)
         .map(|_| ())
         .map_err(|error| error.to_string())
@@ -916,7 +925,7 @@ fn insert_local_variable_owner(
 ) -> Result<(), String> {
     let path = GraphResourcePath::new(owner)
         .map_err(|error| format!("Variable '{}' has invalid owner graph: {error}", key.0))?;
-    if path.kind().ok() != Some(expected_kind) || !known_graphs.contains(&path) {
+    if GraphDocumentKind::from(path.kind()) != expected_kind || !known_graphs.contains(&path) {
         return Err(format!(
             "Variable '{}' owner graph '{}' is not authoritative",
             key.0, path
@@ -933,15 +942,15 @@ fn insert_local_variable_owner(
 mod tests {
     use super::{HistoryGraphResidency, discover_touched_resources};
     use crate::data_contract::{DataType, DataValue};
+    use crate::graph_document::GraphResourcePath as DocumentGraphResourcePath;
+    use crate::graph_document::GraphResourcePath;
     use crate::node_system::document::{
         FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, GraphDocumentOperation,
-        GraphDocumentPatch, GraphResourcePath as DocumentGraphResourcePath, OperationId,
-        ProjectHistoryTransaction, ResourcePatch, ResourceRevision, VariableDocumentPatch,
+        GraphDocumentPatch, ProjectHistoryTransaction, ResourcePatch, VariableDocumentPatch,
         VariableResourceKey,
     };
-    use crate::project::{
-        GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
-    };
+    use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData};
+    use crate::project::{OperationId, ResourceRevision};
     use crate::variable::{VariableId, VariableInstance, VariableScope};
     use std::collections::{BTreeMap, BTreeSet};
 
@@ -958,7 +967,7 @@ mod tests {
     }
 
     fn document_graph_path(path: &GraphResourcePath) -> DocumentGraphResourcePath {
-        DocumentGraphResourcePath(path.as_str().into())
+        path.clone()
     }
 
     fn variable_id() -> VariableId {
@@ -1009,7 +1018,7 @@ mod tests {
             vec![
                 ResourcePatch::graph(
                     document_graph_path(&event_path()),
-                    ResourceRevision::INITIAL,
+                    crate::graph_document::GraphRevision::INITIAL,
                     GraphDocumentPatch::new(Vec::<GraphDocumentOperation>::new()),
                 ),
                 ResourcePatch::function(
@@ -1078,7 +1087,7 @@ mod tests {
             vec![
                 ResourcePatch::graph(
                     document_graph_path(&function_path()),
-                    ResourceRevision::INITIAL,
+                    crate::graph_document::GraphRevision::INITIAL,
                     GraphDocumentPatch::new(Vec::<GraphDocumentOperation>::new()),
                 ),
                 ResourcePatch::function(

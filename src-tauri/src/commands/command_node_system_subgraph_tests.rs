@@ -1,12 +1,11 @@
 use super::{export_graph_subgraph_from_state, mutation_conflict_to_command_error};
+use crate::graph_document::GraphResourcePath;
+use crate::graph_document::{DocumentNode, GraphDocument, NodeId, NodePosition, ParameterValues};
 use crate::node_system::catalog::build_builtin_node_system;
-use crate::node_system::document::{
-    DocumentNode, GraphDocument, MutationConflict, NodeId, NodePosition, ParameterValues,
-};
+use crate::node_system::document::MutationConflict;
 use crate::node_system::protocol::NodeTypeId;
 use crate::project::{
-    GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, ProjectInstanceId,
-    ProjectState,
+    GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectInstanceId, ProjectState,
 };
 
 #[test]

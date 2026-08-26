@@ -56,14 +56,12 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "src-tauri/src/node_system/runtime/data_series.rs",
         "yssbi_lib::node_system::runtime::data_series",
         [
-            (Use, 2, "yssbi_lib::node_system::protocol::types::TypeExpr"),
             (Use, 1, "yssbi_lib::node_system::protocol::value::Value"),
             (
                 Path,
                 1,
                 "yssbi_lib::node_system::protocol::data_series::DATA_SERIES_CONSTRUCTOR_ID"
             ),
-            (Path, 2, "yssbi_lib::node_system::protocol::types::TypeExpr"),
         ],
     );
     debt_group!(
@@ -73,11 +71,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "src-tauri/src/node_system/runtime/execution_event.rs",
         "yssbi_lib::node_system::runtime::execution_event",
         [
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::model::GraphResourcePath"
-            ),
             (Use, 1, "yssbi_lib::node_system::identity::ProjectSessionId"),
             (
                 Use,
@@ -107,11 +100,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 Use,
                 1,
                 "yssbi_lib::node_system::analysis::basis::ResourceVersionSet"
-            ),
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::model::GraphResourcePath"
             ),
             (Use, 1, "yssbi_lib::node_system::identity::ProjectSessionId"),
             (Use, 1, "yssbi_lib::node_system::plan::model::ExecutionPlan"),
@@ -145,12 +133,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "src-tauri/src/node_system/runtime/kernel.rs",
         "yssbi_lib::node_system::runtime::kernel",
         [
-            (Use, 1, "yssbi_lib::node_system::document::ids::NodeId"),
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::model::GraphResourcePath"
-            ),
             (
                 Use,
                 1,
@@ -881,6 +863,12 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             ),
             (Use, 1, "yssbi_lib::node_system::plan::model::ResourceId"),
             (Use, 1, "yssbi_lib::node_system::plan::model::ResourceKind"),
+            (Path, 3, "yssbi_lib::project::identity::ResourceRevision"),
+            (
+                Path,
+                1,
+                "yssbi_lib::project::identity::ResourceRevision::INITIAL"
+            ),
             (
                 Path,
                 1,
@@ -890,16 +878,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 Path,
                 1,
                 "yssbi_lib::database::duckdb_reader::query_to_dataframe_for_table"
-            ),
-            (
-                Path,
-                3,
-                "yssbi_lib::node_system::document::ids::ResourceRevision"
-            ),
-            (
-                Path,
-                1,
-                "yssbi_lib::node_system::document::ids::ResourceRevision::INITIAL"
             ),
         ],
     );
@@ -1002,17 +980,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (
                 Use,
                 1,
-                "yssbi_lib::node_system::document::ids::GraphRevision"
-            ),
-            (Use, 1, "yssbi_lib::node_system::document::ids::NodeId"),
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::model::GraphResourcePath"
-            ),
-            (
-                Use,
-                1,
                 "yssbi_lib::node_system::plan::model::GraphOutputRef"
             ),
             (
@@ -1081,14 +1048,7 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "rust.internal.source-layer",
         "src-tauri/src/node_system/runtime/run_output.rs",
         "yssbi_lib::node_system::runtime::run_output",
-        [
-            (Use, 1, "yssbi_lib::node_system::document::ids::NodeId"),
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::model::GraphResourcePath"
-            ),
-        ],
+        [],
     );
     debt_group!(
         entries,
@@ -1164,12 +1124,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 "yssbi_lib::node_system::protocol::model::RetryPolicy"
             ),
             (Use, 1, "yssbi_lib::node_system::protocol::value::Value"),
-            (Path, 2, "yssbi_lib::node_system::document::ids::NodeId"),
-            (
-                Path,
-                1,
-                "yssbi_lib::node_system::document::ids::NodeId::from_uuid"
-            ),
             (
                 Path,
                 1,

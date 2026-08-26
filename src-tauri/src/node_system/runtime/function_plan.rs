@@ -1,7 +1,7 @@
 use super::FunctionPlanProvider;
+use crate::graph_document::GraphResourcePath;
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{ResourceKey, ResourceVersion, ResourceVersionSet};
-use crate::node_system::document::GraphResourcePath;
 use crate::node_system::plan::{
     ExecutionPlan, FunctionPlanAbi, FunctionPlanHandle, PlanSourceFacts,
 };
@@ -97,7 +97,7 @@ impl FunctionPlanGeneration {
         &self,
         path: &GraphResourcePath,
     ) -> Result<Option<Arc<PublishedFunctionPlan>>, FunctionPlanStoreError> {
-        let key = ResourceKey::new(path.0.clone());
+        let key = ResourceKey::new(path.as_str());
         let Some(version) = self.basis.resource_versions.get(&key) else {
             return Ok(None);
         };
@@ -130,7 +130,9 @@ impl FunctionPlanProvider for FunctionPlanGeneration {
         &self,
         handle: &FunctionPlanHandle,
     ) -> Result<Option<Arc<PublishedFunctionPlan>>, Box<str>> {
-        self.current_function(&GraphResourcePath(handle.as_str().into()))
+        let path = GraphResourcePath::new(handle.as_str())
+            .map_err(|error| error.to_string().into_boxed_str())?;
+        self.current_function(&path)
             .map_err(|error| error.to_string().into())
     }
 
@@ -284,7 +286,7 @@ fn validate_plan(
             message: "plan graph path does not match its index".into(),
         });
     }
-    let resource_key = ResourceKey::new(path.0.clone());
+    let resource_key = ResourceKey::new(path.as_str());
     if current.resource_versions.get(&resource_key) != Some(version) {
         return Err(FunctionPlanStoreError::Stale {
             path: path.clone(),
@@ -342,19 +344,27 @@ impl fmt::Display for FunctionPlanStoreError {
             } => write!(
                 formatter,
                 "function plan '{}' ABI {direction} value {} has a mismatched value contract",
-                path.0,
+                path.as_str(),
                 value.index()
             ),
             Self::Stale { path, message } => {
-                write!(formatter, "function plan '{}' is stale: {message}", path.0)
+                write!(
+                    formatter,
+                    "function plan '{}' is stale: {message}",
+                    path.as_str()
+                )
             }
             Self::InvalidBasis { path, message } => write!(
                 formatter,
                 "function plan '{}' has invalid basis: {message}",
-                path.0
+                path.as_str()
             ),
             Self::Duplicate { path } => {
-                write!(formatter, "function plan '{}' was published twice", path.0)
+                write!(
+                    formatter,
+                    "function plan '{}' was published twice",
+                    path.as_str()
+                )
             }
         }
     }

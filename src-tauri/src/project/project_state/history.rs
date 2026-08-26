@@ -157,8 +157,8 @@ impl ProjectState {
             .get_mut(graph_path)
             .expect("Function owner graph remains loaded")
             .document
-            .revision = to_revision;
-        graph_revisions.insert(graph_path.clone(), to_revision);
+            .revision = to_revision.to_graph_revision();
+        graph_revisions.insert(graph_path.clone(), to_revision.to_graph_revision());
         let deltas = vec![crate::node_system::document::ResourceDeltaEvent {
             resource: expected_resource,
             from_revision,
@@ -768,9 +768,10 @@ impl ProjectState {
             }
             for (resource, expected) in &prepared.basis.expected_revisions {
                 let actual = match resource {
-                    ResourceKey::Graph(path) => GraphResourcePath::new(path.0.as_ref())
+                    ResourceKey::Graph(path) => GraphResourcePath::new(path.as_str())
                         .ok()
-                        .and_then(|path| graph_revisions.get(&path).copied()),
+                        .and_then(|path| graph_revisions.get(&path).copied())
+                        .map(ResourceRevision::from_graph_revision),
                     ResourceKey::Function(key) => GraphResourcePath::new(key.0.as_ref())
                         .ok()
                         .and_then(|path| {
@@ -904,12 +905,7 @@ pub(in crate::project) fn project_documents(
     let mut documents = ProjectDocumentState::new(
         data.graphs
             .iter()
-            .map(|(path, graph)| {
-                (
-                    crate::node_system::document::GraphResourcePath(path.as_str().into()),
-                    graph.document.clone(),
-                )
-            })
+            .map(|(path, graph)| (path.clone(), graph.document.clone()))
             .collect(),
         data.graphs
             .iter()
@@ -966,9 +962,12 @@ pub(in crate::project) fn project_documents(
 pub(super) fn try_project_document_revision(
     documents: &ProjectDocumentState,
     resource: &ResourceKey,
-) -> Option<crate::node_system::document::ResourceRevision> {
+) -> Option<crate::project::ResourceRevision> {
     match resource {
-        ResourceKey::Graph(path) => documents.graphs.get(path).map(|document| document.revision),
+        ResourceKey::Graph(path) => documents
+            .graphs
+            .get(path)
+            .map(|document| ResourceRevision::from_graph_revision(document.revision)),
         ResourceKey::Function(key) => documents
             .functions
             .get(key)
@@ -988,7 +987,7 @@ pub(super) fn try_project_document_revision(
 pub(super) fn project_document_revision(
     documents: &ProjectDocumentState,
     resource: &ResourceKey,
-) -> crate::node_system::document::ResourceRevision {
+) -> crate::project::ResourceRevision {
     try_project_document_revision(documents, resource)
         .expect("history transaction resource remains present")
 }
@@ -1002,7 +1001,7 @@ pub(in crate::project) fn replace_project_documents(
     mut documents: ProjectDocumentState,
 ) {
     for (path, graph) in &mut data.graphs {
-        let key = crate::node_system::document::GraphResourcePath(path.as_str().into());
+        let key = path.clone();
         if let Some(document) = documents.graphs.remove(&key) {
             graph.document = document;
         }

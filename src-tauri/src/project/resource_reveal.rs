@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use crate::database::{DatabaseDecl, DatabaseEngine};
-use crate::project::{GraphResourcePath, WorksheetResourcePath};
+use crate::graph_document::GraphResourcePath;
+use crate::project::WorksheetResourcePath;
 
 use super::{ProjectError, ProjectState};
 

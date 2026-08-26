@@ -880,7 +880,7 @@ const fn registration(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::document::{GraphResourcePath, NodeId};
+    use crate::graph_document::{GraphResourcePath, NodeId};
     use crate::node_system::plan::{CompiledParameterHandle, CompiledResourceRequirement};
     use crate::node_system::runtime::RunId;
     use crate::node_system::runtime::{
@@ -912,7 +912,8 @@ mod tests {
             cancellation.clone(),
         )
         .unwrap();
-        let source_graph_path = GraphResourcePath("events/dataframe-test.yssbi-event".into());
+        let source_graph_path =
+            GraphResourcePath::new("events/dataframe-test.yssbi-event").unwrap();
         let context = KernelContext {
             run_id: RunId::new(1),
             frame_id: FrameId::next().unwrap(),

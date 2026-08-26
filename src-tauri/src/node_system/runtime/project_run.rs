@@ -563,8 +563,8 @@ mod tests {
         let compiler =
             crate::node_system::compiler::GraphCompiler::new(node_registry.as_ref(), &resources);
         let snapshot = compiler.snapshot(
-            crate::node_system::document::GraphResourcePath("events/cancelled".into()),
-            &crate::node_system::document::GraphDocument::default(),
+            crate::graph_document::GraphResourcePath::new("events/cancelled").unwrap(),
+            &crate::graph_document::GraphDocument::default(),
         );
         assert!(
             compiler

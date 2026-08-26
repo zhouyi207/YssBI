@@ -2,6 +2,11 @@ use super::{
     DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER, build_provider_fragment,
 };
 use crate::data_contract::DataType;
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+    GraphDocument, GraphResourcePath, GraphRevision, LastKnownPortMetadata, NodeId, NodePosition,
+    OrderKey, PortAddress, PortInstanceId, SchemaFieldIdentity, SchemaSourceIdentity,
+};
 use crate::node_system::analysis::{
     AnalysisResourceReads, AnalysisResourceResolver, ResolvedPortStatus, ResourceObservationSet,
     ResourceVersionSet,
@@ -18,11 +23,7 @@ use crate::node_system::compiler::{
     builtin_function_interface_resolver_ids,
 };
 use crate::node_system::document::{
-    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    GraphDocument, GraphMutation, GraphResourcePath, GraphRevision, LastKnownPortMetadata,
-    MutationRequest, NodeId, NodePosition, OperationId, OrderKey, PortAddress, PortInstanceId,
-    ResourceKey as DocumentResourceKey, RevisionedGraphStore, SchemaFieldIdentity,
-    SchemaSourceIdentity,
+    GraphMutation, MutationRequest, ResourceKey as DocumentResourceKey, RevisionedGraphStore,
 };
 use crate::node_system::plan::{
     KernelHandle, RelationalExpression, RelationalLiteral, RelationalOperator,
@@ -36,6 +37,7 @@ use crate::node_system::protocol::{
     numeric_data_series_type,
 };
 use crate::node_system::runtime::build_builtin_kernel_registry;
+use crate::project::OperationId;
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
@@ -70,7 +72,7 @@ struct EmptyAnalysisResources {
 impl AnalysisResourceResolver for EmptyAnalysisResources {
     fn resolve_function(
         &mut self,
-        _: &crate::node_system::document::GraphResourcePath,
+        _: &crate::graph_document::GraphResourcePath,
     ) -> Result<
         crate::node_system::analysis::ResolvedFunction<'_>,
         crate::node_system::analysis::ResourceResolutionError,
@@ -443,8 +445,8 @@ fn decompose_projects_final_upstream_schema() {
             assert_eq!(
                 renamed.member().locator,
                 DynamicMemberLocator::SchemaField {
-                    source: SchemaSourceIdentity("databases/main".into()),
-                    field: SchemaFieldIdentity("customer_id".into()),
+                    source: SchemaSourceIdentity::new("databases/main"),
+                    field: SchemaFieldIdentity::new("customer_id"),
                 },
             );
         }
@@ -523,12 +525,12 @@ fn dataframe_field_type_unsupported_projects_any_and_port_diagnostic() {
 
 #[test]
 fn decompose_orphan_preserves_last_known_label_and_type() {
-    let graph_path = GraphResourcePath("events/dataframe-orphan".into());
+    let graph_path = GraphResourcePath::new("events/dataframe-orphan").unwrap();
     let decompose_id = dataframe_node_id(3);
     let consumer_id = dataframe_node_id(4);
     let customer_locator = DynamicMemberLocator::SchemaField {
-        source: SchemaSourceIdentity("databases/main".into()),
-        field: SchemaFieldIdentity("customer_id".into()),
+        source: SchemaSourceIdentity::new("databases/main"),
+        field: SchemaFieldIdentity::new("customer_id"),
     };
     let expected_metadata = LastKnownPortMetadata {
         label: "customer_id".into(),
@@ -559,7 +561,7 @@ fn decompose_orphan_preserves_last_known_label_and_type() {
     let (member, authorization) = candidate.authorize_materialization(
         graph_path.clone(),
         &resolved.interface_projection.basis,
-        OrderKey("a".into()),
+        OrderKey::new("a"),
     );
     let mut store = RevisionedGraphStore::new(graph_path.clone(), document);
     store
@@ -585,7 +587,7 @@ fn decompose_orphan_preserves_last_known_label_and_type() {
         persisted,
         &DynamicPortBinding::Resolved {
             origin: customer_locator.clone(),
-            order: OrderKey("a".into()),
+            order: OrderKey::new("a"),
             last_known: expected_metadata.clone(),
         },
     );
@@ -606,7 +608,7 @@ fn decompose_orphan_preserves_last_known_label_and_type() {
         node_projection.projected_bindings.get(binding),
         Some(&ProjectedDynamicPortBinding::Orphan {
             origin: customer_locator,
-            order: OrderKey("a".into()),
+            order: OrderKey::new("a"),
             last_known: expected_metadata,
         }),
     );
@@ -642,15 +644,15 @@ fn dataframe_decompose_preserves_exact_dynamic_field_identity() {
         PortInstanceId::from_uuid(Uuid::from_u128(30)),
     );
     let customer_locator = DynamicMemberLocator::SchemaField {
-        source: SchemaSourceIdentity("databases/main".into()),
-        field: SchemaFieldIdentity("customer_id".into()),
+        source: SchemaSourceIdentity::new("databases/main"),
+        field: SchemaFieldIdentity::new("customer_id"),
     };
     let mut document = dataframe_document(None);
     document.port_bindings.insert(
         binding.clone(),
         DynamicPortBinding::Resolved {
             origin: customer_locator.clone(),
-            order: OrderKey("a".into()),
+            order: OrderKey::new("a"),
             last_known: LastKnownPortMetadata::default(),
         },
     );

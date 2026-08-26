@@ -1,9 +1,76 @@
 #[cfg(test)]
 use super::{ConnectionId, DocumentNode, DynamicPortBinding, InputState, NodeId, OrderKey};
-use super::{
-    DocumentConnection, DocumentError, EffectiveInputBinding, GraphDocument, PortAddress,
-    TypedValue,
-};
+use super::{DocumentConnection, DocumentError, GraphDocument, PortAddress, TypedValue};
+use crate::node_system::protocol::{PortKey, PortMemberGroupSpec};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EffectiveInputBinding {
+    Connections(Vec<super::ConnectionId>),
+    Literal(TypedValue),
+    ProtocolDefault(TypedValue),
+    Unbound,
+}
+
+pub(crate) struct PortMemberGroupState {
+    required_templates: BTreeSet<PortKey>,
+    present_templates: BTreeMap<super::PortInstanceId, BTreeSet<PortKey>>,
+}
+
+impl PortMemberGroupState {
+    pub(crate) fn complete_count(&self) -> usize {
+        self.present_templates
+            .values()
+            .filter(|present| present.is_superset(&self.required_templates))
+            .count()
+    }
+
+    pub(crate) fn is_complete(&self, instance_id: super::PortInstanceId) -> bool {
+        self.present_templates
+            .get(&instance_id)
+            .is_some_and(|present| present.is_superset(&self.required_templates))
+    }
+
+    pub(crate) fn address_is_complete(&self, address: &PortAddress) -> bool {
+        match &address.port {
+            super::PortRef::Instance { instance_id, .. } => self.is_complete(*instance_id),
+            super::PortRef::Declared { .. } => false,
+        }
+    }
+}
+
+pub(crate) fn port_member_group_state<'a>(
+    node_id: super::NodeId,
+    group: &PortMemberGroupSpec,
+    bindings: impl IntoIterator<Item = (&'a PortAddress, &'a super::DynamicPortBinding)>,
+) -> PortMemberGroupState {
+    let required_templates = group.templates.iter().cloned().collect::<BTreeSet<_>>();
+    let mut present_templates = BTreeMap::<super::PortInstanceId, BTreeSet<PortKey>>::new();
+    for (address, binding) in bindings {
+        if address.node_id != node_id
+            || !matches!(binding, super::DynamicPortBinding::UserCreated { .. })
+        {
+            continue;
+        }
+        let super::PortRef::Instance {
+            template,
+            instance_id,
+        } = &address.port
+        else {
+            continue;
+        };
+        if required_templates.contains(template) {
+            present_templates
+                .entry(*instance_id)
+                .or_default()
+                .insert(template.clone());
+        }
+    }
+    PortMemberGroupState {
+        required_templates,
+        present_templates,
+    }
+}
 
 #[cfg(test)]
 impl GraphDocument {

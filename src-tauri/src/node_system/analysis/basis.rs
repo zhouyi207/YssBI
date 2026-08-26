@@ -1,6 +1,5 @@
-use crate::node_system::document::{
-    FunctionDocument, GraphDocument, GraphResourcePath, GraphRevision,
-};
+use crate::graph_document::{GraphDocument, GraphResourcePath, GraphRevision};
+use crate::node_system::document::FunctionDocument;
 use crate::node_system::registry::RegistryFingerprint;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;

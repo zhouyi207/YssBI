@@ -1437,3 +1437,7 @@ Execution 不知道具体 UI
 - [ ] 为 T/Wald SCI adapter 增加显式的约束数量、自由度、矩阵维度与有限数值前置验证，分别映射 closed parameter、shape 与 non-finite violations。
 - [ ] 将通过结构验证后的下游 T/Wald 数值失败统一映射为 operation-specific `ComputationFailed`，禁止解析 `yss_sci` 原始字符串选择公开错误语义。
 - [ ] 增加窄 focused regressions，分别覆盖 typed input validation 与合法形状下零/奇异协方差的 computation-failure 映射。
+- [ ] 将 serialized GraphDocument、GraphResourcePath、GraphRevision 与 document identities 原子迁入 Pure Leaf graph_document，删除 node_system/project 旧声明及 re-export。
+- [ ] 将 OperationId、HistoryEntryId、ResourceRevision、ProjectRevision 与 ProjectTransactionRevision 拆为 Project-owned 独立 newtype，移除 ResourceRevision 到 GraphRevision 的 ownership alias。
+- [ ] 建立 Graph-owned schema、compile settings、immutable resource catalog 与 21 项 closed mutation/compile typed error contract，并保留 TypedValue untagged JSON wire。
+- [ ] 增加 resource catalog、graph-document wire、Pure Leaf JSON purpose 与 Project→Graph production edge focused guards，按 canonical origins 精确更新 architecture debt。

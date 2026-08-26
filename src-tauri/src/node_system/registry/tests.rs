@@ -1,9 +1,9 @@
 use super::*;
+use crate::graph_document::{DocumentNode, GraphDocument, NodeId, NodePosition};
 use crate::node_system::compiler::{
     CompilationOutcome, GraphCompiler, LoweredKernel, LoweredNode, LoweringContext, LoweringError,
     NodeLowerer, ResourceSnapshot,
 };
-use crate::node_system::document::{DocumentNode, GraphDocument, NodeId, NodePosition};
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::*;
 use crate::node_system::testing::TestProtocolBuilder;

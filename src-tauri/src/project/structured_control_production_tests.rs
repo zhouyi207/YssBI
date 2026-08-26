@@ -1,16 +1,17 @@
 use super::{
     GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, ProjectState,
 };
-use crate::node_system::document::{
-    ConnectionId, DocumentConnection, DocumentNode, DynamicPortBinding, GraphDocumentOperation,
-    GraphDocumentPatch, GraphRevision, NodeId, NodePosition, OperationId, OrderKey,
-    ParameterValues, PortAddress, PortInstanceId, ResourceKey,
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, DynamicPortBinding, GraphRevision, NodeId,
+    NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
 };
+use crate::node_system::document::{GraphDocumentOperation, GraphDocumentPatch, ResourceKey};
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::runtime::{
     OrdinaryRunErrorCode, ProjectResourceLeaseObserver, RunErrorOutcome, RunEvent, RunEventKind,
     RunEventSink, RunOutputMessage,
 };
+use crate::project::{OperationId, ResourceRevision};
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -218,31 +219,31 @@ fn branch_fixture(condition: bool) -> BranchDocumentFixture {
         (
             instance(BRANCH_NODE, "then_source", branch_member),
             DynamicPortBinding::UserCreated {
-                order: OrderKey("result".into()),
+                order: OrderKey::new("result"),
             },
         ),
         (
             instance(BRANCH_NODE, "else_source", branch_member),
             DynamicPortBinding::UserCreated {
-                order: OrderKey("result".into()),
+                order: OrderKey::new("result"),
             },
         ),
         (
             instance(BRANCH_NODE, "result", branch_member),
             DynamicPortBinding::UserCreated {
-                order: OrderKey("result".into()),
+                order: OrderKey::new("result"),
             },
         ),
         (
             instance(MERGE_NODE, "enter", 70),
             DynamicPortBinding::UserCreated {
-                order: OrderKey("true".into()),
+                order: OrderKey::new("true"),
             },
         ),
         (
             instance(MERGE_NODE, "enter", 71),
             DynamicPortBinding::UserCreated {
-                order: OrderKey("false".into()),
+                order: OrderKey::new("false"),
             },
         ),
     ];
@@ -454,7 +455,7 @@ fn loop_member_binding(
             .insert(
                 address.clone(),
                 DynamicPortBinding::UserCreated {
-                    order: OrderKey(order.into()),
+                    order: OrderKey::new(order),
                 },
             )
             .is_none()
@@ -533,7 +534,7 @@ fn carried_observation_loop_fixture() -> GraphResourceDocument {
                 .insert(
                     address.clone(),
                     DynamicPortBinding::UserCreated {
-                        order: OrderKey("observed".into()),
+                        order: OrderKey::new("observed"),
                     },
                 )
                 .is_none()
@@ -1013,9 +1014,7 @@ fn builtin_call_uses_current_persisted_function_generation_after_body_replacemen
         .apply_graph_patch(
             &function_path,
             crate::node_system::document::MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    function_path.as_str().into(),
-                )),
+                ResourceKey::Graph(function_path.clone()),
                 GraphRevision::INITIAL,
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::UpdateNode {
@@ -1073,7 +1072,7 @@ fn builtin_branch_commit_conflict_returns_no_requested_result_or_completion() {
         .unwrap();
     crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
     let final_output = crate::node_system::plan::GraphOutputRef {
-        graph_path: crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
+        graph_path: graph_path.clone(),
         port: instance(BRANCH_NODE, "result", 40),
     };
     let result_key = format!("requested.{}", final_output.port);
@@ -1096,7 +1095,7 @@ fn builtin_branch_commit_conflict_returns_no_requested_result_or_completion() {
                             winning_variable.id
                         ))
                         .unwrap(),
-                        expected_revision: GraphRevision::INITIAL,
+                        expected_revision: ResourceRevision::INITIAL,
                         before: winning_variable.clone(),
                         after: crate::data_contract::DataValue::Int64(99),
                     }],
@@ -1182,7 +1181,7 @@ fn builtin_branch_drain_before_commit_gate_commits_nothing() {
         .unwrap();
     crate::project::fixtures::write_state_graph(fixture.state(), &graph_path).unwrap();
     let final_output = crate::node_system::plan::GraphOutputRef {
-        graph_path: crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
+        graph_path: graph_path.clone(),
         port: instance(BRANCH_NODE, "result", 40),
     };
     let result_key = format!("requested.{}", final_output.port);

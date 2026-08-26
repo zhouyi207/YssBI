@@ -115,7 +115,7 @@ pub(super) fn derive_function_abi<R: CompilerRegistry>(
     projection: &ValidatedInterfaceProjection,
     provenance: &CompileProvenance,
 ) -> Result<Option<FunctionPlanAbi>, CompilerNodeDiagnostic> {
-    if !provenance.graph_path.0.starts_with("functions/") {
+    if !provenance.graph_path.as_str().starts_with("functions/") {
         return Ok(None);
     }
     let (_, values) = allocate_port_values(registry, graph)?;
@@ -149,7 +149,7 @@ pub(super) fn derive_function_abi<R: CompilerRegistry>(
             };
             if function != &provenance.graph_path {
                 return Err(CompilerDiagnostic::FunctionAbiTargetMismatch {
-                    function_path: function.0.clone(),
+                    function_path: function.as_str().into(),
                 }
                 .into_node(DiagnosticLocation::Port(port.address.clone())));
             }
@@ -184,7 +184,7 @@ pub(super) fn derive_function_abi<R: CompilerRegistry>(
             }
             if destination.insert(parameter.clone(), value).is_some() {
                 return Err(CompilerDiagnostic::FunctionAbiMemberDuplicate {
-                    field_name: parameter.0.clone(),
+                    field_name: parameter.as_str().into(),
                 }
                 .into_node(DiagnosticLocation::Port(port.address.clone())));
             }

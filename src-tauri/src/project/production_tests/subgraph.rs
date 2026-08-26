@@ -64,7 +64,7 @@ fn subgraph_mutation_fixture() -> (ActivatedProjectState, Vec<NodeId>) {
         graph.document.port_bindings.insert(
             address.clone(),
             DynamicPortBinding::UserCreated {
-                order: OrderKey(format!("operand-{index}").into()),
+                order: OrderKey::new(format!("operand-{index}")),
             },
         );
         if index != 2 {
@@ -141,15 +141,15 @@ fn task4_subgraph_request(
     )
 }
 
-fn task4_graph_document(state: &ProjectState) -> crate::node_system::document::GraphDocument {
+fn task4_graph_document(state: &ProjectState) -> crate::graph_document::GraphDocument {
     state.get_data().unwrap().graphs[&graph_path()]
         .document
         .clone()
 }
 
 fn assert_task4_graph_content_eq(
-    left: &crate::node_system::document::GraphDocument,
-    right: &crate::node_system::document::GraphDocument,
+    left: &crate::graph_document::GraphDocument,
+    right: &crate::graph_document::GraphDocument,
 ) {
     assert_eq!(left.nodes, right.nodes);
     assert_eq!(left.port_bindings, right.port_bindings);

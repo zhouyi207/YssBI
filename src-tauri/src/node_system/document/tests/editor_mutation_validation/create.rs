@@ -339,13 +339,13 @@ fn phase1_collection_delete_nodes_is_deterministic_and_reversible() {
     document.port_bindings.insert(
         second_input.clone(),
         DynamicPortBinding::UserCreated {
-            order: OrderKey("b".into()),
+            order: OrderKey::new("b"),
         },
     );
     document.port_bindings.insert(
         first_input.clone(),
         DynamicPortBinding::UserCreated {
-            order: OrderKey("a".into()),
+            order: OrderKey::new("a"),
         },
     );
     document.input_states.insert(
@@ -568,7 +568,7 @@ fn phase1_collection_disconnect_connections_validates_sorts_and_restores() {
                 id,
                 output: declared(first, "data_out"),
                 input: declared(second, "ordered_in"),
-                order: Some(OrderKey(id.to_string().into())),
+                order: Some(OrderKey::new(id.to_string())),
             },
         );
     }
@@ -637,7 +637,7 @@ fn phase1_collection_disconnect_port_and_node_break_all_incident_links() {
             id: connection_id(52),
             output: declared(first, "data_out"),
             input: declared(second, "ordered_in"),
-            order: Some(OrderKey("b".into())),
+            order: Some(OrderKey::new("b")),
         },
         DocumentConnection {
             id: connection_id(51),
@@ -649,7 +649,7 @@ fn phase1_collection_disconnect_port_and_node_break_all_incident_links() {
             id: connection_id(53),
             output: declared(second, "data_out"),
             input: declared(third, "ordered_in"),
-            order: Some(OrderKey("c".into())),
+            order: Some(OrderKey::new("c")),
         },
     ] {
         document.connections.insert(connection.id, connection);

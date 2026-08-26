@@ -166,11 +166,11 @@ mod result_id_frame_tests {
     #[test]
     fn scheduler_uses_current_frame_binding_not_latest_pin_history() {
         let store = ResultStore::new();
-        let graph_path = crate::node_system::document::GraphResourcePath("events/test".into());
-        let node_id = crate::node_system::document::NodeId::new();
+        let graph_path = crate::graph_document::GraphResourcePath::new("events/test").unwrap();
+        let node_id = crate::graph_document::NodeId::new();
         let output = GraphOutputRef {
             graph_path: graph_path.clone(),
-            port: crate::node_system::document::PortAddress::declared(
+            port: crate::graph_document::PortAddress::declared(
                 node_id,
                 crate::node_system::protocol::PortKey::new("result").unwrap(),
             ),
@@ -189,7 +189,7 @@ mod result_id_frame_tests {
                         run_id: RunId::new(1),
                         activation_id,
                         graph_path: graph_path.clone(),
-                        graph_revision: crate::node_system::document::GraphRevision::new(1),
+                        graph_revision: crate::graph_document::GraphRevision::new(1),
                         node_id,
                         created_at_ms: activation_id.get(),
                         usage: ResultUsage::Produced,

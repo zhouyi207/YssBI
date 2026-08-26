@@ -228,7 +228,7 @@ fn editor_mutation_enforces_connection_capacity_and_order_policy() {
             EditorGraphMutationDto::Connect {
                 output: declared(first, "data_out").into(),
                 input: declared(third, "data_in").into(),
-                order: Some(OrderKey("a".into())),
+                order: Some(OrderKey::new("a")),
             },
             &document,
             &registry,
@@ -243,7 +243,7 @@ fn editor_mutation_enforces_connection_capacity_and_order_policy() {
             EditorGraphMutationDto::Connect {
                 output: declared(first, "data_out").into(),
                 input: declared(second, "ordered_in").into(),
-                order: Some(OrderKey("a".into())),
+                order: Some(OrderKey::new("a")),
             },
             &document,
             &registry,
@@ -264,10 +264,10 @@ fn editor_mutation_rejects_orphan_and_binding_policy_mismatches() {
         orphan.clone(),
         DynamicPortBinding::Orphan {
             origin: DynamicMemberLocator::SchemaField {
-                source: SchemaSourceIdentity("source".into()),
-                field: SchemaFieldIdentity("field".into()),
+                source: SchemaSourceIdentity::new("source"),
+                field: SchemaFieldIdentity::new("field"),
             },
-            order: OrderKey("a".into()),
+            order: OrderKey::new("a"),
             last_known: LastKnownPortMetadata {
                 label: "Field".to_owned(),
                 value_type: None,
@@ -509,7 +509,7 @@ fn editor_mutation_remove_instance_cleanup_is_reversible() {
         .bind_port(
             address.clone(),
             DynamicPortBinding::UserCreated {
-                order: OrderKey("a".into()),
+                order: OrderKey::new("a"),
             },
         )
         .unwrap();

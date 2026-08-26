@@ -124,7 +124,7 @@ impl ProjectState {
                         variable_revisions.insert(
                             id,
                             VariableRevisionEntry::present(
-                                crate::node_system::document::ResourceRevision::INITIAL,
+                                crate::project::ResourceRevision::INITIAL,
                             ),
                         );
                     }
@@ -289,7 +289,7 @@ impl ProjectState {
             },
         })?;
         let mut graph = loaded.document;
-        graph.revision = loaded.revision;
+        graph.revision = loaded.revision.to_graph_revision();
         let resource = GraphResourceDocument {
             name: loaded.name,
             kind: loaded.kind,

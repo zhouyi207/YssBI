@@ -4,8 +4,8 @@ mod compile_publication;
 pub mod computation_settings;
 pub mod filesystem;
 pub mod graph_resource_index;
-pub mod graph_resource_path;
 mod history_hydration;
+pub mod identity;
 pub mod path_format;
 pub mod project_data;
 pub mod project_error;
@@ -39,7 +39,10 @@ pub mod worksheet_resource_path;
 pub use computation_settings::*;
 pub use filesystem::*;
 pub use graph_resource_index::*;
-pub use graph_resource_path::*;
+pub use identity::{
+    HistoryEntryId, OperationId, ProjectRevision, ProjectTransactionRevision, ResourceRevision,
+    RevisionExhausted,
+};
 pub use path_format::*;
 pub use project_data::*;
 pub use project_error::*;
@@ -67,6 +70,8 @@ pub use resource_patch::*;
 pub use resource_reveal::*;
 pub use worksheet_io::*;
 pub use worksheet_resource_path::*;
+
+use crate::graph_document::GraphResourcePath;
 
 #[cfg(test)]
 pub(crate) mod fixtures {
@@ -160,10 +165,7 @@ pub(crate) mod fixtures {
         state: &super::ProjectState,
     ) -> Result<super::project_writers::ProjectSaveResultDto, super::ProjectFilesystemError> {
         let session = state.capture_project_session()?;
-        state.flush_project_documents(
-            &session.instance_id,
-            crate::node_system::document::OperationId::new(),
-        )
+        state.flush_project_documents(&session.instance_id, crate::project::OperationId::new())
     }
 
     pub(crate) fn write_state_graph(
@@ -183,8 +185,8 @@ pub(crate) mod fixtures {
         state.save_graph_document(
             &session.instance_id,
             graph_path,
-            revision,
-            crate::node_system::document::OperationId::new(),
+            crate::project::ResourceRevision::from_graph_revision(revision),
+            crate::project::OperationId::new(),
         )
     }
 }

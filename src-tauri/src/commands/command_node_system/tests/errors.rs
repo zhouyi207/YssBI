@@ -128,7 +128,8 @@ fn phase1_error_protocol_stale_revision_is_safe_and_stable() {
 
 #[test]
 fn phase1_error_protocol_unexpected_conflicts_remain_internal() {
-    use crate::node_system::document::{DocumentError, MutationConflict, NodeId};
+    use crate::graph_document::NodeId;
+    use crate::node_system::document::{DocumentError, MutationConflict};
 
     for conflict in [
         MutationConflict::Projection("projection detail".into()),

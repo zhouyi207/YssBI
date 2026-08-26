@@ -2,9 +2,10 @@ use crate::database::{DatabaseDecl, DatabaseInstance};
 use crate::node_system::catalog::{
     BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgsDto,
 };
-use crate::node_system::document::{FunctionSignature, ResourceRevision};
+use crate::node_system::document::FunctionSignature;
 use crate::node_system::protocol::NodeTypeId;
 use crate::node_system::registry::NodeRegistry;
+use crate::project::ResourceRevision;
 use crate::project::{
     ProjectData, ProjectFilesystemError, ProjectIndex, ProjectInstanceId, ProjectSession,
     ProjectState, WorksheetDocument, WorksheetResourcePath,
@@ -122,8 +123,8 @@ impl ProjectState {
     pub fn loaded_graph_document_for_catalog(
         &self,
         snapshot: &CatalogProjectSnapshot,
-        graph_path: &crate::project::GraphResourcePath,
-    ) -> Result<Option<crate::node_system::document::GraphDocument>, ProjectFilesystemError> {
+        graph_path: &crate::graph_document::GraphResourcePath,
+    ) -> Result<Option<crate::graph_document::GraphDocument>, ProjectFilesystemError> {
         self.ensure_project_operational()?;
         let publication = self.mutation_publication.lock().unwrap();
         if publication.project_instance_id != snapshot.project_instance_id.as_str()
@@ -610,14 +611,14 @@ fn validate_project_index_authority(
 
 fn variable_owner_graph_path(
     scope: &crate::variable::VariableScope,
-) -> Option<crate::project::GraphResourcePath> {
+) -> Option<crate::graph_document::GraphResourcePath> {
     match scope {
         crate::variable::VariableScope::Global => None,
         crate::variable::VariableScope::Event { event_path } => {
-            crate::project::GraphResourcePath::new(event_path).ok()
+            crate::graph_document::GraphResourcePath::new(event_path).ok()
         }
         crate::variable::VariableScope::Function { function_path } => {
-            crate::project::GraphResourcePath::new(function_path).ok()
+            crate::graph_document::GraphResourcePath::new(function_path).ok()
         }
     }
 }
@@ -680,9 +681,7 @@ fn overlay_authoritative_project_index(
                 resource_path: crate::node_system::catalog::CatalogResourcePath::new(format!(
                     "databases/{id}"
                 )),
-                revision: crate::node_system::document::ResourceRevision::new(
-                    database_revisions[id],
-                ),
+                revision: crate::project::ResourceRevision::new(database_revisions[id]),
                 engine: declaration.engine.clone(),
                 schema_version: declaration.schema_version,
                 required: declaration.required,
@@ -710,13 +709,13 @@ fn overlay_authoritative_project_index(
         .worksheets
         .sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
     for entry in &mut index.graphs {
-        let Ok(path) = crate::project::GraphResourcePath::new(&entry.path) else {
+        let Ok(path) = crate::graph_document::GraphResourcePath::new(&entry.path) else {
             continue;
         };
         let Some(resource) = data.graphs.get(&path) else {
             continue;
         };
-        entry.revision = resource.document.revision;
+        entry.revision = ResourceRevision::from_graph_revision(resource.document.revision);
         if let Some(function) = resource.function.as_ref() {
             entry.function_revision = Some(function.revision);
             entry.function_signature = Some(function.signature.clone());
@@ -739,11 +738,12 @@ fn read_error(error: crate::project::ProjectError) -> ProjectFilesystemError {
 #[cfg(test)]
 mod tests {
     use crate::data_contract::{DataType, DataValue};
-    use crate::node_system::document::{FunctionParameter, FunctionParameterId, FunctionSignature};
+    use crate::graph_document::FunctionParameterId;
+    use crate::graph_document::GraphResourcePath;
+    use crate::node_system::document::{FunctionParameter, FunctionSignature};
     use crate::project::{
-        GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
-        ProjectFilesystemError, ProjectState, fixtures,
-        read_project_index as read_project_index_from_disk,
+        GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectFilesystemError,
+        ProjectState, fixtures, read_project_index as read_project_index_from_disk,
     };
     use crate::variable::VariableScope;
 
@@ -847,7 +847,7 @@ mod tests {
         let mut authoritative = disk;
         let (worksheet_path, mut worksheet) =
             fixtures::worksheet("Authoritative worksheet", "db-1");
-        worksheet.revision = crate::node_system::document::ResourceRevision::new(5);
+        worksheet.revision = crate::project::ResourceRevision::new(5);
         authoritative
             .worksheets
             .insert(worksheet_path.clone(), worksheet.clone());
@@ -855,10 +855,10 @@ mod tests {
         global.name = "authoritative_global".into();
         let function = authoritative.graphs.get_mut(&function_path).unwrap();
         function.function = Some(crate::node_system::document::FunctionDocument {
-            revision: crate::node_system::document::GraphRevision::new(7),
+            revision: crate::project::ResourceRevision::new(7),
             signature: FunctionSignature {
                 parameters: vec![FunctionParameter {
-                    id: FunctionParameterId("sales".into()),
+                    id: FunctionParameterId::new("sales"),
                     name: "Observed sales".into(),
                     type_name: "DataSeries<Float64>".into(),
                 }],
@@ -1047,8 +1047,8 @@ mod tests {
             .delete_local_variable_transaction(
                 &expected,
                 loaded_variable_id,
-                crate::node_system::document::ResourceRevision::INITIAL,
-                crate::node_system::document::OperationId::new(),
+                crate::project::ResourceRevision::INITIAL,
+                crate::project::OperationId::new(),
             )
             .unwrap();
         assert_eq!(deleted.result.publication_revision, 1);
@@ -1065,10 +1065,7 @@ mod tests {
         let retained = state
             .variable_revision_entry_for_test(&loaded_variable_id)
             .unwrap();
-        assert_eq!(
-            retained.revision,
-            crate::node_system::document::ResourceRevision::new(1)
-        );
+        assert_eq!(retained.revision, crate::project::ResourceRevision::new(1));
         assert!(!retained.is_present());
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -1086,8 +1083,8 @@ mod tests {
                 None,
                 None,
                 None,
-                crate::node_system::document::ResourceRevision::INITIAL,
-                crate::node_system::document::OperationId::new(),
+                crate::project::ResourceRevision::INITIAL,
+                crate::project::OperationId::new(),
             )
             .unwrap();
         state.unload_graph_resource(&loaded_path).unwrap();
@@ -1122,8 +1119,8 @@ mod tests {
                     Some(DataValue::Int64(9)),
                     None,
                     None,
-                    crate::node_system::document::ResourceRevision::INITIAL,
-                    crate::node_system::document::OperationId::new(),
+                    crate::project::ResourceRevision::INITIAL,
+                    crate::project::OperationId::new(),
                 )
                 .unwrap();
             Ok(index)
@@ -1232,7 +1229,7 @@ mod tests {
             .function
             .as_mut()
             .unwrap()
-            .revision = crate::node_system::document::ResourceRevision::new(3);
+            .revision = crate::project::ResourceRevision::new(3);
         disk.graphs
             .get_mut(&unloaded_path)
             .unwrap()
@@ -1250,8 +1247,7 @@ mod tests {
         let mut authoritative = ProjectData::new();
         let mut loaded =
             GraphResourceDocument::new("Authoritative loaded", GraphDocumentKind::Function);
-        loaded.function.as_mut().unwrap().revision =
-            crate::node_system::document::ResourceRevision::new(7);
+        loaded.function.as_mut().unwrap().revision = crate::project::ResourceRevision::new(7);
         loaded.function.as_mut().unwrap().signature.return_type = Some("Float64".into());
         authoritative.graphs.insert(loaded_path.clone(), loaded);
         authoritative
@@ -1361,8 +1357,8 @@ mod tests {
                 Some(DataValue::Int64(3)),
                 None,
                 None,
-                crate::node_system::document::ResourceRevision::INITIAL,
-                crate::node_system::document::OperationId::new(),
+                crate::project::ResourceRevision::INITIAL,
+                crate::project::OperationId::new(),
             )
             .unwrap();
 
@@ -1375,10 +1371,7 @@ mod tests {
 
         state.unload_graph_resource(&loaded_path).unwrap();
         let retained = state.variable_revisions.read().unwrap()[&loaded_variable_id];
-        assert_eq!(
-            retained.revision,
-            crate::node_system::document::ResourceRevision::new(1)
-        );
+        assert_eq!(retained.revision, crate::project::ResourceRevision::new(1));
         assert!(retained.is_present());
         let unloaded = state.catalog_snapshot(&expected).unwrap();
         assert!(unloaded.resources.iter().any(|entry| {
@@ -1422,15 +1415,12 @@ mod tests {
             .delete_local_variable_transaction(
                 &expected,
                 loaded_variable_id,
-                crate::node_system::document::ResourceRevision::INITIAL,
-                crate::node_system::document::OperationId::new(),
+                crate::project::ResourceRevision::INITIAL,
+                crate::project::OperationId::new(),
             )
             .unwrap();
         let deleted = state.variable_revisions.read().unwrap()[&loaded_variable_id];
-        assert_eq!(
-            deleted.revision,
-            crate::node_system::document::ResourceRevision::new(1)
-        );
+        assert_eq!(deleted.revision, crate::project::ResourceRevision::new(1));
         assert!(!deleted.is_present());
         state.unload_graph_resource(&loaded_path).unwrap();
 
@@ -1555,7 +1545,7 @@ mod tests {
         state.variable_revisions.write().unwrap().insert(
             loaded_variable_id,
             crate::project::project_state::VariableRevisionEntry::present(
-                crate::node_system::document::ResourceRevision::INITIAL,
+                crate::project::ResourceRevision::INITIAL,
             ),
         );
         state
@@ -1635,10 +1625,7 @@ mod tests {
             else {
                 panic!("variable fact")
             };
-            assert_eq!(
-                *revision,
-                crate::node_system::document::ResourceRevision::INITIAL
-            );
+            assert_eq!(*revision, crate::project::ResourceRevision::INITIAL);
             assert!(matches!(scope, VariableScope::Function { .. }));
             assert_eq!(
                 allowed_node_type_ids
@@ -1666,7 +1653,7 @@ mod tests {
         };
         assert_eq!(
             *authority_revision,
-            crate::node_system::document::ResourceRevision::INITIAL
+            crate::project::ResourceRevision::INITIAL
         );
         assert_eq!(allowed_node_type_id.as_str(), "yssbi.dataframe.source.get");
         assert_eq!(parameter_binding.as_ref(), "dataframe");

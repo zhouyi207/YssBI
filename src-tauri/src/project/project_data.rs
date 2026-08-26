@@ -3,9 +3,8 @@ use super::{
     ProjectMetadata, WorksheetDocument, WorksheetResourcePath,
 };
 use crate::database::DatabaseDecl;
-use crate::node_system::document::{
-    DocumentError, FunctionDocument, FunctionSignature, GraphDocument,
-};
+use crate::graph_document::GraphDocument;
+use crate::node_system::document::{DocumentError, FunctionDocument, FunctionSignature};
 use crate::variable::{VariableId, VariableInstance};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

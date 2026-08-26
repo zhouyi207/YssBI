@@ -48,8 +48,8 @@ fn patch_kind_mismatch_is_rejected_without_mutation() {
     let function_patch = FunctionDocumentPatch::default();
     let resource_patch = ResourcePatch {
         resource: ResourceKey::Graph(path.clone()),
-        before_revision: GraphRevision::INITIAL,
-        after_revision: GraphRevision::new(1),
+        before_revision: ResourceRevision::INITIAL,
+        after_revision: ResourceRevision::new(1),
         forward: ResourceDocumentPatch::Function(function_patch.clone()),
         inverse: ResourceDocumentPatch::Function(function_patch.inverse()),
     };

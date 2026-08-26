@@ -7,7 +7,7 @@ fn demand_specialization_ignores_unbound_inputs_outside_the_retained_closure() {
         .connections
         .remove(&ConnectionId::from_uuid(Uuid::from_u128(11)));
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new("events/main").unwrap(), &graph);
 
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
@@ -42,7 +42,7 @@ fn pin_preview_ignores_unbound_inputs_outside_the_retained_closure() {
         .connections
         .remove(&ConnectionId::from_uuid(Uuid::from_u128(11)));
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new("events/main").unwrap(), &graph);
     let basis = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap()
@@ -64,7 +64,7 @@ fn demand_specialization_rejects_a_required_unbound_input_with_its_port() {
         .connections
         .remove(&ConnectionId::from_uuid(Uuid::from_u128(11)));
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new("events/main").unwrap(), &graph);
     let basis = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap()
@@ -277,7 +277,7 @@ fn demand_specialization_deletes_disconnected_loop_control_sources() {
 fn demand_normalization_is_order_independent_and_default_modes_are_distinct() {
     let (registry, graph) = demand_fixture();
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new("events/main").unwrap(), &graph);
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -359,7 +359,7 @@ fn demand_normalization_is_order_independent_and_default_modes_are_distinct() {
 fn demand_driven_publication_preview_has_independent_normalized_identity_and_generation() {
     let (registry, graph) = demand_fixture();
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new("events/main").unwrap(), &graph);
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -433,7 +433,7 @@ fn invalid_requested_outputs_are_rejected_before_plan_construction() {
     let mut graph = graph_with_nodes(&[(1, "demand_validation_source"), (2, "demand_validation")]);
     connect(&mut graph, 10, 1, "out", 2, "in");
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new("events/main").unwrap(), &graph);
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -441,7 +441,7 @@ fn invalid_requested_outputs_are_rejected_before_plan_construction() {
         .execution_basis
         .expect("valid graph has lowering basis");
     let stale_instance = GraphOutputRef {
-        graph_path: GraphResourcePath("events/main".into()),
+        graph_path: GraphResourcePath::new("events/main").unwrap(),
         port: PortAddress::instance(
             node_id(2),
             key("out"),
@@ -519,7 +519,7 @@ fn retained_operation_keeps_external_value_dependency_and_source() {
     let mut graph = graph_with_nodes(&[(1, "demand_external_entry"), (2, "demand_external_sink")]);
     connect(&mut graph, 10, 1, "payload", 2, "in");
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/external".into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new("events/external").unwrap(), &graph);
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -608,7 +608,7 @@ fn evaluation_policy_and_effect_predecessors_are_authoritative_roots() {
     connect(&mut graph, 10, 1, "effect", 2, "before");
     connect(&mut graph, 11, 2, "after", 3, "effect");
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new("events/main").unwrap(), &graph);
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();

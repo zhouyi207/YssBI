@@ -12,7 +12,7 @@ use super::{
 };
 use crate::database::{DatabaseDecl, DatabaseEngine};
 
-use crate::node_system::document::GraphDocument as NodeGraphDocument;
+use crate::graph_document::GraphDocument as NodeGraphDocument;
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 
 pub const SCHEMA_VERSION: u32 = 3;
@@ -62,7 +62,7 @@ pub struct GraphDocument {
     pub kind: GraphDocumentKind,
     pub name: String,
     #[serde(default)]
-    pub revision: crate::node_system::document::ResourceRevision,
+    pub revision: crate::project::ResourceRevision,
     pub document: NodeGraphDocument,
     pub function: Option<crate::node_system::document::FunctionDocument>,
     pub local_variables: HashMap<VariableId, VariableInstance>,
@@ -75,6 +75,15 @@ pub enum GraphDocumentKind {
     Function,
 }
 
+impl From<crate::graph_document::GraphResourceKind> for GraphDocumentKind {
+    fn from(kind: crate::graph_document::GraphResourceKind) -> Self {
+        match kind {
+            crate::graph_document::GraphResourceKind::Event => Self::Event,
+            crate::graph_document::GraphResourceKind::Function => Self::Function,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectGraphIndexEntry {
@@ -82,9 +91,9 @@ pub struct ProjectGraphIndexEntry {
     pub name: String,
     #[serde(rename = "type")]
     pub graph_type: GraphDocumentKind,
-    pub revision: crate::node_system::document::ResourceRevision,
+    pub revision: crate::project::ResourceRevision,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub function_revision: Option<crate::node_system::document::ResourceRevision>,
+    pub function_revision: Option<crate::project::ResourceRevision>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub function_signature: Option<crate::node_system::document::FunctionSignature>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -97,7 +106,7 @@ pub struct ProjectGraphIndexEntry {
 pub struct ProjectVariableIndexEntry {
     pub id: String,
     pub resource_path: crate::node_system::catalog::CatalogResourcePath,
-    pub revision: crate::node_system::document::ResourceRevision,
+    pub revision: crate::project::ResourceRevision,
     pub name: String,
     pub data_type: crate::data_contract::DataType,
     pub data_value: crate::data_contract::DataValue,
@@ -118,7 +127,7 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
                 "variables/{}",
                 value.id
             )),
-            revision: crate::node_system::document::ResourceRevision::INITIAL,
+            revision: crate::project::ResourceRevision::INITIAL,
             name: value.name,
             data_type: value.data_type,
             data_value: value.data_value,
@@ -137,7 +146,7 @@ impl From<VariableInstance> for ProjectVariableIndexEntry {
 pub struct ProjectDatabaseIndexEntry {
     pub id: String,
     pub resource_path: crate::node_system::catalog::CatalogResourcePath,
-    pub revision: crate::node_system::document::ResourceRevision,
+    pub revision: crate::project::ResourceRevision,
     pub engine: crate::database::DatabaseEngine,
     pub schema_version: u32,
     pub required: bool,
@@ -241,7 +250,7 @@ fn graph_document_from_resource(
         schema_version: SCHEMA_VERSION,
         kind: graph.kind,
         name: graph.name.clone(),
-        revision: graph.document.revision,
+        revision: crate::project::ResourceRevision::from_graph_revision(graph.document.revision),
         document: graph.document.clone(),
         function: graph.function.clone(),
         local_variables,
@@ -271,7 +280,9 @@ fn write_loaded_graph_document(
             schema_version: SCHEMA_VERSION,
             kind: graph.kind,
             name: graph.name.clone(),
-            revision: graph.document.revision,
+            revision: crate::project::ResourceRevision::from_graph_revision(
+                graph.document.revision,
+            ),
             document: graph.document.clone(),
             function: graph.function.clone(),
             local_variables,
@@ -416,7 +427,7 @@ pub fn load_project_graph_from_file(
 ) -> Result<super::GraphResourceDocument, ProjectError> {
     let document = load_project_graph_document_from_file(path, graph_path)?;
     let mut graph = document.document;
-    graph.revision = document.revision;
+    graph.revision = document.revision.to_graph_revision();
     Ok(super::GraphResourceDocument {
         name: document.name,
         kind: document.kind,
@@ -564,7 +575,7 @@ struct GraphFileHeader {
     kind: GraphDocumentKind,
     name: String,
     #[serde(default)]
-    revision: crate::node_system::document::ResourceRevision,
+    revision: crate::project::ResourceRevision,
     function: Option<crate::node_system::document::FunctionDocument>,
 }
 
@@ -706,7 +717,7 @@ fn read_graph_local_variable_index_entries(
                     "variables/{}",
                     variable.id
                 )),
-                revision: crate::node_system::document::ResourceRevision::INITIAL,
+                revision: crate::project::ResourceRevision::INITIAL,
                 name: variable.name,
                 data_type: variable.data_type,
                 data_value: variable.data_value,
@@ -942,11 +953,12 @@ pub fn discover_databases_from_root(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::document::{
+    use crate::graph_document::{
         ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-        EffectiveInputBinding, FunctionParameterId, GraphDocument as NodeGraphDocument, InputState,
-        NodeId, NodePosition, OrderKey, ParameterValues, PortAddress, PortInstanceId,
+        FunctionParameterId, GraphDocument as NodeGraphDocument, InputState, NodeId, NodePosition,
+        OrderKey, ParameterValues, PortAddress, PortInstanceId,
     };
+    use crate::node_system::document::EffectiveInputBinding;
     use crate::node_system::protocol::{NodeTypeId, PortKey};
     use crate::project::{GraphResourceDocument, NumericTolerance};
     use serde_json::json;
@@ -1110,7 +1122,7 @@ mod tests {
         let mut document = NodeGraphDocument::default();
         document.nodes.insert(source, node(source));
         document.nodes.insert(target, node(target));
-        let connection = crate::node_system::document::ConnectionId::new();
+        let connection = crate::graph_document::ConnectionId::new();
         document.connections.insert(
             connection,
             DocumentConnection {
@@ -1185,7 +1197,7 @@ mod tests {
         let mut envelope: GraphDocument = read_json(&graph_file).unwrap();
         let missing_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(0x100));
         let connection_id =
-            crate::node_system::document::ConnectionId::from_uuid(uuid::Uuid::from_u128(0x101));
+            crate::graph_document::ConnectionId::from_uuid(uuid::Uuid::from_u128(0x101));
         let existing_node_id = *envelope.document.nodes.keys().next().unwrap();
         envelope.document.connections.insert(
             connection_id,
@@ -1311,7 +1323,7 @@ mod tests {
                 id: later_connection,
                 output: PortAddress::declared(first_source, PortKey::new("value").unwrap()),
                 input: input.clone(),
-                order: Some(OrderKey("rank-b".into())),
+                order: Some(OrderKey::new("rank-b")),
             },
         );
         document.connections.insert(
@@ -1320,7 +1332,7 @@ mod tests {
                 id: earlier_connection,
                 output: PortAddress::declared(second_source, PortKey::new("value").unwrap()),
                 input: input.clone(),
-                order: Some(OrderKey("rank-a".into())),
+                order: Some(OrderKey::new("rank-a")),
             },
         );
         let graph = GraphResourceDocument {
@@ -1353,11 +1365,11 @@ mod tests {
         );
         assert_eq!(
             loaded.document.connections[&earlier_connection].order,
-            Some(OrderKey("rank-a".into()))
+            Some(OrderKey::new("rank-a"))
         );
         assert_eq!(
             loaded.document.connections[&later_connection].order,
-            Some(OrderKey("rank-b".into()))
+            Some(OrderKey::new("rank-b"))
         );
         assert_eq!(
             loaded.document.input_states.get(&input),
@@ -1431,10 +1443,11 @@ mod tests {
             port_instance_id,
         );
         let locator = DynamicMemberLocator::FunctionParameter {
-            function: crate::node_system::document::GraphResourcePath(
-                "functions/stable.yssbi-function".into(),
-            ),
-            parameter: FunctionParameterId("stable-parameter".into()),
+            function: crate::graph_document::GraphResourcePath::new(
+                "functions/stable.yssbi-function",
+            )
+            .unwrap(),
+            parameter: FunctionParameterId::new("stable-parameter"),
         };
         let mut document = NodeGraphDocument::default();
         document.nodes.insert(
@@ -1451,8 +1464,8 @@ mod tests {
             dynamic_address.clone(),
             DynamicPortBinding::Resolved {
                 origin: locator.clone(),
-                order: OrderKey("stable-order".into()),
-                last_known: crate::node_system::document::LastKnownPortMetadata::default(),
+                order: OrderKey::new("stable-order"),
+                last_known: crate::graph_document::LastKnownPortMetadata::default(),
             },
         );
         document.connections.insert(
@@ -1461,7 +1474,7 @@ mod tests {
                 id: connection_id,
                 output: PortAddress::declared(node_id, PortKey::new("value").unwrap()),
                 input: dynamic_address,
-                order: Some(OrderKey("connection-order".into())),
+                order: Some(OrderKey::new("connection-order")),
             },
         );
         let graph = GraphResourceDocument {

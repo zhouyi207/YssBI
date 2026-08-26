@@ -154,7 +154,7 @@ fn reload_replaces_project_state_and_clears_history() {
             ProjectHistoryTransaction::graph(
                 operation_id(640),
                 path,
-                ResourceRevision::INITIAL,
+                GraphRevision::INITIAL,
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: node(node_id(641)),
                 }]),

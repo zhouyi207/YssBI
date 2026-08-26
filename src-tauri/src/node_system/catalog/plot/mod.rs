@@ -2,12 +2,12 @@ use super::builtin::{
     BuiltinAssemblyError, ProviderFragment, assembled_interface, assembled_parameters, sid,
 };
 use super::localization::Message;
+use crate::graph_document::PortRef;
 use crate::node_system::compiler::{
     FragmentMetadata, FragmentResult, KernelFragment as LoweredKernelFragment, LoweredKernel,
     LoweredNode, LoweringContext, LoweringError, LoweringInvariant, NodeImplementation,
     NodeLowerer,
 };
-use crate::node_system::document::PortRef;
 use crate::node_system::plan::{
     CompiledParameterHandle, CompiledResourceRequirement, KernelHandle, ResourceAccess, ResourceId,
     ResourceKind,

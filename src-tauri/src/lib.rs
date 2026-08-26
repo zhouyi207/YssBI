@@ -12,6 +12,7 @@ pub mod event;
 pub mod execution;
 
 mod graph;
+pub mod graph_document;
 pub mod julia;
 pub mod math;
 pub mod node_system;

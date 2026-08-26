@@ -8,16 +8,22 @@
 Project 唯一拥有：
 
 - project/session identity 与 lifecycle admission；
-- resource path、revision、authority generation 与 transaction publication；
+- Operation/History correlation identity、通用 resource/project/transaction revision、
+  authority generation 与 transaction publication；
 - project filesystem、registry、save/load 和 runtime session ownership；
 - database/variable/graph resource 是否存在及是否 resident 的权威事实。
 
 Graph 唯一拥有：
 
-- graph document、node/pin/connection mutation 与 history；
+- node/pin/connection mutation、validation、patch/apply 与 compile semantics；
 - node protocol、catalog、registry 与 semantic analysis；
 - compiler、validated immutable plan 和 graph diagnostics；
 - graph projection 的 domain facts，不包含 UI 或 transport DTO。
+
+Pure Leaf `graph_document` 唯一拥有 serialized `GraphDocument`、`GraphResourcePath`、
+`GraphRevision` 及 document node/connection/port identities。其 `model.rs` 保留既有
+`TypedValue = serde_json::Value` untagged persisted wire；该许可不扩展到 Graph behavior、
+错误、compiler/runtime package 或其他 Pure Leaf 文件。
 
 ## Dependency direction
 
@@ -31,7 +37,8 @@ Graph 唯一拥有：
           opaque Pure Leaf contracts
 ```
 
-Project 不导入 graph document、compiler、catalog、analysis 或 node DTO。Graph 不导入
+Project 可导入 `graph_document` 数据契约，但不导入 `crate::graph` behavior layer、compiler、
+catalog、analysis 或 node DTO。Graph 不导入
 ProjectState、ProjectStore、project filesystem、Tauri 或 event/schema transport。
 Application 通过 opaque resource path、revision、session token 和 owner-defined result 编排
 两侧；共享 identity/value shape 必须有一个中立 canonical owner。
@@ -49,3 +56,15 @@ resource lookup 或 resident-install implementation。
 完成条件：`debt/project_graph.rs` 为空，Project 与 Graph 的 production dependency 仅通过
 Application orchestration 和中立 contract 形成，相关 focused tests 与 production
 architecture audit 全部通过。
+
+## Task 1 checkpoint（2026-08-27）
+
+Task 1 已原子迁移 graph-document data owner、opaque graph path 与 document identities，旧
+`node_system::document::{ids,model}` 和 Project graph-path declaration 不再存在，也没有旧路径
+re-export。Graph 同时建立 transport-neutral schema/settings、immutable resource catalog 与
+closed typed mutation/compile error contract。
+
+当前 production route 仍由旧 `node_system` Graph behavior 与 Project runtime/compiler workflow
+承担；跨资源 history、catalog/runtime 与 Execution cutover 是后续任务的精确债务。Database
+当前消费 Graph schema 的两条边也保留在 debt ratchet 中，等待 neutral database snapshot mapper
+切换，而不是在本 checkpoint 建立第二条 production route。

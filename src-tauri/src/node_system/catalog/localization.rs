@@ -89,7 +89,7 @@ pub struct LocalizedCatalogItemDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_path: Option<CatalogResourcePath>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub resource_revision: Option<crate::node_system::document::ResourceRevision>,
+    pub resource_revision: Option<crate::project::ResourceRevision>,
     pub creation: NodeCreationDescriptor,
 }
 
@@ -146,7 +146,7 @@ pub enum NodeCreationDescriptor {
         #[serde(rename = "resourcePath")]
         resource_path: CatalogResourcePath,
         #[serde(rename = "resourceRevision")]
-        resource_revision: crate::node_system::document::ResourceRevision,
+        resource_revision: crate::project::ResourceRevision,
         #[serde(rename = "createArgs")]
         create_args: ResourceBoundCreateArgsDto,
     },
@@ -188,7 +188,7 @@ pub struct CatalogResourceEntry {
     pub name: Box<str>,
     pub node_type_id: NodeTypeId,
     pub resource_path: CatalogResourcePath,
-    pub resource_revision: crate::node_system::document::ResourceRevision,
+    pub resource_revision: crate::project::ResourceRevision,
     pub create_args: ResourceBoundCreateArgsDto,
     pub technical_terms: Vec<Box<str>>,
 }

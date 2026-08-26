@@ -14,12 +14,12 @@ mod streams;
 
 use super::scheduler::SchedulerCheckpoint;
 use super::*;
+use crate::graph_document::{
+    FunctionParameterId, GraphResourcePath, GraphRevision, NodeId, PortAddress,
+};
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
-};
-use crate::node_system::document::{
-    FunctionParameterId, GraphResourcePath, GraphRevision, NodeId, PortAddress,
 };
 use crate::node_system::plan::*;
 use crate::node_system::protocol::{
@@ -42,7 +42,7 @@ fn id<T>(value: &str, constructor: impl FnOnce(Box<str>) -> Result<T, InvalidPla
 
 fn stable_output(port_key: &str) -> GraphOutputRef {
     GraphOutputRef {
-        graph_path: GraphResourcePath("events/test".into()),
+        graph_path: GraphResourcePath::new("events/test").unwrap(),
         port: PortAddress::declared(
             NodeId::from_uuid(uuid::Uuid::nil()),
             PortKey::new(port_key).unwrap(),
@@ -146,7 +146,7 @@ fn plan(
     ExecutionPlan {
         provenance: CompileProvenance {
             project_session_id: ProjectSessionId::new("test-session"),
-            graph_path: GraphResourcePath("events/test".into()),
+            graph_path: GraphResourcePath::new("events/test").unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
@@ -296,14 +296,14 @@ fn published_function(
     parameters: &[u32],
     results: &[u32],
 ) -> Arc<PublishedFunctionPlan> {
-    plan.provenance.graph_path = GraphResourcePath(target.into());
+    plan.provenance.graph_path = GraphResourcePath::new(target).unwrap();
     let provenance = plan.provenance.clone();
     let parameters: BTreeMap<FunctionParameterId, ValueRef> = parameters
         .iter()
         .enumerate()
         .map(|(index, value)| {
             (
-                FunctionParameterId(format!("parameter-{index}").into()),
+                FunctionParameterId::new(format!("parameter-{index}")),
                 ValueRef::new(*value),
             )
         })
@@ -313,7 +313,7 @@ fn published_function(
         .enumerate()
         .map(|(index, value)| {
             (
-                FunctionParameterId(format!("result-{index}").into()),
+                FunctionParameterId::new(format!("result-{index}")),
                 ValueRef::new(*value),
             )
         })

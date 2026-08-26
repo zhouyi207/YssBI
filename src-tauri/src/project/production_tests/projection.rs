@@ -252,7 +252,7 @@ fn committed_variable_effect_returns_canonical_result_after_recovery_marker() {
             &session_id,
             vec![crate::node_system::runtime::VariableWriteEffect {
                 resource: resource_id.clone(),
-                expected_revision: GraphRevision::INITIAL,
+                expected_revision: ResourceRevision::INITIAL,
                 before: variable.clone(),
                 after: crate::data_contract::DataValue::Int64(2),
             }],
@@ -289,7 +289,7 @@ fn committed_variable_effect_returns_canonical_result_after_recovery_marker() {
         &session_id,
         vec![crate::node_system::runtime::VariableWriteEffect {
             resource: resource_id,
-            expected_revision: GraphRevision::new(1),
+            expected_revision: ResourceRevision::new(1),
             before: updated,
             after: crate::data_contract::DataValue::Int64(3),
         }],

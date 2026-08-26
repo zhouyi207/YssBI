@@ -27,7 +27,7 @@ fn projected_member_rejects_a_stale_compilation_basis() {
     document.create_node(node(target)).unwrap();
     let mut store = RevisionedGraphStore::new(path.clone(), document);
     let before = store.document().clone();
-    let member = projected_member("events/main", ResourceRevision::INITIAL, target);
+    let member = projected_member("events/main", GraphRevision::INITIAL, target);
     let authorization = authorization(member.clone());
 
     let result = store.apply_mutation(MutationRequest::new(
@@ -58,15 +58,15 @@ fn projected_member_rejects_authorization_for_another_member() {
     document.create_node(node(source)).unwrap();
     document.create_node(node(target)).unwrap();
     let mut store = RevisionedGraphStore::new(path.clone(), document);
-    let member = projected_member("events/main", store.revision(), target);
+    let member = projected_member("events/main", store.revision().to_graph_revision(), target);
     let other = ProjectedMemberRef::new(
         member.basis().clone(),
         target,
         member.template().clone(),
         PortDirection::Input,
         DynamicMemberLocator::SchemaField {
-            source: SchemaSourceIdentity("source".into()),
-            field: SchemaFieldIdentity("other".into()),
+            source: SchemaSourceIdentity::new("source"),
+            field: SchemaFieldIdentity::new("other"),
         },
         LastKnownPortMetadata::default(),
     );
@@ -102,7 +102,7 @@ fn projected_member_materialization_and_connection_commit_atomically() {
     document.create_node(node(target)).unwrap();
     let mut store = RevisionedGraphStore::new(path, document);
     let before_revision = store.revision();
-    let member = projected_member("events/main", before_revision, target);
+    let member = projected_member("events/main", before_revision.to_graph_revision(), target);
 
     let event = store
         .apply_mutation(MutationRequest::new(
@@ -130,7 +130,7 @@ fn projected_member_materialization_and_connection_commit_atomically() {
 
     let invalid_source = node_id(543);
     let before_failed_request = store.document().clone();
-    let member = projected_member("events/main", store.revision(), target);
+    let member = projected_member("events/main", store.revision().to_graph_revision(), target);
     let result = store.apply_mutation(MutationRequest::new(
         resource,
         store.revision(),

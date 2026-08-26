@@ -1,7 +1,7 @@
 use super::*;
+use crate::graph_document::{DocumentNode, GraphDocument, NodeId, NodePosition};
 use crate::node_system::analysis::{DiagnosticLocation, ResourceVersionSet};
 use crate::node_system::catalog::builtin_bundle_parts_for_test;
-use crate::node_system::document::{DocumentNode, GraphDocument, NodeId, NodePosition};
 use crate::node_system::protocol::dataframe::{
     FILTER_PREDICATE_TYPE_ID, PROJECT_COLUMNS_TYPE_ID, validate_filter_predicate_json,
     validate_project_columns_json,

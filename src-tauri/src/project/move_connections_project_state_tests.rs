@@ -1,15 +1,17 @@
 use super::*;
-use crate::node_system::document::{
-    ConnectionId, DocumentConnection, DocumentNode, EditorGraphMutationDto, GraphRevision,
-    MutationRequest, NodeId, OperationId, ParameterValues, PortAddress, ResourceKey,
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, GraphRevision, NodeId, ParameterValues,
+    PortAddress,
 };
+use crate::node_system::document::{EditorGraphMutationDto, MutationRequest, ResourceKey};
 use crate::node_system::protocol::{NodeTypeId, PortKey};
+use crate::project::OperationId;
 
 fn node(id: NodeId, node_type: &str) -> DocumentNode {
     DocumentNode {
         id,
         node_type: NodeTypeId::new(node_type).unwrap(),
-        position: crate::node_system::document::NodePosition { x: 0.0, y: 0.0 },
+        position: crate::graph_document::NodePosition { x: 0.0, y: 0.0 },
         parameters: ParameterValues::new(),
         user_label: None,
     }
@@ -48,9 +50,7 @@ fn phase1_move_connections_project_state_snapshot_reaches_planner() {
     graph.document.connections.insert(original.id, original);
     state.insert_graph(graph_path.clone(), graph).unwrap();
     let project_instance_id = state.capture_project_session().unwrap().instance_id;
-    let resource = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        graph_path.as_str().into(),
-    ));
+    let resource = ResourceKey::Graph(graph_path.clone());
 
     let result = state
         .apply_editor_graph_mutation(

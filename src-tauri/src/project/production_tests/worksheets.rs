@@ -61,7 +61,7 @@ fn worksheet_revision_conflict_has_zero_authoritative_effects() {
         session: state.capture_project_session().unwrap(),
         operation_id: OperationId::new(),
         affected_resources: vec![key.clone()],
-        expected_revisions: [(key.clone(), GraphRevision::INITIAL)]
+        expected_revisions: [(key.clone(), ResourceRevision::INITIAL)]
             .into_iter()
             .collect(),
         expected_absent_resources: Default::default(),
@@ -71,7 +71,7 @@ fn worksheet_revision_conflict_has_zero_authoritative_effects() {
         session: stale.session.clone(),
         operation_id: OperationId::new(),
         affected_resources: vec![key.clone()],
-        expected_revisions: [(key, GraphRevision::INITIAL)].into_iter().collect(),
+        expected_revisions: [(key, ResourceRevision::INITIAL)].into_iter().collect(),
         expected_absent_resources: Default::default(),
         recovery_marker: Some(state.project_recovery_marker()),
     };

@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn graph_document_references_path(
-    document: &crate::node_system::document::GraphDocument,
+    document: &crate::graph_document::GraphDocument,
     target: &str,
 ) -> bool {
     document.nodes.values().any(|node| {
@@ -33,7 +33,7 @@ pub(in crate::project) fn validate_context_revisions(
     data: &ProjectData,
     graph_revisions: &std::collections::HashMap<
         GraphResourcePath,
-        crate::node_system::document::ResourceRevision,
+        crate::graph_document::GraphRevision,
     >,
     variable_revisions: &std::collections::HashMap<
         crate::variable::VariableId,
@@ -41,7 +41,7 @@ pub(in crate::project) fn validate_context_revisions(
     >,
     worksheet_revisions: &std::collections::HashMap<
         WorksheetResourcePath,
-        crate::node_system::document::ResourceRevision,
+        crate::project::ResourceRevision,
     >,
 ) -> Result<(), ProjectFilesystemError> {
     for resource in &context.affected_resources {
@@ -52,14 +52,19 @@ pub(in crate::project) fn validate_context_revisions(
         })?;
         let actual = match resource {
             ResourceKey::Graph(path) => {
-                GraphResourcePath::new(path.0.as_ref())
-                    .ok()
-                    .and_then(|path| {
-                        data.graphs
-                            .get(&path)
-                            .map(|resource| resource.document.revision)
-                            .or_else(|| graph_revisions.get(&path).copied())
-                    })
+                GraphResourcePath::new(path.as_str()).ok().and_then(|path| {
+                    data.graphs
+                        .get(&path)
+                        .map(|resource| {
+                            ResourceRevision::from_graph_revision(resource.document.revision)
+                        })
+                        .or_else(|| {
+                            graph_revisions
+                                .get(&path)
+                                .copied()
+                                .map(ResourceRevision::from_graph_revision)
+                        })
+                })
             }
             ResourceKey::Function(path) => GraphResourcePath::new(path.0.as_ref())
                 .ok()
@@ -92,7 +97,7 @@ pub(in crate::project) fn validate_context_revisions(
     }
     for resource in &context.expected_absent_resources {
         let present = match resource {
-            ResourceKey::Graph(path) => GraphResourcePath::new(path.0.as_ref())
+            ResourceKey::Graph(path) => GraphResourcePath::new(path.as_str())
                 .ok()
                 .is_some_and(|path| data.graphs.contains_key(&path)),
             ResourceKey::Function(path) => GraphResourcePath::new(path.0.as_ref())
@@ -153,23 +158,35 @@ pub(in crate::project) fn checked_resource_revision(
         })
 }
 
+pub(in crate::project::project_state) fn checked_graph_revision(
+    resource: &str,
+    retained: crate::graph_document::GraphRevision,
+) -> Result<crate::graph_document::GraphRevision, ProjectFilesystemError> {
+    retained
+        .checked_next()
+        .map_err(|error| ProjectFilesystemError::ResourceRevisionOverflow {
+            resource: resource.into(),
+            retained: error.retained,
+        })
+}
+
 pub(super) fn authoritative_function_revision(
     path: &GraphResourcePath,
-    incoming: crate::node_system::document::ResourceRevision,
-    retained: Option<crate::node_system::document::ResourceRevision>,
-) -> Result<crate::node_system::document::ResourceRevision, ProjectFilesystemError> {
+    incoming: crate::graph_document::GraphRevision,
+    retained: Option<crate::graph_document::GraphRevision>,
+) -> Result<crate::graph_document::GraphRevision, ProjectFilesystemError> {
     let Some(retained) = retained else {
         return Ok(incoming);
     };
-    let next = checked_resource_revision(path.as_str(), retained)?;
+    let next = checked_graph_revision(path.as_str(), retained)?;
     Ok(std::cmp::max(incoming, next))
 }
 
 pub(super) fn normalize_loaded_function_resource_revision(
     path: &GraphResourcePath,
     resource: &mut GraphResourceDocument,
-    retained: Option<crate::node_system::document::ResourceRevision>,
-) -> Result<crate::node_system::document::ResourceRevision, ProjectFilesystemError> {
+    retained: Option<crate::graph_document::GraphRevision>,
+) -> Result<crate::graph_document::GraphRevision, ProjectFilesystemError> {
     if resource.kind != crate::project::GraphDocumentKind::Function {
         return Ok(resource.document.revision);
     }
@@ -182,7 +199,7 @@ pub(super) fn normalize_loaded_function_resource_revision(
     };
     resource.document.revision = revision;
     if let Some(function) = resource.function.as_mut() {
-        function.revision = revision;
+        function.revision = ResourceRevision::from_graph_revision(revision);
     }
     Ok(revision)
 }
@@ -190,15 +207,15 @@ pub(super) fn normalize_loaded_function_resource_revision(
 pub(in crate::project) fn normalize_function_resource_revision(
     path: &GraphResourcePath,
     resource: &mut GraphResourceDocument,
-    retained: Option<crate::node_system::document::ResourceRevision>,
-) -> Result<crate::node_system::document::ResourceRevision, ProjectFilesystemError> {
+    retained: Option<crate::graph_document::GraphRevision>,
+) -> Result<crate::graph_document::GraphRevision, ProjectFilesystemError> {
     if resource.kind != crate::project::GraphDocumentKind::Function {
         return Ok(resource.document.revision);
     }
     let revision = authoritative_function_revision(path, resource.document.revision, retained)?;
     resource.document.revision = revision;
     if let Some(function) = resource.function.as_mut() {
-        function.revision = revision;
+        function.revision = ResourceRevision::from_graph_revision(revision);
     }
     Ok(revision)
 }
@@ -208,7 +225,7 @@ pub(super) fn normalize_function_patch_revisions(
     data: &ProjectData,
     graph_revisions: &std::collections::HashMap<
         GraphResourcePath,
-        crate::node_system::document::ResourceRevision,
+        crate::graph_document::GraphRevision,
     >,
 ) -> Result<(), ProjectFilesystemError> {
     match patch {
@@ -220,13 +237,13 @@ pub(super) fn normalize_function_patch_revisions(
             )?;
         }
         ResourceDocumentPatch::DeclareGraph { path, revision } => {
-            if matches!(path.kind(), Ok(crate::project::GraphDocumentKind::Function)) {
+            if path.kind() == crate::graph_document::GraphResourceKind::Function {
                 let canonical = authoritative_function_revision(
                     path,
-                    *revision,
+                    revision.to_graph_revision(),
                     graph_revisions.get(path).copied(),
                 )?;
-                if canonical != *revision {
+                if canonical != revision.to_graph_revision() {
                     return Err(ProjectFilesystemError::ResourceRevisionConflict {
                         message: format!(
                             "declared function '{}' revision changed before publication",
@@ -242,7 +259,7 @@ pub(super) fn normalize_function_patch_revisions(
             }) {
                 authoritative_function_revision(
                     path,
-                    *revision,
+                    revision.to_graph_revision(),
                     graph_revisions.get(path).copied(),
                 )?;
             }
@@ -435,26 +452,19 @@ pub(super) fn canonical_resource_lifecycle_events(
     patch: &ResourceDocumentPatch,
     graph_revisions: &std::collections::HashMap<
         GraphResourcePath,
-        crate::node_system::document::ResourceRevision,
+        crate::graph_document::GraphRevision,
     >,
 ) -> Result<Vec<crate::node_system::document::ResourceDeltaEvent>, ProjectFilesystemError> {
-    let graph_key = |path: &GraphResourcePath| {
-        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-            path.as_str().into(),
-        ))
-    };
+    let graph_key = |path: &GraphResourcePath| ResourceKey::Graph(path.clone());
     let lifecycle_state =
         |path: &GraphResourcePath, revision| crate::node_system::document::ResourceLifecycleState {
             revision,
             path: path.as_str().into(),
-            kind: match path
-                .kind()
-                .expect("validated graph resource path must have a kind")
-            {
-                crate::project::GraphDocumentKind::Event => {
+            kind: match path.kind() {
+                crate::graph_document::GraphResourceKind::Event => {
                     crate::node_system::document::ResourceLifecycleKind::Event
                 }
-                crate::project::GraphDocumentKind::Function => {
+                crate::graph_document::GraphResourceKind::Function => {
                     crate::node_system::document::ResourceLifecycleKind::Function
                 }
             },
@@ -473,10 +483,14 @@ pub(super) fn canonical_resource_lifecycle_events(
     };
     match patch {
         ResourceDocumentPatch::InsertGraph { path, resource } => {
-            let revision = resource.document.revision;
+            let revision = ResourceRevision::from_graph_revision(resource.document.revision);
             return Ok(vec![lifecycle_delta(
                 path,
-                graph_revisions.get(path).copied().unwrap_or(revision),
+                graph_revisions
+                    .get(path)
+                    .copied()
+                    .map(ResourceRevision::from_graph_revision)
+                    .unwrap_or(revision),
                 revision,
                 None,
                 Some(lifecycle_state(path, revision)),
@@ -485,7 +499,11 @@ pub(super) fn canonical_resource_lifecycle_events(
         ResourceDocumentPatch::DeclareGraph { path, revision } => {
             return Ok(vec![lifecycle_delta(
                 path,
-                graph_revisions.get(path).copied().unwrap_or(*revision),
+                graph_revisions
+                    .get(path)
+                    .copied()
+                    .map(ResourceRevision::from_graph_revision)
+                    .unwrap_or(*revision),
                 *revision,
                 None,
                 Some(lifecycle_state(path, *revision)),
@@ -540,7 +558,7 @@ pub(super) fn canonical_resource_lifecycle_events(
     let mut deltas = vec![crate::node_system::document::ResourceDeltaEvent {
         resource: graph_key(to),
         from_revision: context.expected_revisions[&source_key],
-        to_revision: moved.document.revision,
+        to_revision: ResourceRevision::from_graph_revision(moved.document.revision),
         caused_by: Some(context.operation_id),
         payload: graph_move_patch(),
     }];
@@ -548,7 +566,7 @@ pub(super) fn canonical_resource_lifecycle_events(
         let key = graph_key(path);
         crate::node_system::document::ResourceDeltaEvent {
             from_revision: context.expected_revisions[&key],
-            to_revision: resource.document.revision,
+            to_revision: ResourceRevision::from_graph_revision(resource.document.revision),
             resource: key,
             caused_by: Some(context.operation_id),
             payload: graph_move_patch(),
@@ -699,7 +717,9 @@ pub(super) fn affected_projection_paths(
     let mut paths = deltas
         .iter()
         .filter_map(|delta| match &delta.resource {
-            crate::node_system::document::ResourceKey::Graph(path) => Some(path.0.to_string()),
+            crate::node_system::document::ResourceKey::Graph(path) => {
+                Some(path.as_str().to_owned())
+            }
             crate::node_system::document::ResourceKey::Function(path) => Some(path.0.to_string()),
             crate::node_system::document::ResourceKey::Variable(_)
             | crate::node_system::document::ResourceKey::Database(_)

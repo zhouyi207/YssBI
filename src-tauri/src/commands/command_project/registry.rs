@@ -1,6 +1,6 @@
 use crate::error::CommandError;
 use crate::event::LifecycleMutationResultDto;
-use crate::node_system::document::OperationId;
+use crate::project::OperationId;
 use crate::project::{
     CleanupInvalidProjectsResult, ProjectInstanceId, ProjectPickerTaskCancelRegistry,
     ProjectRecord, ProjectRegistry, ScanProjectsResult,

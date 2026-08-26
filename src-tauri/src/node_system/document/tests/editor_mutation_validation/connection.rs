@@ -512,7 +512,7 @@ fn phase1_connect_rejects_endpoint_direction_kind_and_order_errors_atomically() 
         &fixture.snapshot,
         fixture.output.clone(),
         fixture.input.clone(),
-        Some(OrderKey("forbidden".into())),
+        Some(OrderKey::new("forbidden")),
         EditorMutationErrorCode::GraphConnectionOrderForbidden,
     );
 
@@ -628,13 +628,13 @@ fn phase1_move_connections_allocates_new_ids_in_old_source_id_order_and_inverse_
             id: connection_id(4_012),
             output: source.clone(),
             input: declared(second_input_node, "ordered_in"),
-            order: Some(OrderKey("b".into())),
+            order: Some(OrderKey::new("b")),
         },
         DocumentConnection {
             id: connection_id(4_011),
             output: source.clone(),
             input: declared(first_input_node, "ordered_in"),
-            order: Some(OrderKey("a".into())),
+            order: Some(OrderKey::new("a")),
         },
     ];
     for connection in originals.clone() {
@@ -920,19 +920,19 @@ fn phase1_move_connections_rejects_aggregate_capacity_and_order_atomically() {
             id: connection_id(4_071),
             output: declared(first_output, "data_out"),
             input: source.clone(),
-            order: Some(OrderKey("a".into())),
+            order: Some(OrderKey::new("a")),
         },
         DocumentConnection {
             id: connection_id(4_072),
             output: declared(second_output, "data_out"),
             input: source.clone(),
-            order: Some(OrderKey("b".into())),
+            order: Some(OrderKey::new("b")),
         },
         DocumentConnection {
             id: connection_id(4_073),
             output: declared(incumbent_output, "data_out"),
             input: target.clone(),
-            order: Some(OrderKey("c".into())),
+            order: Some(OrderKey::new("c")),
         },
     ] {
         document.connections.insert(connection.id, connection);

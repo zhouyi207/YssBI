@@ -1,21 +1,23 @@
 use super::{connection, declared, node, node_id};
-use crate::node_system::document::{
-    DynamicMemberLocator, DynamicPortBinding, FunctionDocument, FunctionParameter,
-    FunctionParameterId, FunctionSignature, OrderKey, PortAddress, PortInstanceId,
+use crate::graph_document::GraphResourcePath;
+use crate::graph_document::{
+    DynamicMemberLocator, DynamicPortBinding, FunctionParameterId, OrderKey, PortAddress,
+    PortInstanceId,
 };
+use crate::node_system::document::{FunctionDocument, FunctionParameter, FunctionSignature};
 use crate::node_system::protocol::{ParameterKey, PortKey};
-use crate::project::{GraphDocumentKind, GraphResourceDocument, GraphResourcePath};
+use crate::project::{GraphDocumentKind, GraphResourceDocument};
 use uuid::Uuid;
 
 pub(super) const PARAMETER_ID: &str = "amount";
 pub(super) const RETURN_ID: &str = "return";
 
 pub(super) fn parameter_id() -> FunctionParameterId {
-    FunctionParameterId(PARAMETER_ID.into())
+    FunctionParameterId::new(PARAMETER_ID)
 }
 
 pub(super) fn return_id() -> FunctionParameterId {
-    FunctionParameterId(RETURN_ID.into())
+    FunctionParameterId::new(RETURN_ID)
 }
 
 pub(super) fn resolved_function_port(
@@ -40,13 +42,11 @@ pub(super) fn resolved_function_port(
                 address.clone(),
                 DynamicPortBinding::Resolved {
                     origin: DynamicMemberLocator::FunctionParameter {
-                        function: crate::node_system::document::GraphResourcePath(
-                            function.as_str().into(),
-                        ),
+                        function: function.clone(),
                         parameter: parameter.clone(),
                     },
-                    order: OrderKey(order.into()),
-                    last_known: crate::node_system::document::LastKnownPortMetadata::default(),
+                    order: OrderKey::new(order),
+                    last_known: crate::graph_document::LastKnownPortMetadata::default(),
                 },
             )
             .is_none()
@@ -80,7 +80,7 @@ fn function_shell(path: &GraphResourcePath, name: &str) -> GraphResourceDocument
 
 pub(super) struct UnaryFunctionFixture {
     pub(super) resource: GraphResourceDocument,
-    pub(super) offset_node: crate::node_system::document::NodeId,
+    pub(super) offset_node: crate::graph_document::NodeId,
 }
 
 pub(super) fn unary_add_function(

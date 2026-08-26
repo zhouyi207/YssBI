@@ -1,8 +1,7 @@
 use super::fixture_result_path;
-use crate::node_system::document::{OperationId, ResourceRevision};
-use crate::project::{
-    GraphDocumentKind, GraphResourcePath, ProjectFilesystemError, ProjectInstanceId, ProjectState,
-};
+use crate::graph_document::{GraphResourcePath, GraphRevision};
+use crate::project::{GraphDocumentKind, ProjectFilesystemError, ProjectInstanceId, ProjectState};
+use crate::project::{OperationId, ResourceRevision};
 
 #[cfg(test)]
 pub(crate) struct GraphRenameFixtureResult {
@@ -69,12 +68,12 @@ impl ProjectState {
             .unwrap()
             .get(source)
             .copied()
-            .unwrap_or(ResourceRevision::INITIAL);
+            .unwrap_or(GraphRevision::INITIAL);
         let result = self
             .duplicate_graph_resource_transaction(
                 &session.instance_id,
                 source,
-                revision,
+                ResourceRevision::from_graph_revision(revision),
                 OperationId::new(),
             )
             .map_err(|error| error.to_string())?;
@@ -94,11 +93,11 @@ impl ProjectState {
             .unwrap()
             .get(graph_path)
             .copied()
-            .unwrap_or(ResourceRevision::INITIAL);
+            .unwrap_or(GraphRevision::INITIAL);
         self.remove_graph_resource_transaction(
             &session.instance_id,
             graph_path,
-            revision,
+            ResourceRevision::from_graph_revision(revision),
             OperationId::new(),
         )
         .map(|_| ())
@@ -125,7 +124,7 @@ impl ProjectState {
                     .get(graph_path)
                     .copied()
             })
-            .unwrap_or(ResourceRevision::INITIAL);
+            .unwrap_or(GraphRevision::INITIAL);
         let expected_project_instance_id =
             ProjectInstanceId::from_existing(expected_project_instance_id.to_string());
         let mut token = 1;
@@ -133,7 +132,7 @@ impl ProjectState {
             match self.rename_graph_resource_transaction(
                 &expected_project_instance_id,
                 graph_path,
-                revision,
+                ResourceRevision::from_graph_revision(revision),
                 new_name,
                 token,
                 OperationId::new(),
@@ -173,7 +172,9 @@ pub(crate) enum ResourceMutationTestPoint {
 
 #[cfg(test)]
 pub(crate) type ResourceMutationTestHook = std::sync::Arc<
-    dyn Fn(ResourceMutationTestPoint, Option<&crate::project::GraphResourcePath>) + Send + Sync,
+    dyn Fn(ResourceMutationTestPoint, Option<&crate::graph_document::GraphResourcePath>)
+        + Send
+        + Sync,
 >;
 
 #[cfg(test)]
@@ -185,7 +186,7 @@ impl ProjectState {
     pub(crate) fn run_resource_mutation_test_hook(
         &self,
         point: ResourceMutationTestPoint,
-        path: Option<&crate::project::GraphResourcePath>,
+        path: Option<&crate::graph_document::GraphResourcePath>,
     ) {
         let hook = self
             .test_hooks

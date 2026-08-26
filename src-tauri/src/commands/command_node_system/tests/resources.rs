@@ -16,7 +16,7 @@ fn save_command_preserves_identity_revision_operation_and_emits_once() {
     let state = ProjectState::new();
     state.activate_project_fixture(root.to_string_lossy().into_owned(), project);
     let project_instance_id = state.capture_project_session().unwrap().instance_id;
-    let operation_id = crate::node_system::document::OperationId::new();
+    let operation_id = crate::project::OperationId::new();
     let mut events = Vec::new();
 
     let result = save_project_graph_with_emitter(
@@ -64,7 +64,7 @@ fn stale_save_command_emits_no_event() {
         stale,
         path,
         ResourceRevision::INITIAL,
-        crate::node_system::document::OperationId::new(),
+        crate::project::OperationId::new(),
         |event| events.push(event),
     )
     .unwrap_err();
@@ -236,9 +236,9 @@ fn resource_commands_emit_one_project_scoped_committed_result() {
     assert_eq!(created.deltas.len(), 1);
     assert_eq!(
         created.deltas[0].resource,
-        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-            "events/Created.yssbi-event".into(),
-        ))
+        ResourceKey::Graph(
+            crate::graph_document::GraphResourcePath::new("events/Created.yssbi-event").unwrap()
+        )
     );
     assert_eq!(created.deltas[0].from_revision, ResourceRevision::INITIAL);
     assert_eq!(created.deltas[0].to_revision, ResourceRevision::INITIAL);
@@ -340,9 +340,9 @@ fn resource_commands_emit_one_project_scoped_committed_result() {
             };
             assert_eq!(
                 delta.resource,
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    expected_path.into(),
-                ))
+                ResourceKey::Graph(
+                    crate::graph_document::GraphResourcePath::new(expected_path).unwrap()
+                )
             );
             let state = serde_json::json!({
                 "revision": 0,
@@ -412,9 +412,9 @@ fn rename_command_returns_and_emits_canonical_mutation_result() {
     assert_eq!(result.deltas.len(), 1);
     assert_eq!(
         result.deltas[0].resource,
-        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-            "events/New.yssbi-event".into()
-        ))
+        ResourceKey::Graph(
+            crate::graph_document::GraphResourcePath::new("events/New.yssbi-event").unwrap()
+        )
     );
     assert_eq!(result.deltas[0].from_revision, ResourceRevision::INITIAL);
     assert_eq!(result.deltas[0].to_revision, ResourceRevision::new(1));

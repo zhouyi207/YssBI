@@ -27,10 +27,7 @@ fn editor_mutation_returns_correlated_delta_projection_and_history_status() {
 
 #[test]
 fn dynamic_merge_input_create_and_connect_serializes_parseable_internal_failure() {
-    use crate::node_system::document::{
-        DynamicPortBinding, GraphResourcePath as DocumentGraphResourcePath, OrderKey,
-        PortInstanceId,
-    };
+    use crate::graph_document::{DynamicPortBinding, OrderKey, PortInstanceId};
 
     let path = graph_path();
     let begin = node("yssbi.project.event.begin");
@@ -52,13 +49,13 @@ fn dynamic_merge_input_create_and_connect_serializes_parseable_internal_failure(
     graph.document.port_bindings.insert(
         connected_enter.clone(),
         DynamicPortBinding::UserCreated {
-            order: OrderKey("00000".into()),
+            order: OrderKey::new("00000"),
         },
     );
     graph.document.port_bindings.insert(
         unconnected_enter.clone(),
         DynamicPortBinding::UserCreated {
-            order: OrderKey("00001".into()),
+            order: OrderKey::new("00001"),
         },
     );
     graph.document.connections.insert(
@@ -82,14 +79,14 @@ fn dynamic_merge_input_create_and_connect_serializes_parseable_internal_failure(
             &path,
             "zh-CN",
             MutationRequest::new(
-                ResourceKey::Graph(DocumentGraphResourcePath(path.as_str().into())),
+                ResourceKey::Graph(path.clone()),
                 GraphRevision::new(1),
                 OperationId::new(),
                 EditorGraphMutationDto::CreateNode {
                     descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
                         node_type_id: NodeTypeId::new("yssbi.control.do").unwrap(),
                     },
-                    position: crate::node_system::document::NodePosition { x: 20.0, y: 30.0 },
+                    position: crate::graph_document::NodePosition { x: 20.0, y: 30.0 },
                     user_label: None,
                     connect_from: Some(unconnected_enter.into()),
                 },

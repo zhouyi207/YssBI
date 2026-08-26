@@ -5,14 +5,14 @@ struct SourceRenameLimitFixture {
     root: std::path::PathBuf,
     path: GraphResourcePath,
     nodes: [DocumentNode; 3],
-    connections: [crate::node_system::document::DocumentConnection; 2],
+    connections: [crate::graph_document::DocumentConnection; 2],
     rename_result_name: String,
     limit_result_name: String,
 }
 
 impl SourceRenameLimitFixture {
     fn new(label: &str) -> Self {
-        use crate::node_system::document::{ConnectionId, DocumentConnection, PortAddress};
+        use crate::graph_document::{ConnectionId, DocumentConnection, PortAddress};
         use crate::node_system::protocol::{ParameterKey, PortKey};
 
         let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
@@ -402,7 +402,7 @@ fn project_execution_preserves_relational_codes_in_errors_and_terminal_events() 
 
 #[test]
 fn project_execute_graph_runs_builtin_dataframe_source_limit() {
-    use crate::node_system::document::{ConnectionId, DocumentConnection, PortAddress};
+    use crate::graph_document::{ConnectionId, DocumentConnection, PortAddress};
     use crate::node_system::protocol::{ParameterKey, PortKey, Value};
     use crate::node_system::runtime::{ProductionRelationalObserver, RuntimeValue};
 
@@ -504,7 +504,7 @@ struct ProductionRelationalChainFixture {
 
 impl ProductionRelationalChainFixture {
     fn new(label: &str, reverse_uuid_order: bool) -> Self {
-        use crate::node_system::document::{ConnectionId, DocumentConnection, NodeId, PortAddress};
+        use crate::graph_document::{ConnectionId, DocumentConnection, NodeId, PortAddress};
         use crate::node_system::protocol::{ParameterKey, PortKey};
 
         let root = std::env::temp_dir().join(format!("yssbi-{label}-{}", uuid::Uuid::new_v4()));
@@ -628,7 +628,7 @@ impl ProductionRelationalChainFixture {
         fixture
     }
 
-    fn node_id(&self, output: ProductionChainOutput) -> crate::node_system::document::NodeId {
+    fn node_id(&self, output: ProductionChainOutput) -> crate::graph_document::NodeId {
         self.nodes[match output {
             ProductionChainOutput::Filter => 1,
             ProductionChainOutput::Limit => 4,
@@ -641,8 +641,8 @@ impl ProductionRelationalChainFixture {
         output: ProductionChainOutput,
     ) -> crate::node_system::plan::GraphOutputRef {
         crate::node_system::plan::GraphOutputRef {
-            graph_path: crate::node_system::document::GraphResourcePath(self.path.as_str().into()),
-            port: crate::node_system::document::PortAddress::declared(
+            graph_path: self.path.clone(),
+            port: crate::graph_document::PortAddress::declared(
                 self.node_id(output),
                 crate::node_system::protocol::PortKey::new("result").unwrap(),
             ),

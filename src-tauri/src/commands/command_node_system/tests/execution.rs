@@ -57,7 +57,7 @@ fn execution_errors_report_actual_terminal_delivery_and_stable_codes() {
             crate::node_system::compiler::InternalCompilationFailure {
                 stage: crate::node_system::compiler::CompilationStage::Lowering,
                 code: "compiler.lowering.internal_invariant".into(),
-                node_id: Some(crate::node_system::document::NodeId::from_uuid(
+                node_id: Some(crate::graph_document::NodeId::from_uuid(
                     uuid::Uuid::from_u128(42),
                 )),
             },
@@ -151,9 +151,8 @@ fn execution_channel_adapter_serializes_minimal_run_and_preview_ids() {
     let unsafe_id = 9_007_199_254_740_993_u64;
     let run = GraphRunIdentity {
         project_session_id: ProjectSessionId::new("session"),
-        graph_path: crate::node_system::document::GraphResourcePath(
-            "events/Main.yssbi-event".into(),
-        ),
+        graph_path: crate::graph_document::GraphResourcePath::new("events/Main.yssbi-event")
+            .unwrap(),
         run_id: RunId::new(unsafe_id),
     };
     let started = execution_channel_event_dto(GraphExecutionStreamEvent::RunEvent(RunEvent {
@@ -163,7 +162,7 @@ fn execution_channel_adapter_serializes_minimal_run_and_preview_ids() {
     .unwrap();
     let output = crate::node_system::plan::GraphOutputRef {
         graph_path: run.graph_path.clone(),
-        port: crate::node_system::document::PortAddress::declared(
+        port: crate::graph_document::PortAddress::declared(
             NodeId::from_uuid(uuid::Uuid::from_u128(2)),
             crate::node_system::protocol::PortKey::new("result").unwrap(),
         ),
@@ -223,7 +222,7 @@ fn execution_channel_adapter_serializes_minimal_run_and_preview_ids() {
 fn run_output_channel_adapter_uses_a_separate_exact_wire_shape() {
     let run_id = RunId::new(9_007_199_254_740_993);
     let source_graph_path =
-        crate::node_system::document::GraphResourcePath("functions/output.yssbi-function".into());
+        crate::graph_document::GraphResourcePath::new("functions/output.yssbi-function").unwrap();
     let source_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(2));
     let output = execution_channel_event_dto(GraphExecutionStreamEvent::RunOutput(
         RunOutputMessage::Output(crate::node_system::runtime::RunOutputEvent {

@@ -20,7 +20,7 @@ use super::{
     compute_dataset_overview_duckdb,
 };
 use crate::database::database_schema::{dataframe_to_schema, duckdb_columns_to_schema};
-use crate::graph::node::DataSchema;
+use crate::graph::schema::DataSchema;
 use polars::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;

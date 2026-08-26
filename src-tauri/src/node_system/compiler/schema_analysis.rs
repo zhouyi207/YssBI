@@ -1,6 +1,6 @@
 use super::{CompilerDiagnostic, CompilerDiagnosticLocation};
+use crate::graph_document::{NodeId, PortAddress, PortRef};
 use crate::node_system::analysis::DiagnosticLocation;
-use crate::node_system::document::{NodeId, PortAddress, PortRef};
 use crate::node_system::protocol::{
     ColumnRename, ColumnSelectionExpr, NodeProtocol, ParameterKey, PortKey, RelationalScalarType,
     RenameExpr, ResolvedSchemaFact, SchemaColumnRef, SchemaDependency, SchemaExpr,

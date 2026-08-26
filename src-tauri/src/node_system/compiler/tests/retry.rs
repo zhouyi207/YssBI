@@ -223,7 +223,7 @@ fn operation_stable_ids_include_canonical_graph_identity() {
     let compile = |path: &str| {
         compiler
             .compile_snapshot(
-                &compiler.snapshot(GraphResourcePath(path.into()), &graph),
+                &compiler.snapshot(GraphResourcePath::new(path).unwrap(), &graph),
                 &CompileCancellationToken::new(),
             )
             .unwrap()

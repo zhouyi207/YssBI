@@ -319,10 +319,15 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
             let Some(target) = function_target(&node.normalized_parameters) else {
                 continue;
             };
-            targets
-                .entry(GraphResourcePath(target.into()))
-                .or_default()
-                .push(node.node_id);
+            match GraphResourcePath::new(target) {
+                Ok(target) => targets.entry(target).or_default().push(node.node_id),
+                Err(_) => diagnostics.push(
+                    CompilerDiagnostic::ControlCallTargetInvalid {
+                        function_path: target.into(),
+                    }
+                    .into_node(DiagnosticLocation::Node(node.node_id)),
+                ),
+            }
         }
         targets
     }
@@ -335,7 +340,7 @@ impl<'a, R: CompilerRegistry, S: ResourceSnapshot> GraphCompiler<'a, R, S> {
     ) {
         diagnostics.extend(sites.iter().map(|&node_id| {
             CompilerDiagnostic::ControlCallAbiInvalid {
-                function_path: target.0.clone(),
+                function_path: target.as_str().into(),
             }
             .into_node(DiagnosticLocation::Node(node_id))
         }));

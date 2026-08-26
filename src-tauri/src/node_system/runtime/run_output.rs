@@ -1,6 +1,6 @@
 use super::RunId;
 use super::execution_event::RunEventSink;
-use crate::node_system::document::{GraphResourcePath, NodeId};
+use crate::graph_document::{GraphResourcePath, NodeId};
 use std::sync::Mutex;
 
 pub const RUN_OUTPUT_TEXT_MAX_BYTES: usize = 8 * 1024;
@@ -214,7 +214,7 @@ mod tests {
     fn run_output_is_bounded_and_reports_each_limit_once() {
         let events = OutputEvents::default();
         let output = RunOutputEmitter::new(RunId::new(99), &events);
-        let source_graph_path = GraphResourcePath("events/output.yssbi-event".into());
+        let source_graph_path = GraphResourcePath::new("events/output.yssbi-event").unwrap();
         let source_node_id = NodeId::from_uuid(uuid::Uuid::nil());
         let oversized = "界".repeat(RUN_OUTPUT_TEXT_MAX_BYTES / 3 + 2);
 

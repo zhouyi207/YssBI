@@ -1,7 +1,7 @@
+use crate::graph_document::{ConnectionId, NodeId, PortAddress};
 use crate::node_system::analysis::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity, NodeDiagnostic,
 };
-use crate::node_system::document::{ConnectionId, NodeId, PortAddress};
 use crate::node_system::protocol::{I18nKey, ManagedNodeRole, NodeScope, PortKind};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;

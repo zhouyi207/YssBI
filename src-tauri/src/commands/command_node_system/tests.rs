@@ -23,21 +23,19 @@ use crate::commands::node_system_execution_dto::ResultValueDto;
 use crate::event::{Event, EventProject};
 use crate::node_system::ProjectSessionId;
 
+use crate::graph_document::NodeId;
 use crate::node_system::catalog::NodeCreationDescriptor;
-use crate::node_system::document::{
-    FunctionDocumentPatch, FunctionResourceKey, ResourceKey, ResourceRevision,
-};
-use crate::node_system::document::{
-    HistoryMutation, MutationRequest, NodeId, OperationId, PortAddressDto,
-};
+use crate::node_system::document::{FunctionDocumentPatch, FunctionResourceKey, ResourceKey};
+use crate::node_system::document::{HistoryMutation, MutationRequest, PortAddressDto};
+use crate::project::OperationId;
+use crate::project::ResourceRevision;
 
+use crate::graph_document::GraphResourcePath;
 use crate::node_system::runtime::{
     ActivationId, ActivationProvenance, GraphRunIdentity, PendingOutputDescriptor, ResultId,
     ResultStore, ResultUsage, RunEvent, RunEventKind, RunId, RunOutputMessage, StoredValue,
 };
-use crate::project::{
-    GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, fixtures,
-};
+use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData, fixtures};
 use crate::project::{ProjectInstanceId, ProjectState};
 use std::sync::Arc;
 
@@ -102,9 +100,7 @@ fn function_project(graph_path: &GraphResourcePath) -> ProjectData {
 
 fn history_request(graph_path: &GraphResourcePath) -> MutationRequest<HistoryMutation> {
     MutationRequest::new(
-        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-            graph_path.as_str().into(),
-        )),
+        ResourceKey::Graph(graph_path.clone()),
         ResourceRevision::INITIAL,
         OperationId::new(),
         HistoryMutation {},
@@ -145,7 +141,7 @@ fn insert_ready_result(
                 run_id,
                 activation_id,
                 graph_path: output.graph_path.clone(),
-                graph_revision: crate::node_system::document::GraphRevision::new(1),
+                graph_revision: crate::graph_document::GraphRevision::new(1),
                 node_id: output.port.node_id,
                 created_at_ms: activation_id.get(),
                 usage: ResultUsage::Produced,
@@ -173,9 +169,9 @@ fn insert_ready_result(
 
 fn test_output(graph_path: &str) -> crate::node_system::plan::GraphOutputRef {
     crate::node_system::plan::GraphOutputRef {
-        graph_path: crate::node_system::document::GraphResourcePath(graph_path.into()),
-        port: crate::node_system::document::PortAddress::declared(
-            crate::node_system::document::NodeId::from_uuid(uuid::Uuid::nil()),
+        graph_path: crate::graph_document::GraphResourcePath::new(graph_path).unwrap(),
+        port: crate::graph_document::PortAddress::declared(
+            crate::graph_document::NodeId::from_uuid(uuid::Uuid::nil()),
             crate::node_system::protocol::PortKey::new("result").unwrap(),
         ),
     }

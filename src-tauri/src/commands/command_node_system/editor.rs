@@ -1,10 +1,9 @@
 use super::common::{mutation_conflict_to_command_error, parse_graph_path};
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, GraphMutationResultDto, emit_project_event};
+use crate::graph_document::NodeId;
 use crate::node_system::analysis::EditorGraphProjectionDto;
-use crate::node_system::document::{
-    ClipboardSubgraphDto, EditorGraphMutationDto, MutationRequest, NodeId,
-};
+use crate::node_system::document::{ClipboardSubgraphDto, EditorGraphMutationDto, MutationRequest};
 use crate::project::{ProjectInstanceId, ProjectState};
 use tauri::{AppHandle, State};
 

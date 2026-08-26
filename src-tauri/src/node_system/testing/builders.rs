@@ -1,12 +1,12 @@
 use super::KernelRecorder;
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, GraphDocument, NodeId, NodePosition,
+    PortAddress,
+};
 use crate::node_system::analysis::ResourceVersionSet;
 use crate::node_system::compiler::{
     GraphCompiler, LoweredKernel, LoweredNode, LoweringContext, LoweringError, NodeLowerer,
     ResourceSnapshot,
-};
-use crate::node_system::document::{
-    ConnectionId, DocumentConnection, DocumentNode, GraphDocument, NodeId, NodePosition,
-    PortAddress,
 };
 use crate::node_system::plan::{
     CompiledParameterHandle, ExecutionPlan, GraphOutputRef, KernelHandle, PlanResult,

@@ -1,5 +1,6 @@
-use crate::node_system::document::{OperationId, ResourceRevision};
-use crate::project::{GraphResourcePath, ProjectFilesystemError, ProjectInstanceId, ProjectState};
+use crate::graph_document::GraphResourcePath;
+use crate::project::{OperationId, ResourceRevision};
+use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
 
 pub(crate) fn remap_variable_scope_path(
     scope: &mut crate::variable::VariableScope,
@@ -28,7 +29,7 @@ pub(crate) fn remap_variable_scope_path(
 }
 
 pub(crate) fn remap_graph_document_references(
-    document: &mut crate::node_system::document::GraphDocument,
+    document: &mut crate::graph_document::GraphDocument,
     from: &str,
     to: &str,
 ) -> bool {

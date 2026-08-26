@@ -10,7 +10,7 @@ fn builtin_function_resolver_projects_function_document_members() {
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
             BTreeMap::from([(
-                ResourceKey::new(self.path.0.clone()),
+                ResourceKey::new(self.path.as_str()),
                 ResourceVersion::new("function-v1"),
             )])
         }
@@ -29,12 +29,12 @@ fn builtin_function_resolver_projects_function_document_members() {
     }
 
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let path = GraphResourcePath("functions/calculate-sales".into());
+    let path = GraphResourcePath::new("functions/calculate-sales").unwrap();
     let resources = FunctionResources {
         path: path.clone(),
         document: FunctionDocument::new(FunctionSignature {
             parameters: vec![FunctionParameter {
-                id: FunctionParameterId("amount".into()),
+                id: FunctionParameterId::new("amount"),
                 name: "Amount".into(),
                 type_name: "Float64".into(),
             }],
@@ -52,7 +52,7 @@ fn builtin_function_resolver_projects_function_document_members() {
             position: NodePosition { x: 0.0, y: 0.0 },
             parameters: BTreeMap::from([(
                 crate::node_system::protocol::ParameterKey::new("target").unwrap(),
-                serde_json::Value::String(path.0.to_string()),
+                serde_json::Value::String(path.as_str().to_owned()),
             )]),
             user_label: None,
         },
@@ -68,12 +68,12 @@ fn builtin_function_resolver_projects_function_document_members() {
     assert_eq!(projection.available_members.len(), 2);
     assert!(projection.available_members.iter().any(|member| {
         match &member.member().locator {
-            crate::node_system::document::DynamicMemberLocator::FunctionParameter {
+            crate::graph_document::DynamicMemberLocator::FunctionParameter {
                 function,
                 parameter,
             } => {
                 function == &path
-                    && parameter == &FunctionParameterId("amount".into())
+                    && parameter == &FunctionParameterId::new("amount")
                     && member.member().value_type
                         == TypeExpr::Concrete(
                             crate::node_system::protocol::TypeId::new("core.float64").unwrap(),

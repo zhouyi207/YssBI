@@ -1,6 +1,6 @@
 use super::{CompilerRegistry, CompilerSemanticGraph, RegistryNodeBehavior};
+use crate::graph_document::{ConnectionId, NodeId, PortAddress};
 use crate::node_system::analysis::{ControlEdge, EffectDependency, SemanticDependency, ValueEdge};
-use crate::node_system::document::{ConnectionId, NodeId, PortAddress};
 use crate::node_system::registry::TransparentNodeRole;
 use std::collections::{BTreeMap, BTreeSet};
 

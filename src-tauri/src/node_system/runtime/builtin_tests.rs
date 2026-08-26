@@ -6,13 +6,13 @@ mod scalar;
 mod statistics;
 
 use super::*;
-use crate::node_system::ProjectSessionId;
-use crate::node_system::analysis::{CompilationBasis, CompileId, CompileProvenance};
-use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
-use crate::node_system::document::{
+use crate::graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath,
     GraphRevision, NodeId, NodePosition, ParameterValues, PortAddress,
 };
+use crate::node_system::ProjectSessionId;
+use crate::node_system::analysis::{CompilationBasis, CompileId, CompileProvenance};
+use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
 use crate::node_system::plan::*;
 use crate::node_system::protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, PortKey,
@@ -150,7 +150,7 @@ fn compile_builtin_flow(
                     NodeId::from_uuid(uuid::Uuid::from_u128(node)),
                     PortKey::new(port).unwrap(),
                 ),
-                crate::node_system::document::InputState {
+                crate::graph_document::InputState {
                     literal_override: Some(
                         serde_json::to_value(crate::node_system::protocol::TypedValue {
                             value_type: TypeExpr::Concrete(TypeId::new(value_type).unwrap()),
@@ -169,12 +169,12 @@ fn compile_builtin_flow(
             let address = PortAddress::instance(
                 target_node,
                 PortKey::new(*target_port).unwrap(),
-                crate::node_system::document::PortInstanceId::from_uuid(id.as_uuid()),
+                crate::graph_document::PortInstanceId::from_uuid(id.as_uuid()),
             );
             graph.port_bindings.insert(
                 address.clone(),
-                crate::node_system::document::DynamicPortBinding::UserCreated {
-                    order: crate::node_system::document::OrderKey("00000".into()),
+                crate::graph_document::DynamicPortBinding::UserCreated {
+                    order: crate::graph_document::OrderKey::new("00000"),
                 },
             );
             address
@@ -273,7 +273,7 @@ fn execute_variable_kernel(
     compiled
         .insert(params.clone(), BuiltinVariableParameters::new(resource))
         .unwrap();
-    let source_graph_path = GraphResourcePath("events/builtin-test.yssbi-event".into());
+    let source_graph_path = GraphResourcePath::new("events/builtin-test.yssbi-event").unwrap();
     let context = KernelContext {
         run_id: RunId::new(1),
         frame_id: FrameId::next().unwrap(),
@@ -385,7 +385,7 @@ fn execute_plot_kernel(
     )
     .unwrap();
     let params = handle("plot.test", CompiledParameterHandle::new);
-    let source_graph_path = GraphResourcePath("events/plot-test.yssbi-event".into());
+    let source_graph_path = GraphResourcePath::new("events/plot-test.yssbi-event").unwrap();
     let context = KernelContext {
         run_id: RunId::new(1),
         frame_id: FrameId::next().unwrap(),
@@ -424,7 +424,7 @@ fn execute_kernel_direct_with_deadline(
         cancellation.clone(),
     )
     .unwrap();
-    let source_graph_path = GraphResourcePath("events/kernel-test.yssbi-event".into());
+    let source_graph_path = GraphResourcePath::new("events/kernel-test.yssbi-event").unwrap();
     let context = KernelContext {
         run_id: RunId::new(1),
         frame_id: FrameId::next().unwrap(),
@@ -452,7 +452,7 @@ fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) ->
         .map(|value| PlanResult {
             name: format!("value_{value}").into(),
             output: GraphOutputRef {
-                graph_path: GraphResourcePath("events/builtin-kernel-test".into()),
+                graph_path: GraphResourcePath::new("events/builtin-kernel-test").unwrap(),
                 port: PortAddress::declared(
                     NodeId::from_uuid(uuid::Uuid::nil()),
                     PortKey::new(format!("value_{value}")).unwrap(),
@@ -474,7 +474,7 @@ fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) ->
     ExecutionPlan {
         provenance: CompileProvenance {
             project_session_id: ProjectSessionId::new("builtin-kernel-test"),
-            graph_path: GraphResourcePath("events/builtin-kernel-test".into()),
+            graph_path: GraphResourcePath::new("events/builtin-kernel-test").unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([7; 32]),

@@ -136,8 +136,8 @@ impl std::error::Error for ValidationError {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph_document::{ConnectionId, GraphRevision, NodeId, PortAddress};
     use crate::node_system::analysis::{ResourceVersion, ResourceVersionSet};
-    use crate::node_system::document::{ConnectionId, GraphRevision, NodeId, PortAddress};
     use crate::node_system::protocol::{SchemaExpr, TypeExpr, TypeId};
     use crate::node_system::registry::RegistryFingerprint;
     use uuid::Uuid;

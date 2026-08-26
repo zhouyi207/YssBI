@@ -171,8 +171,8 @@ fn nested_view_data_event_keeps_root_graph_run_identity() {
             mandatory: true,
         },
     );
-    caller.provenance.graph_path = GraphResourcePath("events/caller".into());
-    let callee_graph_path = GraphResourcePath("functions/callee".into());
+    caller.provenance.graph_path = GraphResourcePath::new("events/caller").unwrap();
+    let callee_graph_path = GraphResourcePath::new("functions/callee").unwrap();
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 

@@ -120,7 +120,7 @@ fn compiler_aggregates_fragment_resources_and_results() {
 fn demand_specialization_prunes_independent_pure_chain_and_owned_resource() {
     let (registry, graph) = demand_fixture();
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new("events/main").unwrap(), &graph);
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -240,7 +240,7 @@ fn builtin_relational_chain_specializes_final_and_intermediate_demands() {
     let basis = result.execution_basis.expect("chain keeps demand basis");
     assert_eq!(
         basis.provenance.graph_path,
-        GraphResourcePath(graph_path.into())
+        GraphResourcePath::new(graph_path).unwrap()
     );
     assert_eq!(
         basis.provenance.basis.resource_versions,
@@ -302,7 +302,7 @@ fn builtin_relational_chain_specializes_final_and_intermediate_demands() {
         assert_eq!(plan.operations.len(), 1);
         assert_eq!(plan.results.len(), 1);
         assert_eq!(plan.results[0].output, selected_output);
-        assert_eq!(plan.results[0].output.graph_path.0.as_ref(), graph_path);
+        assert_eq!(plan.results[0].output.graph_path.as_str(), graph_path);
         assert_eq!(
             plan.results[0].output.port,
             PortAddress::declared(node_id(node), key("result"))

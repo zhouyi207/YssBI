@@ -1,14 +1,14 @@
 use super::*;
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+    FunctionParameterId, GraphDocument, GraphResourcePath, InputState, NodeId, NodePosition,
+    OrderKey, PortAddress, PortInstanceId, PortRef,
+};
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
     CompileId, DiagnosticLocation, DiagnosticSeverity, ResourceKey, ResourceVersion,
 };
-use crate::node_system::document::{
-    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    FunctionDocument, FunctionParameter, FunctionParameterId, FunctionSignature, GraphDocument,
-    GraphResourcePath, InputState, NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
-    PortRef,
-};
+use crate::node_system::document::{FunctionDocument, FunctionParameter, FunctionSignature};
 use crate::node_system::plan::{
     BranchResultBinding, CallResultBinding, CompiledParameterHandle, CompiledResourceRequirement,
     ControlStep, ExecutionDemand, ExecutionPlan, ExecutionSemanticsVersion, FunctionPlanAbi,
@@ -216,7 +216,7 @@ fn registry() -> NodeRegistry {
 fn document(node_type: NodeTypeId) -> GraphDocument {
     let id = node_id(1);
     GraphDocument {
-        revision: crate::node_system::document::GraphRevision::new(7),
+        revision: crate::graph_document::GraphRevision::new(7),
         nodes: BTreeMap::from([(
             id,
             DocumentNode {
@@ -505,7 +505,7 @@ fn builtin_graph_with_nodes(nodes: &[(u128, &str)]) -> GraphDocument {
 
 fn graph_with_node_types(nodes: impl IntoIterator<Item = (u128, String)>) -> GraphDocument {
     GraphDocument {
-        revision: crate::node_system::document::GraphRevision::new(11),
+        revision: crate::graph_document::GraphRevision::new(11),
         nodes: nodes
             .into_iter()
             .map(|(id, node_type)| {
@@ -545,7 +545,7 @@ fn connect(
 }
 
 fn connect_addresses(graph: &mut GraphDocument, id: u128, output: PortAddress, input: PortAddress) {
-    let id = crate::node_system::document::ConnectionId::from_uuid(Uuid::from_u128(id));
+    let id = crate::graph_document::ConnectionId::from_uuid(Uuid::from_u128(id));
     graph.connections.insert(
         id,
         DocumentConnection {
@@ -578,8 +578,8 @@ fn bind_resolved_function_port(
                 function: function.clone(),
                 parameter: parameter.clone(),
             },
-            order: OrderKey(order.into()),
-            last_known: crate::node_system::document::LastKnownPortMetadata::default(),
+            order: OrderKey::new(order),
+            last_known: crate::graph_document::LastKnownPortMetadata::default(),
         },
     );
     address
@@ -600,7 +600,7 @@ fn bind_member_port(
     graph.port_bindings.insert(
         address.clone(),
         DynamicPortBinding::UserCreated {
-            order: OrderKey(order.into()),
+            order: OrderKey::new(order),
         },
     );
     address
@@ -646,7 +646,7 @@ fn kernel_fragment(effect: EffectSemantics, mut metadata: FragmentMetadata) -> L
 
 fn demand_output(graph_path: &str, node: u128, port: &str) -> GraphOutputRef {
     GraphOutputRef {
-        graph_path: GraphResourcePath(graph_path.into()),
+        graph_path: GraphResourcePath::new(graph_path).unwrap(),
         port: PortAddress::declared(node_id(node), key(port)),
     }
 }
@@ -757,7 +757,7 @@ fn demand_fixture() -> (TestRegistry, GraphDocument) {
 fn compiled_demand_basis() -> ExecutionPlanBasis {
     let (registry, graph) = demand_fixture();
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new("events/main").unwrap(), &graph);
     compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap()
@@ -1047,13 +1047,13 @@ fn determinism_fixture(order: FixtureInsertionOrder) -> DeterminismFixture {
         (
             dynamic_ports[0].clone(),
             DynamicPortBinding::UserCreated {
-                order: OrderKey("a".into()),
+                order: OrderKey::new("a"),
             },
         ),
         (
             dynamic_ports[1].clone(),
             DynamicPortBinding::UserCreated {
-                order: OrderKey("b".into()),
+                order: OrderKey::new("b"),
             },
         ),
     ];
@@ -1095,7 +1095,7 @@ fn determinism_fixture(order: FixtureInsertionOrder) -> DeterminismFixture {
 
     DeterminismFixture {
         document: GraphDocument {
-            revision: crate::node_system::document::GraphRevision::new(19),
+            revision: crate::graph_document::GraphRevision::new(19),
             nodes,
             port_bindings,
             connections,
@@ -1254,7 +1254,7 @@ fn compile_builtin_relational_chain(graph_path: &str) -> CompileResult {
     );
     let compiler =
         GraphCompiler::with_schema_resolvers(&registry, &DataframeDatabaseResources, resolvers);
-    let snapshot = compiler.snapshot(GraphResourcePath(graph_path.into()), &graph);
+    let snapshot = compiler.snapshot(GraphResourcePath::new(graph_path).unwrap(), &graph);
     compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap()
@@ -1375,12 +1375,12 @@ fn structured_function_plan(
     value_count: u32,
     result_value: ValueRef,
 ) -> (ExecutionPlan, FunctionPlanAbi, FunctionParameterId) {
-    let result = FunctionParameterId("return".into());
+    let result = FunctionParameterId::new("return");
     let provenance = crate::node_system::analysis::CompileProvenance {
         project_session_id: ProjectSessionId::new("project-a"),
-        graph_path: GraphResourcePath("functions/structured-result".into()),
+        graph_path: GraphResourcePath::new("functions/structured-result").unwrap(),
         basis: crate::node_system::analysis::CompilationBasis {
-            graph_revision: crate::node_system::document::GraphRevision::new(1),
+            graph_revision: crate::graph_document::GraphRevision::new(1),
             registry_fingerprint: RegistryFingerprint::from_bytes([7; 32]),
             resource_versions: BTreeMap::new(),
             resource_observations: BTreeMap::new(),

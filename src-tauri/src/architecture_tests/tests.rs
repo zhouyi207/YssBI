@@ -27,6 +27,7 @@ use super::policy::{
     InternalDependencyCapability, classify_rust_sources, rust_dependency_findings,
     rust_dependency_findings_with_capabilities,
 };
+use super::semantic_guards::{graph_document_json_violations, project_to_graph_production_edges};
 
 fn repository_root() -> PathBuf {
     let manifest_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -672,6 +673,12 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
         "src-tauri/src/data_contract/mod.rs",
         "src-tauri/src/data_contract/data_type.rs",
         "src-tauri/src/data_contract/data_value.rs",
+        "src-tauri/src/graph_document/mod.rs",
+        "src-tauri/src/graph_document/identity.rs",
+        "src-tauri/src/graph_document/model.rs",
+        "src-tauri/src/graph_document/resource_path.rs",
+        "src-tauri/src/node_system/protocol/identity.rs",
+        "src-tauri/src/node_system/protocol/types.rs",
     ] {
         assert_eq!(classification.get(source), Some(&RustLayer::PureLeaf));
     }
@@ -784,6 +791,35 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
             origins,
         );
     }
+}
+
+#[test]
+fn rust_pure_leaf_graph_document_json_is_serialization_only() {
+    assert_eq!(
+        graph_document_json_violations(&repository_root()),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn rust_project_production_does_not_depend_on_graph_layer() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
+        .expect("the real Cargo workspace must be discoverable");
+    let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
+        .expect("the production module graph must be discoverable");
+    let raw_dependencies =
+        collect_production_dependencies(&workspace.repository_root, &workspace.roots)
+            .expect("production dependency facts must be discoverable");
+    let dependencies = resolve_canonical_dependencies_detailed(&workspace, &raw_dependencies)
+        .expect("production dependencies must resolve");
+    let classification = classify_rust_sources(&workspace.roots, &modules)
+        .expect("production sources must classify");
+
+    assert_eq!(
+        project_to_graph_production_edges(&dependencies, &classification),
+        Vec::<String>::new()
+    );
 }
 
 #[test]

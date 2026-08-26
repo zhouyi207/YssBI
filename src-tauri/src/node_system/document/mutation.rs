@@ -49,15 +49,15 @@ pub struct MutationRequest<T> {
 }
 
 impl<T> MutationRequest<T> {
-    pub const fn new(
+    pub fn new(
         resource: ResourceKey,
-        base_revision: ResourceRevision,
+        base_revision: impl Into<ResourceRevision>,
         operation_id: OperationId,
         payload: T,
     ) -> Self {
         Self {
             resource,
-            base_revision,
+            base_revision: base_revision.into(),
             operation_id,
             payload,
         }
@@ -1055,7 +1055,7 @@ fn validate_resource_path(
 ) -> Result<(), MutationConflict> {
     let path = resource_path.as_str();
     let valid = match create_args {
-        ResourceBoundCreateArgsDto::Function => crate::project::GraphResourcePath::new(path)
+        ResourceBoundCreateArgsDto::Function => crate::graph_document::GraphResourcePath::new(path)
             .is_ok_and(|canonical| {
                 canonical.as_str() == path && canonical.as_str().starts_with("functions/")
             }),
@@ -1083,10 +1083,10 @@ fn validate_variable_scope(
     let in_scope = match scope {
         crate::variable::VariableScope::Global => true,
         crate::variable::VariableScope::Event { event_path } => {
-            event_path.as_str() == graph_path.0.as_ref()
+            event_path.as_str() == graph_path.as_str()
         }
         crate::variable::VariableScope::Function { function_path } => {
-            function_path.as_str() == graph_path.0.as_ref()
+            function_path.as_str() == graph_path.as_str()
         }
     };
     if in_scope {
@@ -1094,7 +1094,7 @@ fn validate_variable_scope(
     } else {
         Err(catalog_descriptor_invalid(format!(
             "variable resource is out of scope for graph '{}'",
-            graph_path.0
+            graph_path.as_str()
         )))
     }
 }
@@ -1311,9 +1311,9 @@ pub(super) fn validate_node_scope(
     graph_path: &GraphResourcePath,
     protocol: &NodeProtocol,
 ) -> Result<(), MutationConflict> {
-    let graph_scope = if graph_path.0.starts_with("events/") {
+    let graph_scope = if graph_path.as_str().starts_with("events/") {
         NodeScope::Event
-    } else if graph_path.0.starts_with("functions/") {
+    } else if graph_path.as_str().starts_with("functions/") {
         NodeScope::Function
     } else {
         NodeScope::Any
@@ -1324,7 +1324,8 @@ pub(super) fn validate_node_scope(
     {
         Err(invalid_editor_mutation(format!(
             "node scope {:?} is invalid for graph '{}'",
-            protocol.scope, graph_path.0
+            protocol.scope,
+            graph_path.as_str()
         )))
     } else {
         Ok(())
@@ -1389,9 +1390,9 @@ fn append_atomic_connection(
         }
     };
     let order = match input_connections {
-        ConnectionsPerPort::Multiple { ordered: true, .. } => Some(OrderKey(
-            format!("{:05}", document.connections.len()).into(),
-        )),
+        ConnectionsPerPort::Multiple { ordered: true, .. } => {
+            Some(OrderKey::new(format!("{:05}", document.connections.len())))
+        }
         ConnectionsPerPort::Single | ConnectionsPerPort::Multiple { ordered: false, .. } => None,
     };
     let mut staged = document.clone();
@@ -1422,7 +1423,7 @@ pub(super) fn create_node_operations(
     for group in &protocol.interface.member_groups {
         for index in 0..group.min {
             let instance_id = PortInstanceId::new();
-            let order = OrderKey(format!("{index:05}").into());
+            let order = OrderKey::new(format!("{index:05}"));
             for template in &group.templates {
                 operations.push(GraphDocumentOperation::InsertPortBinding {
                     address: PortAddress::instance(node_id, template.clone(), instance_id),
@@ -1449,7 +1450,7 @@ pub(super) fn create_node_operations(
             operations.push(GraphDocumentOperation::InsertPortBinding {
                 address: PortAddress::instance(node_id, spec.key.clone(), instance_id),
                 binding: DynamicPortBinding::UserCreated {
-                    order: OrderKey(format!("{index:05}").into()),
+                    order: OrderKey::new(format!("{index:05}")),
                 },
             });
         }
@@ -1590,7 +1591,7 @@ fn add_port_instance_operations(
         )));
     }
     let instance_id = PortInstanceId::new();
-    let order = order.unwrap_or_else(|| OrderKey(instance_id.to_string().into()));
+    let order = order.unwrap_or_else(|| OrderKey::new(instance_id.to_string()));
     Ok(templates
         .iter()
         .map(|template| GraphDocumentOperation::InsertPortBinding {
@@ -1827,8 +1828,8 @@ fn materialize_projected_member_operations(
     }
     if member.basis().graph_revision() != document.revision {
         return Err(MutationConflict::CompilationBasisStale {
-            basis_revision: member.basis().graph_revision(),
-            current_revision: document.revision,
+            basis_revision: ResourceRevision::from_graph_revision(member.basis().graph_revision()),
+            current_revision: ResourceRevision::from_graph_revision(document.revision),
         });
     }
 
@@ -1882,7 +1883,7 @@ impl RevisionedGraphStore {
     }
 
     pub const fn revision(&self) -> ResourceRevision {
-        self.document.revision
+        ResourceRevision::from_graph_revision(self.document.revision)
     }
 
     pub fn apply_mutation(
@@ -1896,14 +1897,14 @@ impl RevisionedGraphStore {
                 store: store_resource,
             });
         }
-        if request.base_revision != self.document.revision {
+        if request.base_revision != ResourceRevision::from_graph_revision(self.document.revision) {
             return Err(MutationConflict::StaleRevision {
                 base_revision: request.base_revision,
-                current_revision: self.document.revision,
+                current_revision: ResourceRevision::from_graph_revision(self.document.revision),
             });
         }
 
-        let from_revision = self.document.revision;
+        let from_revision = ResourceRevision::from_graph_revision(self.document.revision);
         let patch = request
             .payload
             .into_patch(&self.graph_path, &self.document)?;
@@ -1912,7 +1913,7 @@ impl RevisionedGraphStore {
         Ok(GraphDeltaEvent {
             graph_path: self.graph_path.clone(),
             from_revision,
-            to_revision: self.document.revision,
+            to_revision: ResourceRevision::from_graph_revision(self.document.revision),
             caused_by: Some(request.operation_id),
             payload: patch,
         })

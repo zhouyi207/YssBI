@@ -123,7 +123,7 @@ pub struct ComputationSettingsSnapshot {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ComputationSettingsMutationRequest {
     pub project_instance_id: crate::project::ProjectInstanceId,
-    pub operation_id: crate::node_system::document::OperationId,
+    pub operation_id: crate::project::OperationId,
     pub expected_revision: u64,
     pub settings: ProjectComputationSettings,
 }
@@ -132,7 +132,7 @@ pub struct ComputationSettingsMutationRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ComputationSettingsMutationReceipt {
     pub project_instance_id: crate::project::ProjectInstanceId,
-    pub operation_id: crate::node_system::document::OperationId,
+    pub operation_id: crate::project::OperationId,
     pub settings_revision: u64,
     pub publication_revision: u64,
     pub settings: ProjectComputationSettings,

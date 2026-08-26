@@ -258,7 +258,7 @@ impl ProjectState {
             let revision = variable_revisions
                 .get(&id)
                 .map(|entry| entry.revision)
-                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                .unwrap_or(crate::project::ResourceRevision::INITIAL);
             if revision != effect.expected_revision
                 || serde_json::to_value(current).map_err(variable_effect_invalid_error)?
                     != serde_json::to_value(&effect.before)
@@ -287,10 +287,8 @@ impl ProjectState {
                             ))
                         })?;
                     expected_revisions.insert(
-                        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                            graph_path.as_str().into(),
-                        )),
-                        graph_revision,
+                        ResourceKey::Graph(graph_path.clone()),
+                        ResourceRevision::from_graph_revision(graph_revision),
                     );
                     local_graph_paths.insert(graph_path);
                 }
@@ -324,7 +322,7 @@ impl ProjectState {
         }
 
         let transaction = ProjectHistoryTransaction::durable_variable_effects(
-            crate::node_system::document::OperationId::new(),
+            crate::project::OperationId::new(),
             changes,
             crate::node_system::document::VariableEffectHistorySnapshots {
                 before: history_before,
@@ -895,8 +893,8 @@ pub(in crate::project) enum VariableEffectCommitError {
     },
     Conflict {
         resource: crate::node_system::document::ResourceKey,
-        expected_revision: crate::node_system::document::ResourceRevision,
-        current_revision: Option<crate::node_system::document::ResourceRevision>,
+        expected_revision: crate::project::ResourceRevision,
+        current_revision: Option<crate::project::ResourceRevision>,
     },
     InvalidEffect {
         message: Box<str>,

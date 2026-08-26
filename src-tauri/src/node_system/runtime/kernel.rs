@@ -2,7 +2,7 @@ use super::{
     ActivationId, CancellationToken, CompiledParameterStore, FrameId, RunDeadline, RunId,
     RunOutputSink, RunOutputStream, RunPhase, RunResourceOwner, RunResourceSet, RuntimeValue,
 };
-use crate::node_system::document::{GraphResourcePath, NodeId};
+use crate::graph_document::{GraphResourcePath, NodeId};
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::project::{NumericTolerance, ProjectComputationSettings, StatisticalMissingValuePolicy};
 use serde::Serialize;

@@ -296,6 +296,7 @@ impl ResourcePatch {
         forward: GraphDocumentPatch,
     ) -> Self {
         let inverse = forward.inverse();
+        let before_revision = ResourceRevision::from_graph_revision(before_revision);
         Self {
             resource: ResourceKey::Graph(graph_path),
             before_revision,
@@ -511,7 +512,7 @@ impl ProjectHistoryTransaction {
         to: GraphResourcePath,
         payload: Value,
     ) -> Self {
-        let kind = if from.0.starts_with("functions/") {
+        let kind = if from.as_str().starts_with("functions/") {
             ResourceLifecycleKind::Function
         } else {
             ResourceLifecycleKind::Event
@@ -524,8 +525,8 @@ impl ProjectHistoryTransaction {
             variable_effect_snapshots: None,
             resource_lifecycle: None,
             resource_move: Some(ResourceMoveHistoryPatch {
-                from: from.0,
-                to: to.0,
+                from: from.as_str().into(),
+                to: to.as_str().into(),
                 kind,
                 payload: ResourceMoveHistoryPayload::Graph {
                     persisted_move_payload: payload,
@@ -1046,7 +1047,7 @@ fn resource_revision(
         ResourceKey::Graph(path) => state
             .graphs
             .get(path)
-            .map(|document| document.revision)
+            .map(|document| ResourceRevision::from_graph_revision(document.revision))
             .ok_or_else(|| HistoryError::ResourceNotFound(resource.clone())),
         ResourceKey::Function(key) => state
             .functions
@@ -1071,7 +1072,8 @@ fn resource_revision(
 #[cfg(test)]
 mod wire_tests {
     use super::*;
-    use crate::node_system::document::{GraphDocumentPatch, GraphResourcePath};
+    use crate::graph_document::GraphResourcePath;
+    use crate::node_system::document::GraphDocumentPatch;
     use serde_json::json;
     use uuid::Uuid;
 
@@ -1079,7 +1081,9 @@ mod wire_tests {
     fn resource_delta_wire_is_camel_case() {
         let caused_by = OperationId::from_uuid(Uuid::from_u128(905));
         let delta = ResourceDeltaEvent {
-            resource: ResourceKey::Graph(GraphResourcePath("events/Main.yssbi-event".into())),
+            resource: ResourceKey::Graph(
+                GraphResourcePath::new("events/Main.yssbi-event").unwrap(),
+            ),
             from_revision: ResourceRevision::new(4),
             to_revision: ResourceRevision::new(5),
             caused_by: Some(caused_by),

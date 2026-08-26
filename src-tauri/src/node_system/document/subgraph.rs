@@ -371,10 +371,10 @@ fn variable_in_scope(
     match scope {
         crate::variable::VariableScope::Global => true,
         crate::variable::VariableScope::Event { event_path } => {
-            event_path.as_str() == graph_path.0.as_ref()
+            event_path.as_str() == graph_path.as_str()
         }
         crate::variable::VariableScope::Function { function_path } => {
-            function_path.as_str() == graph_path.0.as_ref()
+            function_path.as_str() == graph_path.as_str()
         }
     }
 }

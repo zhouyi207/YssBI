@@ -1,13 +1,16 @@
 use super::*;
 use crate::event::GraphMutationResultDto;
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphRevision, NodeId,
+    NodePosition, OrderKey, ParameterValues, PortAddress,
+};
 use crate::node_system::catalog::{DATA_REROUTE_NODE_TYPE, build_builtin_node_system};
 use crate::node_system::document::{
-    ConnectionId, DocumentConnection, DocumentNode, EditorGraphMutationDto, GraphDocument,
-    GraphDocumentOperation, GraphRevision, HistoryMutation, MutationConflict, MutationRequest,
-    NodeId, NodePosition, OperationId, OrderKey, ParameterValues, PortAddress, ResourceKey,
-    ResourceRevision,
+    EditorGraphMutationDto, GraphDocumentOperation, HistoryMutation, MutationConflict,
+    MutationRequest, ResourceKey,
 };
 use crate::node_system::protocol::{NodeTypeId, PortKey};
+use crate::project::{OperationId, ResourceRevision};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 
@@ -174,7 +177,7 @@ fn phase2_reroute_authority_history_undo_redo_restores_exact_identity() {
     assert_document_content_eq(&undone.document, &original.document);
     assert_eq!(
         undone.document.connections[&connection_id(ORIGINAL_ID)].order,
-        Some(OrderKey("original-order".into()))
+        Some(OrderKey::new("original-order"))
     );
     assert_eq!(undone.history_lengths, (0, 1));
     assert_eq!(undone.revision, committed_snapshot.revision.next());
@@ -296,8 +299,8 @@ struct Snapshot {
     revision: ResourceRevision,
     history_lengths: (usize, usize),
     history_heads: (
-        Option<crate::node_system::document::HistoryEntryId>,
-        Option<crate::node_system::document::HistoryEntryId>,
+        Option<crate::project::HistoryEntryId>,
+        Option<crate::project::HistoryEntryId>,
     ),
     publication: (String, u64, u64),
     projection: crate::node_system::analysis::EditorGraphProjectionDto,
@@ -377,9 +380,7 @@ impl Fixture {
     }
 
     fn resource_key(&self) -> ResourceKey {
-        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-            self.graph_path.as_str().into(),
-        ))
+        ResourceKey::Graph(self.graph_path.clone())
     }
 
     fn snapshot(&self) -> Snapshot {
@@ -387,7 +388,7 @@ impl Fixture {
             .document
             .clone();
         Snapshot {
-            revision: document.revision,
+            revision: ResourceRevision::from_graph_revision(document.revision),
             document,
             history_lengths: self.state.history_lengths_for_test(),
             history_heads: (
@@ -435,7 +436,7 @@ fn base_document() -> GraphDocument {
         id: connection_id(ORIGINAL_ID),
         output: declared(node_id(SOURCE_ID), "value"),
         input: declared(node_id(TARGET_ID), "data"),
-        order: Some(OrderKey("original-order".into())),
+        order: Some(OrderKey::new("original-order")),
     };
     document.connections.insert(connection.id, connection);
     document.revision = GraphRevision::INITIAL;

@@ -114,7 +114,7 @@ fn production_decompose_projects_database_column_metadata() {
     let mut decompose = node("yssbi.dataframe.decompose");
     decompose.id = decompose_id;
     let connection_id = ConnectionId::from_uuid(uuid::Uuid::from_u128(0x412));
-    let mut document = crate::node_system::document::GraphDocument::default();
+    let mut document = crate::graph_document::GraphDocument::default();
     document.nodes.insert(source_id, source);
     document.nodes.insert(decompose_id, decompose);
     document.connections.insert(
@@ -342,11 +342,11 @@ fn editor_connect_materializes_current_decompose_projection_and_preserves_orphan
         .iter()
         .find(|(_, binding)| matches!(
             binding,
-            crate::node_system::document::DynamicPortBinding::Resolved { origin, .. }
-                if matches!(origin, crate::node_system::document::DynamicMemberLocator::SchemaField { field, .. } if field.0.as_ref() == "customer_id")
+            crate::graph_document::DynamicPortBinding::Resolved { origin, .. }
+                if matches!(origin, crate::graph_document::DynamicMemberLocator::SchemaField { field, .. } if field.as_str() == "customer_id")
         ))
         .unwrap();
-    let expected_metadata = crate::node_system::document::LastKnownPortMetadata {
+    let expected_metadata = crate::graph_document::LastKnownPortMetadata {
         label: "customer_id".into(),
         value_type: Some(crate::node_system::protocol::data_series_type(
             crate::node_system::protocol::TypeExpr::Concrete(
@@ -356,7 +356,7 @@ fn editor_connect_materializes_current_decompose_projection_and_preserves_orphan
     };
     assert!(matches!(
         binding,
-        crate::node_system::document::DynamicPortBinding::Resolved { last_known, .. }
+        crate::graph_document::DynamicPortBinding::Resolved { last_known, .. }
             if last_known == &expected_metadata
     ));
     assert!(document.connections.values().any(|connection| {
@@ -412,7 +412,7 @@ fn editor_connect_materializes_current_decompose_projection_and_preserves_orphan
     let binding = document.port_bindings.get(&materialized).unwrap();
     assert!(matches!(
         binding,
-        crate::node_system::document::DynamicPortBinding::Resolved { last_known, .. }
+        crate::graph_document::DynamicPortBinding::Resolved { last_known, .. }
             if last_known == &expected_metadata
     ));
     assert!(
@@ -561,7 +561,7 @@ fn resource_rename_updates_editor_title() {
             DocumentNode {
                 id: node_id,
                 node_type: NodeTypeId::new(node_type).unwrap(),
-                position: crate::node_system::document::NodePosition { x: 0.0, y: 0.0 },
+                position: crate::graph_document::NodePosition { x: 0.0, y: 0.0 },
                 parameters: std::collections::BTreeMap::from([(
                     crate::node_system::protocol::ParameterKey::new(parameter).unwrap(),
                     serde_json::json!(resource),
@@ -616,8 +616,8 @@ fn resource_rename_updates_editor_title() {
         .unwrap()
         .get(&database_id)
         .copied()
-        .map(crate::node_system::document::ResourceRevision::new)
-        .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+        .map(crate::project::ResourceRevision::new)
+        .unwrap_or(crate::project::ResourceRevision::INITIAL);
     crate::application::database::rename_database(
         &state,
         &state.capture_project_session().unwrap().instance_id,
@@ -677,7 +677,7 @@ fn database_schema_resolver_attaches_canonical_field_lineage() {
             .unwrap()
             .registry,
     );
-    let mut graph = crate::node_system::document::GraphDocument::default();
+    let mut graph = crate::graph_document::GraphDocument::default();
     let mut source = node("yssbi.dataframe.source.get");
     source.parameters.insert(
         crate::node_system::protocol::ParameterKey::new("dataframe").unwrap(),
