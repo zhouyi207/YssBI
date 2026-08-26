@@ -1434,3 +1434,6 @@ Execution 不知道具体 UI
 - [ ] 将 public SCI statistics、ACF/PACF、serial tests 与 hypothesis adapter 的字符串错误迁为 operation/violation typed `SciError`，禁止 raw algorithm text 决定稳定错误码。
 - [ ] 为 Execution owner 增加 fail-closed layer classification，精确删除 SCI→Project missing-value debt并迁移其余 canonical debt keys，新增 SCI 隔离与 canonical-owner production guard。
 - [ ] 按 TDD 运行 settings、statistical input、metadata wire 与 typed SCI error 的 RED/GREEN focused tests，并执行 Rust 编译、架构 policy、格式及 diff 验证。
+- [ ] 为 T/Wald SCI adapter 增加显式的约束数量、自由度、矩阵维度与有限数值前置验证，分别映射 closed parameter、shape 与 non-finite violations。
+- [ ] 将通过结构验证后的下游 T/Wald 数值失败统一映射为 operation-specific `ComputationFailed`，禁止解析 `yss_sci` 原始字符串选择公开错误语义。
+- [ ] 增加窄 focused regressions，分别覆盖 typed input validation 与合法形状下零/奇异协方差的 computation-failure 映射。
