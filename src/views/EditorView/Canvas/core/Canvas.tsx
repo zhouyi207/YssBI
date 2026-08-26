@@ -131,7 +131,7 @@ export default function Canvas({
     groupId,
     activeTabId,
   );
-  useCanvasWheelZoom(canvasElementRef, viewportScope);
+  useCanvasWheelZoom(canvasElementRef, viewportScope, interactive);
 
   const {
     variableDropMenu,

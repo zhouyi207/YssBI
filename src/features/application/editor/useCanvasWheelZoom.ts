@@ -5,10 +5,11 @@ import type { ViewportScope } from '@/features/core/viewport';
 export function useCanvasWheelZoom(
   canvasElementRef: RefObject<HTMLDivElement | null>,
   viewportScope: ViewportScope | null,
+  enabled: boolean,
 ) {
   useEffect(() => {
     const canvasEl = canvasElementRef.current;
-    if (!canvasEl || !viewportScope) return;
+    if (!enabled || !canvasEl || !viewportScope) return;
     return attachCanvasWheelZoom(canvasEl, viewportScope);
-  }, [canvasElementRef, viewportScope?.groupId, viewportScope?.graphPath]);
+  }, [canvasElementRef, enabled, viewportScope?.groupId, viewportScope?.graphPath]);
 }
