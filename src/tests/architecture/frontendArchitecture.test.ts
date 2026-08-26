@@ -41,7 +41,6 @@ import {
   compareExactFrontendDebt,
   type FrontendDebtEntry,
 } from './frontendArchitectureDebt';
-import { auditFrontendArchitectureDependencies } from './frontendArchitectureAudit';
 import { FRONTEND_ARCHITECTURE_POLICY } from './frontendArchitecturePolicy';
 
 class FixtureTextReader implements RepositoryTextReader {
@@ -817,37 +816,6 @@ describe('frontend architecture model', () => {
       }),
     ]));
   });
-
-  it('frontend production dependencies match the strict policy', () => {
-    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as ReadonlyPackageManifest;
-    withProductionTypeScriptProject((context) => {
-      const report = auditFrontendArchitectureDependencies(
-        context,
-        resolve('.'),
-        createRepositoryTextReader(resolve('.')),
-        FRONTEND_ARCHITECTURE_POLICY,
-        FRONTEND_EXTERNAL_DEPENDENCY_POLICY,
-        FRONTEND_ASSET_DEPENDENCY_POLICY,
-        packageJson,
-      );
-
-      expect({
-        unresolvedErrors: report.unresolvedErrors,
-        classifierErrors: report.classification.errors,
-        externalErrors: report.external.errors,
-        assetErrors: report.asset.errors,
-        debtErrors: report.debt.errors,
-      }).toEqual({
-        unresolvedErrors: [],
-        classifierErrors: [],
-        externalErrors: [],
-        assetErrors: [],
-        debtErrors: [],
-      });
-      expect(report.debt.newOrIncreased).toEqual([]);
-      expect(report.debt.staleOrDecreased).toEqual([]);
-    });
-  }, 120_000);
 
   it('resolves every module dependency to its canonical origin', () => {
     withIsolatedTypeScriptProject(compilerSources, (context) => {

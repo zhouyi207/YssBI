@@ -1465,3 +1465,7 @@ Execution 不知道具体 UI
 - [ ] 将 base-overlap fixture 改为注入两条同时命中的 FrontendBaseRule predicates，确保回退 first-match 会产生 focused failure。
 - [ ] 让 production 与 classifier fixture 共用同一十层 rule-list builder，对每条命中独立 add 后再统一检查 zero/multiple membership。
 - [ ] 删除预制 base membership sets 与 injectedBaseSets bypass，继续先从全部 base sets 移除 literal overrides 并保留 pure-shared 显式排除。
+- [ ] 新增 compiler-backed frontend semantic audit，以 resolved import symbols、call/property access 与 canonical origins 守卫 raw invoke/dialog、View/Core capability、projection write、Application raw wire 和 Dockview constructor。
+- [ ] 用唯一 table-driven fixture 冻结九个 stable semantic rule IDs，并覆盖 canonical IPC adapter、path-dialog service、approved read member 与 root/Logs Dockview exact paths。
+- [ ] 将 236 个 reviewed semantic exact keys 合并进既有五字段 frontend debt manifest，与原有 610 个 dependency keys 通过同一 comparator 双向匹配。
+- [ ] 在 unified production architecture assertion 通过后退役重复 regex/architecture blocks，同时保留 project command identity、stale-result、editor projection behavior 与 node/observability/user-feedback contracts。

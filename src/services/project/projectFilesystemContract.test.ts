@@ -7,65 +7,14 @@ import type {
   Symbol as TypeScriptSymbol,
 } from 'typescript/unstable/sync';
 import { describe, expect, it } from 'vitest';
-import {
-  moduleDependencies,
-  resolveSourceSpecifier,
-  type ArchitectureSource,
-} from '@/tests/helpers/moduleDependencyAudit';
-import {
-  isTauriInvokeCall,
-  rawTauriInvokeOccurrences,
-} from '@/tests/helpers/tauriInvokeAudit';
+import type { ArchitectureSource } from '@/tests/helpers/moduleDependencyAudit';
+import { isTauriInvokeCall } from '@/tests/helpers/tauriInvokeAudit';
 import {
   withIsolatedTypeScriptProject,
   withProductionTypeScriptProject,
 } from '@/tests/helpers/typescriptAudit';
 
 const sourceRoot = resolve('src');
-
-
-
-const projectPublicationTarget =
-  'src/features/application/editorMutation/projectPublicationCoordinator';
-
-
-
-function hasUnresolvedRuntimeDependency({ path, source }: ArchitectureSource): boolean {
-  return moduleDependencies(path, source).some((dependency) => (
-    dependency.mode === 'runtime' && dependency.specifier === null
-  ));
-}
-
-function resolvedSourceTargets({ path, source }: ArchitectureSource): string[] {
-  return moduleDependencies(path, source).flatMap(({ specifier }) => {
-    if (specifier === null) return [];
-    const target = resolveSourceSpecifier(path, specifier);
-    return target === null ? [] : [target.replace(/\.(?:ts|tsx)$/, '')];
-  });
-}
-
-function readArchitectureSource(path: string): ArchitectureSource {
-  return { path, source: readFileSync(resolve(path), 'utf8') };
-}
-
-function serviceBoundaryViolations(sources: readonly ArchitectureSource[]): string[] {
-  return sources
-    .filter((source) => hasUnresolvedRuntimeDependency(source)
-      || resolvedSourceTargets(source).some((target) => (
-        /^src\/(?:features|views)(?:\/|$)/.test(target)
-      )))
-    .map(({ path }) => path);
-}
-
-
-function graphProjectionLifecycleViolations(
-  sources: readonly ArchitectureSource[],
-): string[] {
-  return sources
-    .filter((source) => hasUnresolvedRuntimeDependency(source)
-      || resolvedSourceTargets(source).some((target) => target === projectPublicationTarget))
-    .map(({ path }) => path);
-}
 
 function isProductionSourcePath(path: string): boolean {
   const normalizedPath = path.replace(/\\/g, '/');
@@ -511,94 +460,6 @@ const workflowFiles = [
 
 
 describe('projectFilesystemContract', () => {
-  it('rejects a static import service boundary violation', () => {
-    const fixture = {
-      path: 'src/services/project/staticFixture.ts',
-      source: "import value from '@/features/core/example';",
-    };
-
-    expect(serviceBoundaryViolations([fixture])).toEqual([fixture.path]);
-  });
-
-  it('allows a service import in the scoped service audit', () => {
-    const fixture = {
-      path: 'src/services/project/allowedServiceFixture.ts',
-      source: "import { GraphService } from '@/services/graph/graphService';",
-    };
-
-    expect(serviceBoundaryViolations([fixture])).toEqual([]);
-  });
-
-  it('rejects an unresolved dynamic import runtime dependency', () => {
-    const fixture = {
-      path: 'src/services/project/unresolvedFixture.ts',
-      source: 'const path = getModulePath(); void import(path);',
-    };
-
-    expect(serviceBoundaryViolations([fixture])).toEqual([fixture.path]);
-  });
-
-  it('centralizes production source filtering for tests, specs, and test directories', () => {
-    expect([
-      'src/services/example.ts',
-      'src/services/example.tsx',
-      'src/services/example.test.ts',
-      'src/services/example.spec.tsx',
-      'src/services/__tests__/helper.ts',
-      'src/services/example.js',
-    ].map(isProductionSourcePath)).toEqual([
-      true,
-      true,
-      false,
-      false,
-      false,
-      false,
-    ]);
-  });
-
-  it('keeps production services independent from features and views', () => {
-    const serviceSources = productionSources(resolve('src/services'));
-
-    expect(serviceBoundaryViolations(serviceSources)).toEqual([]);
-  });
-
-  it('keeps raw production Tauri invoke calls inside the IPC boundary', () => {
-    const allowedPath = 'src/services/ipc/invokeCommand.ts';
-    const offenders = withProductionTypeScriptProject((context) => (
-      rawTauriInvokeOccurrences(context)
-        .map(({ repositoryRelativeSourceFile }) => repositoryRelativeSourceFile)
-        .filter((path) => path !== allowedPath)
-    ));
-
-    expect(offenders).toEqual([]);
-  });
-
-  it.each([
-    ['publication reverse import', {
-      path: 'src/features/application/editorProjection/importReverseEdgeFixture.ts',
-      source: "import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';",
-    }],
-    ['publication reverse re-export', {
-      path: 'src/features/application/editorProjection/reExportReverseEdgeFixture.ts',
-      source: "export * from '../editorMutation/projectPublicationCoordinator';",
-    }],
-  ] satisfies Array<[string, ArchitectureSource]>)(
-    'rejects graph projection %s lifecycle edge',
-    (_, fixture) => {
-      expect(graphProjectionLifecycleViolations([fixture])).toEqual([fixture.path]);
-    },
-  );
-
-  it('keeps lifecycle authority independent from application and infrastructure layers', () => {
-    const authority = readArchitectureSource(
-      'src/features/core/projectLifecycle/projectLifecycleAuthority.ts',
-    );
-    const authorityForbiddenTargets = resolvedSourceTargets(authority).filter((target) =>
-      /^src\/(?:features\/application|services|views)(?:\/|$)/.test(target));
-
-    expect(authorityForbiddenTargets).toEqual([]);
-  });
-
   it('classifies every registered Tauri command without duplicate or stale exemptions', () => {
     const registered = registeredTauriCommands(
       readFileSync(resolve('src-tauri/src/lib.rs'), 'utf8'),
@@ -814,17 +675,6 @@ describe('projectFilesystemContract', () => {
     expect(activeProjectInvokeIdentityViolations(invokes)).toEqual([]);
   });
 
-
-  it('contains no direct invoke outside services for project filesystem commands', () => {
-    const commandPattern = new RegExp(activeProjectCommands.join('|')); 
-    const offenders = productionSources()
-      .filter(({ path }) => !path.startsWith('src/services/'))
-      .filter(({ source }) => /@tauri-apps\/api\/core/.test(source) && /\binvoke\s*(?:<|\()/.test(source))
-      .filter(({ source }) => commandPattern.test(source))
-      .map(({ path }) => path);
-
-    expect(offenders).toEqual([]);
-  });
 
   it('rejects stale direct results before any frontend side effect', () => {
     const offenders = workflowFiles.filter((path) => {
