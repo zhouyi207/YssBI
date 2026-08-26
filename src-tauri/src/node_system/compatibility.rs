@@ -1,4 +1,4 @@
-use crate::graph::value::DataType;
+use crate::data_contract::DataType;
 use crate::node_system::analysis::{
     EditorGraphProjectionDto, PortDirectionDto, PortKindDto, ResolvedPortDto,
     resolve_function_data_type,

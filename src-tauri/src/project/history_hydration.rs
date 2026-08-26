@@ -932,7 +932,7 @@ fn insert_local_variable_owner(
 #[cfg(test)]
 mod tests {
     use super::{HistoryGraphResidency, discover_touched_resources};
-    use crate::graph::value::{DataType, DataValue};
+    use crate::data_contract::{DataType, DataValue};
     use crate::node_system::document::{
         FunctionDocumentPatch, FunctionResourceKey, FunctionSignature, GraphDocumentOperation,
         GraphDocumentPatch, GraphResourcePath as DocumentGraphResourcePath, OperationId,

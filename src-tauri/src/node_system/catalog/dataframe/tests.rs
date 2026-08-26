@@ -1,7 +1,7 @@
 use super::{
     DATAFRAME_COLUMNS_RESOLVER, DATAFRAME_RESOURCE_SCHEMA_RESOLVER, build_provider_fragment,
 };
-use crate::graph::DataType;
+use crate::data_contract::DataType;
 use crate::node_system::analysis::{
     AnalysisResourceReads, AnalysisResourceResolver, ResolvedPortStatus, ResourceObservationSet,
     ResourceVersionSet,

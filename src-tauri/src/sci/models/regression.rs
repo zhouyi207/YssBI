@@ -1,6 +1,6 @@
 //! 信息展示相关的数据结构
 
-use crate::graph::value::CategoricalRole;
+use crate::data_contract::CategoricalRole;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

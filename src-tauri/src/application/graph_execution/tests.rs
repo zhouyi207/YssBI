@@ -1,5 +1,5 @@
 use super::*;
-use crate::graph::value::{DataType, DataValue};
+use crate::data_contract::{DataType, DataValue};
 use crate::node_system::document::{
     ConnectionId, DocumentConnection, DocumentNode, NodePosition, ParameterValues, PortAddress,
 };

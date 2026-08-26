@@ -1,6 +1,6 @@
 //! 变量 Schema 模块
 
-use crate::graph::value::{DataType, DataValue};
+use crate::data_contract::{DataType, DataValue};
 use crate::tabular::display_data_value;
 use crate::variable::{VariableInstance, VariableScope};
 use serde::{Deserialize, Serialize};

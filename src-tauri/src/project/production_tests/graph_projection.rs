@@ -170,8 +170,12 @@ fn production_decompose_projects_database_column_metadata() {
             })
             .collect::<Vec<_>>(),
         vec![
-            crate::graph::DataType::DataSeries(Box::new(crate::graph::DataType::Int64)),
-            crate::graph::DataType::DataSeries(Box::new(crate::graph::DataType::Float64)),
+            crate::data_contract::DataType::DataSeries(Box::new(
+                crate::data_contract::DataType::Int64
+            )),
+            crate::data_contract::DataType::DataSeries(Box::new(
+                crate::data_contract::DataType::Float64
+            )),
         ],
     );
     let opaque = ports[2];
@@ -435,8 +439,8 @@ fn editor_connect_materializes_current_decompose_projection_and_preserves_orphan
             .resolved_type
             .as_ref()
             .and_then(|resolved| resolved.data_type.clone()),
-        Some(crate::graph::DataType::DataSeries(Box::new(
-            crate::graph::DataType::Int64,
+        Some(crate::data_contract::DataType::DataSeries(Box::new(
+            crate::data_contract::DataType::Int64,
         ))),
     );
     std::fs::remove_dir_all(root).unwrap();
@@ -505,8 +509,8 @@ fn resource_rename_updates_editor_title() {
     let variable = state
         .add_variable(
             "Revenue",
-            crate::graph::value::DataType::Int64,
-            crate::graph::value::DataValue::Int64(1),
+            crate::data_contract::DataType::Int64,
+            crate::data_contract::DataValue::Int64(1),
             "",
             crate::variable::VariableScope::Global,
             Vec::new(),

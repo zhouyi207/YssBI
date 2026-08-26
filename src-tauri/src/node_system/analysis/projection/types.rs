@@ -1,5 +1,5 @@
 use super::super::{DiagnosticArguments, ResourceVersionSet};
-use crate::graph::value::DataType;
+use crate::data_contract::DataType;
 use crate::node_system::document::PortAddressDto;
 use crate::node_system::protocol::{I18nKey, ParameterPresentation, TypeExpr};
 use crate::node_system::registry::RegistryFingerprint;

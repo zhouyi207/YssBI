@@ -87,8 +87,8 @@ fn project_variable_exclusive_access_is_allowed_for_durable_commit_collection() 
     let variable = Arc::new(crate::variable::VariableInstance {
         id: variable_id,
         name: "Rate".into(),
-        data_type: crate::graph::value::DataType::Int64,
-        data_value: crate::graph::value::DataValue::Int64(1),
+        data_type: crate::data_contract::DataType::Int64,
+        data_value: crate::data_contract::DataValue::Int64(1),
         tabular: None,
         description: String::new(),
         scope: crate::variable::VariableScope::Global,
@@ -199,8 +199,8 @@ fn run_executor_classifies_resource_plan_validation_errors() {
     let variable = Arc::new(crate::variable::VariableInstance {
         id: variable_id,
         name: "Rate".into(),
-        data_type: crate::graph::value::DataType::Int64,
-        data_value: crate::graph::value::DataValue::Int64(1),
+        data_type: crate::data_contract::DataType::Int64,
+        data_value: crate::data_contract::DataValue::Int64(1),
         tabular: None,
         description: String::new(),
         scope: crate::variable::VariableScope::Global,
@@ -293,8 +293,8 @@ fn variable_reads_stay_on_the_snapshot() {
     let variable = Arc::new(crate::variable::VariableInstance {
         id: variable_id,
         name: "Rate".into(),
-        data_type: crate::graph::value::DataType::Int64,
-        data_value: crate::graph::value::DataValue::Int64(1),
+        data_type: crate::data_contract::DataType::Int64,
+        data_value: crate::data_contract::DataValue::Int64(1),
         tabular: None,
         description: String::new(),
         scope: crate::variable::VariableScope::Global,
@@ -324,7 +324,7 @@ fn variable_reads_stay_on_the_snapshot() {
     let cloned = access.read().unwrap();
     assert!(matches!(
         cloned.data_value,
-        crate::graph::value::DataValue::Int64(1)
+        crate::data_contract::DataValue::Int64(1)
     ));
 }
 

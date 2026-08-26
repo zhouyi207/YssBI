@@ -206,13 +206,13 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
     let parameter_id = FunctionParameterId("amount".into());
     let return_id = FunctionParameterId("return".into());
     let mut input_variable = test_variable("Input");
-    input_variable.data_value = crate::graph::value::DataValue::Int64(41);
+    input_variable.data_value = crate::data_contract::DataValue::Int64(41);
     let mut first_offset = test_variable("First Offset");
-    first_offset.data_value = crate::graph::value::DataValue::Int64(1);
+    first_offset.data_value = crate::data_contract::DataValue::Int64(1);
     let mut second_offset = test_variable("Second Offset");
-    second_offset.data_value = crate::graph::value::DataValue::Int64(2);
+    second_offset.data_value = crate::data_contract::DataValue::Int64(2);
     let mut output_variable = test_variable("Output");
-    output_variable.data_value = crate::graph::value::DataValue::Int64(0);
+    output_variable.data_value = crate::data_contract::DataValue::Int64(0);
     let mut project = ProjectData::new();
     for variable in [
         input_variable.clone(),
@@ -438,7 +438,7 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
         .clone();
     assert_eq!(
         state.get_data().unwrap().variables[&output_variable.id].data_value,
-        crate::graph::value::DataValue::Int64(42)
+        crate::data_contract::DataValue::Int64(42)
     );
     state
         .apply_graph_patch(
@@ -476,7 +476,7 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
     assert_ne!(first.provenance.compile_id, second.provenance.compile_id);
     assert_eq!(
         state.get_data().unwrap().variables[&output_variable.id].data_value,
-        crate::graph::value::DataValue::Int64(43)
+        crate::data_contract::DataValue::Int64(43)
     );
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -599,12 +599,12 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
     let function_b = make_function(&path_b, None, 200);
     let input_variable = {
         let mut variable = test_variable("Input");
-        variable.data_value = crate::graph::value::DataValue::Int64(7);
+        variable.data_value = crate::data_contract::DataValue::Int64(7);
         variable
     };
     let output_variable = {
         let mut variable = test_variable("Output");
-        variable.data_value = crate::graph::value::DataValue::Int64(0);
+        variable.data_value = crate::data_contract::DataValue::Int64(0);
         variable
     };
     let mut event = GraphResourceDocument::new("Chain", GraphDocumentKind::Event);
@@ -742,7 +742,7 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
     assert_eq!(forward.0, 2);
     assert_eq!(forward.0, reverse.0);
     assert_eq!(forward.1, reverse.1);
-    assert_eq!(forward.2, crate::graph::value::DataValue::Int64(7));
+    assert_eq!(forward.2, crate::data_contract::DataValue::Int64(7));
     assert_eq!(forward.2, reverse.2);
 }
 
@@ -987,8 +987,8 @@ fn project_execution_ignores_unreferenced_local_variable_versions() {
     state
         .add_variable(
             "unused",
-            crate::graph::value::DataType::Int64,
-            crate::graph::value::DataValue::Int64(0),
+            crate::data_contract::DataType::Int64,
+            crate::data_contract::DataValue::Int64(0),
             "",
             crate::variable::VariableScope::Event {
                 event_path: graph_path().as_str().into(),
@@ -1015,8 +1015,8 @@ fn project_variable_get_executes_against_authoritative_resource() {
     let variable = state
         .add_variable(
             "authoritative",
-            crate::graph::value::DataType::Int64,
-            crate::graph::value::DataValue::Int64(41),
+            crate::data_contract::DataType::Int64,
+            crate::data_contract::DataValue::Int64(41),
             "",
             crate::variable::VariableScope::Global,
             Vec::new(),
@@ -1058,8 +1058,8 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
     let first = state
         .add_variable(
             "first",
-            crate::graph::value::DataType::Int64,
-            crate::graph::value::DataValue::Int64(1),
+            crate::data_contract::DataType::Int64,
+            crate::data_contract::DataValue::Int64(1),
             "",
             crate::variable::VariableScope::Global,
             Vec::new(),
@@ -1068,8 +1068,8 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
     let second = state
         .add_variable(
             "second",
-            crate::graph::value::DataType::Int64,
-            crate::graph::value::DataValue::Int64(2),
+            crate::data_contract::DataType::Int64,
+            crate::data_contract::DataValue::Int64(2),
             "",
             crate::variable::VariableScope::Global,
             Vec::new(),

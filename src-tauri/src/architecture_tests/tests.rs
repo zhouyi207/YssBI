@@ -326,6 +326,26 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "src-tauri/src/node_system/catalog/builtin.rs",
                 "fixture_lib::node_system::catalog::builtin",
             ),
+            module(
+                &runtime_root,
+                "src-tauri/src/data_contract/mod.rs",
+                "fixture_lib::data_contract",
+            ),
+            module(
+                &runtime_root,
+                "src-tauri/src/data_contract/data_type.rs",
+                "fixture_lib::data_contract::data_type",
+            ),
+            module(
+                &runtime_root,
+                "src-tauri/src/data_contract/data_value.rs",
+                "fixture_lib::data_contract::data_value",
+            ),
+            module(
+                &runtime_root,
+                "src-tauri/src/graph/value/type_system.rs",
+                "fixture_lib::graph::value::type_system",
+            ),
             module(&build_root, "src-tauri/build.rs", "build_script_build"),
             module(
                 &build_root,
@@ -342,6 +362,22 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/src/node_system/catalog/builtin.rs"],
         RustLayer::BuiltinComposition
+    );
+    assert_eq!(
+        classified["src-tauri/src/data_contract/mod.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/src/data_contract/data_type.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/src/data_contract/data_value.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/src/graph/value/type_system.rs"],
+        RustLayer::Graph
     );
     assert_eq!(classified["src-tauri/build.rs"], RustLayer::BuildScript);
     assert_eq!(
@@ -402,6 +438,159 @@ fn rust_production_sources_are_classified_once() {
             .all(|layer| classification.values().any(|actual| actual == layer)),
         "the real production graph must exercise all fifteen Rust layers"
     );
+}
+
+#[test]
+fn persisted_data_contract_preserves_wire_and_uses_typed_parse_errors() {
+    use crate::data_contract::{
+        CategoricalRole, DataSeriesValue, DataType, DataTypeParseError, DataValue, DummyInfo,
+        TimeSeriesState,
+    };
+
+    let id_only = DataValue::DataSeries(DataSeriesValue::new("series-id"));
+    assert_eq!(
+        serde_json::to_value(&id_only).expect("id-only data series must serialize"),
+        serde_json::json!({"DataSeries": "series-id"})
+    );
+
+    let full = DataValue::DataSeries(DataSeriesValue {
+        id: "series-id".to_owned(),
+        element_type: Some(DataType::String),
+        dummy_info: Some(DummyInfo {
+            drop_category: Some("baseline".to_owned()),
+            role: CategoricalRole::Individual,
+        }),
+        time_series_state: Some(TimeSeriesState::Aligned),
+    });
+    let expected = serde_json::json!({
+        "DataSeries": {
+            "id": "series-id",
+            "elementType": {"kind": "String"},
+            "dummyInfo": {
+                "dropCategory": "baseline",
+                "role": "individual"
+            },
+            "timeSeriesState": "aligned"
+        }
+    });
+    assert_eq!(
+        serde_json::to_value(&full).expect("full data series must serialize"),
+        expected
+    );
+    assert_eq!(
+        serde_json::from_value::<DataValue>(expected)
+            .expect("persisted full data series must deserialize"),
+        full
+    );
+
+    assert_eq!("".parse::<DataType>(), Err(DataTypeParseError::Empty));
+    assert_eq!(
+        "Array<Int64".parse::<DataType>(),
+        Err(DataTypeParseError::MalformedComposite)
+    );
+    assert_eq!(
+        "Unknown".parse::<DataType>(),
+        Err(DataTypeParseError::UnknownKind)
+    );
+}
+
+#[test]
+fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexport() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
+        .expect("the real Cargo workspace must be discoverable");
+    let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
+        .expect("the production module graph must be discoverable");
+    let classification = classify_rust_sources(&workspace.roots, &modules)
+        .expect("every production source must classify exactly once");
+
+    for source in [
+        "src-tauri/src/data_contract/mod.rs",
+        "src-tauri/src/data_contract/data_type.rs",
+        "src-tauri/src/data_contract/data_value.rs",
+    ] {
+        assert_eq!(classification.get(source), Some(&RustLayer::PureLeaf));
+    }
+    assert_eq!(
+        classification.get("src-tauri/src/graph/value/type_system.rs"),
+        Some(&RustLayer::Graph),
+        "Graph-owned value behavior must not inherit the Pure Leaf contract classification"
+    );
+    assert!(
+        modules.iter().all(|module| {
+            !matches!(
+                module.repository_relative_source_file.as_str(),
+                "src-tauri/src/graph/value/data_type.rs"
+                    | "src-tauri/src/graph/value/data_value.rs"
+            )
+        }),
+        "the old Graph value declarations must not remain production modules"
+    );
+
+    let raw_dependencies =
+        collect_production_dependencies(&workspace.repository_root, &workspace.roots)
+            .expect("production dependency facts must be discoverable");
+    let dependencies = resolve_canonical_dependencies_detailed(&workspace, &raw_dependencies)
+        .unwrap_or_else(|failure| {
+            panic!("every production dependency must resolve to a canonical origin: {failure:#?}")
+        });
+
+    let graph_contract_reexports = dependencies
+        .iter()
+        .filter(|dependency| {
+            dependency.source_file.starts_with("src-tauri/src/graph/")
+                && dependency.kind == RustDependencyKind::ReExport
+                && matches!(
+                    &dependency.origin,
+                    CanonicalOrigin::Repository {
+                        repository_relative_declaration_file,
+                        ..
+                    } if repository_relative_declaration_file.starts_with("src-tauri/src/data_contract/")
+                )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        graph_contract_reexports.is_empty(),
+        "Graph must not re-export the persisted data contract: {graph_contract_reexports:#?}"
+    );
+
+    for (symbol, expected_source) in [
+        ("DataType", "src-tauri/src/data_contract/data_type.rs"),
+        ("DataValue", "src-tauri/src/data_contract/data_value.rs"),
+        (
+            "DataSeriesValue",
+            "src-tauri/src/data_contract/data_value.rs",
+        ),
+        (
+            "CategoricalRole",
+            "src-tauri/src/data_contract/data_value.rs",
+        ),
+        (
+            "TimeSeriesState",
+            "src-tauri/src/data_contract/data_value.rs",
+        ),
+        ("DummyInfo", "src-tauri/src/data_contract/data_value.rs"),
+    ] {
+        let origins = dependencies
+            .iter()
+            .filter_map(|dependency| match &dependency.origin {
+                CanonicalOrigin::Repository {
+                    repository_relative_declaration_file,
+                    symbol: origin_symbol,
+                    ..
+                } if origin_symbol == symbol => Some(repository_relative_declaration_file.as_str()),
+                CanonicalOrigin::Repository { .. }
+                | CanonicalOrigin::LanguageBuiltin { .. }
+                | CanonicalOrigin::RepositoryAsset { .. }
+                | CanonicalOrigin::External(_) => None,
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            origins,
+            std::collections::BTreeSet::from([expected_source]),
+            "{symbol} must resolve to exactly one persisted data contract owner"
+        );
+    }
 }
 
 #[test]

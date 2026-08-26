@@ -1,5 +1,5 @@
 use super::*;
-use crate::graph::value::DataType;
+use crate::data_contract::DataType;
 use crate::node_system::analysis::{ResourceVersionSet, SemanticDependency};
 use crate::node_system::catalog::{
     CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
@@ -664,7 +664,7 @@ fn resource_bound_editor_titles_use_authoritative_names_and_preserve_labels() {
             id: variable_id,
             name: "Revenue".into(),
             data_type: DataType::Int64,
-            data_value: crate::graph::value::DataValue::Int64(1),
+            data_value: crate::data_contract::DataValue::Int64(1),
             tabular: None,
             description: String::new(),
             scope: crate::variable::VariableScope::Global,

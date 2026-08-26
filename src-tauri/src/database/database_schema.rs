@@ -1,5 +1,5 @@
+use crate::data_contract::DataType;
 use crate::graph::node::{ColumnSchema, DataSchema};
-use crate::graph::value::DataType;
 use polars::prelude::DataFrame;
 
 use super::DuckDbColumnMeta;

@@ -6,11 +6,11 @@ fn variable_data_series_materializes_artifact_without_serialized_runtime_interna
     let variable = crate::variable::VariableInstance {
         id,
         name: "observations".into(),
-        data_type: crate::graph::value::DataType::DataSeries(Box::new(
-            crate::graph::value::DataType::Int64,
+        data_type: crate::data_contract::DataType::DataSeries(Box::new(
+            crate::data_contract::DataType::Int64,
         )),
-        data_value: crate::graph::value::DataValue::DataSeries(
-            crate::graph::value::DataSeriesValue::new(crate::tabular::variable_handle(&id)),
+        data_value: crate::data_contract::DataValue::DataSeries(
+            crate::data_contract::DataSeriesValue::new(crate::tabular::variable_handle(&id)),
         ),
         tabular: Some(
             crate::tabular::TabularSnapshot::from_json(r#"{"observations":[1,null,3]}"#).unwrap(),
@@ -46,10 +46,10 @@ fn variable_data_series_set_serializes_payload_without_artifact_internals() {
     let variable = crate::variable::VariableInstance {
         id,
         name: "observations".into(),
-        data_type: crate::graph::value::DataType::DataSeries(Box::new(
-            crate::graph::value::DataType::Float64,
+        data_type: crate::data_contract::DataType::DataSeries(Box::new(
+            crate::data_contract::DataType::Float64,
         )),
-        data_value: crate::graph::value::DataValue::Null,
+        data_value: crate::data_contract::DataValue::Null,
         tabular: None,
         description: String::new(),
         scope: crate::variable::VariableScope::Global,
@@ -70,12 +70,12 @@ fn variable_data_series_set_serializes_payload_without_artifact_internals() {
     let effects = snapshot.variable_effects();
 
     assert_eq!(effects.len(), 1);
-    let crate::graph::value::DataValue::DataSeries(value) = &effects[0].after else {
+    let crate::data_contract::DataValue::DataSeries(value) = &effects[0].after else {
         panic!("DataSeries assignment must persist a serializable DataSeries value");
     };
     assert_eq!(
         value.element_type,
-        Some(crate::graph::value::DataType::Float64)
+        Some(crate::data_contract::DataType::Float64)
     );
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&value.id).unwrap(),
@@ -90,10 +90,10 @@ fn data_series_variable_get_set_flows_into_statistics() {
     let empty = crate::variable::VariableInstance {
         id,
         name: "observations".into(),
-        data_type: crate::graph::value::DataType::DataSeries(Box::new(
-            crate::graph::value::DataType::Float64,
+        data_type: crate::data_contract::DataType::DataSeries(Box::new(
+            crate::data_contract::DataType::Float64,
         )),
-        data_value: crate::graph::value::DataValue::Null,
+        data_value: crate::data_contract::DataValue::Null,
         tabular: None,
         description: String::new(),
         scope: crate::variable::VariableScope::Global,
@@ -111,7 +111,7 @@ fn data_series_variable_get_set_flows_into_statistics() {
         execute_variable_kernel("yssbi.project.variable.set", empty.clone(), &[assigned]);
     set.unwrap();
     let after = snapshot.variable_effects().remove(0).after;
-    let crate::graph::value::DataValue::DataSeries(series) = &after else {
+    let crate::data_contract::DataValue::DataSeries(series) = &after else {
         panic!("variable effect must persist a DataSeries payload");
     };
     let series_json = series.id.clone();

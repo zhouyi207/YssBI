@@ -419,7 +419,7 @@ fn resource_descriptor_snapshot(
                     scope: VariableScope::Event {
                         event_path: "events/validation".into(),
                     },
-                    data_type: crate::graph::value::DataType::Int64,
+                    data_type: crate::data_contract::DataType::Int64,
                     allowed_node_type_ids: [
                         NodeTypeId::new("yssbi.project.variable.get").unwrap(),
                         NodeTypeId::new("yssbi.project.variable.set").unwrap(),

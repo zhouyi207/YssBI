@@ -9,8 +9,8 @@ fn tabular_variable(
     let mut variable = crate::variable::VariableInstance {
         id,
         name: name.into(),
-        data_type: crate::graph::value::DataType::DataFrame,
-        data_value: crate::graph::value::DataValue::DataFrame(values.into()),
+        data_type: crate::data_contract::DataType::DataFrame,
+        data_value: crate::data_contract::DataValue::DataFrame(values.into()),
         tabular: None,
         description: String::new(),
         scope,
@@ -55,7 +55,7 @@ fn commit_tabular_effect(
             .unwrap(),
             expected_revision: GraphRevision::INITIAL,
             before: variable.clone(),
-            after: crate::graph::value::DataValue::DataFrame(values.into()),
+            after: crate::data_contract::DataValue::DataFrame(values.into()),
         }],
     )
 }
@@ -94,7 +94,7 @@ fn global_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
                 .unwrap(),
                 expected_revision: GraphRevision::INITIAL,
                 before: variable.clone(),
-                after: crate::graph::value::DataValue::Int64(2),
+                after: crate::data_contract::DataValue::Int64(2),
             }],
         )
         .unwrap();
@@ -145,7 +145,7 @@ fn global_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
     );
     assert_eq!(
         canonical.data_value,
-        crate::graph::value::DataValue::Int64(2)
+        crate::data_contract::DataValue::Int64(2)
     );
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -192,7 +192,7 @@ fn local_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
                 .unwrap(),
                 expected_revision: GraphRevision::INITIAL,
                 before: variable.clone(),
-                after: crate::graph::value::DataValue::Int64(2),
+                after: crate::data_contract::DataValue::Int64(2),
             }],
         )
         .unwrap();
@@ -232,7 +232,7 @@ fn local_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
     );
     assert_eq!(
         canonical.data_value,
-        crate::graph::value::DataValue::Int64(2)
+        crate::data_contract::DataValue::Int64(2)
     );
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -268,7 +268,7 @@ fn durable_variable_history_conflict_rolls_disk_back_without_authority_transfer(
                 .unwrap(),
                 expected_revision: GraphRevision::INITIAL,
                 before: variable.clone(),
-                after: crate::graph::value::DataValue::Int64(2),
+                after: crate::data_contract::DataValue::Int64(2),
             }],
         )
         .unwrap();
@@ -301,7 +301,7 @@ fn durable_variable_history_conflict_rolls_disk_back_without_authority_transfer(
             .unwrap()
             .unwrap()
             .data_value,
-        crate::graph::value::DataValue::Int64(2)
+        crate::data_contract::DataValue::Int64(2)
     );
     assert_eq!(
         std::fs::read(root.join(crate::project::GLOBAL_VARIABLES_FILE)).unwrap(),
@@ -352,7 +352,7 @@ fn tabular_variable_effect_updates_global_and_local_authority() {
         let canonical = state.get_variable(&variable.id).unwrap().unwrap();
         assert_eq!(
             canonical.data_value,
-            crate::graph::value::DataValue::DataFrame(crate::tabular::variable_handle(
+            crate::data_contract::DataValue::DataFrame(crate::tabular::variable_handle(
                 &variable.id
             ))
         );
@@ -496,7 +496,7 @@ fn variable_effect_commit_is_revisioned_and_undoable() {
                 resource,
                 expected_revision: GraphRevision::INITIAL,
                 before: variable.clone(),
-                after: crate::graph::value::DataValue::Int64(2),
+                after: crate::data_contract::DataValue::Int64(2),
             }],
         )
         .unwrap();
@@ -527,7 +527,7 @@ fn variable_effect_commit_is_revisioned_and_undoable() {
             .unwrap()
             .unwrap()
             .data_value,
-        crate::graph::value::DataValue::Int64(2)
+        crate::data_contract::DataValue::Int64(2)
     ));
 
     state
@@ -551,7 +551,7 @@ fn variable_effect_commit_is_revisioned_and_undoable() {
             .unwrap()
             .unwrap()
             .data_value,
-        crate::graph::value::DataValue::Int64(1)
+        crate::data_contract::DataValue::Int64(1)
     ));
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -584,7 +584,7 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
         resource,
         expected_revision: GraphRevision::INITIAL,
         before: variable.clone(),
-        after: crate::graph::value::DataValue::Int64(2),
+        after: crate::data_contract::DataValue::Int64(2),
     };
     let history_before = state.history_status();
     let active_project_instance_id = state.capture_project_session().unwrap().instance_id;
@@ -606,7 +606,7 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
             .unwrap()
             .unwrap()
             .data_value,
-        crate::graph::value::DataValue::Int64(1)
+        crate::data_contract::DataValue::Int64(1)
     );
     assert_eq!(state.history_status(), history_before);
     let failed_index = state
@@ -640,7 +640,7 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
             .unwrap()
             .variables[&variable.id]
             .data_value,
-        crate::graph::value::DataValue::Int64(2)
+        crate::data_contract::DataValue::Int64(2)
     );
 
     let function_path = GraphResourcePath::new("functions/Next.yssbi-function").unwrap();
@@ -723,7 +723,7 @@ fn variable_effect_authority_assignment_panic_restores_every_authoritative_proje
                 .unwrap(),
                 expected_revision: GraphRevision::INITIAL,
                 before: variable.clone(),
-                after: crate::graph::value::DataValue::Int64(2),
+                after: crate::data_contract::DataValue::Int64(2),
             }],
             &crate::node_system::runtime::CancellationToken::new(),
             None,
@@ -776,10 +776,10 @@ fn concurrent_variable_effect_commit_returns_structured_revision_conflict() {
         resource,
         expected_revision: GraphRevision::INITIAL,
         before: variable.clone(),
-        after: crate::graph::value::DataValue::Int64(2),
+        after: crate::data_contract::DataValue::Int64(2),
     };
     let winning_effect = crate::node_system::runtime::VariableWriteEffect {
-        after: crate::graph::value::DataValue::Int64(3),
+        after: crate::data_contract::DataValue::Int64(3),
         ..stale_effect.clone()
     };
     state
@@ -802,7 +802,7 @@ fn concurrent_variable_effect_commit_returns_structured_revision_conflict() {
             .unwrap()
             .unwrap()
             .data_value,
-        crate::graph::value::DataValue::Int64(3)
+        crate::data_contract::DataValue::Int64(3)
     ));
     std::fs::remove_dir_all(root).unwrap();
 }

@@ -484,7 +484,7 @@ fn prepare_error(error: impl ToString) -> ProjectFilesystemError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::value::{DataType, DataValue};
+    use crate::data_contract::{DataType, DataValue};
     use crate::node_system::document::{
         DocumentNode, GraphDocumentOperation, GraphDocumentPatch, MutationRequest, NodeId,
         NodePosition, OperationId, ParameterValues, ResourceKey, ResourceRevision,

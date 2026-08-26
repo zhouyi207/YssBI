@@ -79,6 +79,7 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/src/data_contract/data_value.rs",
         RustLayer::PureLeaf,
     ),
+    ("src-tauri/src/graph/value/type_system.rs", RustLayer::Graph),
     ("src-tauri/src/tabular/mod.rs", RustLayer::PureLeaf),
     ("src-tauri/src/tabular/contract.rs", RustLayer::PureLeaf),
     (
@@ -692,6 +693,7 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "event" | "schema" | "error" => Some(RustLayer::Transport),
         "window_state" => Some(RustLayer::PlatformAdapter),
         "math" => Some(RustLayer::Execution),
+        "graph" if exact_layer == Some(RustLayer::Graph) => None,
         "graph" | "tabular" | "variable" => Some(RustLayer::PureLeaf),
         "node_system" if exact_layer == Some(RustLayer::BuiltinComposition) => None,
         "node_system" if namespace.starts_with("node_system::runtime") => {
@@ -699,7 +701,7 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         }
         "node_system" => Some(RustLayer::Graph),
         "backend_adapters" => Some(RustLayer::BackendAdapter),
-        "data_contract" | "database_contract" => Some(RustLayer::PureLeaf),
+        "database_contract" => Some(RustLayer::PureLeaf),
         "platform" => Some(RustLayer::PlatformAdapter),
         _ => None,
     }

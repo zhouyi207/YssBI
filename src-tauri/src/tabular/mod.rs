@@ -1,4 +1,4 @@
-use crate::graph::value::{DataSeriesValue, DataType, DataValue};
+use crate::data_contract::{DataSeriesValue, DataType, DataValue};
 use crate::variable::VariableInstance;
 
 pub mod dataframe_io;

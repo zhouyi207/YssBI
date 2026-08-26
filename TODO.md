@@ -1414,3 +1414,8 @@ Execution 不知道具体 UI
 - [ ] 将 strict Rust architecture gate rebase 到最新 `shadcn` 已提交基线，同时保留主工作区全部未提交改动。
 - [ ] 将新增 `trash` runtime dependency 纳入 external declaration 审计，并把 Project 直接调用 `trash::delete` 记录为 Backend Adapter exact debt，而不扩大允许层。
 - [ ] 在同步基线上重新运行 15 项 architecture focused tests、rustfmt 与 `cargo check`，确认 exact debt 双向清单和 production policy 一致。
+- [ ] 将 persisted `DataType`、`DataValue`、`DataSeriesValue` 与分类/时间序列 metadata 原子迁入顶层 Pure Leaf `data_contract`，保持现有 serde tags、camelCase 字段和 DataSeries string/full wire。
+- [ ] 将类型兼容、继承、默认值、转换、查询与运行时值算术保留在 Graph `value::type_system`，以原生数值逻辑替换旧 `num_traits` One/Zero 使用。
+- [ ] 全量切换 Variable、Project、Schema、Commands、Graph、Node System、Runtime、Database、Tabular、SCI 与对应测试到 canonical `data_contract` 路径，并删除 Graph 旧声明与 re-export。
+- [ ] 为 typed `DataTypeParseError`、persisted value wire、单一 Pure Leaf owner 与 Graph 无 compatibility re-export 增加 focused regression。
+- [ ] 将 `data_contract` 三个 exact files 设为 literal Pure Leaf、将 Graph type-system behavior 设为 exact Graph classification，移除 contract namespace fallback，并精确删除已消失的三条 `num_traits` architecture debt occurrence。

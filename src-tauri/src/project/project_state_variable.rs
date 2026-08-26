@@ -3,7 +3,7 @@ use super::unique_name;
 use super::{ProjectFilesystemError, ProjectState};
 
 #[cfg(test)]
-use crate::graph::value::{DataType, DataValue};
+use crate::data_contract::{DataType, DataValue};
 
 use crate::tabular::normalize_variable_tabular;
 use crate::variable::VariableId;
@@ -189,7 +189,7 @@ impl ProjectState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::value::DataSeriesValue;
+    use crate::data_contract::DataSeriesValue;
     use crate::node_system::document::ResourceRevision;
     use crate::project::ProjectData;
     use std::sync::{Arc, Mutex, mpsc};

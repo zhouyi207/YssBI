@@ -1,5 +1,5 @@
+use crate::data_contract::{DataType, DataValue};
 use crate::event::ResourceMutationResultDto;
-use crate::graph::value::{DataType, DataValue};
 use crate::node_system::document::{
     FunctionResourceKey, OperationId, ResourceKey, ResourceRevision, VariableResourceKey,
     WorksheetResourceKey,
@@ -433,7 +433,7 @@ impl ProjectState {
 #[cfg(test)]
 mod tests {
     use super::set_writer_snapshot_test_hook;
-    use crate::graph::value::{DataType, DataValue};
+    use crate::data_contract::{DataType, DataValue};
     use crate::node_system::document::{
         FunctionResourceKey, OperationId, ResourceKey, ResourceRevision, VariableResourceKey,
     };

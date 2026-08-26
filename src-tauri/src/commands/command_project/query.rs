@@ -125,7 +125,7 @@ pub fn get_project_resource_path(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::value::{DataType, DataValue};
+    use crate::data_contract::{DataType, DataValue};
     use crate::node_system::document::{
         EditorGraphMutationDto, FunctionDocumentPatch, FunctionResourceKey, FunctionSignature,
         GraphRevision, MutationRequest, OperationId, ResourceKey,
