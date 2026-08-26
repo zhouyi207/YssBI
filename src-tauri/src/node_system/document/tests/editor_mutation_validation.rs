@@ -373,7 +373,11 @@ fn plan(
     document: &GraphDocument,
     registry: &NodeRegistry,
 ) -> Result<GraphDocumentPatch, MutationConflict> {
-    mutation.into_patch(&graph_path("events/validation"), document, registry)
+    mutation.into_patch(
+        &graph_path("events/validation.yssbi-event"),
+        document,
+        registry,
+    )
 }
 
 fn plan_with_validation(
@@ -383,7 +387,7 @@ fn plan_with_validation(
     validation: &EditorMutationValidationSnapshot,
 ) -> Result<GraphDocumentPatch, MutationConflict> {
     mutation.into_patch_with_editor_validation(
-        &graph_path("events/validation"),
+        &graph_path("events/validation.yssbi-event"),
         document,
         registry,
         None,
@@ -417,7 +421,7 @@ fn resource_descriptor_snapshot(
                 CatalogMutationResource::Variable {
                     revision: ResourceRevision::new(4),
                     scope: VariableScope::Event {
-                        event_path: "events/validation".into(),
+                        event_path: "events/validation.yssbi-event".into(),
                     },
                     data_type: crate::data_contract::DataType::Int64,
                     allowed_node_type_ids: [
@@ -634,7 +638,7 @@ fn snapshot_projection(
 ) -> EditorGraphProjectionDto {
     let node =
         |id: NodeId, node_type_id: &str, ports: Vec<ResolvedPortDto>| EditorNodeProjectionDto {
-            graph_path: "events/validation".into(),
+            graph_path: "events/validation.yssbi-event".into(),
             source_revision: revision,
             node_id: id.to_string().into(),
             node_type_id: node_type_id.into(),
@@ -660,12 +664,12 @@ fn snapshot_projection(
         };
     EditorGraphProjectionDto {
         basis: ProjectionBasis {
-            graph_path: "events/validation".into(),
+            graph_path: "events/validation.yssbi-event".into(),
             graph_revision: revision,
             registry_fingerprint: registry.fingerprint().clone(),
             resource_versions: BTreeMap::new(),
         },
-        graph_path: "events/validation".into(),
+        graph_path: "events/validation.yssbi-event".into(),
         source_revision: revision,
         nodes: vec![
             node(source_id, "yssbi.test.snapshot_source", vec![source_port]),

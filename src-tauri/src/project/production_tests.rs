@@ -164,7 +164,7 @@ fn editor_mutation_request(
 ) -> MutationRequest<EditorGraphMutationDto> {
     MutationRequest::new(
         ResourceKey::Graph(document_path()),
-        base_revision,
+        ResourceRevision::from_graph_revision(base_revision),
         operation_id,
         create_node_mutation(),
     )
@@ -221,7 +221,7 @@ fn function_signature_request(
 ) -> MutationRequest<crate::node_system::document::FunctionDocumentPatch> {
     MutationRequest::new(
         resource,
-        base_revision,
+        ResourceRevision::from_graph_revision(base_revision),
         OperationId::new(),
         crate::node_system::document::FunctionDocumentPatch::new(before, after),
     )
@@ -258,7 +258,7 @@ fn durable_unloaded_history_fixture(
             &graph_path,
             MutationRequest::new(
                 resource.clone(),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: inserted_node,
@@ -456,7 +456,7 @@ fn active_state_with_valid_constant_graph(label: &str) -> (ProjectState, std::pa
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: constant,

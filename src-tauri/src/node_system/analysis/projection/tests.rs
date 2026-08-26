@@ -654,7 +654,7 @@ fn resource_bound_editor_titles_use_authoritative_names_and_preserve_labels() {
     let registry = builtin.registry;
     let catalog = builtin.catalog;
     let variable_id = crate::variable::VariableId::from(Uuid::from_u128(100));
-    let function_path = GraphResourcePath::new("functions/calculate-sales").unwrap();
+    let function_path = GraphResourcePath::new("functions/calculate-sales.yssbi-function").unwrap();
     let resources = NamedResources {
         function_path: function_path.clone(),
         function: FunctionDocument::new(FunctionSignature::default()),
@@ -1357,7 +1357,7 @@ fn grouped_port_capability_ignores_non_user_created_siblings() {
             .unwrap();
     }
     let locator = || DynamicMemberLocator::FunctionParameter {
-        function: GraphResourcePath::new("functions/mixed").unwrap(),
+        function: GraphResourcePath::new("functions/mixed.yssbi-function").unwrap(),
         parameter: FunctionParameterId::new("value"),
     };
     for (template, binding) in [

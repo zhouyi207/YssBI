@@ -1,3 +1,4 @@
+use super::validate_resource_name;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
@@ -6,7 +7,6 @@ const EVENTS_DIR: &str = "events";
 const FUNCTIONS_DIR: &str = "functions";
 const EVENT_EXTENSION: &str = "yssbi-event";
 const FUNCTION_EXTENSION: &str = "yssbi-function";
-const MAX_RESOURCE_NAME_CHARACTERS: usize = 80;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GraphResourceKind {
@@ -142,46 +142,5 @@ fn validate_graph_resource_path(path: &str) -> Result<(), GraphResourcePathError
     }
     .ok_or(GraphResourcePathError::WrongDirectoryOrExtension)?;
 
-    if valid_resource_name(stem) {
-        Ok(())
-    } else {
-        Err(GraphResourcePathError::InvalidName)
-    }
-}
-
-fn valid_resource_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.chars().count() <= MAX_RESOURCE_NAME_CHARACTERS
-        && !matches!(
-            name.to_ascii_uppercase().as_str(),
-            "." | ".."
-                | "CON"
-                | "PRN"
-                | "AUX"
-                | "NUL"
-                | "COM1"
-                | "COM2"
-                | "COM3"
-                | "COM4"
-                | "COM5"
-                | "COM6"
-                | "COM7"
-                | "COM8"
-                | "COM9"
-                | "LPT1"
-                | "LPT2"
-                | "LPT3"
-                | "LPT4"
-                | "LPT5"
-                | "LPT6"
-                | "LPT7"
-                | "LPT8"
-                | "LPT9"
-        )
-        && !name.starts_with(' ')
-        && !name.ends_with(' ')
-        && !name.contains("  ")
-        && name.chars().all(|character| {
-            character.is_alphanumeric() || matches!(character, ' ' | '-' | '_' | '(' | ')')
-        })
+    validate_resource_name(stem).map_err(|_| GraphResourcePathError::InvalidName)
 }

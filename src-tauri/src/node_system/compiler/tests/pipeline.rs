@@ -41,7 +41,7 @@ fn compile_plan_keeps_the_exact_requested_provenance() {
         GraphCompiler::new(&registry, &Resources).with_project_session_id(session_id.clone());
     let snapshot = compiler.snapshot_with_compile_id(
         CompileId::new(41),
-        GraphResourcePath::new("events/main").unwrap(),
+        GraphResourcePath::new("events/main.yssbi-event").unwrap(),
         &document(NodeTypeId::new("yssbi.test.constant").unwrap()),
     );
     let result = compiler
@@ -148,7 +148,7 @@ fn semantically_identical_documents_serialize_identically() {
     let registry = determinism_registry(determinism_protocols());
     let compiler = GraphCompiler::new(&registry, &Resources)
         .with_project_session_id(ProjectSessionId::new("determinism-session"));
-    let graph_path = GraphResourcePath::new("events/determinism").unwrap();
+    let graph_path = GraphResourcePath::new("events/determinism.yssbi-event").unwrap();
     let compile_id = CompileId::new(73);
     let forward_snapshot =
         compiler.snapshot_with_compile_id(compile_id, graph_path.clone(), &forward.document);

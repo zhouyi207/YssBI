@@ -59,7 +59,7 @@ fn phase1_move_connections_project_state_snapshot_reaches_planner() {
             "en-US",
             MutationRequest::new(
                 resource.clone(),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::from_uuid(uuid::Uuid::from_u128(0x5120)),
                 EditorGraphMutationDto::MoveConnections {
                     source: source.into(),

@@ -143,30 +143,6 @@ impl ResourceRevision {
     }
 }
 
-impl From<crate::graph_document::GraphRevision> for ResourceRevision {
-    fn from(revision: crate::graph_document::GraphRevision) -> Self {
-        Self::from_graph_revision(revision)
-    }
-}
-
-impl From<ResourceRevision> for crate::graph_document::GraphRevision {
-    fn from(revision: ResourceRevision) -> Self {
-        revision.to_graph_revision()
-    }
-}
-
-impl PartialEq<crate::graph_document::GraphRevision> for ResourceRevision {
-    fn eq(&self, other: &crate::graph_document::GraphRevision) -> bool {
-        self.get() == other.get()
-    }
-}
-
-impl PartialEq<ResourceRevision> for crate::graph_document::GraphRevision {
-    fn eq(&self, other: &ResourceRevision) -> bool {
-        self.get() == other.get()
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RevisionExhausted {
     pub retained: u64,

@@ -37,7 +37,7 @@ fn graph_cache_unload_preserves_complete_project_history() {
                 path,
                 MutationRequest::new(
                     ResourceKey::Graph(path.clone()),
-                    GraphRevision::INITIAL,
+                    ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                     OperationId::new(),
                     GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                         node: node("yssbi.constant.int64"),
@@ -139,7 +139,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
             &graph_path,
             MutationRequest::new(
                 ResourceKey::Graph(document_path.clone()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: inserted_node,
@@ -163,7 +163,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
             true,
             MutationRequest::new(
                 ResourceKey::Graph(document_path.clone()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -206,7 +206,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
     assert_eq!(prepared.basis.history_id, before_head.unwrap());
     assert_eq!(
         prepared.basis.expected_revisions[&ResourceKey::Graph(document_path.clone())],
-        GraphRevision::new(1)
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
     );
     drop(prepared);
 
@@ -216,7 +216,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
         true,
         MutationRequest::new(
             ResourceKey::Graph(document_path.clone()),
-            GraphRevision::new(1),
+            ResourceRevision::from_graph_revision(GraphRevision::new(1)),
             OperationId::new(),
             HistoryMutation {},
         ),
@@ -242,7 +242,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
         true,
         MutationRequest::new(
             ResourceKey::Graph(document_path),
-            GraphRevision::new(1),
+            ResourceRevision::from_graph_revision(GraphRevision::new(1)),
             OperationId::new(),
             HistoryMutation {},
         ),
@@ -306,7 +306,7 @@ fn assert_history_lifecycle_replacement_has_zero_effects(
             "en-US",
             MutationRequest::new(
                 resource,
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -427,7 +427,7 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
                 path,
                 MutationRequest::new(
                     ResourceKey::Graph(key.clone()),
-                    GraphRevision::INITIAL,
+                    ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                     OperationId::new(),
                     patch,
                 ),
@@ -464,7 +464,7 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(loaded_key.clone()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -502,7 +502,8 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
         loaded_path.as_str()
     );
     assert!(undo.deltas.iter().all(|delta| {
-        delta.from_revision == GraphRevision::new(1) && delta.to_revision == GraphRevision::new(2)
+        delta.from_revision == ResourceRevision::from_graph_revision(GraphRevision::new(1))
+            && delta.to_revision == ResourceRevision::from_graph_revision(GraphRevision::new(2))
     }));
 
     let redo = state
@@ -511,7 +512,7 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(loaded_key),
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -545,7 +546,8 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
     assert_eq!(redo.deltas.len(), 2);
     assert_eq!(redo.projection_replacements.len(), 1);
     assert!(redo.deltas.iter().all(|delta| {
-        delta.from_revision == GraphRevision::new(2) && delta.to_revision == GraphRevision::new(3)
+        delta.from_revision == ResourceRevision::from_graph_revision(GraphRevision::new(2))
+            && delta.to_revision == ResourceRevision::from_graph_revision(GraphRevision::new(3))
     }));
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -629,7 +631,7 @@ fn mixed_residency_unloaded_graph_and_global_variable_commit_atomically() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(graph_key),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -657,7 +659,8 @@ fn mixed_residency_unloaded_graph_and_global_variable_commit_atomically() {
     assert_eq!(undo.deltas.len(), 2);
     assert!(undo.projection_replacements.is_empty());
     assert!(undo.deltas.iter().all(|delta| {
-        delta.from_revision == GraphRevision::new(1) && delta.to_revision == GraphRevision::new(2)
+        delta.from_revision == ResourceRevision::from_graph_revision(GraphRevision::new(1))
+            && delta.to_revision == ResourceRevision::from_graph_revision(GraphRevision::new(2))
     }));
     std::fs::remove_dir_all(root).unwrap();
 }

@@ -525,7 +525,7 @@ fn dataframe_field_type_unsupported_projects_any_and_port_diagnostic() {
 
 #[test]
 fn decompose_orphan_preserves_last_known_label_and_type() {
-    let graph_path = GraphResourcePath::new("events/dataframe-orphan").unwrap();
+    let graph_path = GraphResourcePath::new("events/dataframe-orphan.yssbi-event").unwrap();
     let decompose_id = dataframe_node_id(3);
     let consumer_id = dataframe_node_id(4);
     let customer_locator = DynamicMemberLocator::SchemaField {

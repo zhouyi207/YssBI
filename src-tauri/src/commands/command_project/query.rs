@@ -163,7 +163,7 @@ mod tests {
     ) -> MutationRequest<EditorGraphMutationDto> {
         MutationRequest::new(
             ResourceKey::Graph(graph_path.clone()),
-            GraphRevision::INITIAL,
+            crate::project::ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
             OperationId::new(),
             EditorGraphMutationDto::CreateNode {
                 descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
@@ -181,7 +181,7 @@ mod tests {
     ) -> MutationRequest<FunctionDocumentPatch> {
         MutationRequest::new(
             ResourceKey::Function(FunctionResourceKey(function_path.as_str().into())),
-            GraphRevision::INITIAL,
+            crate::project::ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
             OperationId::new(),
             FunctionDocumentPatch::new(
                 FunctionSignature::default(),
@@ -402,7 +402,10 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(graph_mutation.delta.to_revision, GraphRevision::new(1));
+        assert_eq!(
+            graph_mutation.delta.to_revision,
+            crate::project::ResourceRevision::from_graph_revision(GraphRevision::new(1))
+        );
         assert!(graph_mutation.history.can_undo);
         assert_eq!(after_graph.publication_revision, 0);
         assert_eq!(after_graph.history, state.history_status());

@@ -241,7 +241,10 @@ fn typed_lowering_cancellation_cancels_compilation() {
     let registry = TestRegistry::new(vec![protocol]).with_lowerer(&node_type, CancelledLowerer);
     let compiler = GraphCompiler::new(&registry, &Resources);
     let graph = graph_with_nodes(&[(1, "lowering_cancelled")]);
-    let snapshot = compiler.snapshot(GraphResourcePath::new("events/cancelled").unwrap(), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/cancelled.yssbi-event").unwrap(),
+        &graph,
+    );
 
     let result = compiler.compile_snapshot(&snapshot, &CompileCancellationToken::new());
 
@@ -430,7 +433,7 @@ fn function_plan_store_rejects_data_series_kind_mismatch() {
         1,
         [],
     );
-    let path = GraphResourcePath::new("functions/series-contract").unwrap();
+    let path = GraphResourcePath::new("functions/series-contract.yssbi-function").unwrap();
     let compiler = GraphCompiler::new(&registry, &Resources);
     let graph = graph_with_nodes(&[(1, "series_function_source")]);
     let mut plan = compiler
@@ -928,7 +931,10 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
     connect(&mut graph, 10, 1, "out", 2, "in");
 
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath::new("events/relational").unwrap(), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/relational.yssbi-event").unwrap(),
+        &graph,
+    );
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -983,7 +989,7 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
 
     let requested_source = basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/relational", 1, "out")]),
+            outputs: Box::new([demand_output("events/relational.yssbi-event", 1, "out")]),
             include_default_results: false,
         })
         .expect("same-island intermediate output must be derivable");
@@ -1003,7 +1009,7 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
     }));
     let requested_source_again = basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/relational", 1, "out")]),
+            outputs: Box::new([demand_output("events/relational.yssbi-event", 1, "out")]),
             include_default_results: false,
         })
         .unwrap();
@@ -1078,7 +1084,7 @@ fn compiler_plans_relational_islands_with_valid_local_indices() {
     let reversed_plan = reversed_compiler
         .compile_snapshot(
             &reversed_compiler.snapshot(
-                GraphResourcePath::new("events/relational").unwrap(),
+                GraphResourcePath::new("events/relational.yssbi-event").unwrap(),
                 &reversed,
             ),
             &CompileCancellationToken::new(),
@@ -1300,7 +1306,7 @@ fn compiler_inserts_explicit_materialization_adapter_for_relational_boundary() {
 
     let compiler = GraphCompiler::new(&registry, &Resources);
     let snapshot = compiler.snapshot(
-        GraphResourcePath::new("events/bridge-demand").unwrap(),
+        GraphResourcePath::new("events/bridge-demand.yssbi-event").unwrap(),
         &graph,
     );
     let result = compiler
@@ -1311,7 +1317,7 @@ fn compiler_inserts_explicit_materialization_adapter_for_relational_boundary() {
         .as_ref()
         .unwrap_or_else(|| panic!("adapter diagnostics: {:?}", result.analysis.diagnostics))
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/bridge-demand", 2, "out")]),
+            outputs: Box::new([demand_output("events/bridge-demand.yssbi-event", 2, "out")]),
             include_default_results: false,
         })
         .expect("retained relational adapter boundary specializes after structured pruning");
@@ -1364,7 +1370,7 @@ fn compiler_inserts_explicit_materialization_adapter_for_relational_boundary() {
     connect(&mut reversed, 11, 3, "out", 4, "condition");
     connect(&mut reversed, 10, 1, "out", 2, "in");
     let reversed_snapshot = compiler.snapshot(
-        GraphResourcePath::new("events/bridge-demand").unwrap(),
+        GraphResourcePath::new("events/bridge-demand.yssbi-event").unwrap(),
         &reversed,
     );
     let reversed_result = compiler
@@ -1374,7 +1380,7 @@ fn compiler_inserts_explicit_materialization_adapter_for_relational_boundary() {
         .execution_basis
         .expect("reversed bridge graph has a specialization basis")
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/bridge-demand", 2, "out")]),
+            outputs: Box::new([demand_output("events/bridge-demand.yssbi-event", 2, "out")]),
             include_default_results: false,
         })
         .unwrap();

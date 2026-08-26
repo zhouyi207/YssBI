@@ -166,7 +166,8 @@ mod result_id_frame_tests {
     #[test]
     fn scheduler_uses_current_frame_binding_not_latest_pin_history() {
         let store = ResultStore::new();
-        let graph_path = crate::graph_document::GraphResourcePath::new("events/test").unwrap();
+        let graph_path =
+            crate::graph_document::GraphResourcePath::new("events/test.yssbi-event").unwrap();
         let node_id = crate::graph_document::NodeId::new();
         let output = GraphOutputRef {
             graph_path: graph_path.clone(),

@@ -165,21 +165,26 @@ fn nested_view_data_event_keeps_root_graph_run_identity() {
         vec![],
         0,
         StructuredControlRegion::Call {
-            target: id("functions/callee", FunctionPlanHandle::new),
+            target: id("functions/callee.yssbi-function", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
             mandatory: true,
         },
     );
-    caller.provenance.graph_path = GraphResourcePath::new("events/caller").unwrap();
-    let callee_graph_path = GraphResourcePath::new("functions/callee").unwrap();
+    caller.provenance.graph_path = GraphResourcePath::new("events/caller.yssbi-event").unwrap();
+    let callee_graph_path = GraphResourcePath::new("functions/callee.yssbi-function").unwrap();
     let events = RecordingRunEvents::default();
     let results = ResultStore::new();
 
     RunExecutor::new(
         &kernels,
         &no_resources(),
-        &OneFunction(published_function(callee, "functions/callee", &[], &[])),
+        &OneFunction(published_function(
+            callee,
+            "functions/callee.yssbi-function",
+            &[],
+            &[],
+        )),
         ResultStore::new(),
         Arc::new(SessionMemoization::new()),
     )

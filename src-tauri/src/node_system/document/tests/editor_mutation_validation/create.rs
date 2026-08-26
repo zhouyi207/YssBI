@@ -44,7 +44,7 @@ fn resource_descriptor_materializes_only_function_variable_and_database_bindings
     for (mutation, parameter, expected) in cases {
         let patch = mutation
             .into_patch_with_catalog_snapshot(
-                &graph_path("events/validation"),
+                &graph_path("events/validation.yssbi-event"),
                 &document,
                 &registry,
                 Some(&snapshot),
@@ -93,7 +93,7 @@ fn resource_descriptor_rejects_invalid_stale_scope_and_parameter_injection() {
         assert_eq!(
             mutation
                 .into_patch_with_catalog_snapshot(
-                    &graph_path("events/validation"),
+                    &graph_path("events/validation.yssbi-event"),
                     &document,
                     &registry,
                     Some(&snapshot),
@@ -121,7 +121,7 @@ fn resource_descriptor_rejects_invalid_stale_scope_and_parameter_injection() {
         assert_eq!(
             mutation
                 .into_patch_with_catalog_snapshot(
-                    &graph_path("events/validation"),
+                    &graph_path("events/validation.yssbi-event"),
                     &document,
                     &registry,
                     Some(&snapshot),
@@ -139,7 +139,7 @@ fn resource_descriptor_rejects_invalid_stale_scope_and_parameter_injection() {
         ResourceBoundCreateArgsDto::Variable,
     )
     .into_patch_with_catalog_snapshot(
-        &graph_path("events/other"),
+        &graph_path("events/other.yssbi-event"),
         &document,
         &registry,
         Some(&snapshot),
@@ -240,7 +240,7 @@ fn resource_descriptor_rejects_noncanonical_paths_before_snapshot_lookup() {
     for (node_type, path, create_args) in noncanonical {
         let error = resource_create(node_type, &path, 1, create_args)
             .into_patch_with_catalog_snapshot(
-                &graph_path("events/validation"),
+                &graph_path("events/validation.yssbi-event"),
                 &document,
                 &registry,
                 Some(&snapshot),
@@ -265,7 +265,7 @@ fn resource_descriptor_rejects_noncanonical_paths_before_snapshot_lookup() {
     ] {
         let error = missing
             .into_patch_with_catalog_snapshot(
-                &graph_path("events/validation"),
+                &graph_path("events/validation.yssbi-event"),
                 &document,
                 &registry,
                 Some(&snapshot),

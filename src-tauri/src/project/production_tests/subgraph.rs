@@ -135,7 +135,7 @@ fn task4_subgraph_request(
     };
     MutationRequest::new(
         ResourceKey::Graph(document_path()),
-        base_revision,
+        ResourceRevision::from_graph_revision(base_revision),
         operation_id,
         payload,
     )
@@ -172,8 +172,14 @@ fn subgraph_mutation_advances_one_revision_and_one_history_entry() {
             )
             .unwrap_or_else(|error| panic!("{} mutation failed: {error}", kind.label()));
 
-        assert_eq!(result.delta.from_revision, GraphRevision::INITIAL);
-        assert_eq!(result.delta.to_revision, GraphRevision::new(1));
+        assert_eq!(
+            result.delta.from_revision,
+            ResourceRevision::from_graph_revision(GraphRevision::INITIAL)
+        );
+        assert_eq!(
+            result.delta.to_revision,
+            ResourceRevision::from_graph_revision(GraphRevision::new(1))
+        );
         assert_eq!(result.delta.caused_by, Some(operation_id));
         assert_eq!(task4_graph_document(&state).revision, GraphRevision::new(1));
         assert_eq!(
@@ -205,7 +211,7 @@ fn subgraph_mutation_undoes_and_redoes_in_one_step() {
                 "en-US",
                 MutationRequest::new(
                     ResourceKey::Graph(document_path()),
-                    GraphRevision::new(1),
+                    ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                     OperationId::new(),
                     HistoryMutation {},
                 ),
@@ -221,7 +227,7 @@ fn subgraph_mutation_undoes_and_redoes_in_one_step() {
                 "en-US",
                 MutationRequest::new(
                     ResourceKey::Graph(document_path()),
-                    GraphRevision::new(2),
+                    ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                     OperationId::new(),
                     HistoryMutation {},
                 ),
@@ -373,7 +379,7 @@ fn insert_subgraph_invalid_raw_snapshot_has_zero_effects() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 EditorGraphMutationDto::InsertSubgraph {
                     snapshot_json: "{".into(),

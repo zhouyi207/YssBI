@@ -326,7 +326,7 @@ mod tests {
         let event = RunEvent {
             run: GraphRunIdentity {
                 project_session_id: ProjectSessionId::new("session"),
-                graph_path: GraphResourcePath::new("events/main").unwrap(),
+                graph_path: GraphResourcePath::new("events/main.yssbi-event").unwrap(),
                 run_id: RunId::new(15),
             },
             kind: RunEventKind::RunStarted,

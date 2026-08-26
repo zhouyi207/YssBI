@@ -15,7 +15,7 @@ fn production_compiler_rejects_wrong_scope_and_duplicate_shell_nodes() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 patch,
             ),
@@ -241,7 +241,7 @@ fn default_requested_and_preview_demands_reuse_one_compilation_basis() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode { node: second }]),
             ),
@@ -372,7 +372,7 @@ fn graph_basis_replacement_discards_old_demand_variants() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: node("yssbi.constant.int64"),
@@ -443,7 +443,7 @@ fn blocking_recompile_clears_published_execution_plan() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: node("yssbi.test.missing"),
@@ -474,7 +474,7 @@ fn newer_graph_basis_replaces_older_published_plan() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: node("yssbi.constant.int64"),
@@ -506,7 +506,7 @@ fn newer_graph_basis_replaces_older_published_plan() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: node("yssbi.constant.int64"),
@@ -558,7 +558,7 @@ fn function_body_mutations_stale_dependent_callers_without_eager_slot_eviction()
                     &function_path,
                     MutationRequest::new(
                         request_resource,
-                        GraphRevision::INITIAL,
+                        ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                         OperationId::new(),
                         GraphMutation::CreateNode {
                             node: node("yssbi.constant.int64"),
@@ -572,7 +572,7 @@ fn function_body_mutations_stale_dependent_callers_without_eager_slot_eviction()
                     &function_path,
                     MutationRequest::new(
                         request_resource,
-                        GraphRevision::INITIAL,
+                        ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                         OperationId::new(),
                         GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                             node: node("yssbi.constant.int64"),
@@ -651,7 +651,7 @@ fn committed_graph_mutation_rejects_environment_from_older_authority_generation(
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: node("yssbi.constant.int64"),
@@ -790,7 +790,7 @@ fn function_insert_uses_max_incoming_or_retained_successor_and_reports_overflow(
     assert_eq!(inserted.document.revision, GraphRevision::new(8));
     assert_eq!(
         inserted.function.as_ref().unwrap().revision,
-        inserted.document.revision
+        ResourceRevision::from_graph_revision(inserted.document.revision)
     );
     assert_eq!(
         state.graph_revisions.read().unwrap()[&path],
@@ -856,8 +856,14 @@ fn function_patch_remove_and_reinsert_keep_authoritative_revisions_coherent() {
             },
         )
         .unwrap();
-    assert_eq!(removed.deltas[0].from_revision, GraphRevision::new(4));
-    assert_eq!(removed.deltas[0].to_revision, GraphRevision::new(5));
+    assert_eq!(
+        removed.deltas[0].from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(4))
+    );
+    assert_eq!(
+        removed.deltas[0].to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(5))
+    );
     let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(removed_lifecycle) =
         &removed.deltas[0].payload
     else {
@@ -865,7 +871,7 @@ fn function_patch_remove_and_reinsert_keep_authoritative_revisions_coherent() {
     };
     assert_eq!(
         removed_lifecycle.before.as_ref().unwrap().revision,
-        GraphRevision::new(4)
+        ResourceRevision::from_graph_revision(GraphRevision::new(4))
     );
     assert_eq!(
         state.graph_revisions.read().unwrap()[&path],
@@ -898,11 +904,17 @@ fn function_patch_remove_and_reinsert_keep_authoritative_revisions_coherent() {
     assert_eq!(data.graphs[&path].document.revision, revision);
     assert_eq!(
         data.graphs[&path].function.as_ref().unwrap().revision,
-        revision
+        ResourceRevision::from_graph_revision(revision)
     );
     assert_eq!(state.graph_revisions.read().unwrap()[&path], revision);
-    assert_eq!(inserted.deltas[0].from_revision, GraphRevision::new(5));
-    assert_eq!(inserted.deltas[0].to_revision, revision);
+    assert_eq!(
+        inserted.deltas[0].from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(5))
+    );
+    assert_eq!(
+        inserted.deltas[0].to_revision,
+        ResourceRevision::from_graph_revision(revision)
+    );
     let crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(inserted_lifecycle) =
         &inserted.deltas[0].payload
     else {
@@ -910,7 +922,7 @@ fn function_patch_remove_and_reinsert_keep_authoritative_revisions_coherent() {
     };
     assert_eq!(
         inserted_lifecycle.after.as_ref().unwrap().revision,
-        revision
+        ResourceRevision::from_graph_revision(revision)
     );
     assert_eq!(
         inserted.projection_replacements[0]
@@ -971,9 +983,15 @@ fn function_move_into_tombstone_keeps_document_ledger_delta_and_projection_revis
     let data = state.get_data().unwrap();
     let moved = &data.graphs[&to];
     assert_eq!(moved.document.revision, revision);
-    assert_eq!(moved.function.as_ref().unwrap().revision, revision);
+    assert_eq!(
+        moved.function.as_ref().unwrap().revision,
+        ResourceRevision::from_graph_revision(revision)
+    );
     assert_eq!(state.graph_revisions.read().unwrap()[&to], revision);
-    assert_eq!(result.deltas[0].to_revision, revision);
+    assert_eq!(
+        result.deltas[0].to_revision,
+        ResourceRevision::from_graph_revision(revision)
+    );
     assert_eq!(
         result.projection_replacements[0].projection.source_revision,
         revision.get()
@@ -1013,7 +1031,7 @@ fn function_load_over_retained_revision_keeps_document_ledger_and_projection_equ
     assert_eq!(data.graphs[&path].document.revision, revision);
     assert_eq!(
         data.graphs[&path].function.as_ref().unwrap().revision,
-        revision
+        ResourceRevision::from_graph_revision(revision)
     );
     assert_eq!(state.graph_revisions.read().unwrap()[&path], revision);
     assert_eq!(projection.source_revision, revision.get());
@@ -1026,7 +1044,7 @@ fn function_load_over_retained_revision_keeps_document_ledger_and_projection_equ
     assert_eq!(data.graphs[&path].document.revision, reload_revision);
     assert_eq!(
         data.graphs[&path].function.as_ref().unwrap().revision,
-        reload_revision
+        ResourceRevision::from_graph_revision(reload_revision)
     );
     assert_eq!(
         state.graph_revisions.read().unwrap()[&path],
@@ -1501,7 +1519,7 @@ fn different_basis_request_compiles_after_authoritative_invalidation() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: node("yssbi.constant.int64"),

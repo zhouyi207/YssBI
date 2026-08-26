@@ -285,7 +285,7 @@ fn editor_connect_materializes_current_decompose_projection_and_preserves_orphan
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::from_uuid(uuid::Uuid::from_u128(0x406)),
                 EditorGraphMutationDto::Connect {
                     output: crate::node_system::document::PortAddressDto::from(projected.clone()),
@@ -310,7 +310,7 @@ fn editor_connect_materializes_current_decompose_projection_and_preserves_orphan
 
     let request = MutationRequest::new(
         ResourceKey::Graph(document_path()),
-        GraphRevision::INITIAL,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
         OperationId::from_uuid(uuid::Uuid::from_u128(0x404)),
         EditorGraphMutationDto::Connect {
             output: crate::node_system::document::PortAddressDto::from(projected),
@@ -371,7 +371,7 @@ fn editor_connect_materializes_current_decompose_projection_and_preserves_orphan
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::from_uuid(uuid::Uuid::from_u128(0x407)),
                 EditorGraphMutationDto::Connect {
                     output: crate::node_system::document::PortAddressDto::from(

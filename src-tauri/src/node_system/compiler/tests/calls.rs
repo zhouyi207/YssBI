@@ -36,7 +36,7 @@ fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
         protocol: counted,
         implementation: NodeImplementation::new(CountingLowerer(calls.clone())),
     };
-    let function_path = GraphResourcePath::new("functions/blocking").unwrap();
+    let function_path = GraphResourcePath::new("functions/blocking.yssbi-function").unwrap();
     let blocking_resources = FunctionResources {
         path: function_path.clone(),
         function: FunctionDocument::new(FunctionSignature {
@@ -49,7 +49,7 @@ fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
     for (name, target, expected_code) in [
         (
             "missing",
-            GraphResourcePath::new("functions/missing").unwrap(),
+            GraphResourcePath::new("functions/missing.yssbi-function").unwrap(),
             "compiler.resource.resolution_failed",
         ),
         (
@@ -136,8 +136,8 @@ fn nested_blocking_callee_projects_to_root_call_with_exact_basis() {
         protocol: counted,
         implementation: NodeImplementation::new(CountingLowerer(calls.clone())),
     };
-    let outer_path = GraphResourcePath::new("functions/outer").unwrap();
-    let inner_path = GraphResourcePath::new("functions/inner").unwrap();
+    let outer_path = GraphResourcePath::new("functions/outer.yssbi-function").unwrap();
+    let inner_path = GraphResourcePath::new("functions/inner.yssbi-function").unwrap();
     let signature = FunctionDocument::new(FunctionSignature {
         parameters: Vec::new(),
         return_type: None,
@@ -297,10 +297,10 @@ fn locally_invalid_callee_still_discovers_complete_outgoing_call_closure() {
             .unwrap()
             .registry,
     );
-    let path_a = GraphResourcePath::new("functions/local-invalid-a").unwrap();
-    let path_b = GraphResourcePath::new("functions/present-b").unwrap();
-    let path_c = GraphResourcePath::new("functions/missing-c").unwrap();
-    let path_d = GraphResourcePath::new("functions/transitive-d").unwrap();
+    let path_a = GraphResourcePath::new("functions/local-invalid-a.yssbi-function").unwrap();
+    let path_b = GraphResourcePath::new("functions/present-b.yssbi-function").unwrap();
+    let path_c = GraphResourcePath::new("functions/missing-c.yssbi-function").unwrap();
+    let path_d = GraphResourcePath::new("functions/transitive-d.yssbi-function").unwrap();
     let signature = FunctionDocument::new(FunctionSignature {
         parameters: Vec::new(),
         return_type: None,
@@ -446,9 +446,10 @@ fn mutual_call_scc_propagates_external_blocking_to_every_root_site() {
             .unwrap()
             .registry,
     );
-    let path_a = GraphResourcePath::new("functions/cycle-a").unwrap();
-    let path_b = GraphResourcePath::new("functions/cycle-b").unwrap();
-    let blocking_path = GraphResourcePath::new("functions/cycle-z-blocking").unwrap();
+    let path_a = GraphResourcePath::new("functions/cycle-a.yssbi-function").unwrap();
+    let path_b = GraphResourcePath::new("functions/cycle-b.yssbi-function").unwrap();
+    let blocking_path =
+        GraphResourcePath::new("functions/cycle-z-blocking.yssbi-function").unwrap();
     let signature = FunctionDocument::new(FunctionSignature {
         parameters: Vec::new(),
         return_type: None,
@@ -576,7 +577,7 @@ fn function_abi_managed_role_error_emits_expected_role_and_actual_count() {
     let registry = TestRegistry::new(vec![entry, return_node])
         .structural(&entry_type, StructuralNodeRole::FunctionEntry)
         .structural(&return_type, StructuralNodeRole::FunctionReturn);
-    let path = GraphResourcePath::new("functions/duplicate-entry").unwrap();
+    let path = GraphResourcePath::new("functions/duplicate-entry.yssbi-function").unwrap();
     let resources = FunctionResources {
         path: path.clone(),
         function: FunctionDocument::new(FunctionSignature {

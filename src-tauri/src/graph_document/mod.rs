@@ -1,5 +1,6 @@
 mod identity;
 mod model;
+mod name;
 mod resource_path;
 
 pub use identity::{ConnectionId, GraphRevision, NodeId, PortInstanceId, RevisionExhausted};
@@ -8,12 +9,16 @@ pub use model::{
     FunctionParameterId, GraphDocument, InputState, LastKnownPortMetadata, NodePosition, OrderKey,
     ParameterValues, PortAddress, PortRef, SchemaFieldIdentity, SchemaSourceIdentity, TypedValue,
 };
+pub(crate) use name::{ResourceNameValidationError, validate_resource_name};
 pub(crate) use resource_path::normalize_graph_resource_path;
 pub use resource_path::{GraphResourceKind, GraphResourcePath, GraphResourcePathError};
 
 #[cfg(test)]
 mod tests {
-    use super::{DocumentNode, GraphDocument, NodeId, NodePosition, ParameterValues, TypedValue};
+    use super::{
+        DocumentNode, GraphDocument, GraphResourcePath, GraphResourcePathError, NodeId,
+        NodePosition, ParameterValues, TypedValue,
+    };
     use crate::node_system::protocol::{NodeTypeId, ParameterKey};
     use serde_json::json;
 
@@ -65,5 +70,18 @@ mod tests {
             serde_json::from_value::<GraphDocument>(encoded).unwrap(),
             document
         );
+    }
+
+    #[test]
+    fn graph_resource_names_preserve_exact_unicode_validation() {
+        assert_eq!(
+            GraphResourcePath::new("events/Re\u{301}sume\u{301}.yssbi-event"),
+            Err(GraphResourcePathError::InvalidName)
+        );
+        assert_eq!(
+            GraphResourcePath::new("events/Sales\u{0345}.yssbi-event"),
+            Err(GraphResourcePathError::InvalidName)
+        );
+        assert!(GraphResourcePath::new("events/销售分析 2.yssbi-event").is_ok());
     }
 }

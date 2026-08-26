@@ -43,7 +43,7 @@ fn graph_patch_updates_node_content_reversibly() {
 
 #[test]
 fn patch_kind_mismatch_is_rejected_without_mutation() {
-    let path = graph_path("events/kind-mismatch");
+    let path = graph_path("events/kind-mismatch.yssbi-event");
 
     let function_patch = FunctionDocumentPatch::default();
     let resource_patch = ResourcePatch {

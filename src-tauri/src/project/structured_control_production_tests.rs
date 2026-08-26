@@ -1015,7 +1015,7 @@ fn builtin_call_uses_current_persisted_function_generation_after_body_replacemen
             &function_path,
             crate::node_system::document::MutationRequest::new(
                 ResourceKey::Graph(function_path.clone()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::UpdateNode {
                     before,

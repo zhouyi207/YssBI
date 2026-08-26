@@ -52,7 +52,7 @@ fn project_mutation_rejects_stale_revision_and_records_undo_history() {
     }]);
     let request = MutationRequest::new(
         ResourceKey::Graph(document_path()),
-        GraphRevision::INITIAL,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
         OperationId::new(),
         patch,
     );
@@ -60,8 +60,14 @@ fn project_mutation_rejects_stale_revision_and_records_undo_history() {
     let event = state
         .apply_graph_patch(&graph_path(), request.clone())
         .unwrap();
-    assert_eq!(event.from_revision, GraphRevision::INITIAL);
-    assert_eq!(event.to_revision, GraphRevision::new(1));
+    assert_eq!(
+        event.from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL)
+    );
+    assert_eq!(
+        event.to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
+    );
     assert!(matches!(
         state.apply_graph_patch(&graph_path(), request),
         Err(MutationConflict::StaleRevision { .. })
@@ -73,7 +79,7 @@ fn project_mutation_rejects_stale_revision_and_records_undo_history() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -102,7 +108,7 @@ fn project_projection_hydrates_localized_editor_dto() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 patch,
             ),
@@ -168,7 +174,7 @@ fn project_execution_publishes_persisted_function_plans() {
             &event,
             MutationRequest::new(
                 crate::node_system::document::ResourceKey::Graph(event.clone()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![
                     GraphDocumentOperation::InsertNode { node: call },
@@ -435,7 +441,7 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
             &function_path,
             MutationRequest::new(
                 ResourceKey::Graph(function_path.clone()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![
                     GraphDocumentOperation::RemoveConnection {
@@ -928,7 +934,7 @@ fn project_execution_refuses_blocking_analysis() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 patch,
             ),
@@ -1020,7 +1026,7 @@ fn project_variable_get_executes_against_authoritative_resource() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: variable_node,
@@ -1080,7 +1086,7 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![
                     GraphDocumentOperation::InsertNode { node: first_get },

@@ -1311,7 +1311,7 @@ mod materialization_tests {
         ]));
         let provenance = crate::node_system::analysis::CompileProvenance {
             project_session_id: ProjectSessionId::new("test-session"),
-            graph_path: GraphResourcePath::new("events/materialization").unwrap(),
+            graph_path: GraphResourcePath::new("events/materialization.yssbi-event").unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
@@ -1384,7 +1384,7 @@ mod materialization_tests {
         ]));
         let provenance = crate::node_system::analysis::CompileProvenance {
             project_session_id: ProjectSessionId::new("test-session"),
-            graph_path: GraphResourcePath::new("events/materialized-direct").unwrap(),
+            graph_path: GraphResourcePath::new("events/materialized-direct.yssbi-event").unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
@@ -1465,7 +1465,7 @@ mod materialization_tests {
         ]));
         let provenance = crate::node_system::analysis::CompileProvenance {
             project_session_id: ProjectSessionId::new("test-session"),
-            graph_path: GraphResourcePath::new("events/presentation-fanout").unwrap(),
+            graph_path: GraphResourcePath::new("events/presentation-fanout.yssbi-event").unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
@@ -1551,7 +1551,8 @@ mod materialization_tests {
         )]));
         let provenance = crate::node_system::analysis::CompileProvenance {
             project_session_id: ProjectSessionId::new("test-session"),
-            graph_path: GraphResourcePath::new("events/external-branch-fanout").unwrap(),
+            graph_path: GraphResourcePath::new("events/external-branch-fanout.yssbi-event")
+                .unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
@@ -1665,7 +1666,7 @@ mod materialization_tests {
         ]));
         let provenance = crate::node_system::analysis::CompileProvenance {
             project_session_id: ProjectSessionId::new("test-session"),
-            graph_path: GraphResourcePath::new("events/direct-loop-body").unwrap(),
+            graph_path: GraphResourcePath::new("events/direct-loop-body.yssbi-event").unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
@@ -1750,7 +1751,8 @@ mod materialization_tests {
         ]));
         let provenance = crate::node_system::analysis::CompileProvenance {
             project_session_id: ProjectSessionId::new("test-session"),
-            graph_path: GraphResourcePath::new("events/reverse-operation-block").unwrap(),
+            graph_path: GraphResourcePath::new("events/reverse-operation-block.yssbi-event")
+                .unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),

@@ -29,7 +29,7 @@ fn builtin_function_resolver_projects_function_document_members() {
     }
 
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let path = GraphResourcePath::new("functions/calculate-sales").unwrap();
+    let path = GraphResourcePath::new("functions/calculate-sales.yssbi-function").unwrap();
     let resources = FunctionResources {
         path: path.clone(),
         document: FunctionDocument::new(FunctionSignature {

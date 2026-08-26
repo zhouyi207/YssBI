@@ -589,7 +589,7 @@ mod tests {
         PendingOutputDescriptor {
             value: ValueRef::new(value),
             output: Some(GraphOutputRef {
-                graph_path: GraphResourcePath::new("events/test").unwrap(),
+                graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
                 port: PortAddress::declared(
                     NodeId::from_uuid(uuid::Uuid::nil()),
                     PortKey::new(port_key).unwrap(),
@@ -612,7 +612,7 @@ mod tests {
         ActivationProvenance {
             run_id: RunId::new(run),
             activation_id: ActivationId::next().unwrap(),
-            graph_path: GraphResourcePath::new("events/test").unwrap(),
+            graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
             graph_revision: GraphRevision::new(8),
             node_id: NodeId::from_uuid(uuid::Uuid::nil()),
             created_at_ms: run,
@@ -643,7 +643,7 @@ mod tests {
 
         let mut wrong_graph = test_outputs(["result"]);
         wrong_graph[0].output.as_mut().unwrap().graph_path =
-            GraphResourcePath::new("events/other").unwrap();
+            GraphResourcePath::new("events/other.yssbi-event").unwrap();
         assert!(matches!(
             store.create_pending_group(test_provenance(6), &wrong_graph),
             Err(ResultStoreError::OutputGraphMismatch(_))

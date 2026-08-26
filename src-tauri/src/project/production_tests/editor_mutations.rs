@@ -16,7 +16,10 @@ fn editor_mutation_returns_correlated_delta_projection_and_history_status() {
         .unwrap();
 
     assert_eq!(result.delta.caused_by, Some(operation_id));
-    assert_eq!(result.delta.from_revision, GraphRevision::INITIAL);
+    assert_eq!(
+        result.delta.from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL)
+    );
     assert_eq!(
         result.delta.to_revision.get(),
         result.projection_replacement.projection.source_revision
@@ -80,7 +83,7 @@ fn dynamic_merge_input_create_and_connect_serializes_parseable_internal_failure(
             "zh-CN",
             MutationRequest::new(
                 ResourceKey::Graph(path.clone()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 EditorGraphMutationDto::CreateNode {
                     descriptor: crate::node_system::catalog::NodeCreationDescriptor::Static {
@@ -98,7 +101,10 @@ fn dynamic_merge_input_create_and_connect_serializes_parseable_internal_failure(
     assert_eq!(outcome["type"], "internalFailure");
     assert!(outcome.get("nodeId").is_some());
     assert!(outcome.get("node_id").is_none());
-    assert_eq!(result.delta.to_revision, GraphRevision::new(2));
+    assert_eq!(
+        result.delta.to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(2))
+    );
 
     let merge_projection = result
         .projection_replacement
@@ -145,7 +151,7 @@ fn stale_editor_mutation_rejects_without_consuming_history() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -197,14 +203,17 @@ fn undo_redo_return_atomic_replacements_and_current_history_status() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
             |_| {},
         )
         .unwrap();
-    assert_eq!(undo.deltas[0].to_revision, GraphRevision::new(2));
+    assert_eq!(
+        undo.deltas[0].to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(2))
+    );
     assert_eq!(undo.projection_replacements.len(), 1);
     assert_eq!(
         undo.projection_status,
@@ -230,14 +239,17 @@ fn undo_redo_return_atomic_replacements_and_current_history_status() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
             |_| {},
         )
         .unwrap();
-    assert_eq!(redo.deltas[0].to_revision, GraphRevision::new(3));
+    assert_eq!(
+        redo.deltas[0].to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(3))
+    );
     assert_eq!(redo.projection_replacements.len(), 1);
     assert_eq!(
         redo.projection_status,

@@ -373,7 +373,7 @@ fn production_diagnostics_emit_canonical_protocol_enum_facts() {
     let scope_result = scope_compiler
         .compile_snapshot(
             &scope_compiler.snapshot(
-                GraphResourcePath::new("events/canonical-facts").unwrap(),
+                GraphResourcePath::new("events/canonical-facts.yssbi-event").unwrap(),
                 &scope_graph,
             ),
             &CompileCancellationToken::new(),

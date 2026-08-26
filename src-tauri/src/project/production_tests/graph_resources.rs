@@ -326,7 +326,7 @@ fn resource_descriptor_request(
 ) -> MutationRequest<EditorGraphMutationDto> {
     MutationRequest::new(
         ResourceKey::Graph(document_path()),
-        GraphRevision::INITIAL,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
         OperationId::new(),
         EditorGraphMutationDto::CreateNode {
             descriptor: crate::node_system::catalog::NodeCreationDescriptor::ResourceBound {
@@ -411,18 +411,18 @@ fn resource_descriptor_matrix_request(
     base_revision: GraphRevision,
     node_type_id: &str,
     resource_path: impl Into<Box<str>>,
-    resource_revision: impl Into<ResourceRevision>,
+    resource_revision: GraphRevision,
     create_args: crate::node_system::catalog::ResourceBoundCreateArgsDto,
 ) -> MutationRequest<EditorGraphMutationDto> {
     MutationRequest::new(
         ResourceKey::Graph(document_path()),
-        base_revision,
+        ResourceRevision::from_graph_revision(base_revision),
         OperationId::new(),
         EditorGraphMutationDto::CreateNode {
             descriptor: crate::node_system::catalog::NodeCreationDescriptor::ResourceBound {
                 node_type_id: NodeTypeId::new(node_type_id).unwrap(),
                 resource_path: crate::node_system::catalog::CatalogResourcePath::new(resource_path),
-                resource_revision: resource_revision.into(),
+                resource_revision: ResourceRevision::from_graph_revision(resource_revision),
                 create_args,
             },
             position: crate::graph_document::NodePosition { x: 10.0, y: 20.0 },
@@ -789,8 +789,14 @@ fn resource_descriptor_publication_materializes_exact_variable_binding() {
         )
         .unwrap();
 
-    assert_eq!(result.delta.from_revision, GraphRevision::INITIAL);
-    assert_eq!(result.delta.to_revision, GraphRevision::new(1));
+    assert_eq!(
+        result.delta.from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL)
+    );
+    assert_eq!(
+        result.delta.to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
+    );
     let data = state.get_data().unwrap();
     let node = data.graphs[&graph_path()]
         .document

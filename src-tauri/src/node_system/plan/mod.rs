@@ -63,7 +63,7 @@ mod tests {
 
     fn valid_plan() -> ExecutionPlan {
         let result_output = GraphOutputRef {
-            graph_path: GraphResourcePath::new("events/test").unwrap(),
+            graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
             port: PortAddress::declared(
                 NodeId::from_uuid(uuid::Uuid::nil()),
                 PortKey::new("result").unwrap(),
@@ -72,7 +72,7 @@ mod tests {
         ExecutionPlan {
             provenance: CompileProvenance {
                 project_session_id: ProjectSessionId::new("test-session"),
-                graph_path: GraphResourcePath::new("events/test").unwrap(),
+                graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
                 basis: CompilationBasis {
                     graph_revision: GraphRevision::new(7),
                     registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
@@ -204,7 +204,7 @@ mod tests {
     fn validation_rejects_wrong_public_output_graph_and_node() {
         let mut wrong_graph = valid_plan();
         wrong_graph.operations[0].outputs[0].public_output = Some(GraphOutputRef {
-            graph_path: GraphResourcePath::new("events/other").unwrap(),
+            graph_path: GraphResourcePath::new("events/other.yssbi-event").unwrap(),
             port: PortAddress::declared(
                 wrong_graph.operations[0].source_node_id,
                 PortKey::new("result").unwrap(),
@@ -311,7 +311,7 @@ mod tests {
             PlanResult {
                 name: "result".into(),
                 output: GraphOutputRef {
-                    graph_path: GraphResourcePath::new("events/test").unwrap(),
+                    graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
                     port: PortAddress::declared(
                         NodeId::from_uuid(uuid::Uuid::nil()),
                         PortKey::new("other").unwrap(),

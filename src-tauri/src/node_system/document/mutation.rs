@@ -49,15 +49,15 @@ pub struct MutationRequest<T> {
 }
 
 impl<T> MutationRequest<T> {
-    pub fn new(
+    pub const fn new(
         resource: ResourceKey,
-        base_revision: impl Into<ResourceRevision>,
+        base_revision: ResourceRevision,
         operation_id: OperationId,
         payload: T,
     ) -> Self {
         Self {
             resource,
-            base_revision: base_revision.into(),
+            base_revision,
             operation_id,
             payload,
         }

@@ -195,7 +195,7 @@ mod run_parameter_tests {
         ExecutionPlan {
             provenance: CompileProvenance {
                 project_session_id: ProjectSessionId::new("run-parameter-test"),
-                graph_path: GraphResourcePath::new("events/test").unwrap(),
+                graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
                 basis: CompilationBasis {
                     graph_revision: GraphRevision::new(1),
                     registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),

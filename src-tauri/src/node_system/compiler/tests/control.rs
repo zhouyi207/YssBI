@@ -203,7 +203,7 @@ fn branch_builds_exclusive_true_and_false_regions() {
 
     let compiler = GraphCompiler::new(&registry, &Resources);
     let snapshot = compiler.snapshot(
-        GraphResourcePath::new("events/branch-demand").unwrap(),
+        GraphResourcePath::new("events/branch-demand.yssbi-event").unwrap(),
         &graph,
     );
     let mut result = compiler
@@ -264,7 +264,11 @@ fn branch_builds_exclusive_true_and_false_regions() {
     }
     let disconnected = disconnected_basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/branch-demand", 9, "value")]),
+            outputs: Box::new([demand_output(
+                "events/branch-demand.yssbi-event",
+                9,
+                "value",
+            )]),
             include_default_results: false,
         })
         .expect("a disconnected If with results is deleted without orphan declarations");
@@ -958,7 +962,7 @@ fn loop_uses_explicit_condition_limit_and_carried_bindings() {
 
     let compiler = GraphCompiler::new(&registry, &Resources);
     let snapshot = compiler.snapshot(
-        GraphResourcePath::new("events/loop-demand").unwrap(),
+        GraphResourcePath::new("events/loop-demand.yssbi-event").unwrap(),
         &graph,
     );
     let mut result = compiler
@@ -1029,7 +1033,7 @@ fn loop_uses_explicit_condition_limit_and_carried_bindings() {
     body_eager.effects = EffectSemantics::None;
     let disconnected = disconnected_basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/loop-demand", 9, "value")]),
+            outputs: Box::new([demand_output("events/loop-demand.yssbi-event", 9, "value")]),
             include_default_results: false,
         })
         .expect("a disconnected carried Loop is deleted without orphan declarations");

@@ -596,7 +596,7 @@ fn phase2_reroute_compile_called_function_is_transparent_to_dependency_lowering(
     }
 
     let builtin = crate::node_system::catalog::build_builtin_node_system().unwrap();
-    let path = GraphResourcePath::new("functions/reroute-callee").unwrap();
+    let path = GraphResourcePath::new("functions/reroute-callee.yssbi-function").unwrap();
     let mut callee = GraphDocument::default();
     add_node(&mut callee, 20, "yssbi.project.function.entry");
     add_node(&mut callee, 21, CONTROL_REROUTE_NODE_TYPE);

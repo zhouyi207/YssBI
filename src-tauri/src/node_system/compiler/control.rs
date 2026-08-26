@@ -1290,7 +1290,7 @@ mod tests {
             .unwrap()
             .protocol();
         let call_id = node_id(10);
-        let function_path = GraphResourcePath::new("functions/customer").unwrap();
+        let function_path = GraphResourcePath::new("functions/customer.yssbi-function").unwrap();
         let parameter_id = crate::graph_document::FunctionParameterId::new("customer_id");
         let first = PortAddress::instance(
             call_id,

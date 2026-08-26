@@ -452,7 +452,8 @@ fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) ->
         .map(|value| PlanResult {
             name: format!("value_{value}").into(),
             output: GraphOutputRef {
-                graph_path: GraphResourcePath::new("events/builtin-kernel-test").unwrap(),
+                graph_path: GraphResourcePath::new("events/builtin-kernel-test.yssbi-event")
+                    .unwrap(),
                 port: PortAddress::declared(
                     NodeId::from_uuid(uuid::Uuid::nil()),
                     PortKey::new(format!("value_{value}")).unwrap(),
@@ -474,7 +475,7 @@ fn plan(operations: Vec<PlannedOperation>, value_count: u32, results: &[u32]) ->
     ExecutionPlan {
         provenance: CompileProvenance {
             project_session_id: ProjectSessionId::new("builtin-kernel-test"),
-            graph_path: GraphResourcePath::new("events/builtin-kernel-test").unwrap(),
+            graph_path: GraphResourcePath::new("events/builtin-kernel-test.yssbi-event").unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([7; 32]),

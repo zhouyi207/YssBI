@@ -757,7 +757,10 @@ fn demand_fixture() -> (TestRegistry, GraphDocument) {
 fn compiled_demand_basis() -> ExecutionPlanBasis {
     let (registry, graph) = demand_fixture();
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath::new("events/main").unwrap(), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/main.yssbi-event").unwrap(),
+        &graph,
+    );
     compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap()
@@ -1378,7 +1381,7 @@ fn structured_function_plan(
     let result = FunctionParameterId::new("return");
     let provenance = crate::node_system::analysis::CompileProvenance {
         project_session_id: ProjectSessionId::new("project-a"),
-        graph_path: GraphResourcePath::new("functions/structured-result").unwrap(),
+        graph_path: GraphResourcePath::new("functions/structured-result.yssbi-function").unwrap(),
         basis: crate::node_system::analysis::CompilationBasis {
             graph_revision: crate::graph_document::GraphRevision::new(1),
             registry_fingerprint: RegistryFingerprint::from_bytes([7; 32]),

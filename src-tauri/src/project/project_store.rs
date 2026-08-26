@@ -101,7 +101,7 @@ mod tests {
                 ActivationProvenance {
                     run_id: RunId::new(1),
                     activation_id,
-                    graph_path: GraphResourcePath::new("events/replaced").unwrap(),
+                    graph_path: GraphResourcePath::new("events/replaced.yssbi-event").unwrap(),
                     graph_revision: GraphRevision::new(1),
                     node_id: NodeId::from_uuid(uuid::Uuid::nil()),
                     created_at_ms: 1,

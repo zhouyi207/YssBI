@@ -335,7 +335,7 @@ fn phase1_collection_editor_mutation_wire_is_stable_and_camel_case() {
 fn history_transaction_rejects_missing_persistence() {
     let transaction = ProjectHistoryTransaction::graph(
         operation_id(629),
-        graph_path("events/strict-history"),
+        graph_path("events/strict-history.yssbi-event"),
         GraphRevision::INITIAL,
         GraphDocumentPatch::new(Vec::new()),
     );
@@ -380,7 +380,7 @@ fn history_persistence_policies_round_trip() {
     let transactions = [
         ProjectHistoryTransaction::graph(
             operation_id(630),
-            graph_path("events/in-memory-history"),
+            graph_path("events/in-memory-history.yssbi-event"),
             GraphRevision::INITIAL,
             GraphDocumentPatch::new(Vec::new()),
         ),
@@ -391,8 +391,8 @@ fn history_persistence_policies_round_trip() {
         ),
         ProjectHistoryTransaction::graph_move(
             operation_id(632),
-            graph_path("events/before-move"),
-            graph_path("events/after-move"),
+            graph_path("events/before-move.yssbi-event"),
+            graph_path("events/after-move.yssbi-event"),
             json!({}),
         ),
     ];

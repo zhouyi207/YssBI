@@ -42,7 +42,7 @@ fn id<T>(value: &str, constructor: impl FnOnce(Box<str>) -> Result<T, InvalidPla
 
 fn stable_output(port_key: &str) -> GraphOutputRef {
     GraphOutputRef {
-        graph_path: GraphResourcePath::new("events/test").unwrap(),
+        graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
         port: PortAddress::declared(
             NodeId::from_uuid(uuid::Uuid::nil()),
             PortKey::new(port_key).unwrap(),
@@ -146,7 +146,7 @@ fn plan(
     ExecutionPlan {
         provenance: CompileProvenance {
             project_session_id: ProjectSessionId::new("test-session"),
-            graph_path: GraphResourcePath::new("events/test").unwrap(),
+            graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),

@@ -1383,7 +1383,7 @@ fn project_state_insert_subgraph_raw_json_preserves_complex_patch_projection_and
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(export.graph_path.clone()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 EditorGraphMutationDto::InsertSubgraph {
                     snapshot_json,
@@ -1428,7 +1428,7 @@ fn project_state_insert_subgraph_raw_json_preserves_complex_patch_projection_and
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(export.graph_path.clone()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -1446,7 +1446,7 @@ fn project_state_insert_subgraph_raw_json_preserves_complex_patch_projection_and
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(export.graph_path),
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 OperationId::new(),
                 HistoryMutation {},
             ),

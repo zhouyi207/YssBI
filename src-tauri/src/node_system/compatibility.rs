@@ -875,17 +875,17 @@ mod tests {
         };
         let projection = EditorGraphProjectionDto {
             basis: crate::node_system::analysis::ProjectionBasis {
-                graph_path: "events/main".into(),
+                graph_path: "events/main.yssbi-event".into(),
                 graph_revision: 0,
                 registry_fingerprint: crate::node_system::registry::RegistryFingerprint::from_bytes(
                     [0; 32],
                 ),
                 resource_versions: BTreeMap::new(),
             },
-            graph_path: "events/main".into(),
+            graph_path: "events/main.yssbi-event".into(),
             source_revision: 0,
             nodes: vec![crate::node_system::analysis::EditorNodeProjectionDto {
-                graph_path: "events/main".into(),
+                graph_path: "events/main.yssbi-event".into(),
                 source_revision: 0,
                 node_id: node_id.to_string().into(),
                 node_type_id: "yssbi.constant.int64".into(),
@@ -1043,7 +1043,7 @@ mod tests {
         let snapshot = snapshot(Vec::new(), BTreeMap::new());
         let catalog = compatible_catalog(
             &snapshot,
-            &GraphResourcePath::new("events/main").unwrap(),
+            &GraphResourcePath::new("events/main.yssbi-event").unwrap(),
             &source(DataType::Int64),
             "en-US",
         );
@@ -1117,13 +1117,13 @@ mod tests {
         );
         let int_catalog = compatible_catalog(
             &snapshot,
-            &GraphResourcePath::new("events/main").unwrap(),
+            &GraphResourcePath::new("events/main.yssbi-event").unwrap(),
             &source(DataType::Int64),
             "en-US",
         );
         let bool_catalog = compatible_catalog(
             &snapshot,
-            &GraphResourcePath::new("events/main").unwrap(),
+            &GraphResourcePath::new("events/main.yssbi-event").unwrap(),
             &source(DataType::Boolean),
             "en-US",
         );
