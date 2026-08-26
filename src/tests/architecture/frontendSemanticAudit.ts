@@ -1,5 +1,9 @@
+import { relative } from 'node:path';
 import * as ts from 'typescript/unstable/ast';
-import type { Symbol as TypeScriptSymbol } from 'typescript/unstable/sync';
+import type {
+  Symbol as TypeScriptSymbol,
+  Type as TypeScriptType,
+} from 'typescript/unstable/sync';
 
 import type {
   ArchitectureSource,
@@ -7,7 +11,10 @@ import type {
 } from '@/tests/helpers/moduleDependencyAudit';
 import { resolvedModuleDependencies } from '@/tests/helpers/moduleDependencyAudit';
 import { rawTauriInvokeOccurrences } from '@/tests/helpers/tauriInvokeAudit';
-import type { TypeScriptAuditProject } from '@/tests/helpers/typescriptAudit';
+import {
+  normalizeTypeScriptPath,
+  type TypeScriptAuditProject,
+} from '@/tests/helpers/typescriptAudit';
 import { classifyFrontendSources } from './frontendArchitecturePolicy';
 import type {
   FrontendArchitecturePolicy,
@@ -48,6 +55,21 @@ function findingSort(left: FrontendFinding, right: FrontendFinding): number {
     right.line.toString().padStart(8, '0'),
     right.column.toString().padStart(8, '0'),
   ].join('\u0000'));
+}
+
+function findingIdentity(finding: FrontendFinding): string {
+  return JSON.stringify([
+    finding.ruleId,
+    finding.repositoryRelativeSourceFile,
+    finding.fullyQualifiedOwner,
+    finding.dependencyKind,
+    finding.canonicalOriginTarget,
+    finding.sourceLayer,
+    finding.targetLayer,
+    finding.importedSymbol,
+    finding.line,
+    finding.column,
+  ]);
 }
 
 function locationOf(sourceFile: ts.SourceFile, node: ts.Node): { line: number; column: number } {
@@ -173,6 +195,45 @@ function importedDependencyForExpression(
   return null;
 }
 
+function canonicalTypeSymbolTarget(
+  context: TypeScriptAuditProject,
+  symbol: TypeScriptSymbol,
+): string | null {
+  const paths = symbol.declarations.flatMap((handle) => {
+    const declaration = handle.resolve(context.project);
+    if (!declaration) return [];
+    const path = normalizeTypeScriptPath(relative(
+      context.sourceRoot,
+      declaration.getSourceFile().fileName,
+    ));
+    return path.startsWith('src/') ? [`${path}::${symbol.name}`] : [];
+  }).sort();
+  return paths[0] ?? null;
+}
+
+function typeSymbols(type: TypeScriptType): readonly TypeScriptSymbol[] {
+  const symbols = [type.getAliasSymbol(), type.getSymbol()]
+    .filter((symbol): symbol is TypeScriptSymbol => symbol !== undefined);
+  return [...new Map(symbols.map((symbol) => [symbol.id, symbol])).values()];
+}
+
+function typedDependencyForExpression(
+  expression: ts.Expression,
+  context: TypeScriptAuditProject,
+  dependencies: readonly ResolvedModuleDependency[],
+): ResolvedModuleDependency | null {
+  const type = context.checker.getTypeAtLocation(expression);
+  if (!type || type.isErrorType()) return null;
+  const targets = typeSymbols(type).flatMap((symbol) => {
+    const target = canonicalTypeSymbolTarget(context, symbol);
+    return target === null ? [] : [target];
+  });
+  return dependencies.find((dependency) => (
+    dependency.symbolDeclarationTarget !== null
+    && targets.includes(dependency.symbolDeclarationTarget)
+  )) ?? null;
+}
+
 function memberCapabilityAllows(
   capability: FrontendResolvedCapability,
   member: string,
@@ -258,10 +319,35 @@ function auditSourceExpressions(
 ): FrontendFinding[] {
   const sourceFile = context.sourceFile(source.path);
   const bindings = importedBindings(context, sourceFile, dependencies);
+  const hasMemberCapabilities = policy.capabilities.some((capability) => (
+    capability.sourceLayer === sourceLayer && capability.memberCapabilities !== null
+  ));
   const findings: FrontendFinding[] = [];
   const visit = (node: ts.Node): void => {
-    if (ts.isPropertyAccessExpression(node)) {
+    if (ts.isCallExpression(node)) {
       const dependency = importedDependencyForExpression(node.expression, context, bindings);
+      if (dependency?.origin.kind === 'external'
+        && dependency.origin.dependency.packageName === '@tauri-apps/api'
+        && dependency.origin.dependency.canonicalSubpath === 'core'
+        && dependency.importedSymbol === 'invoke'
+        && source.path !== RAW_INVOKE_ADAPTER) {
+        findings.push(semanticFinding(
+          'frontend.invoke.raw',
+          source.path,
+          sourceLayer,
+          'call',
+          dependency.canonicalOriginTarget,
+          null,
+          dependency.importedSymbol,
+          locationOf(sourceFile, node),
+        ));
+      }
+    }
+    if (ts.isPropertyAccessExpression(node)) {
+      const dependency = importedDependencyForExpression(node.expression, context, bindings)
+        ?? (hasMemberCapabilities
+          ? typedDependencyForExpression(node.expression, context, dependencies)
+          : null);
       if (dependency?.origin.kind === 'repository-module') {
         const targetLayer = classification.get(dependency.origin.declarationTarget) ?? null;
         const capability = exactCapability(policy, dependency, sourceLayer);
@@ -311,12 +397,18 @@ function auditSourceExpressions(
       }
     }
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const namespaceMember = ts.isPropertyAccessExpression(node.tagName)
+        ? node.tagName.name.text
+        : null;
       const dependency = ts.isIdentifier(node.tagName)
         ? importedDependencyForExpression(node.tagName, context, bindings)
-        : null;
+        : ts.isPropertyAccessExpression(node.tagName)
+          ? importedDependencyForExpression(node.tagName.expression, context, bindings)
+          : null;
       if (dependency?.origin.kind === 'external'
         && dependency.origin.dependency.packageName === 'dockview-react'
-        && dependency.importedSymbol === 'DockviewReact') {
+        && (dependency.importedSymbol === 'DockviewReact'
+          || (dependency.importedSymbol === null && namespaceMember === 'DockviewReact'))) {
         const rule = dockviewRule(source.path);
         if (source.path !== rule.allowedPath) {
           findings.push(semanticFinding(
@@ -344,7 +436,14 @@ export function auditFrontendSemantics(
   policy: FrontendArchitecturePolicy,
 ): readonly FrontendFinding[] {
   const sourcePaths = new Set(sources.map(({ path }) => path));
-  const classification = classifyFrontendSources(sources).classification;
+  const classificationReport = classifyFrontendSources(sources);
+  if (classificationReport.errors.length > 0) {
+    const details = classificationReport.errors.map((error) => (
+      `${error.kind}:${error.sourceFile}`
+    )).sort().join(',');
+    throw new Error(`Frontend semantic audit requires total source classification: ${details}`);
+  }
+  const classification = classificationReport.classification;
   const findings: FrontendFinding[] = rawTauriInvokeOccurrences(context)
     .filter((occurrence) => sourcePaths.has(occurrence.repositoryRelativeSourceFile)
       && occurrence.repositoryRelativeSourceFile !== RAW_INVOKE_ADAPTER)
@@ -361,7 +460,7 @@ export function auditFrontendSemantics(
 
   for (const source of sources) {
     const sourceLayer = classification.get(source.path);
-    if (!sourceLayer || !['application', 'services', 'views'].includes(sourceLayer)) continue;
+    if (!sourceLayer) continue;
     const dependencies = resolvedModuleDependencies(context, source);
     findings.push(...auditResolvedImports(
       source,
@@ -379,5 +478,8 @@ export function auditFrontendSemantics(
       policy,
     ));
   }
-  return findings.sort(findingSort);
+  return [...new Map(findings.map((finding) => [
+    findingIdentity(finding),
+    finding,
+  ])).values()].sort(findingSort);
 }

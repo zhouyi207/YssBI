@@ -35,6 +35,14 @@ const fixtureSources = new Map<string, string>([
     import { invoke } from '@tauri-apps/api/core';
     export const RawInvokeView = () => invoke('raw_view_command');
   `],
+  ['src/services/tauriCoreBarrel.ts', `
+    import { invoke } from '@tauri-apps/api/core';
+    export { invoke };
+  `],
+  ['src/services/rawInvokeBarrelConsumer.ts', `
+    import { invoke } from './tauriCoreBarrel';
+    export const callRawBackend = () => invoke('raw_barrel_command');
+  `],
   ['src/services/platform/pathDialog.ts', `
     import { open } from '@tauri-apps/plugin-dialog';
     export const selectPath = () => open();
@@ -42,6 +50,10 @@ const fixtureSources = new Map<string, string>([
   ['src/views/RawDialogView.tsx', `
     import { open } from '@tauri-apps/plugin-dialog';
     export const RawDialogView = () => open();
+  `],
+  ['src/features/core/fixture/RawDialogCore.ts', `
+    import { open } from '@tauri-apps/plugin-dialog';
+    export const openFromCore = () => open();
   `],
   ['src/features/core/fixture/projectionPublisher.ts', `
     export const projectionPublisher = { publish: (_value: unknown) => undefined };
@@ -63,6 +75,19 @@ const fixtureSources = new Map<string, string>([
     import { projectionRead } from '../features/core/fixture/projectionRead';
     projectionRead.getSnapshot();
     projectionRead.setState({ revision: 2 });
+  `],
+  ['src/features/core/fixture/workbenchDockviewPort.ts', `
+    export interface WorkbenchDockviewPort {
+      getSnapshot(): Readonly<{ revision: number }>;
+      openEditor(resourceRef: string): Promise<void>;
+    }
+  `],
+  ['src/views/TypedProjectionReadView.tsx', `
+    import type { WorkbenchDockviewPort } from '../features/core/fixture/workbenchDockviewPort';
+    export function inspectPort(port: WorkbenchDockviewPort): void {
+      port.getSnapshot();
+      void port.openEditor('events/main');
+    }
   `],
   ['src/features/core/fixture/projectionStore.ts', `
     export const useProjectionStore = { setState: (_value: unknown) => undefined };
@@ -94,6 +119,10 @@ const fixtureSources = new Map<string, string>([
     import { DockviewReact } from 'dockview-react';
     export const OtherWorkspace = () => <DockviewReact />;
   `],
+  ['src/views/EditorView/Layout/NamespaceWorkspace.tsx', `
+    import * as Dockview from 'dockview-react';
+    export const NamespaceWorkspace = () => <Dockview.DockviewReact />;
+  `],
   ['src/views/LogView/OtherLogWorkspace.tsx', `
     import { DockviewReact } from 'dockview-react';
     export const OtherLogWorkspace = () => <DockviewReact />;
@@ -119,6 +148,15 @@ const fixturePolicy: FrontendArchitecturePolicy = {
       exactConsumers: null,
       memberCapabilities: {
         ProjectionRead: ['getSnapshot'],
+      },
+    },
+    {
+      sourceLayer: 'views',
+      canonicalModule: 'src/features/core/fixture/workbenchDockviewPort.ts',
+      exportedSymbols: ['WorkbenchDockviewPort'],
+      exactConsumers: null,
+      memberCapabilities: {
+        WorkbenchDockviewRead: ['getSnapshot'],
       },
     },
   ],
@@ -153,6 +191,12 @@ describe('frontend semantic architecture', () => {
         },
         {
           ruleId: 'frontend.dialog.raw',
+          sourceFile: 'src/features/core/fixture/RawDialogCore.ts',
+          dependencyKind: 'static-import',
+          canonicalOriginTarget: 'external:@tauri-apps/plugin-dialog',
+        },
+        {
+          ruleId: 'frontend.dialog.raw',
           sourceFile: 'src/views/RawDialogView.tsx',
           dependencyKind: 'static-import',
           canonicalOriginTarget: 'external:@tauri-apps/plugin-dialog',
@@ -165,9 +209,21 @@ describe('frontend semantic architecture', () => {
         },
         {
           ruleId: 'frontend.dockview.root-constructor',
+          sourceFile: 'src/views/EditorView/Layout/NamespaceWorkspace.tsx',
+          dependencyKind: 'constructor',
+          canonicalOriginTarget: 'external:dockview-react',
+        },
+        {
+          ruleId: 'frontend.dockview.root-constructor',
           sourceFile: 'src/views/EditorView/Layout/OtherWorkspace.tsx',
           dependencyKind: 'constructor',
           canonicalOriginTarget: 'external:dockview-react',
+        },
+        {
+          ruleId: 'frontend.invoke.raw',
+          sourceFile: 'src/services/rawInvokeBarrelConsumer.ts',
+          dependencyKind: 'call',
+          canonicalOriginTarget: 'external:@tauri-apps/api::core',
         },
         {
           ruleId: 'frontend.invoke.raw',
@@ -180,6 +236,12 @@ describe('frontend semantic architecture', () => {
           sourceFile: 'src/views/ProjectionReadView.tsx',
           dependencyKind: 'property-access',
           canonicalOriginTarget: 'src/features/core/fixture/projectionRead.ts::projectionRead',
+        },
+        {
+          ruleId: 'frontend.projection-read-mutation',
+          sourceFile: 'src/views/TypedProjectionReadView.tsx',
+          dependencyKind: 'property-access',
+          canonicalOriginTarget: 'src/features/core/fixture/workbenchDockviewPort.ts::WorkbenchDockviewPort',
         },
         {
           ruleId: 'frontend.service-projection-write',
@@ -201,6 +263,20 @@ describe('frontend semantic architecture', () => {
         },
       ]);
     });
+
+    withIsolatedTypeScriptProject(
+      new Map([['src/unclassified.ts', 'export const unclassified = true;']]),
+      (context) => {
+        expect(() => auditFrontendSemantics(
+          context,
+          productionTypeScriptSources(context),
+          fixturePolicy,
+        )).toThrowError(
+          'Frontend semantic audit requires total source classification: '
+          + 'unclassified-production-source:src/unclassified.ts',
+        );
+      },
+    );
   });
 
   it('frontend production architecture matches dependency and semantic policy', () => {

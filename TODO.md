@@ -1469,3 +1469,6 @@ Execution 不知道具体 UI
 - [ ] 用唯一 table-driven fixture 冻结九个 stable semantic rule IDs，并覆盖 canonical IPC adapter、path-dialog service、approved read member 与 root/Logs Dockview exact paths。
 - [ ] 将 236 个 reviewed semantic exact keys 合并进既有五字段 frontend debt manifest，与原有 610 个 dependency keys 通过同一 comparator 双向匹配。
 - [ ] 在 unified production architecture assertion 通过后退役重复 regex/architecture blocks，同时保留 project command identity、stale-result、editor projection behavior 与 node/observability/user-feedback contracts。
+- [ ] 补齐 policy-approved read interface 的 typed receiver 追踪，通过 checker type 与 canonical declaration symbol 拒绝局部参数调用未批准 authority member。
+- [ ] 让 raw invoke call audit 识别经 repository barrel 解析到 `@tauri-apps/api/core::invoke` 的 canonical symbol，并与直接 binding helper 按完整 occurrence identity 去重。
+- [ ] 支持 namespace `DockviewReact` JSX constructor，移除 semantic audit 的生产层过滤，并使 zero/multiple frontend classification errors 在扫描前 fail-closed。
