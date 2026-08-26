@@ -1419,3 +1419,9 @@ Execution 不知道具体 UI
 - [ ] 全量切换 Variable、Project、Schema、Commands、Graph、Node System、Runtime、Database、Tabular、SCI 与对应测试到 canonical `data_contract` 路径，并删除 Graph 旧声明与 re-export。
 - [ ] 为 typed `DataTypeParseError`、persisted value wire、单一 Pure Leaf owner 与 Graph 无 compatibility re-export 增加 focused regression。
 - [ ] 将 `data_contract` 三个 exact files 设为 literal Pure Leaf、将 Graph type-system behavior 设为 exact Graph classification，移除 contract namespace fallback，并精确删除已消失的三条 `num_traits` architecture debt occurrence。
+
+## 2026.08.27
+
+- [ ] 将 persisted value canonical-owner architecture guard 改为 typed required/allowed exact-origin 策略，保持五个 contract symbol 的单一 data-contract owner。
+- [ ] 允许独立 SCI `CategoricalRole` 仅来自 `src-tauri/src/sci/api/computation.rs`，同时拒绝任意 SCI owner 与 SCI 对 persisted role 的 re-export/alias。
+- [ ] 增加 focused regression，覆盖批准的双 owner 集合与未批准来源拒绝路径，并运行 Rust architecture、格式、编译及 diff 校验。

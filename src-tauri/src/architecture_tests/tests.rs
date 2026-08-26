@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
@@ -440,6 +440,27 @@ fn rust_production_sources_are_classified_once() {
     );
 }
 
+#[derive(Debug)]
+struct CanonicalOwnerExpectation {
+    symbol: &'static str,
+    required_origin: &'static str,
+    allowed_origins: &'static [&'static str],
+}
+
+fn canonical_owner_origins_are_valid(
+    expectation: &CanonicalOwnerExpectation,
+    actual_origins: &BTreeSet<&str>,
+) -> bool {
+    let allowed_origins = expectation
+        .allowed_origins
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+
+    actual_origins.contains(expectation.required_origin)
+        && actual_origins.is_subset(&allowed_origins)
+}
+
 #[test]
 fn persisted_data_contract_preserves_wire_and_uses_typed_parse_errors() {
     use crate::data_contract::{
@@ -535,41 +556,65 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
             panic!("every production dependency must resolve to a canonical origin: {failure:#?}")
         });
 
-    let graph_contract_reexports = dependencies
+    let forbidden_contract_reexports = dependencies
         .iter()
         .filter(|dependency| {
-            dependency.source_file.starts_with("src-tauri/src/graph/")
-                && dependency.kind == RustDependencyKind::ReExport
-                && matches!(
-                    &dependency.origin,
-                    CanonicalOrigin::Repository {
-                        repository_relative_declaration_file,
-                        ..
-                    } if repository_relative_declaration_file.starts_with("src-tauri/src/data_contract/")
-                )
+            if dependency.kind != RustDependencyKind::ReExport {
+                return false;
+            }
+
+            matches!(
+                &dependency.origin,
+                CanonicalOrigin::Repository {
+                    repository_relative_declaration_file,
+                    symbol,
+                    ..
+                } if repository_relative_declaration_file.starts_with("src-tauri/src/data_contract/")
+                    && (dependency.source_file.starts_with("src-tauri/src/graph/")
+                        || (dependency.source_file.starts_with("src-tauri/src/sci/")
+                            && symbol == "CategoricalRole"))
+            )
         })
         .collect::<Vec<_>>();
     assert!(
-        graph_contract_reexports.is_empty(),
-        "Graph must not re-export the persisted data contract: {graph_contract_reexports:#?}"
+        forbidden_contract_reexports.is_empty(),
+        "Graph must not re-export the persisted data contract, and SCI must not re-export or alias its CategoricalRole: {forbidden_contract_reexports:#?}"
     );
 
-    for (symbol, expected_source) in [
-        ("DataType", "src-tauri/src/data_contract/data_type.rs"),
-        ("DataValue", "src-tauri/src/data_contract/data_value.rs"),
-        (
-            "DataSeriesValue",
-            "src-tauri/src/data_contract/data_value.rs",
-        ),
-        (
-            "CategoricalRole",
-            "src-tauri/src/data_contract/data_value.rs",
-        ),
-        (
-            "TimeSeriesState",
-            "src-tauri/src/data_contract/data_value.rs",
-        ),
-        ("DummyInfo", "src-tauri/src/data_contract/data_value.rs"),
+    for expectation in [
+        CanonicalOwnerExpectation {
+            symbol: "DataType",
+            required_origin: "src-tauri/src/data_contract/data_type.rs",
+            allowed_origins: &["src-tauri/src/data_contract/data_type.rs"],
+        },
+        CanonicalOwnerExpectation {
+            symbol: "DataValue",
+            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+        },
+        CanonicalOwnerExpectation {
+            symbol: "DataSeriesValue",
+            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+        },
+        CanonicalOwnerExpectation {
+            symbol: "CategoricalRole",
+            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            allowed_origins: &[
+                "src-tauri/src/data_contract/data_value.rs",
+                "src-tauri/src/sci/api/computation.rs",
+            ],
+        },
+        CanonicalOwnerExpectation {
+            symbol: "TimeSeriesState",
+            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+        },
+        CanonicalOwnerExpectation {
+            symbol: "DummyInfo",
+            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+        },
     ] {
         let origins = dependencies
             .iter()
@@ -578,19 +623,55 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
                     repository_relative_declaration_file,
                     symbol: origin_symbol,
                     ..
-                } if origin_symbol == symbol => Some(repository_relative_declaration_file.as_str()),
+                } if origin_symbol == expectation.symbol => {
+                    Some(repository_relative_declaration_file.as_str())
+                }
                 CanonicalOrigin::Repository { .. }
                 | CanonicalOrigin::LanguageBuiltin { .. }
                 | CanonicalOrigin::RepositoryAsset { .. }
                 | CanonicalOrigin::External(_) => None,
             })
-            .collect::<std::collections::BTreeSet<_>>();
-        assert_eq!(
+            .collect::<BTreeSet<_>>();
+        assert!(
+            canonical_owner_origins_are_valid(&expectation, &origins),
+            "{} must retain {} and resolve only to approved owners {:?}, got {:?}",
+            expectation.symbol,
+            expectation.required_origin,
+            expectation.allowed_origins,
             origins,
-            std::collections::BTreeSet::from([expected_source]),
-            "{symbol} must resolve to exactly one persisted data contract owner"
         );
     }
+}
+
+#[test]
+fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_origin() {
+    let expectation = CanonicalOwnerExpectation {
+        symbol: "CategoricalRole",
+        required_origin: "src-tauri/src/data_contract/data_value.rs",
+        allowed_origins: &[
+            "src-tauri/src/data_contract/data_value.rs",
+            "src-tauri/src/sci/api/computation.rs",
+        ],
+    };
+
+    assert!(canonical_owner_origins_are_valid(
+        &expectation,
+        &BTreeSet::from([
+            "src-tauri/src/data_contract/data_value.rs",
+            "src-tauri/src/sci/api/computation.rs",
+        ]),
+    ));
+    assert!(!canonical_owner_origins_are_valid(
+        &expectation,
+        &BTreeSet::from([
+            "src-tauri/src/data_contract/data_value.rs",
+            "src-tauri/src/sci/api/arbitrary.rs",
+        ]),
+    ));
+    assert!(!canonical_owner_origins_are_valid(
+        &expectation,
+        &BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
+    ));
 }
 
 #[test]
