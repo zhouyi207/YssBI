@@ -1,5 +1,6 @@
 .superpowers
 docs/superpowers/
+.worktrees/
 
 # Logs
 logs
