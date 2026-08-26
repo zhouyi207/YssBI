@@ -1,9 +1,53 @@
 import { executeCommand } from '@/features/core/history';
 import type { GraphMutationCommandResult } from '@/features/core/history/types';
 import { executeSafeGraphMutationOutcome } from '@/features/application/editorMutation/safeGraphMutation';
+import { ensureGraphMutationPortRegistered } from '@/features/application/editorMutation/registerGraphMutationPort';
 
 function isNonEmptyId(value: string): boolean {
   return value.trim().length > 0;
+}
+
+export async function connectPinsById(
+  graphPath: string,
+  pinA: string,
+  pinB: string,
+): Promise<GraphMutationCommandResult> {
+  if (!isNonEmptyId(pinA) || !isNonEmptyId(pinB)) return false;
+  ensureGraphMutationPortRegistered();
+  return executeSafeGraphMutationOutcome(
+    graphPath,
+    'Detail connect pins',
+    'ConnectPins',
+    { pinA, pinB },
+  );
+}
+
+export async function disconnectConnectionById(
+  graphPath: string,
+  connectionId: string,
+): Promise<GraphMutationCommandResult> {
+  if (!isNonEmptyId(connectionId)) return false;
+  ensureGraphMutationPortRegistered();
+  return executeSafeGraphMutationOutcome(
+    graphPath,
+    'Detail disconnect connection',
+    'DisconnectConnections',
+    { connectionIds: [connectionId] },
+  );
+}
+
+export async function disconnectPinById(
+  graphPath: string,
+  pinId: string,
+): Promise<GraphMutationCommandResult> {
+  if (!isNonEmptyId(pinId)) return false;
+  ensureGraphMutationPortRegistered();
+  return executeSafeGraphMutationOutcome(
+    graphPath,
+    'Detail disconnect port',
+    'DisconnectPort',
+    { pinId },
+  );
 }
 
 export async function disconnectConnectionsById(

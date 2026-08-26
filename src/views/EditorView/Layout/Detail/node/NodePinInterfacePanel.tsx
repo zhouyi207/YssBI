@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import type { ConnectionData, NodeData, PinData } from '@/shared/types/store/graph';
 import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
-import { NodePinSpecRow } from './NodePinSpecRow';
 import { detailEmptyHintClass } from '../shared/detailStyles';
 import { DetailCollapsibleSection } from '../shared/DetailCollapsibleSection';
-
+import { NodePinConnectionField } from './NodePinConnectionField';
 
 interface NodePinInterfacePanelProps {
   graphPath: string;
@@ -13,25 +13,33 @@ interface NodePinInterfacePanelProps {
   outputs: ResolvedPinSpec[];
 }
 
-type PinTab = 'inputs' | 'outputs';
-
 function PinList({
   graphPath,
   emptyLabel,
   pins,
+  graphPins,
+  nodes,
+  connections,
 }: {
   graphPath: string;
   emptyLabel: string;
   pins: ResolvedPinSpec[];
+  graphPins: readonly PinData[];
+  nodes: Readonly<Record<string, NodeData>>;
+  connections: readonly ConnectionData[];
 }) {
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-1">
       {pins.length > 0 ? (
         pins.map((pin) => (
-          <NodePinSpecRow
-            key={pin.id}
+          <NodePinConnectionField
+            key={`${graphPath}-${pin.id}`}
             graphPath={graphPath}
             pin={pin}
+            pinData={graphPins.find((candidate) => candidate.id === pin.id)}
+            pins={graphPins}
+            nodes={nodes}
+            connections={connections}
           />
         ))
       ) : (
@@ -47,55 +55,37 @@ export function NodePinInterfacePanel({
   outputs,
 }: NodePinInterfacePanelProps) {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<PinTab>(() =>
-    inputs.length === 0 && outputs.length > 0 ? 'outputs' : 'inputs',
-  );
-  const totalPins = inputs.length + outputs.length;
-
-  useEffect(() => {
-    if (activeTab === 'inputs' && inputs.length === 0 && outputs.length > 0) {
-      setActiveTab('outputs');
-      return;
-    }
-    if (activeTab === 'outputs' && outputs.length === 0 && inputs.length > 0) {
-      setActiveTab('inputs');
-    }
-  }, [activeTab, inputs.length, outputs.length]);
+  const bucket = useGraphDataStore((state) => state.graphEntities[graphPath]);
+  const graphPins = useMemo(() => Object.values(bucket?.pins ?? {}), [bucket]);
+  const graphConnections = useMemo(() => Object.values(bucket?.connections ?? {}), [bucket]);
+  const graphNodes = bucket?.nodes ?? {};
 
   return (
-    <DetailCollapsibleSection title={t('detail.nodeDoc.pinInterface')}>
-      {totalPins > 0 ? (
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as PinTab)}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="inputs" className="gap-1">
-              {t('detail.nodeDoc.inputs')}
-              <span className="text-[10px] text-muted-foreground">{inputs.length}</span>
-            </TabsTrigger>
-            <TabsTrigger value="outputs" className="gap-1">
-              {t('detail.nodeDoc.outputs')}
-              <span className="text-[10px] text-muted-foreground">{outputs.length}</span>
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="inputs" className="mt-2">
-            <PinList
-              graphPath={graphPath}
-              emptyLabel={t('detail.nodeDoc.noInputs')}
-              pins={inputs}
-            />
-          </TabsContent>
-          <TabsContent value="outputs" className="mt-2">
-            <PinList
-              graphPath={graphPath}
-              emptyLabel={t('detail.nodeDoc.noOutputs')}
-              pins={outputs}
-            />
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <div className={detailEmptyHintClass}>
-          {t('detail.nodeDoc.noInputs')} / {t('detail.nodeDoc.noOutputs')}
-        </div>
-      )}
-    </DetailCollapsibleSection>
+    <>
+      <DetailCollapsibleSection
+        title={t('detail.nodeDoc.inputs')}
+      >
+        <PinList
+          graphPath={graphPath}
+          emptyLabel={t('detail.nodeDoc.noInputs')}
+          pins={inputs}
+          graphPins={graphPins}
+          nodes={graphNodes}
+          connections={graphConnections}
+        />
+      </DetailCollapsibleSection>
+      <DetailCollapsibleSection
+        title={t('detail.nodeDoc.outputs')}
+      >
+        <PinList
+          graphPath={graphPath}
+          emptyLabel={t('detail.nodeDoc.noOutputs')}
+          pins={outputs}
+          graphPins={graphPins}
+          nodes={graphNodes}
+          connections={graphConnections}
+        />
+      </DetailCollapsibleSection>
+    </>
   );
 }

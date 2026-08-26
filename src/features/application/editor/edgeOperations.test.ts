@@ -1,13 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { executeCommand, executeCommandOutcome } from '@/features/core/history';
 import {
+  connectPinsById,
+  disconnectConnectionById,
   disconnectConnectionsById,
+  disconnectPinById,
   insertRerouteAtConnection,
 } from './edgeOperations';
 
 vi.mock('@/features/core/history', () => ({
   executeCommand: vi.fn(),
   executeCommandOutcome: vi.fn(),
+}));
+vi.mock('@/features/application/editorMutation/registerGraphMutationPort', () => ({
+  ensureGraphMutationPortRegistered: vi.fn(),
 }));
 
 const graphPath = 'events/main.yssbi-event';
@@ -40,6 +46,39 @@ describe('edge operations', () => {
     expect(executeCommand).toHaveBeenCalledWith(graphPath, 'DisconnectConnections', {
       connectionIds: ['edge-b', 'edge-a', 'edge-c'],
     });
+  });
+
+  it('exposes detail connection operations through the existing graph commands', async () => {
+    vi.mocked(executeCommandOutcome).mockResolvedValue({
+      status: 'applied',
+      result: {},
+    } as never);
+
+    await expect(connectPinsById(graphPath, 'output-a', 'input-b'))
+      .resolves.toEqual({ status: 'applied', result: {} });
+    await expect(disconnectConnectionById(graphPath, 'edge-a'))
+      .resolves.toEqual({ status: 'applied', result: {} });
+    await expect(disconnectPinById(graphPath, 'input-b'))
+      .resolves.toEqual({ status: 'applied', result: {} });
+
+    expect(executeCommandOutcome).toHaveBeenNthCalledWith(
+      1,
+      graphPath,
+      'ConnectPins',
+      { pinA: 'output-a', pinB: 'input-b' },
+    );
+    expect(executeCommandOutcome).toHaveBeenNthCalledWith(
+      2,
+      graphPath,
+      'DisconnectConnections',
+      { connectionIds: ['edge-a'] },
+    );
+    expect(executeCommandOutcome).toHaveBeenNthCalledWith(
+      3,
+      graphPath,
+      'DisconnectPort',
+      { pinId: 'input-b' },
+    );
   });
 
   it.each([
