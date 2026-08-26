@@ -8,6 +8,7 @@ mod model;
 mod result;
 mod validation;
 mod validators;
+pub mod worker;
 
 pub use backend::*;
 pub use convert::draft_to_model_spec;

@@ -1437,3 +1437,8 @@ Execution 不知道具体 UI
 - [ ] 为 T/Wald SCI adapter 增加显式的约束数量、自由度、矩阵维度与有限数值前置验证，分别映射 closed parameter、shape 与 non-finite violations。
 - [ ] 将通过结构验证后的下游 T/Wald 数值失败统一映射为 operation-specific `ComputationFailed`，禁止解析 `yss_sci` 原始字符串选择公开错误语义。
 - [ ] 增加窄 focused regressions，分别覆盖 typed input validation 与合法形状下零/奇异协方差的 computation-failure 映射。
+- [ ] 新增 SCI-owned cancellation source/token、显式 monotonic absolute deadline、run control 与独立 cancel-delivery control，禁止 wall clock、sentinel、global token 和 hidden default。
+- [ ] 定义 validated opaque Bayes task/artifact IDs、非零 generation task handle 与 task-bound artifact handle，并用 closed typed errors 拒绝空值、超长、分隔符、NUL 和保留序列。
+- [ ] 建立 `ValidatedBayesTask::try_new` 唯一构造路径，在 neutral `StatisticalInput` 上重验 model、binding、sampler、响应表达式和 indexed input invariants。
+- [ ] 定义 production-unreachable `BayesWorkerPort`、typed terminal/phase/cancel errors、full-handle validated task result 与 immutable artifact bytes，保持旧 BayesBackend/Application/Julia production route 原样唯一。
+- [ ] 增加 barrier/channel-free-sleep bounded worker fake 与 semantic authority guard，覆盖 cancel/completion linearization、retry、generation ownership、artifact deadline、private constructors/fields 及 broad import 拒绝。

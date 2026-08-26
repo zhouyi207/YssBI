@@ -186,6 +186,26 @@ pub enum SamplerAlgorithm {
 }
 
 impl BayesModelSpec {
+    pub fn predictor(&self) -> &Expression {
+        &self.predictor
+    }
+
+    pub fn likelihood(&self) -> &LikelihoodSpec {
+        &self.likelihood
+    }
+
+    pub fn parameters(&self) -> &[ParameterSpec] {
+        &self.parameters
+    }
+
+    pub fn data_variables(&self) -> &BTreeMap<String, String> {
+        &self.data_variables
+    }
+
+    pub fn sampler(&self) -> &InferenceConfig {
+        &self.sampler
+    }
+
     pub fn parameter_names(&self) -> BTreeSet<&str> {
         self.parameters
             .iter()

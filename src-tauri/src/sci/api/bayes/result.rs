@@ -44,6 +44,18 @@ impl InferenceResult {
     pub(crate) fn take_artifact_owner(&mut self) -> Option<JuliaWorkerTaskDirectory> {
         self.artifact_owner.take()
     }
+
+    pub fn summaries(&self) -> &[ParameterSummary] {
+        &self.summaries
+    }
+
+    pub fn diagnostics(&self) -> &InferenceDiagnostics {
+        &self.diagnostics
+    }
+
+    pub fn artifact_manifest(&self) -> &ResultArtifactManifest {
+        &self.artifact_manifest
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
