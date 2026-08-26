@@ -119,6 +119,16 @@ describe('Rust-generated node-system golden contracts', () => {
     }
   });
 
+  it('accepts node catalog items with documentation but no short description', () => {
+    const catalog = clone(localizedCatalog) as unknown as Record<string, unknown>;
+    const items = catalog.items as Array<Record<string, unknown>>;
+    items.forEach((item) => deleteKey(item, 'description'));
+
+    expect(isLocalizedCatalogDto(catalog)).toBe(true);
+    expect(items.every((item) => !Object.prototype.hasOwnProperty.call(item, 'description')))
+      .toBe(true);
+  });
+
   it.each([
     ['unknown key', (catalog: Record<string, unknown>) => { catalog.compatibility = true; }],
     ['missing key', (catalog: Record<string, unknown>) => { deleteKey(catalog, 'locale'); }],

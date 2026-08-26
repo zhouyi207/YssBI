@@ -868,7 +868,6 @@ fn protocol(
         type_id: sid(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: iid(leak(format!("nodes.{id}.title")))?,
-            description_key: Some(iid(leak(format!("nodes.{id}.description")))?),
             documentation_key: Some(iid(leak(format!("nodes.{id}.documentation")))?),
             aliases_key: Some(iid(leak(format!("nodes.{id}.aliases")))?),
             category_id: sid(category, NodeCategoryId::new)?,
@@ -963,7 +962,6 @@ fn i18n_requirements(
     for node in nodes {
         let protocol = node.protocol();
         keys.insert(protocol.catalog.title_key.clone());
-        keys.extend(protocol.catalog.description_key.iter().cloned());
         keys.extend(protocol.catalog.documentation_key.iter().cloned());
         if let Some(key) = &protocol.catalog.aliases_key {
             keys.insert(key.clone());
@@ -1027,14 +1025,11 @@ fn add_node_messages(
     zh_aliases: &'static [&'static str],
 ) {
     let title = leak(format!("nodes.{id}.title"));
-    let description = leak(format!("nodes.{id}.description"));
     let docs = leak(format!("nodes.{id}.documentation"));
     let aliases = leak(format!("nodes.{id}.aliases"));
     out.extend([
         ("en-US", title, Text(en)),
         ("zh-CN", title, Text(zh)),
-        ("en-US", description, Text("Built-in deterministic node.")),
-        ("zh-CN", description, Text("内置确定性节点。")),
         (
             "en-US",
             docs,

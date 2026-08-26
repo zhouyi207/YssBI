@@ -42,7 +42,6 @@ function item(
   return {
     nodeTypeId,
     title: nodeTypeId,
-    description: null,
     documentation: null,
     categoryId,
     iconId: 'test',

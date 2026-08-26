@@ -36,7 +36,6 @@ export interface NodeData {
   title: string;
   inputs: string[];   // Pin IDs
   outputs: string[]; // Pin IDs
-  description?: string;
   position: { x: number; y: number };
   /** Backend-authored editor projection fields. */
   display?: NodeDisplayDto;

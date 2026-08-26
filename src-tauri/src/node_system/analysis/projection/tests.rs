@@ -836,7 +836,6 @@ fn node(revision: u64, ports: Vec<ResolvedPortDto>) -> EditorNodeProjectionDto {
         position: NodePositionDto { x: 0.0, y: 0.0 },
         display: NodeDisplayDto {
             title: "Test".into(),
-            description: None,
             user_label: None,
             icon_id: None,
             style_id: None,

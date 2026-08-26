@@ -60,7 +60,6 @@ function bucket(graphPath: string, title: string): GraphEntityBucket {
         position: { x: 0, y: 0 },
         display: {
           title,
-          description: null,
           userLabel: null,
           iconId: null,
           styleId: null,

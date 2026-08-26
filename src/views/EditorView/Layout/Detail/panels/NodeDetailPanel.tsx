@@ -103,7 +103,6 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
   }
 
   const catalogItem = catalog?.items.find((item) => item.nodeTypeId === node.nodeType);
-  const description = catalogItem?.description ?? node.display?.description ?? node.description;
   const documentation = catalogItem?.documentation;
 
   return (
@@ -117,11 +116,6 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
         >
           {node.display?.title ?? node.title}
         </DetailReadonlyField>
-        {description ? (
-          <DetailReadonlyField label={t('detail.fields.description')} tone="muted">
-            {description}
-          </DetailReadonlyField>
-        ) : null}
       </DetailForm>
 
       {node.capabilities && (

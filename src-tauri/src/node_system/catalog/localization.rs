@@ -76,7 +76,6 @@ pub struct LocalizedCategoryDto {
 pub struct LocalizedCatalogItemDto {
     pub node_type_id: Box<str>,
     pub title: Box<str>,
-    pub description: Option<Box<str>>,
     pub documentation: Option<Box<str>>,
     pub category_id: Box<str>,
     pub icon_id: Box<str>,
@@ -446,11 +445,6 @@ impl BuiltinCatalog {
         creation: NodeCreationDescriptor,
     ) -> LocalizedCatalogItemDto {
         let title = self.text(locale, &protocol.catalog.title_key);
-        let description = protocol
-            .catalog
-            .description_key
-            .as_ref()
-            .map(|key| self.text(locale, key));
         let documentation =
             crate::node_system::catalog::documentation::documentation(&protocol.type_id, locale)
                 .map(Into::into);
@@ -466,7 +460,6 @@ impl BuiltinCatalog {
         LocalizedCatalogItemDto {
             node_type_id: protocol.type_id.as_str().into(),
             title,
-            description,
             documentation,
             category_id: protocol.catalog.category_id.as_str().into(),
             icon_id: protocol.catalog.icon_id.as_str().into(),
@@ -489,11 +482,6 @@ impl BuiltinCatalog {
         protocol: &crate::node_system::protocol::NodeProtocol,
         locale: &str,
     ) -> LocalizedCatalogItemDto {
-        let description = protocol
-            .catalog
-            .description_key
-            .as_ref()
-            .map(|key| self.text(locale, key));
         let documentation =
             crate::node_system::catalog::documentation::documentation(&protocol.type_id, locale)
                 .map(Into::into);
@@ -510,7 +498,6 @@ impl BuiltinCatalog {
         LocalizedCatalogItemDto {
             node_type_id: entry.node_type_id.as_str().into(),
             title: entry.name.clone(),
-            description,
             documentation,
             category_id: protocol.catalog.category_id.as_str().into(),
             icon_id: protocol.catalog.icon_id.as_str().into(),

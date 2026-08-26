@@ -431,7 +431,6 @@ fn resource_catalog_projects_localized_docs_ports_parameters_and_opaque_identity
         .unwrap();
 
     assert_eq!(en_resource.title, zh_resource.title);
-    assert_ne!(en_resource.description, zh_resource.description);
     assert_ne!(en_resource.documentation, zh_resource.documentation);
     assert_eq!(
         en_resource.resource_names,
@@ -581,7 +580,6 @@ fn resource_catalog_localization_falls_back_without_changing_identity() {
         .unwrap();
 
     assert_eq!(fallback.title.as_ref(), "Opaque Display Name");
-    assert_eq!(fallback.description, en.description);
     assert_eq!(fallback.documentation, en.documentation);
     assert_eq!(fallback.ports, en.ports);
     assert_eq!(fallback.parameters, en.parameters);

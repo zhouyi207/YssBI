@@ -70,7 +70,6 @@ function ItemDetails({ item }: { item: LocalizedCatalogItem }) {
     <div className="space-y-5 px-5 py-4">
       <div className="space-y-1">
         <h2 className="text-lg font-semibold text-foreground">{item.title}</h2>
-        {item.description ? <p className="text-sm text-muted-foreground">{item.description}</p> : null}
       </div>
 
       <dl className="space-y-2">

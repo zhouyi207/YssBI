@@ -466,7 +466,6 @@ fn protocol(spec: &DistributionSpec) -> Result<NodeProtocol, BuiltinAssemblyErro
         type_id: node_id(spec.id)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(spec.id, "title")?,
-            description_key: Some(node_key(spec.id, "description")?),
             documentation_key: Some(node_key(spec.id, "documentation")?),
             aliases_key: Some(node_key(spec.id, "aliases")?),
             category_id: category_id(CATEGORY)?,
@@ -559,14 +558,11 @@ impl NodeLowerer for DistributionLowerer {
 
 fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &DistributionSpec) {
     let title = key_text(spec.id, "title");
-    let description = key_text(spec.id, "description");
     let documentation = key_text(spec.id, "documentation");
     let aliases = key_text(spec.id, "aliases");
     out.extend([
         ("en-US", title, Message::Text(spec.en)),
         ("zh-CN", title, Message::Text(spec.zh)),
-        ("en-US", description, Message::Text("Draws an in-memory data series from the selected probability distribution.")),
-        ("zh-CN", description, Message::Text("从所选概率分布生成内存数据序列。")),
         ("en-US", documentation, Message::Text("Parameters use the conventional statistical parameterization shown by the port names. Sample count must be a positive integer.")),
         ("zh-CN", documentation, Message::Text("参数采用端口名称所示的标准统计参数化；样本数必须为正整数。")),
         ("en-US", aliases, Message::Aliases(spec.aliases)),
@@ -622,7 +618,6 @@ mod tests {
             let protocol = node.protocol();
             let keys = [
                 Some(&protocol.catalog.title_key),
-                protocol.catalog.description_key.as_ref(),
                 protocol.catalog.documentation_key.as_ref(),
                 protocol.catalog.aliases_key.as_ref(),
             ]

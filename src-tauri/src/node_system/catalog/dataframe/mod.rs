@@ -109,7 +109,6 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         type_id: sid(spec.id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(spec.id, "title")?,
-            description_key: Some(node_key(spec.id, "description")?),
             documentation_key: Some(node_key(spec.id, "documentation")?),
             aliases_key: Some(node_key(spec.id, "aliases")?),
             category_id: sid(category(spec.interface), NodeCategoryId::new)?,
@@ -1140,32 +1139,22 @@ fn leak(value: String) -> &'static str {
 
 fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &NodeSpec) {
     let title = leak(format!("nodes.{}.title", spec.id));
-    let description = leak(format!("nodes.{}.description", spec.id));
     let documentation = leak(format!("nodes.{}.documentation", spec.id));
     let aliases = leak(format!("nodes.{}.aliases", spec.id));
-    let (en_description, zh_description, en_documentation, zh_documentation) = match spec.interface
-    {
+    let (en_documentation, zh_documentation) = match spec.interface {
         InterfaceKind::Rename => (
-            "Renames one DataFrame column.",
-            "重命名数据框中的一列。",
             "Renames the column identified by 'from' to 'to'.",
             "将“源列”指定的列重命名为“目标列”。",
         ),
         InterfaceKind::Project => (
-            "Selects DataFrame columns in an explicit order.",
-            "按明确顺序选择数据框列。",
             "Selects direct source columns without renaming or derived expressions.",
             "选择源数据框中的直接列，不执行重命名或派生表达式。",
         ),
         InterfaceKind::FilterRows => (
-            "Filters DataFrame rows with a typed predicate.",
-            "使用类型化谓词筛选数据框行。",
             "Filters rows by one source column and a Rust-issued compatible operator.",
             "按一个源列和 Rust 提供的兼容运算符筛选行。",
         ),
         _ => (
-            "Performs a typed tabular operation.",
-            "执行类型化的表格数据操作。",
             "Uses stable ports and the tabular runtime API.",
             "使用稳定端口和表格运行时 API。",
         ),
@@ -1173,8 +1162,6 @@ fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec:
     out.extend([
         ("en-US", title, Text(spec.title)),
         ("zh-CN", title, Text(spec.zh_title)),
-        ("en-US", description, Text(en_description)),
-        ("zh-CN", description, Text(zh_description)),
         ("en-US", documentation, Text(en_documentation)),
         ("zh-CN", documentation, Text(zh_documentation)),
         ("en-US", aliases, Aliases(spec.aliases)),

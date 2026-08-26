@@ -30,7 +30,6 @@
             "columns"
           ]
         },
-        "description": "Selects DataFrame columns in an explicit order.",
         "documentation": "Selects direct source columns without renaming or derived expressions.",
         "iconId": "builtin.dataframe",
         "nodeTypeId": "yssbi.dataframe.project",
@@ -239,7 +238,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Main",
@@ -355,7 +353,6 @@
                 }
               ],
               "display": {
-                "description": "Filters DataFrame rows with a typed predicate.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Filter Rows",
@@ -497,7 +494,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Selects DataFrame columns in an explicit order.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Project DataFrame",
@@ -631,7 +627,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Renames one DataFrame column.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Rename DataFrame",
@@ -770,7 +765,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Limit DataFrame",
@@ -904,7 +898,6 @@
                 }
               ],
               "display": {
-                "description": "Selects DataFrame columns in an explicit order.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Project DataFrame",
@@ -1226,7 +1219,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Main",
@@ -1342,7 +1334,6 @@
                 }
               ],
               "display": {
-                "description": "Filters DataFrame rows with a typed predicate.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Filter Rows",
@@ -1484,7 +1475,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Selects DataFrame columns in an explicit order.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Project DataFrame",
@@ -1618,7 +1608,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Renames one DataFrame column.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Rename DataFrame",
@@ -1757,7 +1746,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Limit DataFrame",
@@ -1906,7 +1894,6 @@
                 }
               ],
               "display": {
-                "description": "Selects DataFrame columns in an explicit order.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Project DataFrame",
@@ -2117,7 +2104,6 @@
         },
         "diagnostics": [],
         "display": {
-          "description": "Performs a typed tabular operation.",
           "iconId": "builtin.dataframe",
           "styleId": "builtin.dataframe",
           "title": "Main",
@@ -2233,7 +2219,6 @@
           }
         ],
         "display": {
-          "description": "Filters DataFrame rows with a typed predicate.",
           "iconId": "builtin.dataframe",
           "styleId": "builtin.dataframe",
           "title": "Filter Rows",
@@ -2375,7 +2360,6 @@
         },
         "diagnostics": [],
         "display": {
-          "description": "Selects DataFrame columns in an explicit order.",
           "iconId": "builtin.dataframe",
           "styleId": "builtin.dataframe",
           "title": "Project DataFrame",
@@ -2509,7 +2493,6 @@
         },
         "diagnostics": [],
         "display": {
-          "description": "Renames one DataFrame column.",
           "iconId": "builtin.dataframe",
           "styleId": "builtin.dataframe",
           "title": "Rename DataFrame",
@@ -2648,7 +2631,6 @@
         },
         "diagnostics": [],
         "display": {
-          "description": "Performs a typed tabular operation.",
           "iconId": "builtin.dataframe",
           "styleId": "builtin.dataframe",
           "title": "Limit DataFrame",
@@ -2938,7 +2920,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Main",
@@ -3054,7 +3035,6 @@
                 }
               ],
               "display": {
-                "description": "Filters DataFrame rows with a typed predicate.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Filter Rows",
@@ -3196,7 +3176,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Selects DataFrame columns in an explicit order.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Project DataFrame",
@@ -3330,7 +3309,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Renames one DataFrame column.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Rename DataFrame",
@@ -3469,7 +3447,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Performs a typed tabular operation.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Limit DataFrame",
@@ -3590,7 +3567,6 @@
               },
               "diagnostics": [],
               "display": {
-                "description": "Selects DataFrame columns in an explicit order.",
                 "iconId": "builtin.dataframe",
                 "styleId": "builtin.dataframe",
                 "title": "Project DataFrame",

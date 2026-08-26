@@ -8,7 +8,6 @@ function item(overrides: Partial<LocalizedCatalogItem> = {}): LocalizedCatalogIt
   return Object.assign({
     nodeTypeId: 'yssbi.example.node',
     title: 'Localized title',
-    description: null,
     documentation: null,
     categoryId: 'examples',
     iconId: 'example',
@@ -41,7 +40,6 @@ describe('searchLocalizedCatalogItems', () => {
   });
 
   it.each([
-    ['description', item({ description: 'description-only-secret' }), 'description-only-secret'],
     ['documentation', item({ documentation: 'documentation-only-secret' }), 'documentation-only-secret'],
   ])('does not match %s outside the search document', (_field, catalogItem, query) => {
     expect(searchLocalizedCatalogItems([catalogItem], query)).toEqual([]);

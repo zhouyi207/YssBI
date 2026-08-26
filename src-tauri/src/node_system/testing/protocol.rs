@@ -23,7 +23,6 @@ impl TestProtocolBuilder {
             catalog: NodeCatalogProtocol {
                 title_key: I18nKey::new(format!("nodes.{catalog_key}.title"))
                     .expect("test title key is valid"),
-                description_key: None,
                 documentation_key: None,
                 aliases_key: None,
                 category_id: NodeCategoryId::new(category_id).expect("test category ID is valid"),

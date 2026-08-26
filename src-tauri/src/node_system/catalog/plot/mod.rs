@@ -216,7 +216,6 @@ fn protocol(spec: &PlotSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         type_id: node_id(spec.id)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(spec.id, "title")?,
-            description_key: Some(node_key(spec.id, "description")?),
             documentation_key: Some(node_key(spec.id, "documentation")?),
             aliases_key: Some(node_key(spec.id, "aliases")?),
             category_id: category_id(CATEGORY)?,
@@ -357,14 +356,11 @@ impl NodeLowerer for PlotLowerer {
 
 fn add_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &PlotSpec) {
     let title = key_text(spec.id, "title");
-    let description = key_text(spec.id, "description");
     let documentation = key_text(spec.id, "documentation");
     let aliases = key_text(spec.id, "aliases");
     out.extend([
         ("en-US", title, Message::Text(spec.en)),
         ("zh-CN", title, Message::Text(spec.zh)),
-        ("en-US", description, Message::Text("Builds plot data and publishes a view through the run-scoped plot sink.")),
-        ("zh-CN", description, Message::Text("构建绘图数据，并通过运行期绘图接收器发布视图。")),
         ("en-US", documentation, Message::Text("This effectful view node requires the plot-sink resource and returns the published presentation result.")),
         ("zh-CN", documentation, Message::Text("此视图节点具有显式副作用，需要绘图接收器资源，并返回已发布的展示结果。")),
         ("en-US", aliases, Message::Aliases(spec.aliases)),
@@ -420,7 +416,6 @@ mod tests {
             let protocol = node.protocol();
             let keys = [
                 Some(&protocol.catalog.title_key),
-                protocol.catalog.description_key.as_ref(),
                 protocol.catalog.documentation_key.as_ref(),
                 protocol.catalog.aliases_key.as_ref(),
             ]

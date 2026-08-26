@@ -93,7 +93,6 @@ function buildProjectionBucket(
       nodeType: node.nodeTypeId,
       category: [],
       title: node.display.title,
-      description: node.display.description ?? undefined,
       position: node.position,
       inputs,
       outputs,

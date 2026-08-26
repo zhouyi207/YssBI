@@ -217,11 +217,6 @@ fn eligible_static_and_resource_bound_catalog_items_are_localized() {
             let item = item(&localized, id);
             assert!(!item.title.is_empty());
             assert!(
-                item.description
-                    .as_ref()
-                    .is_some_and(|value| !value.is_empty())
-            );
-            assert!(
                 item.documentation
                     .as_ref()
                     .is_some_and(|value| !value.is_empty())

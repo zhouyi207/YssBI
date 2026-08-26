@@ -45,7 +45,6 @@ export function toUiNode(nodeData: NodeData, options: ToUiNodeOptions): UINode {
     category: nodeData.category,
     title,
     uiStyle: nodeData.display?.styleId ?? 'default',
-    description: nodeData.display?.description ?? nodeData.description,
     display: nodeData.display,
     parameterEditors: nodeData.parameterEditors ?? [],
     diagnostics: nodeData.diagnostics ?? [],

@@ -52,7 +52,6 @@ vi.mock('react-i18next', () => ({
 
 function catalog(locale: string, localized: {
   title: string;
-  description: string;
   documentation: string;
   alias: string;
 }): LocalizedCatalogResponse {
@@ -66,7 +65,6 @@ function catalog(locale: string, localized: {
     items: [{
       nodeTypeId: 'function.call',
       title: localized.title,
-      description: localized.description,
       documentation: localized.documentation,
       categoryId: 'functions',
       iconId: 'function',
@@ -148,7 +146,6 @@ describe('NodeDocumentationModal', () => {
   it('renders current-locale documentation and focused Catalog metadata', () => {
     catalogState.current = stateFor(catalog('zh-CN', {
       title: '调用助手',
-      description: '调用当前项目函数',
       documentation: '仅中文 **详细文档**',
       alias: '助手调用',
     }));
@@ -157,7 +154,6 @@ describe('NodeDocumentationModal', () => {
     click(document.querySelector('button[data-node-documentation-item]')!);
 
     expect(document.body.textContent).toContain('调用助手');
-    expect(document.body.textContent).toContain('调用当前项目函数');
     expect(document.body.textContent).toContain('仅中文 详细文档');
     expect(document.querySelector('strong')?.textContent).toBe('详细文档');
     expect(document.body.textContent).not.toContain('English documentation');
@@ -195,7 +191,6 @@ describe('NodeDocumentationModal', () => {
   it('searches the current Catalog index without searching documentation bodies', () => {
     catalogState.current = stateFor(catalog('en-US', {
       title: 'Call Helper',
-      description: 'description-only-secret',
       documentation: 'documentation-only-secret',
       alias: 'invoke helper',
     }));
@@ -216,7 +211,6 @@ describe('NodeDocumentationModal', () => {
   it('limits documentation search to the current-locale title and aliases', () => {
     const response = catalog('en-US', {
       title: 'Call Helper',
-      description: 'English description',
       documentation: 'English documentation',
       alias: 'invoke helper',
     });
@@ -248,7 +242,6 @@ describe('NodeDocumentationModal', () => {
   it('keeps the opaque resource identity selected across a locale switch', () => {
     catalogState.current = stateFor(catalog('en-US', {
       title: 'Call Helper',
-      description: 'English description',
       documentation: 'English documentation',
       alias: 'invoke helper',
     }));
@@ -258,7 +251,6 @@ describe('NodeDocumentationModal', () => {
 
     catalogState.current = stateFor(catalog('zh-CN', {
       title: '调用助手',
-      description: '中文说明',
       documentation: '中文文档',
       alias: '助手调用',
     }));
@@ -272,7 +264,6 @@ describe('NodeDocumentationModal', () => {
   it('shows Catalog-derived empty state and supports preview and modal close behavior', () => {
     catalogState.current = stateFor(catalog('en-US', {
       title: 'Call Helper',
-      description: 'English description',
       documentation: 'English documentation',
       alias: 'invoke helper',
     }));
@@ -290,7 +281,6 @@ describe('NodeDocumentationModal', () => {
     catalogState.current = stateFor({
       ...catalog('en-US', {
         title: 'unused',
-        description: 'unused',
         documentation: 'unused',
         alias: 'unused',
       }),

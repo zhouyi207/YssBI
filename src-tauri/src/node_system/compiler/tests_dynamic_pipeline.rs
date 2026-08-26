@@ -109,7 +109,6 @@ fn protocol() -> NodeProtocol {
         type_id: NodeTypeId::new("yssbi.test.dynamic_pipeline").unwrap(),
         catalog: NodeCatalogProtocol {
             title_key: I18nKey::new("nodes.test.dynamic_pipeline.title").unwrap(),
-            description_key: None,
             documentation_key: None,
             aliases_key: None,
             category_id: NodeCategoryId::new("test").unwrap(),

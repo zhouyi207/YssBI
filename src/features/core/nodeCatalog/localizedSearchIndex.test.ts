@@ -23,7 +23,6 @@ function catalog(
     items: [{
       nodeTypeId,
       title: nodeTypeId,
-      description: null,
       documentation: null,
       categoryId: 'tests',
       iconId: 'tests',

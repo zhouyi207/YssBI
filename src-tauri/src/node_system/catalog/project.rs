@@ -219,7 +219,6 @@ fn protocol(
         type_id: sid(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(id, "title")?,
-            description_key: Some(node_key(id, "description")?),
             documentation_key: Some(node_key(id, "documentation")?),
             aliases_key: Some(node_key(id, "aliases")?),
             category_id: sid("project", NodeCategoryId::new)?,
@@ -410,15 +409,12 @@ fn add_node_messages(
     zh_aliases: &'static [&'static str],
 ) {
     let title: &'static str = Box::leak(format!("nodes.{id}.title").into_boxed_str());
-    let description: &'static str = Box::leak(format!("nodes.{id}.description").into_boxed_str());
     let documentation: &'static str =
         Box::leak(format!("nodes.{id}.documentation").into_boxed_str());
     let aliases: &'static str = Box::leak(format!("nodes.{id}.aliases").into_boxed_str());
     out.extend([
         ("en-US", title, Text(en)),
         ("zh-CN", title, Text(zh)),
-        ("en-US", description, Text("Integrates project resources with graph execution.")),
-        ("zh-CN", description, Text("将项目资源接入图执行。")),
         ("en-US", documentation, Text("Resource identity is stored as a stable node parameter and resolved from the compilation snapshot.")),
         ("zh-CN", documentation, Text("资源身份作为稳定节点参数保存，并从编译快照解析。")),
         ("en-US", aliases, Aliases(en_aliases)),

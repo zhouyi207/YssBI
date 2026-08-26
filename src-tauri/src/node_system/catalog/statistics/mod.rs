@@ -40,7 +40,6 @@ fn protocol(spec: &NodeSpec) -> Result<NodeProtocol, BuiltinAssemblyError> {
         type_id: sid(spec.id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: node_key(spec.id, "title")?,
-            description_key: Some(node_key(spec.id, "description")?),
             documentation_key: Some(node_key(spec.id, "documentation")?),
             aliases_key: Some(node_key(spec.id, "aliases")?),
             category_id: sid(category(spec.family), NodeCategoryId::new)?,
@@ -753,18 +752,11 @@ fn leak(value: String) -> &'static str {
 
 fn add_node_messages(out: &mut Vec<(&'static str, &'static str, Message)>, spec: &NodeSpec) {
     let title = leak(format!("nodes.{}.title", spec.id));
-    let description = leak(format!("nodes.{}.description", spec.id));
     let documentation = leak(format!("nodes.{}.documentation", spec.id));
     let aliases = leak(format!("nodes.{}.aliases", spec.id));
     out.extend([
         ("en-US", title, Text(spec.title)),
         ("zh-CN", title, Text(spec.zh_title)),
-        (
-            "en-US",
-            description,
-            Text("Runs a typed statistical operation."),
-        ),
-        ("zh-CN", description, Text("执行类型化统计操作。")),
         (
             "en-US",
             documentation,

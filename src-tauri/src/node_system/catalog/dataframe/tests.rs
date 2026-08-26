@@ -880,10 +880,6 @@ fn rename_dataframe_freezes_exact_protocol_and_localization() {
             [
                 ("nodes.yssbi.dataframe.rename.title", "Rename DataFrame"),
                 (
-                    "nodes.yssbi.dataframe.rename.description",
-                    "Renames one DataFrame column.",
-                ),
-                (
                     "nodes.yssbi.dataframe.rename.documentation",
                     "Renames the column identified by 'from' to 'to'.",
                 ),
@@ -897,10 +893,6 @@ fn rename_dataframe_freezes_exact_protocol_and_localization() {
             "zh-CN",
             [
                 ("nodes.yssbi.dataframe.rename.title", "重命名数据框"),
-                (
-                    "nodes.yssbi.dataframe.rename.description",
-                    "重命名数据框中的一列。",
-                ),
                 (
                     "nodes.yssbi.dataframe.rename.documentation",
                     "将“源列”指定的列重命名为“目标列”。",
@@ -981,11 +973,6 @@ fn project_and_filter_rows_are_parameterized_catalog_nodes() {
             .find(|item| item.node_type_id.as_ref() == node_type)
             .expect("parameterized node is catalog visible");
         assert_eq!(item.title.as_ref(), title);
-        assert!(
-            item.description
-                .as_deref()
-                .is_some_and(|value| !value.is_empty())
-        );
         assert!(
             item.backend_search_text
                 .iter()

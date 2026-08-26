@@ -61,7 +61,6 @@ function projectedReroute(kind: PortKindDto): UINode {
     nodeType: `opaque.test.${kind}`,
     category: ['Hidden'],
     title: `Forbidden ${kind} title`,
-    description: `Forbidden ${kind} description`,
     uiStyle: 'builtin.reroute',
     position: { x: 135, y: 246 },
     inputs: [projectedPin(id, kind, 'input')],

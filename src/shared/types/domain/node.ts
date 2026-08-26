@@ -16,7 +16,6 @@ export interface Node {
     title: string;
     inputs: Pin[];
     outputs: Pin[];
-    description?: string;
 }
 
 export type NodeGraphScope = 'any' | 'event' | 'function';
@@ -25,7 +24,6 @@ export type NodeDefinitionOrigin = 'system' | 'custom';
 
 export interface NodeMetaData {
     uiStyle: string;
-    description?: string;
     documentation?: NodeDocumentation;
     supports_dynamic_pins: boolean;
     /** 节点允许出现的图类型。 */

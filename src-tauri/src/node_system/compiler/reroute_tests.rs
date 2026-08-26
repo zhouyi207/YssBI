@@ -305,7 +305,6 @@ fn registry() -> NodeRegistry {
     ]);
     for node in &nodes {
         i18n.insert(node.protocol().catalog.title_key.clone());
-        i18n.extend(node.protocol().catalog.description_key.iter().cloned());
         i18n.extend(node.protocol().catalog.documentation_key.iter().cloned());
     }
     let mut provider = ProviderRegistration::new(ProviderId::new("yssbi.reroute.tests").unwrap());

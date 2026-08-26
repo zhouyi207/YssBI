@@ -48,7 +48,6 @@ export class Node implements UINode {
     inputs: PinView[];
     outputs: PinView[];
     uiStyle: string;
-    description?: string;
     position: { x: number; y: number };
     isInternal: boolean;
     paramsKind?: 'none' | 'variable' | 'subGraph' | 'dataFrame';
@@ -70,7 +69,6 @@ export class Node implements UINode {
         this.inputs = data.inputs;
         this.outputs = data.outputs;
         this.uiStyle = data.uiStyle;
-        this.description = data.description;
         this.position = data.position;
         this.isInternal = data.isInternal || false;
         this.paramsKind = data.paramsKind;
@@ -107,7 +105,6 @@ export class Node implements UINode {
             inputs: this.inputs.map((p) => ({ ...p, connectionIds: [...p.connectionIds] })),
             outputs: this.outputs.map((p) => ({ ...p, connectionIds: [...p.connectionIds] })),
             uiStyle: this.uiStyle,
-            description: this.description,
             position: { ...this.position },
             isInternal: this.isInternal,
             paramsKind: this.paramsKind,

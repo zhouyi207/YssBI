@@ -463,7 +463,6 @@ fn test_protocol(
         type_id: NodeTypeId::new(format!("yssbi.test.{name}")).unwrap(),
         catalog: NodeCatalogProtocol {
             title_key: I18nKey::new(format!("nodes.test.{name}.title")).unwrap(),
-            description_key: None,
             documentation_key: None,
             aliases_key: None,
             category_id: NodeCategoryId::new("test").unwrap(),

@@ -365,9 +365,8 @@ function isEditorNode(value: unknown): boolean {
     && typeof value.nodeTypeId === 'string'
     && isPosition(value.position)
     && isRecord(value.display)
-    && hasExactKeys(value.display, ['title', 'description', 'userLabel', 'iconId', 'styleId'])
+    && hasExactKeys(value.display, ['title', 'userLabel', 'iconId', 'styleId'])
     && typeof value.display.title === 'string'
-    && isNullableString(value.display.description)
     && isNullableString(value.display.userLabel)
     && isNullableString(value.display.iconId)
     && isNullableString(value.display.styleId)

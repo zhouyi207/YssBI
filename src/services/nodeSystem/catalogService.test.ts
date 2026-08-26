@@ -90,7 +90,7 @@ describe('CatalogService', () => {
       locale: 'en-US',
       categories: [],
       items: [{
-        nodeTypeId: 'function.call', title: 'Call A', description: null, documentation: null,
+        nodeTypeId: 'function.call', title: 'Call A', documentation: null,
         categoryId: 'functions', iconId: 'function', styleId: 'call', aliases: [],
         technicalTerms: [], backendSearchText: [], resourceNames: [], ports: [], parameters: [],
         resourcePath: 'functions/A', resourceRevision: 2,
@@ -141,7 +141,6 @@ describe('CatalogService', () => {
       items: [{
         nodeTypeId: 'function.call',
         title: 'Call A',
-        description: null,
         documentation: null,
         categoryId: 'functions',
         iconId: 'function',

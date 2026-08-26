@@ -405,7 +405,6 @@ fn protocol(node_type: NodeTypeId, inputs: &[PortKey], outputs: &[PortKey]) -> N
         type_id: node_type,
         catalog: NodeCatalogProtocol {
             title_key,
-            description_key: None,
             documentation_key: None,
             aliases_key: None,
             category_id: NodeCategoryId::new("testing").unwrap(),

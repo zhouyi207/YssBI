@@ -68,7 +68,6 @@ describe('spawnNodeFromTemplate', () => {
     const items = [{
       nodeTypeId: 'yssbi.project.function.call',
       title: 'Opaque',
-      description: null,
       documentation: null,
       categoryId: 'functions',
       iconId: 'function',

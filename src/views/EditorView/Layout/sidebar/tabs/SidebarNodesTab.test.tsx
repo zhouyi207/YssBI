@@ -69,7 +69,6 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: 'statistics.logit.fit',
       title: 'Logit fit',
-      description: null,
       documentation: null,
       categoryId: 'statistics.regression',
       iconId: 'statistics',
@@ -85,7 +84,6 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: 'function.call',
       title: 'Call Helper',
-      description: null,
       documentation: null,
       categoryId: 'output',
       iconId: 'function',
@@ -109,7 +107,6 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: 'function.call',
       title: 'Call Other',
-      description: null,
       documentation: null,
       categoryId: 'output',
       iconId: 'function',

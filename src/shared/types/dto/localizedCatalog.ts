@@ -30,7 +30,6 @@ export interface LocalizedParameterDto {
 export interface LocalizedCatalogItemDto {
   nodeTypeId: string;
   title: string;
-  description: string | null;
   documentation: string | null;
   categoryId: string;
   iconId: string;
@@ -109,7 +108,7 @@ export function isLocalizedCatalogItemDto(value: unknown): value is LocalizedCat
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const candidate = value as Record<string, unknown>;
   if (!hasExactKeys(candidate, [
-    'nodeTypeId', 'title', 'description', 'documentation', 'categoryId', 'iconId', 'styleId',
+    'nodeTypeId', 'title', 'documentation', 'categoryId', 'iconId', 'styleId',
     'aliases', 'technicalTerms', 'backendSearchText', 'resourceNames',
     'ports', 'parameters', 'creation',
   ], ['resourcePath', 'resourceRevision'])) return false;
@@ -125,7 +124,6 @@ export function isLocalizedCatalogItemDto(value: unknown): value is LocalizedCat
   return coherent
     && typeof candidate.nodeTypeId === 'string'
     && typeof candidate.title === 'string'
-    && isNullableString(candidate.description)
     && isNullableString(candidate.documentation)
     && typeof candidate.categoryId === 'string'
     && typeof candidate.iconId === 'string'

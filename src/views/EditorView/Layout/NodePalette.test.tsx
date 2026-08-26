@@ -58,7 +58,6 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: 'statistics.logit.fit',
       title: '逻辑回归',
-      description: '拟合二元响应模型',
       documentation: null,
       categoryId: 'statistics.regression',
       iconId: 'statistics',
@@ -74,7 +73,6 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: 'math.add',
       title: '加法',
-      description: '将两个数字相加',
       documentation: null,
       categoryId: 'math',
       iconId: 'math',
@@ -90,7 +88,6 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: 'output.print',
       title: '打印',
-      description: null,
       documentation: null,
       categoryId: 'output',
       iconId: 'output',
@@ -106,7 +103,6 @@ const catalog: LocalizedCatalogResponse = {
     {
       nodeTypeId: 'function.call',
       title: '调用 Helper',
-      description: null,
       documentation: null,
       categoryId: 'functions',
       iconId: 'function',

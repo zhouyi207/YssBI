@@ -341,7 +341,6 @@ impl EditorGraphProjectionDto {
                 let display = protocol.map_or_else(
                     || NodeDisplayDto {
                         title: node.node_type.as_str().into(),
-                        description: None,
                         user_label: node.user_label.as_deref().map(Into::into),
                         icon_id: None,
                         style_id: None,
@@ -353,11 +352,6 @@ impl EditorGraphProjectionDto {
                                 localization
                                     .text(&protocol.catalog.title_key, &DiagnosticArguments::new())
                             }),
-                        description: protocol
-                            .catalog
-                            .description_key
-                            .as_ref()
-                            .map(|key| localization.text(key, &DiagnosticArguments::new())),
                         user_label: node.user_label.as_deref().map(Into::into),
                         icon_id: Some(protocol.catalog.icon_id.as_str().into()),
                         style_id: Some(protocol.catalog.style_id.as_str().into()),

@@ -22,24 +22,16 @@ impl ProviderFragment {
         spec: &NodeTextSpec,
     ) -> Result<(), BuiltinAssemblyError> {
         let keys = NodeKeys::new(spec.id)?;
-        for (locale, title, description, documentation, aliases) in [
-            (
-                "en-US",
-                spec.title,
-                spec.description,
-                spec.documentation,
-                spec.aliases,
-            ),
+        for (locale, title, documentation, aliases) in [
+            ("en-US", spec.title, spec.documentation, spec.aliases),
             (
                 "zh-CN",
                 spec.zh_title,
-                spec.zh_description,
                 spec.zh_documentation,
                 spec.zh_aliases,
             ),
         ] {
             self.text(locale, keys.title.clone(), title);
-            self.text(locale, keys.description.clone(), description);
             self.text(locale, keys.documentation.clone(), documentation);
             self.aliases(locale, keys.aliases.clone(), aliases);
         }
@@ -66,8 +58,6 @@ pub(crate) struct NodeTextSpec {
     pub id: &'static str,
     pub title: &'static str,
     pub zh_title: &'static str,
-    pub description: &'static str,
-    pub zh_description: &'static str,
     pub documentation: &'static str,
     pub zh_documentation: &'static str,
     pub aliases: &'static [&'static str],
@@ -77,7 +67,6 @@ pub(crate) struct NodeTextSpec {
 #[derive(Clone)]
 struct NodeKeys {
     title: I18nKey,
-    description: I18nKey,
     documentation: I18nKey,
     aliases: I18nKey,
 }
@@ -86,7 +75,6 @@ impl NodeKeys {
     fn new(id: &'static str) -> Result<Self, BuiltinAssemblyError> {
         Ok(Self {
             title: i18n(leak(format!("nodes.{id}.title")))?,
-            description: i18n(leak(format!("nodes.{id}.description")))?,
             documentation: i18n(leak(format!("nodes.{id}.documentation")))?,
             aliases: i18n(leak(format!("nodes.{id}.aliases")))?,
         })
@@ -153,7 +141,6 @@ pub(crate) fn protocol(
         type_id: semantic(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: keys.title,
-            description_key: Some(keys.description),
             documentation_key: Some(keys.documentation),
             aliases_key: Some(keys.aliases),
             category_id: semantic(category, NodeCategoryId::new)?,

@@ -890,7 +890,6 @@ mod tests {
                 position: crate::node_system::analysis::NodePositionDto { x: 0.0, y: 0.0 },
                 display: crate::node_system::analysis::NodeDisplayDto {
                     title: "Source".into(),
-                    description: None,
                     user_label: None,
                     icon_id: None,
                     style_id: None,

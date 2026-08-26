@@ -19,11 +19,6 @@ export function NodeDefinitionDetailPanel({ nodeType }: NodeDefinitionDetailPane
         <DetailReadonlyField label={t('detail.fields.type')} tone="muted">
           {nodeType}
         </DetailReadonlyField>
-        {item?.description ? (
-          <DetailReadonlyField label={t('detail.fields.description')} tone="muted">
-            {item.description}
-          </DetailReadonlyField>
-        ) : null}
       </DetailForm>
       {item?.documentation ? <NodeDocumentationPanel markdown={item.documentation} /> : null}
     </DetailPanelShell>

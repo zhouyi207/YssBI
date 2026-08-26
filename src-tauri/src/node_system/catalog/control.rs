@@ -230,9 +230,6 @@ fn protocol(
         type_id: sid(id, NodeTypeId::new)?,
         catalog: NodeCatalogProtocol {
             title_key: iid(Box::leak(format!("nodes.{id}.title").into_boxed_str()))?,
-            description_key: Some(iid(Box::leak(
-                format!("nodes.{id}.description").into_boxed_str(),
-            ))?),
             documentation_key: Some(iid(Box::leak(
                 format!("nodes.{id}.documentation").into_boxed_str(),
             ))?),
@@ -382,19 +379,12 @@ fn add_node_messages(
     zh_aliases: &'static [&'static str],
 ) {
     let title: &'static str = Box::leak(format!("nodes.{id}.title").into_boxed_str());
-    let description: &'static str = Box::leak(format!("nodes.{id}.description").into_boxed_str());
     let documentation: &'static str =
         Box::leak(format!("nodes.{id}.documentation").into_boxed_str());
     let aliases: &'static str = Box::leak(format!("nodes.{id}.aliases").into_boxed_str());
     out.extend([
         ("en-US", title, Text(en)),
         ("zh-CN", title, Text(zh)),
-        (
-            "en-US",
-            description,
-            Text("Defines explicit structured control flow."),
-        ),
-        ("zh-CN", description, Text("定义显式的结构化控制流。")),
         (
             "en-US",
             documentation,

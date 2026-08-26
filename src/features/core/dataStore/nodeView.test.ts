@@ -17,7 +17,6 @@ const baseNode: NodeData = {
   position: { x: 10, y: 20 },
   display: {
     title: 'Projected Add',
-    description: 'Projected description',
     userLabel: null,
     iconId: null,
     styleId: 'math',
@@ -53,7 +52,6 @@ describe('toUiNode', () => {
       id: 'node-1',
       nodeType: 'math.add',
       title: 'Projected Add',
-      description: 'Projected description',
       display: baseNode.display,
       parameterEditors: [],
       diagnostics: [],

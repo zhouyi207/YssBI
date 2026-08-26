@@ -108,9 +108,8 @@ function isPosition(value: unknown): boolean {
 }
 
 function isNodeDisplay(value: unknown): boolean {
-  return hasExactKeys(value, ['title', 'description', 'userLabel', 'iconId', 'styleId'])
+  return hasExactKeys(value, ['title', 'userLabel', 'iconId', 'styleId'])
     && typeof value.title === 'string'
-    && isStringOrNull(value.description)
     && isStringOrNull(value.userLabel)
     && isStringOrNull(value.iconId)
     && isStringOrNull(value.styleId);

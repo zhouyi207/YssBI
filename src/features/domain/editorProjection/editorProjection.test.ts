@@ -52,7 +52,6 @@ function validProjection(): EditorGraphProjectionDto {
         position: { x: 120.5, y: -32 },
         display: {
           title: '线性回归',
-          description: '拟合线性模型',
           userLabel: '主要模型',
           iconId: 'chart-line',
           styleId: 'analysis',

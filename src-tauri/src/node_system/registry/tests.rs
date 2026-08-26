@@ -1703,20 +1703,6 @@ fn registry_fingerprint_matrix() {
         .remove(&id("nodes.test.empty.title"));
     assert_canonical_fingerprint_invariant("title key", valid_provider(), title_changed);
 
-    let mut description_changed = valid_provider();
-    Arc::make_mut(&mut description_changed.nodes[0].protocol)
-        .catalog
-        .description_key = Some(id("nodes.test.changed.description"));
-    description_changed
-        .i18n
-        .keys
-        .insert(id("nodes.test.changed.description"));
-    assert_canonical_fingerprint_invariant(
-        "description key",
-        valid_provider(),
-        description_changed,
-    );
-
     let mut aliases_changed = valid_provider();
     Arc::make_mut(&mut aliases_changed.nodes[0].protocol)
         .catalog

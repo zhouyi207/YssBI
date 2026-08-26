@@ -20,8 +20,6 @@ pub(crate) fn register(fragment: &mut ProviderFragment) -> Result<(), BuiltinAss
             id: node_type,
             title: "Reroute",
             zh_title: "重路由",
-            description: "Reroutes a connection without runtime behavior.",
-            zh_description: "在不增加运行时行为的情况下重路由连接。",
             documentation: "Persistent compiler-transparent connection routing point.",
             zh_documentation: "持久化且对编译器透明的连接路由点。",
             aliases: &[],

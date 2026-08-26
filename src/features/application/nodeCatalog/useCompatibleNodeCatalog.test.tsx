@@ -42,7 +42,6 @@ function catalog(projectInstanceId: string, itemId: string): LocalizedCatalogDto
     items: [{
       nodeTypeId: itemId,
       title: itemId,
-      description: null,
       documentation: null,
       categoryId: 'compatible',
       iconId: 'test',

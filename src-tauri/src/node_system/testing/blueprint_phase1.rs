@@ -829,7 +829,6 @@ fn protocol(
         type_id: node_type(id),
         catalog: NodeCatalogProtocol {
             title_key: i18n(&format!("nodes.{id}.title")),
-            description_key: None,
             documentation_key: None,
             aliases_key: None,
             category_id: NodeCategoryId::new("testing_phase1").unwrap(),

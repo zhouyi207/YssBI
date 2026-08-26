@@ -53,7 +53,7 @@ describe('useNodeCatalogStore', () => {
     const second = catalog();
     first.items = [];
     second.items = [{
-      nodeTypeId: 'second', title: 'Second', description: null, documentation: null,
+      nodeTypeId: 'second', title: 'Second', documentation: null,
       categoryId: 'tests', iconId: 'tests', styleId: 'default', aliases: [],
       technicalTerms: [], backendSearchText: [], resourceNames: [], ports: [], parameters: [],
       creation: { kind: 'static', nodeTypeId: 'second' },

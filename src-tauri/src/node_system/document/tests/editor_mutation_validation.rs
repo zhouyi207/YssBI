@@ -641,7 +641,6 @@ fn snapshot_projection(
             position: NodePositionDto { x: 0.0, y: 0.0 },
             display: NodeDisplayDto {
                 title: "test".into(),
-                description: None,
                 user_label: None,
                 icon_id: None,
                 style_id: None,

@@ -156,7 +156,6 @@ pub struct EditorConnectionProjectionDto {
 #[serde(rename_all = "camelCase")]
 pub struct NodeDisplayDto {
     pub title: Box<str>,
-    pub description: Option<Box<str>>,
     pub user_label: Option<Box<str>>,
     pub icon_id: Option<Box<str>>,
     pub style_id: Option<Box<str>>,

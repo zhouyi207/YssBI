@@ -36,7 +36,6 @@ function resolveDomainNodes(nodes: NodeData[], pinMap: Map<string, Pin>): Graph[
     outputs: node.outputs
       .map((pinId) => pinMap.get(pinId))
       .filter((pin): pin is Pin => pin != null),
-    description: node.description,
     position: node.position,
     isInternal: node.isInternal,
   })) as Graph['nodes'];

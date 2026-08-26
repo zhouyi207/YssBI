@@ -22,7 +22,6 @@
       },
       "diagnostics": [],
       "display": {
-        "description": "Built-in deterministic node.",
         "iconId": "builtin.constants",
         "styleId": "builtin.default",
         "title": "Boolean Constant",

@@ -64,7 +64,6 @@ export function makeEditorProjectionFixture(options: EditorProjectionFixtureOpti
           position: { x: 0, y: 0 },
           display: {
             title,
-            description: null,
             userLabel: null,
             iconId: null,
             styleId: null,

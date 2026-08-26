@@ -128,7 +128,6 @@ function projectionWithResolvedType(resolvedType: unknown): Record<string, unkno
     position: { x: 1, y: 2 },
     display: {
       title: 'Constant',
-      description: null,
       userLabel: null,
       iconId: null,
       styleId: null,

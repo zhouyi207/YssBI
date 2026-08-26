@@ -53,7 +53,6 @@ function projection(
         position: { x: 10, y: 20 },
         display: {
           title,
-          description: 'Projected description',
           userLabel: null,
           iconId: 'projected-icon',
           styleId: 'projected-style',
@@ -221,7 +220,6 @@ describe('graphDataStore projection replacement', () => {
     expect(bucket.nodes['shared-node']).toMatchObject({
       nodeType: 'unknown.projected-node',
       title: 'Localized title',
-      description: 'Projected description',
       display: {
         styleId: 'projected-style',
         iconId: 'projected-icon',
@@ -251,7 +249,6 @@ describe('graphDataStore projection replacement', () => {
     expect(canvasNode).toMatchObject({
       nodeType: 'unknown.projected-node',
       title: 'Localized title',
-      description: 'Projected description',
       uiStyle: 'projected-style',
     });
   });

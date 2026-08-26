@@ -80,7 +80,6 @@ export interface EditorConnectionProjectionDto {
 
 export interface NodeDisplayDto {
   title: string;
-  description: string | null;
   userLabel: string | null;
   iconId: string | null;
   styleId: string | null;

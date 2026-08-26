@@ -30,7 +30,6 @@ function projectedNode(): UINode {
     position: { x: 0, y: 0 },
     display: {
       title: 'Sales Database',
-      description: null,
       userLabel: 'Prior period',
       iconId: null,
       styleId: null,
