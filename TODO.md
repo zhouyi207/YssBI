@@ -1438,3 +1438,24 @@ Execution 不知道具体 UI
 - [ ] 扩展 nested dependency regression，冻结 `export default import()` 外层 export-assignment 与 options 内层 dynamic-import 的逐项 canonical origin。
 - [ ] 让 ExportAssignment 记录外层 module edge 后遍历 call children，同时避免重访 call 自身导致外层 dependency 重复。
 - [ ] 复验 round 6 focused、Task 4 全组、project filesystem contract、带临时 Task 5 stub 的 typecheck 与 diff check，并继续隔离 classifier RED 草稿。
+- [ ] 为十层 frontend production classifier 建立闭合集合审计，返回分类结果与结构化 zero/multiple membership 错误。
+- [ ] 将 shared stateful、platform 与 presentation exceptions 作为 literal membership 从 base owner 集合移除后再校验 union/intersection。
+- [ ] 冻结 frontend 单向 layer matrix、canonical Core capability 与现有 `WorkbenchDockviewPort` 的 read-member manifest，不新增 production alias。
+
+## 2026.08.27
+
+- [ ] 建立 frontend external declaration policy，双向固定 32 个 runtime dependencies 与唯一 build-only `tailwindcss` scope。
+- [ ] 按 source layer、runtime/type-only/build-style mode、resource kind、canonical subpath 与 stylesheet consumer 审计 exact package rows。
+- [ ] 让 repository asset audit 直接消费 Task 4 `ResolvedStylesheetGraph`，保留 resolver errors 且仅从 exact authorized parent edge 继承 stylesheet layer。
+- [ ] 固定两个 production repository stylesheet consumer/path rows，并将 dev-only、unknown、invalid policy 与 asset resolution failures 排除在 debt 之外。
+- [ ] 以 rule、source、owner、dependency kind、canonical origin 五字段建立 frontend debt identity，明确排除 line/column。
+- [ ] 双向比较 actual 与 declared exact occurrences，让新增/增加和过期/减少均使 ratchet 失败。
+- [ ] 对 duplicate debt key、零或非法 count、未批准 maintained migration spec 返回 typed declaration errors，并保持 import-type 与 dynamic-import 独立。
+- [ ] 用单一 production audit pipeline 复用 Task 4 inventory、canonical module resolver 与完整 stylesheet graph，并分别报告 fatal error families。
+- [ ] 为 Application→Wire validated result/type declarations、View→DnD exact symbols 与现有 WorkbenchDockviewPort read capability 建立 literal manifests。
+- [ ] 审核 934 个 production sources 与 7110 个 dependency facts，将 610 个唯一 frontend debt keys、624 次 occurrences 固化为静态 exact manifest。
+- [ ] 新增 maintained `FRONTEND_APPLICATION_BOUNDARIES.md` 记录最终 owner、单向依赖与原子 debt removal 判据，不引用 docs/superpowers。
+- [ ] 收紧 external policy row validation，拒绝 duplicate subpath、unsupported mode/resource、prototype-inherited package names 与不存在的 build-style consumer。
+- [ ] 分离 TypeScript runtime asset consumer 与 stylesheet build consumer，并回归 stylesheet layer conflict 不产生确定 layer。
+- [ ] 将本地 named re-export 到 exact bare package 的 AST 可证明链纳入现有 canonical resolver，其他 node_modules origin 继续 typed fail-closed。
+- [ ] 补齐 repository dependency target classifier closure，并将 WorkbenchDockviewRead 作为 App/View 指向现有 WorkbenchDockviewPort 的 policy-only manifest。

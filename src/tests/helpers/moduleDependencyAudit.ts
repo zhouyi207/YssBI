@@ -426,6 +426,41 @@ export function parseExternalDependencySpecifier(
   };
 }
 
+function directExternalReExportOrigin(
+  context: TypeScriptAuditProject,
+  modulePath: string,
+  exportedName: string,
+): ExternalDependencyOrigin | null {
+  const sourceFile = context.sourceFile(modulePath);
+  let localName: string | null = null;
+  for (const statement of sourceFile.statements) {
+    if (!ts.isExportDeclaration(statement)
+      || statement.moduleSpecifier
+      || !statement.exportClause
+      || !ts.isNamedExports(statement.exportClause)) continue;
+    const exported = statement.exportClause.elements.find((element) => element.name.text === exportedName);
+    if (exported) {
+      localName = (exported.propertyName ?? exported.name).text;
+      break;
+    }
+  }
+  if (localName === null) return null;
+
+  for (const statement of sourceFile.statements) {
+    if (!ts.isImportDeclaration(statement) || !statement.importClause) continue;
+    const specifier = literalText(statement.moduleSpecifier);
+    if (specifier === null) continue;
+    const clause = statement.importClause;
+    const importsLocalName = clause.name?.text === localName
+      || (clause.namedBindings !== undefined
+        && ts.isNamedImports(clause.namedBindings)
+        && clause.namedBindings.elements.some((element) => element.name.text === localName));
+    if (!importsLocalName) continue;
+    return parseExternalDependencySpecifier(specifier, 'module');
+  }
+  return null;
+}
+
 function repositoryStylesheetTarget(importerPath: string, specifier: string): string | null {
   if (!specifier.startsWith('./')
     || specifier.includes('\\')
@@ -572,7 +607,33 @@ export function resolvedModuleDependencies(
       };
     }
     if (!declarationPath.startsWith('src/')) {
-      throw resolutionFailure('unresolved-module-dependency', source.path, dependency);
+      const reExportedExternal = fallbackModuleTarget !== null
+        && dependency.importedExportName !== null
+        ? directExternalReExportOrigin(
+            context,
+            fallbackModuleTarget,
+            dependency.importedExportName,
+          )
+        : null;
+      if (reExportedExternal === null) {
+        throw resolutionFailure('unresolved-module-dependency', source.path, dependency);
+      }
+      const subpath = reExportedExternal.canonicalSubpath === null
+        ? ''
+        : `::${reExportedExternal.canonicalSubpath}`;
+      return {
+        kind: dependency.kind,
+        mode: dependency.mode,
+        specifier: dependency.specifier,
+        location: dependency.location,
+        repositoryRelativeSourceFile: source.path,
+        fullyQualifiedOwner: `${source.path}::<module>`,
+        origin: { kind: 'external', dependency: reExportedExternal },
+        canonicalOriginTarget: `external:${reExportedExternal.packageName}${subpath}`,
+        importedSymbol,
+        writtenModuleSpecifier: dependency.specifier,
+        symbolDeclarationTarget,
+      };
     }
     return {
       kind: dependency.kind,

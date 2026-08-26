@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -15,8 +15,33 @@ import {
   resolvedModuleDependencies,
   resolvedStylesheetDependencies,
   type RepositoryTextReader,
+  type FrontendFinding,
+  type AssetDependencyPolicy,
+  type ExternalDependencyPolicy,
+  type ReadonlyPackageManifest,
   type ResolvedModuleDependency,
+  type ResolvedStylesheetDependency,
+  type ResolvedStylesheetGraph,
 } from './frontendArchitectureModel';
+import {
+  classifyFrontendSources,
+  type FrontendLayer,
+  type FrontendLiteralPolicyMembership,
+} from './frontendArchitecturePolicy';
+import {
+  FRONTEND_ASSET_DEPENDENCY_POLICY,
+  auditFrontendAssetDependencies,
+} from './frontendAssetDependencyPolicy';
+import {
+  FRONTEND_EXTERNAL_DEPENDENCY_POLICY,
+  auditFrontendExternalDependencies,
+} from './frontendExternalDependencyPolicy';
+import {
+  compareExactFrontendDebt,
+  type FrontendDebtEntry,
+} from './frontendArchitectureDebt';
+import { auditFrontendArchitectureDependencies } from './frontendArchitectureAudit';
+import { FRONTEND_ARCHITECTURE_POLICY } from './frontendArchitecturePolicy';
 
 class FixtureTextReader implements RepositoryTextReader {
   constructor(private readonly files: ReadonlyMap<string, string>) {}
@@ -63,6 +88,14 @@ const compilerSources = new Map<string, string>([
     export const runtimeValue = 1;
     export interface MixedContract { readonly value: number; }
   `],
+  ['src/app/i18n-facade.ts', `
+    import i18n from 'i18next';
+    export { i18n };
+  `],
+  ['src/features/application/i18n-user.ts', `
+    import { i18n } from '../../app/i18n-facade';
+    void i18n;
+  `],
   ['node_modules/@types/react/index.d.ts', `
     export interface ReactNode { readonly reactNode: unique symbol; }
     export interface ReactTypesOnly { readonly forbiddenReact: unique symbol; }
@@ -73,6 +106,7 @@ const compilerSources = new Map<string, string>([
   `],
   ['node_modules/react-dom/client.d.ts', 'export declare function createRoot(): void;'],
   ['node_modules/@tauri-apps/api/window.d.ts', 'export declare function getCurrentWindow(): void;'],
+  ['node_modules/i18next/index.d.ts', 'declare const i18n: { readonly language: string }; export default i18n;'],
   ['src/globals.d.ts', 'declare function require(specifier: string): unknown;'],
 ]);
 
@@ -128,7 +162,582 @@ function stylesheetRoot(path: string): ResolvedModuleDependency {
   };
 }
 
+function externalModuleDependency(
+  sourceFile: string,
+  packageName: string,
+  canonicalSubpath: string | null,
+  mode: 'runtime' | 'type-only',
+  resourceKind: 'module' | 'stylesheet' = 'module',
+  symbolDeclarationTarget: string | null = null,
+): ResolvedModuleDependency {
+  const writtenSubpath = canonicalSubpath?.split('::').join('/');
+  const writtenModuleSpecifier = `${packageName}${writtenSubpath ? `/${writtenSubpath}` : ''}`;
+  return {
+    kind: resourceKind === 'stylesheet' ? 'side-effect-import' : 'static-import',
+    mode,
+    specifier: writtenModuleSpecifier,
+    location: { line: 1, column: 1 },
+    repositoryRelativeSourceFile: sourceFile,
+    fullyQualifiedOwner: `${sourceFile}::<module>`,
+    origin: {
+      kind: 'external',
+      dependency: { packageName, canonicalSubpath, resourceKind },
+    },
+    canonicalOriginTarget: `external:${packageName}${canonicalSubpath ? `::${canonicalSubpath}` : ''}`,
+    importedSymbol: resourceKind === 'module' ? 'fixture' : null,
+    writtenModuleSpecifier,
+    symbolDeclarationTarget,
+  };
+}
+
+function repositoryAssetDependency(
+  sourceFile: string,
+  assetPath: string,
+): ResolvedModuleDependency {
+  const assetFileName = assetPath.split('/').slice(-1)[0];
+  return {
+    kind: 'side-effect-import',
+    mode: 'runtime',
+    specifier: `./${assetFileName}`,
+    location: { line: 1, column: 1 },
+    repositoryRelativeSourceFile: sourceFile,
+    fullyQualifiedOwner: `${sourceFile}::<module>`,
+    origin: {
+      kind: 'repository-asset',
+      asset: { repositoryRelativeAssetPath: assetPath, resourceKind: 'stylesheet' },
+    },
+    canonicalOriginTarget: `repository-asset:${assetPath}`,
+    importedSymbol: null,
+    writtenModuleSpecifier: `./${assetFileName}`,
+    symbolDeclarationTarget: null,
+  };
+}
+
+function stylesheetExternalDependency(
+  sourceFile: string,
+  packageName: string,
+  canonicalSubpath: string | null,
+): ResolvedStylesheetDependency {
+  const writtenSubpath = canonicalSubpath?.split('::').join('/');
+  const writtenSpecifier = `${packageName}${writtenSubpath ? `/${writtenSubpath}` : ''}`;
+  return {
+    repositoryRelativeSourceFile: sourceFile,
+    fullyQualifiedOwner: `stylesheet:${sourceFile}`,
+    kind: 'stylesheet-import',
+    mode: 'build-style',
+    origin: {
+      kind: 'external',
+      dependency: { packageName, canonicalSubpath, resourceKind: 'stylesheet' },
+    },
+    canonicalOriginTarget: `external:${packageName}${canonicalSubpath ? `::${canonicalSubpath}` : ''}`,
+    writtenSpecifier,
+    line: 1,
+    column: 1,
+  };
+}
+
+function architectureFinding(
+  overrides: Partial<FrontendFinding> = {},
+): FrontendFinding {
+  return {
+    ruleId: 'frontend.layer.views-target',
+    repositoryRelativeSourceFile: 'src/views/fixture.ts',
+    fullyQualifiedOwner: 'src/views/fixture.ts::<module>',
+    dependencyKind: 'static-import',
+    canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
+    sourceLayer: 'views',
+    targetLayer: 'domain',
+    importedSymbol: 'Contract',
+    line: 1,
+    column: 1,
+    ...overrides,
+  };
+}
+
 describe('frontend architecture model', () => {
+  it('classifies every frontend production source exactly once', () => {
+    const emptyMembership = Object.fromEntries([
+      'app-composition',
+      'views',
+      'application',
+      'core',
+      'domain',
+      'services',
+      'components-ui',
+      'wire-schema',
+      'diagnostics',
+      'pure-shared',
+    ].map((layer) => [layer, []])) as unknown as Record<FrontendLayer, readonly string[]>;
+    const literalMembership: FrontendLiteralPolicyMembership = {
+      ...emptyMembership,
+      services: ['src/shared/platform/testAdapter.ts'],
+      core: ['src/shared/overlap.ts'],
+      diagnostics: ['src/shared/overlap.ts'],
+    };
+    const report = classifyFrontendSources([
+      { path: 'src\\app\\fixture.ts', source: 'export const fixture = true;' },
+      { path: 'src/shared/platform/testAdapter.ts', source: 'export const adapter = true;' },
+      { path: 'src/unowned/fixture.ts', source: 'export const fixture = true;' },
+      { path: 'src/shared/overlap.ts', source: 'export const overlap = true;' },
+    ], literalMembership);
+
+    expect([...report.classification]).toEqual([
+      ['src/app/fixture.ts', 'app-composition'],
+      ['src/shared/platform/testAdapter.ts', 'services'],
+    ]);
+    expect(report.errors).toEqual([
+      {
+        kind: 'multiply-classified-production-source',
+        sourceFile: 'src/shared/overlap.ts',
+        layers: ['core', 'diagnostics'],
+      },
+      {
+        kind: 'unclassified-production-source',
+        sourceFile: 'src/unowned/fixture.ts',
+      },
+    ]);
+
+    withProductionTypeScriptProject((context) => {
+      const productionReport = classifyFrontendSources(productionTypeScriptSources(context));
+      expect(productionReport.errors).toEqual([]);
+      expect(productionReport.classification.size).toBe(productionTypeScriptSources(context).length);
+    });
+    expect(FRONTEND_ARCHITECTURE_POLICY.capabilities).toContainEqual(expect.objectContaining({
+      canonicalModule: 'src/features/core/dockview/workbenchDockviewPort.ts',
+      exportedSymbols: ['WorkbenchDockviewPort'],
+      memberCapabilities: {
+        WorkbenchDockviewRead: [
+          'isReady',
+          'isHydrated',
+          'whenHydrated',
+          'subscribe',
+          'getSnapshot',
+          'getPanel',
+          'getActivePanel',
+          'getActiveEditorPanel',
+          'listPanels',
+          'listGroups',
+          'listGroupPanels',
+          'findEditorPanelsByResource',
+          'getEdgeState',
+        ],
+      },
+    }));
+    expect(FRONTEND_ARCHITECTURE_POLICY.capabilities.filter((capability) => (
+      capability.canonicalModule === 'src/features/core/dockview/workbenchDockviewPort.ts'
+      && capability.exportedSymbols.includes('WorkbenchDockviewPort')
+    )).map(({ sourceLayer }) => sourceLayer)).toEqual(['app-composition', 'views']);
+  });
+
+  it('audits frontend packages and stylesheet assets by layer mode and origin', () => {
+    const productionSources = [
+      'src/app/App.tsx',
+      'src/app/main.tsx',
+      'src/views/fixture.tsx',
+      'src/features/application/fixture.ts',
+      'src/features/core/fixture.ts',
+      'src/features/domain/fixture.ts',
+      'src/services/fixture.ts',
+      'src/components/fixture.tsx',
+    ].map((path) => ({ path, source: 'export {};' }));
+    const classification = classifyFrontendSources(productionSources).classification;
+    const moduleDependencies = [
+      externalModuleDependency('src/views/fixture.tsx', 'react', null, 'runtime'),
+      externalModuleDependency(
+        'src/views/fixture.tsx',
+        'react',
+        null,
+        'type-only',
+        'module',
+        'node_modules/@types/react/index.d.ts::ReactNode',
+      ),
+      externalModuleDependency(
+        'src/views/fixture.tsx',
+        'd3',
+        null,
+        'type-only',
+        'module',
+        'node_modules/@types/d3/index.d.ts::Selection',
+      ),
+      externalModuleDependency('src/features/application/fixture.ts', 'zustand', 'react::shallow', 'runtime'),
+      externalModuleDependency('src/features/core/fixture.ts', 'dockview-react', null, 'type-only'),
+      externalModuleDependency('src/services/fixture.ts', '@tauri-apps/api', 'core', 'runtime'),
+      externalModuleDependency('src/app/App.tsx', 'dockview-react', 'dist::styles::dockview.css', 'runtime', 'stylesheet'),
+      externalModuleDependency('src/views/fixture.tsx', 'katex', 'dist::katex.min.css', 'runtime', 'stylesheet'),
+      externalModuleDependency('src/components/fixture.tsx', 'katex', 'dist::katex.min.css', 'runtime', 'stylesheet'),
+      repositoryAssetDependency('src/app/App.tsx', 'src/app/App.css'),
+      repositoryAssetDependency('src/app/main.tsx', 'src/app/workbench-dockview.css'),
+      externalModuleDependency('src/features/domain/fixture.ts', 'react', null, 'runtime'),
+      externalModuleDependency('src/views/fixture.tsx', 'zustand', null, 'runtime'),
+      externalModuleDependency('src/views/fixture.tsx', '@tauri-apps/api', 'window', 'runtime'),
+      externalModuleDependency('src/features/application/fixture.ts', 'dockview-react', null, 'runtime'),
+      externalModuleDependency('src/views/fixture.tsx', 'react', 'unlisted', 'runtime'),
+      externalModuleDependency('src/app/App.tsx', 'dockview-react', 'dist::styles::other.css', 'runtime', 'stylesheet'),
+      externalModuleDependency('src/views/fixture.tsx', 'dockview-react', 'dist::styles::dockview.css', 'runtime', 'stylesheet'),
+      repositoryAssetDependency('src/views/fixture.tsx', 'src/app/App.css'),
+      externalModuleDependency('src/features/application/fixture.ts', 'tailwindcss', null, 'runtime'),
+      externalModuleDependency('src/features/application/fixture.ts', 'tailwindcss', null, 'type-only'),
+      externalModuleDependency('src/views/fixture.tsx', '@types/react', null, 'type-only'),
+      externalModuleDependency('src/views/fixture.tsx', '@types/d3', null, 'type-only'),
+      externalModuleDependency('src/views/fixture.tsx', 'vitest', null, 'runtime'),
+      externalModuleDependency('src/views/fixture.tsx', 'mystery-package', null, 'runtime'),
+      externalModuleDependency('src/views/fixture.tsx', 'toString', null, 'runtime'),
+    ];
+    const stylesheetDependencies = [
+      stylesheetExternalDependency('src/app/App.css', 'tailwindcss', null),
+      stylesheetExternalDependency('src/app/App.css', 'tw-animate-css', null),
+      stylesheetExternalDependency('src/app/App.css', 'shadcn', 'tailwind.css'),
+      stylesheetExternalDependency('src/app/App.css', '@fontsource-variable/inter', null),
+      stylesheetExternalDependency('src/app/workbench-dockview.css', 'tailwindcss', null),
+    ];
+    const stylesheetGraph: ResolvedStylesheetGraph = {
+      repositoryStylesheets: ['src/app/App.css', 'src/app/workbench-dockview.css'],
+      dependencies: stylesheetDependencies,
+      errors: [
+        { kind: 'stylesheet-target-missing', sourceFile: 'src/app/App.css', canonicalTarget: 'src/app/missing.css' },
+        { kind: 'stylesheet-path-escapes-repository', sourceFile: 'src/app/App.css', writtenSpecifier: '../../../outside.css' },
+        { kind: 'unsupported-stylesheet-target', sourceFile: 'src/app/App.css', writtenSpecifier: './font.woff2' },
+        { kind: 'stylesheet-cycle', cycle: ['src/app/a.css', 'src/app/b.css', 'src/app/a.css'] },
+      ],
+    };
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as ReadonlyPackageManifest;
+
+    expect(FRONTEND_EXTERNAL_DEPENDENCY_POLICY.declaredRuntimePackages).toEqual(
+      Object.keys(packageJson.dependencies).sort(),
+    );
+    expect(FRONTEND_EXTERNAL_DEPENDENCY_POLICY.declaredBuildOnlyPackages).toEqual(['tailwindcss']);
+    expect(FRONTEND_ASSET_DEPENDENCY_POLICY.uses).toEqual([
+      {
+        sourceLayer: 'app-composition',
+        mode: 'runtime',
+        dependencyKind: 'side-effect-import',
+        resourceKind: 'stylesheet',
+        consumerSourceFile: 'src/app/App.tsx',
+        repositoryRelativeAssetPath: 'src/app/App.css',
+      },
+      {
+        sourceLayer: 'app-composition',
+        mode: 'runtime',
+        dependencyKind: 'side-effect-import',
+        resourceKind: 'stylesheet',
+        consumerSourceFile: 'src/app/main.tsx',
+        repositoryRelativeAssetPath: 'src/app/workbench-dockview.css',
+      },
+    ]);
+
+    const assetReport = auditFrontendAssetDependencies({
+      productionSources,
+      moduleDependencies,
+      stylesheetGraph,
+    }, classification, FRONTEND_ASSET_DEPENDENCY_POLICY);
+    expect(assetReport.stylesheetLayers).toEqual(new Map([
+      ['src/app/App.css', 'app-composition'],
+      ['src/app/workbench-dockview.css', 'app-composition'],
+    ]));
+    expect(assetReport.findings).toEqual([
+      expect.objectContaining({
+        ruleId: 'frontend.asset.consumer-path',
+        repositoryRelativeSourceFile: 'src/views/fixture.tsx',
+        canonicalOriginTarget: 'repository-asset:src/app/App.css',
+      }),
+    ]);
+    expect(assetReport.errors).toEqual(stylesheetGraph.errors);
+
+    const externalReport = auditFrontendExternalDependencies(
+      [...moduleDependencies, ...stylesheetDependencies],
+      classification,
+      assetReport.stylesheetLayers,
+      packageJson,
+      FRONTEND_EXTERNAL_DEPENDENCY_POLICY,
+    );
+    expect(externalReport.evaluated).toEqual(expect.arrayContaining([
+      expect.objectContaining({ packageName: 'react', mode: 'type-only', declarationScope: 'production', allowed: true }),
+      expect.objectContaining({ packageName: 'd3', mode: 'type-only', declarationScope: 'production', allowed: true }),
+      expect.objectContaining({ packageName: 'tailwindcss', mode: 'build-style', declarationScope: 'development', allowed: true }),
+      expect.objectContaining({ packageName: '@tauri-apps/api', canonicalSubpath: 'core', allowed: true }),
+    ]));
+    expect(externalReport.findings.map(({ ruleId }) => ruleId)).toEqual([
+      'frontend.external.runtime-subpath',
+      'frontend.external.build-style-consumer',
+      'frontend.external.runtime-source-layer',
+      'frontend.external.runtime-source-layer',
+      'frontend.external.runtime-resource-kind',
+      'frontend.external.runtime-source-layer',
+      'frontend.external.runtime-subpath',
+      'frontend.external.runtime-subpath',
+    ]);
+    expect(externalReport.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'development-dependency-in-production', packageName: 'tailwindcss' }),
+      expect.objectContaining({ kind: 'development-dependency-in-production', packageName: '@types/react' }),
+      expect.objectContaining({ kind: 'development-dependency-in-production', packageName: '@types/d3' }),
+      expect.objectContaining({ kind: 'development-dependency-in-production', packageName: 'vitest' }),
+      expect.objectContaining({ kind: 'unknown-external-package', packageName: 'mystery-package' }),
+      expect.objectContaining({ kind: 'unknown-external-package', packageName: 'toString' }),
+    ]));
+    expect(externalReport.errors.filter(({ kind }) => (
+      kind === 'development-dependency-in-production'
+    ))).toHaveLength(5);
+
+    const duplicateExternalPolicy = {
+      ...FRONTEND_EXTERNAL_DEPENDENCY_POLICY,
+      uses: [
+        ...FRONTEND_EXTERNAL_DEPENDENCY_POLICY.uses,
+        FRONTEND_EXTERNAL_DEPENDENCY_POLICY.uses[0],
+      ],
+    };
+    expect(auditFrontendExternalDependencies(
+      [],
+      classification,
+      assetReport.stylesheetLayers,
+      packageJson,
+      duplicateExternalPolicy,
+    ).errors).toContainEqual(expect.objectContaining({ kind: 'invalid-external-policy-row' }));
+    const duplicateSubpathPolicy = {
+      ...FRONTEND_EXTERNAL_DEPENDENCY_POLICY,
+      uses: FRONTEND_EXTERNAL_DEPENDENCY_POLICY.uses.map((row, index) => (
+        index === 0 ? { ...row, canonicalSubpaths: [null, null] } : row
+      )),
+    };
+    expect(auditFrontendExternalDependencies(
+      [],
+      classification,
+      assetReport.stylesheetLayers,
+      packageJson,
+      duplicateSubpathPolicy,
+    ).errors).toContainEqual(expect.objectContaining({
+      kind: 'invalid-external-policy-row',
+      reason: 'duplicate-subpath',
+    }));
+    const unsupportedModePolicy = {
+      ...FRONTEND_EXTERNAL_DEPENDENCY_POLICY,
+      uses: FRONTEND_EXTERNAL_DEPENDENCY_POLICY.uses.map((row, index) => (
+        index === 0 ? { ...row, mode: 'test-only' } : row
+      )),
+    } as unknown as ExternalDependencyPolicy;
+    expect(auditFrontendExternalDependencies(
+      [],
+      classification,
+      assetReport.stylesheetLayers,
+      packageJson,
+      unsupportedModePolicy,
+    ).errors).toContainEqual(expect.objectContaining({
+      kind: 'invalid-external-policy-row',
+      reason: 'unsupported-mode',
+    }));
+    const missingBuildConsumerPolicy = {
+      ...FRONTEND_EXTERNAL_DEPENDENCY_POLICY,
+      uses: FRONTEND_EXTERNAL_DEPENDENCY_POLICY.uses.map((row) => (
+        row.mode === 'build-style' && row.packageName === 'tailwindcss'
+          ? { ...row, consumerSourceFile: 'src/app/missing.css' }
+          : row
+      )),
+    };
+    expect(auditFrontendExternalDependencies(
+      [],
+      classification,
+      assetReport.stylesheetLayers,
+      packageJson,
+      missingBuildConsumerPolicy,
+    ).errors).toContainEqual(expect.objectContaining({
+      kind: 'invalid-external-policy-row',
+      reason: 'invalid-build-style-consumer',
+    }));
+    const duplicateAssetPolicy = {
+      uses: [...FRONTEND_ASSET_DEPENDENCY_POLICY.uses, FRONTEND_ASSET_DEPENDENCY_POLICY.uses[0]],
+    };
+    expect(auditFrontendAssetDependencies({
+      productionSources,
+      moduleDependencies,
+      stylesheetGraph: { ...stylesheetGraph, errors: [] },
+    }, classification, duplicateAssetPolicy).errors).toContainEqual(
+      expect.objectContaining({ kind: 'invalid-asset-policy-row' }),
+    );
+    const typeOnlyAssetPolicy = {
+      uses: [{ ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses[0], mode: 'type-only' }],
+    } as unknown as AssetDependencyPolicy;
+    expect(auditFrontendAssetDependencies({
+      productionSources,
+      moduleDependencies,
+      stylesheetGraph: { ...stylesheetGraph, errors: [] },
+    }, classification, typeOnlyAssetPolicy).errors).toContainEqual(expect.objectContaining({
+      kind: 'invalid-asset-policy-row',
+      reason: 'unsupported-mode',
+    }));
+    const stylesheetRuntimeConsumerPolicy: AssetDependencyPolicy = {
+      uses: [{
+        ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses[0],
+        consumerSourceFile: 'src/app/App.css',
+      }],
+    };
+    expect(auditFrontendAssetDependencies({
+      productionSources,
+      moduleDependencies,
+      stylesheetGraph: { ...stylesheetGraph, errors: [] },
+    }, classification, stylesheetRuntimeConsumerPolicy).errors).toContainEqual(expect.objectContaining({
+      kind: 'invalid-asset-policy-row',
+      reason: 'runtime-asset-consumer-not-typescript',
+    }));
+
+    const conflictModules = [
+      repositoryAssetDependency('src/app/App.tsx', 'src/app/shared.css'),
+      repositoryAssetDependency('src/views/fixture.tsx', 'src/app/shared.css'),
+    ];
+    const conflictPolicy: AssetDependencyPolicy = {
+      uses: [
+        {
+          ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses[0],
+          repositoryRelativeAssetPath: 'src/app/shared.css',
+        },
+        {
+          ...FRONTEND_ASSET_DEPENDENCY_POLICY.uses[0],
+          sourceLayer: 'views',
+          consumerSourceFile: 'src/views/fixture.tsx',
+          repositoryRelativeAssetPath: 'src/app/shared.css',
+        },
+      ],
+    };
+    const conflictReport = auditFrontendAssetDependencies({
+      productionSources,
+      moduleDependencies: conflictModules,
+      stylesheetGraph: {
+        repositoryStylesheets: ['src/app/shared.css'],
+        dependencies: [],
+        errors: [],
+      },
+    }, classification, conflictPolicy);
+    expect(conflictReport.stylesheetLayers.has('src/app/shared.css')).toBe(false);
+    expect(conflictReport.errors).toContainEqual({
+      kind: 'stylesheet-layer-conflict',
+      sourceFile: 'src/app/shared.css',
+      inheritedLayers: ['app-composition', 'views'],
+    });
+  });
+
+  it('ratchets frontend debt in both directions', () => {
+    const actual = [
+      architectureFinding({ line: 10, column: 2 }),
+      architectureFinding({ line: 20, column: 4 }),
+      architectureFinding({
+        dependencyKind: 'import-type',
+        canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
+      }),
+      architectureFinding({
+        dependencyKind: 'dynamic-import',
+        canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
+      }),
+    ];
+    const declared: FrontendDebtEntry[] = [
+      {
+        ruleId: 'frontend.layer.views-target',
+        repositoryRelativeSourceFile: 'src/views/fixture.ts',
+        fullyQualifiedOwner: 'src/views/fixture.ts::<module>',
+        dependencyKind: 'static-import',
+        canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
+        expectedOccurrences: 1,
+        owningMigrationSpec: 'docs/architecture/FRONTEND_APPLICATION_BOUNDARIES.md',
+      },
+      {
+        ruleId: 'frontend.layer.views-target',
+        repositoryRelativeSourceFile: 'src/views/moved.ts',
+        fullyQualifiedOwner: 'src/views/moved.ts::<module>',
+        dependencyKind: 'static-import',
+        canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
+        expectedOccurrences: 3,
+        owningMigrationSpec: 'docs/architecture/PROJECT_GRAPH_OWNERSHIP_BOUNDARIES.md',
+      },
+      {
+        ruleId: 'frontend.layer.views-target',
+        repositoryRelativeSourceFile: 'src/views/fixture.ts',
+        fullyQualifiedOwner: 'src/views/fixture.ts::<module>',
+        dependencyKind: 'dynamic-import',
+        canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
+        expectedOccurrences: 1,
+        owningMigrationSpec: 'docs/architecture/EXECUTION_RUNTIME_BOUNDARIES.md',
+      },
+    ];
+    expect(Object.keys(declared[0]).sort()).toEqual([
+      'canonicalOriginTarget',
+      'dependencyKind',
+      'expectedOccurrences',
+      'fullyQualifiedOwner',
+      'owningMigrationSpec',
+      'repositoryRelativeSourceFile',
+      'ruleId',
+    ]);
+
+    const mismatch = compareExactFrontendDebt(actual, declared);
+    expect(mismatch.errors).toEqual([]);
+    expect(mismatch.newOrIncreased).toContainEqual(expect.objectContaining({
+      dependencyKind: 'static-import',
+      actualOccurrences: 2,
+      expectedOccurrences: 1,
+    }));
+    expect(mismatch.newOrIncreased).toContainEqual(expect.objectContaining({
+      dependencyKind: 'import-type',
+      canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
+      actualOccurrences: 1,
+      expectedOccurrences: 0,
+    }));
+    expect(mismatch.newOrIncreased).not.toContainEqual(expect.objectContaining({
+      dependencyKind: 'dynamic-import',
+      canonicalOriginTarget: 'src/features/domain/fixture/contract.ts::Contract',
+    }));
+    expect(mismatch.staleOrDecreased).toEqual([
+      expect.objectContaining({
+        repositoryRelativeSourceFile: 'src/views/moved.ts',
+        actualOccurrences: 0,
+        expectedOccurrences: 3,
+      }),
+    ]);
+
+    const duplicate = { ...declared[0] };
+    const invalid = compareExactFrontendDebt([], [
+      declared[0],
+      duplicate,
+      { ...declared[1], expectedOccurrences: 0 },
+      { ...declared[2], owningMigrationSpec: 'docs/superpowers/unapproved.md' },
+    ]);
+    expect(invalid.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'duplicate-frontend-debt-key' }),
+      expect.objectContaining({ kind: 'invalid-frontend-debt-count', expectedOccurrences: 0 }),
+      expect.objectContaining({
+        kind: 'invalid-frontend-debt-owning-spec',
+        owningMigrationSpec: 'docs/superpowers/unapproved.md',
+      }),
+    ]));
+  });
+
+  it('frontend production dependencies match the strict policy', () => {
+    const packageJson = JSON.parse(readFileSync('package.json', 'utf8')) as ReadonlyPackageManifest;
+    withProductionTypeScriptProject((context) => {
+      const report = auditFrontendArchitectureDependencies(
+        context,
+        resolve('.'),
+        createRepositoryTextReader(resolve('.')),
+        FRONTEND_ARCHITECTURE_POLICY,
+        FRONTEND_EXTERNAL_DEPENDENCY_POLICY,
+        FRONTEND_ASSET_DEPENDENCY_POLICY,
+        packageJson,
+      );
+
+      expect({
+        unresolvedErrors: report.unresolvedErrors,
+        classifierErrors: report.classification.errors,
+        externalErrors: report.external.errors,
+        assetErrors: report.asset.errors,
+        debtErrors: report.debt.errors,
+      }).toEqual({
+        unresolvedErrors: [],
+        classifierErrors: [],
+        externalErrors: [],
+        assetErrors: [],
+        debtErrors: [],
+      });
+      expect(report.debt.newOrIncreased).toEqual([]);
+      expect(report.debt.staleOrDecreased).toEqual([]);
+    });
+  }, 120_000);
+
   it('resolves every module dependency to its canonical origin', () => {
     withIsolatedTypeScriptProject(compilerSources, (context) => {
       const sourcePaths = [...compilerSources.keys()].filter((path) => (
@@ -229,6 +838,11 @@ describe('frontend architecture model', () => {
         }),
         expect.objectContaining({ canonicalOriginTarget: 'external:react-dom::client' }),
         expect.objectContaining({ canonicalOriginTarget: 'external:@tauri-apps/api::window' }),
+        expect.objectContaining({
+          repositoryRelativeSourceFile: 'src/features/application/i18n-user.ts',
+          canonicalOriginTarget: 'external:i18next',
+          symbolDeclarationTarget: 'node_modules/i18next/index.d.ts::i18n',
+        }),
         expect.objectContaining({
           kind: 'side-effect-import',
           mode: 'runtime',
