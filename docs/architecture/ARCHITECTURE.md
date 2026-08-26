@@ -71,11 +71,12 @@ membership 都是 hard failure：
   files 使用 literal membership 归到真实 owner；repository assets 不伪装成 source layer。
 
 依赖在应用 layer policy 前解析到 canonical origin。Rust origin 只有 repository declaration、
-language builtin 或 external Cargo dependency；workspace-member alias 必须先进入 member library
-与 re-export graph，不能回退为 external。Frontend origin 只有 repository declaration、
-repository asset 或 external package；alias/barrel/re-export 解析到声明 symbol，written external
-package authority 则保留原 package。Canonical external target 使用 `external:<package>` 或
-`external:<package>::<subpath>`，asset 使用
+repository asset、language builtin 或 external Cargo dependency；Include/Attribute 的 repository
+file fact 解析为 repository asset。Workspace-member alias 必须先进入 member library 与 re-export
+graph，不能回退为 external。Frontend origin 只有 repository declaration、repository asset 或
+external package；alias/barrel/re-export 解析到声明 symbol，written external package authority
+则保留原 package。Canonical external target 使用 `external:<package>` 或
+`external:<package>::<subpath>`；两端 canonical repository-asset target 都使用
 `repository-asset:<repository-relative-path>`，repository path 统一使用 `/`。
 
 Cargo policy 对 workspace member、declared alias、actual package、runtime/build/development scope

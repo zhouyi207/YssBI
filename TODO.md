@@ -1500,3 +1500,5 @@ Execution 不知道具体 UI
 - [ ] 在当前架构文档记录 Cargo/Frontend production-root discovery、15/10 层 total-exclusive classification 与 canonical dependency origins。
 - [ ] 记录 exact Cargo/package declaration-use policy、双向 occurrence debt ratchet 与两端 semantic fitness checks，不复制具体 debt entries。
 - [ ] 完成 focused scripts 的缺入口 RED 与 GREEN 验证，Frontend 66 项、Rust architecture 20 项测试通过。
+- [ ] 补全当前架构文档中的 Rust canonical origin 列表，明确 repository asset 是独立于 repository declaration、language builtin 与 external dependency 的分支。
+- [ ] 对照 `CanonicalOrigin::RepositoryAsset` 与 Include/Attribute resolver，记录 exact `repository-asset:<repository-relative-path>` target 规范。
