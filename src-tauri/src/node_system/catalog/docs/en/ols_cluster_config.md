@@ -2,12 +2,6 @@
 
 Cluster-robust covariance for `cov_type = 'cluster'`.
 
-## Inputs
-
-| Pin | Description |
-|-----|-------------|
-| **Cluster ID** | Group labels as a `DataSeries` (`Categorical` or `Int64`, same length as $Y$); observations sharing a label form one cluster |
-
 ## Formula
 
 $$
@@ -15,11 +9,3 @@ $$
 $$
 
 Standard errors allow arbitrary within-cluster correlation.
-
-## Output
-
-| Pin | Description |
-|-----|-------------|
-| **Config** | Cluster VCE config handle |
-
-Wire **Config** → **OLS & WLS Configure** → **VCE**, then to **OLS** / **WLS** / Summary nodes.

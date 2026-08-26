@@ -18,18 +18,6 @@ Rows = source type, columns = target type. ✓ = supported; — = use a dedicate
 
 \*String parsing: Boolean accepts `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off` (case-insensitive); invalid strings error. Int64/Float64 use standard parse rules.
 
-## Inputs
-
-| Pin | Description |
-|-----|-------------|
-| **Input** | Source value; type must be convertible to **Output** |
-
-## Outputs
-
-| Pin | Description |
-|-----|-------------|
-| **Output** | Converted value; pin type selects target scalar type |
-
 ## Usage
 
 Connect any scalar producer to **Input**, pick **Output** type, and wire downstream. For column-wise casts use **String to Float64**, **Int64 to Categorical**, etc.

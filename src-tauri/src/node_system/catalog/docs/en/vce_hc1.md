@@ -8,12 +8,6 @@ $$
 \widehat{\mathrm{Var}}(\hat\beta) = \frac{n}{n-k} \cdot \widehat{\mathrm{Var}}_{\mathrm{HC0}}(\hat\beta)
 $$
 
-## Output
-
-| Pin | Description |
-|-----|-------------|
-| **VCE** | HC1 covariance constant handle |
-
 ## Usage
 
 Connect **VCE** → **OLS & WLS Configure** → **VCE**, then to **OLS** / **WLS** / Summary nodes.

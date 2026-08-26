@@ -8,12 +8,6 @@ $$
 \widehat{\mathrm{Var}}(\hat\beta) = \frac{n}{n-k} \cdot \widehat{\mathrm{Var}}_{\mathrm{HC0}}(\hat\beta)
 $$
 
-## 输出
-
-| Pin | 说明 |
-|-----|------|
-| **VCE** | HC1 协方差常量句柄 |
-
 ## 用法
 
 **VCE** → **OLS & WLS Configure** → **VCE** → **OLS** / **WLS** / Summary 节点。

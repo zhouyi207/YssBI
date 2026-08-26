@@ -6,13 +6,6 @@ $$
 P(X=k)=(1-p)^{k-1}p,\quad k=1,2,3,\ldots
 $$
 
-## Pins
-
-| Pin | Description |
-|-----|-------------|
-| **P** | success probability $p$ per trial, with $0 < p \le 1$ |
-| **N** | sample size |
-
 ## Usage
 
 Wire **P** and **N**, then run the graph. **Samples** is a `DataSeries<Int64>` of positive integers. Use for time-to-first-success, waiting counts in repeated trials, and related survival-style discrete models.

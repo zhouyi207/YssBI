@@ -18,18 +18,6 @@
 
 \*字符串解析：Boolean 接受 `true`/`false`、`1`/`0`、`yes`/`no`、`on`/`off`（不区分大小写）；无效字符串报错。Int64/Float64 使用标准 parse 规则。
 
-## 输入
-
-| Pin | 说明 |
-|-----|------|
-| **Input** | 源值；类型须可转换为 **Output** |
-
-## 输出
-
-| Pin | 说明 |
-|-----|------|
-| **Output** | 转换结果；引脚类型即目标标量类型 |
-
 ## 用法
 
 将标量源接到 **Input**，设定 **Output** 类型并连到下游。列级转换请用 **String to Float64**、**Int64 to Categorical** 等节点。

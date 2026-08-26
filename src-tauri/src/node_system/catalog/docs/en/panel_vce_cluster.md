@@ -2,12 +2,6 @@
 
 Panel default VCE: cluster-robust standard errors using **Entity ID** from the panel node (not a separate series pin).
 
-## Output
-
-| Pin | Description |
-|-----|-------------|
-| **VCE** | Entity-cluster VCE constant handle |
-
 ## Usage
 
 Connect **VCE** → **Panel Configure** → **Config** on **Panel Summary** / **Panel DID**.

@@ -9,15 +9,6 @@ f(x)=\begin{cases}
 \end{cases}
 $$
 
-## Pins
-
-| Pin | Description |
-|-----|-------------|
-| **A** | lower bound (minimum) |
-| **B** | upper bound (maximum), with $A \le B$ |
-| **C** | mode, with $A \le C \le B$ |
-| **N** | sample size |
-
 ## Usage
 
 Set **A**, **B**, **C**, and **N**, then run the graph. **Samples** is a `DataSeries<Float64>` on $[A,B]$. Use for expert elicitation, project duration uncertainty, and bounded but non-uniform random inputs.

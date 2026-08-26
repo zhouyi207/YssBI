@@ -2,12 +2,6 @@
 
 面板默认 VCE：使用面板节点上的 **Entity ID** 做聚类稳健标准误（无需单独连接序列 pin）。
 
-## 输出
-
-| Pin | 说明 |
-|-----|------|
-| **VCE** | 按 entity 聚类的 VCE 常量句柄 |
-
 ## 用法
 
 **VCE** → **Panel Configure** → **Config** → **Panel Summary** / **Panel DID**。

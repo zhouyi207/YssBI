@@ -6,14 +6,6 @@ $$
 f(x)=\frac{\beta^\alpha}{\Gamma(\alpha)}x^{\alpha-1}e^{-\beta x},\quad x > 0
 $$
 
-## Pin
-
-| Pin | 说明 |
-|-----|------|
-| **Shape** | 形状参数 $\alpha > 0$ |
-| **Rate** | 速率参数 $\beta > 0$ |
-| **N** | 样本量 |
-
 ## 用法
 
 设置 **Shape**、**Rate** 与 **N** 后执行图。**Samples** 输出正的 `DataSeries<Float64>`。适用于等待时间总和、Bayesian 共轭先验及作为 **Erlang** 的连续推广。
