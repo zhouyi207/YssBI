@@ -193,6 +193,12 @@ const RUST_EXTERNAL_DECLARATIONS: &[ExternalDependencyDeclarationAllowance] = &[
     ExternalDependencyDeclarationAllowance {
         owning_package: "yssbi",
         mode: RustDependencyMode::Runtime,
+        package_name: "trash",
+        target_condition: None,
+    },
+    ExternalDependencyDeclarationAllowance {
+        owning_package: "yssbi",
+        mode: RustDependencyMode::Runtime,
         package_name: "unicode-casefold",
         target_condition: None,
     },

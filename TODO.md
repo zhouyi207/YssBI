@@ -1411,3 +1411,6 @@ Execution 不知道具体 UI
 - [ ] 将四份边界目标迁入 docs/architecture 长期文档，移除 architecture audit 对 docs/superpowers 草稿的引用，并验证 owning spec 文件真实存在。
 - [ ] 增加并运行 production root、raw fact、canonical resolver、layer/capability、external policy、exact debt 与真实仓库 focused Rust regressions。
 - [ ] 运行 rustfmt、architecture_tests、rust:check、verify:rust 与 git diff --check，记录隔离 worktree 的最终验证结果。
+- [ ] 将 strict Rust architecture gate rebase 到最新 `shadcn` 已提交基线，同时保留主工作区全部未提交改动。
+- [ ] 将新增 `trash` runtime dependency 纳入 external declaration 审计，并把 Project 直接调用 `trash::delete` 记录为 Backend Adapter exact debt，而不扩大允许层。
+- [ ] 在同步基线上重新运行 15 项 architecture focused tests、rustfmt 与 `cargo check`，确认 exact debt 双向清单和 production policy 一致。

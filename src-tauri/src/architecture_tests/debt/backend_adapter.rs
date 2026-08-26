@@ -255,6 +255,14 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         entries,
         BACKEND_ADAPTER_SPEC,
         "rust.external.runtime-source-layer",
+        "src-tauri/src/project/project_lifecycle.rs",
+        "yssbi_lib::project::project_lifecycle",
+        [(Path, 1, "external:trash::delete")],
+    );
+    debt_group!(
+        entries,
+        BACKEND_ADAPTER_SPEC,
+        "rust.external.runtime-source-layer",
         "src-tauri/src/project/project_registry.rs",
         "yssbi_lib::project::project_registry",
         [
