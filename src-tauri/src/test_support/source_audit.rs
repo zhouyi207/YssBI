@@ -20,12 +20,18 @@ pub(crate) fn expand_use_tree(
         }
         UseTree::Name(name) => {
             let mut path = prefix.clone();
-            path.push(normalized_ident(&name.ident));
+            let ident = normalized_ident(&name.ident);
+            if ident != "self" || path.is_empty() {
+                path.push(ident);
+            }
             paths.push(path);
         }
         UseTree::Rename(rename) => {
             let mut path = prefix.clone();
-            path.push(normalized_ident(&rename.ident));
+            let ident = normalized_ident(&rename.ident);
+            if ident != "self" || path.is_empty() {
+                path.push(ident);
+            }
             paths.push(path);
         }
         UseTree::Glob(_) => {

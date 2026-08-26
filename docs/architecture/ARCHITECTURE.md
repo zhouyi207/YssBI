@@ -6,6 +6,10 @@
 
 - [诊断、IPC 错误、Results 与 Run Output](./DIAGNOSTICS_ERRORS_AND_OUTPUT.md)
 - [Workbench Dockview 架构](./WORKBENCH_DOCKVIEW_ARCHITECTURE.md)
+- [Rust Backend Adapter 边界](./RUST_BACKEND_ADAPTER_BOUNDARIES.md)
+- [Project 与 Graph ownership 边界](./PROJECT_GRAPH_OWNERSHIP_BOUNDARIES.md)
+- [Execution Runtime 边界](./EXECUTION_RUNTIME_BOUNDARIES.md)
+- [Presentation 与 Command 边界](./PRESENTATION_COMMAND_BOUNDARIES.md)
 - [Database 实现说明](../../src-tauri/src/database/README.md)
 - [SCI 应用模块说明](../../src-tauri/src/sci/README.md)
 - [Julia Bayes worker protocol](../../src-tauri/julia/README.md)
@@ -45,6 +49,24 @@ flowchart TD
 `commands/` 是 transport seam，不是业务 workflow 的归属。复杂行为进入 application、project、node_system、database 或 sci module，以提高 depth、leverage 和 locality。
 
 `application/` 拥有跨 module 的 database use-case orchestration；`project/` 拥有 project/session authority、resource revision、commit 与 coherent snapshot，并直接依赖 `database/` 提供的存储和 runtime primitives。生产代码中的 `project/` 不依赖 `application/` 或 `commands/`；该约束由 Rust production-module architecture audit 执行。
+
+### 1.1 Rust production dependency gate
+
+`src-tauri/src/architecture_tests/` 对所有 Cargo production targets 执行依赖审计，包括
+library、binary、example 与 custom-build。它从 Rust AST 收集 use、re-export、path、macro、
+include 与 `#[path]` 事实，再结合 Cargo workspace member alias、dependency scope 和 module
+declaration，把 written target 解析成唯一 canonical origin。
+
+每个 production source 必须恰好属于 Composition Root、Commands、Platform Adapter、
+Application、Project、Graph、Execution、SCI Core、Database Core、Backend Adapter、Built-in
+Composition、Transport、Diagnostics、Pure Leaf 或 Build Script 之一。普通允许边由 layer matrix
+给出；少数 composition/transport 调用必须按 source layer、literal file、fully-qualified owner
+与 canonical target 精确声明 capability。Capability 不接受 glob、目录 prefix 或 external target。
+
+现存违规以四份长期边界文档分组，并在 `architecture_tests/debt/` 中逐键声明 rule、file、
+owner、dependency kind、canonical target 与 occurrence count。审计对实际结果和声明清单做双向
+相等比较：新增/增加会失败，已删除/减少但未同步清单也会失败。因此清单是可删除的迁移账本，
+不是扩大允许边的第二套 policy。
 
 ## 2. 顶层目录与 authority
 

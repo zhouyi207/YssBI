@@ -1,3 +1,4 @@
+mod resolver;
 mod visitor;
 
 #[cfg(test)]
@@ -10,9 +11,28 @@ use syn::visit::Visit;
 use syn::{Expr, ExprLit, Item, ItemMod, Lit, Meta};
 
 use self::visitor::{ForbiddenDependencyVisitor, item_attributes};
+use crate::architecture_tests::model::{
+    ArchitectureAuditError, CanonicalDependency, ProductionRoot, ProductionRootKind, RawDependency,
+    RustDependencyKind, RustDependencyMode, RustModule, RustWorkspaceModel,
+};
 use crate::test_support::source_audit::{
     has_production_cfg_attr_path, is_test_only, normalized_ident,
 };
+
+pub(super) struct DependencyResolutionFailure {
+    dependency: RawDependency,
+    error: ArchitectureAuditError,
+}
+
+impl std::fmt::Debug for DependencyResolutionFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("DependencyResolutionFailure")
+            .field("dependency", &self.dependency)
+            .field("error", &self.error)
+            .finish()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct DependencyViolation {
@@ -45,6 +65,339 @@ fn audit_production_dependency(
     let mut state = AuditState::default();
     audit_module_file(&source_root, root, forbidden_module, &mut state)?;
     Ok(state.violations.into_iter().collect())
+}
+
+pub(super) fn collect_production_dependencies(
+    repository_root: &Path,
+    roots: &[ProductionRoot],
+) -> Result<Vec<RawDependency>, ArchitectureAuditError> {
+    collect_production_graph(repository_root, roots).map(|(_, dependencies)| dependencies)
+}
+
+pub(super) fn resolve_canonical_dependencies_detailed(
+    workspace: &RustWorkspaceModel,
+    raw: &[RawDependency],
+) -> Result<Vec<CanonicalDependency>, DependencyResolutionFailure> {
+    resolver::resolve_canonical_dependencies_detailed(workspace, raw)
+}
+
+pub(super) fn collect_production_modules(
+    repository_root: &Path,
+    roots: &[ProductionRoot],
+) -> Result<Vec<RustModule>, ArchitectureAuditError> {
+    collect_production_graph(repository_root, roots).map(|(modules, _)| modules)
+}
+
+fn collect_production_graph(
+    repository_root: &Path,
+    roots: &[ProductionRoot],
+) -> Result<(Vec<RustModule>, Vec<RawDependency>), ArchitectureAuditError> {
+    let repository_root =
+        std::fs::canonicalize(repository_root).map_err(|source| ArchitectureAuditError::Io {
+            path: repository_root.to_path_buf(),
+            source,
+        })?;
+    let mut modules = Vec::new();
+    let mut dependencies = Vec::new();
+    for root in roots {
+        let source_path = canonicalize_under_audit_root(&repository_root, &root.source_path)?;
+        let module = ModuleSource {
+            child_module_dir: source_path
+                .parent()
+                .expect("Cargo root source must have a parent")
+                .to_path_buf(),
+            path_attr_dir: path_attr_dir_for_file(&source_path),
+            file: source_path.clone(),
+            module_path: root_module_path(root, &source_path),
+        };
+        let mode = if root.kind == ProductionRootKind::BuildScript {
+            RustDependencyMode::Build
+        } else {
+            RustDependencyMode::Runtime
+        };
+        let mut visited = BTreeSet::new();
+        collect_module_file(
+            &repository_root,
+            root,
+            module,
+            mode,
+            &mut visited,
+            &mut modules,
+            &mut dependencies,
+        )?;
+    }
+    modules.sort();
+    modules.dedup();
+    dependencies.sort();
+    Ok((modules, dependencies))
+}
+
+fn collect_module_file(
+    repository_root: &Path,
+    root: &ProductionRoot,
+    module: ModuleSource,
+    mode: RustDependencyMode,
+    visited: &mut BTreeSet<(PathBuf, Vec<String>)>,
+    modules: &mut Vec<RustModule>,
+    dependencies: &mut Vec<RawDependency>,
+) -> Result<(), ArchitectureAuditError> {
+    if !visited.insert((module.file.clone(), module.module_path.clone())) {
+        return Ok(());
+    }
+    let source =
+        std::fs::read_to_string(&module.file).map_err(|source| ArchitectureAuditError::Io {
+            path: module.file.clone(),
+            source,
+        })?;
+    let syntax =
+        syn::parse_file(&source).map_err(|source| ArchitectureAuditError::SourceParse {
+            path: module.file.clone(),
+            source,
+        })?;
+    if is_test_only(&syntax.attrs) {
+        return Ok(());
+    }
+    modules.push(RustModule {
+        root_package_id: root.package_id.clone(),
+        root_target: root.target.clone(),
+        root_kind: root.kind,
+        repository_relative_source_file: relative_source_path_audit(repository_root, &module.file)?,
+        fully_qualified_owner: module_owner(root, &module),
+    });
+    collect_items(
+        repository_root,
+        root,
+        &source,
+        &syntax.items,
+        &module,
+        mode,
+        visited,
+        modules,
+        dependencies,
+    )
+}
+
+fn collect_items(
+    repository_root: &Path,
+    root: &ProductionRoot,
+    source: &str,
+    items: &[Item],
+    module: &ModuleSource,
+    mode: RustDependencyMode,
+    visited: &mut BTreeSet<(PathBuf, Vec<String>)>,
+    modules: &mut Vec<RustModule>,
+    dependencies: &mut Vec<RawDependency>,
+) -> Result<(), ArchitectureAuditError> {
+    for item in items {
+        if is_test_only(item_attributes(item)) {
+            continue;
+        }
+        if let Item::Mod(item_mod) = item {
+            collect_path_attribute(
+                repository_root,
+                root,
+                source,
+                item_mod,
+                module,
+                mode,
+                dependencies,
+            )?;
+            if let Some((_, inline_items)) = &item_mod.content {
+                let name = normalized_ident(&item_mod.ident);
+                let path_base = explicit_module_path(module, item_mod)
+                    .map_err(|message| ArchitectureAuditError::InvalidMetadata { message })?
+                    .map(|path| module.path_attr_dir.join(path))
+                    .unwrap_or_else(|| module.child_module_dir.join(&name));
+                let mut inline = module.clone();
+                inline.child_module_dir = path_base.clone();
+                inline.path_attr_dir = path_base;
+                inline.module_path.push(name);
+                collect_items(
+                    repository_root,
+                    root,
+                    source,
+                    inline_items,
+                    &inline,
+                    mode,
+                    visited,
+                    modules,
+                    dependencies,
+                )?;
+            } else {
+                let child = resolve_external_module(repository_root, module, item_mod)
+                    .map_err(|message| ArchitectureAuditError::InvalidMetadata { message })?;
+                collect_module_file(
+                    repository_root,
+                    root,
+                    child,
+                    mode,
+                    visited,
+                    modules,
+                    dependencies,
+                )?;
+            }
+            continue;
+        }
+
+        let file = relative_source_path_audit(repository_root, &module.file)?;
+        let owner = module_owner(root, module);
+        let dependency_start = dependencies.len();
+        let mut visitor = visitor::RawDependencyVisitor::new(
+            &root.package,
+            &file,
+            &owner,
+            mode,
+            source,
+            dependencies,
+        );
+        visitor.visit_item(item);
+        let unresolved_include = visitor.unresolved_include();
+        let code_includes = visitor.code_includes();
+        drop(visitor);
+        if let Some(target) = unresolved_include {
+            return Err(ArchitectureAuditError::UnresolvedInclude {
+                source_file: module.file.clone(),
+                target,
+            });
+        }
+        for dependency in &dependencies[dependency_start..] {
+            if dependency.kind == RustDependencyKind::Include {
+                let include_path = module
+                    .file
+                    .parent()
+                    .unwrap_or(repository_root)
+                    .join(&dependency.written_target);
+                canonicalize_under_audit_root(repository_root, &include_path)?;
+            }
+        }
+        for target in code_includes {
+            let include_path = module.file.parent().unwrap_or(repository_root).join(target);
+            let file = canonicalize_under_audit_root(repository_root, &include_path)?;
+            let included_module = ModuleSource {
+                child_module_dir: child_module_dir_for_file(&file),
+                path_attr_dir: path_attr_dir_for_file(&file),
+                file,
+                module_path: module.module_path.clone(),
+            };
+            collect_module_file(
+                repository_root,
+                root,
+                included_module,
+                mode,
+                visited,
+                modules,
+                dependencies,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn collect_path_attribute(
+    repository_root: &Path,
+    root: &ProductionRoot,
+    source: &str,
+    item_mod: &ItemMod,
+    module: &ModuleSource,
+    mode: RustDependencyMode,
+    dependencies: &mut Vec<RawDependency>,
+) -> Result<(), ArchitectureAuditError> {
+    let Some(attribute) = item_mod
+        .attrs
+        .iter()
+        .find(|attribute| attribute.path().is_ident("path"))
+    else {
+        return Ok(());
+    };
+    let Some(target) =
+        attribute
+            .meta
+            .require_name_value()
+            .ok()
+            .and_then(|value| match &value.value {
+                Expr::Lit(ExprLit {
+                    lit: Lit::Str(path),
+                    ..
+                }) => Some(path.value()),
+                _ => None,
+            })
+    else {
+        return Ok(());
+    };
+    let file = relative_source_path_audit(repository_root, &module.file)?;
+    let owner = module_owner(root, module);
+    let (_, line, column) = visitor::source_location(source, &target, 0);
+    dependencies.push(RawDependency {
+        owning_package: root.package.clone(),
+        repository_relative_source_file: file,
+        fully_qualified_owner: owner,
+        kind: RustDependencyKind::Attribute,
+        mode,
+        written_target: target,
+        line,
+        column,
+    });
+    Ok(())
+}
+
+fn root_module_path(root: &ProductionRoot, source_path: &Path) -> Vec<String> {
+    let owner = root_owner(root);
+    let Some(file_name) = source_path.file_name().and_then(|name| name.to_str()) else {
+        return vec![owner];
+    };
+    if file_name == "mod.rs" {
+        source_path
+            .parent()
+            .and_then(|parent| parent.file_name())
+            .and_then(|name| name.to_str())
+            .map(|name| vec![name.to_owned()])
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    }
+}
+
+fn root_owner(root: &ProductionRoot) -> String {
+    root.target.replace('-', "_")
+}
+
+fn module_owner(root: &ProductionRoot, module: &ModuleSource) -> String {
+    let root_owner = root_owner(root);
+    if module.module_path.is_empty() {
+        root_owner
+    } else {
+        format!("{root_owner}::{}", module.module_path.join("::"))
+    }
+}
+
+fn canonicalize_under_audit_root(
+    repository_root: &Path,
+    path: &Path,
+) -> Result<PathBuf, ArchitectureAuditError> {
+    let canonical = std::fs::canonicalize(path).map_err(|source| ArchitectureAuditError::Io {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    if !canonical.starts_with(repository_root) {
+        return Err(ArchitectureAuditError::SourceEscapesRepository {
+            path: canonical,
+            repository_root: repository_root.to_path_buf(),
+        });
+    }
+    Ok(canonical)
+}
+
+fn relative_source_path_audit(
+    repository_root: &Path,
+    file: &Path,
+) -> Result<String, ArchitectureAuditError> {
+    let relative = file.strip_prefix(repository_root).map_err(|_| {
+        ArchitectureAuditError::SourceEscapesRepository {
+            path: file.to_path_buf(),
+            repository_root: repository_root.to_path_buf(),
+        }
+    })?;
+    Ok(relative.to_string_lossy().replace('\\', "/"))
 }
 
 fn resolve_root_module(source_root: &Path, module: &str) -> Result<ModuleSource, String> {

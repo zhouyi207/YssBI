@@ -42,6 +42,7 @@ Node.js 最低版本与 React Router 8 的运行时要求保持一致。
 | 格式检查 Rust | `pnpm rust:fmt:check` |
 | 检查 Rust 编译 | `pnpm rust:check` |
 | 测试 Tauri/Rust library | `pnpm rust:test:lib` |
+| 测试 Rust production architecture | `pnpm rust:test:lib -- architecture_tests::tests --nocapture` |
 | 测试 Tauri/Rust 主 crate（完整） | `pnpm rust:test` |
 | 测试科学计算 crate | `pnpm rust:test:sci` |
 | 运行宽表统计基准 | `pnpm rust:bench:column-analytics` |
@@ -80,6 +81,20 @@ pnpm rust:test --test database_test test_name -- --exact --nocapture
 pnpm rust:test:sci test_name -- --exact --nocapture
 julia --project=src-tauri/julia src-tauri/julia/tests/bayes_fit_tests.jl
 ```
+
+### Rust production architecture audit
+
+修改 Rust module、Cargo dependency、re-export、layer classification、command/application seam
+或边界债务时，先运行对应的快速 fixture test，再运行真实 production audit：
+
+```sh
+pnpm rust:test:lib -- architecture_tests::tests::rust_production_architecture_matches_declared_policy --exact --nocapture
+```
+
+真实审计会遍历所有 production targets 并解析 canonical origins，通常比普通 unit test 慢。
+它要求实际违规与 `src-tauri/src/architecture_tests/debt/` 的 literal 清单双向完全一致。
+新增依赖不能通过增加 broad allow rule 处理；只有目标架构确实允许的 exact capability 才进入
+policy，其余项必须绑定维护在 `docs/architecture/` 的边界文档并保留准确 occurrence count。
 
 首次运行 Julia-backed operations/tests 前安装项目环境：
 

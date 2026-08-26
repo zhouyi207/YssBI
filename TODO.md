@@ -1393,3 +1393,21 @@ Execution 不知道具体 UI
     169 +    };
     170 +    title.into()
     171 +}
+
+## 2026.08.26
+
+- [ ] 在隔离 worktree 中为 Rust architecture audit 增加 Cargo production root discovery，覆盖 library、binary、example 与 custom-build。
+- [ ] 保留 workspace member crate alias、runtime/build/development dependency scope 与 target condition，禁止 workspace 依赖降级为 external fallback。
+- [ ] 为 metadata fixture 与真实 workspace discovery 增加 focused Rust regression tests，并保持现有 Project/Application 依赖审计通过。
+- [ ] 将 Rust production source traversal 拆出 raw dependency facts，覆盖 use、pub use、路径、宏、include、#[path]、inline 与 cfg 可达性。
+- [ ] 为 raw facts 记录 owning package、repository-relative source file、fully-qualified owner、Runtime/Build mode 与稳定 source location，并对动态 include fail-closed。
+- [ ] 增加 workspace-first canonical origin resolver，保留 language builtin、external declaration、workspace member re-export chain 与 development-only/unknown alias 的 typed failures。
+- [ ] 运行 architecture_tests 全组回归，确认新的 discovery/resolver 不改变既有 Project→Application 依赖审计。
+- [ ] 将 repository dependency resolver 补齐 lexical/private import 与 exported facade 的可见性区分，并忽略 lint-level attribute token 中的伪依赖。
+- [ ] 为 15 个 Rust production layers 建立 total/exclusive classifier、单向 layer matrix 与 exact file/owner/symbol capability 校验。
+- [ ] 建立 Cargo external declaration/use policy，逐 scope、target condition、source layer 与 package fail-closed 审计 production 依赖。
+- [ ] 用 rule、file、owner、dependency kind、canonical target 和 occurrence count 冻结双向 exact architecture debt，新增与过期条目均使门禁失败。
+- [ ] 按 Backend Adapter、Project–Graph、Execution Runtime、Presentation–Command 四个迁移 owner 拆分 debt manifests，避免单一巨型清单混合职责。
+- [ ] 将四份边界目标迁入 docs/architecture 长期文档，移除 architecture audit 对 docs/superpowers 草稿的引用，并验证 owning spec 文件真实存在。
+- [ ] 增加并运行 production root、raw fact、canonical resolver、layer/capability、external policy、exact debt 与真实仓库 focused Rust regressions。
+- [ ] 运行 rustfmt、architecture_tests、rust:check、verify:rust 与 git diff --check，记录隔离 worktree 的最终验证结果。
