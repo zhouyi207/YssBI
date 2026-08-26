@@ -1,7 +1,6 @@
 import type { ArchitectureSource } from '@/tests/helpers/moduleDependencyAudit';
 import type {
   FrontendArchitecturePolicy,
-  FrontendBasePolicyMembership,
   FrontendClassificationError,
   FrontendClassificationReport,
   FrontendLayer,
@@ -9,11 +8,15 @@ import type {
 } from './frontendArchitectureModel';
 
 export type {
-  FrontendBasePolicyMembership,
   FrontendClassificationReport,
   FrontendLayer,
   FrontendLiteralPolicyMembership,
 } from './frontendArchitectureModel';
+
+export interface FrontendBaseRule {
+  readonly layer: FrontendLayer;
+  readonly matches: (path: string) => boolean;
+}
 
 export const FRONTEND_LAYERS = [
   'app-composition',
@@ -320,61 +323,64 @@ function literalSets(
   ]));
 }
 
-function injectedBaseSets(
-  membership: FrontendBasePolicyMembership,
-  sources: ReadonlySet<string>,
+function baseSetsFromRules(
+  rules: readonly FrontendBaseRule[],
+  sources: readonly string[],
 ): MutableMembershipSets {
-  const memberships = literalSets(membership);
-  for (const paths of memberships.values()) {
-    for (const path of paths) {
-      if (!sources.has(path)) paths.delete(path);
+  const memberships = emptyMembershipSets();
+  for (const path of sources) {
+    for (const rule of rules) {
+      if (rule.matches(path)) memberships.get(rule.layer)!.add(path);
     }
   }
   return memberships;
 }
 
-function productionBaseSets(
-  sources: readonly string[],
-  overridden: ReadonlySet<string>,
-): MutableMembershipSets {
-  const memberships = emptyMembershipSets();
-  for (const path of sources) {
-    const sharedPresentation = /^src\/shared\/(?:ui|charts|hooks|plot)\//.test(path);
-    const sharedWire = path.startsWith('src/shared/types/dto/');
-    if (path.startsWith('src/app/')) memberships.get('app-composition')!.add(path);
-    if (path.startsWith('src/views/')) memberships.get('views')!.add(path);
-    if (path.startsWith('src/features/application/')) memberships.get('application')!.add(path);
-    if (path.startsWith('src/features/core/')) memberships.get('core')!.add(path);
-    if (path.startsWith('src/features/domain/')) memberships.get('domain')!.add(path);
-    if (path.startsWith('src/services/')) memberships.get('services')!.add(path);
-    if (path.startsWith('src/components/') || sharedPresentation) {
-      memberships.get('components-ui')!.add(path);
-    }
-    if (sharedWire) memberships.get('wire-schema')!.add(path);
-    if (path.startsWith('src/utils/')) memberships.get('diagnostics')!.add(path);
-    if (path.startsWith('src/lib/')
-      || (path.startsWith('src/shared/')
-        && !sharedPresentation
-        && !sharedWire
-        && !overridden.has(path))) {
-      memberships.get('pure-shared')!.add(path);
-    }
-  }
-  return memberships;
+function isSharedPresentationSource(path: string): boolean {
+  return /^src\/shared\/(?:ui|charts|hooks|plot)\//.test(path);
 }
+
+function isSharedWireSource(path: string): boolean {
+  return path.startsWith('src/shared/types/dto/');
+}
+
+const PRODUCTION_LITERAL_OVERRIDE_PATHS = new Set(
+  FRONTEND_LAYERS.flatMap((layer) => FRONTEND_LITERAL_POLICY_MEMBERSHIP[layer]),
+);
+
+export const FRONTEND_BASE_RULES: readonly FrontendBaseRule[] = [
+  { layer: 'app-composition', matches: (path) => path.startsWith('src/app/') },
+  { layer: 'views', matches: (path) => path.startsWith('src/views/') },
+  { layer: 'application', matches: (path) => path.startsWith('src/features/application/') },
+  { layer: 'core', matches: (path) => path.startsWith('src/features/core/') },
+  { layer: 'domain', matches: (path) => path.startsWith('src/features/domain/') },
+  { layer: 'services', matches: (path) => path.startsWith('src/services/') },
+  {
+    layer: 'components-ui',
+    matches: (path) => path.startsWith('src/components/') || isSharedPresentationSource(path),
+  },
+  { layer: 'wire-schema', matches: isSharedWireSource },
+  { layer: 'diagnostics', matches: (path) => path.startsWith('src/utils/') },
+  {
+    layer: 'pure-shared',
+    matches: (path) => path.startsWith('src/lib/')
+      || (path.startsWith('src/shared/')
+        && !isSharedPresentationSource(path)
+        && !isSharedWireSource(path)
+        && !PRODUCTION_LITERAL_OVERRIDE_PATHS.has(path)),
+  },
+];
 
 export function classifyFrontendSources(
   sources: readonly ArchitectureSource[],
   literalMembership: FrontendLiteralPolicyMembership = FRONTEND_LITERAL_POLICY_MEMBERSHIP,
-  baseMembership?: FrontendBasePolicyMembership,
+  baseRules: readonly FrontendBaseRule[] = FRONTEND_BASE_RULES,
 ): FrontendClassificationReport {
   const literals = literalSets(literalMembership);
   const overridden = new Set([...literals.values()].flatMap((paths) => [...paths]));
   const normalizedSources = [...new Set(sources.map(({ path }) => normalizeSourcePath(path)))].sort();
   const sourceSet = new Set(normalizedSources);
-  const memberships = baseMembership
-    ? injectedBaseSets(baseMembership, sourceSet)
-    : productionBaseSets(normalizedSources, overridden);
+  const memberships = baseSetsFromRules(baseRules, normalizedSources);
 
   for (const layer of FRONTEND_LAYERS) {
     const layerMembership = memberships.get(layer)!;

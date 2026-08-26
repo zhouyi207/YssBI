@@ -25,6 +25,7 @@ import {
 } from './frontendArchitectureModel';
 import {
   classifyFrontendSources,
+  type FrontendBaseRule,
   type FrontendLayer,
   type FrontendLiteralPolicyMembership,
 } from './frontendArchitecturePolicy';
@@ -362,15 +363,14 @@ describe('frontend architecture model', () => {
       'diagnostics',
       'pure-shared',
     ].map((layer) => [layer, []])) as unknown as Record<FrontendLayer, readonly string[]>;
-    const baseMembership: FrontendLiteralPolicyMembership = {
-      ...emptyMembership,
-      views: ['src/base-overlap.ts'],
-      application: ['src/base-overlap.ts'],
-    };
+    const baseRules: readonly FrontendBaseRule[] = [
+      { layer: 'views', matches: (path) => path.endsWith('/base-overlap.ts') },
+      { layer: 'application', matches: (path) => path.startsWith('src/base-') },
+    ];
 
     const report = classifyFrontendSources([
       { path: 'src/base-overlap.ts', source: 'export const overlap = true;' },
-    ], emptyMembership, baseMembership);
+    ], emptyMembership, baseRules);
 
     expect([...report.classification]).toEqual([]);
     expect(report.errors).toEqual([{

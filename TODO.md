@@ -1462,3 +1462,6 @@ Execution 不知道具体 UI
 - [ ] 将 frontend classifier 改为十个独立 base membership sets，以 base-overlap regression 冻结 zero/multiple 检测不依赖 rule ordering。
 - [ ] 在合并 literal policy membership 前从每个 base set 移除 overrides，显式排除 pure-shared 的其他 shared owners，并保持现有 exact capability/debt contracts。
 - [ ] 先对 stylesheet 与 source layer provenance 求稳定 fixed point，再使冲突 parent 的 descendants 失效，最后仅用 singleton layers 生成 asset findings。
+- [ ] 将 base-overlap fixture 改为注入两条同时命中的 FrontendBaseRule predicates，确保回退 first-match 会产生 focused failure。
+- [ ] 让 production 与 classifier fixture 共用同一十层 rule-list builder，对每条命中独立 add 后再统一检查 zero/multiple membership。
+- [ ] 删除预制 base membership sets 与 injectedBaseSets bypass，继续先从全部 base sets 移除 literal overrides 并保留 pure-shared 显式排除。
