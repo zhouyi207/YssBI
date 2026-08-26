@@ -1414,3 +1414,8 @@ Execution 不知道具体 UI
 - [ ] 将 strict Rust architecture gate rebase 到最新 `shadcn` 已提交基线，同时保留主工作区全部未提交改动。
 - [ ] 将新增 `trash` runtime dependency 纳入 external declaration 审计，并把 Project 直接调用 `trash::delete` 记录为 Backend Adapter exact debt，而不扩大允许层。
 - [ ] 在同步基线上重新运行 15 项 architecture focused tests、rustfmt 与 `cargo check`，确认 exact debt 双向清单和 production policy 一致。
+- [ ] 建立完整 frontend production TypeScript inventory，统一排除测试、fixture、声明与 generated source，并覆盖所有生产目录。
+- [ ] 增加 canonical module dependency resolver，区分 runtime/type-only、repository/external/stylesheet origin，并保留 declaration symbol identity。
+- [ ] 增加递归 stylesheet dependency lexer 与 typed failure，覆盖 package、repository asset、url、parse failure、missing target 和 cycle。
+- [ ] 抽取 raw Tauri invoke semantic audit helper，并让 project filesystem contract 复用 canonical production inventory。
+- [ ] 运行 frontend architecture focused tests、project filesystem contract、typecheck 与 diff check，记录参数转发导致伪 focused 执行的诊断结论。

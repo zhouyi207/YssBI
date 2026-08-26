@@ -13,6 +13,10 @@ import {
   type ArchitectureSource,
 } from '@/tests/helpers/moduleDependencyAudit';
 import {
+  isTauriInvokeCall,
+  rawTauriInvokeOccurrences,
+} from '@/tests/helpers/tauriInvokeAudit';
+import {
   withIsolatedTypeScriptProject,
   withProductionTypeScriptProject,
 } from '@/tests/helpers/typescriptAudit';
@@ -278,27 +282,8 @@ function importModuleSpecifier(
     : null;
 }
 
-function isTauriCoreImport(
-  binding: ts.ImportSpecifier | ts.NamespaceImport,
-): boolean {
-  return importModuleSpecifier(binding) === '@tauri-apps/api/core';
-}
-
 function isIpcHelperImport(binding: ts.ImportSpecifier): boolean {
   return importModuleSpecifier(binding) === '@/services/ipc';
-}
-
-function symbolHasTauriInvokeImport(
-  symbol: TypeScriptSymbol | undefined,
-  project: Project,
-): boolean {
-  return symbol?.declarations.some((handle) => {
-    const declaration = handle.resolve(project);
-    return declaration !== undefined
-      && ts.isImportSpecifier(declaration)
-      && (declaration.propertyName ?? declaration.name).text === 'invoke'
-      && isTauriCoreImport(declaration);
-  }) ?? false;
 }
 
 function symbolHasInvokeCommandImport(
@@ -312,34 +297,6 @@ function symbolHasInvokeCommandImport(
       && (declaration.propertyName ?? declaration.name).text === 'invokeCommand'
       && isIpcHelperImport(declaration);
   }) ?? false;
-}
-
-function symbolHasTauriNamespaceImport(
-  symbol: TypeScriptSymbol | undefined,
-  project: Project,
-): boolean {
-  return symbol?.declarations.some((handle) => {
-    const declaration = handle.resolve(project);
-    return declaration !== undefined
-      && ts.isNamespaceImport(declaration)
-      && isTauriCoreImport(declaration);
-  }) ?? false;
-}
-
-function isTauriInvokeCall(
-  expression: ts.Expression,
-  checker: Checker,
-  project: Project,
-): boolean {
-  if (ts.isIdentifier(expression)) {
-    return symbolHasTauriInvokeImport(checker.getSymbolAtLocation(expression), project);
-  }
-  return ts.isPropertyAccessExpression(expression)
-    && expression.name.text === 'invoke'
-    && symbolHasTauriNamespaceImport(
-      checker.getSymbolAtLocation(expression.expression),
-      project,
-    );
 }
 
 function isServiceCommandInvokeCall(
@@ -395,39 +352,6 @@ function productionServiceInvokes(sources: readonly ArchitectureSource[]): Servi
       context.project,
     ))
   ));
-}
-
-function sourceFileRawTauriInvokePaths(
-  path: string,
-  sourceFile: ts.SourceFile,
-  project: Project,
-): string[] {
-  let found = false;
-  const checker = project.checker;
-  const visit = (node: ts.Node): void => {
-    if (found) return;
-    if (ts.isCallExpression(node) && isTauriInvokeCall(node.expression, checker, project)) {
-      found = true;
-      return;
-    }
-    node.forEachChild(visit);
-  };
-  visit(sourceFile);
-  return found ? [path] : [];
-}
-
-function productionRawTauriInvokePaths(sources: readonly ArchitectureSource[]): string[] {
-  const candidates = sources.filter(({ source }) => source.includes('@tauri-apps/api/core'));
-  if (candidates.length === 0) return [];
-
-  return withIsolatedTypeScriptProject(
-    new Map(candidates.map(({ path, source }) => [path, source])),
-    (context) => candidates.flatMap(({ path }) => sourceFileRawTauriInvokePaths(
-      path,
-      context.sourceFile(path),
-      context.project,
-    )),
-  );
 }
 
 function commandClassificationViolations(
@@ -640,8 +564,11 @@ describe('projectFilesystemContract', () => {
 
   it('keeps raw production Tauri invoke calls inside the IPC boundary', () => {
     const allowedPath = 'src/services/ipc/invokeCommand.ts';
-    const offenders = productionRawTauriInvokePaths(productionSources())
-      .filter((path) => path !== allowedPath);
+    const offenders = withProductionTypeScriptProject((context) => (
+      rawTauriInvokeOccurrences(context)
+        .map(({ repositoryRelativeSourceFile }) => repositoryRelativeSourceFile)
+        .filter((path) => path !== allowedPath)
+    ));
 
     expect(offenders).toEqual([]);
   });
