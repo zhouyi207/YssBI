@@ -99,8 +99,8 @@ pub struct ProjectVariableIndexEntry {
     pub resource_path: crate::node_system::catalog::CatalogResourcePath,
     pub revision: crate::node_system::document::ResourceRevision,
     pub name: String,
-    pub data_type: crate::graph::value::DataType,
-    pub data_value: crate::graph::value::DataValue,
+    pub data_type: crate::data_contract::DataType,
+    pub data_value: crate::data_contract::DataValue,
     pub description: String,
     pub scope: VariableScope,
     pub tags: Vec<String>,
@@ -1476,8 +1476,8 @@ mod tests {
             VariableInstance {
                 id: variable_id,
                 name: "Stable local".into(),
-                data_type: crate::graph::value::DataType::Int64,
-                data_value: crate::graph::value::DataValue::Int64(7),
+                data_type: crate::data_contract::DataType::Int64,
+                data_value: crate::data_contract::DataValue::Int64(7),
                 tabular: None,
                 description: String::new(),
                 scope: VariableScope::Event {

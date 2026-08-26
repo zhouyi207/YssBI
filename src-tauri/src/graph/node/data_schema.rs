@@ -9,5 +9,5 @@ pub struct DataSchema {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ColumnSchema {
     pub name: String,
-    pub data_type: crate::graph::DataType,
+    pub data_type: crate::data_contract::DataType,
 }

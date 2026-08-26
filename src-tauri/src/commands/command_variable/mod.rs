@@ -1,7 +1,7 @@
+use crate::data_contract::{DataType, DataValue};
 use crate::error::CommandError;
 use crate::event::ResourceMutationResultDto;
 use crate::event::{Event, EventProject, emit_project_event};
-use crate::graph::value::{DataType, DataValue};
 use crate::node_system::document::{OperationId, ResourceRevision};
 #[cfg(test)]
 use crate::project::project_writers::ProjectSaveResultDto;

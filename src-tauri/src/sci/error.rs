@@ -1,30 +1,46 @@
 //! Scientific-computing error model.
 
-use std::fmt;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SciOperationCode {
+    Regression,
+    InstrumentalVariables,
+    Panel,
+    Adf,
+    VarFit,
+    VarLagOrder,
+    VecFit,
+    VecRank,
+    KernelDensity,
+    AcfPacf,
+    SerialTests,
+    TTest,
+    WaldTest,
+}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SciInputViolation {
+    EmptyInput,
+    NonFiniteInput,
+    ShapeMismatch,
+    ParameterOutOfRange,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum SciError {
-    InvalidInput(String),
+    #[error("scientific input is invalid")]
+    InvalidInput {
+        operation: SciOperationCode,
+        violation: SciInputViolation,
+    },
+    #[error("scientific computation failed")]
+    ComputationFailed { operation: SciOperationCode },
 }
 
 impl SciError {
     pub fn code(&self) -> &'static str {
         match self {
-            Self::InvalidInput(_) => "sci_invalid_input",
-        }
-    }
-
-    pub fn invalid_input(message: impl Into<String>) -> Self {
-        Self::InvalidInput(message.into())
-    }
-}
-
-impl fmt::Display for SciError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidInput(message) => formatter.write_str(message),
+            Self::InvalidInput { .. } => "sci_invalid_input",
+            Self::ComputationFailed { .. } => "sci_computation_failed",
         }
     }
 }
-
-impl std::error::Error for SciError {}

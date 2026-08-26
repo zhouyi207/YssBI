@@ -1,9 +1,9 @@
 use super::*;
+use crate::data_contract::{DataType, DataValue};
 use crate::event::{
     LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationOutcomeDto,
     LifecycleMutationPhaseDto, LifecycleMutationResultDto, LifecycleRecoveryDto,
 };
-use crate::graph::value::{DataType, DataValue};
 use crate::project::{
     ProjectData, ProjectRootBinding, ProjectRootIdentityState, ProjectState, fixtures,
 };

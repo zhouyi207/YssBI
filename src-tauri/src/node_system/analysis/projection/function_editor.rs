@@ -1,4 +1,4 @@
-use crate::graph::value::DataType;
+use crate::data_contract::{DataType, DataTypeParseError};
 
 use serde::{Deserialize, Serialize};
 
@@ -56,7 +56,9 @@ pub fn build_function_editor_projection(
 }
 
 pub(crate) fn resolve_function_data_type(type_name: &str) -> Result<DataType, String> {
-    let data_type = type_name.parse()?;
+    let data_type = type_name
+        .parse()
+        .map_err(|error: DataTypeParseError| error.to_string())?;
     validate_function_data_type(&data_type)?;
     Ok(data_type)
 }

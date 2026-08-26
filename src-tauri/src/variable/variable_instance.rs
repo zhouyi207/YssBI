@@ -1,5 +1,5 @@
 use super::{VariableId, VariableScope};
-use crate::graph::value::{DataType, DataValue};
+use crate::data_contract::{DataType, DataValue};
 use crate::tabular::TabularSnapshot;
 use serde::{Deserialize, Serialize};
 

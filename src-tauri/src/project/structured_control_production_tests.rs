@@ -76,9 +76,9 @@ struct BranchOutcome {
     expected_result_variable_id: VariableId,
     true_effect_variable_id: VariableId,
     false_effect_variable_id: VariableId,
-    result: crate::graph::value::DataValue,
-    true_effect: crate::graph::value::DataValue,
-    false_effect: crate::graph::value::DataValue,
+    result: crate::data_contract::DataValue,
+    true_effect: crate::data_contract::DataValue,
+    false_effect: crate::data_contract::DataValue,
     committed_variable_ids: Box<[VariableId]>,
 }
 
@@ -339,8 +339,8 @@ fn int64_result_variable(name: &str) -> VariableInstance {
     VariableInstance {
         id: result_variable_id(),
         name: name.into(),
-        data_type: crate::graph::value::DataType::Int64,
-        data_value: crate::graph::value::DataValue::Int64(0),
+        data_type: crate::data_contract::DataType::Int64,
+        data_value: crate::data_contract::DataValue::Int64(0),
         tabular: None,
         description: String::new(),
         scope: VariableScope::Global,
@@ -388,8 +388,8 @@ fn float64_variable(id: VariableId, name: &str) -> VariableInstance {
     VariableInstance {
         id,
         name: name.into(),
-        data_type: crate::graph::value::DataType::Float64,
-        data_value: crate::graph::value::DataValue::Float64(0.0),
+        data_type: crate::data_contract::DataType::Float64,
+        data_value: crate::data_contract::DataValue::Float64(0.0),
         tabular: None,
         description: String::new(),
         scope: VariableScope::Global,
@@ -404,15 +404,15 @@ fn float64_result_variable(name: &str) -> VariableInstance {
 fn assert_branch_outcome(outcome: &BranchOutcome, expected_result: i64, selected_true: bool) {
     assert_eq!(
         outcome.result,
-        crate::graph::value::DataValue::Int64(expected_result),
+        crate::data_contract::DataValue::Int64(expected_result),
     );
     assert_eq!(
         outcome.true_effect,
-        crate::graph::value::DataValue::Int64(if selected_true { 101 } else { 0 }),
+        crate::data_contract::DataValue::Int64(if selected_true { 101 } else { 0 }),
     );
     assert_eq!(
         outcome.false_effect,
-        crate::graph::value::DataValue::Int64(if selected_true { 0 } else { 202 }),
+        crate::data_contract::DataValue::Int64(if selected_true { 0 } else { 202 }),
     );
     assert!(
         outcome
@@ -700,7 +700,7 @@ fn run_loop(
     result_variable: VariableInstance,
 ) -> (
     Result<crate::node_system::runtime::RunResult, String>,
-    crate::graph::value::DataValue,
+    crate::data_contract::DataValue,
     Vec<RunEvent>,
 ) {
     let mut project = ProjectData::new();
@@ -748,8 +748,8 @@ const CALL_TWO_VARIABLE: u128 = 602;
 
 fn int64_variable(id: u128, name: &str, value: i64) -> VariableInstance {
     let mut variable = float64_variable(variable_id(id), name);
-    variable.data_type = crate::graph::value::DataType::Int64;
-    variable.data_value = crate::graph::value::DataValue::Int64(value);
+    variable.data_type = crate::data_contract::DataType::Int64;
+    variable.data_value = crate::data_contract::DataValue::Int64(value);
     variable
 }
 
@@ -922,7 +922,7 @@ fn builtin_call_binds_persisted_argument_and_result_across_distinct_layouts() {
 
     assert_eq!(
         fixture.state().get_data().unwrap().variables[&output.id].data_value,
-        crate::graph::value::DataValue::Int64(42)
+        crate::data_contract::DataValue::Int64(42)
     );
     assert_eq!(run.committed_variable_ids.as_ref(), &[output.id]);
 }
@@ -957,11 +957,11 @@ fn builtin_call_two_calls_in_one_run_keep_arguments_and_results_independent() {
 
     assert_eq!(
         data.variables[&first.id].data_value,
-        crate::graph::value::DataValue::Int64(11)
+        crate::data_contract::DataValue::Int64(11)
     );
     assert_eq!(
         data.variables[&second.id].data_value,
-        crate::graph::value::DataValue::Int64(22)
+        crate::data_contract::DataValue::Int64(22)
     );
     assert_eq!(
         run.committed_variable_ids
@@ -1002,7 +1002,7 @@ fn builtin_call_uses_current_persisted_function_generation_after_body_replacemen
         .unwrap();
     assert_eq!(
         fixture.state().get_data().unwrap().variables[&output.id].data_value,
-        crate::graph::value::DataValue::Int64(42)
+        crate::data_contract::DataValue::Int64(42)
     );
     let before = fixture.state().get_data().unwrap().graphs[&function_path]
         .document
@@ -1038,7 +1038,7 @@ fn builtin_call_uses_current_persisted_function_generation_after_body_replacemen
     assert_ne!(first.provenance.compile_id, second.provenance.compile_id);
     assert_eq!(
         fixture.state().get_data().unwrap().variables[&output.id].data_value,
-        crate::graph::value::DataValue::Int64(43)
+        crate::data_contract::DataValue::Int64(43)
     );
 }
 
@@ -1098,7 +1098,7 @@ fn builtin_branch_commit_conflict_returns_no_requested_result_or_completion() {
                         .unwrap(),
                         expected_revision: GraphRevision::INITIAL,
                         before: winning_variable.clone(),
-                        after: crate::graph::value::DataValue::Int64(99),
+                        after: crate::data_contract::DataValue::Int64(99),
                     }],
                 )
                 .unwrap();
@@ -1133,15 +1133,15 @@ fn builtin_branch_commit_conflict_returns_no_requested_result_or_completion() {
     let data = fixture.state().get_data().unwrap();
     assert_eq!(
         data.variables[&variable.id].data_value,
-        crate::graph::value::DataValue::Int64(99)
+        crate::data_contract::DataValue::Int64(99)
     );
     assert_eq!(
         data.variables[&true_effect.id].data_value,
-        crate::graph::value::DataValue::Int64(0)
+        crate::data_contract::DataValue::Int64(0)
     );
     assert_eq!(
         data.variables[&false_effect.id].data_value,
-        crate::graph::value::DataValue::Int64(0)
+        crate::data_contract::DataValue::Int64(0)
     );
     drop(data);
     assert_eq!(
@@ -1254,7 +1254,7 @@ fn builtin_branch_drain_before_commit_gate_commits_nothing() {
     for variable in [&variable, &true_effect, &false_effect] {
         assert_eq!(
             data.variables[&variable.id].data_value,
-            crate::graph::value::DataValue::Int64(0)
+            crate::data_contract::DataValue::Int64(0)
         );
     }
     drop(data);
@@ -1308,15 +1308,15 @@ fn builtin_loop_carries_initial_and_subsequent_values_across_observable_iteratio
 
     assert_eq!(
         data.variables[&first_observer.id].data_value,
-        crate::graph::value::DataValue::Float64(1.5)
+        crate::data_contract::DataValue::Float64(1.5)
     );
     assert_eq!(
         data.variables[&second_observer.id].data_value,
-        crate::graph::value::DataValue::Float64(22.5)
+        crate::data_contract::DataValue::Float64(22.5)
     );
     assert_eq!(
         data.variables[&result.id].data_value,
-        crate::graph::value::DataValue::Float64(22.5)
+        crate::data_contract::DataValue::Float64(22.5)
     );
     assert_eq!(run.committed_variable_ids.len(), 3);
     assert!(
@@ -1332,7 +1332,7 @@ fn builtin_loop_reports_iteration_limit_without_committing_result() {
     let (run, result, events) = run_loop(loop_fixture(true, "yssbi.control.do", 3), variable);
 
     assert_eq!(run.unwrap_err(), "loop iteration limit exceeded");
-    assert_eq!(result, crate::graph::value::DataValue::Float64(0.0));
+    assert_eq!(result, crate::data_contract::DataValue::Float64(0.0));
     assert!(events.iter().any(|event| {
         event.kind
             == RunEventKind::RunErrored {
@@ -1506,7 +1506,7 @@ fn builtin_effect_failure_drops_every_retained_project_resource_without_commit()
     assert_no_run_completed(&recorded);
     assert_eq!(
         fixture.state().get_data().unwrap().variables[&result.id].data_value,
-        crate::graph::value::DataValue::Int64(0)
+        crate::data_contract::DataValue::Int64(0)
     );
     assert_eq!(observer.acquired(), 1);
     assert_eq!(observer.dropped(), 1);
@@ -1589,7 +1589,7 @@ fn builtin_effect_cancellation_attempts_once_drops_retained_resources_and_drains
     assert_no_run_completed(&recorded);
     assert_eq!(
         fixture.state().get_data().unwrap().variables[&result.id].data_value,
-        crate::graph::value::DataValue::Float64(0.0)
+        crate::data_contract::DataValue::Float64(0.0)
     );
     assert_eq!(observer.acquired(), 1);
     assert_eq!(observer.dropped(), 1);

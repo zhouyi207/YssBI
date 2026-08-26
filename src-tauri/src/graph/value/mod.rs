@@ -1,11 +1,3 @@
-//! 值系统模块
-//!
-//! 定义数据类型、值表示和类型推断系统
+//! Graph-owned persisted-value behavior and type-system semantics.
 
-pub mod data_type;
-pub mod data_value;
 pub mod type_system;
-
-pub use data_type::*;
-pub use data_value::*;
-pub use type_system::*;

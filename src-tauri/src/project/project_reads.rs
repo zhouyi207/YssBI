@@ -51,7 +51,7 @@ pub enum CatalogMutationResource {
     Variable {
         revision: ResourceRevision,
         scope: VariableScope,
-        data_type: crate::graph::value::DataType,
+        data_type: crate::data_contract::DataType,
         allowed_node_type_ids: [NodeTypeId; 2],
         parameter_binding: Box<str>,
     },
@@ -738,7 +738,7 @@ fn read_error(error: crate::project::ProjectError) -> ProjectFilesystemError {
 
 #[cfg(test)]
 mod tests {
-    use crate::graph::value::{DataType, DataValue};
+    use crate::data_contract::{DataType, DataValue};
     use crate::node_system::document::{FunctionParameter, FunctionParameterId, FunctionSignature};
     use crate::project::{
         GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,

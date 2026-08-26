@@ -72,25 +72,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         entries,
         BACKEND_ADAPTER_SPEC,
         "rust.external.runtime-source-layer",
-        "src-tauri/src/graph/value/data_type.rs",
-        "yssbi_lib::graph::value::data_type",
-        [(Path, 1, "external:num-traits::Zero::zero")],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.external.runtime-source-layer",
-        "src-tauri/src/graph/value/data_value.rs",
-        "yssbi_lib::graph::value::data_value",
-        [
-            (Use, 1, "external:num-traits::One"),
-            (Use, 1, "external:num-traits::Zero"),
-        ],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.external.runtime-source-layer",
         "src-tauri/src/julia/worker.rs",
         "yssbi_lib::julia::worker",
         [(Use, 1, "external:uuid::Uuid")],

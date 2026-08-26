@@ -254,7 +254,7 @@ fn committed_variable_effect_returns_canonical_result_after_recovery_marker() {
                 resource: resource_id.clone(),
                 expected_revision: GraphRevision::INITIAL,
                 before: variable.clone(),
-                after: crate::graph::value::DataValue::Int64(2),
+                after: crate::data_contract::DataValue::Int64(2),
             }],
         )
         .unwrap();
@@ -284,14 +284,14 @@ fn committed_variable_effect_returns_canonical_result_after_recovery_marker() {
     );
 
     let mut updated = variable;
-    updated.data_value = crate::graph::value::DataValue::Int64(2);
+    updated.data_value = crate::data_contract::DataValue::Int64(2);
     let blocked = state.commit_variable_effects(
         &session_id,
         vec![crate::node_system::runtime::VariableWriteEffect {
             resource: resource_id,
             expected_revision: GraphRevision::new(1),
             before: updated,
-            after: crate::graph::value::DataValue::Int64(3),
+            after: crate::data_contract::DataValue::Int64(3),
         }],
     );
     assert!(matches!(

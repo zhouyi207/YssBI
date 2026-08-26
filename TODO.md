@@ -1472,3 +1472,26 @@ Execution 不知道具体 UI
 - [ ] 补齐 policy-approved read interface 的 typed receiver 追踪，通过 checker type 与 canonical declaration symbol 拒绝局部参数调用未批准 authority member。
 - [ ] 让 raw invoke call audit 识别经 repository barrel 解析到 `@tauri-apps/api/core::invoke` 的 canonical symbol，并与直接 binding helper 按完整 occurrence identity 去重。
 - [ ] 支持 namespace `DockviewReact` JSX constructor，移除 semantic audit 的生产层过滤，并使 zero/multiple frontend classification errors 在扫描前 fail-closed。
+- [ ] 将 persisted `DataType`、`DataValue`、`DataSeriesValue` 与分类/时间序列 metadata 原子迁入顶层 Pure Leaf `data_contract`，保持现有 serde tags、camelCase 字段和 DataSeries string/full wire。
+- [ ] 将类型兼容、继承、默认值、转换、查询与运行时值算术保留在 Graph `value::type_system`，以原生数值逻辑替换旧 `num_traits` One/Zero 使用。
+- [ ] 全量切换 Variable、Project、Schema、Commands、Graph、Node System、Runtime、Database、Tabular、SCI 与对应测试到 canonical `data_contract` 路径，并删除 Graph 旧声明与 re-export。
+- [ ] 为 typed `DataTypeParseError`、persisted value wire、单一 Pure Leaf owner 与 Graph 无 compatibility re-export 增加 focused regression。
+- [ ] 将 `data_contract` 三个 exact files 设为 literal Pure Leaf、将 Graph type-system behavior 设为 exact Graph classification，移除 contract namespace fallback，并精确删除已消失的三条 `num_traits` architecture debt occurrence。
+
+## 2026.08.27
+
+- [ ] 将 persisted value canonical-owner architecture guard 改为 typed required/allowed exact-origin 策略，保持五个 contract symbol 的单一 data-contract owner。
+- [ ] 允许独立 SCI `CategoricalRole` 仅来自 `src-tauri/src/sci/api/computation.rs`，同时拒绝任意 SCI owner 与 SCI 对 persisted role 的 re-export/alias。
+- [ ] 增加 focused regression，覆盖批准的双 owner 集合与未批准来源拒绝路径，并运行 Rust architecture、格式、编译及 diff 校验。
+- [ ] 为 canonical-owner production guard 增加基于 `syn::Item::Type` 的窄扫描，拒绝 Graph 对六类 persisted data-contract symbol 的 type alias。
+- [ ] 拒绝 SCI 对 persisted `CategoricalRole` 的 type alias，同时保留 `sci/api/computation.rs` 独立声明作为唯一批准 SCI owner。
+- [ ] 增加真实 Rust source fixture 回归，覆盖 Graph 六类 alias、SCI alias、独立 SCI enum 与 test-only alias 排除，并执行 focused RED/GREEN 验证。
+- [ ] 将 SCI 统计设置、分类角色、统计标量输入与九字段 observation metadata 原子迁入 `sci/api/computation.rs`，保持既有 metadata 字段名及 `project`/`node` 序列化值。
+- [ ] 新增 Application-owned Project→SCI/Execution settings 与 persisted value/role→SCI input 穷尽映射，使用 closed typed errors 拒绝非有限数值和不支持的持久化值。
+- [ ] 建立 production-unreachable 的独立 `execution/settings.rs` contract，并保持现有 Project run-parameter 与 node runtime settings 路径不变，留待 Execution Task 8 切换。
+- [ ] 将 public SCI statistics、ACF/PACF、serial tests 与 hypothesis adapter 的字符串错误迁为 operation/violation typed `SciError`，禁止 raw algorithm text 决定稳定错误码。
+- [ ] 为 Execution owner 增加 fail-closed layer classification，精确删除 SCI→Project missing-value debt并迁移其余 canonical debt keys，新增 SCI 隔离与 canonical-owner production guard。
+- [ ] 按 TDD 运行 settings、statistical input、metadata wire 与 typed SCI error 的 RED/GREEN focused tests，并执行 Rust 编译、架构 policy、格式及 diff 验证。
+- [ ] 为 T/Wald SCI adapter 增加显式的约束数量、自由度、矩阵维度与有限数值前置验证，分别映射 closed parameter、shape 与 non-finite violations。
+- [ ] 将通过结构验证后的下游 T/Wald 数值失败统一映射为 operation-specific `ComputationFailed`，禁止解析 `yss_sci` 原始字符串选择公开错误语义。
+- [ ] 增加窄 focused regressions，分别覆盖 typed input validation 与合法形状下零/奇异协方差的 computation-failure 映射。

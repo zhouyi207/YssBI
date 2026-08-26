@@ -1,3 +1,5 @@
+use crate::sci::api::computation::StatisticalObservationMetadata;
+use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
 use crate::sci::models::regression::{
     BinaryRegressionLink, BinaryRegressionStatistics, LinearRegressionStatistics, PraisInfo,
     PraisRegressionStatistics, RegressionCoefficientStatistics, RegressionStatistics,
@@ -34,7 +36,7 @@ pub struct RegressionFit {
     pub fitted: Vec<f64>,
     pub residuals: Vec<f64>,
     pub statistics: RegressionStatistics,
-    pub metadata: crate::sci::models::regression::StatisticalObservationMetadata,
+    pub metadata: StatisticalObservationMetadata,
 }
 
 pub fn fit_regression(
@@ -42,10 +44,10 @@ pub fn fit_regression(
     response: Vec<f64>,
     predictors: Vec<Vec<f64>>,
     weights: Option<Vec<f64>>,
-    metadata: crate::sci::models::regression::StatisticalObservationMetadata,
-) -> Result<RegressionFit, String> {
+    metadata: StatisticalObservationMetadata,
+) -> Result<RegressionFit, SciError> {
     let y = Array1::from_vec(response);
-    let x = design_matrix(&predictors, y.len(), true)?;
+    let x = design_matrix(&predictors, y.len(), true, SciOperationCode::Regression)?;
     match kind {
         RegressionKind::Ols => {
             let result = OLS {
@@ -57,7 +59,8 @@ pub fn fit_regression(
                     cov_params: None,
                 },
             }
-            .fit()?;
+            .fit()
+            .map_err(|_| computation_failed(SciOperationCode::Regression))?;
             linear_fit(
                 "ols",
                 &y,
@@ -100,7 +103,8 @@ pub fn fit_regression(
                 sigma: Array2::eye(y.len()),
                 config: GLSConfig { constant: true },
             }
-            .fit()?;
+            .fit()
+            .map_err(|_| computation_failed(SciOperationCode::Regression))?;
             linear_fit(
                 "gls",
                 &y,
@@ -137,9 +141,14 @@ pub fn fit_regression(
             )
         }
         RegressionKind::Wls => {
-            let weights = weights.ok_or_else(|| "WLS requires a weight series".to_string())?;
+            let weights = weights.ok_or_else(|| {
+                invalid_input(SciOperationCode::Regression, SciInputViolation::EmptyInput)
+            })?;
             if weights.len() != y.len() {
-                return Err("WLS weights must match the response length".into());
+                return Err(invalid_input(
+                    SciOperationCode::Regression,
+                    SciInputViolation::ShapeMismatch,
+                ));
             }
             let result = WLS {
                 endog: y.clone(),
@@ -151,7 +160,8 @@ pub fn fit_regression(
                     cov_params: None,
                 },
             }
-            .fit()?;
+            .fit()
+            .map_err(|_| computation_failed(SciOperationCode::Regression))?;
             linear_fit(
                 "wls",
                 &y,
@@ -193,7 +203,8 @@ pub fn fit_regression(
                 exog: x.clone(),
                 config: PraisConfig::default(),
             }
-            .fit()?;
+            .fit()
+            .map_err(|_| computation_failed(SciOperationCode::Regression))?;
             linear_fit(
                 "prais",
                 &y,
@@ -241,7 +252,8 @@ pub fn fit_regression(
                 exog: x.clone(),
                 config: LogitConfig::default(),
             }
-            .fit()?;
+            .fit()
+            .map_err(|_| computation_failed(SciOperationCode::Regression))?;
             let coefficients = result.betas.to_vec();
             let fitted = x
                 .dot(&Array1::from_vec(coefficients.clone()))
@@ -287,9 +299,11 @@ pub fn fit_regression(
                 exog: x.clone(),
                 config: ProbitConfig::default(),
             }
-            .fit()?;
+            .fit()
+            .map_err(|_| computation_failed(SciOperationCode::Regression))?;
             let coefficients = result.betas.to_vec();
-            let normal = Normal::new(0.0, 1.0).map_err(|error| error.to_string())?;
+            let normal = Normal::new(0.0, 1.0)
+                .map_err(|_| computation_failed(SciOperationCode::Regression))?;
             let fitted = x
                 .dot(&Array1::from_vec(coefficients.clone()))
                 .mapv(|value| normal.cdf(value))
@@ -541,8 +555,8 @@ fn linear_fit(
     x: &Array2<f64>,
     coefficients: Vec<f64>,
     statistics: RegressionStatistics,
-    metadata: crate::sci::models::regression::StatisticalObservationMetadata,
-) -> Result<RegressionFit, String> {
+    metadata: StatisticalObservationMetadata,
+) -> Result<RegressionFit, SciError> {
     let fitted = x.dot(&Array1::from_vec(coefficients.clone())).to_vec();
     Ok(RegressionFit {
         family,
@@ -562,12 +576,13 @@ fn design_matrix(
     predictors: &[Vec<f64>],
     observations: usize,
     constant: bool,
-) -> Result<Array2<f64>, String> {
+    operation: SciOperationCode,
+) -> Result<Array2<f64>, SciError> {
     if predictors.is_empty() {
-        return Err("regression requires at least one predictor".into());
+        return Err(invalid_input(operation, SciInputViolation::EmptyInput));
     }
     if predictors.iter().any(|values| values.len() != observations) {
-        return Err("response and predictor lengths must match".into());
+        return Err(invalid_input(operation, SciInputViolation::ShapeMismatch));
     }
     let columns = predictors.len() + usize::from(constant);
     let mut values = Vec::with_capacity(observations * columns);
@@ -579,7 +594,8 @@ fn design_matrix(
             values.push(predictor[row]);
         }
     }
-    Array2::from_shape_vec((observations, columns), values).map_err(|error| error.to_string())
+    Array2::from_shape_vec((observations, columns), values)
+        .map_err(|_| computation_failed(operation))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -594,16 +610,20 @@ pub fn fit_instrumental_variables(
     exogenous: Vec<f64>,
     endogenous: Vec<f64>,
     instruments: Vec<f64>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, SciError> {
     let observations = response.len();
     if [exogenous.len(), endogenous.len(), instruments.len()]
         .into_iter()
         .any(|len| len != observations)
     {
-        return Err("IV series lengths must match".into());
+        return Err(invalid_input(
+            SciOperationCode::InstrumentalVariables,
+            SciInputViolation::ShapeMismatch,
+        ));
     }
     let column = |values: Vec<f64>| {
-        Array2::from_shape_vec((observations, 1), values).map_err(|error| error.to_string())
+        Array2::from_shape_vec((observations, 1), values)
+            .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))
     };
     match kind {
         InstrumentalVariableKind::TwoStageLeastSquares => {
@@ -621,7 +641,8 @@ pub fn fit_instrumental_variables(
                 endog_names: None,
                 z_var_names: None,
             }
-            .fit()?;
+            .fit()
+            .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))?;
             Ok(serde_json::json!({
                 "family": "iv_2sls",
                 "coefficients": result.betas.to_vec(),
@@ -647,7 +668,8 @@ pub fn fit_instrumental_variables(
                 endog_names: None,
                 z_var_names: None,
             }
-            .fit()?;
+            .fit()
+            .map_err(|_| computation_failed(SciOperationCode::InstrumentalVariables))?;
             Ok(serde_json::json!({
                 "family": "iv_liml",
                 "coefficients": result.betas.to_vec(),
@@ -668,20 +690,26 @@ pub fn fit_panel(
     entity: Vec<f64>,
     time: Vec<f64>,
     treatment: Option<Vec<f64>>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, SciError> {
     let observations = response.len();
     if entity.len() != observations || time.len() != observations {
-        return Err("panel entity/time series lengths must match the response".into());
+        return Err(invalid_input(
+            SciOperationCode::Panel,
+            SciInputViolation::ShapeMismatch,
+        ));
     }
     let mut predictors = predictors;
     let is_did = treatment.is_some();
     if let Some(treatment) = treatment {
         if treatment.len() != observations {
-            return Err("panel treatment length must match the response".into());
+            return Err(invalid_input(
+                SciOperationCode::Panel,
+                SciInputViolation::ShapeMismatch,
+            ));
         }
         predictors.push(treatment);
     }
-    let exog = design_matrix(&predictors, observations, false)?;
+    let exog = design_matrix(&predictors, observations, false, SciOperationCode::Panel)?;
     let ids = |values: Vec<f64>| -> Vec<usize> {
         let mut levels = Vec::<f64>::new();
         values
@@ -705,7 +733,8 @@ pub fn fit_panel(
         true,
         "cluster",
         None,
-    )?;
+    )
+    .map_err(|_| computation_failed(SciOperationCode::Panel))?;
     Ok(serde_json::json!({
         "family": if is_did { "panel_did_twfe" } else { "panel_fe_twoway" },
         "coefficients": result.betas.to_vec(),
@@ -723,14 +752,20 @@ pub fn augmented_dickey_fuller(
     series: &[f64],
     lags: usize,
     regression: &str,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, SciError> {
     let (constant, trend) = match regression {
         "none" | "no_constant" => (false, false),
         "constant" => (true, false),
         "trend" => (true, true),
-        other => return Err(format!("unsupported ADF regression '{other}'")),
+        _ => {
+            return Err(invalid_input(
+                SciOperationCode::Adf,
+                SciInputViolation::ParameterOutOfRange,
+            ));
+        }
     };
-    let result = adf_test(series, lags, constant, trend)?;
+    let result = adf_test(series, lags, constant, trend)
+        .map_err(|_| computation_failed(SciOperationCode::Adf))?;
     serde_json::to_value(serde_json::json!({
         "operation": "adf",
         "statistic": result.test_statistic,
@@ -743,16 +778,19 @@ pub fn augmented_dickey_fuller(
             "10%": result.critical_value_10pct,
         }
     }))
-    .map_err(|error| error.to_string())
+    .map_err(|_| computation_failed(SciOperationCode::Adf))
 }
 
-fn multivariate_series(series: Vec<Vec<f64>>) -> Result<Array2<f64>, String> {
+fn multivariate_series(
+    series: Vec<Vec<f64>>,
+    operation: SciOperationCode,
+) -> Result<Array2<f64>, SciError> {
     let observations = series.first().map(Vec::len).unwrap_or(0);
-    if series.len() < 2 || observations == 0 || series.iter().any(|item| item.len() != observations)
-    {
-        return Err(
-            "multivariate time-series inputs must contain at least two equal-length series".into(),
-        );
+    if series.len() < 2 || observations == 0 {
+        return Err(invalid_input(operation, SciInputViolation::EmptyInput));
+    }
+    if series.iter().any(|item| item.len() != observations) {
+        return Err(invalid_input(operation, SciInputViolation::ShapeMismatch));
     }
     let mut values = Vec::with_capacity(observations * series.len());
     for row in 0..observations {
@@ -760,14 +798,18 @@ fn multivariate_series(series: Vec<Vec<f64>>) -> Result<Array2<f64>, String> {
             values.push(column[row]);
         }
     }
-    Array2::from_shape_vec((observations, series.len()), values).map_err(|error| error.to_string())
+    Array2::from_shape_vec((observations, series.len()), values)
+        .map_err(|_| computation_failed(operation))
 }
 
-pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<serde_json::Value, String> {
+pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<serde_json::Value, SciError> {
     if lags == 0 {
-        return Err("VAR lags must be positive".into());
+        return Err(invalid_input(
+            SciOperationCode::VarFit,
+            SciInputViolation::ParameterOutOfRange,
+        ));
     }
-    let y = multivariate_series(series)?;
+    let y = multivariate_series(series, SciOperationCode::VarFit)?;
     let result = VAR {
         y,
         exog: None,
@@ -784,13 +826,28 @@ pub fn var_fit(series: Vec<Vec<f64>>, lags: usize) -> Result<serde_json::Value, 
         exog_names: None,
         regression_times: None,
     }
-    .fit()?;
-    serde_json::to_value(result).map_err(|error| error.to_string())
+    .fit()
+    .map_err(|_| computation_failed(SciOperationCode::VarFit))?;
+    serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VarFit))
 }
 
-pub fn var_lag_order(series: Vec<Vec<f64>>, max_lags: usize) -> Result<serde_json::Value, String> {
-    serde_json::to_value(var_varsoc(multivariate_series(series)?, max_lags, None)?)
-        .map_err(|error| error.to_string())
+pub fn var_lag_order(
+    series: Vec<Vec<f64>>,
+    max_lags: usize,
+) -> Result<serde_json::Value, SciError> {
+    if max_lags == 0 {
+        return Err(invalid_input(
+            SciOperationCode::VarLagOrder,
+            SciInputViolation::ParameterOutOfRange,
+        ));
+    }
+    let result = var_varsoc(
+        multivariate_series(series, SciOperationCode::VarLagOrder)?,
+        max_lags,
+        None,
+    )
+    .map_err(|_| computation_failed(SciOperationCode::VarLagOrder))?;
+    serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VarLagOrder))
 }
 
 pub fn vec_fit(
@@ -798,52 +855,81 @@ pub fn vec_fit(
     rank: usize,
     lags: usize,
     trend: &str,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, SciError> {
+    if lags == 0 {
+        return Err(invalid_input(
+            SciOperationCode::VecFit,
+            SciInputViolation::ParameterOutOfRange,
+        ));
+    }
     let result = vec_estimate(
-        &multivariate_series(series)?,
+        &multivariate_series(series, SciOperationCode::VecFit)?,
         &VECConfig {
-            trend_spec: vec_trend(trend)?,
+            trend_spec: vec_trend(trend, SciOperationCode::VecFit)?,
             lags,
             rank,
             mlag: 2,
         },
         None,
         None,
-    )?;
-    serde_json::to_value(result).map_err(|error| error.to_string())
+    )
+    .map_err(|_| computation_failed(SciOperationCode::VecFit))?;
+    serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VecFit))
 }
 
 pub fn vec_rank_test(
     series: Vec<Vec<f64>>,
     lags: usize,
     trend: &str,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, SciError> {
+    if lags == 0 {
+        return Err(invalid_input(
+            SciOperationCode::VecRank,
+            SciInputViolation::ParameterOutOfRange,
+        ));
+    }
     let result = vec_vecrank_stats(
-        &multivariate_series(series)?,
+        &multivariate_series(series, SciOperationCode::VecRank)?,
         lags,
-        vec_trend(trend)?,
+        vec_trend(trend, SciOperationCode::VecRank)?,
         None,
         true,
         None,
-    )?;
-    serde_json::to_value(result).map_err(|error| error.to_string())
+    )
+    .map_err(|_| computation_failed(SciOperationCode::VecRank))?;
+    serde_json::to_value(result).map_err(|_| computation_failed(SciOperationCode::VecRank))
 }
 
-fn vec_trend(trend: &str) -> Result<VecTrendSpec, String> {
+fn vec_trend(trend: &str, operation: SciOperationCode) -> Result<VecTrendSpec, SciError> {
     match trend {
         "none" | "no_constant" => Ok(VecTrendSpec::None),
         "constant" => Ok(VecTrendSpec::Constant),
         "trend" => Ok(VecTrendSpec::Trend),
-        other => Err(format!("unsupported VEC trend '{other}'")),
+        _ => Err(invalid_input(
+            operation,
+            SciInputViolation::ParameterOutOfRange,
+        )),
     }
+}
+
+fn invalid_input(operation: SciOperationCode, violation: SciInputViolation) -> SciError {
+    SciError::InvalidInput {
+        operation,
+        violation,
+    }
+}
+
+fn computation_failed(operation: SciOperationCode) -> SciError {
+    SciError::ComputationFailed { operation }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sci::models::regression::{
-        StatisticalObservationMetadata, StatisticalSettingSource,
+    use crate::sci::api::computation::{
+        MissingValuePolicy, StatisticalObservationMetadata, StatisticalSettingSource,
     };
+    use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
 
     fn regression_metadata(observations: usize) -> StatisticalObservationMetadata {
         StatisticalObservationMetadata {
@@ -851,10 +937,10 @@ mod tests {
             used_observation_count: observations,
             dropped_null_count: 0,
             dropped_nan_count: 0,
-            missing_value_policy: crate::project::StatisticalMissingValuePolicy::Listwise,
-            missing_value_policy_source: StatisticalSettingSource::Project,
+            missing_value_policy: MissingValuePolicy::Listwise,
+            missing_value_policy_source: StatisticalSettingSource::ProjectDefault,
             effective_convergence_tolerance: 1e-12,
-            convergence_tolerance_source: StatisticalSettingSource::Project,
+            convergence_tolerance_source: StatisticalSettingSource::ProjectDefault,
             convergence_tolerance_consumed: false,
         }
     }
@@ -995,6 +1081,12 @@ mod tests {
 
         let error = augmented_dickey_fuller(&series, 1, "unexpected").unwrap_err();
 
-        assert_eq!(error, "unsupported ADF regression 'unexpected'");
+        assert_eq!(
+            error,
+            SciError::InvalidInput {
+                operation: SciOperationCode::Adf,
+                violation: SciInputViolation::ParameterOutOfRange,
+            }
+        );
     }
 }

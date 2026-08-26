@@ -89,8 +89,8 @@ fn test_variable(name: &str) -> crate::variable::VariableInstance {
     crate::variable::VariableInstance {
         id,
         name: name.into(),
-        data_type: crate::graph::value::DataType::Int64,
-        data_value: crate::graph::value::DataValue::Int64(1),
+        data_type: crate::data_contract::DataType::Int64,
+        data_value: crate::data_contract::DataValue::Int64(1),
         tabular: None,
         description: String::new(),
         scope: crate::variable::VariableScope::Global,

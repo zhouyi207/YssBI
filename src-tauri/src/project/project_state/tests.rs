@@ -364,7 +364,7 @@ mod run_parameter_tests {
         assert_eq!(compiled.convergence_tolerance, 2e-6);
         assert_eq!(
             compiled.convergence_tolerance_source,
-            crate::sci::models::regression::StatisticalSettingSource::Project
+            crate::sci::api::computation::StatisticalSettingSource::ProjectDefault
         );
         assert_eq!(
             compiled.missing_value_policy,
@@ -372,7 +372,7 @@ mod run_parameter_tests {
         );
         assert_eq!(
             compiled.missing_value_policy_source,
-            crate::sci::models::regression::StatisticalSettingSource::Project
+            crate::sci::api::computation::StatisticalSettingSource::ProjectDefault
         );
     }
 
@@ -421,7 +421,7 @@ mod run_parameter_tests {
         assert_eq!(compiled.convergence_tolerance, 1e-7);
         assert_eq!(
             compiled.convergence_tolerance_source,
-            crate::sci::models::regression::StatisticalSettingSource::Node
+            crate::sci::api::computation::StatisticalSettingSource::NodeOverride
         );
         assert_eq!(
             compiled.missing_value_policy,
@@ -429,7 +429,7 @@ mod run_parameter_tests {
         );
         assert_eq!(
             compiled.missing_value_policy_source,
-            crate::sci::models::regression::StatisticalSettingSource::Node
+            crate::sci::api::computation::StatisticalSettingSource::NodeOverride
         );
     }
 

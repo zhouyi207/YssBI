@@ -1,7 +1,8 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use serde_json::{Value, json};
+use syn::{Item, Type};
 
 use super::cargo_targets::rust_workspace_model_from_metadata;
 use super::debt::{
@@ -326,6 +327,31 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "src-tauri/src/node_system/catalog/builtin.rs",
                 "fixture_lib::node_system::catalog::builtin",
             ),
+            module(
+                &runtime_root,
+                "src-tauri/src/data_contract/mod.rs",
+                "fixture_lib::data_contract",
+            ),
+            module(
+                &runtime_root,
+                "src-tauri/src/data_contract/data_type.rs",
+                "fixture_lib::data_contract::data_type",
+            ),
+            module(
+                &runtime_root,
+                "src-tauri/src/data_contract/data_value.rs",
+                "fixture_lib::data_contract::data_value",
+            ),
+            module(
+                &runtime_root,
+                "src-tauri/src/graph/value/type_system.rs",
+                "fixture_lib::graph::value::type_system",
+            ),
+            module(
+                &runtime_root,
+                "src-tauri/src/execution/settings.rs",
+                "fixture_lib::execution::settings",
+            ),
             module(&build_root, "src-tauri/build.rs", "build_script_build"),
             module(
                 &build_root,
@@ -342,6 +368,26 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/src/node_system/catalog/builtin.rs"],
         RustLayer::BuiltinComposition
+    );
+    assert_eq!(
+        classified["src-tauri/src/data_contract/mod.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/src/data_contract/data_type.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/src/data_contract/data_value.rs"],
+        RustLayer::PureLeaf
+    );
+    assert_eq!(
+        classified["src-tauri/src/graph/value/type_system.rs"],
+        RustLayer::Graph
+    );
+    assert_eq!(
+        classified["src-tauri/src/execution/settings.rs"],
+        RustLayer::Execution
     );
     assert_eq!(classified["src-tauri/build.rs"], RustLayer::BuildScript);
     assert_eq!(
@@ -401,6 +447,609 @@ fn rust_production_sources_are_classified_once() {
             .iter()
             .all(|layer| classification.values().any(|actual| actual == layer)),
         "the real production graph must exercise all fifteen Rust layers"
+    );
+}
+
+#[derive(Debug)]
+struct CanonicalOwnerExpectation {
+    symbol: &'static str,
+    required_origin: &'static str,
+    allowed_origins: &'static [&'static str],
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct PersistedContractTypeAlias {
+    source_file: String,
+    alias: String,
+    target: String,
+}
+
+fn forbidden_persisted_contract_type_aliases(
+    repository_root: &Path,
+    modules: &[RustModule],
+) -> Result<Vec<PersistedContractTypeAlias>, ArchitectureAuditError> {
+    let source_files = modules
+        .iter()
+        .map(|module| module.repository_relative_source_file.as_str())
+        .filter(|source_file| forbidden_alias_symbols(source_file).is_some())
+        .collect::<BTreeSet<_>>();
+    let mut aliases = Vec::new();
+
+    for source_file in source_files {
+        let path = repository_root.join(source_file);
+        let source =
+            std::fs::read_to_string(&path).map_err(|source| ArchitectureAuditError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        let syntax =
+            syn::parse_file(&source).map_err(|source| ArchitectureAuditError::SourceParse {
+                path: path.clone(),
+                source,
+            })?;
+        collect_forbidden_type_aliases(source_file, &syntax.items, &mut aliases);
+    }
+
+    aliases.sort();
+    Ok(aliases)
+}
+
+fn collect_forbidden_type_aliases(
+    source_file: &str,
+    items: &[Item],
+    aliases: &mut Vec<PersistedContractTypeAlias>,
+) {
+    let Some(forbidden_symbols) = forbidden_alias_symbols(source_file) else {
+        return;
+    };
+
+    for item in items {
+        match item {
+            Item::Type(item_type)
+                if !crate::test_support::source_audit::is_test_only(&item_type.attrs) =>
+            {
+                let Some((symbol, target)) = canonical_persisted_contract_path(&item_type.ty)
+                else {
+                    continue;
+                };
+                if forbidden_symbols.contains(&symbol.as_str()) {
+                    aliases.push(PersistedContractTypeAlias {
+                        source_file: source_file.to_owned(),
+                        alias: item_type.ident.to_string(),
+                        target,
+                    });
+                }
+            }
+            Item::Mod(item_mod)
+                if !crate::test_support::source_audit::is_test_only(&item_mod.attrs) =>
+            {
+                if let Some((_, nested_items)) = &item_mod.content {
+                    collect_forbidden_type_aliases(source_file, nested_items, aliases);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn forbidden_alias_symbols(source_file: &str) -> Option<&'static [&'static str]> {
+    const PERSISTED_SYMBOLS: &[&str] = &[
+        "CategoricalRole",
+        "DataSeriesValue",
+        "DataType",
+        "DataValue",
+        "DummyInfo",
+        "TimeSeriesState",
+    ];
+    const SCI_SYMBOLS: &[&str] = &["CategoricalRole"];
+
+    if source_file.starts_with("src-tauri/src/graph/") {
+        Some(PERSISTED_SYMBOLS)
+    } else if source_file.starts_with("src-tauri/src/sci/") {
+        Some(SCI_SYMBOLS)
+    } else {
+        None
+    }
+}
+
+fn canonical_persisted_contract_path(ty: &Type) -> Option<(String, String)> {
+    let type_path = match ty {
+        Type::Group(group) => return canonical_persisted_contract_path(&group.elem),
+        Type::Paren(paren) => return canonical_persisted_contract_path(&paren.elem),
+        Type::Path(type_path) if type_path.qself.is_none() => type_path,
+        _ => return None,
+    };
+    let segments = type_path
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>();
+    let [crate_root, contract, symbol] = segments.as_slice() else {
+        return None;
+    };
+    if type_path.path.leading_colon.is_some()
+        || crate_root != "crate"
+        || contract != "data_contract"
+        || type_path
+            .path
+            .segments
+            .iter()
+            .any(|segment| !matches!(segment.arguments, syn::PathArguments::None))
+    {
+        return None;
+    }
+
+    Some((symbol.clone(), segments.join("::")))
+}
+
+fn canonical_owner_origins_are_valid(
+    expectation: &CanonicalOwnerExpectation,
+    actual_origins: &BTreeSet<&str>,
+) -> bool {
+    let allowed_origins = expectation
+        .allowed_origins
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+
+    actual_origins.contains(expectation.required_origin)
+        && actual_origins.is_subset(&allowed_origins)
+}
+
+#[test]
+fn persisted_data_contract_preserves_wire_and_uses_typed_parse_errors() {
+    use crate::data_contract::{
+        CategoricalRole, DataSeriesValue, DataType, DataTypeParseError, DataValue, DummyInfo,
+        TimeSeriesState,
+    };
+
+    let id_only = DataValue::DataSeries(DataSeriesValue::new("series-id"));
+    assert_eq!(
+        serde_json::to_value(&id_only).expect("id-only data series must serialize"),
+        serde_json::json!({"DataSeries": "series-id"})
+    );
+
+    let full = DataValue::DataSeries(DataSeriesValue {
+        id: "series-id".to_owned(),
+        element_type: Some(DataType::String),
+        dummy_info: Some(DummyInfo {
+            drop_category: Some("baseline".to_owned()),
+            role: CategoricalRole::Individual,
+        }),
+        time_series_state: Some(TimeSeriesState::Aligned),
+    });
+    let expected = serde_json::json!({
+        "DataSeries": {
+            "id": "series-id",
+            "elementType": {"kind": "String"},
+            "dummyInfo": {
+                "dropCategory": "baseline",
+                "role": "individual"
+            },
+            "timeSeriesState": "aligned"
+        }
+    });
+    assert_eq!(
+        serde_json::to_value(&full).expect("full data series must serialize"),
+        expected
+    );
+    assert_eq!(
+        serde_json::from_value::<DataValue>(expected)
+            .expect("persisted full data series must deserialize"),
+        full
+    );
+
+    assert_eq!("".parse::<DataType>(), Err(DataTypeParseError::Empty));
+    assert_eq!(
+        "Array<Int64".parse::<DataType>(),
+        Err(DataTypeParseError::MalformedComposite)
+    );
+    assert_eq!(
+        "Unknown".parse::<DataType>(),
+        Err(DataTypeParseError::UnknownKind)
+    );
+}
+
+#[test]
+fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexport() {
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
+        .expect("the real Cargo workspace must be discoverable");
+    let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
+        .expect("the production module graph must be discoverable");
+    let forbidden_contract_aliases =
+        forbidden_persisted_contract_type_aliases(&workspace.repository_root, &modules)
+            .expect("production persisted contract aliases must be discoverable");
+    assert!(
+        forbidden_contract_aliases.is_empty(),
+        "Graph must not alias persisted data-contract symbols, and SCI must not alias persisted CategoricalRole: {forbidden_contract_aliases:#?}"
+    );
+    let classification = classify_rust_sources(&workspace.roots, &modules)
+        .expect("every production source must classify exactly once");
+
+    for source in [
+        "src-tauri/src/data_contract/mod.rs",
+        "src-tauri/src/data_contract/data_type.rs",
+        "src-tauri/src/data_contract/data_value.rs",
+    ] {
+        assert_eq!(classification.get(source), Some(&RustLayer::PureLeaf));
+    }
+    assert_eq!(
+        classification.get("src-tauri/src/graph/value/type_system.rs"),
+        Some(&RustLayer::Graph),
+        "Graph-owned value behavior must not inherit the Pure Leaf contract classification"
+    );
+    assert!(
+        modules.iter().all(|module| {
+            !matches!(
+                module.repository_relative_source_file.as_str(),
+                "src-tauri/src/graph/value/data_type.rs"
+                    | "src-tauri/src/graph/value/data_value.rs"
+            )
+        }),
+        "the old Graph value declarations must not remain production modules"
+    );
+
+    let raw_dependencies =
+        collect_production_dependencies(&workspace.repository_root, &workspace.roots)
+            .expect("production dependency facts must be discoverable");
+    let dependencies = resolve_canonical_dependencies_detailed(&workspace, &raw_dependencies)
+        .unwrap_or_else(|failure| {
+            panic!("every production dependency must resolve to a canonical origin: {failure:#?}")
+        });
+
+    let forbidden_contract_reexports = dependencies
+        .iter()
+        .filter(|dependency| {
+            if dependency.kind != RustDependencyKind::ReExport {
+                return false;
+            }
+
+            matches!(
+                &dependency.origin,
+                CanonicalOrigin::Repository {
+                    repository_relative_declaration_file,
+                    symbol,
+                    ..
+                } if repository_relative_declaration_file.starts_with("src-tauri/src/data_contract/")
+                    && (dependency.source_file.starts_with("src-tauri/src/graph/")
+                        || (dependency.source_file.starts_with("src-tauri/src/sci/")
+                            && symbol == "CategoricalRole"))
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        forbidden_contract_reexports.is_empty(),
+        "Graph must not re-export the persisted data contract, and SCI must not re-export or alias its CategoricalRole: {forbidden_contract_reexports:#?}"
+    );
+
+    for expectation in [
+        CanonicalOwnerExpectation {
+            symbol: "DataType",
+            required_origin: "src-tauri/src/data_contract/data_type.rs",
+            allowed_origins: &["src-tauri/src/data_contract/data_type.rs"],
+        },
+        CanonicalOwnerExpectation {
+            symbol: "DataValue",
+            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+        },
+        CanonicalOwnerExpectation {
+            symbol: "DataSeriesValue",
+            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+        },
+        CanonicalOwnerExpectation {
+            symbol: "CategoricalRole",
+            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            allowed_origins: &[
+                "src-tauri/src/data_contract/data_value.rs",
+                "src-tauri/src/sci/api/computation.rs",
+            ],
+        },
+        CanonicalOwnerExpectation {
+            symbol: "TimeSeriesState",
+            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+        },
+        CanonicalOwnerExpectation {
+            symbol: "DummyInfo",
+            required_origin: "src-tauri/src/data_contract/data_value.rs",
+            allowed_origins: &["src-tauri/src/data_contract/data_value.rs"],
+        },
+    ] {
+        let origins = dependencies
+            .iter()
+            .filter_map(|dependency| match &dependency.origin {
+                CanonicalOrigin::Repository {
+                    repository_relative_declaration_file,
+                    symbol: origin_symbol,
+                    ..
+                } if origin_symbol == expectation.symbol => {
+                    Some(repository_relative_declaration_file.as_str())
+                }
+                CanonicalOrigin::Repository { .. }
+                | CanonicalOrigin::LanguageBuiltin { .. }
+                | CanonicalOrigin::RepositoryAsset { .. }
+                | CanonicalOrigin::External(_) => None,
+            })
+            .collect::<BTreeSet<_>>();
+        assert!(
+            canonical_owner_origins_are_valid(&expectation, &origins),
+            "{} must retain {} and resolve only to approved owners {:?}, got {:?}",
+            expectation.symbol,
+            expectation.required_origin,
+            expectation.allowed_origins,
+            origins,
+        );
+    }
+}
+
+#[test]
+fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_origin() {
+    let expectation = CanonicalOwnerExpectation {
+        symbol: "CategoricalRole",
+        required_origin: "src-tauri/src/data_contract/data_value.rs",
+        allowed_origins: &[
+            "src-tauri/src/data_contract/data_value.rs",
+            "src-tauri/src/sci/api/computation.rs",
+        ],
+    };
+
+    assert!(canonical_owner_origins_are_valid(
+        &expectation,
+        &BTreeSet::from([
+            "src-tauri/src/data_contract/data_value.rs",
+            "src-tauri/src/sci/api/computation.rs",
+        ]),
+    ));
+    assert!(!canonical_owner_origins_are_valid(
+        &expectation,
+        &BTreeSet::from([
+            "src-tauri/src/data_contract/data_value.rs",
+            "src-tauri/src/sci/api/arbitrary.rs",
+        ]),
+    ));
+    assert!(!canonical_owner_origins_are_valid(
+        &expectation,
+        &BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
+    ));
+}
+
+#[test]
+fn task1_sci_contracts_are_isolated_and_canonical() {
+    const TASK1_SCI_FILES: &[&str] = &[
+        "src-tauri/src/sci/api/computation.rs",
+        "src-tauri/src/sci/api/node_statistics.rs",
+        "src-tauri/src/sci/api/time_series/acf_pacf.rs",
+        "src-tauri/src/sci/api/time_series/serial_tests.rs",
+        "src-tauri/src/sci/backends/rust/stats/hypothesis.rs",
+        "src-tauri/src/sci/backends/rust/time_series/acf_pacf.rs",
+        "src-tauri/src/sci/error.rs",
+        "src-tauri/src/sci/models/regression.rs",
+    ];
+
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
+        .expect("the real Cargo workspace must be discoverable");
+    let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
+        .expect("the production module graph must be discoverable");
+    let classification = classify_rust_sources(&workspace.roots, &modules)
+        .expect("every production source must classify exactly once");
+    let raw_dependencies =
+        collect_production_dependencies(&workspace.repository_root, &workspace.roots)
+            .expect("production dependency facts must be discoverable");
+    let dependencies = resolve_canonical_dependencies_detailed(&workspace, &raw_dependencies)
+        .expect("production dependency origins must resolve");
+
+    let forbidden = dependencies
+        .iter()
+        .filter(|dependency| TASK1_SCI_FILES.contains(&dependency.source_file.as_str()))
+        .filter(|dependency| match &dependency.origin {
+            CanonicalOrigin::Repository {
+                repository_relative_declaration_file,
+                ..
+            } => matches!(
+                classification.get(repository_relative_declaration_file),
+                Some(RustLayer::Graph | RustLayer::Project | RustLayer::Execution)
+            ),
+            CanonicalOrigin::External(origin) => origin.package_name == "tauri",
+            CanonicalOrigin::LanguageBuiltin { .. } | CanonicalOrigin::RepositoryAsset { .. } => {
+                false
+            }
+        })
+        .map(|dependency| {
+            format!(
+                "{}|{}",
+                dependency.source_file, dependency.canonical_origin_target
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        forbidden.is_empty(),
+        "Task 1 SCI contracts must not import Graph, Project, Execution, or Tauri: {forbidden:#?}"
+    );
+
+    for (symbol, expected_origins) in [
+        (
+            "CategoricalRole",
+            BTreeSet::from([
+                "src-tauri/src/data_contract/data_value.rs",
+                "src-tauri/src/sci/api/computation.rs",
+            ]),
+        ),
+        (
+            "StatisticalObservationMetadata",
+            BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
+        ),
+        (
+            "StatisticalSettingSource",
+            BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
+        ),
+    ] {
+        let actual_origins = dependencies
+            .iter()
+            .filter_map(|dependency| match &dependency.origin {
+                CanonicalOrigin::Repository {
+                    repository_relative_declaration_file,
+                    symbol: origin_symbol,
+                    ..
+                } if origin_symbol == symbol => Some(repository_relative_declaration_file.as_str()),
+                CanonicalOrigin::Repository { .. }
+                | CanonicalOrigin::LanguageBuiltin { .. }
+                | CanonicalOrigin::RepositoryAsset { .. }
+                | CanonicalOrigin::External(_) => None,
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            actual_origins, expected_origins,
+            "{symbol} must have only its approved canonical owner(s)"
+        );
+    }
+
+    let computation_data_value_origins = dependencies
+        .iter()
+        .filter_map(|dependency| match &dependency.origin {
+            CanonicalOrigin::Repository {
+                repository_relative_declaration_file,
+                symbol,
+                ..
+            } if dependency.source_file == "src-tauri/src/sci/api/computation.rs"
+                && symbol == "DataValue" =>
+            {
+                Some(repository_relative_declaration_file.as_str())
+            }
+            CanonicalOrigin::Repository { .. }
+            | CanonicalOrigin::LanguageBuiltin { .. }
+            | CanonicalOrigin::RepositoryAsset { .. }
+            | CanonicalOrigin::External(_) => None,
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        computation_data_value_origins,
+        BTreeSet::from(["src-tauri/src/data_contract/data_value.rs"]),
+        "StatisticalInputSource values must borrow the persisted DataValue owner"
+    );
+    let computation_persisted_role_dependencies = dependencies
+        .iter()
+        .filter(|dependency| {
+            dependency.source_file == "src-tauri/src/sci/api/computation.rs"
+                && matches!(
+                    &dependency.origin,
+                    CanonicalOrigin::Repository {
+                        repository_relative_declaration_file,
+                        symbol,
+                        ..
+                    } if repository_relative_declaration_file
+                        == "src-tauri/src/data_contract/data_value.rs"
+                        && symbol == "CategoricalRole"
+                )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        computation_persisted_role_dependencies.is_empty(),
+        "StatisticalInputSource must expose the SCI-owned CategoricalRole"
+    );
+}
+
+#[test]
+fn persisted_contract_type_aliases_are_rejected_from_real_graph_and_sci_sources() {
+    const FIXTURE_PREFIX: &str = "architecture-canonical-owner-alias-";
+
+    struct SourceFixture {
+        root: PathBuf,
+    }
+
+    impl SourceFixture {
+        fn new() -> Self {
+            let root = repository_root()
+                .join("target")
+                .join(format!("{FIXTURE_PREFIX}{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&root).expect("alias fixture root must be created");
+            Self { root }
+        }
+
+        fn write(&self, relative: &str, source: &str) {
+            let path = self.root.join(relative);
+            assert!(path.starts_with(&self.root));
+            std::fs::create_dir_all(path.parent().expect("fixture source must have a parent"))
+                .expect("alias fixture source parent must be created");
+            std::fs::write(path, source).expect("alias fixture source must be written");
+        }
+    }
+
+    impl Drop for SourceFixture {
+        fn drop(&mut self) {
+            let safe_name = self
+                .root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(FIXTURE_PREFIX));
+            if safe_name {
+                let _ = std::fs::remove_dir_all(&self.root);
+            }
+        }
+    }
+
+    let fixture = SourceFixture::new();
+    fixture.write("src-tauri/src/lib.rs", "pub mod graph;\npub mod sci;\n");
+    fixture.write("src-tauri/src/graph/mod.rs", "pub mod value;\n");
+    fixture.write("src-tauri/src/graph/value/mod.rs", "mod aliases;\n");
+    fixture.write(
+        "src-tauri/src/graph/value/aliases.rs",
+        r#"
+pub type PersistedDataType = crate::data_contract::DataType;
+pub type PersistedDataValue = crate::data_contract::DataValue;
+pub type PersistedDataSeriesValue = crate::data_contract::DataSeriesValue;
+pub type PersistedCategoricalRole = crate::data_contract::CategoricalRole;
+pub type PersistedTimeSeriesState = crate::data_contract::TimeSeriesState;
+pub type PersistedDummyInfo = crate::data_contract::DummyInfo;
+
+#[cfg(test)]
+pub type TestOnlyAlias = crate::data_contract::DataType;
+"#,
+    );
+    fixture.write("src-tauri/src/sci/mod.rs", "pub mod api;\n");
+    fixture.write("src-tauri/src/sci/api/mod.rs", "pub mod computation;\n");
+    fixture.write(
+        "src-tauri/src/sci/api/computation.rs",
+        r#"
+pub enum CategoricalRole {
+    Individual,
+}
+
+pub type PersistedCategoricalRole = crate::data_contract::CategoricalRole;
+"#,
+    );
+    let modules = collect_production_modules(
+        &fixture.root,
+        &[ProductionRoot {
+            package_id: "fixture-package".to_owned(),
+            package: "fixture".to_owned(),
+            target: "fixture_lib".to_owned(),
+            kind: ProductionRootKind::Library,
+            source_path: fixture.root.join("src-tauri/src/lib.rs"),
+        }],
+    )
+    .expect("real alias fixture modules must be discovered");
+    let aliases = forbidden_persisted_contract_type_aliases(&fixture.root, &modules)
+        .expect("real alias fixture must be scanned");
+    let aliases = aliases
+        .iter()
+        .map(|alias| format!("{}|{}|{}", alias.source_file, alias.alias, alias.target))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        aliases,
+        vec![
+            "src-tauri/src/graph/value/aliases.rs|PersistedCategoricalRole|crate::data_contract::CategoricalRole",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDataSeriesValue|crate::data_contract::DataSeriesValue",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDataType|crate::data_contract::DataType",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDataValue|crate::data_contract::DataValue",
+            "src-tauri/src/graph/value/aliases.rs|PersistedDummyInfo|crate::data_contract::DummyInfo",
+            "src-tauri/src/graph/value/aliases.rs|PersistedTimeSeriesState|crate::data_contract::TimeSeriesState",
+            "src-tauri/src/sci/api/computation.rs|PersistedCategoricalRole|crate::data_contract::CategoricalRole",
+        ]
     );
 }
 

@@ -223,9 +223,9 @@ pub(in crate::project) fn build_run_parameters(
                         convergence_tolerance_source: if parameter("convergence_tolerance")
                             .is_some()
                         {
-                            crate::sci::models::regression::StatisticalSettingSource::Node
+                            crate::sci::api::computation::StatisticalSettingSource::NodeOverride
                         } else {
-                            crate::sci::models::regression::StatisticalSettingSource::Project
+                            crate::sci::api::computation::StatisticalSettingSource::ProjectDefault
                         },
                         missing_value_policy: match parameter("missing_value_policy")
                             .and_then(serde_json::Value::as_str)
@@ -241,9 +241,9 @@ pub(in crate::project) fn build_run_parameters(
                         },
                         missing_value_policy_source: if parameter("missing_value_policy").is_some()
                         {
-                            crate::sci::models::regression::StatisticalSettingSource::Node
+                            crate::sci::api::computation::StatisticalSettingSource::NodeOverride
                         } else {
-                            crate::sci::models::regression::StatisticalSettingSource::Project
+                            crate::sci::api::computation::StatisticalSettingSource::ProjectDefault
                         },
                     },
                 )

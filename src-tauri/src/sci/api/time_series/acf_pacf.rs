@@ -2,7 +2,7 @@
 
 use crate::sci::backends::rust;
 use crate::sci::engine::SciContext;
-use crate::sci::error::SciError;
+use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -35,7 +35,10 @@ pub fn compute_acf_pacf(
 fn command_max_lag(input: &AcfPacfInput) -> Result<usize, SciError> {
     let n = input.residuals.len();
     if n < 4 {
-        return Err(SciError::invalid_input("ACF/PACF: 至少需要 4 个观测值"));
+        return Err(SciError::InvalidInput {
+            operation: SciOperationCode::AcfPacf,
+            violation: SciInputViolation::EmptyInput,
+        });
     }
     Ok(input.max_lag.min(n / 2 - 1).min(40).max(1))
 }

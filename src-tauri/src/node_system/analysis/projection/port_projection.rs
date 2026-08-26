@@ -4,7 +4,7 @@ use super::types::{
     PortDirectionDto, PortInstanceKindDto, PortKindDto, RelationalScalarTypeDto,
     ResolvedPortStatusDto, SchemaFieldDto, SchemaSummaryDto, SchemaSummaryKindDto, TypeSummaryDto,
 };
-use crate::graph::value::DataType;
+use crate::data_contract::DataType;
 use crate::node_system::document::{
     EffectiveInputBinding, GraphDocument, PortAddress, PortAddressDto,
 };

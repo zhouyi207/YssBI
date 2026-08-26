@@ -4,10 +4,12 @@
 
 pub mod application;
 pub mod commands;
+pub mod data_contract;
 pub mod database;
 pub mod diagnostics;
 pub mod error;
 pub mod event;
+pub mod execution;
 
 mod graph;
 pub mod julia;

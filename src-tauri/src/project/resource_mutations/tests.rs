@@ -1,5 +1,5 @@
 use super::ResourceMutationTestPoint;
-use crate::graph::value::{DataType, DataValue};
+use crate::data_contract::{DataType, DataValue};
 use crate::node_system::document::{
     DocumentNode, NodeId, OperationId, ParameterValues, ResourceRevision,
 };

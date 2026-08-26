@@ -1,5 +1,5 @@
 use super::{PlotSink, ResourceError, ResourceLease, ResourceProvider};
-use crate::graph::value::DataValue;
+use crate::data_contract::DataValue;
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
     CompileProvenance, ResourceKey, ResourceVersion, ResourceVersionSet,

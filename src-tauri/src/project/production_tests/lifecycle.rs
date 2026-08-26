@@ -697,8 +697,8 @@ fn function_duplicate_rebinds_self_identity_and_loaded_rename_is_authoritative()
     let local_variable = state
         .add_variable(
             "Local Rate",
-            crate::graph::value::DataType::Int64,
-            crate::graph::value::DataValue::Int64(9),
+            crate::data_contract::DataType::Int64,
+            crate::data_contract::DataValue::Int64(9),
             "",
             crate::variable::VariableScope::Function {
                 function_path: function.as_str().into(),
@@ -882,8 +882,8 @@ fn loaded_rename_undo_redo_restores_disk_authority_and_move_identity() {
     let variable = state
         .add_variable(
             "Scoped",
-            crate::graph::value::DataType::Int64,
-            crate::graph::value::DataValue::Int64(1),
+            crate::data_contract::DataType::Int64,
+            crate::data_contract::DataValue::Int64(1),
             "",
             crate::variable::VariableScope::Event {
                 event_path: source.as_str().into(),
@@ -1208,8 +1208,8 @@ fn recovery_gate_rejects_public_snapshots_queries_and_variable_mutations() {
         state
             .add_variable(
                 "blocked",
-                crate::graph::value::DataType::Int64,
-                crate::graph::value::DataValue::Int64(1),
+                crate::data_contract::DataType::Int64,
+                crate::data_contract::DataValue::Int64(1),
                 "",
                 crate::variable::VariableScope::Global,
                 Vec::new(),
