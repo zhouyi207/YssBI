@@ -325,6 +325,46 @@ describe('frontend architecture model', () => {
 
   });
 
+  it('collects nested dependencies inside recognized import syntax', () => {
+    const sources = new Map<string, string>([
+      ['src/views/nested.ts', `
+        export type Nested = import('./outer').Box<import('./inner').Thing>;
+        void import('./outer', { with: { type: import('./inner') } });
+      `],
+      ['src/views/outer.ts', 'export interface Box<T> { readonly value: T; }'],
+      ['src/views/inner.ts', 'export interface Thing { readonly value: string; }'],
+    ]);
+
+    withIsolatedTypeScriptProject(sources, (context) => {
+      const resolved = resolvedModuleDependencies(context, {
+        path: 'src/views/nested.ts',
+        source: sources.get('src/views/nested.ts')!,
+      });
+
+      expect(resolved.map(({ kind, canonicalOriginTarget }) => ({
+        kind,
+        canonicalOriginTarget,
+      }))).toEqual([
+        {
+          kind: 'import-type',
+          canonicalOriginTarget: 'src/views/outer.ts::Box',
+        },
+        {
+          kind: 'import-type',
+          canonicalOriginTarget: 'src/views/inner.ts::Thing',
+        },
+        {
+          kind: 'dynamic-import',
+          canonicalOriginTarget: 'src/views/outer.ts',
+        },
+        {
+          kind: 'dynamic-import',
+          canonicalOriginTarget: 'src/views/inner.ts',
+        },
+      ]);
+    });
+  });
+
   it('rejects forged declarations outside the exact audit source root', () => {
     const isolatedPath = 'src/views/out-of-root.ts';
     const isolatedSource = "import { forged } from '../../sibling/src/forged'; void forged;";

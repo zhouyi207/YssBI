@@ -1432,3 +1432,6 @@ Execution 不知道具体 UI
 - [ ] 删除 declaration 与 production inventory 对任意 `run-N/src/**` 的名称猜测，并回归拒绝伪造 source root 外的 sibling 与顶层 run 目录。
 - [ ] 让 collector 无条件保留已识别的 type-only/runtime dependency，统一由 resolver 对非字面量 import type 与缺参动态 import 返回 typed failure。
 - [ ] 复验 Task 4 全部 architecture contracts、project filesystem contract、TypeScript typecheck 与 diff check，并继续隔离 Task 5 classifier RED 草稿。
+- [ ] 为嵌套 ImportTypeNode 与 dynamic import options 增加 focused regression，逐项冻结 outer/inner dependency 的 syntax kind 与 canonical origin。
+- [ ] 已识别 import type 与 module call 在记录当前 edge 后继续遍历子节点，同时保留 import/export/import-equals 的声明级去重语义。
+- [ ] 使用临时未跟踪 Task 5 stub 复验 focused、Task 4 architecture、project filesystem contract 与 TypeScript typecheck，并在 staging 前删除 stub。

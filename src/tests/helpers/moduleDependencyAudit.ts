@@ -273,6 +273,7 @@ function collectModuleDependencies(sourceFile: ts.SourceFile): CollectedModuleDe
           ? node.qualifier.getText(sourceFile).split('.').slice(-1)[0] ?? null
           : null,
       );
+      node.forEachChild(visit);
       return;
     }
     if (ts.isExportAssignment(node)) {
@@ -299,6 +300,7 @@ function collectModuleDependencies(sourceFile: ts.SourceFile): CollectedModuleDe
           node,
           node.arguments[0] ?? null,
         );
+        node.forEachChild(visit);
         return;
       }
     }
