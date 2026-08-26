@@ -99,10 +99,17 @@
   .dv-groupview.dv-groupview-edge.dv-groupview-header-bottom:not([data-yssbi-logs-dockview] *)
   > .dv-tabs-and-actions-container
   .dv-tabs-container
-  > .dv-tab.dv-active-tab {
+  > .dv-tab {
   margin: 3px 2px;
-  border-bottom-color: transparent;
   border-radius: 4px;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-bottom:not([data-yssbi-logs-dockview] *)
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container
+  > .dv-tab.dv-active-tab {
+  border-bottom-color: transparent;
   background-color: var(--accent-color);
   color: var(--primary-foreground);
 }
@@ -567,4 +574,78 @@
   [data-workbench-activity-settings-surface] {
   background: var(--interactive-hover);
   color: var(--foreground);
+}
+
+/* A collapsed root edge has no selected tab in the user-facing chrome. */
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-edge-collapsed
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container
+  > .dv-tab.dv-active-tab:has([data-workbench-tab-edge-collapsed="true"]) {
+  border-color: transparent;
+  background-color: transparent;
+  color: var(--muted-foreground);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-bottom.dv-edge-collapsed:not([data-yssbi-logs-dockview] *)
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container
+  > .dv-tab.dv-active-tab:has([data-workbench-tab-edge-collapsed="true"]) {
+  border-radius: 0;
+  border-bottom-color: transparent;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has([data-workbench-tab-edge-collapsed="true"]) {
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has([data-workbench-tab-edge-collapsed="true"])::after {
+  content: none;
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has([data-workbench-tab-edge-collapsed="true"])
+  [data-workbench-activity-icon] {
+  background: transparent;
+  color: var(--muted-foreground);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has([data-workbench-tab-edge-collapsed="true"]):hover {
+  color: var(--foreground);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-groupview-header-left.dv-edge-collapsed
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container.dv-vertical
+  > .dv-tab.dv-active-tab:has([data-workbench-activity-tab]):has([data-workbench-tab-edge-collapsed="true"]):hover
+  [data-workbench-activity-icon] {
+  background: var(--interactive-hover);
+  color: var(--foreground);
+}
+
+[data-yssbi-root-dockview]
+  .dv-groupview.dv-groupview-edge.dv-edge-collapsed
+  > .dv-tabs-and-actions-container
+  .dv-tabs-container
+  > .dv-tab.dv-active-tab:has([data-workbench-tab-edge-collapsed="true"])
+  [data-workbench-tab-dirty] {
+  background-color: var(--accent-color);
 }

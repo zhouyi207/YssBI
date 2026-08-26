@@ -107,6 +107,12 @@ graph compilation/execution, databases, results, and scientific orchestration.
 - Use shadcn/ui primitives for ordinary interactive controls. Dockview is the
   specialized workbench/editor docking infrastructure; do not introduce another
   general-purpose UI component library.
+- Prefer composing existing shadcn/ui components over implementing equivalent
+  controls or interaction primitives locally. Add custom UI only when shadcn/ui
+  lacks the required behavior or a project-specific wrapper is necessary.
+- Prefer the existing `react-icons` package, primarily `react-icons/vsc`, for
+  project icons. Do not add a second icon dependency solely for glyphs emitted
+  by generated shadcn/ui source; map those glyphs to existing equivalents.
 - Use persistent shadcn `Alert` surfaces for page/section errors, inline
   feedback for field errors, and the application `MessageDialog` for blocking
   acknowledgement. Never use toaster/Sonner, browser `alert`, `prompt`,

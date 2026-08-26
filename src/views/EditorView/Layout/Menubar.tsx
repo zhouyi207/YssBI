@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
 import {
@@ -16,16 +16,17 @@ import { openExternalUrlWithDialog, useWindowMaximized } from '@/features/applic
 import { useActiveProjectPath } from '@/features/core/dataStore';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import { APP_LINKS } from '@/app/appConfig/default';
-import { Button } from '@/components/ui/button';
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Menubar as ShadcnMenubar,
+  MenubarCheckboxItem,
+  MenubarContent,
+  MenubarGroup,
+  MenubarItem,
+  MenubarMenu,
+  MenubarSeparator,
+  MenubarShortcut,
+  MenubarTrigger,
+} from '@/components/ui/menubar';
 import { BrandLockup } from '@/shared/ui/BrandMark';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
@@ -178,60 +179,73 @@ function selectMenuItem(
   onClick();
 }
 
-const MenuButton = ({ label, items }: MenuButtonProps) => (
-  <DropdownMenu>
-    <DropdownMenuTrigger asChild>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-7 px-2.5 text-[12px] font-normal text-muted-foreground hover:text-foreground"
-      >
-        {label}
-      </Button>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="start" className="min-w-[190px]">
-      {items.map((item, index) => {
-        if (item.type === 'separator' || item.label === '-') {
-          return <DropdownMenuSeparator key={`${label}-${index}`} />;
-        }
+const MenuButton = ({ id, label, items }: MenuButtonProps) => {
+  const sections = items.reduce<MenuItem[][]>((groups, item) => {
+    if (item.type === 'separator' || item.label === '-') {
+      if (groups[groups.length - 1]?.length) groups.push([]);
+      return groups;
+    }
 
-        const content = (
-          <>
-            <span className="flex-1">{item.label}</span>
-            {item.shortcut
-              ? <DropdownMenuShortcut>{item.shortcut}</DropdownMenuShortcut>
-              : null}
-          </>
-        );
+    groups[groups.length - 1]?.push(item);
+    return groups;
+  }, [[]]);
 
-        if (item.type === 'checkbox') {
-          return (
-            <DropdownMenuCheckboxItem
-              key={`${label}-${index}`}
-              checked={item.checked}
-              disabled={!item.onClick}
-              onSelect={(event) => selectMenuItem(event, item.onClick)}
-              className="gap-8"
-            >
-              {content}
-            </DropdownMenuCheckboxItem>
-          );
-        }
+  return (
+    <MenubarMenu value={id}>
+      <MenubarTrigger>{label}</MenubarTrigger>
+      <MenubarContent>
+        {sections.map((section, sectionIndex) => (
+          <Fragment key={`${id}-section-${sectionIndex}`}>
+            {sectionIndex > 0 ? <MenubarSeparator /> : null}
+            <MenubarGroup>
+              {section.map((item, itemIndex) => {
+                const content = (
+                  <>
+                    <span className="flex-1">{item.label}</span>
+                    {item.shortcut
+                      ? <MenubarShortcut>{item.shortcut}</MenubarShortcut>
+                      : null}
+                  </>
+                );
 
-        return (
-          <DropdownMenuItem
-            key={`${label}-${index}`}
-            disabled={!item.onClick}
-            onSelect={(event) => selectMenuItem(event, item.onClick)}
-            className="gap-8"
-          >
-            {content}
-          </DropdownMenuItem>
-        );
-      })}
-    </DropdownMenuContent>
-  </DropdownMenu>
-);
+                if (item.type === 'checkbox') {
+                  return (
+                    <MenubarCheckboxItem
+                      key={`${id}-${sectionIndex}-${itemIndex}`}
+                      checked={item.checked}
+                      disabled={!item.onClick}
+                      onSelect={(event) => selectMenuItem(event, item.onClick)}
+                    >
+                      {content}
+                    </MenubarCheckboxItem>
+                  );
+                }
+
+                return (
+                  <MenubarItem
+                    key={`${id}-${sectionIndex}-${itemIndex}`}
+                    disabled={!item.onClick}
+                    onSelect={(event) => selectMenuItem(event, item.onClick)}
+                  >
+                    {content}
+                  </MenubarItem>
+                );
+              })}
+            </MenubarGroup>
+          </Fragment>
+        ))}
+      </MenubarContent>
+    </MenubarMenu>
+  );
+};
+
+export function EditorMenuBar({ menus }: { menus: readonly MenuButtonProps[] }) {
+  return (
+    <ShadcnMenubar className="border-0">
+      {menus.map((menu) => <MenuButton key={menu.id} {...menu} />)}
+    </ShadcnMenubar>
+  );
+}
 
 export function Menubar() {
   const { t } = useTranslation();
@@ -353,6 +367,15 @@ export function Menubar() {
     { label: '-', type: 'separator' },
     { label: t('menubar.about'), onClick: () => setAboutOpen(true) },
   ];
+  const menus: MenuButtonProps[] = [
+    { id: 'file', label: t('menubar.file'), items: fileItems },
+    { id: 'edit', label: t('menubar.edit'), items: editItems },
+    { id: 'data', label: t('menubar.data'), items: dataItems },
+    { id: 'view', label: t('menubar.view'), items: viewItems },
+    { id: 'window', label: t('menubar.window'), items: windowItems },
+    { id: 'tools', label: t('menubar.tools'), items: toolItems },
+    { id: 'help', label: t('menubar.help'), items: helpItems },
+  ];
 
   return (
     <>
@@ -384,15 +407,7 @@ export function Menubar() {
       >
         <BrandLockup className="pointer-events-none self-center px-4" />
 
-        <div className="my-2 flex items-center gap-0.5 self-center border-l border-[var(--strong-border)] pl-2">
-          <MenuButton id="file" label={t('menubar.file')} items={fileItems} />
-          <MenuButton id="edit" label={t('menubar.edit')} items={editItems} />
-          <MenuButton id="data" label={t('menubar.data')} items={dataItems} />
-          <MenuButton id="view" label={t('menubar.view')} items={viewItems} />
-          <MenuButton id="window" label={t('menubar.window')} items={windowItems} />
-          <MenuButton id="tools" label={t('menubar.tools')} items={toolItems} />
-          <MenuButton id="help" label={t('menubar.help')} items={helpItems} />
-        </div>
+        <EditorMenuBar menus={menus} />
       </WindowMenuBar>
       <AboutModal open={aboutOpen} onOpenChange={setAboutOpen} />
     </>

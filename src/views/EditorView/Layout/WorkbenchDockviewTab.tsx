@@ -91,6 +91,27 @@ function usePanelTitle(api: IDockviewPanelHeaderProps<WorkbenchPanelParams>['api
   return title;
 }
 
+function useWorkbenchEdgeCollapsed(
+  api: IDockviewPanelHeaderProps<WorkbenchPanelParams>['api'],
+): boolean {
+  const groupApi = api.group.api;
+  const isEdge = groupApi.location.type === 'edge';
+  const [collapsed, setCollapsed] = useState(
+    () => isEdge && groupApi.isCollapsed(),
+  );
+
+  useEffect(() => {
+    if (!isEdge) return;
+
+    const disposable = groupApi.onDidCollapsedChange(({ isCollapsed }) => {
+      setCollapsed(isCollapsed);
+    });
+    return () => disposable.dispose();
+  }, [groupApi, isEdge]);
+
+  return isEdge && collapsed;
+}
+
 function titleForMetadata(
   metadata: WorkbenchPanelMetadata,
   panelTitle: string | undefined,
@@ -137,6 +158,7 @@ export function WorkbenchDockviewTab(
   const { t } = useTranslation();
   const metadata = props.params.metadata;
   const panelTitle = usePanelTitle(props.api);
+  const isEdgeCollapsed = useWorkbenchEdgeCollapsed(props.api);
   const title = titleForMetadata(metadata, panelTitle);
   const isActivityTab = metadata.role === 'view' && isWorkbenchActivityViewId(metadata.viewId);
   const isPersistentSidebarTab = isWorkbenchPersistentViewMetadata(metadata);
@@ -164,10 +186,11 @@ export function WorkbenchDockviewTab(
 
     if (isActivityTab) {
       const handleActivityClick = (event: MouseEvent) => {
+        if (!props.api.group.api.isCollapsed()) return;
         event.preventDefault();
         event.stopPropagation();
         props.api.setActive();
-        if (props.api.group.api.isCollapsed()) props.api.group.api.expand();
+        props.api.group.api.expand();
       };
       tabContent.addEventListener('click', handleActivityClick);
       return () => tabContent.removeEventListener('click', handleActivityClick);
@@ -241,6 +264,7 @@ export function WorkbenchDockviewTab(
         className="dv-default-tab"
         data-workbench-activity-tab
         data-workbench-activity-separator={metadata.viewId === 'commands' ? 'true' : undefined}
+        data-workbench-tab-edge-collapsed={isEdgeCollapsed ? 'true' : undefined}
         data-panel-instance-id={props.api.id}
         aria-label={title}
         title={title}
@@ -277,6 +301,7 @@ export function WorkbenchDockviewTab(
         className="dv-default-tab"
         data-panel-instance-id={props.api.id}
         data-workbench-tab
+        data-workbench-tab-edge-collapsed={isEdgeCollapsed ? 'true' : undefined}
         title={title}
       >
         <span className="dv-default-tab-content flex min-w-0 items-center gap-1.5">

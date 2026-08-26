@@ -2,10 +2,17 @@
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { DockviewReact, type DockviewApi } from 'dockview-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkbenchPanelParams } from '@/features/core/dockview';
+
+const WORKBENCH_DOCKVIEW_CSS = readFileSync(
+  join(process.cwd(), 'src/app/workbench-dockview.css'),
+  'utf8',
+);
 
 const mocks = vi.hoisted(() => ({
   dirty: false,
@@ -108,6 +115,7 @@ describe('WorkbenchDockviewTab', () => {
   let host: HTMLDivElement;
   let root: Root;
   let api: DockviewApi | null;
+  let workbenchStyle: HTMLStyleElement;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -116,12 +124,17 @@ describe('WorkbenchDockviewTab', () => {
     mocks.listGroupPanels.mockImplementation(() => mocks.groupPanels);
     api = null;
     host = document.createElement('div');
+    host.dataset.yssbiRootDockview = '';
     document.body.appendChild(host);
+    workbenchStyle = document.createElement('style');
+    workbenchStyle.textContent = WORKBENCH_DOCKVIEW_CSS;
+    document.head.appendChild(workbenchStyle);
     root = createRoot(host);
   });
 
   afterEach(() => {
     act(() => root.unmount());
+    workbenchStyle.remove();
     document.body.replaceChildren();
   });
 
@@ -272,6 +285,112 @@ describe('WorkbenchDockviewTab', () => {
     });
 
     expect(mocks.requestCloseWorkbenchPanel).not.toHaveBeenCalled();
+  });
+
+  it('treats collapsed edge tabs as unselected and expands the selected tab', () => {
+    renderDockview((readyApi) => {
+      readyApi.addEdgeGroup('bottom', {
+        id: 'bottom-edge',
+        initialSize: 180,
+      });
+      const bottomGroup = readyApi.groups.find((group) => group.id === 'bottom-edge');
+      if (!bottomGroup) throw new Error('Missing bottom edge group');
+
+      readyApi.addPanel<WorkbenchPanelParams>({
+        id: 'output-a',
+        component: 'Logs',
+        title: 'Output',
+        params: { metadata: { role: 'view', viewId: 'output' } },
+        position: { referenceGroup: bottomGroup, direction: 'within' },
+      });
+      readyApi.addPanel<WorkbenchPanelParams>({
+        id: 'diagnostics-a',
+        component: 'Logs',
+        title: 'Diagnostics',
+        params: { metadata: { role: 'view', viewId: 'diagnostics' } },
+        inactive: true,
+        position: { referenceGroup: bottomGroup, direction: 'within' },
+      });
+    });
+
+    const bottomGroup = api?.getEdgeGroup('bottom');
+    if (!bottomGroup) throw new Error('Missing bottom edge group');
+
+    act(() => bottomGroup.collapse());
+
+    expect(host.querySelectorAll('[data-workbench-tab-edge-collapsed="true"]')).toHaveLength(2);
+
+    act(() => tabShell('diagnostics-a').click());
+
+    expect(bottomGroup.isCollapsed()).toBe(false);
+    expect(api?.activePanel?.id).toBe('diagnostics-a');
+    expect(host.querySelectorAll('[data-workbench-tab-edge-collapsed="true"]')).toHaveLength(0);
+  });
+
+  it('keeps bottom edge tab geometry stable when activation changes', () => {
+    renderDockview((readyApi) => {
+      readyApi.addEdgeGroup('bottom', {
+        id: 'bottom-edge',
+        initialSize: 180,
+      });
+      const bottomGroup = readyApi.groups.find((group) => group.id === 'bottom-edge');
+      if (!bottomGroup) throw new Error('Missing bottom edge group');
+
+      readyApi.addPanel<WorkbenchPanelParams>({
+        id: 'output-a',
+        component: 'Logs',
+        title: 'Output',
+        params: { metadata: { role: 'view', viewId: 'output' } },
+        position: { referenceGroup: bottomGroup, direction: 'within' },
+      });
+      readyApi.addPanel<WorkbenchPanelParams>({
+        id: 'diagnostics-a',
+        component: 'Logs',
+        title: 'Diagnostics',
+        params: { metadata: { role: 'view', viewId: 'diagnostics' } },
+        inactive: true,
+        position: { referenceGroup: bottomGroup, direction: 'within' },
+      });
+    });
+
+    const outputTab = tabShell('output-a');
+    const diagnosticsTab = tabShell('diagnostics-a');
+
+    expect(getComputedStyle(outputTab).margin).toBe(getComputedStyle(diagnosticsTab).margin);
+
+    act(() => diagnosticsTab.click());
+
+    expect(getComputedStyle(outputTab).margin).toBe(getComputedStyle(diagnosticsTab).margin);
+  });
+
+  it('collapses the left Activity edge when its active tab is clicked again', () => {
+    renderDockview((readyApi) => {
+      readyApi.addEdgeGroup('left', {
+        id: 'activity-edge',
+        initialSize: 240,
+      });
+      const activityGroup = readyApi.groups.find((group) => group.id === 'activity-edge');
+      if (!activityGroup) throw new Error('Missing activity edge group');
+
+      readyApi.addPanel<WorkbenchPanelParams>({
+        id: 'project-a',
+        component: 'Details',
+        title: 'Project',
+        params: { metadata: { role: 'view', viewId: 'project' } },
+        position: { referenceGroup: activityGroup, direction: 'within' },
+      });
+    });
+
+    const leftGroup = api?.getEdgeGroup('left');
+    if (!leftGroup) throw new Error('Missing left edge group');
+    const activityTab = host.querySelector<HTMLElement>('[data-panel-instance-id="project-a"]');
+    if (!activityTab) throw new Error('Missing project activity tab');
+
+    expect(leftGroup.isCollapsed()).toBe(false);
+
+    act(() => activityTab.click());
+
+    expect(leftGroup.isCollapsed()).toBe(true);
   });
 
   it('closes one physical mixed group through one batch request', () => {
