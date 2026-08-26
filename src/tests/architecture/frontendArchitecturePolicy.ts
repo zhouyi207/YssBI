@@ -1,6 +1,7 @@
 import type { ArchitectureSource } from '@/tests/helpers/moduleDependencyAudit';
 import type {
   FrontendArchitecturePolicy,
+  FrontendBasePolicyMembership,
   FrontendClassificationError,
   FrontendClassificationReport,
   FrontendLayer,
@@ -8,6 +9,7 @@ import type {
 } from './frontendArchitectureModel';
 
 export type {
+  FrontendBasePolicyMembership,
   FrontendClassificationReport,
   FrontendLayer,
   FrontendLiteralPolicyMembership,
@@ -303,44 +305,82 @@ function normalizeSourcePath(path: string): string {
   return path.replace(/\\/g, '/').replace(/^\.\//, '');
 }
 
-function baseLayer(path: string): FrontendLayer | null {
-  if (path.startsWith('src/app/')) return 'app-composition';
-  if (path.startsWith('src/views/')) return 'views';
-  if (path.startsWith('src/features/application/')) return 'application';
-  if (path.startsWith('src/features/core/')) return 'core';
-  if (path.startsWith('src/features/domain/')) return 'domain';
-  if (path.startsWith('src/services/')) return 'services';
-  if (path.startsWith('src/components/')) return 'components-ui';
-  if (/^src\/shared\/(?:ui|charts|hooks|plot)\//.test(path)) return 'components-ui';
-  if (path.startsWith('src/shared/types/dto/')) return 'wire-schema';
-  if (path.startsWith('src/utils/')) return 'diagnostics';
-  if (path.startsWith('src/lib/') || path.startsWith('src/shared/')) return 'pure-shared';
-  return null;
+type MutableMembershipSets = Map<FrontendLayer, Set<string>>;
+
+function emptyMembershipSets(): MutableMembershipSets {
+  return new Map(FRONTEND_LAYERS.map((layer) => [layer, new Set<string>()]));
 }
 
 function literalSets(
   membership: FrontendLiteralPolicyMembership,
-): ReadonlyMap<FrontendLayer, ReadonlySet<string>> {
+): MutableMembershipSets {
   return new Map(FRONTEND_LAYERS.map((layer) => [
     layer,
     new Set(membership[layer].map(normalizeSourcePath)),
   ]));
 }
 
+function injectedBaseSets(
+  membership: FrontendBasePolicyMembership,
+  sources: ReadonlySet<string>,
+): MutableMembershipSets {
+  const memberships = literalSets(membership);
+  for (const paths of memberships.values()) {
+    for (const path of paths) {
+      if (!sources.has(path)) paths.delete(path);
+    }
+  }
+  return memberships;
+}
+
+function productionBaseSets(
+  sources: readonly string[],
+  overridden: ReadonlySet<string>,
+): MutableMembershipSets {
+  const memberships = emptyMembershipSets();
+  for (const path of sources) {
+    const sharedPresentation = /^src\/shared\/(?:ui|charts|hooks|plot)\//.test(path);
+    const sharedWire = path.startsWith('src/shared/types/dto/');
+    if (path.startsWith('src/app/')) memberships.get('app-composition')!.add(path);
+    if (path.startsWith('src/views/')) memberships.get('views')!.add(path);
+    if (path.startsWith('src/features/application/')) memberships.get('application')!.add(path);
+    if (path.startsWith('src/features/core/')) memberships.get('core')!.add(path);
+    if (path.startsWith('src/features/domain/')) memberships.get('domain')!.add(path);
+    if (path.startsWith('src/services/')) memberships.get('services')!.add(path);
+    if (path.startsWith('src/components/') || sharedPresentation) {
+      memberships.get('components-ui')!.add(path);
+    }
+    if (sharedWire) memberships.get('wire-schema')!.add(path);
+    if (path.startsWith('src/utils/')) memberships.get('diagnostics')!.add(path);
+    if (path.startsWith('src/lib/')
+      || (path.startsWith('src/shared/')
+        && !sharedPresentation
+        && !sharedWire
+        && !overridden.has(path))) {
+      memberships.get('pure-shared')!.add(path);
+    }
+  }
+  return memberships;
+}
+
 export function classifyFrontendSources(
   sources: readonly ArchitectureSource[],
   literalMembership: FrontendLiteralPolicyMembership = FRONTEND_LITERAL_POLICY_MEMBERSHIP,
+  baseMembership?: FrontendBasePolicyMembership,
 ): FrontendClassificationReport {
   const literals = literalSets(literalMembership);
   const overridden = new Set([...literals.values()].flatMap((paths) => [...paths]));
   const normalizedSources = [...new Set(sources.map(({ path }) => normalizeSourcePath(path)))].sort();
-  const memberships = new Map(FRONTEND_LAYERS.map((layer) => [layer, new Set<string>()]));
+  const sourceSet = new Set(normalizedSources);
+  const memberships = baseMembership
+    ? injectedBaseSets(baseMembership, sourceSet)
+    : productionBaseSets(normalizedSources, overridden);
 
-  for (const sourceFile of normalizedSources) {
-    const owner = baseLayer(sourceFile);
-    if (owner !== null && !overridden.has(sourceFile)) memberships.get(owner)!.add(sourceFile);
-    for (const layer of FRONTEND_LAYERS) {
-      if (literals.get(layer)!.has(sourceFile)) memberships.get(layer)!.add(sourceFile);
+  for (const layer of FRONTEND_LAYERS) {
+    const layerMembership = memberships.get(layer)!;
+    for (const path of overridden) layerMembership.delete(path);
+    for (const path of literals.get(layer)!) {
+      if (sourceSet.has(path)) layerMembership.add(path);
     }
   }
 

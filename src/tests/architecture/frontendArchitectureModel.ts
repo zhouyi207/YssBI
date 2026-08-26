@@ -80,6 +80,8 @@ export type FrontendLiteralPolicyMembership = Readonly<
   Record<FrontendLayer, readonly string[]>
 >;
 
+export type FrontendBasePolicyMembership = FrontendLiteralPolicyMembership;
+
 export interface FrontendResolvedCapability {
   readonly sourceLayer: 'app-composition' | 'views' | 'application';
   readonly canonicalModule: string;

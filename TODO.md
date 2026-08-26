@@ -1459,3 +1459,6 @@ Execution 不知道具体 UI
 - [ ] 分离 TypeScript runtime asset consumer 与 stylesheet build consumer，并回归 stylesheet layer conflict 不产生确定 layer。
 - [ ] 将本地 named re-export 到 exact bare package 的 AST 可证明链纳入现有 canonical resolver，其他 node_modules origin 继续 typed fail-closed。
 - [ ] 补齐 repository dependency target classifier closure，并将 WorkbenchDockviewRead 作为 App/View 指向现有 WorkbenchDockviewPort 的 policy-only manifest。
+- [ ] 将 frontend classifier 改为十个独立 base membership sets，以 base-overlap regression 冻结 zero/multiple 检测不依赖 rule ordering。
+- [ ] 在合并 literal policy membership 前从每个 base set 移除 overrides，显式排除 pure-shared 的其他 shared owners，并保持现有 exact capability/debt contracts。
+- [ ] 先对 stylesheet 与 source layer provenance 求稳定 fixed point，再使冲突 parent 的 descendants 失效，最后仅用 singleton layers 生成 asset findings。

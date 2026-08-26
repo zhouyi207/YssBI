@@ -236,6 +236,26 @@ function stylesheetExternalDependency(
   };
 }
 
+function stylesheetAssetDependency(
+  sourceFile: string,
+  assetPath: string,
+): ResolvedStylesheetDependency {
+  return {
+    repositoryRelativeSourceFile: sourceFile,
+    fullyQualifiedOwner: `stylesheet:${sourceFile}`,
+    kind: 'stylesheet-import',
+    mode: 'build-style',
+    origin: {
+      kind: 'repository-asset',
+      asset: { repositoryRelativeAssetPath: assetPath, resourceKind: 'stylesheet' },
+    },
+    canonicalOriginTarget: `repository-asset:${assetPath}`,
+    writtenSpecifier: `./${assetPath.split('/').slice(-1)[0]}`,
+    line: 1,
+    column: 1,
+  };
+}
+
 function architectureFinding(
   overrides: Partial<FrontendFinding> = {},
 ): FrontendFinding {
@@ -327,6 +347,37 @@ describe('frontend architecture model', () => {
       capability.canonicalModule === 'src/features/core/dockview/workbenchDockviewPort.ts'
       && capability.exportedSymbols.includes('WorkbenchDockviewPort')
     )).map(({ sourceLayer }) => sourceLayer)).toEqual(['app-composition', 'views']);
+  });
+
+  it('reports overlapping frontend base memberships without rule ordering', () => {
+    const emptyMembership = Object.fromEntries([
+      'app-composition',
+      'views',
+      'application',
+      'core',
+      'domain',
+      'services',
+      'components-ui',
+      'wire-schema',
+      'diagnostics',
+      'pure-shared',
+    ].map((layer) => [layer, []])) as unknown as Record<FrontendLayer, readonly string[]>;
+    const baseMembership: FrontendLiteralPolicyMembership = {
+      ...emptyMembership,
+      views: ['src/base-overlap.ts'],
+      application: ['src/base-overlap.ts'],
+    };
+
+    const report = classifyFrontendSources([
+      { path: 'src/base-overlap.ts', source: 'export const overlap = true;' },
+    ], emptyMembership, baseMembership);
+
+    expect([...report.classification]).toEqual([]);
+    expect(report.errors).toEqual([{
+      kind: 'multiply-classified-production-source',
+      sourceFile: 'src/base-overlap.ts',
+      layers: ['views', 'application'],
+    }]);
   });
 
   it('audits frontend packages and stylesheet assets by layer mode and origin', () => {
@@ -611,6 +662,66 @@ describe('frontend architecture model', () => {
       sourceFile: 'src/app/shared.css',
       inheritedLayers: ['app-composition', 'views'],
     });
+  });
+
+  it('invalidates nested stylesheet provenance when a parent gains a second layer', () => {
+    const productionSources = [
+      { path: 'src/app/App.tsx', source: "import './shared.css';" },
+      { path: 'src/views/fixture.tsx', source: "import '../app/shared.css';" },
+    ];
+    const classification = classifyFrontendSources(productionSources).classification;
+    const moduleDependencies = [
+      repositoryAssetDependency('src/app/App.tsx', 'src/app/shared.css'),
+      repositoryAssetDependency('src/views/fixture.tsx', 'src/app/shared.css'),
+    ];
+    const policy: AssetDependencyPolicy = {
+      uses: [
+        {
+          sourceLayer: 'app-composition',
+          mode: 'runtime',
+          dependencyKind: 'side-effect-import',
+          resourceKind: 'stylesheet',
+          consumerSourceFile: 'src/app/App.tsx',
+          repositoryRelativeAssetPath: 'src/app/shared.css',
+        },
+        {
+          sourceLayer: 'views',
+          mode: 'runtime',
+          dependencyKind: 'side-effect-import',
+          resourceKind: 'stylesheet',
+          consumerSourceFile: 'src/views/fixture.tsx',
+          repositoryRelativeAssetPath: 'src/app/shared.css',
+        },
+        {
+          sourceLayer: 'app-composition',
+          mode: 'build-style',
+          dependencyKind: 'stylesheet-import',
+          resourceKind: 'stylesheet',
+          consumerSourceFile: 'src/app/shared.css',
+          repositoryRelativeAssetPath: 'src/app/nested.css',
+        },
+      ],
+    };
+
+    const report = auditFrontendAssetDependencies({
+      productionSources,
+      moduleDependencies,
+      stylesheetGraph: {
+        repositoryStylesheets: ['src/app/nested.css', 'src/app/shared.css'],
+        dependencies: [
+          stylesheetAssetDependency('src/app/shared.css', 'src/app/nested.css'),
+        ],
+        errors: [],
+      },
+    }, classification, policy);
+
+    expect([...report.stylesheetLayers]).toEqual([]);
+    expect(report.findings).toEqual([]);
+    expect(report.errors).toEqual([{
+      kind: 'stylesheet-layer-conflict',
+      sourceFile: 'src/app/shared.css',
+      inheritedLayers: ['app-composition', 'views'],
+    }]);
   });
 
   it('ratchets frontend debt in both directions', () => {

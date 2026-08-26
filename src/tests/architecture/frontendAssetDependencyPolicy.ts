@@ -149,6 +149,96 @@ function finding(
   };
 }
 
+type StylesheetProvenance = Map<string, Set<FrontendLayer>>;
+
+function inheritLayer(
+  provenance: StylesheetProvenance,
+  dependency: RepositoryAssetDependency,
+  layer: FrontendLayer,
+): boolean {
+  if (dependency.origin.kind !== 'repository-asset') return false;
+  const target = dependency.origin.asset.repositoryRelativeAssetPath;
+  let layers = provenance.get(target);
+  if (!layers) {
+    layers = new Set();
+    provenance.set(target, layers);
+  }
+  const previousSize = layers.size;
+  layers.add(layer);
+  return layers.size !== previousSize;
+}
+
+function stableStylesheetProvenance(
+  dependencies: readonly RepositoryAssetDependency[],
+  classification: ReadonlyMap<string, FrontendLayer>,
+  policy: AssetDependencyPolicy,
+): StylesheetProvenance {
+  const provenance: StylesheetProvenance = new Map();
+  for (const dependency of dependencies) {
+    if (!('location' in dependency)) continue;
+    const layer = classification.get(dependency.repositoryRelativeSourceFile);
+    if (layer && policy.uses.some((row) => matchesRow(row, dependency, layer))) {
+      inheritLayer(provenance, dependency, layer);
+    }
+  }
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const dependency of dependencies) {
+      if ('location' in dependency) continue;
+      const sourceLayers = provenance.get(dependency.repositoryRelativeSourceFile) ?? [];
+      for (const layer of sourceLayers) {
+        if (policy.uses.some((row) => matchesRow(row, dependency, layer))) {
+          changed = inheritLayer(provenance, dependency, layer) || changed;
+        }
+      }
+    }
+  }
+  return provenance;
+}
+
+function invalidConflictDescendants(
+  dependencies: readonly RepositoryAssetDependency[],
+  provenance: StylesheetProvenance,
+): ReadonlySet<string> {
+  const invalid = new Set(
+    [...provenance].filter(([, layers]) => layers.size > 1).map(([sourceFile]) => sourceFile),
+  );
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const dependency of dependencies) {
+      if ('location' in dependency
+        || !invalid.has(dependency.repositoryRelativeSourceFile)
+        || dependency.origin.kind !== 'repository-asset') continue;
+      const target = dependency.origin.asset.repositoryRelativeAssetPath;
+      if (!invalid.has(target)) {
+        invalid.add(target);
+        changed = true;
+      }
+    }
+  }
+  return invalid;
+}
+
+function stableStylesheetLayers(
+  provenance: StylesheetProvenance,
+  invalid: ReadonlySet<string>,
+  errors: FrontendAssetDependencyError[],
+): ReadonlyMap<string, FrontendLayer> {
+  const stylesheetLayers = new Map<string, FrontendLayer>();
+  for (const [sourceFile, layers] of [...provenance].sort(([left], [right]) => left.localeCompare(right))) {
+    const orderedLayers = FRONTEND_LAYERS.filter((layer) => layers.has(layer));
+    if (orderedLayers.length > 1) {
+      errors.push({ kind: 'stylesheet-layer-conflict', sourceFile, inheritedLayers: orderedLayers });
+    } else if (orderedLayers.length === 1 && !invalid.has(sourceFile)) {
+      stylesheetLayers.set(sourceFile, orderedLayers[0]);
+    }
+  }
+  return stylesheetLayers;
+}
+
 export function auditFrontendAssetDependencies(
   context: FrontendAssetAuditContext,
   classification: ReadonlyMap<string, FrontendLayer>,
@@ -159,49 +249,17 @@ export function auditFrontendAssetDependencies(
     ...validateAssetPolicy(context, policy),
   ];
   const findings: FrontendFinding[] = [];
-  const inherited = new Map<string, Set<FrontendLayer>>();
   const dependencies = assetDependencies(context);
+  const provenance = stableStylesheetProvenance(dependencies, classification, policy);
+  const invalid = invalidConflictDescendants(dependencies, provenance);
+  const stylesheetLayers = stableStylesheetLayers(provenance, invalid, errors);
 
-  const inherit = (target: string, layer: FrontendLayer): boolean => {
-    let layers = inherited.get(target);
-    if (!layers) {
-      layers = new Set();
-      inherited.set(target, layers);
-    }
-    const previousSize = layers.size;
-    layers.add(layer);
-    return layers.size !== previousSize;
-  };
-
-  const audited = new Set<RepositoryAssetDependency>();
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const dependency of dependencies) {
-      const sourceLayer = 'location' in dependency
-        ? classification.get(dependency.repositoryRelativeSourceFile)
-        : (() => {
-            const layers = inherited.get(dependency.repositoryRelativeSourceFile);
-            return layers?.size === 1 ? [...layers][0] : undefined;
-          })();
-      if (!sourceLayer) continue;
-      const allowed = policy.uses.some((row) => matchesRow(row, dependency, sourceLayer));
-      if (!audited.has(dependency)) {
-        if (!allowed) findings.push(finding(dependency, sourceLayer));
-        audited.add(dependency);
-      }
-      if (allowed && dependency.origin.kind === 'repository-asset') {
-        changed = inherit(dependency.origin.asset.repositoryRelativeAssetPath, sourceLayer) || changed;
-      }
-    }
-  }
-
-  const stylesheetLayers = new Map<string, FrontendLayer>();
-  for (const [sourceFile, layers] of [...inherited].sort(([left], [right]) => left.localeCompare(right))) {
-    const orderedLayers = FRONTEND_LAYERS.filter((layer) => layers.has(layer));
-    if (orderedLayers.length === 1) stylesheetLayers.set(sourceFile, orderedLayers[0]);
-    else if (orderedLayers.length > 1) {
-      errors.push({ kind: 'stylesheet-layer-conflict', sourceFile, inheritedLayers: orderedLayers });
+  for (const dependency of dependencies) {
+    const sourceLayer = 'location' in dependency
+      ? classification.get(dependency.repositoryRelativeSourceFile)
+      : stylesheetLayers.get(dependency.repositoryRelativeSourceFile);
+    if (sourceLayer && !policy.uses.some((row) => matchesRow(row, dependency, sourceLayer))) {
+      findings.push(finding(dependency, sourceLayer));
     }
   }
 
