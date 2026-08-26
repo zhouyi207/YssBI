@@ -88,7 +88,6 @@ pub enum LifecycleMutationKindDto {
 #[serde(rename_all = "camelCase")]
 pub enum LifecycleMutationPhaseDto {
     DestinationCommitted,
-    TombstoneCommitted,
     RegistryCommitted,
     AuthorityCommitted,
 }
@@ -100,7 +99,6 @@ pub enum LifecycleMutationOutcomeDto {
     RegistryFailed,
     ActivationFailed,
     RegistryPending,
-    CleanupPending,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

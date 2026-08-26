@@ -5,8 +5,7 @@ use crate::event::{
 };
 use crate::graph::value::{DataType, DataValue};
 use crate::project::{
-    NormalizedProjectRoot, ProjectData, ProjectRootBinding, ProjectRootIdentityState, ProjectState,
-    fixtures,
+    ProjectData, ProjectRootBinding, ProjectRootIdentityState, ProjectState, fixtures,
 };
 use crate::variable::VariableScope;
 use sqlx::Connection;
@@ -42,7 +41,7 @@ struct DeleteHookReset;
 impl Drop for DeleteHookReset {
     fn drop(&mut self) {
         set_before_registry_remove_test_hook(None);
-        crate::project::set_after_tombstone_rename_hook(None);
+        crate::project::set_recycle_bin_test_hook(None);
     }
 }
 
@@ -84,20 +83,6 @@ async fn seed_stale_registration(registry: &ProjectRegistry, destination: &Path)
     let record = register_root(registry, destination, "Stale registration").await;
     std::fs::remove_dir_all(destination).unwrap();
     record
-}
-
-fn deletion_paths(root: &Path, operation_id: OperationId) -> (NormalizedProjectRoot, PathBuf) {
-    let normalized = ProjectRootBinding::for_existing(root)
-        .unwrap()
-        .normalized()
-        .clone();
-    let committed_root = normalized.as_path();
-    let name = committed_root.file_name().unwrap().to_string_lossy();
-    let tombstone = committed_root
-        .parent()
-        .unwrap()
-        .join(format!(".{name}.yssbi-deleting-{operation_id}"));
-    (normalized, tombstone)
 }
 
 async fn mark_registry_record_invalid(registry: &ProjectRegistry, id: &str) {
@@ -266,7 +251,7 @@ fn registry_failure_reports_preserved_created_project() {
 }
 
 #[test]
-fn first_tombstone_bind_replacement_returns_registry_pending_receipt() {
+fn recycle_bin_failure_leaves_project_and_registry_for_retry() {
     let _serial = DELETE_TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -278,20 +263,13 @@ fn first_tombstone_bind_replacement_returns_registry_pending_receipt() {
         let state = activate_named_project(&root, "Registered");
         let session = state.capture_project_session().unwrap();
         let record = register_root(&registry, &root, "Registered").await;
-        let identity = record.deletion_identity().unwrap().clone();
+        let session_before = session.clone();
         let operation_id = OperationId::new();
-        let (normalized, tombstone) = deletion_paths(&root, operation_id);
-        let recovery = tombstone.with_extension("external-recovery");
-        let tombstone_for_hook = tombstone.clone();
-        let recovery_for_hook = recovery.clone();
-        crate::project::set_after_tombstone_rename_hook(Some(Arc::new(move || {
-            std::fs::rename(&tombstone_for_hook, &recovery_for_hook).unwrap();
-            std::fs::create_dir_all(&tombstone_for_hook).unwrap();
-            std::fs::write(tombstone_for_hook.join("replacement.txt"), b"unrelated").unwrap();
+        crate::project::set_recycle_bin_test_hook(Some(Arc::new(|_| {
+            Err("injected recycle-bin failure".into())
         })));
-        registry.fail_project_remove_for_test().await;
 
-        let result = delete_registered_project(
+        let error = delete_registered_project(
             &state,
             &registry,
             &record.id,
@@ -299,60 +277,52 @@ fn first_tombstone_bind_replacement_returns_registry_pending_receipt() {
             operation_id,
         )
         .await
-        .unwrap();
+        .unwrap_err();
 
-        assert_eq!(result.outcome, LifecycleMutationOutcomeDto::RegistryPending);
-        assert_eq!(result.operation_id, operation_id);
-        let recovery_receipt = result.recovery.as_ref().unwrap();
-        assert_eq!(recovery_receipt.action, "removeRegistryRecord");
-        let receipt_path = Path::new(recovery_receipt.path.as_deref().unwrap());
-        assert_eq!(receipt_path.file_name(), tombstone.file_name());
-        assert!(receipt_path.join("replacement.txt").is_file());
-        assert_eq!(
-            recovery_receipt.identity.as_deref(),
-            Some(identity.as_str())
-        );
-        assert_eq!(
-            std::fs::read(tombstone.join("replacement.txt")).unwrap(),
-            b"unrelated"
-        );
-        assert!(
-            recovery
-                .join(crate::project::PROJECT_METADATA_FILE)
-                .is_file()
-        );
-        assert!(state.capture_project_session().is_err());
-        assert_eq!(
-            state.filesystem().lifecycle_state_for_test(&normalized),
-            (false, false, 0)
-        );
+        assert!(matches!(
+            error,
+            ProjectLifecycleError::AuthorityFailed(error)
+                if error.code() == "transaction_commit_failed"
+        ));
+        assert_eq!(state.capture_project_session().unwrap(), session_before);
+        assert!(root.join(crate::project::PROJECT_METADATA_FILE).is_file());
+        assert!(registry.fetch_by_id(&record.id).await.unwrap().is_some());
     });
 }
 
 #[test]
-fn registry_success_never_recycles_external_tombstone_replacement() {
+fn registered_deletion_returns_committed_receipt_after_recycle_bin_move() {
     let _serial = DELETE_TEST_LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let _reset = DeleteHookReset;
     tauri::async_runtime::block_on(async {
-        let directory = TestDirectory::new("delete-application-replacement-success");
+        let directory = TestDirectory::new("delete-application-success");
         let registry = initialize_registry(&directory).await;
         let root = directory.child("project");
         let state = activate_named_project(&root, "Registered");
         let session = state.capture_project_session().unwrap();
         let record = register_root(&registry, &root, "Registered").await;
-        let identity = record.deletion_identity().unwrap().clone();
+        let normalized = ProjectRootBinding::for_existing(&root)
+            .unwrap()
+            .normalized()
+            .clone();
         let operation_id = OperationId::new();
-        let (normalized, tombstone) = deletion_paths(&root, operation_id);
-        let recovery = tombstone.with_extension("external-recovery");
-        let tombstone_for_hook = tombstone.clone();
-        let recovery_for_hook = recovery.clone();
-        set_before_registry_remove_test_hook(Some(Arc::new(move || {
-            std::fs::rename(&tombstone_for_hook, &recovery_for_hook).unwrap();
-            std::fs::create_dir_all(&tombstone_for_hook).unwrap();
-            std::fs::write(tombstone_for_hook.join("replacement.txt"), b"unrelated").unwrap();
-        })));
+        let expected = LifecycleMutationResultDto {
+            operation_id,
+            kind: LifecycleMutationKindDto::Delete,
+            old_project_instance_id: Some(session.instance_id.to_string()),
+            new_project_instance_id: None,
+            phase: LifecycleMutationPhaseDto::AuthorityCommitted,
+            outcome: LifecycleMutationOutcomeDto::Committed,
+            record: Some(record.clone()),
+            path: Some(normalized.as_path().to_string_lossy().into_owned()),
+            recovery: None,
+            invalidation: LifecycleInvalidationDto {
+                project: true,
+                registry: true,
+            },
+        };
 
         let result = delete_registered_project(
             &state,
@@ -364,27 +334,14 @@ fn registry_success_never_recycles_external_tombstone_replacement() {
         .await
         .unwrap();
 
-        assert_eq!(result.outcome, LifecycleMutationOutcomeDto::CleanupPending);
+        assert_eq!(result, expected);
         assert!(state.capture_project_session().is_err());
-        assert_eq!(
-            std::fs::read(tombstone.join("replacement.txt")).unwrap(),
-            b"unrelated"
-        );
-        assert!(
-            recovery
-                .join(crate::project::PROJECT_METADATA_FILE)
-                .is_file()
-        );
-        assert_eq!(result.recovery.as_ref().unwrap().action, "cleanupTombstone");
-        assert_eq!(
-            result.recovery.as_ref().unwrap().identity.as_deref(),
-            Some(identity.as_str())
-        );
+        assert!(!root.exists());
+        assert!(registry.fetch_by_id(&record.id).await.unwrap().is_none());
         assert_eq!(
             state.filesystem().lifecycle_state_for_test(&normalized),
             (false, false, 0)
         );
-        assert!(registry.fetch_by_id(&record.id).await.unwrap().is_none());
     });
 }
 
@@ -403,8 +360,10 @@ fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() 
         let record = register_root(&registry, &root, "Registered").await;
         let identity = record.deletion_identity().unwrap().clone();
         let operation_id = OperationId::new();
-        let (normalized, tombstone) = deletion_paths(&root, operation_id);
-        let committed_root = normalized.as_path().to_path_buf();
+        let normalized = ProjectRootBinding::for_existing(&root)
+            .unwrap()
+            .normalized()
+            .clone();
         let expected = LifecycleMutationResultDto {
             operation_id,
             kind: LifecycleMutationKindDto::Delete,
@@ -413,11 +372,11 @@ fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() 
             phase: LifecycleMutationPhaseDto::AuthorityCommitted,
             outcome: LifecycleMutationOutcomeDto::RegistryPending,
             record: Some(record.clone()),
-            path: Some(committed_root.to_string_lossy().into_owned()),
+            path: Some(normalized.as_path().to_string_lossy().into_owned()),
             recovery: Some(LifecycleRecoveryDto {
                 required: true,
                 action: "removeRegistryRecord".into(),
-                path: Some(tombstone.to_string_lossy().into_owned()),
+                path: None,
                 identity: Some(identity.as_str().to_owned()),
             }),
             invalidation: LifecycleInvalidationDto {
@@ -433,68 +392,6 @@ fn registry_future_panic_returns_exact_pending_receipt_and_releases_ownership() 
                 (false, false, 0)
             );
             panic!("injected registry future panic")
-        })));
-
-        let result = delete_registered_project(
-            &state,
-            &registry,
-            &record.id,
-            Some(session.instance_id),
-            operation_id,
-        )
-        .await
-        .unwrap();
-
-        assert_eq!(result, expected);
-        assert!(state.capture_project_session().is_err());
-        assert_eq!(
-            state.filesystem().lifecycle_state_for_test(&normalized),
-            (false, false, 0)
-        );
-        drop(state.filesystem().acquire(normalized).unwrap());
-        assert!(registry.fetch_by_id(&record.id).await.unwrap().is_some());
-    });
-}
-
-#[test]
-fn post_rename_hook_panic_returns_exact_pending_receipt_and_releases_ownership() {
-    let _serial = DELETE_TEST_LOCK
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let _reset = DeleteHookReset;
-    tauri::async_runtime::block_on(async {
-        let directory = TestDirectory::new("delete-application-post-rename-panic");
-        let registry = initialize_registry(&directory).await;
-        let root = directory.child("project");
-        let state = activate_named_project(&root, "Registered");
-        let session = state.capture_project_session().unwrap();
-        let record = register_root(&registry, &root, "Registered").await;
-        let identity = record.deletion_identity().unwrap().clone();
-        let operation_id = OperationId::new();
-        let (normalized, tombstone) = deletion_paths(&root, operation_id);
-        let committed_root = normalized.as_path().to_path_buf();
-        let expected = LifecycleMutationResultDto {
-            operation_id,
-            kind: LifecycleMutationKindDto::Delete,
-            old_project_instance_id: Some(session.instance_id.to_string()),
-            new_project_instance_id: None,
-            phase: LifecycleMutationPhaseDto::AuthorityCommitted,
-            outcome: LifecycleMutationOutcomeDto::RegistryPending,
-            record: Some(record.clone()),
-            path: Some(committed_root.to_string_lossy().into_owned()),
-            recovery: Some(LifecycleRecoveryDto {
-                required: true,
-                action: "removeRegistryRecord".into(),
-                path: Some(tombstone.to_string_lossy().into_owned()),
-                identity: Some(identity.as_str().to_owned()),
-            }),
-            invalidation: LifecycleInvalidationDto {
-                project: true,
-                registry: true,
-            },
-        };
-        crate::project::set_after_tombstone_rename_hook(Some(Arc::new(|| {
-            panic!("injected post-rename panic")
         })));
 
         let result = delete_registered_project(

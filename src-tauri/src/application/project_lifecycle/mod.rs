@@ -228,12 +228,11 @@ pub async fn delete_registered_project(
             Path::new(&record.path),
             Some(&identity),
             expected_active_instance_id.as_ref(),
-            operation_id,
         )
         .map_err(ProjectLifecycleError::AuthorityFailed)?;
-    let post_tombstone_failed = prepared.post_tombstone_failed();
+    let post_activation_failed = prepared.post_activation_failed();
     let deleted = state.commit_project_deletion(prepared);
-    let registry_removed = if post_tombstone_failed {
+    let registry_removed = if post_activation_failed {
         false
     } else {
         catch_future_unwind(async {
@@ -245,6 +244,13 @@ pub async fn delete_registered_project(
         .is_ok_and(|result| result.is_ok())
     };
 
+    let recovery = (!registry_removed).then(|| LifecycleRecoveryDto {
+        required: true,
+        action: "removeRegistryRecord".into(),
+        path: None,
+        identity: Some(identity.as_str().to_owned()),
+    });
+
     Ok(LifecycleMutationResultDto {
         operation_id,
         kind: LifecycleMutationKindDto::Delete,
@@ -255,7 +261,7 @@ pub async fn delete_registered_project(
         new_project_instance_id: None,
         phase: LifecycleMutationPhaseDto::AuthorityCommitted,
         outcome: if registry_removed {
-            LifecycleMutationOutcomeDto::CleanupPending
+            LifecycleMutationOutcomeDto::Committed
         } else {
             LifecycleMutationOutcomeDto::RegistryPending
         },
@@ -267,16 +273,7 @@ pub async fn delete_registered_project(
                 .to_string_lossy()
                 .into_owned(),
         ),
-        recovery: Some(LifecycleRecoveryDto {
-            required: true,
-            action: if registry_removed {
-                "cleanupTombstone".into()
-            } else {
-                "removeRegistryRecord".into()
-            },
-            path: Some(deleted.tombstone_path.to_string_lossy().into_owned()),
-            identity: Some(deleted.tombstone_identity.as_str().to_owned()),
-        }),
+        recovery,
         invalidation: LifecycleInvalidationDto {
             project: deleted.cleared_project_instance_id.is_some(),
             registry: true,

@@ -246,7 +246,6 @@ export const zhCN = {
         registerDestination: "项目已创建，但无法登记新的项目位置。",
         activateDestination: "项目已创建，但无法激活新的项目位置。",
         cleanupRegistry: "项目文件已变更，但项目列表仍需要清理。",
-        cleanupTombstone: "项目文件已变更，但临时恢复数据仍需要清理。",
         removeRegistryRecord: "项目文件已移除，但无法删除项目列表中的记录。",
         unknown: "操作只完成了一部分，需要执行恢复。",
       },

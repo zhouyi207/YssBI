@@ -246,7 +246,6 @@ export const enUS = {
         registerDestination: "The project was created, but its new location could not be registered.",
         activateDestination: "The project was created, but the new location could not be activated.",
         cleanupRegistry: "The project files changed, but the project list still requires cleanup.",
-        cleanupTombstone: "The project files changed, but temporary recovery data still requires cleanup.",
         removeRegistryRecord: "The project files were removed, but its project-list entry could not be removed.",
         unknown: "The operation completed only partially and requires recovery.",
       },

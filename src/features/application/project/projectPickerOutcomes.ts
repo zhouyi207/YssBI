@@ -174,7 +174,6 @@ const RECOVERY_MESSAGE_KEYS: Readonly<Record<string, string>> = {
   registerDestination: 'projectPicker.issues.recovery.registerDestination',
   activateDestination: 'projectPicker.issues.recovery.activateDestination',
   cleanupRegistry: 'projectPicker.issues.recovery.cleanupRegistry',
-  cleanupTombstone: 'projectPicker.issues.recovery.cleanupTombstone',
   removeRegistryRecord: 'projectPicker.issues.recovery.removeRegistryRecord',
 };
 

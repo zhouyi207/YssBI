@@ -380,20 +380,15 @@ describe('project lifecycle pending receipt registry', () => {
     expect(deps.refreshRegistry).toHaveBeenCalledOnce();
   });
 
-  it('clears active authority and refreshes registry for cleanup-pending delete', async () => {
+  it('clears active authority and refreshes registry for committed delete', async () => {
     const pending = registerPendingProjectLifecycleOperation({ kind: 'delete' });
     const deps = dependencies();
 
     await applyProjectLifecycleReceipt(receipt(pending.operationId, {
       kind: 'delete',
       newProjectInstanceId: null,
-      outcome: 'cleanupPending',
-      recovery: {
-        required: true,
-        action: 'cleanupTombstone',
-        path: 'C:/.project-a.yssbi-deleting-operation',
-        identity: 'native-id',
-      },
+      outcome: 'committed',
+      recovery: null,
     }), 'direct', deps);
 
     expect(deps.clearProject).toHaveBeenCalledOnce();

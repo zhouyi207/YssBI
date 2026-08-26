@@ -20,15 +20,13 @@ export type LifecycleMutationKind =
   | 'clear';
 export type LifecycleMutationPhase =
   | 'destinationCommitted'
-  | 'tombstoneCommitted'
   | 'registryCommitted'
   | 'authorityCommitted';
 export type LifecycleMutationOutcome =
   | 'committed'
   | 'registryFailed'
   | 'activationFailed'
-  | 'registryPending'
-  | 'cleanupPending';
+  | 'registryPending';
 
 export interface LifecycleRecoveryDto {
   required: boolean;

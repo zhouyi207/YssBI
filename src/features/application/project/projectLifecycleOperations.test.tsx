@@ -169,8 +169,8 @@ function projectReceipt(
     path: kind === 'create' ? record().path : 'C:/deleted-project',
     recovery: outcome === 'committed' ? null : {
       required: true,
-      action: outcome === 'registryPending' ? 'removeRegistryRecord' : 'cleanupTombstone',
-      path: 'C:/.deleted-project.tombstone',
+      action: 'removeRegistryRecord',
+      path: null,
       identity: 'native-id',
     },
     invalidation: {
@@ -511,7 +511,7 @@ describe('project lifecycle initiating operations', () => {
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
   });
 
-  it('recovers inactive delete list from event when direct rejects', async () => {
+  it('recovers inactive committed delete from event when direct rejects', async () => {
     const request = deferred<LifecycleMutationResultDto>();
     const remove = vi.spyOn(ProjectService, 'deleteRegisteredProjectFiles').mockReturnValue(request.promise);
     vi.mocked(ProjectService.listRegisteredProjects).mockResolvedValue([]);
@@ -523,7 +523,6 @@ describe('project lifecycle initiating operations', () => {
     });
     await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
     const result = projectReceipt(remove.mock.calls[0][2], 'delete', {
-      outcome: 'cleanupPending',
       row: record('inactive-record'),
     });
     const registryCalls = vi.mocked(ProjectService.listRegisteredProjects).mock.calls.length;
@@ -538,10 +537,7 @@ describe('project lifecycle initiating operations', () => {
       await completion;
     });
 
-    expect(await completion).toMatchObject({
-      status: 'recovery',
-      recovery: { action: 'cleanupTombstone' },
-    });
+    expect(await completion).toEqual({ status: 'committed' });
     expect(picker.projects).toEqual([]);
     expect(ProjectService.listRegisteredProjects).toHaveBeenCalledTimes(registryCalls + 1);
   });

@@ -5,8 +5,7 @@ use crate::project::{
     ProjectFilesystemTransaction, ProjectInstanceId, ProjectRootBinding, ProjectRootIdentity,
     ProjectRootLifecycleGuard, ProjectSession, ProjectState, ProjectTransactionContext,
     StagedFilesystemMutation, WORKSHEETS_DIR, ensure_directory, read_project_source_tree,
-    remove_directory_if_created, rename_project_root, validate_deletion_root,
-    validate_destination_policy,
+    remove_directory_if_created, validate_deletion_root, validate_destination_policy,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -34,17 +33,12 @@ pub struct CreatedProject {
 #[derive(Debug)]
 pub struct ProjectDeletionResult {
     pub deleted_root: NormalizedProjectRoot,
-    pub tombstone_path: PathBuf,
-    pub tombstone_identity: ProjectRootIdentity,
     pub cleared_project_instance_id: Option<ProjectInstanceId>,
-    pub cleanup_pending: bool,
 }
 
 pub struct PreparedProjectDeletion {
     deleted_root: NormalizedProjectRoot,
-    tombstone_path: PathBuf,
-    tombstone_identity: ProjectRootIdentity,
-    post_tombstone_failed: bool,
+    post_activation_failed: bool,
     active_project_instance_id: Option<ProjectInstanceId>,
     activation: Option<crate::project::ProjectActivationToken>,
     lifecycle: Option<ProjectRootLifecycleGuard>,
@@ -52,16 +46,8 @@ pub struct PreparedProjectDeletion {
 }
 
 impl PreparedProjectDeletion {
-    pub fn recovery_path(&self) -> &Path {
-        &self.tombstone_path
-    }
-
-    pub fn recovery_identity(&self) -> &ProjectRootIdentity {
-        &self.tombstone_identity
-    }
-
-    pub fn post_tombstone_failed(&self) -> bool {
-        self.post_tombstone_failed
+    pub fn post_activation_failed(&self) -> bool {
+        self.post_activation_failed
     }
 }
 
@@ -225,7 +211,6 @@ impl ProjectState {
         root: &Path,
         expected_root_identity: Option<&ProjectRootIdentity>,
         expected_active_instance_id: Option<&ProjectInstanceId>,
-        operation_id: OperationId,
     ) -> Result<PreparedProjectDeletion, ProjectFilesystemError> {
         let root_binding = ProjectRootBinding::for_existing(root)?;
         if expected_root_identity.is_some_and(|expected| root_binding.identity() != Some(expected))
@@ -247,13 +232,6 @@ impl ProjectState {
         root_binding.revalidate()?;
         validate_deletion_root(&normalized)?;
         let active = active_session_for_deletion(self, &normalized, expected_active_instance_id)?;
-        let tombstone_path = deletion_tombstone_path(normalized.as_path(), operation_id)?;
-        let original_identity = root_binding.identity().cloned().ok_or_else(|| {
-            invalid_root(
-                normalized.as_path(),
-                "existing root binding has no native identity",
-            )
-        })?;
         let cleared_project_instance_id =
             active.as_ref().map(|session| session.instance_id.clone());
         let cleared_activation = cleared_project_instance_id
@@ -261,24 +239,20 @@ impl ProjectState {
             .map(|_| PreparedProjectActivation::from_data(None, ProjectData::new(), None, false))
             .transpose()?;
         root_binding.revalidate()?;
-        rename_project_root(normalized.as_path(), &tombstone_path)?;
-        let post_tombstone_failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        move_project_to_recycle_bin(normalized.as_path())?;
+        let post_activation_failed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             if let Some(cleared) = cleared_activation {
                 let published = self
                     .publish_project_activation_without_test_hooks(cleared)
                     .map_err(|_| ())?;
                 published.dispose();
             }
-            #[cfg(test)]
-            run_after_tombstone_rename_hook();
             Ok::<(), ()>(())
         }))
         .map_or(true, |result| result.is_err());
         Ok(PreparedProjectDeletion {
             deleted_root: normalized,
-            tombstone_path,
-            tombstone_identity: original_identity,
-            post_tombstone_failed,
+            post_activation_failed,
             active_project_instance_id: cleared_project_instance_id,
             activation: Some(activation),
             lifecycle: Some(lifecycle),
@@ -293,10 +267,7 @@ impl ProjectState {
         let cleared_project_instance_id = prepared.active_project_instance_id.clone();
         ProjectDeletionResult {
             deleted_root: prepared.deleted_root.clone(),
-            tombstone_path: prepared.tombstone_path.clone(),
-            tombstone_identity: prepared.tombstone_identity.clone(),
             cleared_project_instance_id,
-            cleanup_pending: true,
         }
     }
 
@@ -305,56 +276,52 @@ impl ProjectState {
         root: &Path,
         expected_root_identity: Option<&ProjectRootIdentity>,
         expected_active_instance_id: Option<&ProjectInstanceId>,
-        operation_id: OperationId,
     ) -> Result<ProjectDeletionResult, ProjectFilesystemError> {
         let prepared = self.prepare_project_deletion(
             root,
             expected_root_identity,
             expected_active_instance_id,
-            operation_id,
         )?;
         Ok(self.commit_project_deletion(prepared))
     }
 }
 
-fn deletion_tombstone_path(
-    root: &Path,
-    operation_id: OperationId,
-) -> Result<PathBuf, ProjectFilesystemError> {
-    let parent = root
-        .parent()
-        .ok_or_else(|| invalid_root(root, "project root has no parent"))?;
-    let name = root
-        .file_name()
-        .ok_or_else(|| invalid_root(root, "project root has no final component"))?
-        .to_string_lossy();
-    let tombstone = parent.join(format!(".{name}.yssbi-deleting-{operation_id}"));
-    if tombstone.exists() {
-        return Err(invalid_root(
-            &tombstone,
-            "project deletion tombstone already exists",
-        ));
+#[cfg(test)]
+type RecycleBinTestHook = std::sync::Arc<dyn Fn(&Path) -> Result<(), String> + Send + Sync>;
+
+#[cfg(test)]
+static RECYCLE_BIN_TEST_HOOK: std::sync::Mutex<Option<RecycleBinTestHook>> =
+    std::sync::Mutex::new(None);
+
+#[cfg(test)]
+pub(crate) fn set_recycle_bin_test_hook(hook: Option<RecycleBinTestHook>) {
+    *RECYCLE_BIN_TEST_HOOK.lock().unwrap() = hook;
+}
+
+fn move_project_to_recycle_bin(root: &Path) -> Result<(), ProjectFilesystemError> {
+    #[cfg(test)]
+    if let Some(hook) = RECYCLE_BIN_TEST_HOOK.lock().unwrap().clone() {
+        return hook(root).map_err(|error| recycle_bin_error(root, error));
     }
-    Ok(tombstone)
+
+    #[cfg(test)]
+    {
+        std::fs::remove_dir_all(root).map_err(|error| recycle_bin_error(root, error))
+    }
+
+    #[cfg(not(test))]
+    {
+        trash::delete(root).map_err(|error| recycle_bin_error(root, error))
+    }
 }
 
-#[cfg(test)]
-static AFTER_TOMBSTONE_RENAME_HOOK: std::sync::Mutex<
-    Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
-> = std::sync::Mutex::new(None);
-
-#[cfg(test)]
-pub(crate) fn set_after_tombstone_rename_hook(
-    hook: Option<std::sync::Arc<dyn Fn() + Send + Sync>>,
-) {
-    *AFTER_TOMBSTONE_RENAME_HOOK.lock().unwrap() = hook;
-}
-
-#[cfg(test)]
-fn run_after_tombstone_rename_hook() {
-    let hook = AFTER_TOMBSTONE_RENAME_HOOK.lock().unwrap().clone();
-    if let Some(hook) = hook {
-        hook();
+fn recycle_bin_error(root: &Path, error: impl ToString) -> ProjectFilesystemError {
+    ProjectFilesystemError::TransactionCommitFailed {
+        message: format!(
+            "failed to move project root '{}' to the system recycle bin: {}",
+            root.display(),
+            error.to_string()
+        ),
     }
 }
 
@@ -528,7 +495,6 @@ mod tests {
         ProjectFilesystemFaultPoint, fixtures, load_project_from_file,
     };
     use crate::variable::VariableScope;
-    use std::sync::Arc;
     use std::time::Duration;
 
     fn root(label: &str) -> PathBuf {
@@ -866,7 +832,7 @@ mod tests {
         let state = ProjectState::new();
 
         let error = state
-            .delete_project_transaction(&redirect, None, None, OperationId::new())
+            .delete_project_transaction(&redirect, None, None)
             .unwrap_err();
 
         assert_eq!(error.code(), "invalid_project_root");
@@ -892,12 +858,7 @@ mod tests {
             .unwrap();
 
         let error = ProjectState::new()
-            .delete_project_transaction(
-                &project_root,
-                Some(&registered_identity),
-                None,
-                OperationId::new(),
-            )
+            .delete_project_transaction(&project_root, Some(&registered_identity), None)
             .unwrap_err();
 
         assert_eq!(error.code(), "stale_project_lifecycle");
@@ -1058,12 +1019,8 @@ mod tests {
         let delete_instance = instance_id.clone();
         let (delete_done_tx, delete_done_rx) = std::sync::mpsc::channel();
         let deletion = std::thread::spawn(move || {
-            let result = delete_state.delete_project_transaction(
-                &delete_root,
-                None,
-                Some(&delete_instance),
-                OperationId::new(),
-            );
+            let result =
+                delete_state.delete_project_transaction(&delete_root, None, Some(&delete_instance));
             delete_done_tx.send(result).unwrap();
         });
         if deletion_draining
@@ -1139,176 +1096,21 @@ mod tests {
     }
 
     #[test]
-    fn rename_to_first_bind_failure_becomes_committed_recovery_without_path_touch() {
-        let (state, project_root, instance_id) = active_state("delete-first-bind-replacement");
-        let root_binding = ProjectRootBinding::for_existing(&project_root).unwrap();
-        let normalized = root_binding.normalized().clone();
-        let original_identity = root_binding.identity().unwrap().clone();
-        let operation_id = OperationId::new();
-        let name = project_root.file_name().unwrap().to_string_lossy();
-        let tombstone = project_root
-            .parent()
-            .unwrap()
-            .join(format!(".{name}.yssbi-deleting-{operation_id}"));
-        let external_recovery = tombstone.with_extension("external-recovery");
-        let tombstone_for_hook = tombstone.clone();
-        let recovery_for_hook = external_recovery.clone();
-        set_after_tombstone_rename_hook(Some(Arc::new(move || {
-            std::fs::rename(&tombstone_for_hook, &recovery_for_hook).unwrap();
-        })));
-
-        let prepared = state
-            .prepare_project_deletion(
-                &project_root,
-                Some(&original_identity),
-                Some(&instance_id),
-                operation_id,
-            )
-            .unwrap();
-        set_after_tombstone_rename_hook(None);
-
-        assert_eq!(prepared.recovery_identity(), &original_identity);
-        assert_eq!(prepared.recovery_path().file_name(), tombstone.file_name());
-        assert!(!prepared.post_tombstone_failed());
-        let result = state.commit_project_deletion(prepared);
-        assert_eq!(result.cleared_project_instance_id, Some(instance_id));
-        assert!(!tombstone.exists());
-        assert!(external_recovery.join(PROJECT_METADATA_FILE).is_file());
-        assert!(state.capture_project_session().is_err());
-        assert_eq!(
-            state.filesystem().lifecycle_state_for_test(&normalized),
-            (false, false, 0)
-        );
-        let _ = std::fs::remove_dir_all(tombstone);
-        let _ = std::fs::remove_dir_all(external_recovery);
-    }
-
-    #[test]
-    fn post_tombstone_panic_becomes_total_boundary_and_releases_all_ownership() {
-        let (state, project_root, instance_id) = active_state("delete-post-tombstone-panic");
-        let binding = ProjectRootBinding::for_existing(&project_root).unwrap();
-        let normalized = binding.normalized().clone();
-        let identity = binding.identity().unwrap().clone();
-        let operation_id = OperationId::new();
-        let name = project_root.file_name().unwrap().to_string_lossy();
-        let tombstone = project_root
-            .parent()
-            .unwrap()
-            .join(format!(".{name}.yssbi-deleting-{operation_id}"));
-        set_after_tombstone_rename_hook(Some(Arc::new(|| panic!("post-tombstone panic"))));
-
-        let prepared = state
-            .prepare_project_deletion(
-                &project_root,
-                Some(&identity),
-                Some(&instance_id),
-                operation_id,
-            )
-            .unwrap();
-        set_after_tombstone_rename_hook(None);
-
-        assert!(prepared.post_tombstone_failed());
-        drop(prepared);
-        assert!(state.capture_project_session().is_err());
-        assert!(tombstone.join(PROJECT_METADATA_FILE).is_file());
-        assert_eq!(
-            state.filesystem().lifecycle_state_for_test(&normalized),
-            (false, false, 0)
-        );
-        drop(state.filesystem().acquire(normalized).unwrap());
-        let _ = std::fs::remove_dir_all(tombstone);
-    }
-
-    #[test]
-    fn tombstone_replacement_is_never_rolled_back_or_recycled() {
-        let (state, project_root, instance_id) = active_state("delete-tombstone-replacement");
+    fn deletion_commits_without_retaining_local_cleanup_artifact() {
+        let (state, project_root, instance_id) = active_state("delete-recycle-commit");
         let identity = ProjectRootBinding::for_existing(&project_root)
             .unwrap()
             .identity()
             .unwrap()
             .clone();
-        let prepared = state
-            .prepare_project_deletion(
-                &project_root,
-                Some(&identity),
-                Some(&instance_id),
-                OperationId::new(),
-            )
-            .unwrap();
-        let tombstone = prepared.tombstone_path.clone();
-        let tombstone_identity = prepared.tombstone_identity.clone();
-        let recovery = tombstone.with_extension("external-recovery");
-        std::fs::rename(&tombstone, &recovery).unwrap();
-        std::fs::create_dir_all(&tombstone).unwrap();
-        std::fs::write(tombstone.join("replacement.txt"), b"unrelated").unwrap();
 
-        drop(prepared);
-        assert_eq!(
-            std::fs::read(tombstone.join("replacement.txt")).unwrap(),
-            b"unrelated"
-        );
-        assert_eq!(
-            ProjectRootBinding::for_existing(&recovery)
-                .unwrap()
-                .identity(),
-            Some(&tombstone_identity)
-        );
-        assert!(!project_root.exists());
-        assert!(state.capture_project_session().is_err());
-        let _ = std::fs::remove_dir_all(tombstone);
-        let _ = std::fs::remove_dir_all(recovery);
-    }
-
-    #[test]
-    fn prepared_delete_never_auto_rolls_back_committed_tombstone() {
-        let (state, project_root, instance_id) = active_state("delete-rollback");
-        let identity = ProjectRootBinding::for_existing(&project_root)
-            .unwrap()
-            .identity()
-            .unwrap()
-            .clone();
-        let prepared = state
-            .prepare_project_deletion(
-                &project_root,
-                Some(&identity),
-                Some(&instance_id),
-                OperationId::new(),
-            )
-            .unwrap();
-
-        let tombstone = prepared.recovery_path().to_path_buf();
-        assert!(!project_root.exists());
-        assert!(state.capture_project_session().is_err());
-        drop(prepared);
-
-        assert!(!project_root.exists());
-        assert!(tombstone.join(PROJECT_METADATA_FILE).is_file());
-        assert!(state.capture_project_session().is_err());
-        let _ = std::fs::remove_dir_all(tombstone);
-    }
-
-    #[test]
-    fn deletion_clear_returns_explicit_cleanup_pending_without_path_touch() {
-        let (state, project_root, instance_id) = active_state("delete-recycle-failure");
-        let identity = ProjectRootBinding::for_existing(&project_root)
-            .unwrap()
-            .identity()
-            .unwrap()
-            .clone();
         let result = state
-            .delete_project_transaction(
-                &project_root,
-                Some(&identity),
-                Some(&instance_id),
-                OperationId::new(),
-            )
+            .delete_project_transaction(&project_root, Some(&identity), Some(&instance_id))
             .unwrap();
 
         assert_eq!(result.cleared_project_instance_id, Some(instance_id));
-        assert!(result.cleanup_pending);
-        assert!(result.tombstone_path.is_dir());
+        assert!(!project_root.exists());
         assert!(state.capture_project_session().is_err());
-        let _ = std::fs::remove_dir_all(result.tombstone_path);
     }
 
     #[test]
@@ -1320,7 +1122,7 @@ mod tests {
         let replacement_session = state.capture_project_session().unwrap();
 
         let error = state
-            .delete_project_transaction(&root, None, Some(&stale_instance_id), OperationId::new())
+            .delete_project_transaction(&root, None, Some(&stale_instance_id))
             .unwrap_err();
 
         assert_eq!(error.code(), "stale_project_lifecycle");

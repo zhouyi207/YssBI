@@ -24,17 +24,6 @@ pub(crate) fn remove_directory_if_created(root: &Path, created: bool) {
     }
 }
 
-pub(crate) fn rename_project_root(
-    source: &Path,
-    destination: &Path,
-) -> Result<(), ProjectFilesystemError> {
-    std::fs::rename(source, destination).map_err(|error| {
-        ProjectFilesystemError::TransactionCommitFailed {
-            message: format!("failed to atomically tombstone project root: {error}"),
-        }
-    })
-}
-
 pub(crate) fn validate_destination_policy(root: &Path) -> Result<(), ProjectFilesystemError> {
     if !root.exists() {
         let parent = root
