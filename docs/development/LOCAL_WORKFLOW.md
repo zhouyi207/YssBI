@@ -39,10 +39,11 @@ Node.js 最低版本与 React Router 8 的运行时要求保持一致。
 | 构建桌面安装包 | `pnpm tauri:build` |
 | TypeScript 类型检查 | `pnpm typecheck` |
 | 前端 Vitest 测试 | `pnpm test` |
+| 测试 Frontend production architecture | `pnpm test:architecture` |
 | 格式检查 Rust | `pnpm rust:fmt:check` |
 | 检查 Rust 编译 | `pnpm rust:check` |
 | 测试 Tauri/Rust library | `pnpm rust:test:lib` |
-| 测试 Rust production architecture | `pnpm rust:test:lib -- architecture_tests::tests --nocapture` |
+| 测试 Rust production architecture | `pnpm rust:test:architecture` |
 | 测试 Tauri/Rust 主 crate（完整） | `pnpm rust:test` |
 | 测试科学计算 crate | `pnpm rust:test:sci` |
 | 运行宽表统计基准 | `pnpm rust:bench:column-analytics` |
@@ -59,14 +60,21 @@ Node.js 最低版本与 React Router 8 的运行时要求保持一致。
 `--jobs 1` 序列化 Rust 测试链接，以避免 Windows 链接器内存峰值。
 `pnpm rust:check` 和开发构建仍保留 Cargo 的正常并行度。
 
-`pnpm verify` 是日常跨栈交付检查：执行前端类型检查与完整 Vitest、Rust
-格式/编译检查，以及 `git diff --check`。Rust 行为改动仍必须先运行受影响的
-focused tests；`verify` 不会隐式运行全部 Rust runtime、integration 和 SCI
-测试。
+`pnpm verify:frontend` 精确执行 `pnpm typecheck && pnpm test`。完整 Vitest 已收集
+Frontend architecture tests；`pnpm test:architecture` 只作为快速 focused 入口，不在
+`verify:frontend` 中重复运行。
 
-`pnpm verify:full` 才执行完整主 Rust crate 与 SCI 测试。仅在发布前、执行
-引擎/Runtime 跨切面改动、或明确要求完整仓库回归时运行。两种验证命令都
-不会启动应用、打包安装包或修改项目状态。
+`pnpm verify:rust` 精确执行 Rust format check、compile check 与
+`pnpm rust:test:architecture`。`pnpm verify` 依次组合 `verify:frontend`、
+`verify:rust` 与 `git diff --check`，因此日常跨栈交付会执行两端 architecture gates，
+但不会隐式运行完整 Rust runtime、integration 或 SCI suite。Rust 行为改动仍必须先
+运行受影响的 focused tests。
+
+`pnpm verify:full` 组合 `verify:frontend`、Rust format/compile checks、完整主 Rust crate、
+SCI tests 与 `git diff --check`；它不另行重复调用 focused Rust architecture script，
+因为完整主 crate tests 已包含 library architecture tests。仅在发布前、执行引擎/Runtime
+跨切面改动、或明确要求完整仓库回归时运行。两种验证命令都不会启动应用、打包安装包
+或修改项目状态。
 
 ## 聚焦测试
 
@@ -74,8 +82,10 @@ focused tests；`verify` 不会隐式运行全部 Rust runtime、integration 和
 一致：
 
 ```sh
+pnpm test:architecture
 pnpm test src/path/to/example.test.ts
 pnpm test src/path/to/example.test.ts -t "test name"
+pnpm rust:test:architecture
 pnpm rust:test:lib test_name -- --exact --nocapture
 pnpm rust:test --test database_test test_name -- --exact --nocapture
 pnpm rust:test:sci test_name -- --exact --nocapture
@@ -88,7 +98,7 @@ julia --project=src-tauri/julia src-tauri/julia/tests/bayes_fit_tests.jl
 或边界债务时，先运行对应的快速 fixture test，再运行真实 production audit：
 
 ```sh
-pnpm rust:test:lib -- architecture_tests::tests::rust_production_architecture_matches_declared_policy --exact --nocapture
+pnpm rust:test:architecture
 ```
 
 真实审计会遍历所有 production targets 并解析 canonical origins，通常比普通 unit test 慢。
@@ -109,8 +119,8 @@ julia --project=src-tauri/julia -e 'using Pkg; Pkg.instantiate()'
   `pnpm verify:frontend`。
 - **Rust、Tauri command、项目状态或执行引擎改动：**
   先添加或更新聚焦回归测试，运行 `pnpm rust:check`、受影响的测试，
-  提交前运行 `pnpm verify:rust`。执行引擎跨切面改动或发布前再运行
-  `pnpm verify:full`。
+  涉及 architecture policy 时先运行 `pnpm rust:test:architecture`，提交前运行
+  `pnpm verify:rust`。执行引擎跨切面改动或发布前再运行 `pnpm verify:full`。
 - **`yss-sci` 数值计算改动：**
   运行 `pnpm rust:test:sci`；性能敏感的列统计或分布改动还应运行
   `pnpm rust:bench:column-analytics`，并记录与基线相比的结果。

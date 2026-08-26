@@ -1495,3 +1495,8 @@ Execution 不知道具体 UI
 - [ ] 为 T/Wald SCI adapter 增加显式的约束数量、自由度、矩阵维度与有限数值前置验证，分别映射 closed parameter、shape 与 non-finite violations。
 - [ ] 将通过结构验证后的下游 T/Wald 数值失败统一映射为 operation-specific `ComputationFailed`，禁止解析 `yss_sci` 原始字符串选择公开错误语义。
 - [ ] 增加窄 focused regressions，分别覆盖 typed input validation 与合法形状下零/奇异协方差的 computation-failure 映射。
+- [ ] 新增 Frontend 与 Rust focused architecture scripts，并将 Rust architecture suite 纳入日常 `verify:rust`，保持 frontend/full Rust 验证无重复执行。
+- [ ] 更新工程规范与本地工作流，明确 focused architecture 命令、daily/full 验证边界及 `package.json` 的 exact command composition。
+- [ ] 在当前架构文档记录 Cargo/Frontend production-root discovery、15/10 层 total-exclusive classification 与 canonical dependency origins。
+- [ ] 记录 exact Cargo/package declaration-use policy、双向 occurrence debt ratchet 与两端 semantic fitness checks，不复制具体 debt entries。
+- [ ] 完成 focused scripts 的缺入口 RED 与 GREEN 验证，Frontend 66 项、Rust architecture 20 项测试通过。

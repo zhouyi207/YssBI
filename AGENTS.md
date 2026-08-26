@@ -199,10 +199,15 @@ graph compilation/execution, databases, results, and scientific orchestration.
   explicitly requested, or the focused checks cannot cover the risk. For
   frontend changes, run `pnpm typecheck` and the relevant `pnpm test` coverage.
   Run `git diff --check` before reporting completion.
+- Use `pnpm test:architecture` for the focused frontend architecture entry;
+  the full Vitest run in `pnpm verify:frontend` already collects those tests.
+  Daily Rust verification includes `pnpm rust:test:architecture` after format
+  and compile checks. Reserve the full main-crate and SCI suites for release
+  validation, cross-cutting runtime changes, or explicit requests.
 - Use `pnpm verify` before delivery when changes span both frontend and Rust. It
-  runs the frontend suite plus Rust format/compile checks; run focused Rust tests
-  separately for the touched area. Use `pnpm verify:full` only for release
-  validation, cross-cutting runtime changes, or when explicitly requested. Neither
-  command builds a release installer.
+  runs the frontend suite plus Rust format, compile, and focused architecture
+  checks. Run other touched-area focused Rust tests separately. Use
+  `pnpm verify:full` only for release validation, cross-cutting runtime changes,
+  or when explicitly requested. Neither command builds a release installer.
 - Do not claim success without fresh command output. Preserve unrelated user
   changes in the working tree.

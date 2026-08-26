@@ -50,23 +50,56 @@ flowchart TD
 
 `application/` 拥有跨 module 的 database use-case orchestration；`project/` 拥有 project/session authority、resource revision、commit 与 coherent snapshot，并直接依赖 `database/` 提供的存储和 runtime primitives。生产代码中的 `project/` 不依赖 `application/` 或 `commands/`；该约束由 Rust production-module architecture audit 执行。
 
-### 1.1 Rust production dependency gate
+### 1.1 Production architecture fitness gates
 
-`src-tauri/src/architecture_tests/` 对所有 Cargo production targets 执行依赖审计，包括
-library、binary、example 与 custom-build。它从 Rust AST 收集 use、re-export、path、macro、
-include 与 `#[path]` 事实，再结合 Cargo workspace member alias、dependency scope 和 module
-declaration，把 written target 解析成唯一 canonical origin。
+Rust 与 Frontend 各有一条 test-owned production architecture audit；production module 不依赖
+policy、classifier 或 debt 数据。Rust audit 从 Cargo metadata 发现 workspace 中全部 library、
+binary、runnable example 与 custom-build roots，排除 test/bench target，再沿每个 root 的真实
+`mod` graph 发现 production source。它从 Rust AST 收集 use、re-export、path、macro、include、
+attribute、`#[path]` 与 cfg reachability facts。Frontend audit 盘点完整 `src/**` production tree，
+排除 `src/tests/**`、test files、generated declarations 与明确 fixtures，并把 TypeScript module
+dependencies 和递归 repository stylesheet dependencies 纳入同一审计。
 
-每个 production source 必须恰好属于 Composition Root、Commands、Platform Adapter、
-Application、Project、Graph、Execution、SCI Core、Database Core、Backend Adapter、Built-in
-Composition、Transport、Diagnostics、Pure Leaf 或 Build Script 之一。普通允许边由 layer matrix
-给出；少数 composition/transport 调用必须按 source layer、literal file、fully-qualified owner
-与 canonical target 精确声明 capability。Capability 不接受 glob、目录 prefix 或 external target。
+分类使用闭合集合而不是 rule priority。每个发现的 source 必须命中且只命中一层，zero/multiple
+membership 都是 hard failure：
 
-现存违规以四份长期边界文档分组，并在 `architecture_tests/debt/` 中逐键声明 rule、file、
-owner、dependency kind、canonical target 与 occurrence count。审计对实际结果和声明清单做双向
-相等比较：新增/增加会失败，已删除/减少但未同步清单也会失败。因此清单是可删除的迁移账本，
-不是扩大允许边的第二套 policy。
+- Rust 共 15 层：Composition Root、Build Script、Commands、Platform Adapter、Application、
+  Project、Graph、Execution、SCI Core、Database Core、Backend Adapter、Built-in Composition、
+  Transport、Diagnostics、Pure Leaf。Custom-build root 及其 local modules 只属于 Build Script。
+- Frontend 共 10 层：App Composition、Views、Application、Core、Domain、Services、
+  Components/shared UI、Wire Schema、Diagnostics、Pure Shared。Stateful/framework-bearing shared
+  files 使用 literal membership 归到真实 owner；repository assets 不伪装成 source layer。
+
+依赖在应用 layer policy 前解析到 canonical origin。Rust origin 只有 repository declaration、
+language builtin 或 external Cargo dependency；workspace-member alias 必须先进入 member library
+与 re-export graph，不能回退为 external。Frontend origin 只有 repository declaration、
+repository asset 或 external package；alias/barrel/re-export 解析到声明 symbol，written external
+package authority 则保留原 package。Canonical external target 使用 `external:<package>` 或
+`external:<package>::<subpath>`，asset 使用
+`repository-asset:<repository-relative-path>`，repository path 统一使用 `/`。
+
+Cargo policy 对 workspace member、declared alias、actual package、runtime/build/development scope
+与 target condition 做 exact declaration check，再按 source layer、runtime/build mode、canonical
+subpath 或 literal symbol capability 检查每个 production use。Build Script 当前只允许其 exact
+build-mode declaration 与 `external:tauri-build::build` call。Frontend policy 双向核对 production
+dependencies，并按 source layer、runtime/type-only/build-style mode、module/stylesheet resource
+kind、package/subpath 与 stylesheet consumer 匹配 literal rows；development dependency 不授权
+production import，唯一 build-only declaration 只通过其 exact build-style row 使用。Relative CSS、
+CSS `@import` 与 `url(...)` 解析成 existing repository asset 或 exact external style target；missing、
+escaping、remote、nonliteral、cyclic 与未登记 target 都 fail closed。
+
+两端 finding/debt 使用相同的 exact identity：`ruleId`、repository-relative source file、
+fully-qualified owner、dependency kind 与 canonical origin target。Debt entry 另保存
+`expectedOccurrences` 和 `owningMigrationSpec`，line/column 只用于诊断。Audit 双向比较按 key 排序的
+actual occurrences 与 declared counts；新增/增加以及已删除/减少但仍声明都会失败。Debt 不扩展
+layer 或 external allow policy，且长期文档不复制具体 entry。
+
+Import direction 之外，semantic fitness checks 还守卫 resolved command/application symbols、Tauri
+command/error shape、framework/DTO leakage、Execution plan closed parameter family、Build Script
+call surface、SCI/Database/backend-adapter purpose limits、Frontend raw invoke/dialog consumers、
+View-to-Core exact read capabilities、projection write ownership与 root/nested Dockview constructor
+位置。稳定 type/variant/symbol contract 用 AST 和 type resolution 检查；只有无法在该层表达的
+窄 contract 才使用 source-token guard。
 
 ## 2. 顶层目录与 authority
 
