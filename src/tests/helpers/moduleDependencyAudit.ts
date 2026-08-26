@@ -328,19 +328,23 @@ function withAuditSourceFile<T>(
   );
 }
 
-function repositoryRelativeDeclarationPath(fileName: string): string {
-  const normalized = fileName.replace(/\\/g, '/');
-  const repositoryRelative = relative(resolve('.'), normalized).replace(/\\/g, '/');
-  if (!repositoryRelative.startsWith('../') && !repositoryRelative.includes(':/')) {
-    return repositoryRelative;
-  }
+function repositoryRelativeDeclarationPath(
+  context: TypeScriptAuditProject,
+  fileName: string,
+): string | null {
+  const normalized = resolve(fileName).replace(/\\/g, '/');
   const nodeModulesMarker = '/node_modules/';
   const nodeModulesIndex = normalized.lastIndexOf(nodeModulesMarker);
   if (nodeModulesIndex >= 0) return normalized.slice(nodeModulesIndex + 1);
-  const sourceMarker = '/src/';
-  const sourceIndex = normalized.lastIndexOf(sourceMarker);
-  if (sourceIndex >= 0) return normalized.slice(sourceIndex + 1);
-  return normalized;
+  const projectRoot = dirname(resolve(context.project.configFileName));
+  const projectRelative = relative(projectRoot, normalized).replace(/\\/g, '/');
+  if (projectRelative.startsWith('../') || projectRelative.includes(':/')) return null;
+  if (projectRelative.startsWith('src/')) return projectRelative;
+  const [runDirectory, ...rest] = projectRelative.split('/');
+  const isolatedPath = rest.join('/');
+  return /^run-\d+$/.test(runDirectory) && isolatedPath.startsWith('src/')
+    ? isolatedPath
+    : null;
 }
 
 function resolvedSymbol(
@@ -390,7 +394,8 @@ function symbolDeclaration(
   const declarations = symbol.declarations
     .map((handle) => handle.resolve(context.project))
     .filter((node): node is ts.Node => node !== undefined)
-    .map((node) => repositoryRelativeDeclarationPath(node.getSourceFile().fileName))
+    .map((node) => repositoryRelativeDeclarationPath(context, node.getSourceFile().fileName))
+    .filter((path): path is string => path !== null)
     .sort();
   const path = declarations[0];
   if (!path) return null;
@@ -454,7 +459,9 @@ function repositoryModuleTarget(
     posix.join(base, 'index.tsx'),
   ];
   const programPaths = new Set(
-    context.project.program.getSourceFileNames().map(repositoryRelativeDeclarationPath),
+    context.project.program.getSourceFileNames()
+      .map((path) => repositoryRelativeDeclarationPath(context, path))
+      .filter((path): path is string => path !== null),
   );
   return candidates.find((candidate) => programPaths.has(candidate)) ?? null;
 }

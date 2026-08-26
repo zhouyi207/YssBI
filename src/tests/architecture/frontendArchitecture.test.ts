@@ -321,6 +321,29 @@ describe('frontend architecture model', () => {
         }
       },
     );
+
+    const outOfRootPath = 'src/views/out-of-root.ts';
+    const outOfRootSource = "import { forged } from '../../sibling/src/forged'; void forged;";
+    withIsolatedTypeScriptProject(
+      new Map([
+        [outOfRootPath, outOfRootSource],
+        ['sibling/src/forged.ts', 'export const forged = true;'],
+      ]),
+      (context) => {
+        let failure: unknown;
+        try {
+          resolvedModuleDependencies(context, { path: outOfRootPath, source: outOfRootSource });
+        } catch (error) {
+          failure = error;
+        }
+        expect(failure).toBeInstanceOf(ModuleDependencyResolutionError);
+        expect(failure).toMatchObject({
+          kind: 'unresolved-module-dependency',
+          sourceFile: outOfRootPath,
+          writtenSpecifier: '../../sibling/src/forged',
+        });
+      },
+    );
   });
 
   it('inventories the complete frontend production tree', () => {
@@ -482,6 +505,15 @@ describe('frontend architecture model', () => {
         },
       },
       {
+        name: 'normalized parent stylesheet',
+        source: '@import "./../parent.css";',
+        error: {
+          kind: 'unsupported-stylesheet-target',
+          sourceFile: path,
+          writtenSpecifier: './../parent.css',
+        },
+      },
+      {
         name: 'encoded package separator',
         source: '@import "react/%2fsecret";',
         error: {
@@ -523,7 +555,10 @@ describe('frontend architecture model', () => {
       const graph = resolvedStylesheetDependencies(
         resolve('.'),
         [stylesheetRoot(path)],
-        new FixtureTextReader(new Map([[path, fixture.source]])),
+        new FixtureTextReader(new Map([
+          [path, fixture.source],
+          ['src/parent.css', '.parent {}'],
+        ])),
       );
       expect(graph.dependencies, fixture.name).toEqual([]);
       expect(graph.errors, fixture.name).toEqual([fixture.error]);

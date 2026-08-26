@@ -1425,3 +1425,6 @@ Execution 不知道具体 UI
 - [ ] 通过真实 `App.css` 与 `workbench-dockview.css` 构建 stylesheet graph，并回归验证 Task 4 architecture、project filesystem contract 与 TypeScript typecheck。
 - [ ] 将 `../parent.css` 纳入坏 stylesheet 逐输入 exact-payload 表，冻结 unsupported error 且零 dependency 的既有行为。
 - [ ] 将 encoded package separator `react/%2fsecret` 纳入同一 table-driven contract，并记录本轮为 reviewer-requested assertion completeness、无伪造 RED。
+- [ ] 将 TypeScript declaration 路径解析绑定到实际 tsconfig 项目根，仅显式映射隔离 `run-N/src/**`，拒绝仓库外非 node_modules 声明伪装成内部层。
+- [ ] 在 canonical module resolver 回归中覆盖含 `/src/` 的 sibling declaration，冻结 `unresolved-module-dependency` typed failure。
+- [ ] 在逐输入 stylesheet 表中加入真实存在目标的 `./../parent.css`，规范化前拒绝任意相对父段并保持 exact error 与零 dependency。

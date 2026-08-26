@@ -305,7 +305,8 @@ function resolveStylesheetOrigin(
     || specifier.toLowerCase().startsWith('data:')) {
     return { error: { kind: 'unsupported-stylesheet-target', sourceFile, writtenSpecifier: specifier } };
   }
-  if (specifier.startsWith('/') || specifier.startsWith('../')) {
+  const isRelative = specifier.startsWith('./') || specifier.startsWith('../');
+  if (specifier.startsWith('/') || (isRelative && specifier.split('/').includes('..'))) {
     const escapedTarget = posix.normalize(posix.join(posix.dirname(sourceFile), specifier));
     if (!escapedTarget.startsWith('src/')) {
       return { error: { kind: 'stylesheet-path-escapes-repository', sourceFile, writtenSpecifier: specifier } };
