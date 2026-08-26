@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   DockviewReact,
   type DockviewApi,
@@ -36,9 +36,17 @@ interface BoundMainLayout {
 }
 
 function LogWorkspaceTab({ api }: IDockviewPanelHeaderProps) {
+  const [title, setTitle] = useState(api.title);
+
+  useEffect(() => {
+    const disposable = api.onDidTitleChange((event) => setTitle(event.title));
+    setTitle(api.title);
+    return () => disposable.dispose();
+  }, [api]);
+
   return (
     <div className="dv-default-tab yssbi-logs-tab" data-yssbi-logs-tab>
-      <span className="dv-default-tab-content">{api.title}</span>
+      <span className="dv-default-tab-content">{title}</span>
     </div>
   );
 }

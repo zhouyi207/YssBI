@@ -65,6 +65,18 @@ const VIEW_ICONS: Readonly<Record<WorkbenchViewId, IconType>> = {
   diagnostics: VscError,
 };
 
+const VIEW_TITLE_KEYS = {
+  project: 'activityBar.project',
+  nodes: 'activityBar.nodes',
+  data: 'activityBar.data',
+  commands: 'activityBar.commands',
+  details: 'panel.details',
+  inspect: 'panel.inspect',
+  logs: 'panel.logs',
+  output: 'panel.output',
+  diagnostics: 'panel.diagnostics',
+} as const satisfies Record<WorkbenchViewId, string>;
+
 function iconForMetadata(metadata: WorkbenchPanelMetadata): {
   readonly Icon: ComponentType<{ size?: number; 'aria-hidden'?: boolean }>;
   readonly key: string;
@@ -94,13 +106,21 @@ function usePanelTitle(api: IDockviewPanelHeaderProps<WorkbenchPanelParams>['api
 function useWorkbenchEdgeCollapsed(
   api: IDockviewPanelHeaderProps<WorkbenchPanelParams>['api'],
 ): boolean {
-  const groupApi = api.group.api;
+  const [groupApi, setGroupApi] = useState(() => api.group.api);
   const isEdge = groupApi.location.type === 'edge';
   const [collapsed, setCollapsed] = useState(
     () => isEdge && groupApi.isCollapsed(),
   );
 
   useEffect(() => {
+    const updateGroup = () => setGroupApi(api.group.api);
+    const groupDisposable = api.onDidGroupChange(updateGroup);
+    updateGroup();
+    return () => groupDisposable.dispose();
+  }, [api]);
+
+  useEffect(() => {
+    setCollapsed(isEdge && groupApi.isCollapsed());
     if (!isEdge) return;
 
     const disposable = groupApi.onDidCollapsedChange(({ isCollapsed }) => {
@@ -115,12 +135,13 @@ function useWorkbenchEdgeCollapsed(
 function titleForMetadata(
   metadata: WorkbenchPanelMetadata,
   panelTitle: string | undefined,
+  translate: (key: string) => string,
 ): string {
   if (metadata.role === 'result') {
     return metadata.title || panelTitle || metadata.resultId;
   }
   if (metadata.role === 'editor') return panelTitle || metadata.resourceRef;
-  return panelTitle || metadata.viewId;
+  return translate(VIEW_TITLE_KEYS[metadata.viewId]);
 }
 
 function genericContextMenuSections(
@@ -159,7 +180,7 @@ export function WorkbenchDockviewTab(
   const metadata = props.params.metadata;
   const panelTitle = usePanelTitle(props.api);
   const isEdgeCollapsed = useWorkbenchEdgeCollapsed(props.api);
-  const title = titleForMetadata(metadata, panelTitle);
+  const title = titleForMetadata(metadata, panelTitle, t);
   const isActivityTab = metadata.role === 'view' && isWorkbenchActivityViewId(metadata.viewId);
   const isPersistentSidebarTab = isWorkbenchPersistentViewMetadata(metadata);
   const { Icon, key: iconKey } = iconForMetadata(metadata);
@@ -198,8 +219,8 @@ export function WorkbenchDockviewTab(
 
     if (isPersistentSidebarTab) return;
 
-    const tabShell = tabContent.closest<HTMLElement>('.dv-tab');
-    if (!tabShell) return;
+    const tabHost = tabContent.parentElement;
+    if (!tabHost) return;
 
     let middleButtonDown = false;
     let middleCloseHandled = false;
@@ -243,17 +264,17 @@ export function WorkbenchDockviewTab(
       });
     };
 
-    tabShell.addEventListener('pointerdown', handlePointerDown);
-    tabShell.addEventListener('pointerup', handlePointerUp);
-    tabShell.addEventListener('pointerleave', handlePointerLeave);
-    tabShell.addEventListener('auxclick', handleAuxClick);
-    tabShell.addEventListener('contextmenu', handleContextMenu);
+    tabHost.addEventListener('pointerdown', handlePointerDown);
+    tabHost.addEventListener('pointerup', handlePointerUp);
+    tabHost.addEventListener('pointerleave', handlePointerLeave);
+    tabHost.addEventListener('auxclick', handleAuxClick);
+    tabHost.addEventListener('contextmenu', handleContextMenu);
     return () => {
-      tabShell.removeEventListener('pointerdown', handlePointerDown);
-      tabShell.removeEventListener('pointerup', handlePointerUp);
-      tabShell.removeEventListener('pointerleave', handlePointerLeave);
-      tabShell.removeEventListener('auxclick', handleAuxClick);
-      tabShell.removeEventListener('contextmenu', handleContextMenu);
+      tabHost.removeEventListener('pointerdown', handlePointerDown);
+      tabHost.removeEventListener('pointerup', handlePointerUp);
+      tabHost.removeEventListener('pointerleave', handlePointerLeave);
+      tabHost.removeEventListener('auxclick', handleAuxClick);
+      tabHost.removeEventListener('contextmenu', handleContextMenu);
     };
   }, [isActivityTab, isPersistentSidebarTab, metadata, props.api, requestClose, setContextMenu]);
 

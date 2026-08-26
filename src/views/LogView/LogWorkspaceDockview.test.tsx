@@ -36,6 +36,9 @@ vi.mock('dockview-react', async (importOriginal) => {
       readonly title: string | undefined;
       setActive: () => void;
       setTitle: (title: string) => void;
+      onDidTitleChange: (
+        listener: (event: { title: string | undefined }) => void,
+      ) => { dispose: () => void };
       moveTo: (options: { group?: FakeGroup }) => void;
     };
   };
@@ -104,6 +107,7 @@ vi.mock('dockview-react', async (importOriginal) => {
         }
 
         const panel = {} as FakePanel;
+        const titleListeners = new Set<(event: { title: string | undefined }) => void>();
         panel.id = options.id;
         panel.component = options.component;
         panel.title = options.title;
@@ -121,7 +125,11 @@ vi.mock('dockview-react', async (importOriginal) => {
           setTitle: (title) => {
             if (panel.title === title) return;
             panel.title = title;
-            publishLayout();
+            [...titleListeners].forEach((listener) => listener({ title }));
+          },
+          onDidTitleChange: (listener) => {
+            titleListeners.add(listener);
+            return { dispose: () => titleListeners.delete(listener) };
           },
           moveTo: ({ group }) => {
             if (!group) throw new Error('fake Dockview moveTo requires a target group');
@@ -480,6 +488,19 @@ describe('LogWorkspaceDockview', () => {
     expect(levelButtons).toHaveLength(5);
     expect(levelButtons.every((button) => button.getAttribute('aria-pressed') === 'true'))
       .toBe(true);
+  });
+
+  it('updates a logs tab when Dockview changes its title', async () => {
+    renderWorkspace({ kind: 'ephemeral' });
+    await flushSubscription();
+
+    const panel = latestDockview().api.getPanel(logDomainPanelId('all'));
+    if (!panel) throw new Error('expected the All log panel');
+
+    act(() => panel.api.setTitle('Translated All'));
+
+    expect(host.querySelector('[data-yssbi-logs-tab]')?.textContent)
+      .toBe('Translated All');
   });
 
   it('allows only same-group tab reordering drops', async () => {

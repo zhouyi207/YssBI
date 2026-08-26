@@ -4,7 +4,11 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DockviewReact, type DockviewApi } from 'dockview-react';
+import {
+  DockviewReact,
+  type DockviewApi,
+  type DockviewGroupPanel,
+} from 'dockview-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WorkbenchPanelParams } from '@/features/core/dockview';
@@ -98,6 +102,18 @@ function detailsParams(): WorkbenchPanelParams {
   return { metadata: { role: 'view', viewId: 'details' } };
 }
 
+const fixedViewCases = [
+  { viewId: 'project', component: 'Project', titleKey: 'activityBar.project' },
+  { viewId: 'nodes', component: 'Nodes', titleKey: 'activityBar.nodes' },
+  { viewId: 'data', component: 'Data', titleKey: 'activityBar.data' },
+  { viewId: 'commands', component: 'Commands', titleKey: 'activityBar.commands' },
+  { viewId: 'details', component: 'Details', titleKey: 'panel.details' },
+  { viewId: 'inspect', component: 'Inspect', titleKey: 'panel.inspect' },
+  { viewId: 'logs', component: 'Logs', titleKey: 'panel.logs' },
+  { viewId: 'output', component: 'Output', titleKey: 'panel.output' },
+  { viewId: 'diagnostics', component: 'Diagnostics', titleKey: 'panel.diagnostics' },
+] as const;
+
 function resultParams(): WorkbenchPanelParams {
   return {
     metadata: {
@@ -144,8 +160,15 @@ describe('WorkbenchDockviewTab', () => {
         <DockviewReact
           components={{
             GraphEditor: TestPanel,
+            Project: TestPanel,
+            Nodes: TestPanel,
+            Data: TestPanel,
+            Commands: TestPanel,
             Details: TestPanel,
+            Inspect: TestPanel,
             Logs: TestPanel,
+            Output: TestPanel,
+            Diagnostics: TestPanel,
             Result: TestPanel,
           }}
           defaultTabComponent={WorkbenchDockviewTab}
@@ -166,6 +189,34 @@ describe('WorkbenchDockviewTab', () => {
     if (!tab) throw new Error(`Missing tab ${panelInstanceId}`);
     return tab;
   }
+
+  function tabHeaderHost(panelInstanceId: string): HTMLElement {
+    const content = host.querySelector<HTMLElement>(
+      `[data-panel-instance-id="${panelInstanceId}"]`,
+    );
+    const headerHost = content?.parentElement;
+    if (!headerHost) throw new Error(`Missing tab header host ${panelInstanceId}`);
+    return headerHost;
+  }
+
+  it('localizes every fixed workbench view tab', () => {
+    renderDockview((readyApi) => {
+      fixedViewCases.forEach(({ viewId, component }) => readyApi.addPanel<WorkbenchPanelParams>({
+        id: `${viewId}-a`,
+        component,
+        title: `fallback-${viewId}`,
+        params: { metadata: { role: 'view', viewId } },
+      }));
+    });
+
+    fixedViewCases.forEach(({ viewId, titleKey }) => {
+      const content = host.querySelector<HTMLElement>(`[data-panel-instance-id="${viewId}-a"]`);
+      const title = ['project', 'nodes', 'data', 'commands'].includes(viewId)
+        ? content?.textContent
+        : content?.querySelector('[data-workbench-tab-title]')?.textContent;
+      expect(title).toContain(titleKey);
+    });
+  });
 
   it('shows canonical editor chrome and routes close and middle-click without native removal', () => {
     mocks.dirty = true;
@@ -195,7 +246,7 @@ describe('WorkbenchDockviewTab', () => {
     expect(mocks.requestCloseWorkbenchPanel).toHaveBeenNthCalledWith(1, 'editor-a');
     expect(api?.getPanel('editor-a')).toBeDefined();
 
-    const tab = tabShell('editor-a');
+    const tab = tabHeaderHost('editor-a');
     const pointerDown = new MouseEvent('pointerdown', {
       button: 1,
       bubbles: true,
@@ -234,13 +285,70 @@ describe('WorkbenchDockviewTab', () => {
       clientX: 21,
       clientY: 34,
     });
-    act(() => tabShell('editor-a').dispatchEvent(event));
+    act(() => tabHeaderHost('editor-a').dispatchEvent(event));
 
     expect(event.defaultPrevented).toBe(true);
     expect(mocks.buildTabContextMenuSections).toHaveBeenCalledWith(
       {
         panelInstanceId: 'editor-a',
         groupId: panel?.group.id,
+        tab: {
+          id: 'events/Main.yssbi-event',
+          type: 'event',
+          component: 'GraphEditor',
+          pinned: true,
+        },
+      },
+      expect.any(Function),
+    );
+    expect(document.querySelector('[role="menu"]')?.textContent).toContain('document-action');
+  });
+
+  it('keeps the editor document context menu after splitting the tab into a new group', () => {
+    let sourceGroupId: string | undefined;
+
+    renderDockview((readyApi) => {
+      const movedPanel = readyApi.addPanel<WorkbenchPanelParams>({
+        id: 'editor-a',
+        component: 'GraphEditor',
+        title: 'Main',
+        params: editorParams(),
+      });
+      sourceGroupId = movedPanel.group.id;
+      readyApi.addPanel<WorkbenchPanelParams>({
+        id: 'editor-b',
+        component: 'GraphEditor',
+        title: 'Secondary',
+        params: editorParams(),
+        position: { referenceGroup: movedPanel.group, direction: 'within' },
+      });
+    });
+
+    const movedPanel = api?.getPanel('editor-a');
+    if (!movedPanel || !sourceGroupId) throw new Error('Missing moved panel');
+
+    act(() => {
+      movedPanel.api.moveTo({
+        group: movedPanel.group,
+        position: 'right',
+      });
+    });
+
+    const splitPanel = api?.getPanel('editor-a');
+    const event = new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 21,
+      clientY: 34,
+    });
+    act(() => tabHeaderHost('editor-a').dispatchEvent(event));
+
+    expect(splitPanel?.group.id).not.toBe(sourceGroupId);
+    expect(event.defaultPrevented).toBe(true);
+    expect(mocks.buildTabContextMenuSections).toHaveBeenCalledWith(
+      {
+        panelInstanceId: 'editor-a',
+        groupId: splitPanel?.group.id,
         tab: {
           id: 'events/Main.yssbi-event',
           type: 'event',
@@ -264,7 +372,7 @@ describe('WorkbenchDockviewTab', () => {
     });
 
     const content = host.querySelector<HTMLElement>('[data-panel-instance-id="details-a"]')!;
-    expect(content.querySelector('[data-workbench-tab-title]')?.textContent).toBe('Details');
+    expect(content.querySelector('[data-workbench-tab-title]')?.textContent).toBe('panel.details');
     expect(content.querySelector('[data-workbench-tab-icon="details"]')).not.toBeNull();
     expect(content.querySelector('[data-workbench-tab-close]')).toBeNull();
 
@@ -325,6 +433,47 @@ describe('WorkbenchDockviewTab', () => {
     expect(bottomGroup.isCollapsed()).toBe(false);
     expect(api?.activePanel?.id).toBe('diagnostics-a');
     expect(host.querySelectorAll('[data-workbench-tab-edge-collapsed="true"]')).toHaveLength(0);
+  });
+
+  it('follows edge collapse state after a panel moves out of an edge group', () => {
+    let centralGroup: DockviewGroupPanel | undefined;
+
+    renderDockview((readyApi) => {
+      const centralPanel = readyApi.addPanel<WorkbenchPanelParams>({
+        id: 'editor-b',
+        component: 'GraphEditor',
+        title: 'Secondary',
+        params: editorParams(),
+      });
+      centralGroup = centralPanel.group;
+      readyApi.addEdgeGroup('bottom', {
+        id: 'bottom-edge',
+        initialSize: 180,
+      });
+      const bottomGroup = readyApi.groups.find((group) => group.id === 'bottom-edge');
+      if (!bottomGroup) throw new Error('Missing bottom edge group');
+      readyApi.addPanel<WorkbenchPanelParams>({
+        id: 'editor-a',
+        component: 'GraphEditor',
+        title: 'Main',
+        params: editorParams(),
+        position: { referenceGroup: bottomGroup, direction: 'within' },
+      });
+    });
+
+    const panel = api?.getPanel('editor-a');
+    const bottomGroup = api?.getEdgeGroup('bottom');
+    if (!panel || !bottomGroup || !centralGroup) throw new Error('Missing panel groups');
+
+    act(() => bottomGroup.collapse());
+
+    expect(host.querySelector('[data-workbench-tab-edge-collapsed="true"]'))
+      .not.toBeNull();
+
+    act(() => panel.api.moveTo({ group: centralGroup }));
+
+    expect(host.querySelector('[data-workbench-tab-edge-collapsed="true"]'))
+      .toBeNull();
   });
 
   it('keeps bottom edge tab geometry stable when activation changes', () => {
@@ -421,7 +570,7 @@ describe('WorkbenchDockviewTab', () => {
       clientX: 55,
       clientY: 89,
     });
-    act(() => tabShell('result-a').dispatchEvent(event));
+    act(() => tabHeaderHost('result-a').dispatchEvent(event));
 
     const closeGroupItem = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
       .find((item) => item.textContent?.includes('tabBar.closeGroup'));
