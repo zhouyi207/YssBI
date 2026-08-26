@@ -1,4 +1,6 @@
-import { resolve } from 'node:path';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ArchitectureSource } from '@/tests/helpers/moduleDependencyAudit';
 import {
@@ -7,10 +9,12 @@ import {
 } from '@/tests/helpers/typescriptAudit';
 import {
   ModuleDependencyResolutionError,
+  createRepositoryTextReader,
   productionTypeScriptSources,
   resolvedModuleDependencies,
   resolvedStylesheetDependencies,
   type RepositoryTextReader,
+  type ResolvedModuleDependency,
 } from './frontendArchitectureModel';
 
 class FixtureTextReader implements RepositoryTextReader {
@@ -101,6 +105,26 @@ function architectureSource(path: string): ArchitectureSource {
   const source = compilerSources.get(path);
   if (source === undefined) throw new Error(`Missing compiler fixture ${path}`);
   return { path, source };
+}
+
+function stylesheetRoot(path: string): ResolvedModuleDependency {
+  const fileName = path.split('/').slice(-1)[0];
+  return {
+    kind: 'side-effect-import',
+    mode: 'runtime',
+    specifier: `./${fileName}`,
+    location: { line: 1, column: 1 },
+    repositoryRelativeSourceFile: 'src/views/fixture.ts',
+    fullyQualifiedOwner: 'src/views/fixture.ts::<module>',
+    origin: {
+      kind: 'repository-asset',
+      asset: { repositoryRelativeAssetPath: path, resourceKind: 'stylesheet' },
+    },
+    canonicalOriginTarget: `repository-asset:${path}`,
+    importedSymbol: null,
+    writtenModuleSpecifier: `./${fileName}`,
+    symbolDeclarationTarget: null,
+  };
 }
 
 describe('frontend architecture model', () => {
@@ -343,6 +367,198 @@ describe('frontend architecture model', () => {
       ]) {
         expect(productionPaths.some((path) => path.startsWith(root)), root).toBe(true);
       }
+    });
+  });
+
+  it('fails closed for an unresolvable external stylesheet package', () => {
+    const path = 'src/views/missingStylesheetPackage.ts';
+    const source = "import 'not-a-real-package/theme.css';";
+    let failure: unknown;
+
+    withIsolatedTypeScriptProject(
+      { [path]: source },
+      (context) => {
+        try {
+          resolvedModuleDependencies(context, { path, source });
+        } catch (error) {
+          failure = error;
+        }
+      },
+    );
+
+    expect(failure).toBeInstanceOf(ModuleDependencyResolutionError);
+    expect(failure).toMatchObject({
+      kind: 'unresolved-module-dependency',
+      sourceFile: path,
+      writtenSpecifier: 'not-a-real-package/theme.css',
+    });
+  });
+
+  it('emits declaration facts for empty named imports and exports', () => {
+    const path = 'src/views/emptyNamedDeclarations.ts';
+    const sources = new Map<string, string>([
+      [path, `
+        import {} from './runtime';
+        import type {} from './contract';
+        export {} from './runtime';
+        export type {} from './contract';
+      `],
+      ['src/views/runtime.ts', 'export const value = 1;'],
+      ['src/views/contract.ts', 'export interface Contract {}'],
+    ]);
+
+    withIsolatedTypeScriptProject(sources, (context) => {
+      expect(resolvedModuleDependencies(context, { path, source: sources.get(path)! })).toEqual([
+        expect.objectContaining({
+          kind: 'static-import',
+          mode: 'runtime',
+          importedSymbol: null,
+          canonicalOriginTarget: 'src/views/runtime.ts',
+          symbolDeclarationTarget: 'src/views/runtime.ts',
+        }),
+        expect.objectContaining({
+          kind: 'static-import',
+          mode: 'type-only',
+          importedSymbol: null,
+          canonicalOriginTarget: 'src/views/contract.ts',
+          symbolDeclarationTarget: 'src/views/contract.ts',
+        }),
+        expect.objectContaining({
+          kind: 're-export',
+          mode: 'runtime',
+          importedSymbol: null,
+          canonicalOriginTarget: 'src/views/runtime.ts',
+          symbolDeclarationTarget: 'src/views/runtime.ts',
+        }),
+        expect.objectContaining({
+          kind: 're-export',
+          mode: 'type-only',
+          importedSymbol: null,
+          canonicalOriginTarget: 'src/views/contract.ts',
+          symbolDeclarationTarget: 'src/views/contract.ts',
+        }),
+      ]);
+    });
+  });
+
+  it('reports each invalid stylesheet input exactly without granting a dependency', () => {
+    const path = 'src/views/fixture.css';
+    const cases = [
+      {
+        name: 'unterminated quoted import',
+        source: '@import "unterminated.css;',
+        error: { kind: 'stylesheet-parse-failure', sourceFile: path, line: 1, column: 9 },
+      },
+      {
+        name: 'nonliteral import',
+        source: '@import url(var(--theme));',
+        error: { kind: 'stylesheet-parse-failure', sourceFile: path, line: 1, column: 16 },
+      },
+      {
+        name: 'remote import',
+        source: '@import "https://example.invalid/theme.css";',
+        error: {
+          kind: 'unsupported-stylesheet-target',
+          sourceFile: path,
+          writtenSpecifier: 'https://example.invalid/theme.css',
+        },
+      },
+      {
+        name: 'repository escape',
+        source: '@import "../../../outside.css";',
+        error: {
+          kind: 'stylesheet-path-escapes-repository',
+          sourceFile: path,
+          writtenSpecifier: '../../../outside.css',
+        },
+      },
+      {
+        name: 'missing repository stylesheet',
+        source: '@import "./missing.css";',
+        error: {
+          kind: 'stylesheet-target-missing',
+          sourceFile: path,
+          canonicalTarget: 'src/views/missing.css',
+        },
+      },
+      {
+        name: 'unsupported repository asset',
+        source: '@import "./font.woff2";',
+        error: {
+          kind: 'unsupported-stylesheet-target',
+          sourceFile: path,
+          writtenSpecifier: './font.woff2',
+        },
+      },
+      {
+        name: 'quoted backslash',
+        source: '@import "react\\secret";',
+        error: {
+          kind: 'unsupported-stylesheet-target',
+          sourceFile: path,
+          writtenSpecifier: 'react\\secret',
+        },
+      },
+    ] as const;
+
+    for (const fixture of cases) {
+      const graph = resolvedStylesheetDependencies(
+        resolve('.'),
+        [stylesheetRoot(path)],
+        new FixtureTextReader(new Map([[path, fixture.source]])),
+      );
+      expect(graph.dependencies, fixture.name).toEqual([]);
+      expect(graph.errors, fixture.name).toEqual([fixture.error]);
+    }
+  });
+
+  it('reads repository text only through real root-bounded src paths', () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'yssbi-repository-reader-'));
+    const repositoryRoot = join(sandbox, 'repository');
+    const outsideRoot = join(sandbox, 'outside');
+    const sourceRoot = join(repositoryRoot, 'src');
+    mkdirSync(join(sourceRoot, 'app'), { recursive: true });
+    mkdirSync(outsideRoot);
+    writeFileSync(join(sourceRoot, 'app', 'App.css'), '.app {}');
+    writeFileSync(join(outsideRoot, 'secret.css'), '.secret {}');
+    symlinkSync(outsideRoot, join(sourceRoot, 'escape'), 'junction');
+
+    try {
+      const reader = createRepositoryTextReader(repositoryRoot);
+      expect(reader.readRepositoryText('src/app/App.css')).toBe('.app {}');
+      expect(reader.readRepositoryText(resolve(sourceRoot, 'app', 'App.css'))).toBeNull();
+      expect(reader.readRepositoryText('package.json')).toBeNull();
+      expect(reader.readRepositoryText('../outside/secret.css')).toBeNull();
+      expect(reader.readRepositoryText('src/escape/secret.css')).toBeNull();
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it('builds the real App and workbench stylesheet graph through the repository reader', () => {
+    withProductionTypeScriptProject((context) => {
+      const sources = new Map(productionTypeScriptSources(context).map((source) => [source.path, source]));
+      const moduleDependencies = [
+        'src/app/App.tsx',
+        'src/app/main.tsx',
+      ].flatMap((path) => resolvedModuleDependencies(context, sources.get(path)!));
+      const graph = resolvedStylesheetDependencies(
+        resolve('.'),
+        moduleDependencies,
+        createRepositoryTextReader(resolve('.')),
+      );
+
+      expect(graph.repositoryStylesheets).toEqual([
+        'src/app/App.css',
+        'src/app/workbench-dockview.css',
+      ]);
+      expect(graph.dependencies.map(({ canonicalOriginTarget }) => canonicalOriginTarget)).toEqual([
+        'external:tailwindcss',
+        'external:tw-animate-css',
+        'external:shadcn::tailwind.css',
+        'external:@fontsource-variable/inter',
+      ]);
+      expect(graph.errors).toEqual([]);
     });
   });
 });

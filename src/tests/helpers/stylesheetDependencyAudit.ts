@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { posix, resolve } from 'node:path';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { isAbsolute, posix, relative, resolve, win32 } from 'node:path';
 import {
   parseExternalDependencySpecifier,
   type ResolvedModuleDependency,
@@ -37,6 +37,31 @@ export interface ResolvedStylesheetGraph {
 
 export interface RepositoryTextReader {
   readRepositoryText(repositoryRelativePath: string): string | null;
+}
+
+export function createRepositoryTextReader(repositoryRoot: string): RepositoryTextReader {
+  const sourceRoot = realpathSync(resolve(repositoryRoot, 'src'));
+  return {
+    readRepositoryText(repositoryRelativePath: string): string | null {
+      if (!repositoryRelativePath.startsWith('src/')
+        || repositoryRelativePath.includes('\\')
+        || repositoryRelativePath.split('/').includes('..')
+        || posix.normalize(repositoryRelativePath) !== repositoryRelativePath
+        || isAbsolute(repositoryRelativePath)
+        || win32.isAbsolute(repositoryRelativePath)) return null;
+      try {
+        const target = realpathSync(resolve(repositoryRoot, ...repositoryRelativePath.split('/')));
+        const sourceRelativeTarget = relative(sourceRoot, target);
+        if (!sourceRelativeTarget
+          || sourceRelativeTarget.startsWith('..')
+          || isAbsolute(sourceRelativeTarget)
+          || !statSync(target).isFile()) return null;
+        return readFileSync(target, 'utf8');
+      } catch {
+        return null;
+      }
+    },
+  };
 }
 
 interface StylesheetReference {
@@ -123,7 +148,7 @@ function readQuotedLiteral(source: string, offset: number): LiteralResult {
       if (cursor + 1 >= source.length) {
         return { value: null, next: source.length, errorOffset: cursor };
       }
-      value += source[cursor + 1];
+      value += character + source[cursor + 1];
       cursor += 2;
       continue;
     }

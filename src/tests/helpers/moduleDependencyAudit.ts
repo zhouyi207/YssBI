@@ -199,6 +199,15 @@ function collectModuleDependencies(sourceFile: ts.SourceFile): CollectedModuleDe
         );
       }
       if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) {
+        if (clause.namedBindings.elements.length === 0) {
+          add(
+            'static-import',
+            clauseIsTypeOnly ? 'type-only' : 'runtime',
+            specifier,
+            node,
+            node.moduleSpecifier,
+          );
+        }
         for (const element of clause.namedBindings.elements) {
           add(
             'static-import',
@@ -217,6 +226,15 @@ function collectModuleDependencies(sourceFile: ts.SourceFile): CollectedModuleDe
       if (!node.moduleSpecifier) return;
       const specifier = literalText(node.moduleSpecifier);
       if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+        if (node.exportClause.elements.length === 0) {
+          add(
+            're-export',
+            node.isTypeOnly ? 'type-only' : 'runtime',
+            specifier,
+            node,
+            node.moduleSpecifier,
+          );
+        }
         for (const element of node.exportClause.elements) {
           add(
             're-export',
@@ -469,6 +487,9 @@ function stylesheetModuleDependency(
     : null;
   if (!external && !assetPath) {
     throw resolutionFailure('invalid-repository-module-specifier', source.path, dependency);
+  }
+  if (external && !existsSync(resolve('node_modules', ...external.packageName.split('/')))) {
+    throw resolutionFailure('unresolved-module-dependency', source.path, dependency);
   }
   const origin: StylesheetDependencyOrigin = external
     ? { kind: 'external', dependency: external }

@@ -1419,3 +1419,7 @@ Execution 不知道具体 UI
 - [ ] 增加递归 stylesheet dependency lexer 与 typed failure，覆盖 package、repository asset、url、parse failure、missing target 和 cycle。
 - [ ] 抽取 raw Tauri invoke semantic audit helper，并让 project filesystem contract 复用 canonical production inventory。
 - [ ] 运行 frontend architecture focused tests、project filesystem contract、typecheck 与 diff check，记录参数转发导致伪 focused 执行的诊断结论。
+- [ ] 修复外部 stylesheet package 未解析时的 fail-closed typed error，并为 runtime/type-only 空 named import/export 保留 declaration-level dependency facts。
+- [ ] 让 quoted CSS 反斜杠目标保留原始 payload 并产出 unsupported typed error，逐个坏样式输入断言 exact error 且零 dependency。
+- [ ] 导出限制在真实 repository `src` 根内的只读 filesystem reader，拒绝 absolute、non-src、parent traversal 与 realpath escape。
+- [ ] 通过真实 `App.css` 与 `workbench-dockview.css` 构建 stylesheet graph，并回归验证 Task 4 architecture、project filesystem contract 与 TypeScript typecheck。

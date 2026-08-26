@@ -12,6 +12,7 @@ export {
   type StylesheetDependencyOrigin,
 } from '@/tests/helpers/moduleDependencyAudit';
 export {
+  createRepositoryTextReader,
   resolvedStylesheetDependencies,
   type RepositoryTextReader,
   type ResolvedStylesheetDependency,
