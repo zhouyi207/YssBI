@@ -1423,3 +1423,5 @@ Execution 不知道具体 UI
 - [ ] 让 quoted CSS 反斜杠目标保留原始 payload 并产出 unsupported typed error，逐个坏样式输入断言 exact error 且零 dependency。
 - [ ] 导出限制在真实 repository `src` 根内的只读 filesystem reader，拒绝 absolute、non-src、parent traversal 与 realpath escape。
 - [ ] 通过真实 `App.css` 与 `workbench-dockview.css` 构建 stylesheet graph，并回归验证 Task 4 architecture、project filesystem contract 与 TypeScript typecheck。
+- [ ] 将 `../parent.css` 纳入坏 stylesheet 逐输入 exact-payload 表，冻结 unsupported error 且零 dependency 的既有行为。
+- [ ] 将 encoded package separator `react/%2fsecret` 纳入同一 table-driven contract，并记录本轮为 reviewer-requested assertion completeness、无伪造 RED。

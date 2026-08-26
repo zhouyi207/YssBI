@@ -473,6 +473,24 @@ describe('frontend architecture model', () => {
         },
       },
       {
+        name: 'unsupported parent stylesheet',
+        source: '@import "../parent.css";',
+        error: {
+          kind: 'unsupported-stylesheet-target',
+          sourceFile: path,
+          writtenSpecifier: '../parent.css',
+        },
+      },
+      {
+        name: 'encoded package separator',
+        source: '@import "react/%2fsecret";',
+        error: {
+          kind: 'unsupported-stylesheet-target',
+          sourceFile: path,
+          writtenSpecifier: 'react/%2fsecret',
+        },
+      },
+      {
         name: 'missing repository stylesheet',
         source: '@import "./missing.css";',
         error: {
