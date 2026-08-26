@@ -66,6 +66,17 @@ describe('OutputPanel', () => {
     expect(host.textContent).toContain('panel.outputTruncated');
   });
 
+  it('renders a shared header without exposing the focused graph path', () => {
+    act(() => {
+      useGraphSessionStore.getState().setFocusedSession('group-1', graphPath);
+      root.render(<TooltipProvider><OutputPanel /></TooltipProvider>);
+    });
+
+    const header = host.querySelector('[data-output-panel-header]');
+    expect(header?.textContent).toContain('panel.output');
+    expect(header?.textContent).not.toContain(graphPath);
+  });
+
   it('clears only the visible output projection', () => {
     const execution = useExecutionStore.getState();
     act(() => {

@@ -89,6 +89,19 @@ describe('DiagnosticsPanel', () => {
     });
   });
 
+  it('renders a shared header without exposing the focused graph path', () => {
+    useGraphSessionStore.getState().setFocusedSession('group-1', graphPath);
+
+    act(() => {
+      root.render(<TooltipProvider><DiagnosticsPanel /></TooltipProvider>);
+    });
+
+    const header = host.querySelector('[data-diagnostics-panel-header]');
+    expect(header?.textContent).toContain('panel.diagnostics');
+    expect(header?.textContent).toContain('panel.diagnosticsCount');
+    expect(header?.textContent).not.toContain(graphPath);
+  });
+
   it('shows an empty state when the focused graph has no node diagnostics', () => {
     useGraphSessionStore.getState().setFocusedSession('group-1', graphPath);
     useGraphDataStore.setState({

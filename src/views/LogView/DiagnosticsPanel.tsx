@@ -44,32 +44,28 @@ export function DiagnosticsPanel() {
     [bucket, graphPath],
   );
 
-  if (!graphPath) {
-    return (
-      <div
-        data-diagnostics-panel
-        className="flex h-full items-center justify-center bg-background px-4 text-xs text-muted-foreground"
-      >
-        {t('panel.diagnosticsNoGraph')}
-      </div>
-    );
-  }
-
   return (
     <div
       data-diagnostics-panel
       className="flex h-full min-h-0 flex-col bg-background text-foreground"
     >
-      <div className="flex min-h-(--panel-toolbar-height) shrink-0 flex-col justify-center border-b border-border/20 bg-background px-2 py-1">
-        <span className="truncate font-mono text-[10px] text-muted-foreground" title={graphPath}>
-          {graphPath}
+      <div
+        data-diagnostics-panel-header
+        className="flex h-(--logs-tab-height) shrink-0 items-center justify-between gap-1 border-b border-border/20 bg-background px-1"
+      >
+        <span className="min-w-0 truncate px-1 text-xs font-medium text-foreground">
+          {t('panel.diagnostics')}
         </span>
-        <span className="text-[10px] text-muted-foreground">
+        <span className="shrink-0 px-1 text-[11px] text-muted-foreground">
           {t('panel.diagnosticsCount', { count: rows.length })}
         </span>
       </div>
 
-      {rows.length === 0 ? (
+      {!graphPath ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-xs text-muted-foreground">
+          {t('panel.diagnosticsNoGraph')}
+        </div>
+      ) : rows.length === 0 ? (
         <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-xs text-muted-foreground">
           {t('panel.diagnosticsEmpty')}
         </div>

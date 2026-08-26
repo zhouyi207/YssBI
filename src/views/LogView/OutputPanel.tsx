@@ -23,26 +23,23 @@ export function OutputPanel() {
   const clearRunOutput = useExecutionStore((state) => state.clearRunOutput);
   const hasOutput = output.entries.length > 0 || output.projectionDropped;
 
-  if (!graphPath) {
-    return (
-      <div className="flex h-full items-center justify-center bg-background px-4 text-xs text-muted-foreground">
-        {t('panel.outputNoGraph')}
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <div className="flex h-(--panel-toolbar-height) shrink-0 items-center justify-between border-b border-border/20 bg-background px-2">
-        <span className="min-w-0 truncate font-mono text-[10px] text-muted-foreground">
-          {graphPath}
+      <div
+        data-output-panel-header
+        className="flex h-(--logs-tab-height) shrink-0 items-center justify-between gap-1 border-b border-border/20 bg-background px-1"
+      >
+        <span className="min-w-0 truncate px-1 text-xs font-medium text-foreground">
+          {t('panel.output')}
         </span>
         <ToolbarIconButton
           type="button"
           variant="ghost"
           size="icon-sm"
-          disabled={!hasOutput}
-          onClick={() => clearRunOutput(graphPath)}
+          disabled={!graphPath || !hasOutput}
+          onClick={() => {
+            if (graphPath) clearRunOutput(graphPath);
+          }}
           tooltip={t('panel.outputClear')}
           aria-label={t('panel.outputClear')}
         >
@@ -50,7 +47,11 @@ export function OutputPanel() {
         </ToolbarIconButton>
       </div>
 
-      {!hasOutput ? (
+      {!graphPath ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-xs text-muted-foreground">
+          {t('panel.outputNoGraph')}
+        </div>
+      ) : !hasOutput ? (
         <div className="flex min-h-0 flex-1 items-center justify-center px-4 text-xs text-muted-foreground">
           {t('panel.outputEmpty')}
         </div>
