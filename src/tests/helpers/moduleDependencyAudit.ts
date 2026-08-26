@@ -3,6 +3,7 @@ import { dirname, posix, relative, resolve } from 'node:path';
 import * as ts from 'typescript/unstable/ast';
 import { SymbolFlags, type Symbol as TypeScriptSymbol } from 'typescript/unstable/sync';
 import {
+  normalizeTypeScriptPath,
   withIsolatedTypeScriptProject,
   withProductionTypeScriptProject,
   type TypeScriptAuditProject,
@@ -128,8 +129,7 @@ function moduleCallSpecifier(node: ts.Expression): {
   specifier: string | null;
 } | null {
   if (!ts.isCallExpression(node)) return null;
-  const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword
-    && node.arguments.length >= 1;
+  const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
   const isRequire = ts.isIdentifier(node.expression)
     && node.expression.text === 'require'
     && node.arguments.length === 1;
@@ -155,18 +155,16 @@ function collectModuleDependencies(sourceFile: ts.SourceFile): CollectedModuleDe
     importedSymbolNode: ts.Node | null = null,
     importedExportName: string | null = null,
   ): void => {
-    if (specifier !== null || mode === 'runtime') {
-      dependencies.push({
-        kind,
-        mode,
-        specifier,
-        location: location(node),
-        node,
-        moduleSpecifierNode,
-        importedSymbolNode,
-        importedExportName,
-      });
-    }
+    dependencies.push({
+      kind,
+      mode,
+      specifier,
+      location: location(node),
+      node,
+      moduleSpecifierNode,
+      importedSymbolNode,
+      importedExportName,
+    });
   };
 
   const visit = (node: ts.Node): void => {
@@ -332,19 +330,13 @@ function repositoryRelativeDeclarationPath(
   context: TypeScriptAuditProject,
   fileName: string,
 ): string | null {
-  const normalized = resolve(fileName).replace(/\\/g, '/');
+  const normalized = normalizeTypeScriptPath(resolve(fileName));
   const nodeModulesMarker = '/node_modules/';
   const nodeModulesIndex = normalized.lastIndexOf(nodeModulesMarker);
   if (nodeModulesIndex >= 0) return normalized.slice(nodeModulesIndex + 1);
-  const projectRoot = dirname(resolve(context.project.configFileName));
-  const projectRelative = relative(projectRoot, normalized).replace(/\\/g, '/');
-  if (projectRelative.startsWith('../') || projectRelative.includes(':/')) return null;
-  if (projectRelative.startsWith('src/')) return projectRelative;
-  const [runDirectory, ...rest] = projectRelative.split('/');
-  const isolatedPath = rest.join('/');
-  return /^run-\d+$/.test(runDirectory) && isolatedPath.startsWith('src/')
-    ? isolatedPath
-    : null;
+  const sourceRelative = normalizeTypeScriptPath(relative(context.sourceRoot, normalized));
+  if (sourceRelative.startsWith('../') || sourceRelative.includes(':/')) return null;
+  return sourceRelative.startsWith('src/') ? sourceRelative : null;
 }
 
 function resolvedSymbol(

@@ -1,4 +1,4 @@
-import { dirname, relative, resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import type { ArchitectureSource } from './moduleDependencyAudit';
 import { normalizeTypeScriptPath, type TypeScriptAuditProject } from './typescriptAudit';
 
@@ -6,16 +6,10 @@ function repositorySourcePath(
   context: TypeScriptAuditProject,
   fileName: string,
 ): string | null {
-  const projectRoot = dirname(context.project.configFileName);
   const absolutePath = normalizeTypeScriptPath(resolve(fileName));
-  const relativePath = normalizeTypeScriptPath(relative(projectRoot, absolutePath));
+  const relativePath = normalizeTypeScriptPath(relative(context.sourceRoot, absolutePath));
   if (relativePath.startsWith('../') || relativePath.includes(':/')) return null;
-  if (relativePath.startsWith('src/')) return relativePath;
-  const [runDirectory, ...rest] = relativePath.split('/');
-  const isolatedPath = rest.join('/');
-  return runDirectory.startsWith('run-') && isolatedPath.startsWith('src/')
-    ? isolatedPath
-    : null;
+  return relativePath.startsWith('src/') ? relativePath : null;
 }
 
 function isProductionTypeScriptPath(path: string): boolean {

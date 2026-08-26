@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { ArchitectureSource } from '@/tests/helpers/moduleDependencyAudit';
 import {
+  closeTypeScriptAuditResources,
   withIsolatedTypeScriptProject,
   withProductionTypeScriptProject,
 } from '@/tests/helpers/typescriptAudit';
@@ -322,28 +323,90 @@ describe('frontend architecture model', () => {
       },
     );
 
-    const outOfRootPath = 'src/views/out-of-root.ts';
-    const outOfRootSource = "import { forged } from '../../sibling/src/forged'; void forged;";
+  });
+
+  it('rejects forged declarations outside the exact audit source root', () => {
+    const isolatedPath = 'src/views/out-of-root.ts';
+    const isolatedSource = "import { forged } from '../../sibling/src/forged'; void forged;";
     withIsolatedTypeScriptProject(
       new Map([
-        [outOfRootPath, outOfRootSource],
+        [isolatedPath, isolatedSource],
         ['sibling/src/forged.ts', 'export const forged = true;'],
       ]),
       (context) => {
         let failure: unknown;
         try {
-          resolvedModuleDependencies(context, { path: outOfRootPath, source: outOfRootSource });
+          resolvedModuleDependencies(context, { path: isolatedPath, source: isolatedSource });
         } catch (error) {
           failure = error;
         }
         expect(failure).toBeInstanceOf(ModuleDependencyResolutionError);
         expect(failure).toMatchObject({
           kind: 'unresolved-module-dependency',
-          sourceFile: outOfRootPath,
+          sourceFile: isolatedPath,
           writtenSpecifier: '../../sibling/src/forged',
         });
       },
     );
+
+    const sandbox = mkdtempSync(join(tmpdir(), 'yssbi-typescript-source-root-'));
+    const importerPath = join(sandbox, 'src', 'views', 'screen.ts');
+    const forgedPath = join(sandbox, 'run-1', 'src', 'forged.ts');
+    const configPath = join(sandbox, 'tsconfig.json');
+    const source = "import { forged } from '../../run-1/src/forged'; void forged;";
+    mkdirSync(join(sandbox, 'src', 'views'), { recursive: true });
+    mkdirSync(join(sandbox, 'run-1', 'src'), { recursive: true });
+    writeFileSync(importerPath, source);
+    writeFileSync(forgedPath, 'export const forged = true;');
+    writeFileSync(configPath, JSON.stringify({
+      compilerOptions: { noLib: true, strict: true, target: 'esnext' },
+      files: ['src/views/screen.ts', 'run-1/src/forged.ts'],
+    }));
+
+    let failure: unknown;
+    try {
+      withProductionTypeScriptProject((context) => {
+        expect(productionTypeScriptSources(context).map(({ path }) => path)).toEqual([
+          'src/views/screen.ts',
+        ]);
+        resolvedModuleDependencies(context, { path: importerPath, source });
+      }, configPath);
+    } catch (error) {
+      failure = error;
+    } finally {
+      closeTypeScriptAuditResources();
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+    expect(failure).toBeInstanceOf(ModuleDependencyResolutionError);
+    expect(failure).toMatchObject({
+      kind: 'unresolved-module-dependency',
+      sourceFile: importerPath,
+      writtenSpecifier: '../../run-1/src/forged',
+    });
+  });
+
+  it('fails closed for recognized dependencies without literal specifiers', () => {
+    const cases = [
+      ['src/views/nonliteral-import-type.ts', 'type Contract = import(Target).Contract;'],
+      ['src/views/missing-dynamic-import-argument.ts', 'const loaded = import(); void loaded;'],
+    ] as const;
+
+    withIsolatedTypeScriptProject(new Map(cases), (context) => {
+      for (const [path, source] of cases) {
+        let failure: unknown;
+        try {
+          resolvedModuleDependencies(context, { path, source });
+        } catch (error) {
+          failure = error;
+        }
+        expect(failure, path).toBeInstanceOf(ModuleDependencyResolutionError);
+        expect(failure, path).toMatchObject({
+          kind: 'nonliteral-module-specifier',
+          sourceFile: path,
+          writtenSpecifier: null,
+        });
+      }
+    });
   });
 
   it('inventories the complete frontend production tree', () => {

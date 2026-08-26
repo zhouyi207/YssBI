@@ -1428,3 +1428,7 @@ Execution 不知道具体 UI
 - [ ] 将 TypeScript declaration 路径解析绑定到实际 tsconfig 项目根，仅显式映射隔离 `run-N/src/**`，拒绝仓库外非 node_modules 声明伪装成内部层。
 - [ ] 在 canonical module resolver 回归中覆盖含 `/src/` 的 sibling declaration，冻结 `unresolved-module-dependency` typed failure。
 - [ ] 在逐输入 stylesheet 表中加入真实存在目标的 `./../parent.css`，规范化前拒绝任意相对父段并保持 exact error 与零 dependency。
+- [ ] 为 TypeScript audit context 记录当前精确 source root，使 production 与每次 isolated run 只从各自根目录 canonicalize `src/**`。
+- [ ] 删除 declaration 与 production inventory 对任意 `run-N/src/**` 的名称猜测，并回归拒绝伪造 source root 外的 sibling 与顶层 run 目录。
+- [ ] 让 collector 无条件保留已识别的 type-only/runtime dependency，统一由 resolver 对非字面量 import type 与缺参动态 import 返回 typed failure。
+- [ ] 复验 Task 4 全部 architecture contracts、project filesystem contract、TypeScript typecheck 与 diff check，并继续隔离 Task 5 classifier RED 草稿。

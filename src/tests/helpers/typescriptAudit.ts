@@ -9,6 +9,7 @@ export type TypeScriptSourceMap = Readonly<Record<string, string>> | ReadonlyMap
 export interface TypeScriptAuditProject {
   readonly project: Project;
   readonly checker: Project['checker'];
+  readonly sourceRoot: string;
   sourceFile(path: string): SourceFile;
 }
 
@@ -115,6 +116,7 @@ class IsolatedProjectHost {
       return callback({
         project,
         checker: project.checker,
+        sourceRoot: runRoot,
         sourceFile: (path) => requiredSourceFile(
           project,
           `${runRoot}/${fixtureRelativePath(path)}`,
@@ -153,6 +155,7 @@ class ProductionProjectHost {
       this.context = {
         project,
         checker: project.checker,
+        sourceRoot: normalizeTypeScriptPath(dirname(this.configPath)),
         sourceFile: (path) => requiredSourceFile(
           project,
           normalizeTypeScriptPath(resolve(path)),
