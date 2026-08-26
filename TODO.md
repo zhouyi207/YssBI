@@ -1435,3 +1435,6 @@ Execution 不知道具体 UI
 - [ ] 为嵌套 ImportTypeNode 与 dynamic import options 增加 focused regression，逐项冻结 outer/inner dependency 的 syntax kind 与 canonical origin。
 - [ ] 已识别 import type 与 module call 在记录当前 edge 后继续遍历子节点，同时保留 import/export/import-equals 的声明级去重语义。
 - [ ] 使用临时未跟踪 Task 5 stub 复验 focused、Task 4 architecture、project filesystem contract 与 TypeScript typecheck，并在 staging 前删除 stub。
+- [ ] 扩展 nested dependency regression，冻结 `export default import()` 外层 export-assignment 与 options 内层 dynamic-import 的逐项 canonical origin。
+- [ ] 让 ExportAssignment 记录外层 module edge 后遍历 call children，同时避免重访 call 自身导致外层 dependency 重复。
+- [ ] 复验 round 6 focused、Task 4 全组、project filesystem contract、带临时 Task 5 stub 的 typecheck 与 diff check，并继续隔离 classifier RED 草稿。

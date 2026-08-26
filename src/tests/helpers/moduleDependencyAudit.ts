@@ -287,6 +287,7 @@ function collectModuleDependencies(sourceFile: ts.SourceFile): CollectedModuleDe
           node,
           call?.arguments[0] ?? null,
         );
+        call?.forEachChild(visit);
         return;
       }
     }

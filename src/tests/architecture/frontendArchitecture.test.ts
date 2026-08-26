@@ -330,6 +330,7 @@ describe('frontend architecture model', () => {
       ['src/views/nested.ts', `
         export type Nested = import('./outer').Box<import('./inner').Thing>;
         void import('./outer', { with: { type: import('./inner') } });
+        export default import('./outer', (import('./inner'), {}));
       `],
       ['src/views/outer.ts', 'export interface Box<T> { readonly value: T; }'],
       ['src/views/inner.ts', 'export interface Thing { readonly value: string; }'],
@@ -355,6 +356,14 @@ describe('frontend architecture model', () => {
         },
         {
           kind: 'dynamic-import',
+          canonicalOriginTarget: 'src/views/outer.ts',
+        },
+        {
+          kind: 'dynamic-import',
+          canonicalOriginTarget: 'src/views/inner.ts',
+        },
+        {
+          kind: 'export-assignment',
           canonicalOriginTarget: 'src/views/outer.ts',
         },
         {
