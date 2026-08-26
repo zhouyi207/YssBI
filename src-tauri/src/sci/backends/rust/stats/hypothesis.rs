@@ -5,7 +5,7 @@ use yss_sci::stats::{
 use crate::sci::api::stats::hypothesis::{
     Alternative, LinearHypothesisTestInput, TTestOutput, WaldTestOutput,
 };
-use crate::sci::error::SciError;
+use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
 
 pub fn t_test(input: LinearHypothesisTestInput<'_>) -> Result<TTestOutput, SciError> {
     let result = yss_t_test(
@@ -17,7 +17,10 @@ pub fn t_test(input: LinearHypothesisTestInput<'_>) -> Result<TTestOutput, SciEr
         convert_alternative(input.alternative),
         input.constraint_desc,
     )
-    .map_err(SciError::invalid_input)?;
+    .map_err(|_| SciError::InvalidInput {
+        operation: SciOperationCode::TTest,
+        violation: SciInputViolation::ShapeMismatch,
+    })?;
 
     Ok(TTestOutput {
         alternative: result.alternative,
@@ -38,7 +41,10 @@ pub fn wald_test(input: LinearHypothesisTestInput<'_>) -> Result<WaldTestOutput,
         convert_alternative(input.alternative),
         input.constraint_desc,
     )
-    .map_err(SciError::invalid_input)?;
+    .map_err(|_| SciError::InvalidInput {
+        operation: SciOperationCode::WaldTest,
+        violation: SciInputViolation::ShapeMismatch,
+    })?;
 
     Ok(WaldTestOutput {
         alternative: result.alternative,

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::sci::backends::rust;
 use crate::sci::engine::SciContext;
-use crate::sci::error::SciError;
+use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SerialTestsInput {
@@ -63,7 +63,10 @@ pub fn compute_serial_tests(
 fn normalized_lags(input: &SerialTestsInput) -> Result<usize, SciError> {
     let n = input.residuals.len();
     if n < 4 {
-        return Err(SciError::invalid_input("序列相关检验: 至少需要 4 个观测值"));
+        return Err(SciError::InvalidInput {
+            operation: SciOperationCode::SerialTests,
+            violation: SciInputViolation::EmptyInput,
+        });
     }
     Ok(input.lags.min(n / 2 - 1).min(40).max(1))
 }

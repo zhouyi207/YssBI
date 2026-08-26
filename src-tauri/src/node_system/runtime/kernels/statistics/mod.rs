@@ -8,7 +8,9 @@ use crate::node_system::runtime::{
     prepare_numeric_rows, require_data_series,
 };
 use crate::project::{NumericTolerance, StatisticalMissingValuePolicy};
-use crate::sci::models::regression::{StatisticalObservationMetadata, StatisticalSettingSource};
+use crate::sci::api::computation::{
+    MissingValuePolicy, StatisticalObservationMetadata, StatisticalSettingSource,
+};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -89,9 +91,9 @@ impl Default for StatisticsKernelParameters {
             regression: None,
             trend: None,
             convergence_tolerance: NumericTolerance::default().absolute,
-            convergence_tolerance_source: StatisticalSettingSource::Project,
+            convergence_tolerance_source: StatisticalSettingSource::ProjectDefault,
             missing_value_policy: StatisticalMissingValuePolicy::default(),
-            missing_value_policy_source: StatisticalSettingSource::Project,
+            missing_value_policy_source: StatisticalSettingSource::ProjectDefault,
         }
     }
 }
@@ -238,7 +240,10 @@ fn prepare_statistics_rows(
             used_observation_count: rows.used_row_count(),
             dropped_null_count: rows.dropped_null_count(),
             dropped_nan_count: rows.dropped_nan_count(),
-            missing_value_policy: parameters.missing_value_policy,
+            missing_value_policy: match parameters.missing_value_policy {
+                StatisticalMissingValuePolicy::Listwise => MissingValuePolicy::Listwise,
+                StatisticalMissingValuePolicy::Reject => MissingValuePolicy::Reject,
+            },
             missing_value_policy_source: parameters.missing_value_policy_source,
             effective_convergence_tolerance: parameters.convergence_tolerance,
             convergence_tolerance_source: parameters.convergence_tolerance_source,
@@ -318,7 +323,7 @@ fn regression_fit(
         weights,
         prepared.metadata,
     )
-    .map_err(KernelError::new)
+    .map_err(|error| KernelError::new(error.to_string()))
 }
 
 fn float_series(values: Vec<f64>, name: &'static str) -> Result<RuntimeValue, KernelError> {
@@ -538,7 +543,7 @@ fn execute_operation(
                 parameters.lags.unwrap_or(1),
                 parameters.regression.as_deref().unwrap_or("constant"),
             )
-            .map_err(KernelError::new)?;
+            .map_err(|error| KernelError::new(error.to_string()))?;
             Ok(vec![RuntimeValue::Scalar(protocol_value(result)?)])
         }
         VarLagOrder => {
@@ -560,7 +565,7 @@ fn execute_operation(
                     .collect(),
                 parameters.max_lags.unwrap_or(4),
             )
-            .map_err(KernelError::new)?;
+            .map_err(|error| KernelError::new(error.to_string()))?;
             Ok(vec![RuntimeValue::Scalar(protocol_value(result)?)])
         }
         VecFit => {
@@ -583,7 +588,7 @@ fn execute_operation(
                 parameters.lags.unwrap_or(1),
                 parameters.trend.as_deref().unwrap_or("constant"),
             )
-            .map_err(KernelError::new)?;
+            .map_err(|error| KernelError::new(error.to_string()))?;
             let model = result_with_metadata(result, &prepared.metadata, "vec")?;
             Ok(vec![
                 RuntimeValue::Scalar(model),
@@ -610,7 +615,7 @@ fn execute_operation(
                 parameters.max_lags.unwrap_or(4),
                 parameters.trend.as_deref().unwrap_or("constant"),
             )
-            .map_err(KernelError::new)?;
+            .map_err(|error| KernelError::new(error.to_string()))?;
             Ok(vec![RuntimeValue::Scalar(protocol_value(result)?)])
         }
         OlsSummary | GlsSummary | LogitSummary | PraisSummary | ProbitSummary | WlsSummary => {
@@ -656,7 +661,7 @@ fn execute_operation(
                     .collect(),
                 parameters.lags.unwrap_or(1),
             )
-            .map_err(KernelError::new)?;
+            .map_err(|error| KernelError::new(error.to_string()))?;
             Ok(vec![
                 RuntimeValue::Scalar(result_with_metadata(result, &prepared.metadata, "var")?),
                 RuntimeValue::Scalar(Value::String("VAR estimation from yss_sci".into())),
@@ -700,7 +705,7 @@ fn execute_operation(
                 series[2].clone(),
                 series[3].clone(),
             )
-            .map_err(KernelError::new)?;
+            .map_err(|error| KernelError::new(error.to_string()))?;
             Ok(vec![
                 RuntimeValue::Scalar(result_with_metadata(
                     result,
@@ -746,7 +751,7 @@ fn execute_operation(
             let result = crate::sci::api::node_statistics::fit_panel(
                 response, series, entity, time, treatment,
             )
-            .map_err(KernelError::new)?;
+            .map_err(|error| KernelError::new(error.to_string()))?;
             Ok(vec![
                 RuntimeValue::Scalar(result_with_metadata(
                     result,

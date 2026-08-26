@@ -687,6 +687,7 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "project" => Some(RustLayer::Project),
         "database" => Some(RustLayer::DatabaseCore),
         "diagnostics" => Some(RustLayer::Diagnostics),
+        "execution" => Some(RustLayer::Execution),
         "sci" if namespace.starts_with("sci::backends::julia") => Some(RustLayer::BackendAdapter),
         "sci" => Some(RustLayer::SciCore),
         "julia" => Some(RustLayer::BackendAdapter),

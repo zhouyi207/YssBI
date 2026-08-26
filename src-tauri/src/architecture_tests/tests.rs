@@ -347,6 +347,11 @@ fn rust_layer_classifier_is_total_and_exclusive() {
                 "src-tauri/src/graph/value/type_system.rs",
                 "fixture_lib::graph::value::type_system",
             ),
+            module(
+                &runtime_root,
+                "src-tauri/src/execution/settings.rs",
+                "fixture_lib::execution::settings",
+            ),
             module(&build_root, "src-tauri/build.rs", "build_script_build"),
             module(
                 &build_root,
@@ -379,6 +384,10 @@ fn rust_layer_classifier_is_total_and_exclusive() {
     assert_eq!(
         classified["src-tauri/src/graph/value/type_system.rs"],
         RustLayer::Graph
+    );
+    assert_eq!(
+        classified["src-tauri/src/execution/settings.rs"],
+        RustLayer::Execution
     );
     assert_eq!(classified["src-tauri/build.rs"], RustLayer::BuildScript);
     assert_eq!(
@@ -806,6 +815,142 @@ fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_
         &expectation,
         &BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
     ));
+}
+
+#[test]
+fn task1_sci_contracts_are_isolated_and_canonical() {
+    const TASK1_SCI_FILES: &[&str] = &[
+        "src-tauri/src/sci/api/computation.rs",
+        "src-tauri/src/sci/api/node_statistics.rs",
+        "src-tauri/src/sci/api/time_series/acf_pacf.rs",
+        "src-tauri/src/sci/api/time_series/serial_tests.rs",
+        "src-tauri/src/sci/backends/rust/stats/hypothesis.rs",
+        "src-tauri/src/sci/backends/rust/time_series/acf_pacf.rs",
+        "src-tauri/src/sci/error.rs",
+        "src-tauri/src/sci/models/regression.rs",
+    ];
+
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
+        .expect("the real Cargo workspace must be discoverable");
+    let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
+        .expect("the production module graph must be discoverable");
+    let classification = classify_rust_sources(&workspace.roots, &modules)
+        .expect("every production source must classify exactly once");
+    let raw_dependencies =
+        collect_production_dependencies(&workspace.repository_root, &workspace.roots)
+            .expect("production dependency facts must be discoverable");
+    let dependencies = resolve_canonical_dependencies_detailed(&workspace, &raw_dependencies)
+        .expect("production dependency origins must resolve");
+
+    let forbidden = dependencies
+        .iter()
+        .filter(|dependency| TASK1_SCI_FILES.contains(&dependency.source_file.as_str()))
+        .filter(|dependency| match &dependency.origin {
+            CanonicalOrigin::Repository {
+                repository_relative_declaration_file,
+                ..
+            } => matches!(
+                classification.get(repository_relative_declaration_file),
+                Some(RustLayer::Graph | RustLayer::Project | RustLayer::Execution)
+            ),
+            CanonicalOrigin::External(origin) => origin.package_name == "tauri",
+            CanonicalOrigin::LanguageBuiltin { .. } | CanonicalOrigin::RepositoryAsset { .. } => {
+                false
+            }
+        })
+        .map(|dependency| {
+            format!(
+                "{}|{}",
+                dependency.source_file, dependency.canonical_origin_target
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        forbidden.is_empty(),
+        "Task 1 SCI contracts must not import Graph, Project, Execution, or Tauri: {forbidden:#?}"
+    );
+
+    for (symbol, expected_origins) in [
+        (
+            "CategoricalRole",
+            BTreeSet::from([
+                "src-tauri/src/data_contract/data_value.rs",
+                "src-tauri/src/sci/api/computation.rs",
+            ]),
+        ),
+        (
+            "StatisticalObservationMetadata",
+            BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
+        ),
+        (
+            "StatisticalSettingSource",
+            BTreeSet::from(["src-tauri/src/sci/api/computation.rs"]),
+        ),
+    ] {
+        let actual_origins = dependencies
+            .iter()
+            .filter_map(|dependency| match &dependency.origin {
+                CanonicalOrigin::Repository {
+                    repository_relative_declaration_file,
+                    symbol: origin_symbol,
+                    ..
+                } if origin_symbol == symbol => Some(repository_relative_declaration_file.as_str()),
+                CanonicalOrigin::Repository { .. }
+                | CanonicalOrigin::LanguageBuiltin { .. }
+                | CanonicalOrigin::RepositoryAsset { .. }
+                | CanonicalOrigin::External(_) => None,
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            actual_origins, expected_origins,
+            "{symbol} must have only its approved canonical owner(s)"
+        );
+    }
+
+    let computation_data_value_origins = dependencies
+        .iter()
+        .filter_map(|dependency| match &dependency.origin {
+            CanonicalOrigin::Repository {
+                repository_relative_declaration_file,
+                symbol,
+                ..
+            } if dependency.source_file == "src-tauri/src/sci/api/computation.rs"
+                && symbol == "DataValue" =>
+            {
+                Some(repository_relative_declaration_file.as_str())
+            }
+            CanonicalOrigin::Repository { .. }
+            | CanonicalOrigin::LanguageBuiltin { .. }
+            | CanonicalOrigin::RepositoryAsset { .. }
+            | CanonicalOrigin::External(_) => None,
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        computation_data_value_origins,
+        BTreeSet::from(["src-tauri/src/data_contract/data_value.rs"]),
+        "StatisticalInputSource values must borrow the persisted DataValue owner"
+    );
+    let computation_persisted_role_dependencies = dependencies
+        .iter()
+        .filter(|dependency| {
+            dependency.source_file == "src-tauri/src/sci/api/computation.rs"
+                && matches!(
+                    &dependency.origin,
+                    CanonicalOrigin::Repository {
+                        repository_relative_declaration_file,
+                        symbol,
+                        ..
+                    } if repository_relative_declaration_file
+                        == "src-tauri/src/data_contract/data_value.rs"
+                        && symbol == "CategoricalRole"
+                )
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        computation_persisted_role_dependencies.is_empty(),
+        "StatisticalInputSource must expose the SCI-owned CategoricalRole"
+    );
 }
 
 #[test]

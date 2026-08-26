@@ -1428,3 +1428,9 @@ Execution 不知道具体 UI
 - [ ] 为 canonical-owner production guard 增加基于 `syn::Item::Type` 的窄扫描，拒绝 Graph 对六类 persisted data-contract symbol 的 type alias。
 - [ ] 拒绝 SCI 对 persisted `CategoricalRole` 的 type alias，同时保留 `sci/api/computation.rs` 独立声明作为唯一批准 SCI owner。
 - [ ] 增加真实 Rust source fixture 回归，覆盖 Graph 六类 alias、SCI alias、独立 SCI enum 与 test-only alias 排除，并执行 focused RED/GREEN 验证。
+- [ ] 将 SCI 统计设置、分类角色、统计标量输入与九字段 observation metadata 原子迁入 `sci/api/computation.rs`，保持既有 metadata 字段名及 `project`/`node` 序列化值。
+- [ ] 新增 Application-owned Project→SCI/Execution settings 与 persisted value/role→SCI input 穷尽映射，使用 closed typed errors 拒绝非有限数值和不支持的持久化值。
+- [ ] 建立 production-unreachable 的独立 `execution/settings.rs` contract，并保持现有 Project run-parameter 与 node runtime settings 路径不变，留待 Execution Task 8 切换。
+- [ ] 将 public SCI statistics、ACF/PACF、serial tests 与 hypothesis adapter 的字符串错误迁为 operation/violation typed `SciError`，禁止 raw algorithm text 决定稳定错误码。
+- [ ] 为 Execution owner 增加 fail-closed layer classification，精确删除 SCI→Project missing-value debt并迁移其余 canonical debt keys，新增 SCI 隔离与 canonical-owner production guard。
+- [ ] 按 TDD 运行 settings、statistical input、metadata wire 与 typed SCI error 的 RED/GREEN focused tests，并执行 Rust 编译、架构 policy、格式及 diff 验证。

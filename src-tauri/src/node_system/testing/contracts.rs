@@ -645,17 +645,17 @@ fn fingerprint_wire_from_production_encoders(catalog: &Value, editor: &Value) ->
 }
 
 fn ols_summary_report_contract() -> Value {
-    let metadata = crate::sci::models::regression::StatisticalObservationMetadata {
+    let metadata = crate::sci::api::computation::StatisticalObservationMetadata {
         original_observation_count: 3,
         used_observation_count: 3,
         dropped_null_count: 0,
         dropped_nan_count: 0,
-        missing_value_policy: crate::project::StatisticalMissingValuePolicy::Listwise,
+        missing_value_policy: crate::sci::api::computation::MissingValuePolicy::Listwise,
         missing_value_policy_source:
-            crate::sci::models::regression::StatisticalSettingSource::Project,
+            crate::sci::api::computation::StatisticalSettingSource::ProjectDefault,
         effective_convergence_tolerance: 1e-12,
         convergence_tolerance_source:
-            crate::sci::models::regression::StatisticalSettingSource::Project,
+            crate::sci::api::computation::StatisticalSettingSource::ProjectDefault,
         convergence_tolerance_consumed: false,
     };
     use crate::sci::models::regression::{

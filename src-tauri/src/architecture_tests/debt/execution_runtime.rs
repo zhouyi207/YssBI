@@ -449,12 +449,12 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (
                 Path,
                 2,
-                "yssbi_lib::sci::models::regression::StatisticalSettingSource::Node"
+                "yssbi_lib::sci::api::computation::StatisticalSettingSource::NodeOverride"
             ),
             (
                 Path,
                 2,
-                "yssbi_lib::sci::models::regression::StatisticalSettingSource::Project"
+                "yssbi_lib::sci::api::computation::StatisticalSettingSource::ProjectDefault"
             ),
         ],
     );
@@ -559,18 +559,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         entries,
         EXECUTION_RUNTIME_SPEC,
         "rust.internal.source-layer",
-        "src-tauri/src/sci/models/regression.rs",
-        "yssbi_lib::sci::models::regression",
-        [(
-            Path,
-            1,
-            "yssbi_lib::project::computation_settings::StatisticalMissingValuePolicy"
-        )],
-    );
-    debt_group!(
-        entries,
-        EXECUTION_RUNTIME_SPEC,
-        "rust.internal.source-layer",
         "src-tauri/src/node_system/runtime/kernels/distribution/mod.rs",
         "yssbi_lib::node_system::runtime::kernels::distribution",
         [(Use, 1, "yssbi_lib::node_system::protocol::value::Value"),],
@@ -632,12 +620,17 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (
                 Use,
                 1,
-                "yssbi_lib::sci::models::regression::StatisticalObservationMetadata"
+                "yssbi_lib::sci::api::computation::MissingValuePolicy"
             ),
             (
                 Use,
                 1,
-                "yssbi_lib::sci::models::regression::StatisticalSettingSource"
+                "yssbi_lib::sci::api::computation::StatisticalObservationMetadata"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::sci::api::computation::StatisticalSettingSource"
             ),
             (
                 Path,
