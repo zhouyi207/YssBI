@@ -57,6 +57,13 @@ fn emit_global_result(emit: &mut impl FnMut(Event), result: &ResourceMutationRes
     }));
 }
 
+fn variable_dto(
+    variable: &crate::variable::VariableInstance,
+) -> Result<VariableInstanceDTO, CommandError> {
+    VariableInstanceDTO::try_from(variable)
+        .map_err(|error| CommandError::diagnosed("variable_dto_mapping_failed", error))
+}
+
 fn create_variable_with_emitter(
     state: &ProjectState,
     name: &str,
@@ -88,7 +95,7 @@ fn create_variable_with_emitter(
         emit_global_result(&mut emit, &committed.result);
         return Ok(VariableCommandResult {
             variable_id: committed.variable.id.to_string(),
-            variable: Some((&committed.variable).into()),
+            variable: Some(variable_dto(&committed.variable)?),
             result: Some(committed.result),
         });
     }
@@ -108,7 +115,7 @@ fn create_variable_with_emitter(
     emit_global_result(&mut emit, &committed.result);
     Ok(VariableCommandResult {
         variable_id: committed.variable.id.to_string(),
-        variable: Some((&committed.variable).into()),
+        variable: Some(variable_dto(&committed.variable)?),
         result: Some(committed.result),
     })
 }
@@ -151,7 +158,7 @@ fn update_variable_with_emitter(
         emit_global_result(&mut emit, &committed.result);
         return Ok(VariableCommandResult {
             variable_id: committed.variable.id.to_string(),
-            variable: Some((&committed.variable).into()),
+            variable: Some(variable_dto(&committed.variable)?),
             result: Some(committed.result),
         });
     }
@@ -171,7 +178,7 @@ fn update_variable_with_emitter(
     emit_global_result(&mut emit, &committed.result);
     Ok(VariableCommandResult {
         variable_id: committed.variable.id.to_string(),
-        variable: Some((&committed.variable).into()),
+        variable: Some(variable_dto(&committed.variable)?),
         result: Some(committed.result),
     })
 }
@@ -271,7 +278,7 @@ pub fn get_variable(
         .get_variable(&variable_id)
         .map_err(CommandError::from)?
         .ok_or_else(|| CommandError::expected("variable_not_found"))?;
-    Ok((&variable).into())
+    variable_dto(&variable)
 }
 
 /// 更新变量（统一接口，部分更新）

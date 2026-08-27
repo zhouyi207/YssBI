@@ -5,7 +5,7 @@ use super::{ProjectFilesystemError, ProjectState};
 #[cfg(test)]
 use crate::data_contract::{DataType, DataValue};
 
-use crate::tabular::normalize_variable_tabular;
+use crate::project::variable_tabular::normalize_variable_tabular;
 use crate::variable::VariableId;
 use crate::variable::VariableInstance;
 #[cfg(test)]
@@ -15,8 +15,11 @@ impl ProjectState {
     pub(super) fn stage_variable(
         mut variable: VariableInstance,
     ) -> Result<VariableInstance, ProjectFilesystemError> {
-        normalize_variable_tabular(&mut variable)
-            .map_err(|message| ProjectFilesystemError::TransactionCommitFailed { message })?;
+        normalize_variable_tabular(&mut variable).map_err(|error| {
+            ProjectFilesystemError::TransactionCommitFailed {
+                message: error.to_string(),
+            }
+        })?;
         Ok(variable)
     }
 

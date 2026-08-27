@@ -6,6 +6,7 @@ use std::thread;
 
 use polars::prelude::{DataFrame, Float64Chunked};
 
+use crate::database::tabular_io::{read_ipc_dataframe, write_csv_dataframe};
 use crate::error::new_diagnostic_incident_id;
 use crate::julia::worker::JuliaWorkerTaskDirectory;
 use crate::project::{ProjectDatabaseError, ProjectState};
@@ -18,7 +19,6 @@ use crate::sci::api::bayes::{
     ResultArtifactKind, TaskError, TaskProgress, TaskStatus, TracePlotData, TracePoint,
     TraceSeries, draft_to_model_spec, validate_bayes_input_table,
 };
-use crate::tabular::dataframe_io::{read_ipc_dataframe, write_csv_dataframe};
 
 #[derive(Debug)]
 pub enum BayesApplicationError {
@@ -345,7 +345,7 @@ impl BayesInferenceService {
         write_csv_dataframe(Path::new(destination), &mut dataframe).map_err(|source| {
             BayesApplicationError::ArtifactWriteFailed {
                 destination: destination.to_string(),
-                source,
+                source: source.to_string(),
             }
         })
     }
@@ -594,8 +594,12 @@ fn read_bayes_artifact_dataframe(
     path: &str,
     context: &'static str,
 ) -> Result<DataFrame, BayesApplicationError> {
-    read_ipc_dataframe(Path::new(path))
-        .map_err(|source| BayesApplicationError::ArtifactReadFailed { context, source })
+    read_ipc_dataframe(Path::new(path)).map_err(|source| {
+        BayesApplicationError::ArtifactReadFailed {
+            context,
+            source: source.to_string(),
+        }
+    })
 }
 
 fn validate_paging(offset: usize, limit: usize) -> Result<(), BayesApplicationError> {

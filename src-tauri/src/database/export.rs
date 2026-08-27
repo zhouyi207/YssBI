@@ -3,7 +3,7 @@ use std::path::Path;
 use duckdb::Connection;
 use polars::prelude::DataFrame;
 
-use crate::tabular::dataframe_io::{write_csv_dataframe, write_parquet_dataframe};
+use crate::database::tabular_io::{write_csv_dataframe, write_parquet_dataframe};
 
 use super::{quote_duckdb_identifier, quote_duckdb_string_literal};
 
@@ -29,8 +29,12 @@ pub fn export_dataframe(
     format: DatabaseExportFormat,
 ) -> Result<(), String> {
     match format {
-        DatabaseExportFormat::Csv => write_csv_dataframe(path, dataframe),
-        DatabaseExportFormat::Parquet => write_parquet_dataframe(path, dataframe),
+        DatabaseExportFormat::Csv => {
+            write_csv_dataframe(path, dataframe).map_err(|error| error.to_string())
+        }
+        DatabaseExportFormat::Parquet => {
+            write_parquet_dataframe(path, dataframe).map_err(|error| error.to_string())
+        }
     }
 }
 

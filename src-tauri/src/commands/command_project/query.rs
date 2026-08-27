@@ -554,7 +554,8 @@ mod tests {
             .unwrap();
 
         let old_resources =
-            crate::application::database_schema::databases_variables_from_snapshot(old_snapshot);
+            crate::application::database_schema::databases_variables_from_snapshot(old_snapshot)
+                .unwrap();
         assert_eq!(
             old_resources.databases["shared"].name.as_deref(),
             Some("old database")

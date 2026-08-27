@@ -24,7 +24,6 @@ use crate::project::{
     WorksheetResourcePath, load_project_graph_from_file,
 };
 use crate::project::{HistoryEntryId, OperationId, ResourceRevision};
-use crate::tabular::normalize_variable_tabular;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
 

@@ -6,8 +6,7 @@ use syn::{Item, Type};
 
 use super::cargo_targets::rust_workspace_model_from_metadata;
 use super::debt::{
-    DebtCountDifference, DebtMismatch, compare_exact_rust_debt, pure_leaf_graph_document_json_debt,
-    rust_architecture_debt,
+    DebtCountDifference, DebtMismatch, compare_exact_rust_debt, rust_architecture_debt,
 };
 use super::dependency_audit::{
     collect_production_dependencies, collect_production_modules,
@@ -29,8 +28,9 @@ use super::policy::{
     rust_dependency_findings_with_capabilities,
 };
 use super::semantic_guards::{
-    PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE, graph_project_revision_bridge_violations,
-    project_to_graph_production_edges, pure_leaf_graph_document_json_violations,
+    PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE, TABULAR_CONTRACT_RULE,
+    graph_project_revision_bridge_violations, project_to_graph_production_edges,
+    pure_leaf_graph_document_json_violations, tabular_contract_source_violations,
 };
 
 fn repository_root() -> PathBuf {
@@ -835,7 +835,7 @@ fn rust_pure_leaf_graph_document_json_is_serialization_only() {
             &facts.dependencies,
             &facts.classification,
         ),
-        pure_leaf_graph_document_json_debt()
+        Vec::new()
     );
 }
 
@@ -975,6 +975,15 @@ fn database_contract_has_one_pure_owner_without_legacy_declaration_files() {
             "legacy database declaration owner must be removed: {relative}"
         );
     }
+}
+
+#[test]
+fn tabular_contract_and_adapters_are_acyclic_and_typed() {
+    let violations = tabular_contract_source_violations(&repository_root());
+    assert!(
+        violations.is_empty(),
+        "{TABULAR_CONTRACT_RULE} violations: {violations:#?}"
+    );
 }
 
 #[test]

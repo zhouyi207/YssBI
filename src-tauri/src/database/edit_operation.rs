@@ -1,7 +1,9 @@
-use chrono::{Datelike, NaiveDate, NaiveDateTime, Utc};
+use chrono::{Datelike, NaiveDate};
 use polars::chunked_array::cast::CastOptions;
 use polars::prelude::*;
 use serde::{Deserialize, Serialize};
+
+use crate::backend_adapters::tabular::polars::json_to_anyvalue;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -111,168 +113,6 @@ impl EditHistory {
     }
 }
 
-/// Converts JSON value to Polars AnyValue, strictly preserving column dtype.
-/// Returns Err if the value cannot be converted to the target type (e.g. "abc" for Float64).
-pub fn json_to_anyvalue(
-    val: &serde_json::Value,
-    dtype: &DataType,
-) -> Result<AnyValue<'static>, String> {
-    match val {
-        serde_json::Value::Null => Ok(AnyValue::Null),
-        serde_json::Value::Bool(b) => {
-            if matches!(dtype, DataType::Boolean) {
-                Ok(AnyValue::Boolean(*b))
-            } else {
-                Err(format!(
-                    "Boolean value not compatible with column type {:?}",
-                    dtype
-                ))
-            }
-        }
-        serde_json::Value::Number(n) => match dtype {
-            DataType::Int8 => n
-                .as_i64()
-                .and_then(|value| i8::try_from(value).ok())
-                .map(AnyValue::Int8)
-                .ok_or_else(|| format!("Number {n} is not a valid Int8")),
-            DataType::Int16 => n
-                .as_i64()
-                .and_then(|value| i16::try_from(value).ok())
-                .map(AnyValue::Int16)
-                .ok_or_else(|| format!("Number {n} is not a valid Int16")),
-            DataType::Int32 => n
-                .as_i64()
-                .and_then(|value| i32::try_from(value).ok())
-                .map(AnyValue::Int32)
-                .ok_or_else(|| format!("Number {n} is not a valid Int32")),
-            DataType::Int64 => n
-                .as_i64()
-                .map(AnyValue::Int64)
-                .ok_or_else(|| format!("Number {n} is not a valid Int64")),
-            DataType::UInt8 => n
-                .as_u64()
-                .and_then(|value| u8::try_from(value).ok())
-                .map(AnyValue::UInt8)
-                .ok_or_else(|| format!("Number {n} is not a valid UInt8")),
-            DataType::UInt16 => n
-                .as_u64()
-                .and_then(|value| u16::try_from(value).ok())
-                .map(AnyValue::UInt16)
-                .ok_or_else(|| format!("Number {n} is not a valid UInt16")),
-            DataType::UInt32 => n
-                .as_u64()
-                .and_then(|value| u32::try_from(value).ok())
-                .map(AnyValue::UInt32)
-                .ok_or_else(|| format!("Number {n} is not a valid UInt32")),
-            DataType::UInt64 => n
-                .as_u64()
-                .map(AnyValue::UInt64)
-                .ok_or_else(|| format!("Number {n} is not a valid UInt64")),
-            DataType::Float32 => n
-                .as_f64()
-                .filter(|value| *value >= f32::MIN as f64 && *value <= f32::MAX as f64)
-                .map(|value| AnyValue::Float32(value as f32))
-                .ok_or_else(|| format!("Number {n} is not a valid Float32")),
-            DataType::Float64 => n
-                .as_f64()
-                .map(AnyValue::Float64)
-                .ok_or_else(|| format!("Number {n} is not a valid Float64")),
-            DataType::String => Ok(AnyValue::StringOwned(n.to_string().into())),
-            _ => Err(format!(
-                "Numeric JSON values are not supported for column type {dtype:?}"
-            )),
-        },
-        serde_json::Value::String(s) => {
-            if s.is_empty() {
-                return Ok(AnyValue::Null);
-            }
-            match dtype {
-                DataType::Float32 => s
-                    .parse::<f32>()
-                    .map(AnyValue::Float32)
-                    .map_err(|_| format!("Cannot parse \"{}\" as Float32", s)),
-                DataType::Float64 => s
-                    .parse::<f64>()
-                    .map(AnyValue::Float64)
-                    .map_err(|_| format!("Cannot parse \"{}\" as Float64", s)),
-                DataType::Int8 => s
-                    .parse::<i8>()
-                    .map(AnyValue::Int8)
-                    .map_err(|_| format!("Cannot parse \"{}\" as Int8", s)),
-                DataType::Int16 => s
-                    .parse::<i16>()
-                    .map(AnyValue::Int16)
-                    .map_err(|_| format!("Cannot parse \"{}\" as Int16", s)),
-                DataType::Int32 => s
-                    .parse::<i32>()
-                    .map(AnyValue::Int32)
-                    .map_err(|_| format!("Cannot parse \"{}\" as Int32", s)),
-                DataType::Int64 => s
-                    .parse::<i64>()
-                    .map(AnyValue::Int64)
-                    .map_err(|_| format!("Cannot parse \"{}\" as Int64", s)),
-                DataType::UInt8 => s
-                    .parse::<u8>()
-                    .map(AnyValue::UInt8)
-                    .map_err(|_| format!("Cannot parse \"{}\" as UInt8", s)),
-                DataType::UInt16 => s
-                    .parse::<u16>()
-                    .map(AnyValue::UInt16)
-                    .map_err(|_| format!("Cannot parse \"{}\" as UInt16", s)),
-                DataType::UInt32 => s
-                    .parse::<u32>()
-                    .map(AnyValue::UInt32)
-                    .map_err(|_| format!("Cannot parse \"{}\" as UInt32", s)),
-                DataType::UInt64 => s
-                    .parse::<u64>()
-                    .map(AnyValue::UInt64)
-                    .map_err(|_| format!("Cannot parse \"{}\" as UInt64", s)),
-                DataType::Boolean => {
-                    let lower = s.to_lowercase();
-                    if lower == "true" || lower == "1" {
-                        Ok(AnyValue::Boolean(true))
-                    } else if lower == "false" || lower == "0" || lower == "" {
-                        Ok(AnyValue::Boolean(false))
-                    } else {
-                        Err(format!(
-                            "Cannot parse \"{}\" as Boolean (use true/false)",
-                            s
-                        ))
-                    }
-                }
-                DataType::String | DataType::Categorical(_, _) => {
-                    Ok(AnyValue::StringOwned(s.clone().into()))
-                }
-                DataType::Date => NaiveDate::parse_from_str(s, "%Y-%m-%d")
-                    .map(|d| {
-                        let epoch = NaiveDate::from_ymd_opt(1970, 1, 1)
-                            .unwrap()
-                            .num_days_from_ce();
-                        AnyValue::Date((d.num_days_from_ce() - epoch) as i32)
-                    })
-                    .map_err(|e| format!("Cannot parse \"{}\" as Date (use YYYY-MM-DD): {}", s, e)),
-                DataType::Datetime(_, _) => {
-                    let dt =
-                        NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S%.f").or_else(|_| {
-                            NaiveDate::parse_from_str(s, "%Y-%m-%d")
-                                .map(|d| d.and_hms_opt(0, 0, 0).unwrap())
-                        });
-                    dt.map(|ndt| {
-                        let ts = chrono::DateTime::<Utc>::from_naive_utc_and_offset(ndt, Utc)
-                            .timestamp_micros();
-                        AnyValue::DatetimeOwned(ts, TimeUnit::Microseconds, None)
-                    })
-                    .map_err(|e| format!("Cannot parse \"{}\" as DateTime: {}", s, e))
-                }
-                _ => Err(format!(
-                    "String JSON values are not supported for column type {dtype:?}"
-                )),
-            }
-        }
-        _ => Err("Unsupported JSON value type".to_string()),
-    }
-}
-
 pub fn anyvalue_to_json(val: AnyValue<'_>) -> serde_json::Value {
     use polars::prelude::TimeUnit;
     match val {
@@ -341,7 +181,7 @@ fn set_cell(
         .get_column_index(col)
         .ok_or_else(|| format!("Column '{}' not found", col))?;
     let dtype = df.columns()[col_idx].dtype().clone();
-    let av = json_to_anyvalue(val, &dtype)?;
+    let av = json_to_anyvalue(val, &dtype).map_err(|error| error.to_string())?;
 
     let series = df.columns()[col_idx].as_materialized_series();
     let mut new_vec: Vec<AnyValue<'static>> = Vec::with_capacity(series.len());
@@ -548,7 +388,8 @@ pub fn reverse_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), S
             let values: Vec<AnyValue<'static>> = data
                 .iter()
                 .map(|value| json_to_anyvalue(value, &dtype))
-                .collect::<Result<_, _>>()?;
+                .collect::<Result<_, _>>()
+                .map_err(|error| error.to_string())?;
             let restored = Series::from_any_values(PlSmallStr::from(name.as_str()), &values, false)
                 .map_err(|e| e.to_string())?
                 .cast(&dtype)
@@ -577,7 +418,8 @@ pub fn reverse_operation(df: &mut DataFrame, op: &EditOperation) -> Result<(), S
             let values: Vec<AnyValue<'static>> = old_data
                 .iter()
                 .map(|v| json_to_anyvalue(v, &dt))
-                .collect::<Result<_, _>>()?;
+                .collect::<Result<_, _>>()
+                .map_err(|error| error.to_string())?;
             let name = df.columns()[col_idx].name().clone();
             let restored = Series::from_any_values(name, &values, false)
                 .map_err(|e| e.to_string())?

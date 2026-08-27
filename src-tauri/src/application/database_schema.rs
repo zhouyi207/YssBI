@@ -107,17 +107,23 @@ pub fn enriched_database_dtos(
 
 pub fn databases_variables_from_snapshot(
     snapshot: ProjectResourceSnapshot,
-) -> DatabasesVariablesDTO {
+) -> Result<DatabasesVariablesDTO, ProjectFilesystemError> {
     let databases = enriched_database_dtos(&snapshot.databases, &snapshot.runtime_databases);
     let variables = snapshot
         .variables
         .iter()
-        .map(|(id, variable)| (id.to_string(), VariableInstanceDTO::from(variable)))
-        .collect();
-    DatabasesVariablesDTO {
+        .map(|(id, variable)| {
+            VariableInstanceDTO::try_from(variable)
+                .map(|dto| (id.to_string(), dto))
+                .map_err(|error| ProjectFilesystemError::TransactionPrepareFailed {
+                    message: error.to_string(),
+                })
+        })
+        .collect::<Result<_, _>>()?;
+    Ok(DatabasesVariablesDTO {
         databases,
         variables,
-    }
+    })
 }
 
 pub fn project_databases_variables(
@@ -125,7 +131,7 @@ pub fn project_databases_variables(
 ) -> Result<DatabasesVariablesDTO, ProjectFilesystemError> {
     state
         .project_resource_snapshot()
-        .map(databases_variables_from_snapshot)
+        .and_then(databases_variables_from_snapshot)
 }
 
 #[cfg(test)]

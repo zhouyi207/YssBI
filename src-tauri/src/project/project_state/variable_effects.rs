@@ -1,6 +1,7 @@
 //! Durable persistence and authoritative publication of runtime variable effects.
 
 use super::*;
+use crate::project::variable_tabular::normalize_variable_tabular;
 
 type PreparedVariableEffectAuthority<'a> = Box<
     dyn FnMut(

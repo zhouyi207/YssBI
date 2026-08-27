@@ -2,11 +2,11 @@ use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
 use crate::database_contract::DatabaseEngine;
 use crate::graph_document::GraphResourcePath;
 use crate::project::ResourceRevision;
+use crate::project::variable_tabular::normalize_variable_tabular;
 use crate::project::{
     NormalizedProjectRoot, ProjectData, ProjectFilesystemError, ProjectInstanceId, ProjectSession,
     ProjectState, ProjectStore, WorksheetResourcePath,
 };
-use crate::tabular::normalize_variable_tabular;
 use crate::variable::VariableId;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
