@@ -24,7 +24,7 @@ export function buildPinResultSearchEntry(
     ?? history.entries[history.entries.length - 1];
   if (!selected) return null;
 
-  const nodeTitle = labels.nodeTitle.trim() || history.output.nodeId;
+  const nodeTitle = labels.nodeTitle.trim();
   const pinName = labels.pinName.trim();
   const sourceTitle = `${selected.state.kind} · ${selected.resultId}`;
   const searchText = [nodeTitle, pinName, sourceTitle, history.graphPath, selected.runId]

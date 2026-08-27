@@ -2,7 +2,9 @@ import { useTranslation } from 'react-i18next';
 import { FiTrash2 } from 'react-icons/fi';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useExecutionStore } from '@/features/core/execution';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import { resolveNodePinDisplayLabel } from '@/features/domain/editorProjection';
 import type { RunOutputProjection } from '@/shared/types/ui';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 
@@ -20,6 +22,7 @@ export function OutputPanel() {
   const output = useExecutionStore((state) => (
     graphPath ? state.graphs[graphPath]?.runOutput ?? EMPTY_RUN_OUTPUT : EMPTY_RUN_OUTPUT
   ));
+  const graphEntities = useGraphDataStore((state) => state.graphEntities);
   const clearRunOutput = useExecutionStore((state) => state.clearRunOutput);
   const hasOutput = output.entries.length > 0 || output.projectionDropped;
 
@@ -63,34 +66,41 @@ export function OutputPanel() {
                 {t('panel.outputProjectionDropped')}
               </div>
             ) : null}
-            {output.entries.map((entry) => (
-              <div
-                key={`${entry.runId}:${entry.sequence}`}
-                className="grid grid-cols-[4rem_4rem_minmax(10rem,1fr)] items-start gap-2 border-b border-border/10 px-3 py-1.5 last:border-b-0"
-              >
-                <span className="text-right text-muted-foreground">{entry.sequence}</span>
-                <span className={entry.stream === 'stderr' ? 'text-destructive' : 'text-primary'}>
-                  {entry.stream}
-                </span>
-                <div className="min-w-0">
-                  {'text' in entry ? (
-                    <pre className="whitespace-pre-wrap wrap-break-word text-foreground">{entry.text}</pre>
-                  ) : (
-                    <span className="text-amber-500">
-                      {t(entry.status === 'truncated'
-                        ? 'panel.outputTruncated'
-                        : 'panel.outputDropped')}
-                    </span>
-                  )}
-                  <div
-                    className="truncate text-[10px] text-muted-foreground/70"
-                    title={`${entry.sourceGraphPath} · ${entry.sourceNodeId}`}
-                  >
-                    {t('panel.outputSource')}: {entry.sourceGraphPath} · {entry.sourceNodeId}
+            {output.entries.map((entry) => {
+              const sourceLabel = resolveNodePinDisplayLabel(
+                graphEntities[entry.sourceGraphPath],
+                entry.sourcePort,
+              ) ?? t('panel.outputSourceUnknown');
+
+              return (
+                <div
+                  key={`${entry.runId}:${entry.sequence}`}
+                  className="grid grid-cols-[4rem_4rem_minmax(10rem,1fr)] items-start gap-2 border-b border-border/10 px-3 py-1.5 last:border-b-0"
+                >
+                  <span className="text-right text-muted-foreground">{entry.sequence}</span>
+                  <span className={entry.stream === 'stderr' ? 'text-destructive' : 'text-primary'}>
+                    {entry.stream}
+                  </span>
+                  <div className="min-w-0">
+                    {'text' in entry ? (
+                      <pre className="whitespace-pre-wrap wrap-break-word text-foreground">{entry.text}</pre>
+                    ) : (
+                      <span className="text-amber-500">
+                        {t(entry.status === 'truncated'
+                          ? 'panel.outputTruncated'
+                          : 'panel.outputDropped')}
+                      </span>
+                    )}
+                    <div
+                      className="truncate text-[10px] text-muted-foreground/70"
+                      title={sourceLabel}
+                    >
+                      {t('panel.outputSource')}: {sourceLabel}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </ScrollArea>
       )}

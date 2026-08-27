@@ -8,6 +8,7 @@ import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAcc
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useEditorStore } from '@/features/core/editor';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import { portAddressKey } from '@/features/domain/editorProjection';
 import type { DiagnosticDto } from '@/shared/types/dto/editorProjection';
 import { DiagnosticsPanel } from './DiagnosticsPanel';
 
@@ -122,5 +123,43 @@ describe('DiagnosticsPanel', () => {
 
     expect(host.querySelectorAll('[data-diagnostics-row]')).toHaveLength(0);
     expect(host.textContent).toContain('panel.diagnosticsEmpty');
+  });
+
+  it('shows semantic port locations without exposing node or pin identities', () => {
+    const address = { kind: 'declared' as const, nodeId: 'node-a', portKey: 'value' };
+    const pinId = portAddressKey(address);
+    const portBucket = {
+      ...bucket,
+      graphNodes: ['node-a'],
+      nodes: {
+        ...bucket.nodes,
+        'node-a': {
+          ...bucket.nodes['node-a'],
+          diagnostics: [{
+            ...diagnostic('node-a', 'node.error', 'Value is invalid'),
+            location: { kind: 'port' as const, address },
+          }],
+        },
+      },
+      pins: {
+        [pinId]: {
+          id: pinId,
+          nodeId: 'node-a',
+          name: 'raw-value',
+          display: { label: 'Value', instanceLabel: null },
+          address,
+        },
+      },
+    } as unknown as GraphEntityBucket;
+    useGraphDataStore.setState({ graphEntities: { [graphPath]: portBucket } });
+    useGraphSessionStore.getState().setFocusedSession('group-1', graphPath);
+
+    act(() => {
+      root.render(<TooltipProvider><DiagnosticsPanel /></TooltipProvider>);
+    });
+
+    expect(host.textContent).toContain('Node A · Value');
+    expect(host.textContent).not.toContain('node-a');
+    expect(host.textContent).not.toContain(pinId);
   });
 });

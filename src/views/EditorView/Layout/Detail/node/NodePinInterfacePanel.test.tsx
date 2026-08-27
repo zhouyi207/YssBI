@@ -289,6 +289,36 @@ describe('NodePinInterfacePanel', () => {
     await act(async () => root.unmount());
   });
 
+  it('does not expose a raw node id when a connection target lacks its node projection', async () => {
+    const bucket = graphBucket();
+    delete bucket.nodes.target;
+    useGraphDataStore.setState({ graphEntities: { [graphPath]: bucket } });
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    await act(async () => {
+      root.render(createElement(NodePinInterfacePanel, {
+        graphPath,
+        inputs: [],
+        outputs: [output],
+      }));
+    });
+    await act(async () => {
+      container.querySelectorAll<HTMLElement>('[data-slot="collapsible-trigger"]')[1]
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await act(async () => {
+      container.querySelector<HTMLElement>('[data-slot="select-trigger"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const items = Array.from(document.querySelectorAll<HTMLElement>('[data-slot="select-item"]'));
+    expect(items.map((item) => item.textContent?.trim())).toContain('Value');
+    expect(items.map((item) => item.textContent?.trim())).not.toContain('target · Value');
+
+    await act(async () => root.unmount());
+  });
+
   it('uses the input selector to connect or clear its upstream output', async () => {
     useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket() } });
     const container = document.createElement('div');

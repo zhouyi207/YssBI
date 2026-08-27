@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { portAddressKey } from '@/features/domain/editorProjection';
 import { NodeDetailPanel, selectNodeDetailNode } from './NodeDetailPanel';
 import { NodeInspectPanel } from './NodeInspectPanel';
 
@@ -125,6 +126,70 @@ describe('NodeDetailPanel projection selection', () => {
 
     act(() => root.render(createElement(NodeInspectPanel, { graphPath, nodeId: 'shared' })));
     expect(container.querySelector('[data-testid="parameter-editor"]')).not.toBeNull();
+
+    act(() => root.unmount());
+  });
+
+  it('uses translation keys for capability and diagnostic section titles', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const graphBucket = bucket(graphPath, 'Node');
+    graphBucket.nodes.shared.diagnostics = [
+      {
+        code: 'node.warning',
+        message: 'Needs review',
+        severity: 'warning',
+        blocking: false,
+        location: { kind: 'node', nodeId: 'shared' },
+        related: [],
+      },
+    ];
+    useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket } });
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: 'shared' })));
+
+    expect(container.textContent).toContain('detail.sections.capabilities');
+    expect(container.textContent).toContain('detail.sections.diagnostics');
+    expect(container.textContent).not.toContain('Capabilities');
+    expect(container.textContent).not.toContain('Diagnostics');
+
+    act(() => root.unmount());
+  });
+
+  it('renders diagnostic port locations as node and pin titles', () => {
+    const graphPath = 'events/Main.yssbi-event';
+    const graphBucket = bucket(graphPath, 'Node');
+    const address = { kind: 'declared' as const, nodeId: 'shared', portKey: 'value' };
+    const pinId = portAddressKey(address);
+    graphBucket.nodes.shared.diagnostics = [{
+      code: 'node.error',
+      message: 'Value is invalid',
+      severity: 'error',
+      blocking: true,
+      location: { kind: 'port', address },
+      related: [],
+    }];
+    graphBucket.pins[pinId] = {
+      id: pinId,
+      nodeId: 'shared',
+      name: 'raw-value',
+      type: 'object',
+      direction: 'input',
+      display: { label: 'Value', instanceLabel: null },
+      address,
+    };
+    graphBucket.nodePins.shared = [pinId];
+    graphBucket.pinConnections[pinId] = [];
+    useGraphDataStore.setState({ graphEntities: { [graphPath]: graphBucket } });
+    const container = document.createElement('div');
+    const root = createRoot(container);
+
+    act(() => root.render(createElement(NodeDetailPanel, { graphPath, nodeId: 'shared' })));
+
+    expect(container.textContent).toContain('Node · Value');
+    expect(container.textContent).not.toContain(pinId);
+    expect(container.textContent).not.toContain('raw-value');
 
     act(() => root.unmount());
   });

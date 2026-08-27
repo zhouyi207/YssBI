@@ -1,5 +1,10 @@
 import { resolveConnectionCompatibility } from '@/shared/utils/pinCompatibility';
 import type { ConnectionData, NodeData, PinData } from '@/shared/types/store/graph';
+import {
+  formatNodePinDisplayLabel,
+  nodeDisplayTitle,
+  pinDisplayTitle,
+} from '@/features/domain/editorProjection';
 
 export interface PinConnectionOption {
   label: string;
@@ -12,19 +17,14 @@ export interface PinConnectionOptionConfig {
   includedIds?: ReadonlySet<string>;
 }
 
-function pinLabel(pin: PinData): string {
-  return pin.display?.instanceLabel ?? pin.display?.label ?? pin.name;
-}
-
-function nodeLabel(node: NodeData | undefined, fallback: string): string {
-  return node?.display?.title ?? node?.title ?? fallback;
-}
-
 export function formatPinConnectionOptionLabel(
   pin: PinData,
   nodes: Readonly<Record<string, NodeData>>,
 ): string {
-  return `${nodeLabel(nodes[pin.nodeId], pin.nodeId)} · ${pinLabel(pin)}`;
+  return formatNodePinDisplayLabel(
+    nodeDisplayTitle(nodes[pin.nodeId]),
+    pinDisplayTitle(pin),
+  ) ?? '';
 }
 
 export function listPinConnections(

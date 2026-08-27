@@ -13,8 +13,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 
-function formatPinResultLabel(entry: PinResultSearchEntry): string {
-  return `${entry.nodeTitle} · ${entry.pinName}`;
+function formatPinResultLabel(
+  entry: PinResultSearchEntry,
+  unknownNode: string,
+  unknownPin: string,
+): string {
+  return `${entry.nodeTitle || unknownNode} · ${entry.pinName || unknownPin}`;
 }
 
 function PinResultSearchRow({
@@ -24,7 +28,12 @@ function PinResultSearchRow({
   entry: PinResultSearchEntry;
   onSelect: (entry: PinResultSearchEntry) => void;
 }) {
-  const label = formatPinResultLabel(entry);
+  const { t } = useTranslation();
+  const label = formatPinResultLabel(
+    entry,
+    t('canvas.pinResultSearch.unknownNode'),
+    t('canvas.pinResultSearch.unknownPin'),
+  );
 
   return (
     <button

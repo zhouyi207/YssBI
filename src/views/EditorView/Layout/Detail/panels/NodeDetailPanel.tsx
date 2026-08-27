@@ -5,6 +5,7 @@ import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useL
 import type { GraphEntitiesState } from '@/features/core/dataStore/graphEntityAccess';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
+import { formatDiagnosticLocationLabel } from '@/features/domain/graphDiagnostics/nodeDiagnostics';
 
 import type { PinData, PinView } from '@/shared/types/store/graph';
 
@@ -40,6 +41,7 @@ interface NodeDetailPanelProps {
 export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
   const { t } = useTranslation();
   const node = useGraphDataStore((state) => selectNodeDetailNode(state, graphPath, nodeId));
+  const graphBucket = useGraphDataStore((state) => state.graphEntities[graphPath]);
   const { catalog } = useLocalizedNodeCatalog(Boolean(node));
   const pinObjs = useGraphDataStore(
     useShallow((state) => {
@@ -119,7 +121,7 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
       </DetailForm>
 
       {node.capabilities && (
-        <DetailCollapsibleSection title="Capabilities">
+        <DetailCollapsibleSection title={t('detail.sections.capabilities')}>
           <div className="flex flex-wrap gap-1.5 px-1 py-2">
             {Object.entries(node.capabilities)
               .filter(([, enabled]) => enabled)
@@ -130,16 +132,31 @@ export function NodeDetailPanel({ graphPath, nodeId }: NodeDetailPanelProps) {
         </DetailCollapsibleSection>
       )}
       {node.diagnostics && node.diagnostics.length > 0 && (
-        <DetailCollapsibleSection title="Diagnostics" defaultOpen>
+        <DetailCollapsibleSection title={t('detail.sections.diagnostics')} defaultOpen>
           <div className="space-y-2 px-1 py-2">
-            {node.diagnostics.map((diagnostic, index) => (
-              <div key={`${diagnostic.code}-${index}`} className="flex items-start gap-2">
-                <DetailBadge>{diagnostic.severity}</DetailBadge>
-                <DetailText as="span" tone="muted">
-                  {diagnostic.message}
-                </DetailText>
-              </div>
-            ))}
+            {node.diagnostics.map((diagnostic, index) => {
+              const locationLabel = formatDiagnosticLocationLabel(
+                diagnostic.location,
+                graphBucket,
+                nodeId,
+              );
+              const nodeTitle = node.display?.title ?? node.title;
+              return (
+                <div key={`${diagnostic.code}-${index}`} className="flex items-start gap-2">
+                  <DetailBadge>{diagnostic.severity}</DetailBadge>
+                  <div className="min-w-0">
+                    {locationLabel && locationLabel !== nodeTitle ? (
+                      <DetailText as="div" className="font-medium" tone="muted">
+                        {locationLabel}
+                      </DetailText>
+                    ) : null}
+                    <DetailText as="span" tone="muted">
+                      {diagnostic.message}
+                    </DetailText>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </DetailCollapsibleSection>
       )}
