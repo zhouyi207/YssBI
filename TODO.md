@@ -1545,6 +1545,9 @@ Execution 不知道具体 UI
 - [ ] 新增 Rust production serializer 生成的 `plot-payloads.json` 契约 fixture，并由 node-system contract generator 持续校验七种 Plot kind。
 - [ ] 将 TypeScript Plot 边界收敛为 camelCase-only 读取和单次 correlogram normalization，并让现有 correlation renderer 跳过 null cell。
 - [ ] 增加 Rust fixture 驱动的 Plot parser 回归覆盖，验证 pMatrix、ciHalfWidth、qStat 与 pValue 跨语言保真。
+- [ ] 增加 production Plot kernel 路径回归测试，验证 constant series 产生的未定义 correlation 与 p-value cells 序列化为 null 而不是 `0.0`。
+- [ ] 锁定 Rust Plot fixture 的七种 chart inventory，防止删除 payload record 后 TypeScript parser 契约测试静默通过。
+- [ ] 通过 zero-fallback 与缺失 scatter record 的定向 mutation 完成两项 review finding 的 RED/GREEN 验证。
 - [ ] 更新 `AGENTS.md`，明确 Rust 后端测试的编译与运行成本较高，避免迭代期间频繁运行。
 - [ ] 保持 Rust 聚焦测试与完整测试套件之间的执行边界，仅在必要场景运行 broader/full suite。
 - [ ] 更新 `AGENTS.md`，统一后端 Rust 错误使用 `thiserror` 定义类型化错误。

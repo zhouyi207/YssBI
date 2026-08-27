@@ -15,6 +15,15 @@ const fixtureByKind = Object.fromEntries(
 
 describe('Rust plot payload contract', () => {
   it('parses every current production plot kind', () => {
+    expect(fixture.payloads.map((record) => record.chart).sort()).toEqual([
+      'correlation',
+      'correlogram',
+      'ecdf',
+      'histogram',
+      'kde',
+      'line',
+      'scatter',
+    ]);
     for (const record of fixture.payloads) {
       const parsed = parsePlotPayload(record.chart as ResultPlotKind, record.data);
       expect(parsed?.kind).toBe(record.chart);
