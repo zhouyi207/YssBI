@@ -5,6 +5,7 @@ export interface DocumentState {
   resourceKey: ResourceKey;
   loaded: boolean;
   dirty: boolean;
+  draft?: unknown;
   stale: boolean;
   missing: boolean;
   conflict: boolean;
