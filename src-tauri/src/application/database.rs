@@ -15,7 +15,7 @@ use crate::database::{
     write_display_name,
 };
 use crate::database::{EditHistory, EditState};
-use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql};
+use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId};
 use crate::project::{
     ProjectDatabaseError, ProjectFilesystemError, ProjectInstanceId, ProjectSession, ProjectState,
     relative_project_duckdb_path, unique_name,
@@ -269,11 +269,11 @@ fn register_duckdb_instance(
     };
 
     let decl = DatabaseDecl {
-        id: id.clone(),
+        id: DatabaseId::from_existing(id.clone().into()),
         engine: engine_domain,
         schema_version: 1,
         required: false,
-        name: name.clone(),
+        name: name.clone().into(),
     };
 
     let instance = DatabaseInstance {
@@ -977,7 +977,7 @@ mod tests {
     fn install_loaded_database(state: &ProjectState) -> ProjectInstanceId {
         let mut project = ProjectData::new();
         let decl = DatabaseDecl {
-            id: "sales".into(),
+            id: crate::database_contract::DatabaseId::from_existing("sales".into()),
             engine: DatabaseEngine::InMemory {
                 name: "sales".into(),
             },

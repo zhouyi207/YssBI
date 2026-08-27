@@ -1090,7 +1090,7 @@ fn project_resource_authority_tracks_missing_tombstones_and_prevents_aba() {
         data.databases.insert(
             "authority".into(),
             crate::database_contract::DatabaseDecl {
-                id: "authority".into(),
+                id: crate::database_contract::DatabaseId::from_existing("authority".into()),
                 engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "authority".into(),
                 },
@@ -1149,7 +1149,7 @@ fn project_resource_authority_tracks_missing_tombstones_and_prevents_aba() {
         data.databases.insert(
             "authority".into(),
             crate::database_contract::DatabaseDecl {
-                id: "authority".into(),
+                id: crate::database_contract::DatabaseId::from_existing("authority".into()),
                 engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "authority".into(),
                 },

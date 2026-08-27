@@ -8,7 +8,7 @@ use yssbi_lib::database::{
     ingest_csv_to_duckdb, ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta,
     write_display_name,
 };
-use yssbi_lib::database_contract::{DatabaseDecl, DatabaseEngine};
+use yssbi_lib::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 use yssbi_lib::node_system::document::{DatabaseResourceKey, ResourceKey};
 use yssbi_lib::project::{
     OperationId, ProjectInstanceId, ProjectState, ResourceRevision, discover_databases_from_root,
@@ -38,7 +38,7 @@ fn database_authority(
 fn loaded_instance(dataframe: DataFrame) -> DatabaseInstance {
     DatabaseInstance {
         decl: DatabaseDecl {
-            id: "test".into(),
+            id: DatabaseId::from_existing("test".into()),
             engine: DatabaseEngine::InMemory {
                 name: "test".into(),
             },
@@ -58,7 +58,7 @@ fn duckdb_instance(duckdb_path: &PathBuf, table: &str) -> DatabaseInstance {
     let meta = read_table_meta(duckdb_path, table).unwrap();
     DatabaseInstance {
         decl: DatabaseDecl {
-            id: table.into(),
+            id: DatabaseId::from_existing(table.into()),
             engine: DatabaseEngine::DuckDb {
                 path: duckdb_path.to_string_lossy().into_owned(),
                 table: table.into(),

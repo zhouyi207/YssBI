@@ -48,7 +48,7 @@ fn dataframe_decompose_production_fixture(
         data.databases.insert(
             "main".into(),
             crate::database_contract::DatabaseDecl {
-                id: "main".into(),
+                id: crate::database_contract::DatabaseId::from_existing("main".into()),
                 engine: crate::database_contract::DatabaseEngine::DuckDb {
                     path: "database/main.duckdb".into(),
                     table: "main".into(),
@@ -71,7 +71,7 @@ fn production_decompose_projects_database_column_metadata() {
     data.databases.insert(
         "main".into(),
         crate::database_contract::DatabaseDecl {
-            id: "main".into(),
+            id: crate::database_contract::DatabaseId::from_existing("main".into()),
             engine: crate::database_contract::DatabaseEngine::InMemory {
                 name: "main".into(),
             },
@@ -653,7 +653,7 @@ fn resource_rename_updates_editor_title() {
 #[test]
 fn database_schema_resolver_attaches_canonical_field_lineage() {
     let declaration = crate::database_contract::DatabaseDecl {
-        id: "main".into(),
+        id: crate::database_contract::DatabaseId::from_existing("main".into()),
         engine: crate::database_contract::DatabaseEngine::InMemory {
             name: "main".into(),
         },
@@ -705,7 +705,7 @@ fn database_schema_resolver_attaches_canonical_field_lineage() {
 #[test]
 fn database_resource_version_changes_with_resolved_column_type() {
     let declaration = crate::database_contract::DatabaseDecl {
-        id: "main".into(),
+        id: crate::database_contract::DatabaseId::from_existing("main".into()),
         engine: crate::database_contract::DatabaseEngine::InMemory {
             name: "main".into(),
         },

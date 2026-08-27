@@ -10,7 +10,7 @@ use super::{
     ProjectComputationSettings, ProjectData, ProjectError, ProjectWorksheetIndexEntry,
     load_worksheets_from_root, read_worksheet_index_entries, scan_graph_resource_index,
 };
-use crate::database_contract::{DatabaseDecl, DatabaseEngine};
+use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
 
 use crate::graph_document::GraphDocument as NodeGraphDocument;
 use crate::variable::{VariableId, VariableInstance, VariableScope};
@@ -935,14 +935,14 @@ pub fn discover_databases_from_root(
         let display_name = crate::database::read_display_name(&duckdb_path, &table)
             .unwrap_or_else(|| table.clone());
         let decl = DatabaseDecl {
-            id: table.clone(),
+            id: DatabaseId::from_existing(table.clone().into()),
             engine: DatabaseEngine::DuckDb {
                 path: relative_path.clone(),
                 table: table.clone(),
             },
             schema_version: SCHEMA_VERSION,
             required: false,
-            name: display_name,
+            name: display_name.into(),
         };
         map.insert(table, decl);
     }

@@ -653,7 +653,7 @@ pub fn get_edit_state(
 mod tests {
     use super::*;
     use crate::database::DatabaseState;
-    use crate::database_contract::{DatabaseDecl, DatabaseEngine};
+    use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
     use crate::event::{Event, EventProject};
     use crate::project::ProjectData;
     use crate::project::{OperationId, ResourceRevision};
@@ -723,7 +723,7 @@ mod tests {
     fn install_export_database(state: &ProjectState, project_name: &str) -> ProjectInstanceId {
         let mut project = ProjectData::new();
         let decl = DatabaseDecl {
-            id: "sales".into(),
+            id: DatabaseId::from_existing("sales".into()),
             engine: DatabaseEngine::InMemory {
                 name: "sales".into(),
             },
@@ -975,7 +975,7 @@ mod tests {
         data.databases.insert(
             "writer".into(),
             DatabaseDecl {
-                id: "writer".into(),
+                id: DatabaseId::from_existing("writer".into()),
                 engine: DatabaseEngine::InMemory {
                     name: "writer".into(),
                 },
@@ -1032,7 +1032,10 @@ mod tests {
         );
         assert!(stale.is_err());
         assert_eq!(events.len(), event_count);
-        assert_eq!(state.get_data().unwrap().databases["writer"].name, "After");
+        assert_eq!(
+            state.get_data().unwrap().databases["writer"].name.as_ref(),
+            "After"
+        );
     }
 
     #[test]

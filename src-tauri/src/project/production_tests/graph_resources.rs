@@ -381,7 +381,7 @@ fn resource_descriptor_matrix_fixture(label: &str) -> ResourceDescriptorMatrixFi
     data.databases.insert(
         database_id.clone(),
         crate::database_contract::DatabaseDecl {
-            id: database_id.clone(),
+            id: crate::database_contract::DatabaseId::from_existing(database_id.clone().into()),
             engine: crate::database_contract::DatabaseEngine::InMemory {
                 name: database_id.clone(),
             },

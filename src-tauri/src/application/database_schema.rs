@@ -14,7 +14,7 @@ pub fn name_from_path(path: &str) -> String {
 }
 
 pub fn database_display_name(instance: &DatabaseInstance) -> String {
-    instance.decl.name.clone()
+    instance.decl.name.to_string()
 }
 
 #[derive(Debug)]

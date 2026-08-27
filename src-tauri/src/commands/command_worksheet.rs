@@ -442,14 +442,14 @@ pub fn get_plot_column_pair(
 mod tests {
     use super::*;
     use crate::database::{DatabaseState, EditHistory};
-    use crate::database_contract::{DatabaseDecl, DatabaseEngine};
+    use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseId};
     use crate::event::{Event, EventProject};
     use crate::project::ProjectData;
 
     fn install_plot_database(state: &ProjectState, project_name: &str) -> ProjectInstanceId {
         let mut project = ProjectData::new();
         let decl = DatabaseDecl {
-            id: "sales".into(),
+            id: DatabaseId::from_existing("sales".into()),
             engine: DatabaseEngine::InMemory {
                 name: "sales".into(),
             },

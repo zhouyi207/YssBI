@@ -63,11 +63,11 @@ pub struct DatabaseDeclDTO {
 impl From<&crate::database_contract::DatabaseDecl> for DatabaseDeclDTO {
     fn from(value: &crate::database_contract::DatabaseDecl) -> Self {
         Self {
-            id: value.id.clone(),
+            id: value.id.as_str().to_string(),
             engine: (&value.engine).into(),
             schema_version: value.schema_version,
             required: value.required,
-            name: Some(value.name.clone()),
+            name: Some(value.name.to_string()),
             columns: None,
             row_count: None,
             column_count: None,

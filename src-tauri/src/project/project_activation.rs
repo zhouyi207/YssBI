@@ -1046,7 +1046,9 @@ mod tests {
                 crate::project::OperationId::new(),
                 crate::database::DatabaseInstance {
                     decl: crate::database_contract::DatabaseDecl {
-                        id: database_id.clone(),
+                        id: crate::database_contract::DatabaseId::from_existing(
+                            database_id.clone().into(),
+                        ),
                         engine: crate::database_contract::DatabaseEngine::InMemory {
                             name: "generation".into(),
                         },

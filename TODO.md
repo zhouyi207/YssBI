@@ -1554,3 +1554,7 @@ Execution 不知道具体 UI
 - [ ] 将变量 JSON/handle normalization、Polars materialization、DataFrame I/O 分别归入 Project、Backend adapter、Database owner，并删除旧 mixed tabular owners。
 - [ ] 补充 typed tabular/materialization/I/O/DTO mapping errors、atomic normalization 与 architecture/debt guard，避免 raw backend prose 和 lossy unsigned conversion。
 - [ ] 通过 tabular 聚焦回归、数据库编辑 integration 回归、Rust 编译/格式/debt 验证及独立 review；保留当前 worktree 未提交状态等待集成授权。
+- [ ] 将 DatabaseRuntimeSession 的 admission 状态与幂等 close_admission 收敛为 session-owned 生命周期，禁止 registry-wide close 影响其它 session。
+- [ ] 分离 DatabaseOutstandingWork 的 Copy 计数投影与私有 DatabaseOperationLease RAII 所有权，保持未来 prepare/recovery 计数为私有字段。
+- [ ] 让 DatabaseSessionDrainControl 携带显式单调 deadline，使用带 outstanding 计数的 closed drain/timeout outcome，并保持 timeout 后 lease 不脱离、Drop 不阻塞等待。
+- [ ] 完成 Database foundation 的 Pure Leaf contract、typed error、显式 declaration caller migration 与 focused RED/GREEN、fmt/check/diff 交付记录。

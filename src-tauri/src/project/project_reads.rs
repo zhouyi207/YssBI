@@ -686,7 +686,7 @@ fn overlay_authoritative_project_index(
                 engine: declaration.engine.clone(),
                 schema_version: declaration.schema_version,
                 required: declaration.required,
-                name: Some(declaration.name.clone()),
+                name: Some(declaration.name.to_string()),
             },
         )
         .collect();
@@ -1257,7 +1257,7 @@ mod tests {
         authoritative.databases.insert(
             "sales".into(),
             crate::database_contract::DatabaseDecl {
-                id: "sales".into(),
+                id: crate::database_contract::DatabaseId::from_existing("sales".into()),
                 engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "sales".into(),
                 },

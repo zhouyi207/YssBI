@@ -1,6 +1,8 @@
 use super::ProjectState;
 use crate::database::*;
 use crate::database_contract::DatabaseDecl;
+#[cfg(test)]
+use crate::database_contract::DatabaseId;
 use crate::project::{
     ProjectFilesystemError, ProjectFilesystemLeaseSet, ProjectInstanceId, ProjectSession,
 };
@@ -391,7 +393,7 @@ impl ProjectState {
             .into());
         }
         let decl = instance.decl.clone();
-        let id = decl.id.clone();
+        let id = decl.id.as_str().to_string();
         let mut data = self.project_data.write().unwrap();
         let mut store = self.project_store.write().unwrap();
         let mut revisions = self.database_authority_revisions.write().unwrap();
@@ -453,8 +455,8 @@ impl ProjectState {
         let publication_advance = publication.prepare_resource_revision()?;
         let from_revision = crate::project::ResourceRevision::new(token.database_revision);
         let to_revision = Self::next_database_revision(id, from_revision)?;
-        declaration.name = name.to_string();
-        instance.decl.name = name.to_string();
+        declaration.name = name.to_string().into();
+        instance.decl.name = name.to_string().into();
         let after = declaration.clone();
         let mutation = self.publish_database_delta(
             &mut publication,
@@ -616,7 +618,7 @@ mod tests {
         original.databases.insert(
             "sales".into(),
             DatabaseDecl {
-                id: "sales".into(),
+                id: DatabaseId::from_existing("sales".into()),
                 engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "sales".into(),
                 },
@@ -631,7 +633,7 @@ mod tests {
         replacement.databases.insert(
             "sales".into(),
             DatabaseDecl {
-                id: "sales".into(),
+                id: DatabaseId::from_existing("sales".into()),
                 engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "sales".into(),
                 },
@@ -664,7 +666,7 @@ mod tests {
             &state,
             DatabaseInstance {
                 decl: DatabaseDecl {
-                    id: database_id.into(),
+                    id: DatabaseId::from_existing(database_id.into()),
                     engine: crate::database_contract::DatabaseEngine::InMemory {
                         name: "writer".into(),
                     },
@@ -719,11 +721,14 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases[database_id]
                 .decl
-                .name,
+                .name
+                .as_ref(),
             "Committed"
         );
         assert_eq!(
-            state.get_data().unwrap().databases[database_id].name,
+            state.get_data().unwrap().databases[database_id]
+                .name
+                .as_ref(),
             "Committed"
         );
         assert_eq!(state.authority_generation_for_test(), generation + 1);
@@ -752,7 +757,8 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases[database_id]
                 .decl
-                .name,
+                .name
+                .as_ref(),
             "Committed"
         );
         assert_eq!(state.authority_generation_for_test(), generation);
@@ -770,7 +776,7 @@ mod tests {
             &state,
             DatabaseInstance {
                 decl: DatabaseDecl {
-                    id: database_id.into(),
+                    id: DatabaseId::from_existing(database_id.into()),
                     engine: crate::database_contract::DatabaseEngine::InMemory {
                         name: "snapshot".into(),
                     },
@@ -813,7 +819,7 @@ mod tests {
             .unwrap();
         state
             .with_database_snapshot(database_id, |database| {
-                assert_eq!(database.decl.name, "Authoritative");
+                assert_eq!(database.decl.name.as_ref(), "Authoritative");
                 Ok(())
             })
             .unwrap();
@@ -822,7 +828,8 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases[database_id]
                 .decl
-                .name,
+                .name
+                .as_ref(),
             "Authoritative"
         );
         assert_eq!(state.authority_generation_for_test(), generation);
@@ -966,7 +973,7 @@ mod tests {
             state,
             DatabaseInstance {
                 decl: DatabaseDecl {
-                    id: id.into(),
+                    id: DatabaseId::from_existing(id.into()),
                     engine: crate::database_contract::DatabaseEngine::InMemory { name: id.into() },
                     schema_version: 1,
                     required: false,
@@ -1016,7 +1023,8 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases["writer"]
                 .decl
-                .name,
+                .name
+                .as_ref(),
             "Committed"
         );
         assert_eq!(
@@ -1099,7 +1107,8 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases[&imported.id]
                 .decl
-                .name,
+                .name
+                .as_ref(),
             "Renamed"
         );
         assert_eq!(
@@ -1161,7 +1170,8 @@ mod tests {
         assert_eq!(
             state.project_store.read().unwrap().databases["writer"]
                 .decl
-                .name,
+                .name
+                .as_ref(),
             "Committed B"
         );
         let _ = std::fs::remove_dir_all(root);
@@ -1303,7 +1313,7 @@ mod tests {
                 operation_id,
                 DatabaseInstance {
                     decl: DatabaseDecl {
-                        id: database_id.into(),
+                        id: DatabaseId::from_existing(database_id.into()),
                         engine: crate::database_contract::DatabaseEngine::InMemory {
                             name: database_id.into(),
                         },
@@ -1466,7 +1476,7 @@ mod tests {
         replacement.databases.insert(
             "replacement".into(),
             DatabaseDecl {
-                id: "replacement".into(),
+                id: DatabaseId::from_existing("replacement".into()),
                 engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "replacement".into(),
                 },

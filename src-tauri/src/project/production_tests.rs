@@ -146,7 +146,7 @@ fn insert_uncached_duckdb_declaration(state: &ProjectState, path: &str) {
     state.project_data.write().unwrap().databases.insert(
         "missing".into(),
         crate::database_contract::DatabaseDecl {
-            id: "missing".into(),
+            id: crate::database_contract::DatabaseId::from_existing("missing".into()),
             engine: crate::database_contract::DatabaseEngine::DuckDb {
                 path: path.into(),
                 table: "main".into(),

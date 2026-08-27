@@ -326,7 +326,7 @@ fn projection_environment_capture_is_activation_ordered_and_coherent() {
         project.databases.insert(
             id.into(),
             crate::database_contract::DatabaseDecl {
-                id: id.into(),
+                id: crate::database_contract::DatabaseId::from_existing(id.into()),
                 engine: crate::database_contract::DatabaseEngine::DuckDb {
                     path: "database/project.duckdb".into(),
                     table: "main".into(),
@@ -427,7 +427,7 @@ fn projection_environment_capture_rejects_store_from_overlapping_activation() {
         project.databases.insert(
             id.into(),
             crate::database_contract::DatabaseDecl {
-                id: id.into(),
+                id: crate::database_contract::DatabaseId::from_existing(id.into()),
                 engine: crate::database_contract::DatabaseEngine::DuckDb {
                     path: "database/project.duckdb".into(),
                     table: "main".into(),
@@ -511,7 +511,7 @@ fn committed_projection_uses_precommit_database_metadata_after_removal() {
     project.databases.insert(
         "main".into(),
         crate::database_contract::DatabaseDecl {
-            id: "main".into(),
+            id: crate::database_contract::DatabaseId::from_existing("main".into()),
             engine: crate::database_contract::DatabaseEngine::DuckDb {
                 path: "database/project.duckdb".into(),
                 table: "main".into(),

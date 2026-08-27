@@ -1,5 +1,7 @@
 pub mod column_distribution;
 pub mod column_stats;
+pub mod error;
+pub mod runtime;
 
 pub mod database_instance;
 pub mod database_schema;
@@ -35,3 +37,6 @@ pub use duckdb_reader::*;
 pub use duckdb_sql::*;
 pub use edit_operation::*;
 pub use export::*;
+
+#[cfg(test)]
+mod foundation_tests;
