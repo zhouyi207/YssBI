@@ -81,6 +81,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
       .attr('stroke', chartTheme.axis).attr('stroke-width', 1);
 
     const tip = new PlotTooltipController(tooltipRef.current, containerRef.current);
+    const detachTooltips: Array<() => void> = [];
 
     data.forEach((d, i) => {
       const x = xScale(d.re);
@@ -99,7 +100,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
         .attr('fill-opacity', 0.9)
         .style('cursor', 'pointer');
 
-      attachMarkTooltip(point as D3Onable<SVGCircleElement, VARStableRow>, {
+      const detachTooltip = attachMarkTooltip(point as D3Onable<SVGCircleElement, VARStableRow>, {
         tooltip: tip,
         position: 'anchor',
         getHtml: () => {
@@ -122,6 +123,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
         onEnter: (el) => select(el).attr('r', 6).attr('stroke-width', 2),
         onLeave: (el) => select(el).attr('r', 5).attr('stroke-width', 1.5),
       });
+      detachTooltips.push(detachTooltip);
     });
 
     g.append('g')
@@ -156,6 +158,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
       .attr('fill', chartTheme.label)
       .attr('font-size', '11px')
       .text('Imaginary');
+    return () => detachTooltips.forEach((detach) => detach());
   }, [data, size, chartTheme, seriesColors]);
 
   return (

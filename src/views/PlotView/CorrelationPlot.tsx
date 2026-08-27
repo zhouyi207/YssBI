@@ -129,7 +129,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('stroke-width', 0.5)
       .attr('rx', 2);
 
-    attachMarkTooltip(
+    const detachTooltip = attachMarkTooltip(
       cellRects as D3Onable<
         SVGRectElement,
         { i: number; j: number; value: number; pValue?: number | null }
@@ -229,6 +229,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('fill', chartTheme.label)
       .attr('font-size', '9px')
       .text('1');
+    return detachTooltip;
   }, [labels, matrix, pMatrix, heightProp, margin, size, chartTheme, seriesColors.primary]);
 
   return (

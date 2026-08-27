@@ -175,12 +175,114 @@ export interface AttachMarkTooltipConfig<GElement extends Element, Datum> {
   onLeave?: (element: GElement, datum: Datum) => void;
 }
 
+type MarkInputMode = 'pointer' | 'keyboard';
+
+interface ActiveMarkState<Datum> {
+  datum: Datum;
+  pointerHovered: boolean;
+  keyboardFocused: boolean;
+  pointerEvent: MouseEvent | null;
+  lastMode: MarkInputMode;
+  order: number;
+}
+
+const MARK_TOOLTIP_EVENT_NAMESPACE = '.markTooltip';
+
 /** Pointer and keyboard tooltip wiring for bar, cell, and point marks. */
 export function attachMarkTooltip<GElement extends Element, Datum>(
   selection: D3Onable<GElement, Datum>,
   config: AttachMarkTooltipConfig<GElement, Datum>,
-): void {
+): () => void {
   const position = config.position ?? 'cursor';
+  const activeMarks = new Map<GElement, ActiveMarkState<Datum>>();
+  let activationOrder = 0;
+  let visibleMark: { element: GElement; mode: MarkInputMode } | null = null;
+
+  const isActive = (state: ActiveMarkState<Datum>) =>
+    state.pointerHovered || state.keyboardFocused;
+
+  const preferredMode = (state: ActiveMarkState<Datum>): MarkInputMode => {
+    if (state.lastMode === 'pointer' && state.pointerHovered) return 'pointer';
+    if (state.lastMode === 'keyboard' && state.keyboardFocused) return 'keyboard';
+    return state.keyboardFocused ? 'keyboard' : 'pointer';
+  };
+
+  const show = (
+    element: GElement,
+    state: ActiveMarkState<Datum>,
+    mode: MarkInputMode,
+  ) => {
+    config.tooltip.show(config.getHtml(state.datum, element));
+    if (mode === 'keyboard' || position === 'anchor') {
+      config.tooltip.moveToAnchor(element.getBoundingClientRect());
+    } else if (state.pointerEvent) {
+      config.tooltip.moveToCursor(state.pointerEvent, config.cursorOffset);
+    }
+    visibleMark = { element, mode };
+  };
+
+  const activate = (
+    element: GElement,
+    datum: Datum,
+    event: MarkInteractionEvent,
+    mode: MarkInputMode,
+  ) => {
+    const state = activeMarks.get(element) ?? {
+      datum,
+      pointerHovered: false,
+      keyboardFocused: false,
+      pointerEvent: null,
+      lastMode: mode,
+      order: 0,
+    };
+    const wasActive = isActive(state);
+    state.datum = datum;
+    state.lastMode = mode;
+    state.order = ++activationOrder;
+    if (mode === 'pointer') {
+      state.pointerHovered = true;
+      state.pointerEvent = event as MouseEvent;
+    } else {
+      state.keyboardFocused = true;
+    }
+    activeMarks.set(element, state);
+    if (!wasActive) config.onEnter?.(element, datum, event);
+    show(element, state, mode);
+  };
+
+  const deactivate = (element: GElement, datum: Datum, mode: MarkInputMode) => {
+    const state = activeMarks.get(element);
+    if (!state) return;
+    state.datum = datum;
+    if (mode === 'pointer') {
+      state.pointerHovered = false;
+      state.pointerEvent = null;
+    } else {
+      state.keyboardFocused = false;
+    }
+
+    if (isActive(state)) {
+      if (visibleMark?.element === element && visibleMark.mode === mode) {
+        show(element, state, preferredMode(state));
+      }
+      return;
+    }
+
+    activeMarks.delete(element);
+    config.onLeave?.(element, datum);
+    if (visibleMark?.element !== element) return;
+
+    let fallback: [GElement, ActiveMarkState<Datum>] | null = null;
+    for (const entry of activeMarks) {
+      if (!fallback || entry[1].order > fallback[1].order) fallback = entry;
+    }
+    if (fallback) {
+      show(fallback[0], fallback[1], preferredMode(fallback[1]));
+    } else {
+      visibleMark = null;
+      config.tooltip.hide();
+    }
+  };
 
   selection.attr('tabindex', 0);
   if (config.getAriaLabel) {
@@ -190,33 +292,43 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
   }
 
   selection
-    .on('mouseenter', function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
-      config.onEnter?.(this, datum, event);
-      config.tooltip.show(config.getHtml(datum, this));
-      if (position === 'anchor') {
-        config.tooltip.moveToAnchor(this.getBoundingClientRect());
-      } else {
-        config.tooltip.moveToCursor(event as MouseEvent, config.cursorOffset);
-      }
+    .on(`mouseenter${MARK_TOOLTIP_EVENT_NAMESPACE}`, function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
+      activate(this, datum, event, 'pointer');
     })
-    .on('mousemove', function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
+    .on(`mousemove${MARK_TOOLTIP_EVENT_NAMESPACE}`, function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
       const mouseEvent = event as MouseEvent;
       config.onMove?.(this, datum, mouseEvent);
       if (position === 'cursor') {
-        config.tooltip.moveToCursor(mouseEvent, config.cursorOffset);
+        const state = activeMarks.get(this);
+        if (state?.pointerHovered) {
+          state.pointerEvent = mouseEvent;
+          state.lastMode = 'pointer';
+          state.order = ++activationOrder;
+          if (visibleMark?.element === this && visibleMark.mode === 'pointer') {
+            config.tooltip.moveToCursor(mouseEvent, config.cursorOffset);
+          } else {
+            show(this, state, 'pointer');
+          }
+        }
       }
     })
-    .on('mouseleave', function (this: GElement, _event: MarkInteractionEvent, datum: Datum) {
-      config.onLeave?.(this, datum);
-      config.tooltip.hide();
+    .on(`mouseleave${MARK_TOOLTIP_EVENT_NAMESPACE}`, function (this: GElement, _event: MarkInteractionEvent, datum: Datum) {
+      deactivate(this, datum, 'pointer');
     })
-    .on('focus', function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
-      config.onEnter?.(this, datum, event);
-      config.tooltip.show(config.getHtml(datum, this));
-      config.tooltip.moveToAnchor(this.getBoundingClientRect());
+    .on(`focus${MARK_TOOLTIP_EVENT_NAMESPACE}`, function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
+      activate(this, datum, event, 'keyboard');
     })
-    .on('blur', function (this: GElement, _event: MarkInteractionEvent, datum: Datum) {
-      config.onLeave?.(this, datum);
-      config.tooltip.hide();
+    .on(`blur${MARK_TOOLTIP_EVENT_NAMESPACE}`, function (this: GElement, _event: MarkInteractionEvent, datum: Datum) {
+      deactivate(this, datum, 'keyboard');
     });
+
+  return () => {
+    selection.on(MARK_TOOLTIP_EVENT_NAMESPACE, null);
+    for (const [element, state] of activeMarks) {
+      config.onLeave?.(element, state.datum);
+    }
+    activeMarks.clear();
+    visibleMark = null;
+    config.tooltip.hide();
+  };
 }

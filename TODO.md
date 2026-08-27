@@ -1609,3 +1609,6 @@ Execution 不知道具体 UI
 - [ ] 删除节点右键菜单的临时“选择节点…”入口、Canvas picker 状态、overlay model、projection 缓存、专用组件测试及中英文废弃文案。
 - [ ] 增加 NodePalette 键盘创建、IME 防误触和筛选重置回归覆盖，完成 34 个相关测试、TypeScript 检查、Oxlint 与独立代码审查。
 - [ ] 记录仓库级 Oxfmt 当前因缺少配置并命中 1311 个既有文件而失败，本任务不批量格式化或改写无关基线文件。
+- [ ] 修复共享 D3 mark tooltip 的 pointer-hover 与 keyboard-focus 混合状态，确保激活回调仅在整体进入和退出时触发一次。
+- [ ] 为 `attachMarkTooltip` 增加 namespaced handler detach 契约，在清理时重置活跃 mark 状态并隐藏 tooltip。
+- [ ] 将 Histogram、Correlation、Correlogram 与 VAR Stability renderer 的 tooltip detach 接入 React effect cleanup，并补充混合输入及可见态清理回归。

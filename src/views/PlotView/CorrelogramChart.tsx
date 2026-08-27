@@ -97,6 +97,7 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
       .attr('stroke', chartTheme.zeroLine);
 
     const tip = new PlotTooltipController(tooltipRef.current, containerRef.current);
+    const detachTooltips: Array<() => void> = [];
 
     data.forEach((d) => {
       const x = xBand(String(d.lag))!;
@@ -119,7 +120,7 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
         .attr('rx', 2)
         .style('cursor', 'pointer');
 
-      attachMarkTooltip(bar as D3Onable<SVGRectElement, CorrelogramBarDTO>, {
+      const detachTooltip = attachMarkTooltip(bar as D3Onable<SVGRectElement, CorrelogramBarDTO>, {
         tooltip: tip,
         position: 'anchor',
         getHtml: (datum) => {
@@ -144,6 +145,7 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
             .attr('stroke-width', 1),
         onLeave: (el) => select(el).attr('fill-opacity', 0.85).attr('stroke', 'none'),
       });
+      detachTooltips.push(detachTooltip);
     });
 
     g.append('g')
@@ -173,6 +175,7 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
         .attr('font-weight', '500')
         .text(title);
     }
+    return () => detachTooltips.forEach((detach) => detach());
   }, [data, ciHalfWidth, title, plotColor, negativeColor, valueLabel, size, chartTheme]);
 
   return (

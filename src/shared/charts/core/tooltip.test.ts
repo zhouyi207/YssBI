@@ -111,4 +111,89 @@ describe('attachMarkTooltip', () => {
     expect(tooltipElement.style.opacity).toBe('0');
     expect(mark.getAttribute('data-active')).toBe('false');
   });
+
+  it('keeps a mark active until both pointer hover and keyboard focus end', () => {
+    const container = document.createElement('div');
+    const tooltipElement = document.createElement('div');
+    const mark = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    const datum = { label: 'north', count: 4 };
+    let enterCount = 0;
+    let leaveCount = 0;
+    container.append(mark, tooltipElement);
+    document.body.appendChild(container);
+
+    attachMarkTooltip(select(mark).datum(datum), {
+      tooltip: new PlotTooltipController(tooltipElement, container),
+      getHtml: (value) => String(value.count),
+      onEnter: (element) => {
+        enterCount++;
+        element.setAttribute('data-active', 'true');
+      },
+      onLeave: (element) => {
+        leaveCount++;
+        element.setAttribute('data-active', 'false');
+      },
+    });
+
+    mark.dispatchEvent(new MouseEvent('mouseenter', { clientX: 20, clientY: 20 }));
+    mark.dispatchEvent(new FocusEvent('focus'));
+    expect(enterCount).toBe(1);
+    mark.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(tooltipElement.style.opacity).toBe('1');
+    expect(mark.getAttribute('data-active')).toBe('true');
+    expect(leaveCount).toBe(0);
+    mark.dispatchEvent(new FocusEvent('blur'));
+    expect(tooltipElement.style.opacity).toBe('0');
+    expect(mark.getAttribute('data-active')).toBe('false');
+    expect(leaveCount).toBe(1);
+
+    mark.dispatchEvent(new FocusEvent('focus'));
+    mark.dispatchEvent(new MouseEvent('mouseenter', { clientX: 20, clientY: 20 }));
+    expect(enterCount).toBe(2);
+    mark.dispatchEvent(new FocusEvent('blur'));
+    expect(tooltipElement.style.opacity).toBe('1');
+    expect(mark.getAttribute('data-active')).toBe('true');
+    expect(leaveCount).toBe(1);
+    mark.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(tooltipElement.style.opacity).toBe('0');
+    expect(mark.getAttribute('data-active')).toBe('false');
+    expect(leaveCount).toBe(2);
+  });
+
+  it('detaches handlers and resets a visible mark tooltip', () => {
+    const container = document.createElement('div');
+    const tooltipElement = document.createElement('div');
+    const mark = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    const datum = { label: 'north', count: 4 };
+    let enterCount = 0;
+    let leaveCount = 0;
+    container.append(mark, tooltipElement);
+    document.body.appendChild(container);
+
+    const detach = attachMarkTooltip(select(mark).datum(datum), {
+      tooltip: new PlotTooltipController(tooltipElement, container),
+      getHtml: (value) => String(value.count),
+      onEnter: (element) => {
+        enterCount++;
+        element.setAttribute('data-active', 'true');
+      },
+      onLeave: (element) => {
+        leaveCount++;
+        element.setAttribute('data-active', 'false');
+      },
+    });
+
+    mark.dispatchEvent(new MouseEvent('mouseenter', { clientX: 20, clientY: 20 }));
+    expect(tooltipElement.style.opacity).toBe('1');
+    expect(mark.getAttribute('data-active')).toBe('true');
+    detach();
+    expect(tooltipElement.style.opacity).toBe('0');
+    expect(mark.getAttribute('data-active')).toBe('false');
+    expect(leaveCount).toBe(1);
+
+    mark.dispatchEvent(new FocusEvent('focus'));
+    expect(tooltipElement.style.opacity).toBe('0');
+    expect(mark.getAttribute('data-active')).toBe('false');
+    expect(enterCount).toBe(1);
+  });
 });

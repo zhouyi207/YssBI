@@ -111,8 +111,9 @@ const Histogram: React.FC<HistogramProps> = ({
       .attr('stroke-width', 0.5)
       .attr('rx', compact ? 1 : 0);
 
+    let detachTooltip: (() => void) | undefined;
     if (compact) {
-      attachMarkTooltip(bars as D3Onable<SVGRectElement, HistogramBin>, {
+      detachTooltip = attachMarkTooltip(bars as D3Onable<SVGRectElement, HistogramBin>, {
         tooltip,
         getHtml: (d) => tooltipTwoLine(chartTheme, d.label, String(d.count), plotColor),
         getAriaLabel: (d) => `Histogram bin ${d.label}, ${yLabel} ${d.count}`,
@@ -158,6 +159,7 @@ const Histogram: React.FC<HistogramProps> = ({
           .text(yLabel);
       }
     }
+    return detachTooltip;
   }, [data, xLabel, yLabel, plotColor, heightProp, margin, compact, size, chartTheme]);
 
   return (
