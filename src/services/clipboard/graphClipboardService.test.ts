@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClipboardSubgraphDto } from '@/shared/types/dto/clipboardSubgraph';
 
-const pluginReadText = vi.hoisted(() => vi.fn<() => Promise<string>>());
-const pluginWriteText = vi.hoisted(() => vi.fn<(text: string) => Promise<void>>());
+const platformReadText = vi.hoisted(() => vi.fn<() => Promise<unknown>>());
+const platformWriteText = vi.hoisted(() => vi.fn<(text: string) => Promise<unknown>>());
 
-vi.mock('@tauri-apps/plugin-clipboard-manager', () => ({
-  readText: pluginReadText,
-  writeText: pluginWriteText,
+vi.mock('@/services/platform/clipboard', () => ({
+  readClipboardText: platformReadText,
+  writeClipboardText: platformWriteText,
 }));
 import {
   GRAPH_CLIPBOARD_FORMAT,
@@ -32,10 +32,16 @@ const snapshot: ClipboardSubgraphDto = {
 function installClipboard(options: {
   readText?: () => Promise<string>;
   writeText?: (text: string) => Promise<void>;
-}) {
-  pluginReadText.mockImplementation(options.readText ?? (async () => ''));
-  pluginWriteText.mockImplementation(options.writeText ?? (async () => undefined));
-  return { readText: pluginReadText, writeText: pluginWriteText };
+} = {}) {
+  platformReadText.mockImplementation(async () => ({
+    ok: true,
+    value: await (options.readText ?? (async () => ''))(),
+  }));
+  platformWriteText.mockImplementation(async (text) => {
+    await (options.writeText ?? (async () => undefined))(text);
+    return { ok: true, value: undefined };
+  });
+  return { readText: platformReadText, writeText: platformWriteText };
 }
 
 function envelope(overrides: Record<string, unknown> = {}): string {
@@ -117,7 +123,7 @@ describe('graphClipboardService', () => {
 
     await expect(readGraphClipboard()).rejects.toMatchObject({ code: 'invalid_envelope' });
 
-    clipboard.readText.mockResolvedValue(envelope({ extra: true }));
+    clipboard.readText.mockResolvedValue({ ok: true, value: envelope({ extra: true }) });
     await expect(readGraphClipboard()).rejects.toMatchObject({ code: 'invalid_envelope' });
   });
 
@@ -132,17 +138,23 @@ describe('graphClipboardService', () => {
   });
 
   it('propagates write permission failures unchanged', async () => {
-    const permissionError = new DOMException('Write denied', 'NotAllowedError');
-    installClipboard({ writeText: async () => { throw permissionError; } });
+    installClipboard();
+    platformWriteText.mockResolvedValue({
+      ok: false,
+      failure: { operation: 'writeClipboardText', code: 'operationFailed' },
+    });
 
-    await expect(writeGraphClipboard(snapshot)).rejects.toBe(permissionError);
+    await expect(writeGraphClipboard(snapshot)).rejects.toMatchObject({ code: 'platform' });
   });
 
   it('propagates read permission failures unchanged', async () => {
-    const permissionError = new DOMException('Read denied', 'NotAllowedError');
-    installClipboard({ readText: async () => { throw permissionError; } });
+    installClipboard();
+    platformReadText.mockResolvedValue({
+      ok: false,
+      failure: { operation: 'readClipboardText', code: 'operationFailed' },
+    });
 
-    await expect(readGraphClipboard()).rejects.toBe(permissionError);
+    await expect(readGraphClipboard()).rejects.toMatchObject({ code: 'platform' });
   });
 
 

@@ -1,14 +1,6 @@
-import { logger } from "@/utils/appLogger";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import { openExternal } from '@/services/platform/opener';
 
 export async function openExternalUrl(url: string): Promise<void> {
-  try {
-    await openUrl(url);
-  } catch (error) {
-    logger.app.error(
-      `External URL open failed: ${error instanceof Error ? error.message : String(error)}`,
-      "openExternalUrl",
-    );
-    throw error;
-  }
+  const result = await openExternal(url);
+  if (!result.ok) throw new Error(result.failure.code);
 }

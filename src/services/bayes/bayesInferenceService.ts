@@ -1,5 +1,5 @@
 import { invokeCommand } from '@/services/ipc';
-import { revealItemInDir } from '@tauri-apps/plugin-opener';
+import { revealPath } from '@/services/platform/opener';
 import {
   parseBayesInferenceTaskDTO,
   parseInferenceResultDTO,
@@ -31,7 +31,8 @@ export async function readBayesInferenceResult(taskId: string): Promise<Inferenc
 }
 
 export async function revealBayesResultFolder(artifactPath: string): Promise<void> {
-  await revealItemInDir(artifactPath);
+  const result = await revealPath(artifactPath);
+  if (!result.ok) throw new Error(result.failure.code);
 }
 
 export async function exportBayesArtifactCsv(

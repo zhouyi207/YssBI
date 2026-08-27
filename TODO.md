@@ -1633,3 +1633,7 @@ Execution 不知道具体 UI
 - [ ] 新增 schema application-event staged mapper，穷尽映射到现有 EventProject wire shape，不启用新的 production emitter 或 route。
 - [ ] 为生命周期/资源提交各保留一个独特 wire mapping regression，并覆盖资源结果缺失 project identity 的 serde failure。
 - [ ] 完成 Presentation/Command Boundaries Task 1 staged event contract slice 的 focused Rust test、check、fmt 与 diff 验证，旧 event_project route 保持唯一活跃。
+- [ ] 将路径对话框、窗口、webview、剪贴板、外部 opener 与设置事件收敛到 Services platform typed outcome contracts。
+- [ ] 移除 shared URL、Bayes reveal 与 graph clipboard 的直接 Tauri runtime imports，统一通过 platform adapter 处理失败。
+- [ ] 保留 platform adapter 的 invalid argument/result 与 operation failure closed variants，避免暴露原始 native error prose。
+- [ ] 完成 Frontend Task 2 platform contract slice 的 typecheck 与 diff 校验；Vitest runner 的既有 Windows 阻塞继续记录。

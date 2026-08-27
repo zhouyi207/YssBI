@@ -1,4 +1,4 @@
-import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
+import { readClipboardText, writeClipboardText } from '@/services/platform/clipboard';
 import type { ClipboardSubgraphDto } from '@/shared/types/dto/clipboardSubgraph';
 import { parseClipboardSubgraphDto } from '@/shared/types/dto/clipboardSubgraphWireParser';
 
@@ -12,6 +12,7 @@ export interface GraphClipboardEnvelope {
 }
 
 export type GraphClipboardErrorCode =
+  | 'platform'
   | 'invalid_json'
   | 'invalid_envelope'
   | 'unsupported_format'
@@ -44,11 +45,14 @@ export async function writeGraphClipboard(snapshot: ClipboardSubgraphDto): Promi
     version: GRAPH_CLIPBOARD_VERSION,
     snapshot,
   };
-  await writeText(JSON.stringify(envelope));
+  const result = await writeClipboardText(JSON.stringify(envelope));
+  if (!result.ok) throw new GraphClipboardError('platform', result.failure.code);
 }
 
 export async function readGraphClipboard(): Promise<ClipboardSubgraphDto> {
-  const text = await readText();
+  const result = await readClipboardText();
+  if (!result.ok) throw new GraphClipboardError('platform', result.failure.code);
+  const text = result.value;
   let value: unknown;
   try {
     value = JSON.parse(text);
