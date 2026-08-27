@@ -10,9 +10,10 @@ import {
   presentationWindowErrorMessage,
   type PresentationWindowState,
 } from '@/features/application/presentation';
-import { ReportResultView, UnifiedResultView } from '@/features/core/resultSource';
+import { UnifiedResultView } from '@/features/core/resultSource';
 import { ResultViewPresentationProvider } from '@/features/core/resultSource/resultViewPresentation';
 import type { ResultDescriptor } from '@/shared/types/dto/result';
+import { ReportView } from '@/views/InfoView/ReportView';
 import { PlotWindowContent } from '@/views/PlotView/PlotWindowContent';
 
 function ResultStatus({ message }: { message: string }) {
@@ -102,9 +103,14 @@ export function ResultContent({ resultId }: { resultId: string }) {
     );
   }
   if (state.payload.mode === 'report') {
+    if (state.descriptor.presentation.kind !== 'report') return null;
     return (
       <ResultViewPresentationProvider presentation="embedded">
-        <ReportResultView payload={state.descriptor} data={state.payload.data} />
+        <ReportView
+          descriptor={state.descriptor}
+          report={state.descriptor.presentation.report}
+          data={state.payload.data}
+        />
       </ResultViewPresentationProvider>
     );
   }

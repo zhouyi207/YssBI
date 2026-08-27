@@ -31,7 +31,6 @@ export {
   type ResultViewPresentation,
 } from './resultViewPresentation';
 export { UnifiedResultView } from './components/UnifiedResultView';
-export { ReportResultView } from './components/ReportResultView';
 export { ResultViewShell } from './components/ResultViewShell';
 export { JsonTreeView } from './components/JsonTreeView';
 export { ReadOnlyDataGrid } from './components/ReadOnlyDataGrid';

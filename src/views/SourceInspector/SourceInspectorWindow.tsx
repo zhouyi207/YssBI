@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { VscPreview } from 'react-icons/vsc';
 import { usePresentationWindow } from '@/features/application/presentation';
-import { ReportResultView, UnifiedResultView } from '@/features/core/resultSource';
+import { UnifiedResultView } from '@/features/core/resultSource';
 import { PresentationWindowShell } from '@/features/application/window/PresentationWindowShell';
+import { ReportView } from '@/views/InfoView/ReportView';
 
 export const SourceInspectorWindow: React.FC = () => {
   const { t } = useTranslation();
@@ -33,8 +34,14 @@ export const SourceInspectorWindow: React.FC = () => {
       {state.status === 'ready' && state.payload.mode === 'inspector' ? (
         <UnifiedResultView payload={state.payload.descriptor} />
       ) : null}
-      {state.status === 'ready' && state.payload.mode === 'report' ? (
-        <ReportResultView payload={state.descriptor} data={state.payload.data} />
+      {state.status === 'ready' &&
+      state.payload.mode === 'report' &&
+      state.descriptor.presentation.kind === 'report' ? (
+        <ReportView
+          descriptor={state.descriptor}
+          report={state.descriptor.presentation.report}
+          data={state.payload.data}
+        />
       ) : null}
     </PresentationWindowShell>
   );

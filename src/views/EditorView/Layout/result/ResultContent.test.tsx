@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   parsePlotPayload: vi.fn(),
   plotWindowContent: vi.fn(),
   launchInspectablePresentation: vi.fn(),
+  reportView: vi.fn(),
 }));
 
 vi.mock('@/features/core/resultSource', async () => {
@@ -20,7 +21,6 @@ vi.mock('@/features/core/resultSource', async () => {
   >('@/features/core/resultSource/components/ResultViewShell');
 
   return {
-    ReportResultView: () => null,
     UnifiedResultView: ({ payload }: { payload: ResultDescriptor }) => (
       <ResultViewShell
         title={payload.title}
@@ -32,6 +32,13 @@ vi.mock('@/features/core/resultSource', async () => {
     ),
   };
 });
+
+vi.mock('@/views/InfoView/ReportView', () => ({
+  ReportView: (props: { descriptor: ResultDescriptor; report: string; data: unknown }) => {
+    mocks.reportView(props);
+    return <div data-testid="report-preview">report preview</div>;
+  },
+}));
 
 vi.mock('@/features/application/presentation', () => ({
   loadPresentationWindow: mocks.loadPresentationWindow,
@@ -81,6 +88,15 @@ const descriptor: ResultDescriptor = {
   totalCount: null,
   title: 'Scatter',
 };
+
+const reportDescriptor: ResultDescriptor = {
+  ...descriptor,
+  resultId: 'report-1',
+  presentation: { kind: 'report', report: 'olsSummary' },
+  title: 'OLS Summary',
+};
+
+const preloadedReportData = { title: 'preloaded report' };
 
 async function flush(): Promise<void> {
   await act(async () => { await Promise.resolve(); });
@@ -149,6 +165,22 @@ describe('ResultContent', () => {
     expect(container.querySelector('[data-testid="result-meta"]')).toBeNull();
     expect(container.querySelector('[data-testid="result-body"]')).not.toBeNull();
     expect(container.querySelector('[data-result-view-toolbar]')).not.toBeNull();
+  });
+
+  it('passes preloaded report data to ReportView unchanged', async () => {
+    mocks.loadPresentationWindow.mockResolvedValueOnce({
+      status: 'ready',
+      descriptor: reportDescriptor,
+      payload: { mode: 'report', data: preloadedReportData },
+    });
+
+    act(() => root.render(<ResultContent resultId="report-1" />));
+    await flush();
+
+    expect(mocks.reportView).toHaveBeenCalledOnce();
+    const renderedReportProps = mocks.reportView.mock.calls[0][0];
+    expect(renderedReportProps.descriptor).toBe(reportDescriptor);
+    expect(renderedReportProps.data).toBe(preloadedReportData);
   });
 
   it('keeps the full title hierarchy when the result shell is standalone', () => {

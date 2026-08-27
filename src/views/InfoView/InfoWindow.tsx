@@ -2,7 +2,7 @@ import type { FC } from 'react';
 import { useTranslation } from 'react-i18next';
 import { usePresentationWindow } from '@/features/application/presentation';
 import { PresentationWindowShell } from '@/features/application/window/PresentationWindowShell';
-import { ReportResultView } from '@/features/core/resultSource/components/ReportResultView';
+import { ReportView } from './ReportView';
 
 const INFO_ICON = (
   <svg className="h-4 w-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,9 +38,12 @@ export const InfoWindow: FC = () => {
       }}
       contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden"
     >
-      {state.status === 'ready' && state.payload.mode === 'report' ? (
-        <ReportResultView
-          payload={state.descriptor}
+      {state.status === 'ready' &&
+      state.payload.mode === 'report' &&
+      state.descriptor.presentation.kind === 'report' ? (
+        <ReportView
+          descriptor={state.descriptor}
+          report={state.descriptor.presentation.report}
           data={state.payload.data}
         />
       ) : null}

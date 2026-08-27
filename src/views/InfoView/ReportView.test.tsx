@@ -122,7 +122,7 @@ describe('ReportView', () => {
       );
     });
 
-    expect(container.textContent).toBe(
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
       'Unable to render OLS report: coefficients[0].std_err missing required field.',
     );
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
@@ -159,7 +159,7 @@ describe('ReportView', () => {
       );
     });
 
-    expect(container.textContent).toBe(
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
       'Unable to render OLS report: model_basic_info.covariance_type missing required field.',
     );
     expect(logError).toHaveBeenCalledTimes(1);

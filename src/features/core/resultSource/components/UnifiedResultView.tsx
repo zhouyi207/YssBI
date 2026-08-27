@@ -1,6 +1,5 @@
 import type { ResultDescriptor } from '../types';
 import { resolveResultRenderer } from '../resolveRenderer';
-import { ReportResultView } from './ReportResultView';
 import {
   JsonResultView,
   ScalarResultView,
@@ -23,10 +22,10 @@ export function UnifiedResultView({ payload }: UnifiedResultViewProps) {
     case 'scalar':
       return <ScalarResultView payload={payload} />;
 
+    case 'info':
+      return null;
     case 'json':
       return <JsonResultView payload={payload} />;
-    case 'info':
-      return <ReportResultView payload={payload} />;
     default:
       return <JsonResultView payload={payload} />;
   }
