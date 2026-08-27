@@ -274,7 +274,7 @@ fn internal_lowering_failure_preserves_semantic_without_plan() {
 }
 
 #[test]
-fn unbound_input_diagnostic_carries_the_exact_port() {
+fn unbound_input_diagnostic_includes_the_exact_port_argument() {
     let protocol = test_protocol(
         "unbound_input",
         vec![data_port(
@@ -288,7 +288,6 @@ fn unbound_input_diagnostic_carries_the_exact_port() {
     );
     let registry = TestRegistry::new(vec![protocol]);
     let address = PortAddress::declared(node_id(1), key("value"));
-
     let result = GraphCompiler::new(&registry, &Resources)
         .compile(&graph_with_nodes(&[(1, "unbound_input")]));
 
@@ -302,6 +301,7 @@ fn unbound_input_diagnostic_carries_the_exact_port() {
         diagnostic.arguments,
         BTreeMap::from([(Box::from("port"), address.to_string().into())])
     );
+    assert_eq!(diagnostic.primary, DiagnosticLocation::Port(address),);
     assert_eq!(diagnostic.severity, DiagnosticSeverity::Warning);
     let basis = result.execution_basis.as_ref().expect("execution basis");
     assert!(result.plan.is_none());
