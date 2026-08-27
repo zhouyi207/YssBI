@@ -9,7 +9,7 @@ export type {
   StringDistribution,
 } from '@/shared/types/domain/dataframe';
 
-type DistributionMap = Record<string, ColumnDistribution>;
+export type DistributionMap = Record<string, ColumnDistribution>;
 
 interface ColumnDistributionStore {
   distByDatabase: Record<DatabaseId, DistributionMap>;

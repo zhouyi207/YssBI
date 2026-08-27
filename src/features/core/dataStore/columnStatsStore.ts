@@ -4,7 +4,7 @@ import type { ColumnStats } from '@/shared/types/domain/dataframe';
 export type { ColumnStats, NumericColumnStats, StringColumnStats } from '@/shared/types/domain/dataframe';
 
 /** 按列名索引的统计信息 */
-type ColumnStatsMap = Record<string, ColumnStats>;
+export type ColumnStatsMap = Record<string, ColumnStats>;
 
 interface ColumnStatsStore {
   /** databaseId -> { columnName -> ColumnStats } */
