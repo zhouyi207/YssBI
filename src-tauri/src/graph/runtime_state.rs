@@ -48,4 +48,17 @@ impl GraphRuntimeState {
     pub fn resource_catalog(&self) -> &ResourceCatalogSnapshot {
         &self.components.resource_catalog
     }
+
+    pub(crate) fn localized_catalog(
+        &self,
+        _catalog: &ResourceCatalogSnapshot,
+        locale: &str,
+    ) -> Result<crate::node_system::catalog::LocalizedCatalog, crate::graph::error::GraphCatalogError>
+    {
+        Ok(self.components.catalog.localize_with_resources(
+            self.components.registry.as_ref(),
+            locale,
+            &[],
+        ))
+    }
 }

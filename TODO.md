@@ -1604,3 +1604,5 @@ Execution 不知道具体 UI
 - [ ] 建立正常编译但不路由的 Application editor projection model/mapper，消费 Graph analysis/document/catalog 的 neutral facts。
 - [ ] 保持现有 Graph-owned editor projection 与 wire DTO 生产路径唯一，新增 Application projection 仅作为后续 Project–Graph/Presentation cutover handoff。
 - [ ] 完成 Presentation Task 2A editor projection focused regression、Rust check、fmt 与 diff 校验。
+- [ ] 建立 staged Application catalog query result/transport-parts seam，统一 localized/compatible query 的 session capture/revalidation 入口。
+- [ ] 保持 catalog commands 与旧 Graph/Project snapshot route 不变，待 Project–Graph Task 8 / Execution Task 8 一次性切换并删除旧 owner。

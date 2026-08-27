@@ -1,5 +1,6 @@
 pub mod bayes;
 pub mod catalog_compatibility;
+pub mod catalog_query;
 pub mod computation_settings;
 pub mod database;
 pub mod database_schema;
