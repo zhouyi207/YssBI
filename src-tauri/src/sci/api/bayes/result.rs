@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
 
 use crate::julia::worker::JuliaWorkerTaskDirectory;
+use crate::sci::api::bayes::contract::{InferenceDiagnostics, ParameterSummary};
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct InferenceResult {
-    pub summaries: Vec<ParameterSummary>,
-    pub diagnostics: InferenceDiagnostics,
-    pub artifact_manifest: ResultArtifactManifest,
+    summaries: Vec<ParameterSummary>,
+    diagnostics: InferenceDiagnostics,
+    artifact_manifest: ResultArtifactManifest,
     #[serde(skip)]
     artifact_owner: Option<JuliaWorkerTaskDirectory>,
 }
@@ -58,66 +59,51 @@ impl InferenceResult {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct ParameterSummary {
-    pub parameter: String,
-    pub mean: f64,
-    pub sd: f64,
-    pub median: f64,
-    pub q025: f64,
-    pub q975: f64,
-    pub rhat: Option<f64>,
-    pub ess_bulk: Option<f64>,
-    pub ess_tail: Option<f64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct InferenceDiagnostics {
-    pub chains: usize,
-    pub draws_per_chain: usize,
-    pub warmup: usize,
-    pub divergences: Option<usize>,
-    pub max_treedepth_hits: Option<usize>,
-    pub warnings: Vec<DiagnosticWarning>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DiagnosticWarning {
-    pub code: String,
-    pub metric: DiagnosticMetric,
-    pub value: f64,
-    pub threshold: f64,
-    pub parameter: String,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum DiagnosticMetric {
-    Rhat,
-    EssBulk,
-    EssTail,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResultArtifactManifest {
-    pub task_id: String,
-    pub artifacts: Vec<ResultArtifact>,
+    task_id: String,
+    artifacts: Vec<ResultArtifact>,
+}
+
+impl ResultArtifactManifest {
+    pub fn task_id(&self) -> &str {
+        &self.task_id
+    }
+
+    pub fn artifacts(&self) -> &[ResultArtifact] {
+        &self.artifacts
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResultArtifact {
-    pub kind: ResultArtifactKind,
-    pub format: ResultArtifactFormat,
-    pub path: String,
-    pub rows: Option<usize>,
+    kind: ResultArtifactKind,
+    format: ResultArtifactFormat,
+    path: String,
+    rows: Option<usize>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+impl ResultArtifact {
+    pub fn kind(&self) -> ResultArtifactKind {
+        self.kind
+    }
+
+    pub fn format(&self) -> ResultArtifactFormat {
+        self.format
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    pub fn rows(&self) -> Option<usize> {
+        self.rows
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ResultArtifactKind {
     Summary,
@@ -127,7 +113,7 @@ pub enum ResultArtifactKind {
     Log,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ResultArtifactFormat {
     Json,
@@ -249,7 +235,8 @@ pub struct PosteriorPredictivePage {
 
 #[cfg(test)]
 mod tests {
-    use super::{DensityPlotData, DiagnosticWarning, TaskError};
+    use super::{DensityPlotData, TaskError};
+    use crate::sci::api::bayes::contract::DiagnosticWarning;
 
     #[test]
     fn task_errors_and_diagnostic_warnings_use_safe_structured_wire_shapes() {

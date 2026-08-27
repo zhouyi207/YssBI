@@ -1,4 +1,5 @@
 mod backend;
+pub mod contract;
 mod convert;
 mod draft;
 mod exchange;
@@ -137,10 +138,10 @@ mod tests {
     fn converts_valid_draft_to_model_spec() {
         let spec = draft_to_model_spec(valid_draft()).expect("valid draft");
         assert_eq!(
-            spec.response.data_variables.get("y"),
+            spec.response().data_variables.get("y"),
             Some(&"response".to_string())
         );
-        assert_eq!(spec.data_variables.get("x"), Some(&"time".to_string()));
+        assert_eq!(spec.data_variables().get("x"), Some(&"time".to_string()));
         assert_eq!(spec.parameter_names().len(), 3);
     }
 

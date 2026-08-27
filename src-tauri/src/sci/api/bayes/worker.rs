@@ -1,8 +1,8 @@
 use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use super::contract::{InferenceDiagnostics, ParameterSummary};
 use super::model::BayesModelSpec;
-use super::result::InferenceResult;
 use crate::sci::api::computation::StatisticalInput;
 use crate::sci::api::control::{CancelDeliveryControl, ExecutionControl};
 
@@ -342,9 +342,44 @@ pub trait BayesWorkerPort: Send + Sync {
 }
 
 pub struct BayesTaskResult {
-    task: BayesTaskHandle,
-    inference: InferenceResult,
+    inference: BayesInferenceSnapshot,
     artifacts: Arc<[BayesArtifactHandle]>,
+}
+
+pub struct BayesInferenceSnapshot {
+    task: BayesTaskHandle,
+    summaries: Arc<[ParameterSummary]>,
+    diagnostics: InferenceDiagnostics,
+}
+
+impl BayesInferenceSnapshot {
+    #[allow(
+        dead_code,
+        reason = "worker result authority stays unreachable until the final adapter is staged"
+    )]
+    pub(crate) fn from_worker(
+        task: BayesTaskHandle,
+        summaries: Arc<[ParameterSummary]>,
+        diagnostics: InferenceDiagnostics,
+    ) -> Self {
+        Self {
+            task,
+            summaries,
+            diagnostics,
+        }
+    }
+
+    pub fn task(&self) -> &BayesTaskHandle {
+        &self.task
+    }
+
+    pub fn summaries(&self) -> &[ParameterSummary] {
+        &self.summaries
+    }
+
+    pub fn diagnostics(&self) -> &InferenceDiagnostics {
+        &self.diagnostics
+    }
 }
 
 impl BayesTaskResult {
@@ -354,13 +389,12 @@ impl BayesTaskResult {
     )]
     pub(crate) fn validated_worker_result(
         awaited: &BayesTaskHandle,
-        returned_task: BayesTaskHandle,
-        inference: InferenceResult,
+        inference: BayesInferenceSnapshot,
         artifacts: Arc<[BayesArtifactHandle]>,
     ) -> Result<Self, BayesWorkerError> {
-        if &returned_task != awaited {
+        if inference.task() != awaited {
             return Err(BayesWorkerError::StaleTaskHandle {
-                task: returned_task,
+                task: inference.task().clone(),
             });
         }
         if let Some(artifact) = artifacts.iter().find(|artifact| artifact.task() != awaited) {
@@ -369,17 +403,16 @@ impl BayesTaskResult {
             });
         }
         Ok(Self {
-            task: returned_task,
             inference,
             artifacts,
         })
     }
 
     pub fn task(&self) -> &BayesTaskHandle {
-        &self.task
+        self.inference.task()
     }
 
-    pub fn inference(&self) -> &InferenceResult {
+    pub fn inference(&self) -> &BayesInferenceSnapshot {
         &self.inference
     }
 

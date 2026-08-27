@@ -70,24 +70,29 @@ impl BayesBackend for JuliaBayesBackend {
 
         report_stage(&progress, "reading_result");
         let mut result = read_inference_result(&output.metadata_path)?;
-        if result.artifact_manifest.task_id != output.task_id {
+        if result.artifact_manifest().task_id() != output.task_id {
             return Err(BayesBackendError::with_detail(
                 "julia_bayes_result_invalid",
                 "Julia Bayesian backend returned a mismatched result.",
                 format!(
                     "worker task {} returned artifact manifest for task {}",
-                    output.task_id, result.artifact_manifest.task_id
+                    output.task_id,
+                    result.artifact_manifest().task_id()
                 ),
             ));
         }
 
         report_stage(&progress, "writing_artifacts");
-        let retains_artifacts = result.artifact_manifest.artifacts.iter().any(|artifact| {
-            matches!(
-                artifact.kind,
-                ResultArtifactKind::PosteriorSamples | ResultArtifactKind::PosteriorPredictive
-            )
-        });
+        let retains_artifacts = result
+            .artifact_manifest()
+            .artifacts()
+            .iter()
+            .any(|artifact| {
+                matches!(
+                    artifact.kind(),
+                    ResultArtifactKind::PosteriorSamples | ResultArtifactKind::PosteriorPredictive
+                )
+            });
         if retains_artifacts {
             let owner = output.take_task_directory().ok_or_else(|| {
                 BayesBackendError::new(
@@ -148,7 +153,7 @@ fn write_exchange_files(
     write_json_file(&model_spec_path, spec, "Bayesian model spec")?;
     write_json_file(
         &inference_config_path,
-        &spec.sampler,
+        spec.sampler(),
         "Bayesian inference config",
     )?;
     let predictor = compile_predictor(spec)?;
@@ -255,7 +260,7 @@ fn map_worker_error(error: JuliaWorkerError) -> BayesBackendError {
 mod tests {
     use super::{map_worker_error, parse_inference_result};
     use crate::julia::worker::JuliaWorkerError;
-    use crate::sci::api::bayes::DiagnosticMetric;
+    use crate::sci::api::bayes::contract::DiagnosticMetric;
 
     #[test]
     fn maps_stable_worker_codes_without_classifying_diagnostic_prose() {
@@ -311,17 +316,20 @@ mod tests {
         )
         .expect("valid manifest result");
 
-        assert_eq!(result.artifact_manifest.task_id, "task-1");
-        assert_eq!(result.artifact_manifest.artifacts.len(), 2);
-        assert_eq!(result.artifact_manifest.artifacts[0].path, "summary.json");
-        assert_eq!(result.diagnostics.max_treedepth_hits, None);
-        assert_eq!(result.diagnostics.warnings.len(), 1);
-        let warning = &result.diagnostics.warnings[0];
-        assert_eq!(warning.code, "ess_too_low");
-        assert_eq!(warning.metric, DiagnosticMetric::EssTail);
-        assert_eq!(warning.value, 42.5);
-        assert_eq!(warning.threshold, 100.0);
-        assert_eq!(warning.parameter, "beta");
+        assert_eq!(result.artifact_manifest().task_id(), "task-1");
+        assert_eq!(result.artifact_manifest().artifacts().len(), 2);
+        assert_eq!(
+            result.artifact_manifest().artifacts()[0].path(),
+            "summary.json"
+        );
+        assert_eq!(result.diagnostics().max_treedepth_hits(), None);
+        assert_eq!(result.diagnostics().warnings().len(), 1);
+        let warning = &result.diagnostics().warnings()[0];
+        assert_eq!(warning.code(), "ess_too_low");
+        assert_eq!(warning.metric(), DiagnosticMetric::EssTail);
+        assert_eq!(warning.value(), 42.5);
+        assert_eq!(warning.threshold(), 100.0);
+        assert_eq!(warning.parameter(), "beta");
     }
 
     #[test]
@@ -347,7 +355,10 @@ mod tests {
         )
         .expect("valid sampled result");
 
-        assert_eq!(result.artifact_manifest.artifacts[0].path, "output.arrow");
+        assert_eq!(
+            result.artifact_manifest().artifacts()[0].path(),
+            "output.arrow"
+        );
     }
 
     #[test]

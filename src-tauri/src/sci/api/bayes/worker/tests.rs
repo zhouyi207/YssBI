@@ -6,75 +6,62 @@ use std::time::{Duration, Instant};
 
 use super::{
     ArtifactId, ArtifactIdValidationError, BayesArtifact, BayesArtifactHandle,
-    BayesArtifactMediaType, BayesCancelTerminal, BayesTaskHandle, BayesTaskId,
-    BayesTaskIdValidationError, BayesTaskResult, BayesTaskValidationError, BayesWorkerError,
-    BayesWorkerPhase, BayesWorkerPort, BayesWorkerTerminalCode, ValidatedBayesTask,
+    BayesArtifactMediaType, BayesCancelTerminal, BayesInferenceSnapshot, BayesTaskHandle,
+    BayesTaskId, BayesTaskIdValidationError, BayesTaskResult, BayesTaskValidationError,
+    BayesWorkerError, BayesWorkerPhase, BayesWorkerPort, BayesWorkerTerminalCode,
+    ValidatedBayesTask,
 };
-use crate::sci::api::bayes::{
-    BayesModelSpec, BinaryOp, DatasetRef, DatasetSourceType, Expression, InferenceConfig,
-    InferenceDiagnostics, InferenceResult, LikelihoodSpec, ParameterConstraint, ParameterRef,
-    ParameterSpec, PredictorSource, PredictorSourceKind, PriorSpec, ResponseSpec,
-    ResultArtifactManifest, SamplerAlgorithm,
-};
+use crate::sci::api::bayes::contract::{InferenceDiagnostics, ParameterSummary};
+use crate::sci::api::bayes::{BayesModelSpec, Expression};
 use crate::sci::api::computation::{StatisticalInput, StatisticalScalar};
 use crate::sci::api::control::{
     AbsoluteDeadline, CancelDeliveryControl, ExecutionControl, SciCancellationSource,
 };
 
 fn valid_model() -> BayesModelSpec {
-    BayesModelSpec {
-        dataset: DatasetRef {
-            source_type: DatasetSourceType::Table,
-            source_id: "dataset".to_owned(),
+    serde_json::from_value(serde_json::json!({
+        "dataset": { "sourceType": "table", "sourceId": "dataset" },
+        "response": {
+            "expression": { "type": "data_variable", "name": "y" },
+            "dataVariables": { "y": "response" }
         },
-        response: ResponseSpec {
-            expression: Expression::DataVariable {
-                name: "y".to_owned(),
-            },
-            data_variables: BTreeMap::from([("y".to_owned(), "response".to_owned())]),
+        "predictor": {
+            "type": "binary",
+            "op": "mul",
+            "left": { "type": "parameter", "name": "beta" },
+            "right": { "type": "data_variable", "name": "x" }
         },
-        predictor: Expression::Binary {
-            op: BinaryOp::Mul,
-            left: Box::new(Expression::Parameter {
-                name: "beta".to_owned(),
-            }),
-            right: Box::new(Expression::DataVariable {
-                name: "x".to_owned(),
-            }),
+        "dataVariables": { "x": "predictor" },
+        "likelihood": {
+            "type": "normal",
+            "mean": { "source": "predictor" },
+            "sigma": { "parameter": "sigma" }
         },
-        data_variables: BTreeMap::from([("x".to_owned(), "predictor".to_owned())]),
-        likelihood: LikelihoodSpec::Normal {
-            mean: PredictorSource {
-                source: PredictorSourceKind::Predictor,
+        "parameters": [
+            {
+                "name": "beta",
+                "constraint": { "type": "real" },
+                "prior": { "distribution": "normal", "args": [0.0, 1.0] }
             },
-            sigma: ParameterRef {
-                parameter: "sigma".to_owned(),
-            },
-        },
-        parameters: vec![
-            ParameterSpec {
-                name: "beta".to_owned(),
-                constraint: ParameterConstraint::Real,
-                prior: PriorSpec::Normal([0.0, 1.0]),
-            },
-            ParameterSpec {
-                name: "sigma".to_owned(),
-                constraint: ParameterConstraint::Positive,
-                prior: PriorSpec::Exponential([1.0]),
-            },
+            {
+                "name": "sigma",
+                "constraint": { "type": "positive" },
+                "prior": { "distribution": "exponential", "args": [1.0] }
+            }
         ],
-        sampler: InferenceConfig {
-            algorithm: SamplerAlgorithm::Nuts,
-            chains: 2,
-            samples: 100,
-            warmup: 50,
-            seed: Some(7),
-            target_accept: Some(0.8),
-            max_tree_depth: Some(10),
-            save_samples: false,
+        "sampler": {
+            "algorithm": "nuts",
+            "chains": 2,
+            "samples": 100,
+            "warmup": 50,
+            "seed": 7,
+            "targetAccept": 0.8,
+            "maxTreeDepth": 10,
+            "saveSamples": false
         },
-        display_formula: "response ~ beta * predictor".to_owned(),
-    }
+        "displayFormula": "response ~ beta * predictor"
+    }))
+    .expect("valid worker model fixture must deserialize")
 }
 
 fn input(name: &str, values: Vec<Option<StatisticalScalar>>) -> StatisticalInput {
@@ -107,22 +94,29 @@ fn task_handle(task_id: &BayesTaskId, generation: u64) -> BayesTaskHandle {
     )
 }
 
-fn inference_result(task_id: &str) -> InferenceResult {
-    InferenceResult::new(
-        Vec::new(),
-        InferenceDiagnostics {
-            chains: 1,
-            draws_per_chain: 1,
-            warmup: 0,
-            divergences: Some(0),
-            max_treedepth_hits: Some(0),
-            warnings: Vec::new(),
-        },
-        ResultArtifactManifest {
-            task_id: task_id.to_owned(),
-            artifacts: Vec::new(),
-        },
-    )
+fn inference_snapshot(task: &BayesTaskHandle) -> BayesInferenceSnapshot {
+    let summaries: Vec<ParameterSummary> = serde_json::from_value(serde_json::json!([{
+        "parameter": "beta",
+        "mean": 1.5,
+        "sd": 0.2,
+        "median": 1.4,
+        "q025": 1.0,
+        "q975": 2.0,
+        "rhat": 1.0,
+        "essBulk": 100.0,
+        "essTail": 80.0
+    }]))
+    .expect("neutral summaries must deserialize");
+    let diagnostics: InferenceDiagnostics = serde_json::from_value(serde_json::json!({
+        "chains": 1,
+        "drawsPerChain": 1,
+        "warmup": 0,
+        "divergences": 0,
+        "maxTreedepthHits": 0,
+        "warnings": []
+    }))
+    .expect("neutral diagnostics must deserialize");
+    BayesInferenceSnapshot::from_worker(task.clone(), Arc::from(summaries), diagnostics)
 }
 
 fn validated_task(task_id: &str) -> ValidatedBayesTask {
@@ -333,8 +327,7 @@ impl BayesWorkerPort for FakeWorker {
             FakeTaskState::Terminal(BayesWorkerTerminalCode::Succeeded) => {
                 BayesTaskResult::validated_worker_result(
                     handle,
-                    handle.clone(),
-                    inference_result(handle.task_id().as_str()),
+                    inference_snapshot(handle),
                     Arc::from([]),
                 )
             }
@@ -517,8 +510,11 @@ fn validated_task_reruns_model_and_indexed_input_invariants() {
         ["response", "predictor"]
     );
 
-    let mut invalid_model = valid_model();
-    invalid_model.sampler.samples = 0;
+    let mut invalid_model =
+        serde_json::to_value(valid_model()).expect("valid worker model fixture must serialize");
+    invalid_model["sampler"]["samples"] = serde_json::json!(0);
+    let invalid_model = serde_json::from_value(invalid_model)
+        .expect("invalid semantic model still has a valid wire shape");
     assert!(matches!(
         ValidatedBayesTask::try_new(task_id.clone(), invalid_model, valid_inputs()),
         Err(BayesTaskValidationError::InvalidModel)
@@ -554,23 +550,19 @@ fn result_and_artifact_builders_require_the_full_awaited_handle() {
 
     let result = BayesTaskResult::validated_worker_result(
         &awaited,
-        awaited.clone(),
-        inference_result(task_id.as_str()),
+        inference_snapshot(&awaited),
         Arc::from([matching_artifact.clone()]),
     )
     .expect("matching full handles must produce a result");
     assert_eq!(result.task(), &awaited);
-    assert_eq!(
-        result.inference().artifact_manifest().task_id,
-        task_id.as_str()
-    );
+    assert_eq!(result.inference().summaries()[0].parameter(), "beta");
+    assert_eq!(result.inference().diagnostics().chains(), 1);
     assert_eq!(result.artifacts(), [matching_artifact.clone()]);
 
     assert!(matches!(
         BayesTaskResult::validated_worker_result(
             &awaited,
-            other_generation.clone(),
-            inference_result(task_id.as_str()),
+            inference_snapshot(&other_generation),
             Arc::from([]),
         ),
         Err(BayesWorkerError::StaleTaskHandle { task }) if task == other_generation
@@ -580,8 +572,7 @@ fn result_and_artifact_builders_require_the_full_awaited_handle() {
     assert!(matches!(
         BayesTaskResult::validated_worker_result(
             &awaited,
-            awaited.clone(),
-            inference_result(task_id.as_str()),
+            inference_snapshot(&awaited),
             Arc::from([foreign_artifact.clone()]),
         ),
         Err(BayesWorkerError::ArtifactNotOwned { artifact }) if artifact == foreign_artifact

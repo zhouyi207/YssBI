@@ -1442,3 +1442,8 @@ Execution 不知道具体 UI
 - [ ] 建立 `ValidatedBayesTask::try_new` 唯一构造路径，在 neutral `StatisticalInput` 上重验 model、binding、sampler、响应表达式和 indexed input invariants。
 - [ ] 定义 production-unreachable `BayesWorkerPort`、typed terminal/phase/cancel errors、full-handle validated task result 与 immutable artifact bytes，保持旧 BayesBackend/Application/Julia production route 原样唯一。
 - [ ] 增加 barrier/channel-free-sleep bounded worker fake 与 semantic authority guard，覆盖 cancel/completion linearization、retry、generation ownership、artifact deadline、private constructors/fields 及 broad import 拒绝。
+- [ ] 将 Bayes summaries、diagnostics 与 warning DTO 迁入单一 neutral contract owner，并以 full-handle `BayesInferenceSnapshot` 替换 worker result 对旧 `InferenceResult` 的依赖。
+- [ ] 收紧旧 `InferenceResult`、artifact manifest 与 artifact path fields 为 private getters，保持现有 serde wire、Julia owner 生命周期和唯一 production route 行为不变。
+- [ ] 将 `BayesModelSpec` 八个 fields 全部私有化，仅公开 predictor、likelihood、parameters、data variables 与 sampler 五项 final-adapter capability。
+- [ ] 将旧 dataset/response/display 访问限制为 crate-private canonical getters，并将测试 fixture 改走现有 serde wire，禁止 setter、compatibility view 与 old/new converter。
+- [ ] 将 Bayes authority guard 改为 exact owner+method allowlist，覆盖 function-item alias、wrong-owner 同名函数、伪造 associated constructor 与 neutral result path/source 泄漏。

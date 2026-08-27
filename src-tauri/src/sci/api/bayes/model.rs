@@ -4,14 +4,14 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct BayesModelSpec {
-    pub dataset: DatasetRef,
-    pub response: ResponseSpec,
-    pub predictor: Expression,
-    pub data_variables: BTreeMap<String, String>,
-    pub likelihood: LikelihoodSpec,
-    pub parameters: Vec<ParameterSpec>,
-    pub sampler: InferenceConfig,
-    pub display_formula: String,
+    dataset: DatasetRef,
+    response: ResponseSpec,
+    predictor: Expression,
+    data_variables: BTreeMap<String, String>,
+    likelihood: LikelihoodSpec,
+    parameters: Vec<ParameterSpec>,
+    sampler: InferenceConfig,
+    display_formula: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -186,6 +186,28 @@ pub enum SamplerAlgorithm {
 }
 
 impl BayesModelSpec {
+    pub(super) fn from_validated_parts(
+        dataset: DatasetRef,
+        response: ResponseSpec,
+        predictor: Expression,
+        data_variables: BTreeMap<String, String>,
+        likelihood: LikelihoodSpec,
+        parameters: Vec<ParameterSpec>,
+        sampler: InferenceConfig,
+        display_formula: String,
+    ) -> Self {
+        Self {
+            dataset,
+            response,
+            predictor,
+            data_variables,
+            likelihood,
+            parameters,
+            sampler,
+            display_formula,
+        }
+    }
+
     pub fn predictor(&self) -> &Expression {
         &self.predictor
     }
@@ -206,10 +228,22 @@ impl BayesModelSpec {
         &self.sampler
     }
 
-    pub fn parameter_names(&self) -> BTreeSet<&str> {
+    pub(super) fn parameter_names(&self) -> BTreeSet<&str> {
         self.parameters
             .iter()
             .map(|parameter| parameter.name.as_str())
             .collect()
+    }
+
+    pub(crate) fn dataset(&self) -> &DatasetRef {
+        &self.dataset
+    }
+
+    pub(crate) fn response(&self) -> &ResponseSpec {
+        &self.response
+    }
+
+    pub(crate) fn display_formula(&self) -> &str {
+        &self.display_formula
     }
 }

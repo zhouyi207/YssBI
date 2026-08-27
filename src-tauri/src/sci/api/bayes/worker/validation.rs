@@ -7,14 +7,14 @@ use crate::sci::api::bayes::model::{
 use crate::sci::api::computation::{StatisticalInput, StatisticalScalar};
 
 pub(super) fn model_is_valid(model: &BayesModelSpec) -> bool {
-    if model.dataset.source_id.trim().is_empty()
-        || model.display_formula.trim().is_empty()
-        || model.response.data_variables.len() != 1
-        || !valid_bindings(&model.response.data_variables)
-        || !valid_bindings(&model.data_variables)
-        || !expression_is_valid(&model.response.expression)
-        || !expression_is_valid(&model.predictor)
-        || !parameters_are_valid(&model.parameters)
+    if model.dataset().source_id.trim().is_empty()
+        || model.display_formula().trim().is_empty()
+        || model.response().data_variables.len() != 1
+        || !valid_bindings(&model.response().data_variables)
+        || !valid_bindings(model.data_variables())
+        || !expression_is_valid(&model.response().expression)
+        || !expression_is_valid(model.predictor())
+        || !parameters_are_valid(model.parameters())
         || !sampler_is_valid(model)
     {
         return false;
@@ -24,7 +24,7 @@ pub(super) fn model_is_valid(model: &BayesModelSpec) -> bool {
     let mut response_data = BTreeSet::new();
     let mut response_parameters = BTreeSet::new();
     collect_expression_symbols(
-        &model.response.expression,
+        &model.response().expression,
         &mut response_data,
         &mut response_parameters,
     );
@@ -32,16 +32,16 @@ pub(super) fn model_is_valid(model: &BayesModelSpec) -> bool {
         && response_parameters.is_empty()
         && response_data
             .iter()
-            .all(|name| model.response.data_variables.contains_key(name));
+            .all(|name| model.response().data_variables.contains_key(name));
     if !response_matches {
         return false;
     }
 
-    if !matches!(model.likelihood, LikelihoodSpec::Normal { .. })
+    if !matches!(model.likelihood(), LikelihoodSpec::Normal { .. })
         && !matches!(
-            &model.response.expression,
+            &model.response().expression,
             Expression::DataVariable { name }
-                if model.response.data_variables.contains_key(name)
+                if model.response().data_variables.contains_key(name)
         )
     {
         return false;
@@ -50,13 +50,13 @@ pub(super) fn model_is_valid(model: &BayesModelSpec) -> bool {
     let mut predictor_data = BTreeSet::new();
     let mut predictor_parameters = BTreeSet::new();
     collect_expression_symbols(
-        &model.predictor,
+        model.predictor(),
         &mut predictor_data,
         &mut predictor_parameters,
     );
     if predictor_data
         .iter()
-        .any(|name| !model.data_variables.contains_key(name))
+        .any(|name| !model.data_variables().contains_key(name))
         || predictor_parameters
             .iter()
             .any(|name| !parameter_names.contains(name.as_str()))
@@ -64,7 +64,7 @@ pub(super) fn model_is_valid(model: &BayesModelSpec) -> bool {
         return false;
     }
 
-    match &model.likelihood {
+    match model.likelihood() {
         LikelihoodSpec::Normal { sigma, .. } => parameter_names.contains(sigma.parameter.as_str()),
         LikelihoodSpec::BernoulliLogit { .. } | LikelihoodSpec::PoissonLog { .. } => true,
     }
@@ -176,13 +176,13 @@ fn prior_is_valid(prior: &PriorSpec) -> bool {
 }
 
 fn sampler_is_valid(model: &BayesModelSpec) -> bool {
-    model.sampler.chains > 0
-        && model.sampler.samples > 0
+    model.sampler().chains > 0
+        && model.sampler().samples > 0
         && model
-            .sampler
+            .sampler()
             .target_accept
             .is_none_or(|value| value.is_finite() && (0.0..=1.0).contains(&value))
-        && !matches!(model.sampler.max_tree_depth, Some(0))
+        && !matches!(model.sampler().max_tree_depth, Some(0))
 }
 
 pub(super) fn validate_inputs(
@@ -200,10 +200,10 @@ pub(super) fn validate_inputs(
     }
 
     let required_columns = model
-        .response
+        .response()
         .data_variables
         .values()
-        .chain(model.data_variables.values())
+        .chain(model.data_variables().values())
         .collect::<BTreeSet<_>>();
     let mut row_count = None;
     for (required_index, column) in required_columns.iter().enumerate() {
@@ -221,18 +221,18 @@ pub(super) fn validate_inputs(
         row_count.get_or_insert(input.values().len());
     }
 
-    let Some(response_column) = model.response.data_variables.values().next() else {
+    let Some(response_column) = model.response().data_variables.values().next() else {
         return Err(0);
     };
     let Some((response_index, response)) = by_name.get(response_column.as_str()).copied() else {
         return Err(0);
     };
-    match &model.likelihood {
+    match model.likelihood() {
         LikelihoodSpec::Normal { .. } => {
             for row in 0..response.values().len() {
                 if evaluate_response(
-                    &model.response.expression,
-                    &model.response.data_variables,
+                    &model.response().expression,
+                    &model.response().data_variables,
                     &by_name,
                     row,
                 )

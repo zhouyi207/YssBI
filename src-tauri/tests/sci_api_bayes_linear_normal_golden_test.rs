@@ -1,8 +1,8 @@
 use polars::prelude::{Column, DataFrame};
 use serde::Deserialize;
 use yssbi_lib::sci::api::bayes::{
-    BayesDataExchangeManifest, BayesExchangeColumn, BayesModelSpec, BinaryOp, DatasetSourceType,
-    Expression, LikelihoodSpec, ParameterConstraint, PriorSpec,
+    BayesDataExchangeManifest, BayesExchangeColumn, BayesModelSpec, BinaryOp, Expression,
+    LikelihoodSpec, ParameterConstraint, PriorSpec,
 };
 
 const SIMPLE_LINEAR_NORMAL: &str = include_str!("sci/fixtures/bayes/linear_normal/simple.json");
@@ -53,37 +53,41 @@ fn linear_normal_fixture_defines_stable_model_protocol() {
     assert_eq!(fixture.name, "simple linear normal");
 
     let spec = &fixture.model_spec;
-    assert_eq!(spec.dataset.source_type, DatasetSourceType::Table);
+    let wire = serde_json::to_value(spec).expect("model spec wire");
+    assert_eq!(wire["dataset"]["sourceType"], "table");
     assert_eq!(
-        spec.response.data_variables.get("y").map(String::as_str),
-        Some("y")
+        wire["response"]["dataVariables"]["y"],
+        serde_json::json!("y")
     );
-    assert_eq!(spec.data_variables.get("x").map(String::as_str), Some("x"));
-    assert_eq!(spec.parameters.len(), 3);
-    assert_eq!(spec.sampler.chains, 2);
-    assert!(spec.sampler.save_samples);
+    assert_eq!(
+        spec.data_variables().get("x").map(String::as_str),
+        Some("x")
+    );
+    assert_eq!(spec.parameters().len(), 3);
+    assert_eq!(spec.sampler().chains, 2);
+    assert!(spec.sampler().save_samples);
 
-    match &spec.likelihood {
+    match spec.likelihood() {
         LikelihoodSpec::Normal { sigma, .. } => assert_eq!(sigma.parameter, "sigma"),
         other => panic!("expected normal likelihood, got {other:?}"),
     }
 
     let parameter_names = spec
-        .parameters
+        .parameters()
         .iter()
         .map(|parameter| parameter.name.as_str())
         .collect::<Vec<_>>();
     assert_eq!(parameter_names, ["a", "b", "sigma"]);
     assert!(matches!(
-        spec.parameters[0].constraint,
+        spec.parameters()[0].constraint,
         ParameterConstraint::Real
     ));
     assert!(matches!(
-        spec.parameters[0].prior,
+        spec.parameters()[0].prior,
         PriorSpec::Normal([0.0, 10.0])
     ));
     assert!(matches!(
-        spec.parameters[2].prior,
+        spec.parameters()[2].prior,
         PriorSpec::Exponential([1.0])
     ));
 
@@ -100,17 +104,21 @@ fn nonlinear_normal_fixture_defines_generic_expression_protocol() {
     assert_eq!(fixture.name, "exponential decay normal");
 
     let spec = &fixture.model_spec;
+    let wire = serde_json::to_value(spec).expect("model spec wire");
     assert_eq!(
-        spec.response.data_variables.get("y").map(String::as_str),
-        Some("y")
+        wire["response"]["dataVariables"]["y"],
+        serde_json::json!("y")
     );
-    assert_eq!(spec.data_variables.get("x").map(String::as_str), Some("x"));
-    assert_eq!(spec.parameters.len(), 4);
+    assert_eq!(
+        spec.data_variables().get("x").map(String::as_str),
+        Some("x")
+    );
+    assert_eq!(spec.parameters().len(), 4);
     assert_eq!(fixture.golden.parameters, ["a", "b", "c", "sigma"]);
     assert!(fixture.golden.requires_samples);
     assert!(fixture.golden.requires_posterior_predictive);
 
-    match &spec.predictor {
+    match spec.predictor() {
         Expression::Binary { op, left, right } => {
             assert_eq!(*op, BinaryOp::Add);
             assert!(matches!(left.as_ref(), Expression::Binary { .. }));
@@ -119,16 +127,16 @@ fn nonlinear_normal_fixture_defines_generic_expression_protocol() {
         other => panic!("expected binary predictor, got {other:?}"),
     }
 
-    match &spec.likelihood {
+    match spec.likelihood() {
         LikelihoodSpec::Normal { sigma, .. } => assert_eq!(sigma.parameter, "sigma"),
         other => panic!("expected normal likelihood, got {other:?}"),
     }
     assert!(matches!(
-        spec.parameters[1].constraint,
+        spec.parameters()[1].constraint,
         ParameterConstraint::Positive
     ));
     assert!(matches!(
-        spec.parameters[1].prior,
+        spec.parameters()[1].prior,
         PriorSpec::Exponential([1.0])
     ));
 
@@ -142,14 +150,17 @@ fn bernoulli_logit_fixture_defines_model_family_protocol() {
     let fixture = simple_bernoulli_logit_fixture();
     assert_eq!(fixture.name, "simple bernoulli logit");
     let spec = &fixture.model_spec;
-    assert_eq!(spec.parameters.len(), 2);
+    assert_eq!(spec.parameters().len(), 2);
     assert_eq!(fixture.golden.parameters, ["a", "b"]);
     assert!(matches!(
-        spec.likelihood,
+        spec.likelihood(),
         LikelihoodSpec::BernoulliLogit { .. }
     ));
-    assert_eq!(spec.data_variables.get("x").map(String::as_str), Some("x"));
-    assert!(spec.sampler.save_samples);
+    assert_eq!(
+        spec.data_variables().get("x").map(String::as_str),
+        Some("x")
+    );
+    assert!(spec.sampler().save_samples);
     assert_eq!(fixture_input_table(&fixture).height(), 8);
 }
 
@@ -158,11 +169,17 @@ fn poisson_log_fixture_defines_model_family_protocol() {
     let fixture = simple_poisson_log_fixture();
     assert_eq!(fixture.name, "simple poisson log");
     let spec = &fixture.model_spec;
-    assert_eq!(spec.parameters.len(), 2);
+    assert_eq!(spec.parameters().len(), 2);
     assert_eq!(fixture.golden.parameters, ["a", "b"]);
-    assert!(matches!(spec.likelihood, LikelihoodSpec::PoissonLog { .. }));
-    assert_eq!(spec.data_variables.get("x").map(String::as_str), Some("x"));
-    assert!(spec.sampler.save_samples);
+    assert!(matches!(
+        spec.likelihood(),
+        LikelihoodSpec::PoissonLog { .. }
+    ));
+    assert_eq!(
+        spec.data_variables().get("x").map(String::as_str),
+        Some("x")
+    );
+    assert!(spec.sampler().save_samples);
     assert_eq!(fixture_input_table(&fixture).height(), 8);
 }
 

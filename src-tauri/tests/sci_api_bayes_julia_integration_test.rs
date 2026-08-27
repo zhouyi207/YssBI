@@ -91,8 +91,8 @@ fn run_julia_fixture_when_enabled(fixture: BayesGoldenFixture, task_id: &str) {
     worker.warm_up(&app_data_dir).expect("warm up Julia worker");
 
     let backend = JuliaBayesBackend::new(&app_data_dir, worker);
-    let expected_total = fixture.model_spec.sampler.chains
-        * (fixture.model_spec.sampler.warmup + fixture.model_spec.sampler.samples);
+    let expected_total = fixture.model_spec.sampler().chains
+        * (fixture.model_spec.sampler().warmup + fixture.model_spec.sampler().samples);
     let progress_updates = Arc::new(Mutex::new(Vec::<TaskProgress>::new()));
     let progress_target = progress_updates.clone();
     let result = backend
@@ -135,75 +135,75 @@ fn run_julia_fixture_when_enabled(fixture: BayesGoldenFixture, task_id: &str) {
     assert_eq!(final_sampling_progress.completed, Some(expected_total));
     assert_eq!(final_sampling_progress.total, Some(expected_total));
 
-    assert_eq!(result.summaries.len(), fixture.golden.parameters.len());
+    assert_eq!(result.summaries().len(), fixture.golden.parameters.len());
     for parameter in &fixture.golden.parameters {
         assert!(
             result
-                .summaries
+                .summaries()
                 .iter()
-                .any(|summary| summary.parameter == *parameter),
+                .any(|summary| summary.parameter() == *parameter),
             "missing summary for {parameter}"
         );
     }
     assert!(
         result
-            .summaries
+            .summaries()
             .iter()
-            .all(|summary| summary.rhat.is_some())
+            .all(|summary| summary.rhat().is_some())
     );
     assert!(
         result
-            .summaries
+            .summaries()
             .iter()
-            .all(|summary| summary.ess_bulk.is_some())
+            .all(|summary| summary.ess_bulk().is_some())
     );
     assert!(
         result
-            .summaries
+            .summaries()
             .iter()
-            .all(|summary| summary.ess_tail.is_some())
+            .all(|summary| summary.ess_tail().is_some())
     );
     if fixture.golden.requires_samples {
         assert!(
             result
-                .artifact_manifest
-                .artifacts
+                .artifact_manifest()
+                .artifacts()
                 .iter()
-                .any(|artifact| { artifact.kind == ResultArtifactKind::PosteriorSamples })
+                .any(|artifact| artifact.kind() == ResultArtifactKind::PosteriorSamples)
         );
     }
     if fixture.golden.requires_posterior_predictive {
         assert!(
             result
-                .artifact_manifest
-                .artifacts
+                .artifact_manifest()
+                .artifacts()
                 .iter()
-                .any(|artifact| { artifact.kind == ResultArtifactKind::PosteriorPredictive })
+                .any(|artifact| artifact.kind() == ResultArtifactKind::PosteriorPredictive)
         );
     }
-    for summary in &result.summaries {
-        if let Some(expectation) = fixture.golden.posterior_mean.get(&summary.parameter) {
+    for summary in result.summaries() {
+        if let Some(expectation) = fixture.golden.posterior_mean.get(summary.parameter()) {
             assert!(
-                (summary.mean - expectation.expected).abs() <= expectation.tolerance,
+                (summary.mean() - expectation.expected).abs() <= expectation.tolerance,
                 "posterior mean for {} was {}, expected {} ± {}",
-                summary.parameter,
-                summary.mean,
+                summary.parameter(),
+                summary.mean(),
                 expectation.expected,
                 expectation.tolerance
             );
         }
-        if let Some(rhat) = summary.rhat {
+        if let Some(rhat) = summary.rhat() {
             assert!(
                 rhat <= fixture.golden.max_rhat,
                 "R-hat for {} was {}, expected <= {}",
-                summary.parameter,
+                summary.parameter(),
                 rhat,
                 fixture.golden.max_rhat
             );
         }
     }
-    assert!(result.diagnostics.warnings.iter().all(|warning| {
-        !warning.code.ends_with("_ready") && !warning.code.contains("turing_generic")
+    assert!(result.diagnostics().warnings().iter().all(|warning| {
+        !warning.code().ends_with("_ready") && !warning.code().contains("turing_generic")
     }));
 
     let _ = fs::remove_dir_all(app_data_dir);
