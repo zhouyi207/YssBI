@@ -1616,3 +1616,6 @@ Execution 不知道具体 UI
 - [ ] 建立 Frontend Application 的 project hydration/event ingress/reconciliation、database metadata、worksheet、result query、execution projection 与 window-close coordinator seams。
 - [ ] 建立 Core 只读 read/publication/UI capability 类型，保持 Zustand stores、Views 与旧生产 publication route 尚未切换。
 - [ ] 完成 Frontend Application staged capability 的 typecheck 与 diff 校验；Vitest runner 的环境阻塞继续记录，不引入重复测试路径。
+- [ ] 建立 Services-owned platform outcome/failure contracts 与 path/window/webview/opener/clipboard/settings event seams，隔离原始平台 API。
+- [ ] 建立 Application-owned settings synchronization coordinator 与 Core settings UI capability，保持跨窗口 echo suppression 与 UI state ownership边界。
+- [ ] 完成 Frontend platform capability staged typecheck 与 diff 校验，未改动现有 production listener/invoke routes。
