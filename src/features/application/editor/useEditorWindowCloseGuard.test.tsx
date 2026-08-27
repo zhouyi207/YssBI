@@ -2,13 +2,14 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { currentAppWindow } from '@/services/platform/appWindow';
+import type { AppWindowHandle } from '@/services/platform/appWindow';
 import { WorkbenchLayoutError } from '@/features/core/dockview/workbenchDockviewPort';
 import { useEditorWindowCloseGuard } from './useEditorWindowCloseGuard';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-type CloseListener = (event: { preventDefault(): void }) => void | Promise<void>;
+type CloseListener = () => Promise<'allow' | 'prevent'>;
 
 type Deferred<T> = {
   readonly promise: Promise<T>;
@@ -31,8 +32,8 @@ const mocks = vi.hoisted(() => ({
   logWarn: vi.fn(),
 }));
 
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: vi.fn(),
+vi.mock('@/services/platform/appWindow', () => ({
+  currentAppWindow: vi.fn(),
 }));
 vi.mock('@/features/core/layout/tabDirty', () => ({
   collectDirtyGraphTabs: () => mocks.dirty,
@@ -67,20 +68,21 @@ function Harness(): null {
 
 function installWindowMock() {
   let closeListener: CloseListener | undefined;
-  let recursivePreventDefault: (() => void) | undefined;
+  let recursiveDecision: 'allow' | 'prevent' | undefined;
   const unlisten = vi.fn();
   const close = vi.fn(async () => {
-    recursivePreventDefault = vi.fn();
-    await closeListener?.({ preventDefault: recursivePreventDefault });
+    recursiveDecision = await closeListener?.();
+    return { ok: true, value: undefined } as const;
   });
   const onCloseRequested = vi.fn(async (listener: CloseListener) => {
     closeListener = listener;
-    return unlisten;
+    return { ok: true, value: unlisten } as const;
   });
-  vi.mocked(getCurrentWindow).mockReturnValue({
+  vi.mocked(currentAppWindow).mockReturnValue({
+    label: 'main',
     close,
     onCloseRequested,
-  } as unknown as ReturnType<typeof getCurrentWindow>);
+  } as unknown as AppWindowHandle);
 
   return {
     close,
@@ -90,7 +92,7 @@ function installWindowMock() {
       if (!closeListener) throw new Error('close listener is not attached');
       return closeListener;
     },
-    getRecursivePreventDefault: () => recursivePreventDefault,
+    getRecursiveDecision: () => recursiveDecision,
   };
 }
 
@@ -121,17 +123,15 @@ describe('useEditorWindowCloseGuard', () => {
       await Promise.resolve();
     });
 
-    const preventDefault = vi.fn();
     await act(async () => {
-      await appWindow.getCloseListener()({ preventDefault });
+      await appWindow.getCloseListener()();
     });
 
-    expect(preventDefault).toHaveBeenCalledOnce();
     expect(mocks.confirm3).toHaveBeenCalledOnce();
     expect(mocks.saveAllDirtyGraphs).not.toHaveBeenCalled();
     expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce();
     expect(appWindow.close).toHaveBeenCalledOnce();
-    expect(appWindow.getRecursivePreventDefault()).not.toHaveBeenCalled();
+    expect(appWindow.getRecursiveDecision()).toBe('allow');
 
     await act(async () => root?.unmount());
     root = null;
@@ -149,13 +149,9 @@ describe('useEditorWindowCloseGuard', () => {
       await Promise.resolve();
     });
 
-    const preventDefault = vi.fn();
-    const closeRequest = Promise.resolve(
-      appWindow.getCloseListener()({ preventDefault }),
-    );
+    const closeRequest = appWindow.getCloseListener()();
     await Promise.resolve();
 
-    expect(preventDefault).toHaveBeenCalledOnce();
     expect(mocks.confirm3).not.toHaveBeenCalled();
     expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce();
     expect(appWindow.close).not.toHaveBeenCalled();
@@ -164,7 +160,7 @@ describe('useEditorWindowCloseGuard', () => {
     await closeRequest;
 
     expect(appWindow.close).toHaveBeenCalledOnce();
-    expect(appWindow.getRecursivePreventDefault()).not.toHaveBeenCalled();
+    expect(appWindow.getRecursiveDecision()).toBe('allow');
     expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce();
   });
 
@@ -179,10 +175,8 @@ describe('useEditorWindowCloseGuard', () => {
       await Promise.resolve();
     });
 
-    const preventDefault = vi.fn();
-    await appWindow.getCloseListener()({ preventDefault });
+    await appWindow.getCloseListener()();
 
-    expect(preventDefault).toHaveBeenCalledOnce();
     expect(mocks.showWorkbenchLayoutError).toHaveBeenCalledOnce();
     expect(mocks.showWorkbenchLayoutError).toHaveBeenCalledWith(failure);
     expect(appWindow.close).not.toHaveBeenCalled();
@@ -199,33 +193,25 @@ describe('useEditorWindowCloseGuard', () => {
       await Promise.resolve();
     });
 
-    const firstPreventDefault = vi.fn();
-    const secondPreventDefault = vi.fn();
     const closeListener = appWindow.getCloseListener();
-    const firstCloseRequest = Promise.resolve(
-      closeListener({ preventDefault: firstPreventDefault }),
-    );
+    const firstCloseRequest = closeListener();
 
     await vi.waitFor(() => {
       expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce();
     });
 
-    const secondCloseRequest = Promise.resolve(
-      closeListener({ preventDefault: secondPreventDefault }),
-    );
+    const secondCloseRequest = closeListener();
     await secondCloseRequest;
     const closeCallsWhileFlushPending = appWindow.close.mock.calls.length;
 
     firstFlush.resolve(undefined);
     await firstCloseRequest;
 
-    expect(firstPreventDefault).toHaveBeenCalledOnce();
-    expect(secondPreventDefault).toHaveBeenCalledOnce();
     expect(mocks.confirm3).toHaveBeenCalledOnce();
     expect(mocks.saveAllDirtyGraphs).toHaveBeenCalledOnce();
     expect(mocks.flushBeforeWindowClose).toHaveBeenCalledOnce();
     expect(closeCallsWhileFlushPending).toBe(0);
     expect(appWindow.close).toHaveBeenCalledOnce();
-    expect(appWindow.getRecursivePreventDefault()).not.toHaveBeenCalled();
+    expect(appWindow.getRecursiveDecision()).toBe('allow');
   });
 });

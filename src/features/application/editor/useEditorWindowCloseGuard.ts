@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { i18n } from '@/app/i18n';
+import { currentAppWindow } from '@/services/platform/appWindow';
 import { workbenchLayoutController } from '@/features/application/layout/workbenchLayoutController';
 import { showWorkbenchLayoutError } from '@/features/application/layout/workbenchLayoutErrorFeedback';
 import { collectDirtyGraphTabs } from '@/features/core/layout/tabDirty';
@@ -11,7 +11,7 @@ import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 /** Flushes layout and protects dirty documents before the editor window closes. */
 export function useEditorWindowCloseGuard(): void {
   useEffect(() => {
-    const appWindow = getCurrentWindow();
+    const appWindow = currentAppWindow();
     let cancelled = false;
     let unlistenClose: (() => void) | null = null;
     let allowDestructiveClose = false;
@@ -19,11 +19,13 @@ export function useEditorWindowCloseGuard(): void {
 
     const setupCloseListener = async () => {
       try {
-        const unlisten = await appWindow.onCloseRequested(async (event) => {
-          if (allowDestructiveClose) return;
+        const subscription = await appWindow.onCloseRequested(async () => {
+          if (allowDestructiveClose) {
+            allowDestructiveClose = false;
+            return 'allow';
+          }
 
-          event.preventDefault();
-          if (inFlight) return;
+          if (inFlight) return 'prevent';
           inFlight = true;
 
           const dirty = collectDirtyGraphTabs();
@@ -44,14 +46,14 @@ export function useEditorWindowCloseGuard(): void {
 
             if (choice === 'cancel') {
               inFlight = false;
-              return;
+              return 'prevent';
             }
 
             if (choice === 'confirm') {
               const saved = await saveAllDirtyGraphs();
               if (!saved) {
                 inFlight = false;
-                return;
+                return 'prevent';
               }
             }
           }
@@ -61,32 +63,28 @@ export function useEditorWindowCloseGuard(): void {
           } catch (error) {
             inFlight = false;
             showWorkbenchLayoutError(error);
-            return;
+            return 'prevent';
           }
 
           allowDestructiveClose = true;
-          try {
-            await appWindow.close();
-          } catch (error) {
-            logger.app.error(
-              `Failed to close window after dirty-tab decision: ${error instanceof Error ? error.message : String(error)}`,
-              'EditorWindow',
-            );
+          const closeResult = await appWindow.close();
+          if (!closeResult.ok) {
+            logger.app.error('window close after confirmation failed', 'EditorWindow');
             allowDestructiveClose = false;
             inFlight = false;
           }
+          return 'prevent';
         });
 
         if (cancelled) {
-          unlisten();
+          if (subscription.ok) subscription.value();
+        } else if (subscription.ok) {
+          unlistenClose = subscription.value;
         } else {
-          unlistenClose = unlisten;
+          logger.app.warn('editor window close guard unavailable', 'EditorWindow');
         }
-      } catch (error) {
-        logger.app.warn(
-          `Failed to attach editor window close guard: ${error instanceof Error ? error.message : String(error)}`,
-          'EditorWindow',
-        );
+      } catch {
+        logger.app.warn('editor window close guard unavailable', 'EditorWindow');
       }
     };
 
