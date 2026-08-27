@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use sqlx::SqlitePool;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
+use sqlx::{FromRow, SqlitePool};
 use std::str::FromStr;
 
 use crate::project::{
@@ -13,6 +13,18 @@ use crate::project::{
 pub struct SqliteProjectRegistryStore {
     pool: SqlitePool,
     path: PathBuf,
+}
+
+#[derive(Debug, FromRow)]
+struct ProjectRegistryRow {
+    id: String,
+    name: String,
+    path: String,
+    created_at: String,
+    last_opened_at: Option<String>,
+    is_favorite: i64,
+    root_identity: String,
+    root_identity_state: String,
 }
 
 impl SqliteProjectRegistryStore {
@@ -72,22 +84,115 @@ impl ProjectRegistryStore for SqliteProjectRegistryStore {
         Result<Box<[ProjectRegistryRecord]>, ProjectRegistryStoreError>,
     > {
         Box::pin(async move {
-            let _ = &self.pool;
-            Err(ProjectRegistryStoreError::Unavailable)
+            let rows = sqlx::query_as::<_, ProjectRegistryRow>(
+                "SELECT id, name, path, created_at, last_opened_at, is_favorite, root_identity, root_identity_state FROM projects",
+            )
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|error| {
+                tracing::warn!(
+                    target: "yssbi::backend_adapters::project_registry_sqlite",
+                    diagnostic_domain = "system",
+                    diagnostic_event = "projectRegistryLoadFailed",
+                    error = %error,
+                    "Project registry load failed"
+                );
+                ProjectRegistryStoreError::StorageFailed
+            })?;
+            rows.into_iter()
+                .map(row_to_record)
+                .collect::<Result<Vec<_>, _>>()
+                .map(Vec::into_boxed_slice)
         })
     }
 
     fn upsert(
         &self,
-        _record: &ProjectRegistryRecord,
+        record: &ProjectRegistryRecord,
     ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
-        Box::pin(async move { Err(ProjectRegistryStoreError::Unavailable) })
+        let id = record.id().to_owned();
+        let name = record.name().to_owned();
+        let path = record.path().to_owned();
+        let created_at = record.created_at().to_owned();
+        let last_opened_at = record.last_opened_at().map(str::to_owned);
+        let favorite = record.is_favorite();
+        let root_identity = record.root_identity().as_str().to_owned();
+        let root_identity_state = record.root_identity_state();
+        Box::pin(async move {
+            sqlx::query(
+                "INSERT INTO projects (id, name, path, created_at, last_opened_at, is_favorite, root_identity, root_identity_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, path=excluded.path, created_at=excluded.created_at, last_opened_at=excluded.last_opened_at, is_favorite=excluded.is_favorite, root_identity=excluded.root_identity, root_identity_state=excluded.root_identity_state",
+            )
+            .bind(id)
+            .bind(name)
+            .bind(path)
+            .bind(created_at)
+            .bind(last_opened_at)
+            .bind(i64::from(favorite))
+            .bind(root_identity)
+            .bind(match root_identity_state {
+                crate::project::ProjectRootIdentityState::Valid => "valid",
+                crate::project::ProjectRootIdentityState::Invalid => "invalid",
+            })
+            .execute(&self.pool)
+            .await
+            .map(|_| ())
+            .map_err(|error| {
+                tracing::warn!(
+                    target: "yssbi::backend_adapters::project_registry_sqlite",
+                    diagnostic_domain = "system",
+                    diagnostic_event = "projectRegistryUpsertFailed",
+                    error = %error,
+                    "Project registry upsert failed"
+                );
+                ProjectRegistryStoreError::StorageFailed
+            })
+        })
     }
 
     fn remove(
         &self,
-        _project: &ProjectInstanceId,
+        project: &ProjectInstanceId,
     ) -> ProjectRegistryStoreFuture<'_, Result<(), ProjectRegistryStoreError>> {
-        Box::pin(async move { Err(ProjectRegistryStoreError::Unavailable) })
+        let project_id = project.as_str().to_owned();
+        Box::pin(async move {
+            let result = sqlx::query("DELETE FROM projects WHERE id = ?")
+                .bind(project_id)
+                .execute(&self.pool)
+                .await
+                .map_err(|error| {
+                    tracing::warn!(
+                        target: "yssbi::backend_adapters::project_registry_sqlite",
+                        diagnostic_domain = "system",
+                        diagnostic_event = "projectRegistryRemoveFailed",
+                        error = %error,
+                        "Project registry remove failed"
+                    );
+                    ProjectRegistryStoreError::StorageFailed
+                })?;
+            if result.rows_affected() == 0 {
+                return Err(ProjectRegistryStoreError::Unavailable);
+            }
+            Ok(())
+        })
     }
+}
+
+fn row_to_record(
+    row: ProjectRegistryRow,
+) -> Result<ProjectRegistryRecord, ProjectRegistryStoreError> {
+    let state = match row.root_identity_state.as_str() {
+        "valid" => crate::project::ProjectRootIdentityState::Valid,
+        "invalid" => crate::project::ProjectRootIdentityState::Invalid,
+        _ => return Err(ProjectRegistryStoreError::StorageFailed),
+    };
+    Ok(ProjectRegistryRecord::new(
+        row.id.into_boxed_str(),
+        row.name.into_boxed_str(),
+        row.path.into_boxed_str(),
+        row.created_at.into_boxed_str(),
+        row.last_opened_at.map(String::into_boxed_str),
+        row.is_favorite != 0,
+        crate::project::ProjectRootIdentity::from_stored(row.root_identity),
+        state,
+    ))
 }

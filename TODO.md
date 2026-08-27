@@ -1598,3 +1598,6 @@ Execution 不知道具体 UI
 - [ ] 将 Project registry scan/cleanup 的 progress 入参切换为借用 `ProjectProgressSink`，移除 Project 对 Tauri Channel 的直接依赖。
 - [ ] 让 Commands registry 创建 bounded progress publisher/worker，在每个返回路径关闭 admission 并保留 timeout drain owner。
 - [ ] 完成 Backend Task 7 progress seam 的 Rust check、focused publisher test、fmt 与 diff 校验；SQLx persistence owner 仍待同一任务的后续切换。
+- [ ] 将 ProjectRegistry 的 SQLx pool/row/query ownership 移出 Project，改由 `Arc<dyn ProjectRegistryStore>` 驱动域验证、排序与 registry authority。
+- [ ] 让 `backend_adapters/project_registry_sqlite.rs` 成为唯一 SQLite schema/query/row mapping owner，并在组合根一次性构造/擦除 concrete store。
+- [ ] 完成 registry persistence 与 lifecycle focused 回归、Rust check、fmt 与 diff 校验，保留错误与项目生命周期语义。

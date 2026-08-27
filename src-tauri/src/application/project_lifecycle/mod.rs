@@ -33,9 +33,9 @@ pub struct ProjectRegistryFailure {
 }
 
 impl ProjectRegistryFailure {
-    fn new(diagnostic: String) -> Self {
+    fn new(diagnostic: impl std::fmt::Display) -> Self {
         Self {
-            diagnostic: diagnostic.into_boxed_str(),
+            diagnostic: diagnostic.to_string().into_boxed_str(),
         }
     }
 }

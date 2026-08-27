@@ -79,8 +79,14 @@ pub fn run() {
             app.manage(project_state);
 
             let app_dir = app.path().app_data_dir()?;
+            let registry_store = tauri::async_runtime::block_on(
+                backend_adapters::project_registry_sqlite::SqliteProjectRegistryStore::connect(
+                    app_dir.clone(),
+                ),
+            )?;
+            let registry_path = registry_store.path().to_path_buf();
             let project_registry =
-                tauri::async_runtime::block_on(project::ProjectRegistry::init(app_dir.clone()))?;
+                project::ProjectRegistry::new(std::sync::Arc::new(registry_store), registry_path);
             app.manage(project_registry);
             app.manage(application::bayes::BayesInferenceService::with_backend(
                 std::sync::Arc::new(sci::backends::julia::bayes::JuliaBayesBackend::new(
