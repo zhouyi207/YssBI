@@ -1590,3 +1590,6 @@ Execution 不知道具体 UI
 - [ ] 建立 GraphRuntimeState 的 epoch-bound component contract，保留旧 Project-owned registry/catalog/compiler production route 不变。
 - [ ] 建立 Project-owned graph history before/after residency snapshots与可逆 change contract，避免将 Graph patch 穿透到 Project history。
 - [ ] 完成 Project–Graph Tasks 3–6 的 focused owner checks、Rust check、fmt 与 diff 校验，graph mutation/open/catalog activation继续留待后续原子切换。
+- [ ] 建立 production-unreachable `ExecutionRuntimeState` 的 session/generation/admission owner，保持旧 Project/node-system runtime path 唯一活跃。
+- [ ] 建立 `ApplicationSessionSlot` 的 Inactive/Replacing/Recovering/Active capture/revalidation contract，禁止暴露混合 session tuple 或第二 production owner。
+- [ ] 完成 Execution Tasks 2–3 的 staged state focused compile/test gate，session replacement recovery workflow与生产安装继续留待后续 cutover。

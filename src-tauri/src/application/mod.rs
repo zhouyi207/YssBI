@@ -3,6 +3,7 @@ pub mod catalog_compatibility;
 pub mod computation_settings;
 pub mod database;
 pub mod database_schema;
+pub mod execution;
 pub mod graph_contracts;
 pub mod graph_execution;
 pub mod hypothesis;
