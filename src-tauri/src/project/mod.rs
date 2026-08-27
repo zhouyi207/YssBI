@@ -10,6 +10,8 @@ pub mod path_format;
 pub mod project_change;
 pub mod project_data;
 pub mod project_error;
+pub mod project_progress;
+pub mod project_registry_store;
 pub mod resource_lifecycle;
 pub mod resource_name;
 
@@ -48,6 +50,8 @@ pub use path_format::*;
 pub use project_change::*;
 pub use project_data::*;
 pub use project_error::*;
+pub use project_progress::*;
+pub use project_registry_store::*;
 pub use resource_lifecycle::*;
 pub use resource_name::*;
 

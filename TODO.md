@@ -1577,3 +1577,6 @@ Execution 不知道具体 UI
 - [ ] 建立 Database-owned session API 的 neutral catalog/data snapshot、ordered column selection 与 private query-basis seams，保持旧 Project database route 不变。
 - [ ] 增加 whole-catalog session/generation/declaration/runtime/schema revalidation 与 typed mutation prepare/commit evidence，所有基础验证保持锁外。
 - [ ] 完成 session API focused tests、Rust check、fmt 与 diff 校验；plot query、relational/resource adapters 与生产 session cutover继续由后续任务负责。
+- [ ] 建立 Project-owned typed `ProjectRegistryStore` 与 bounded `ProjectProgress` contracts，隔离 registry persistence/progress 的消费者接口。
+- [ ] 建立 Commands-owned FIFO progress publisher/worker、shared close state 与 retryable shutdown outcome，保留 Tauri Channel 仅在 delivery adapter。
+- [ ] 完成 registry/progress staged contracts 的 Rust check、fmt 与 diff 校验；旧 Project SQLx/Channel route 保留至后续原子 caller cutover。

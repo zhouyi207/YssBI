@@ -650,7 +650,7 @@ impl DatabaseRuntimeSession {
         })
     }
 
-    pub fn claim_recovery(
+    pub(crate) fn claim_recovery(
         &self,
         _recovery: DatabaseRecoveryId,
         _current_authority: &DatabaseDeclarationObservation,
