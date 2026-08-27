@@ -49,12 +49,12 @@ describe('correlogram report DTO', () => {
     expect(pacf[0].lag).toBe(1);
   });
 
-  it('parses plot bar with required q_stat and p_value', () => {
+  it('parses plot bar with required qStat and pValue', () => {
     const bar = parsePlotCorrelogramBar({
       lag: 2,
       value: 0.3,
-      q_stat: 1.2,
-      p_value: 0.04,
+      qStat: 1.2,
+      pValue: 0.04,
     });
     expect(bar).not.toBeNull();
     expect(hasLjungBoxStats(bar!)).toBe(true);

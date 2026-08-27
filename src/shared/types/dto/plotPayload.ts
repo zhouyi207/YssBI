@@ -44,8 +44,8 @@ export interface CorrelogramPlotDTO {
 
 export interface CorrelationPlotDTO {
   labels: string[];
-  matrix: number[][];
-  pMatrix?: number[][];
+  matrix: (number | null)[][];
+  pMatrix?: (number | null)[][];
 }
 
 export type ParsedPlotPayload =
@@ -70,25 +70,21 @@ function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
-function readOptionalString(record: Record<string, unknown>, ...keys: string[]): string | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'string' && value.length > 0) {
-      return value;
-    }
+function readOptionalString(record: Record<string, unknown>, key: string): string | undefined {
+  const value = record[key];
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
   }
   return undefined;
 }
 
 function readOptionalAxisFormat(
   record: Record<string, unknown>,
-  ...keys: string[]
+  key: string,
 ): AxisFormat | undefined {
-  for (const key of keys) {
-    const value = record[key];
-    if (value === 'date' || value === 'datetime' || value === 'number') {
-      return value;
-    }
+  const value = record[key];
+  if (value === 'date' || value === 'datetime' || value === 'number') {
+    return value;
   }
   return undefined;
 }
@@ -119,10 +115,10 @@ export function parseXySeriesPlot(raw: unknown): XySeriesPlotDTO | null {
   if (!data) return null;
   return {
     data,
-    xLabel: readOptionalString(raw, 'xLabel', 'x_label'),
-    yLabel: readOptionalString(raw, 'yLabel', 'y_label'),
-    xFormat: readOptionalAxisFormat(raw, 'xFormat', 'x_format'),
-    yFormat: readOptionalAxisFormat(raw, 'yFormat', 'y_format'),
+    xLabel: readOptionalString(raw, 'xLabel'),
+    yLabel: readOptionalString(raw, 'yLabel'),
+    xFormat: readOptionalAxisFormat(raw, 'xFormat'),
+    yFormat: readOptionalAxisFormat(raw, 'yFormat'),
   };
 }
 
@@ -145,8 +141,8 @@ export function parseHistogramPlot(raw: unknown): HistogramPlotDTO | null {
   }
   return {
     data: bins,
-    xLabel: readOptionalString(raw, 'xLabel', 'x_label'),
-    yLabel: readOptionalString(raw, 'yLabel', 'y_label'),
+    xLabel: readOptionalString(raw, 'xLabel'),
+    yLabel: readOptionalString(raw, 'yLabel'),
   };
 }
 
@@ -165,7 +161,7 @@ export function parseCorrelogramPlot(raw: unknown): CorrelogramPlotDTO | null {
   if (!isRecord(raw)) return null;
   const acf = parseCorrelogramSeries(raw.acf);
   const pacf = parseCorrelogramSeries(raw.pacf);
-  const ciHalfWidth = raw.ci_half_width;
+  const ciHalfWidth = raw.ciHalfWidth;
   const n = raw.n;
   if (!acf || !pacf || !isFiniteNumber(ciHalfWidth) || !isNonNegativeInteger(n) || n === 0) {
     return null;
@@ -173,14 +169,14 @@ export function parseCorrelogramPlot(raw: unknown): CorrelogramPlotDTO | null {
   return { acf, pacf, ciHalfWidth, n };
 }
 
-function parseSquareNumberMatrix(raw: unknown, size: number): number[][] | null {
+function parseSquareNullableNumberMatrix(raw: unknown, size: number): (number | null)[][] | null {
   if (!Array.isArray(raw) || raw.length !== size) return null;
-  const matrix: number[][] = [];
+  const matrix: (number | null)[][] = [];
   for (const row of raw) {
     if (!Array.isArray(row) || row.length !== size) return null;
-    const parsedRow: number[] = [];
+    const parsedRow: (number | null)[] = [];
     for (const cell of row) {
-      if (!isFiniteNumber(cell)) return null;
+      if (cell !== null && !isFiniteNumber(cell)) return null;
       parsedRow.push(cell);
     }
     matrix.push(parsedRow);
@@ -196,12 +192,12 @@ export function parseCorrelationPlot(raw: unknown): CorrelationPlotDTO | null {
     if (typeof label !== 'string') return null;
     labels.push(label);
   }
-  const matrix = parseSquareNumberMatrix(raw.matrix, labels.length);
+  const matrix = parseSquareNullableNumberMatrix(raw.matrix, labels.length);
   if (!matrix) return null;
-  const pMatrixRaw = raw.p_matrix;
-  let pMatrix: number[][] | undefined;
+  const pMatrixRaw = raw.pMatrix;
+  let pMatrix: (number | null)[][] | undefined;
   if (pMatrixRaw !== undefined) {
-    const parsed = parseSquareNumberMatrix(pMatrixRaw, labels.length);
+    const parsed = parseSquareNullableNumberMatrix(pMatrixRaw, labels.length);
     if (!parsed) return null;
     pMatrix = parsed;
   }

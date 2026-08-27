@@ -1540,6 +1540,11 @@ Execution 不知道具体 UI
 - [ ] 接入禁用发送的 Assistant UI Workbench Shell，注册 root Dockview、布局持久化、View 菜单及中英文文案。
 - [ ] 新增仓库级 `.gitattributes`，统一文本文件使用 LF 换行。
 - [ ] 通过 Git 属性与 `git diff --check` 验证换行策略。
+- [ ] 将 scatter、line、ECDF、KDE、histogram、correlation 与 correlogram 的 Rust Plot payload 统一为 canonical camelCase wire。
+- [ ] 将未定义的相关系数和 p 值保留为 nullable correlation matrix cells，不再静默转换为 `0.0`。
+- [ ] 新增 Rust production serializer 生成的 `plot-payloads.json` 契约 fixture，并由 node-system contract generator 持续校验七种 Plot kind。
+- [ ] 将 TypeScript Plot 边界收敛为 camelCase-only 读取和单次 correlogram normalization，并让现有 correlation renderer 跳过 null cell。
+- [ ] 增加 Rust fixture 驱动的 Plot parser 回归覆盖，验证 pMatrix、ciHalfWidth、qStat 与 pValue 跨语言保真。
 - [ ] 更新 `AGENTS.md`，明确 Rust 后端测试的编译与运行成本较高，避免迭代期间频繁运行。
 - [ ] 保持 Rust 聚焦测试与完整测试套件之间的执行边界，仅在必要场景运行 broader/full suite。
 - [ ] 更新 `AGENTS.md`，统一后端 Rust 错误使用 `thiserror` 定义类型化错误。

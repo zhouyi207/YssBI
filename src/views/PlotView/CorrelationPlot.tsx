@@ -17,9 +17,9 @@ export interface CorrelationPlotProps {
   /** 变量名列表，与 matrix 行列顺序一致 */
   labels: string[];
   /** n×n 相关系数矩阵，值域 [-1, 1] */
-  matrix: number[][];
+  matrix: (number | null)[][];
   /** n×n p 值矩阵，可选 */
-  pMatrix?: number[][];
+  pMatrix?: (number | null)[][];
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
@@ -91,7 +91,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
 
     const tooltip = new PlotTooltipController(tooltipRef.current, container);
 
-    const cells: { i: number; j: number; value: number; pValue?: number }[] = [];
+    const cells: { i: number; j: number; value: number; pValue?: number | null }[] = [];
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
         const v = matrix[i]?.[j];
@@ -102,7 +102,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       }
     }
 
-    const formatP = (p: number | undefined): string => {
+    const formatP = (p: number | null | undefined): string => {
       if (p == null || Number.isNaN(p)) return '—';
       if (p < 0.001) return 'p < 0.001';
       return `p = ${p.toFixed(3)}`;
@@ -125,7 +125,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
     attachHoverTooltip(
       cellRects as D3Onable<
         SVGRectElement,
-        { i: number; j: number; value: number; pValue?: number }
+        { i: number; j: number; value: number; pValue?: number | null }
       >,
       {
         tooltip,
