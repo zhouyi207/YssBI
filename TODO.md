@@ -28,10 +28,149 @@ src/app/appConfig/appLinks.ts
 提交并 push，或手动再跑 publish.yml
 ```
 
+codex resume 01a03e97-3969-7c82-85e9-8d2071050906 --yolo
+
+
+已完成汇总文档：
+
+  docs/superpowers/plans/2026-08-27-architecture-decoupling-progress-and-next-steps.md
+
+  文档包含：
+
+  - 已完成、已集成、进行中、待实现的完整状态矩阵。
+  - Strict Frontend/Rust、Backend Tasks 1–5a、Project–Graph Task 1 的实现与提交记录。
+  - 当前 architecture-final、各 worktree 和验证状态。
+  - 当前进行中的 Backend Task 5b Tabular/Polars 拆分。
+  - Backend、Project–Graph、Execution、Presentation、Frontend Application 的后续依赖顺序。
+  - 最终原子切换、债务清零和验证门槛。
+  - 明确禁止兼容层、双路线、动态 debt baseline。
+
+  同时已向 TODO.md 的 2026.08.27 标题追加两条摘要，未改写既有内容。
+
+  最新集成分支 d042b4f9 已重新确认：
+
+  - pnpm rust:fmt:check：通过
+  - pnpm rust:check：通过
+  - git diff --check：通过
+
+  docs/superpowers 按仓库规则保持 git-ignored、未提交；主工作区中的用户代码改动未被触碰
+
 # DOLIST
+
+## 2026.08.27
+
+- [ ] 完成 Rig、rmcp、assistant-ui 与 YssBI 当前/目标模块边界的架构审计，确认内部 Agent 与外部 MCP 复用 Application 能力而不共享协议实现。
+- [ ] 将长期能力入口收敛为 Application-owned capability gateway，区分领域请求、model-facing capability schema、Tauri DTO 与 MCP/Rig adapter mapping。
+- [ ] 规划 typed `thiserror` owner errors、稳定安全 failure code/details、incident correlation 与 Rig/MCP/Tauri 各自的穷举错误映射。
+- [ ] 规划 actor/session-bound policy、一次性 approval grant、invocation idempotency、deadline/cancellation 和非诊断型 invocation ledger。
+- [ ] 规划 revision-aware `apply_graph_edit` 批处理与可验证 undo receipts，明确现有 `OperationId` 只作 correlation、不得充当 AI transaction 或幂等键。
+- [ ] 规划 Rust-authoritative assistant session/event stream、assistant-ui ExternalStore projection，以及 loopback MCP transport、认证和 project-session binding。
+- [ ] 明确 Assistant Host 只依赖其自有 `AgentDriverPort`，Rig adapter 实现该 port 并由 composition root 注入，禁止 Application 反向 import Rig/rmcp。
+- [ ] 明确 Rig 与 MCP adapter 只能依赖 Capability Gateway public interface，禁止直接访问 Project、Graph、Execution authority 或互相调用。
+- [ ] 为 Automation contracts、Application、Rig、MCP、Tauri schema/event 建立单向依赖与 exact import architecture guards，防止 service locator、barrel re-export 和双向回调形成隐式环。
+- [ ] 新增 Automation Capability Foundation 书面规范，固定 Foundation 与 Internal Assistant、Assistant Frontend、MCP Server、MCP Client 四阶段拆分及前置迁移顺序。
+- [ ] 将 `automation_contract` 固定为 Pure Leaf、将 Rig/MCP 固定为第十六层 Automation Adapter，并定义 composition root 唯一 concrete constructor ownership。
+- [ ] 固定 `inspect_graph`、`search_node_catalog`、`inspect_dataset_schema`、`apply_graph_edit` 四个 closed typed capability contract 与有界数据暴露规则。
+- [ ] 将 `apply_graph_edit` 设计为 clientKey-aware 单 graph 批处理，要求一次 staged validation、一次 Project commit、一次 revision/history/publication。
+- [ ] 固定 principal/session-bound approval、binding nonce invocation ID、无淘汰 session ledger、typed failure/incident 和 commit point-of-no-return 语义。
+- [ ] 定义 Capability Gateway 五类 public interface、architecture fitness functions、代表性回归测试与 production-unrouted Foundation 验收条件。
+- [ ] 批准 Automation Capability Foundation 规范并将状态更新为已批准，保持 Foundation 与后续 Internal Assistant/Frontend/MCP 设计分离。
+- [ ] 新增 Capability Foundation 十一任务实施计划，设置最终 ApplicationSessionSlot、Project–Graph、Database 与 strict policy 的硬前置 gate。
+- [ ] 规划第十六层 Automation Adapter、Pure Leaf capability contracts、schemars 1.2.2 exact allowlist 与 contract/schema golden 的 RED–GREEN 任务。
+- [ ] 规划 loaded graph inspection、single-route catalog search、no-row dataset schema inspection 三个独立 Application 深 module 及 currentness 回归。
+- [ ] 规划 clientKey graph edit batch 通过原 mutation owner 构造 sealed candidate，保留唯一 `mutate_graph_in_session`/Project commit caller。
+- [ ] 规划 Gateway binding、policy、approval、no-eviction ledger、OperationId admission、deadline/cancellation 与 commit point-of-no-return 的完整状态测试。
+- [ ] 在实施计划中加入每任务 TODO、focused tests、architecture tests、baseline hash 对比、untracked whitespace 与 production-unrouted 验证门禁。
+- [ ] 复核所谓 2026.08.26 plans 实为 `2026-08-25-*` 文件并于 8 月 26 日完成最后修改，确认其 exact cross-plan 顺序仍是 Foundation 的权威前置。
+- [ ] 重新审计 Foundation 的 15 个硬前置最终 seam，当前工作树存在 0 个、缺失 15 个，因此禁止立即执行 Foundation Task 1。
+- [ ] 确认 Foundation 与 Strict、Backend、Project–Graph、Execution、Presentation 在 architecture policy、ApplicationState、Graph mutation、Database session、Project history 等文件有预期后置重叠，并行执行会形成真实冲突。
+- [ ] 固定安全插入点为 Presentation Tasks 4–8 完成之后；Foundation 可在 Frontend Application Boundaries 前后执行，但推荐同一工作树顺序执行以避免 TODO/文档协调冲突。
+- [ ] 明确当前可执行起点是 Strict Architecture Policy，而不是为当前 ProjectState/node_system 增加 Capability compatibility bridge。
+- [ ] 新增 Assistant UI Workbench Shell 书面规范，将本切片限定为 frontend-only、无模型、无 IPC、发送禁用的可见 Workbench 壳层。
+- [ ] 固定 Details 为 canonical right edge 的唯一 permanent view，禁止 panel、tab 及包含 Details 的整个 group 绕过 move/split/remove policy。
+- [ ] 将 Assistant 定义为默认与 Details 同组但可独立移动、split、关闭并由 View 菜单重建的 layout-persisted singleton。
+- [ ] 规划 assistant-ui ExternalStoreRuntime 空投影与 Application-owned adapter，禁止 LocalRuntime、Zustand message authority、AI SDK、MCP 和临时 backend 路径。
+- [ ] 明确 Assistant reveal/restore/reset/project replacement 语义，并同步 Strict、Frontend plans 与维护架构文档的后续修改范围。
+- [ ] 记录本切片不新增或运行测试，仅以 typecheck、build、diff 和只读 source audit 作为实施验证门禁。
+- [ ] 批准 Assistant UI Workbench Shell 书面规范，并将规范状态锁定为 2026.08.27 已批准。
+- [ ] 新增 Assistant UI Workbench Shell 七任务实施计划，覆盖依赖、runtime adapter、View、Dockview policy、layout、菜单、文档同步与无测试交付门禁。
+- [ ] 以 assistant-ui 0.15.16 官方 ExternalStoreRuntime、Composer 与 Thread primitives 契约复核计划中的 runtime/provider/send gate 接口。
+- [ ] 自审实施计划的规范覆盖、类型命名、代码围栏、占位符和测试命令，保持当前切片不运行测试且不执行 Git staging/commit。
+- [ ] 安装唯一直接依赖 `@assistant-ui/react`，不引入 AI SDK、Cloud、MCP、Lucide 或 assistant-ui CLI 生成源码。
+- [ ] 新增 Application-owned Assistant ExternalStoreRuntime 壳层，使用不可变空消息、固定非运行态与严格发送禁用。
+- [ ] 新增窄 AssistantRuntimeProvider，不建立 Zustand、React message store、Service、Tauri 或后端执行路径。
+- [ ] 新增 AssistantPanel 与紧凑 AssistantThread，使用 assistant-ui headless primitives 组合项目现有 shadcn 组件。
+- [ ] 使用项目 ScrollArea、Empty、Button 与 react-icons/vsc 构建空态和可编辑但不可发送的 composer。
+- [ ] 增加 Assistant 壳层中英文文案与可访问标签，不引入 backend prose、toast、浏览器对话框或第二 UI 库。
+- [ ] 将 `view:assistant` 与 `Assistant` component 纳入 Workbench closed metadata，并保持 Details 为唯一 persistent view。
+- [ ] 为 Assistant 设置 right-edge deterministic home，但不建立固定 placement、Activity membership 或布局镜像。
+- [ ] 增加包含 Details 的整个 Dockview group 拖动保护，同时保留 Assistant 独立 tab 的普通移动与 split 能力。
+- [ ] 在新默认布局中固定 Details index 0、Assistant index 1，并保持 Project 为启动 active panel。
+- [ ] 实现 Assistant existing reveal 保留实际位置、missing recreate 原子回到 Details 后，以及显式 Reset 回归默认 home。
+- [ ] 保持 restore 缺失即关闭、project replacement 保留 Assistant、固定 Details group 拒绝批量 Close Group 的既有语义。
+- [ ] 将 Assistant tab 图标统一为既有 `react-icons/vsc` 的 `VscSparkle`，并保持普通 tab 的关闭/中键/右键行为。
+- [ ] 在 View 菜单增加由 root Dockview live projection 驱动的 Assistant checkbox 与 toggle action，不新增 visibility store。
+- [ ] 完成 Task 5 的 Dockview panel/tab/menu 注册并通过允许的 TypeScript 检查，未新增或运行测试。
+- [ ] 更新维护架构文档，纠正 Details lazy/session-only 旧描述并记录 Assistant、Diagnostics、restore/reset/project replacement 当前契约。
+- [ ] 将 `@assistant-ui/react` 纳入待执行 Strict Architecture 的 33 项 exact declaration 与 Application/View 精确 consumer policy。
+- [ ] 将 Assistant Application adapter、View composition、无前端 message authority 与 Dockview cutover 纳入 Frontend Application Boundaries 规范和计划。
+- [ ] 完成 Assistant UI Workbench Shell 无测试交付门禁，以新鲜 typecheck、production build、source audit 与 diff check 验证本切片。
+- [ ] 确认 assistant-ui 仅由批准的 Application/View 文件直接引用，未产生 LocalRuntime、Zustand conversation authority、Tauri 或临时 backend 路径。
+- [ ] 确认 root Dockview/Logs nested constructor 数量不变，Details 仍是唯一 fixed view，Assistant 保持普通可移动持久化 panel。
 
 ## 2026.08.26
 
+- [ ] 移除 `compiler.input.unbound` 诊断文案中的内部端口地址，仅保留结构化端口位置供界面显示。
+- [ ] 为未绑定输入诊断补充回归覆盖，验证消息不携带 UUID 且 `Node · Pin` 定位仍然保留。
+- [ ] 为程序输出事件补充结构化 `sourcePort`，并在 Output 中显示节点标题与端口标题。
+- [ ] 让 Diagnostics、Detail 诊断位置和 Pin result 搜索统一使用 `node title · pin title`，保留 opaque ID 仅用于内部定位。
+- [ ] 更新执行 wire、前端回归测试与中英文未知来源文案，并完成 TypeScript、Rust 聚焦验证。
+- [ ] 收口 Project–Graph 与 Presentation Task 2A/2B 的跨计划编译顺序，保证 editor projection 先有唯一 Application owner、catalog schema mapper 后置且不产生第二条生产路径。
+- [ ] 将 graph mutation/open 的 session currentness 固定为提交前 gate 与 Project authority 线性化，补齐 revision/lifecycle/operation closed errors 及 Commands-owned wire mappers。
+- [ ] 强制 RecoveryRequired 的 `{ recoveryRequired: true }` 安全 detail、六项 EditorProjectionError 穷举映射与本地架构计划文档的结构/链接校验。
+- [ ] 修复 graph Dockview tab 失活后重新激活时 wheel scale listener 不恢复的问题，让监听生命周期跟随 canvas 的 interactive 状态。
+- [ ] 增加 graph wheel 缩放 active → inactive → active 回归测试，验证失活不响应且重新激活后恢复缩放。
+- [ ] 定位 ProjectPicker「移动到回收站」前端调用链，确认确认操作进入 `delete_registered_project_files`，未误调用普通重命名路径。
+- [ ] 定位 Rust 删除事务仅将项目根目录改名为 `.yssbi-deleting-<operationId>`，当前未调用系统回收站 API。
+- [ ] 记录 `CleanupPending` 回执没有后续 tombstone 清理实现，导致项目列表移除但项目文件仍留在原父目录。
+- [ ] 分析 editor 顶部菜单栏：当前由自定义 `WindowMenuBar` 标题栏容器承载菜单布局。
+- [ ] 确认 editor 顶部各菜单项使用 shadcn/Radix `DropdownMenu` 与 `Button` 组合，而非 shadcn `Menubar` 组件。
+- [ ] 确认仓库没有 `src/components/ui/menubar.*` 封装，也没有 `MenubarTrigger`、`MenubarContent` 等 shadcn Menubar API 的源码引用。
+- [ ] 使用 shadcn CLI 安装官方 Menubar，并将 editor 顶部七个独立 DropdownMenu 替换为统一的语义化 Menubar。
+- [ ] 保留 shadcn Menubar 默认样式与视觉尺寸，将生成的图标映射到项目既有 `react-icons/vsc`，避免引入第二套图标依赖。
+- [ ] 在 `AGENTS.md` 中补充优先组合 shadcn/ui 组件及复用既有图标库的规则，并增加 editor Menubar 语义回归测试。
+- [ ] 移除 editor 顶部 shadcn Menubar 根容器的外部边框，保留默认触发器、菜单项和键盘交互。
+- [ ] 保留窗口标题栏自身的底部分隔线，不将 Menubar 边框调整扩散到 WindowChrome。
+- [ ] 分析 root Dockview edge 收缩时仍保留 tab 激活样式的问题，确认 `collapsed` 与 `activePanel` 是独立语义。
+- [ ] 确认 left/right/bottom edge 收缩时应清空 tab 的展示激活态，同时保留 Dockview 内部 active panel 作为展开后的恢复目标。
+- [ ] 规划基于 root Dockview 实时 edge state 派生 visual active，避免在 Zustand 建立布局镜像，并区分 Logs nested Dockview 的内部激活态。
+- [ ] 实现 root Dockview edge 收缩态 tab 的无激活视觉投影，保留 Dockview 内部 active panel 与布局持久化契约。
+- [ ] 让自定义 Workbench tab 订阅 Dockview edge 收缩事件，收缩时标记 tab 为未选择，点击 tab 后由 Dockview 激活并展开 edge。
+- [ ] 增加 bottom edge Output/Diagnostics 的收缩、选择和展开回归测试，并保持中心 editor 与 Logs nested Dockview 不受影响。
+- [ ] 将项目删除事务改为调用系统回收站，成功后清理活动项目状态并提交注册表删除，不再在原目录旁创建 tombstone。
+- [ ] 收窄删除生命周期回执：正常删除返回 `committed`，注册表失败仅返回 `registryPending`，恢复信息不再携带本地 tombstone 路径。
+- [ ] 删除 tombstone/`CleanupPending` 相关死代码、UI 文案与测试，保留路径身份校验、生命周期排他及注册表失败恢复覆盖。
+- [ ] 新增系统回收站成功与失败回归测试，验证成功无本地残留、失败时项目目录和注册表记录保持可重试。
+- [ ] 复查六组架构设计与实施计划，统一加入 0.x replace-and-delete 约束，禁止迁移 adapter、bridge、forwarder、双路由、回退和旧新 contract 转换。
+- [ ] 删除 Project 临时 tabular snapshot、Legacy Execution port、旧 Graph facade 迁移及 Frontend 新 coordinator 调用旧 writer 等设计，改为最终 owner 离线构建与单点原子切换。
+- [ ] 将 Julia、ScientificBackend、Execution value/plan/resource ports 直接放入最终路径，旧 `node_system`/Project production route 在切换前不消费最终接口。
+- [ ] 对齐 Project–Graph、Execution、Presentation 与 Frontend 的 Task 8 切换时序，要求同一 compiling checkpoint 切换全部 caller 并删除旧 source、tests 与 debt。
+- [ ] 明确独立 canonical owner relocation 也必须一次切换全部 consumers 并删除旧声明，禁止借独立迁移建立旧 workflow 到 staged replacement 的转接层。
+- [ ] 删除节点目录与编辑器投影中的节点级短 description 字段，保留 documentation 与参数级 description。
+- [ ] 同步 Rust NodeCatalogProtocol、LocalizedCatalog DTO、EditorProjection DTO 及 React 目录/画布投影，避免节点详情再次读取短描述。
+- [ ] 更新 Rust 生成的 node-system golden fixtures 与前端契约测试，验证节点目录和投影 wire 不再携带节点级 description。
+- [ ] 复现左侧 Activity tab 二次点击无法收缩的问题，确认自定义 click handler 在展开态阻止了 Dockview 原生事件。
+- [ ] 让 Activity tab 仅在 edge 已收缩时拦截点击并手动激活/展开，展开态交还 Dockview 原生收缩切换逻辑。
+- [ ] 增加左侧 Activity edge 二次点击收缩回归测试，并通过 Dockview 相关测试、TypeScript 检查与前端构建。
+- [ ] 分析 root bottom tab 激活态额外 margin 导致 tab 几何尺寸变化和相邻位置移动的问题。
+- [ ] 将 bottom edge tab 的 margin/radius 固定到所有 tab，限制激活态只改变背景、文字颜色和语义边框。
+- [ ] 增加 bottom tab 激活切换前后 computed margin 稳定性测试，并完成相关测试、构建和差异校验。
+- [ ] 使用标准库脚本批量清理节点文档中的 Inputs/Outputs/Pin/Parameters 等接口说明章节。
+- [ ] 为 catalog 文档清理脚本增加中英文标题识别、只读检查和显式写入模式。
+- [ ] 保留节点文档的公式、模型、用法等正文，并验证批量清理不会产生额外尾部空行。
+- [ ] 将共享 ContextMenu 的 item、label 与 separator 间距恢复为默认值，修复 sidebar 右键菜单分割线后的紧凑间距。
+- [ ] 检查 ActionMenu、sidebar 与 ContextMenu 测试，确认仅保留行为测试，不新增或保留样式断言。
+- [ ] 通过 ActionMenu 聚焦行为测试、TypeScript 检查和差异校验。
 - [ ] 将根 Dockview 的固定 view tab 标题接入现有 activityBar/panel 翻译 key，覆盖底部、右侧和 Activity tab。
 - [ ] 保持编辑器资源名、结果标题和 Logs workspace 内部 domain tab 的既有动态标题逻辑，不把本地化文本写入布局持久化数据。
 - [ ] 增加固定 workbench view 标题的统一回归测试，并通过相关测试、TypeScript 检查和 i18n key 校验。
@@ -45,10 +184,32 @@ src/app/appConfig/appLinks.ts
 - [ ] 增加 edge tab 从收缩 group 移回中央 group 后清除视觉收缩标记的回归测试。
 - [ ] 修复 Logs nested Dockview 自定义 tab 未订阅 `onDidTitleChange` 导致 i18n 标题不刷新的问题，并覆盖 title event 回归测试。
 - [ ] 复查 Dockview 的 title、group、visibility、collapse 和 DOM 监听生命周期，未发现其它同类生产 bug。
-
+- [ ] 定位 Node detail 的 Pin Interface 在已连接 pin 上触发 `getSnapshot` 未缓存和最大更新深度错误的原因。
+- [ ] 让 NodePinSpecRow 的 Zustand selector 只返回稳定的连接实体引用，再在组件内派生 pin view 参数。
+- [ ] 增加已连接 pin 的 React 外部 store snapshot 回归测试，并完成类型检查与相关前端测试。
+- [ ] 将 Detail 中原有的 Pin Interface 外层 collapsible 与 Inputs/Outputs tabs 替换为两个独立的 Inputs、Outputs collapsible。
+- [ ] 保留输入输出数量和空状态提示，默认让两个类别分别收起，移除不再使用的 Tabs 状态与旧翻译键。
+- [ ] 增加 Inputs/Outputs 独立展开回归测试，并完成 Detail 相关测试、类型检查和差异校验。
 - [ ] 分析 Output/Diagnostics 顶部当前图路径仅为展示信息，确认可移除而不改变图级数据语义。
 - [ ] 将 Output/Diagnostics 顶部栏统一为 Logs 风格的紧凑横向 header，保留标题、清理操作和诊断数量。
 - [ ] 增加 Output/Diagnostics header 回归测试，验证隐藏图路径且保留 focused graph 的输出与诊断行为。
+- [ ] 将 Node detail 的 Inputs/Outputs pin 内容改为统一的 name/content 两列布局，并移除旧 Pin 行的状态徽标、历史菜单和 Tooltip 逻辑。
+- [ ] 为 Inputs 提供兼容上游输出选择，为 Outputs 提供可增删的输入目标下拉槽，并将选择/删除接入现有 graph mutation 命令。
+- [ ] 增加 Detail pin 连接选项、输出多连接槽和精确断开连接的回归测试，完成类型检查与相关前端验证。
+- [ ] 移除 Node detail Inputs/Outputs collapsible 标题右侧的数量展示及其派生逻辑，保持折叠与 pin 连接交互不变。
+- [ ] 增加标题不显示数量的回归断言，并完成相关前端验证与差异检查。
+- [ ] 检查 Node detail 的 Capabilities 与 Diagnostics collapsible 标题，确认存在硬编码英文文案。
+- [ ] 为 Capabilities 与 Diagnostics collapsible 标题接入中英文 i18n 翻译键，不改变 capability 数据和交互逻辑。
+- [ ] 增加 NodeDetailPanel 标题翻译回归测试，并完成 Detail focused tests、类型检查和差异校验。
+- [ ] 清理 Node detail 测试中的旧 Tabs/标题实现细节断言及重复的输出槽操作覆盖。
+- [ ] 保留 Inputs/Outputs 兼容选择、输出槽增删、精确断开和输入清空的最小回归覆盖。
+- [ ] 在 graph canvas 节点右键菜单中增加临时“选择节点…”入口，保留原生右键菜单的键盘导航行为。
+- [ ] 为节点选择器实现当前节点/首节点初始化、上下箭头切换和 Enter 确认选择，并完成编辑器回归验证。
+- [ ] 修复 graph canvas 节点选择列表 selector 创建新对象数组导致 React 外部 store snapshot 不稳定的问题。
+- [ ] 为节点选择选项 projection 增加稳定引用回归测试，并完成 React 19 更新深度错误验证。
+- [ ] 复核 `compiler.input.unbound` 的结构化端口位置与文案参数，保留 `Node · Pin` 定位能力并恢复 `{port}` 上下文。
+- [ ] 恢复未绑定输入分析阶段传入精确端口地址，同步编译器诊断定义与 lowering 回归断言。
+- [ ] 完成 compiler diagnostics 与 lowering 聚焦 Rust 测试验证。
 
 ## 2026.08.25
 
@@ -1393,3 +1554,12 @@ Execution 不知道具体 UI
     169 +    };
     170 +    title.into()
     171 +}
+
+## 2026.08.27
+
+- [ ] 在 `docs/superpowers/plans` 新增架构解耦进度总览，按 review-clean、已集成、进行中和待实现区分 strict policy、Backend、Project–Graph、Execution、Presentation 与 Frontend Application 工作。
+- [ ] 记录 `architecture-final`、各隔离 worktree、最新验证证据、当前 Backend Task 5b 阻塞及剩余跨计划依赖顺序，明确不把未提交草稿或兼容路径纳入集成。
+- [ ] 按内容分层提交本次 Assistant、执行输出、编辑器交互、架构文档与 TODO 改动，并推送到 `origin/shadcn`。
+- [ ] 为运行时输出补充结构化 `sourcePort`，同步 Rust/TypeScript execution wire、投影与契约测试。
+- [ ] 统一 Output、Diagnostics、Pin result search 与 Node detail 的节点/Pin 语义化显示，并新增画布节点选择器交互。
+- [ ] 接入禁用发送的 Assistant UI Workbench Shell，注册 root Dockview、布局持久化、View 菜单及中英文文案。
