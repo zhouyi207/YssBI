@@ -1,17 +1,10 @@
 import { useEffect, useRef } from 'react';
-import { isEmptyGridSelection, type DatabaseGridSelection } from './useSelection';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { isAppModalOpen } from '@/features/core/keyboard';
 
 interface useDatabaseEditorKeyboardParams {
-  handleUndo: () => void;
-  handleRedo: () => void;
-  handleDeleteRow: (indices: number[]) => Promise<void>;
   selectAll: () => void;
   clearSelection: () => void;
-  dismissContextMenu: () => void;
-  selection: DatabaseGridSelection | null;
-  selectedRowIndices: () => number[];
 }
 
 function isTextEntryTarget(target: EventTarget | null): boolean {
@@ -33,27 +26,14 @@ export function useDatabaseEditorKeyboard(params: useDatabaseEditorKeyboardParam
       }
 
       const {
-        handleUndo,
-        handleRedo,
-        handleDeleteRow,
         selectAll,
         clearSelection,
-        dismissContextMenu,
-        selection,
-        selectedRowIndices,
       } = paramsRef.current;
 
-      if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault(); handleUndo();
-      } else if ((e.ctrlKey && e.shiftKey && e.key === 'Z') || (e.ctrlKey && e.key === 'y')) {
-        e.preventDefault(); handleRedo();
-      } else if (e.key === 'Escape') {
-        dismissContextMenu(); clearSelection();
+      if (e.key === 'Escape') {
+        clearSelection();
       } else if (e.ctrlKey && e.key === 'a') {
         e.preventDefault(); selectAll();
-      } else if (e.key === 'Delete' && !isEmptyGridSelection(selection)) {
-        const rows = selectedRowIndices();
-        if (rows.length > 0) { e.preventDefault(); handleDeleteRow(rows); clearSelection(); }
       }
     };
     return addGlobalEventListener(window, 'keydown', handler);

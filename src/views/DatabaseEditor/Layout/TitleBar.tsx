@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscDatabase } from 'react-icons/vsc';
-import { useEditStateStore } from '@/features/core/dataStore';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
@@ -37,12 +36,8 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   selectedCellText,
 }) => {
   const { t } = useTranslation();
-  const editStateByDatabase = useEditStateStore((s) => s.editStateByDatabase);
   const isMaximized = useWindowMaximized('DatabaseEditorTitleBar');
   const showCustomChrome = useCustomTitleBar();
-
-  const labelWithDirtyMark = (id: string, label: string) =>
-    editStateByDatabase[id]?.isModified ? `${label} *` : label;
 
   const selectValue = selectedDataframeId && dataframes.some((o) => o.value === selectedDataframeId)
     ? selectedDataframeId
@@ -75,7 +70,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
               <SelectContent position="popper" className="z-[600] max-h-72">
                 {dataframes.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value} className="text-xs">
-                    {labelWithDirtyMark(opt.value, opt.label)}
+                    {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -1,14 +1,12 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useProjectSync } from '@/features/application/initialization';
 import { usePersistedWindow } from '@/features/application/window';
 import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
-import { useDataLoader, useEditActions, useSelection, useDatabaseEditorKeyboard, getGridSelectionPrimaryCellText } from '@/features/application/databaseEditor';
+import { useDataLoader, useSelection, useDatabaseEditorKeyboard, getGridSelectionPrimaryCellText, useDatabaseExport } from '@/features/application/databaseEditor';
 import { TitleBar, Toolbar, type DataframeOption } from './Layout';
 import { DataTable } from './Table';
-import { TableContextMenu } from './ContextMenu';
-import type { ContextMenuState } from './ContextMenu';
 import { logger } from '@/utils/appLogger';
 import {
   captureProjectIdentity,
@@ -55,7 +53,6 @@ export const DatabaseEditorWindow: React.FC = () => {
   const dataframes = useDatabaseStore(s => s.databases);
 
   const [selectedDfId, setSelectedDfId] = useState<string | null>(null);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const hasInitializedDfRef = useRef(false);
 
   usePersistedWindow('databaseEditor');
@@ -69,18 +66,7 @@ export const DatabaseEditorWindow: React.FC = () => {
 
   // Data loading
   const dataLoader = useDataLoader(selectedDfId);
-  const dismissContextMenu = useCallback(() => setContextMenu(null), []);
-
-  // Edit actions
-  const edit = useEditActions({
-    selectedDfId,
-    columns,
-    loadedRows: dataLoader.loadedRows,
-    loadedRowIds: dataLoader.loadedRowIds,
-    rowOffset: dataLoader.pageStartIndex,
-    reloadAllData: dataLoader.reloadAllData,
-    getDataScopeVersion: dataLoader.getPageIntentEpoch,
-  });
+  const exportDatabase = useDatabaseExport(selectedDfId);
 
   // Selection
   const sel = useSelection({
@@ -90,14 +76,8 @@ export const DatabaseEditorWindow: React.FC = () => {
 
   // Keyboard shortcuts
   useDatabaseEditorKeyboard({
-    handleUndo: edit.handleUndo,
-    handleRedo: edit.handleRedo,
-    handleDeleteRow: edit.handleDeleteRow,
     selectAll: sel.selectAll,
     clearSelection: sel.clearSelection,
-    dismissContextMenu,
-    selection: sel.selection,
-    selectedRowIndices: sel.selectedRowIndices,
   });
 
   // 首次有数据时选中 URL 指定或第一个 DataFrame；之后仅在当前选中被删除时回退
@@ -168,11 +148,6 @@ export const DatabaseEditorWindow: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
-  // Context menu handler
-  const handleContextMenu = useCallback((position: { x: number; y: number }, target: { type: 'cell' | 'header' | 'row'; rowIndex?: number; colIndex?: number; colName?: string }) => {
-    setContextMenu({ x: position.x, y: position.y, ...target });
-  }, []);
-
   const dfOptions: DataframeOption[] = useMemo(() => Object.entries(dataframes).map(([id, df]) => {
     const d = df as { name?: string; engine?: { csv?: { path?: string }; parquet?: { path?: string }; duckDb?: { table?: string } } };
     let label = d.name;
@@ -209,9 +184,6 @@ export const DatabaseEditorWindow: React.FC = () => {
           loading={dataLoader.loading}
           selection={sel.selection}
           onSelectionChange={sel.setSelection}
-          onCommitCellValue={edit.commitCellValue}
-          onCommitCellValues={edit.commitCellValues}
-          onContextMenu={handleContextMenu}
         />
       </div>
 
@@ -224,29 +196,12 @@ export const DatabaseEditorWindow: React.FC = () => {
         totalPages={dataLoader.totalPages}
         lastFetchMs={dataLoader.lastFetchMs}
         exportEnabled={Boolean(selectedDfId)}
-        currentEditState={edit.currentEditState}
         onPreviousPage={dataLoader.goToPreviousPage}
         onNextPage={dataLoader.goToNextPage}
         onRefresh={dataLoader.refreshData}
-        onSave={edit.handleSave}
-        onUndo={edit.handleUndo}
-        onRedo={edit.handleRedo}
-        onExport={edit.handleExport}
+        onExport={exportDatabase}
       />
 
-      {contextMenu && (
-        <TableContextMenu
-          menu={contextMenu}
-          selectedRowIndices={sel.selectedRowIndices()}
-          onAddRow={edit.handleAddRow}
-          onDeleteRow={edit.handleDeleteRow}
-          onRenameColumn={edit.handleRenameColumn}
-          onAddColumn={edit.handleAddColumn}
-          onDeleteColumn={edit.handleDeleteColumn}
-          onClearSelection={sel.clearSelection}
-          onClose={() => setContextMenu(null)}
-        />
-      )}
     </div>
   );
 };

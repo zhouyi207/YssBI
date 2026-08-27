@@ -1,5 +1,5 @@
 pub(crate) mod basis;
-pub(crate) mod identity;
+pub mod identity;
 pub(crate) mod model;
 pub(crate) mod observation;
 pub(crate) mod package;

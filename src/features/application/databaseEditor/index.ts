@@ -1,12 +1,6 @@
 export { COLUMN_TYPE_OPTIONS } from './columnTypes';
 export { useDataLoader } from './useDataLoader';
-export { useEditActions } from './useEditActions';
-export type {
-  DatabaseCellBatchMutationOutcome,
-  DatabaseEditorIpcFailure,
-  DatabaseFieldMutationOutcome,
-} from './useEditActions';
-export type { DatabaseCellEditInput } from './databaseCellEditBatch';
+export { useDatabaseExport } from './useDatabaseExport';
 export {
   createSelectAllSelection,
   isEmptyGridSelection,

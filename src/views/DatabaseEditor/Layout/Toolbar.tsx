@@ -1,8 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscChevronLeft, VscChevronRight, VscRefresh } from 'react-icons/vsc';
-import type { EditState } from '@/features/core/dataStore/editStateStore';
-import { Separator } from '@/components/ui/separator';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 
 interface ToolbarProps {
@@ -15,19 +13,15 @@ interface ToolbarProps {
   lastFetchMs: number | null;
   /** 当前是否有打开的 DataFrame（用于导出等，与单元格是否选中无关） */
   exportEnabled: boolean;
-  currentEditState: EditState;
   onPreviousPage: () => void;
   onNextPage: () => void;
   onRefresh: () => void;
-  onSave: () => void;
-  onUndo: () => void;
-  onRedo: () => void;
   onExport: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
   loading, totalRowCount, columnCount, pageIndex, pageSize, totalPages, lastFetchMs, exportEnabled,
-  currentEditState, onPreviousPage, onNextPage, onRefresh, onSave, onUndo, onRedo, onExport,
+  onPreviousPage, onNextPage, onRefresh, onExport,
 }) => {
   const { t } = useTranslation();
   const pageStart = totalRowCount === 0 ? 0 : pageIndex * pageSize + 1;
@@ -40,42 +34,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({
       <ToolbarIconButton type="button" variant="ghost" size="icon-sm" onClick={onRefresh} tooltip={t("common.refresh")}>
         <VscRefresh className={loading ? 'animate-spin' : ''} size={15} />
       </ToolbarIconButton>
-      <ToolbarIconButton
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        onClick={onSave}
-        disabled={!currentEditState.isModified}
-        tooltip={t("common.save")}
-      >
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-          <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" />
-          <polyline points="17 21 17 13 7 13 7 21" />
-          <polyline points="7 3 7 8 15 8" />
-        </svg>
-      </ToolbarIconButton>
-      <Separator orientation="vertical" className="h-4" />
-      <ToolbarIconButton
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        onClick={onUndo}
-        disabled={!currentEditState.canUndo}
-        tooltip={`${t("common.undo")} (Ctrl+Z)`}
-      >
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 10h13a4 4 0 010 8H9" /><path d="M3 10l4-4M3 10l4 4" /></svg>
-      </ToolbarIconButton>
-      <ToolbarIconButton
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        onClick={onRedo}
-        disabled={!currentEditState.canRedo}
-        tooltip={`${t("common.redo")} (Ctrl+Shift+Z)`}
-      >
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10H8a4 4 0 000 8h6" /><path d="M21 10l-4-4M21 10l-4 4" /></svg>
-      </ToolbarIconButton>
-      <Separator orientation="vertical" className="h-4" />
       <ToolbarIconButton
         type="button"
         variant="ghost"

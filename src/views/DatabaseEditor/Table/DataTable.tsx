@@ -2,15 +2,10 @@ import React, { useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   CellStyleModule,
-  CheckboxEditorModule,
   ClientSideRowModelModule,
-  NumberEditorModule,
   RenderApiModule,
   RowApiModule,
   RowSelectionModule,
-  TextEditorModule,
-  type CellContextMenuEvent,
-  type CellEditRequestEvent,
   type CellStyle,
   type ColDef,
   type GetRowIdParams,
@@ -24,11 +19,7 @@ import {
   EmptyTitle,
 } from '@/components/ui/empty';
 import { buildAgGridTheme } from '@/components/data-grid/agGridTheme';
-import type {
-  DatabaseCellBatchMutationOutcome,
-  DatabaseCellEditInput,
-  DatabaseGridSelection,
-} from '@/features/application/databaseEditor';
+import type { DatabaseGridSelection } from '@/features/application/databaseEditor';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import { resolveThemeTokens } from '@/shared/theme/themeTokens';
 import type { ColumnInfo, DatabaseRow } from '@/shared/types/dto/database';
@@ -41,34 +32,20 @@ import {
   DatabaseCellRenderer,
   DatabaseColumnHeader,
   DatabaseRowMarker,
-  cellEditorForColumnType,
 } from './DatabaseGridRenderers';
 import {
   dataColumnId,
-  dataColumnIndexFromId,
   isGridCellActive,
   isGridCellSelected,
   isGridColumnSelected,
   type DatabaseGridRow,
 } from './databaseGridModel';
-import {
-  databaseGridSelectionToClipboardText,
-  parseDatabaseGridClipboard,
-} from './databaseGridClipboard';
+import { databaseGridSelectionToClipboardText } from './databaseGridClipboard';
 import { useDatabaseGridSelectionAdapter } from './useDatabaseGridSelectionAdapter';
 
 const ROW_MARKER_COLUMN_ID = '__row_marker__';
 
-const GRID_MODULES = [
-  CellStyleModule,
-  CheckboxEditorModule,
-  ClientSideRowModelModule,
-  NumberEditorModule,
-  RenderApiModule,
-  RowApiModule,
-  RowSelectionModule,
-  TextEditorModule,
-];
+const GRID_MODULES = [CellStyleModule, ClientSideRowModelModule, RenderApiModule, RowApiModule, RowSelectionModule];
 
 const ROW_SELECTION = {
   mode: 'multiRow',
@@ -87,13 +64,6 @@ const BASE_COLUMN_DEF: ColDef<DatabaseGridRow> = {
   suppressMovable: true,
 };
 
-interface ContextMenuTarget {
-  type: 'cell' | 'header' | 'row';
-  rowIndex?: number;
-  colIndex?: number;
-  colName?: string;
-}
-
 interface DataTableProps {
   columns: ColumnInfo[];
   loadedRows: DatabaseRow[];
@@ -102,19 +72,10 @@ interface DataTableProps {
   loading: boolean;
   selection: DatabaseGridSelection | null;
   onSelectionChange: (selection: DatabaseGridSelection | null) => void;
-  onCommitCellValue: (row: number, col: number, value: unknown) => Promise<void>;
-  onCommitCellValues: (
-    edits: readonly DatabaseCellEditInput[],
-  ) => Promise<DatabaseCellBatchMutationOutcome>;
-  onContextMenu: (position: { x: number; y: number }, target: ContextMenuTarget) => void;
 }
 
 function getRowId({ data }: GetRowIdParams<DatabaseGridRow>): string {
   return String(data.rowId);
-}
-
-function browserMouseEvent(event: Event | null | undefined): MouseEvent | null {
-  return event instanceof MouseEvent ? event : null;
 }
 
 function isTextEntryTarget(target: EventTarget | null): boolean {
@@ -133,16 +94,11 @@ export const DataTable: React.FC<DataTableProps> = ({
   loading,
   selection,
   onSelectionChange,
-  onCommitCellValue,
-  onCommitCellValues,
-  onContextMenu,
 }) => {
   const { t } = useTranslation();
   const appTheme = useSettingsStore((state) => state.theme);
   const themeTokens = useMemo(() => resolveThemeTokens(appTheme), [appTheme]);
   const gridRef = useRef<AgGridReact<DatabaseGridRow>>(null);
-  const pasteInFlightRef = useRef(false);
-
   const dataGridTheme = useMemo(() => buildAgGridTheme(appTheme), [appTheme]);
   const gridRows = useMemo<DatabaseGridRow[]>(() => loadedRows.map((values, rowIndex) => ({
     values,
@@ -175,22 +131,9 @@ export const DataTable: React.FC<DataTableProps> = ({
       if (editing) return false;
       captureCellKeyboard(event);
       const commandKey = event.ctrlKey || event.metaKey;
-      return (commandKey && event.key.toLowerCase() === 'a') || event.key === 'Delete';
+      return commandKey && event.key.toLowerCase() === 'a';
     },
   }), [captureCellKeyboard]);
-
-  const handleHeaderMenu = useCallback((
-    position: { x: number; y: number },
-    columnIndex: number,
-  ) => {
-    const column = columns[columnIndex];
-    if (!column) return;
-    onContextMenu(position, {
-      type: 'header',
-      colIndex: columnIndex,
-      colName: column.name,
-    });
-  }, [columns, onContextMenu]);
 
   const cellSelectionStyle = useCallback((
     rowIndex: number,
@@ -210,13 +153,12 @@ export const DataTable: React.FC<DataTableProps> = ({
   const gridColumns = useMemo<ColDef<DatabaseGridRow>[]>(() => {
     const realColumns = columns.map<ColDef<DatabaseGridRow>>((column, columnIndex) => ({
       colId: dataColumnId(columnIndex),
-      editable: true,
+      editable: false,
       headerComponent: DatabaseColumnHeader,
       headerComponentParams: {
         columnIndex,
         columnType: column.type,
         isSelected: () => isGridColumnSelected(selectionRef.current, columnIndex),
-        onOpenMenu: handleHeaderMenu,
         onSelect: handleColumnSelect,
       },
       headerName: column.name,
@@ -224,7 +166,6 @@ export const DataTable: React.FC<DataTableProps> = ({
       minWidth: 72,
       maxWidth: 520,
       valueGetter: ({ data }) => data?.values[columnIndex],
-      cellEditor: cellEditorForColumnType(column.type),
       cellRenderer: DatabaseCellRenderer,
       cellStyle: ({ data }) => data
         ? cellSelectionStyle(data.sourceRowIndex, columnIndex)
@@ -270,38 +211,8 @@ export const DataTable: React.FC<DataTableProps> = ({
     pageStartIndex,
     cellSelectionStyle,
     handleColumnSelect,
-    handleHeaderMenu,
     handleRowSelect,
   ]);
-
-
-  const handleCellEditRequest = useCallback((event: CellEditRequestEvent<DatabaseGridRow>) => {
-    const columnIndex = dataColumnIndexFromId(event.column.getColId());
-    if (columnIndex === null) return;
-    void onCommitCellValue(event.data.sourceRowIndex, columnIndex, event.newValue);
-  }, [onCommitCellValue]);
-
-  const handleCellContextMenu = useCallback((event: CellContextMenuEvent<DatabaseGridRow>) => {
-    event.event?.preventDefault();
-    const mouseEvent = browserMouseEvent(event.event);
-    if (!mouseEvent || !event.data) return;
-    const rowIndex = event.data.sourceRowIndex;
-    const columnId = event.column.getColId();
-    const position = { x: mouseEvent.clientX, y: mouseEvent.clientY };
-    if (columnId === ROW_MARKER_COLUMN_ID) {
-      onContextMenu(position, { type: 'row', rowIndex });
-      return;
-    }
-    const columnIndex = dataColumnIndexFromId(columnId);
-    const column = columnIndex === null ? undefined : columns[columnIndex];
-    if (!column || columnIndex === null) return;
-    onContextMenu(position, {
-      type: 'cell',
-      rowIndex,
-      colIndex: columnIndex,
-      colName: column.name,
-    });
-  }, [columns, onContextMenu]);
 
   const handleCopy = useCallback((event: React.ClipboardEvent<HTMLDivElement>) => {
     if (isTextEntryTarget(event.target)) return;
@@ -314,34 +225,6 @@ export const DataTable: React.FC<DataTableProps> = ({
     event.preventDefault();
     event.clipboardData.setData('text/plain', text);
   }, [columns.length, loadedRows]);
-
-  const handlePaste = useCallback((event: React.ClipboardEvent<HTMLDivElement>) => {
-    if (isTextEntryTarget(event.target) || pasteInFlightRef.current) return;
-    const current = selectionRef.current;
-    if (current?.type !== 'cells') return;
-    const values = parseDatabaseGridClipboard(event.clipboardData.getData('text/plain'));
-    if (values.length === 0) return;
-    event.preventDefault();
-
-    const start = current.activeCell;
-    const edits: DatabaseCellEditInput[] = [];
-    for (let rowOffset = 0; rowOffset < values.length; rowOffset += 1) {
-      const rowIndex = start.row + rowOffset;
-      if (rowIndex >= loadedRows.length) break;
-      const row = values[rowOffset] ?? [];
-      for (let columnOffset = 0; columnOffset < row.length; columnOffset += 1) {
-        const columnIndex = start.column + columnOffset;
-        if (columnIndex >= columns.length) break;
-        edits.push({ row: rowIndex, column: columnIndex, value: row[columnOffset] });
-      }
-    }
-    if (edits.length === 0) return;
-
-    pasteInFlightRef.current = true;
-    void onCommitCellValues(edits).finally(() => {
-      pasteInFlightRef.current = false;
-    });
-  }, [columns.length, loadedRows.length, onCommitCellValues]);
 
   const hasData = columns.length > 0 || loadedRows.length > 0;
   if (!hasData) {
@@ -369,7 +252,6 @@ export const DataTable: React.FC<DataTableProps> = ({
     <div
       className="relative flex min-h-0 min-w-0 flex-1 overflow-hidden bg-card"
       onCopy={handleCopy}
-      onPaste={handlePaste}
     >
       <AgGridReact<DatabaseGridRow>
         ref={gridRef}
@@ -380,20 +262,15 @@ export const DataTable: React.FC<DataTableProps> = ({
         getRowId={getRowId}
         headerHeight={44}
         modules={GRID_MODULES}
-        onCellContextMenu={handleCellContextMenu}
-        onCellEditRequest={handleCellEditRequest}
         onCellFocused={handleCellFocused}
         onCellMouseDown={handleCellMouseDown}
         onCellMouseOver={handleCellMouseOver}
         onGridReady={handleGridReady}
         onSelectionChanged={handleSelectionChanged}
-        preventDefaultOnContextMenu
-        readOnlyEdit
         rowData={gridRows}
         rowHeight={DATABASE_EDITOR_ROW_HEIGHT}
         rowSelection={ROW_SELECTION}
         stopEditingWhenCellsLoseFocus
-        suppressContextMenu
         suppressNoRowsOverlay
         theme={dataGridTheme}
       />

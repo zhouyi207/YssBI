@@ -1621,3 +1621,7 @@ Execution 不知道具体 UI
 - [ ] 完成 Frontend platform capability staged typecheck 与 diff 校验，未改动现有 production listener/invoke routes。
 - [ ] 让 ExecutionRuntimeState session-local 持有 run registry 与 result store typed owners，支持后续 finalization/result query cutover。
 - [ ] 完成 run/result owner 的 Rust check、fmt 与 diff 校验，继续保留旧 node-system runtime production route。
+- [ ] 将 Database Editor 子窗口收敛为后端只读投影，移除单元格编辑、粘贴、行列 mutation、undo/redo 与 dirty 标记入口。
+- [ ] 删除已无 production caller 的 `useEditActions`、数据库表 mutation context menu 及其生命周期测试，避免保留第二条编辑路径。
+- [ ] 将数据库导出路径选择隔离到 Services platform adapter，由 Application hook 负责 project identity revalidation 与 typed export 调用。
+- [ ] 扩展 Rust architecture resolver 对 execution plan 的 `plan_id!` 生成 identity，修复 canonical target 解析门禁。

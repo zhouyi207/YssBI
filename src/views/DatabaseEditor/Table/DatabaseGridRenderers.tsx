@@ -1,23 +1,16 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
-import { VscChevronDown } from 'react-icons/vsc';
 import {
   type CustomCellRendererProps,
   type CustomHeaderProps,
 } from 'ag-grid-react';
-import {
-  databaseColumnKind,
-  type DatabaseGridRow,
-  type DatabaseGridSelectionModifiers,
-} from './databaseGridModel';
+import { type DatabaseGridRow, type DatabaseGridSelectionModifiers } from './databaseGridModel';
 
 interface DatabaseColumnHeaderParams {
   columnIndex: number;
   columnType: string;
   isSelected: () => boolean;
-  onOpenMenu: (position: { x: number; y: number }, columnIndex: number) => void;
   onSelect: (columnIndex: number, modifiers: DatabaseGridSelectionModifiers) => void;
 }
-
 type DatabaseColumnHeaderProps = CustomHeaderProps<DatabaseGridRow>
   & DatabaseColumnHeaderParams;
 
@@ -27,23 +20,14 @@ function selectionModifiers(event: ReactMouseEvent): DatabaseGridSelectionModifi
     extend: event.shiftKey,
   };
 }
-
 export function DatabaseColumnHeader({
   columnIndex,
   columnType,
   displayName,
   isSelected,
-  onOpenMenu,
   onSelect,
 }: DatabaseColumnHeaderProps) {
   const selected = isSelected();
-
-  const handleMenuClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const bounds = event.currentTarget.getBoundingClientRect();
-    onOpenMenu({ x: bounds.left, y: bounds.bottom }, columnIndex);
-  };
 
   return (
     <div
@@ -52,11 +36,6 @@ export function DatabaseColumnHeader({
         selected ? 'text-primary' : '',
       ].join(' ')}
       onClick={(event) => onSelect(columnIndex, selectionModifiers(event))}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onOpenMenu({ x: event.clientX, y: event.clientY }, columnIndex);
-      }}
       title={`${displayName} (${columnType})`}
     >
       <span className="flex min-w-0 flex-1 flex-col justify-center leading-none">
@@ -65,15 +44,6 @@ export function DatabaseColumnHeader({
           {columnType}
         </span>
       </span>
-      <button
-        type="button"
-        tabIndex={-1}
-        className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 hover:bg-accent hover:text-accent-foreground group-hover:opacity-100 group-focus-within:opacity-100"
-        aria-label={displayName}
-        onClick={handleMenuClick}
-      >
-        <VscChevronDown className="size-3.5" />
-      </button>
     </div>
   );
 }
@@ -160,11 +130,4 @@ export function DatabaseRowMarker({
       <span className={selected ? '' : 'group-hover:hidden'}>{value}</span>
     </button>
   );
-}
-
-export function cellEditorForColumnType(dtype: string): string {
-  const kind = databaseColumnKind(dtype);
-  if (kind === 'number') return 'agNumberCellEditor';
-  if (kind === 'boolean') return 'agCheckboxCellEditor';
-  return 'agTextCellEditor';
 }
