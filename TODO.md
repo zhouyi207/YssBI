@@ -1607,6 +1607,7 @@ Execution 不知道具体 UI
 - [ ] 建立 Project-owned execution authority prepare/effect-commit contracts，暴露只读快照与 typed cancellation/deadline control，不构造 runtime/adapters。
 - [ ] 建立 Execution package preparation 与 immutable generation-pinned handle，验证 package basis/provenance 后再 mint prepared plan。
 - [ ] 完成 Execution Tasks 4–5 focused package/authority checks、Rust check、fmt 与 diff 校验，旧执行 workflow 保留至 Task 8。
+- [ ] 建立 Transport-owned `schema::graph_mutation` PortAddressDto typed mapper，保持现有 graph mutation command wire shape 与旧 production route。
 - [ ] 建立 staged Application catalog query result/transport-parts seam，统一 localized/compatible query 的 session capture/revalidation 入口。
 - [ ] 保持 catalog commands 与旧 Graph/Project snapshot route 不变，待 Project–Graph Task 8 / Execution Task 8 一次性切换并删除旧 owner。
 - [ ] 建立 Frontend state-authority manifest 与 fail-closed audit，区分 backend base、optimistic overlay、local draft 与 frontend UI ownership。
