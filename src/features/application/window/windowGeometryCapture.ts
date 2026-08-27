@@ -1,49 +1,44 @@
-import type { Window } from '@tauri-apps/api/window';
 import type { WindowState } from '@/shared/types/settings';
-import { logger } from '@/utils/appLogger';
+import type { AppWindowHandle } from '@/services/platform/appWindow';
 
 export async function captureWindowGeometry(
-  win: Window,
+  win: Pick<AppWindowHandle, 'isMaximized' | 'innerSize' | 'outerPosition'>,
 ): Promise<WindowState | null> {
   try {
     const isMaximized = await win.isMaximized();
-    if (isMaximized) {
+    if (!isMaximized.ok) return null;
+    if (isMaximized.value) {
       return null;
     }
     const size = await win.innerSize();
+    if (!size.ok) return null;
     const position = await win.outerPosition();
+    if (!position.ok) return null;
     return {
-      width: size.width,
-      height: size.height,
-      x: position.x,
-      y: position.y,
+      width: size.value.width,
+      height: size.value.height,
+      x: position.value.x,
+      y: position.value.y,
       isMaximized: false,
     };
-  } catch (error) {
-    logger.app.warn(
-      `Failed to read current window geometry: ${error instanceof Error ? error.message : String(error)}`,
-      'Window',
-    );
+  } catch {
     return null;
   }
 }
 
 export async function captureWindowGeometryPreservingMaximized(
-  win: Window,
+  win: Pick<AppWindowHandle, 'isMaximized' | 'innerSize' | 'outerPosition'>,
   readPrevious: () => WindowState | Promise<WindowState>,
 ): Promise<WindowState | null> {
   try {
     const isMaximized = await win.isMaximized();
-    if (isMaximized) {
+    if (!isMaximized.ok) return null;
+    if (isMaximized.value) {
       const previous = await readPrevious();
       return { ...previous, isMaximized: true };
     }
     return captureWindowGeometry(win);
-  } catch (error) {
-    logger.app.warn(
-      `Failed to read current window geometry: ${error instanceof Error ? error.message : String(error)}`,
-      'Window',
-    );
+  } catch {
     return null;
   }
 }

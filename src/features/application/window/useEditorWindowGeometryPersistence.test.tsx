@@ -2,11 +2,12 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { currentAppWindow } from '@/services/platform/appWindow';
+import type { AppWindowHandle } from '@/services/platform/appWindow';
 import { useEditorWindowGeometryPersistence } from './useEditorWindowGeometryPersistence';
 
-vi.mock('@tauri-apps/api/window', () => ({
-  getCurrentWindow: vi.fn(),
+vi.mock('@/services/platform/appWindow', () => ({
+  currentAppWindow: vi.fn(),
 }));
 
 function Harness(): null {
@@ -31,16 +32,16 @@ describe('useEditorWindowGeometryPersistence', () => {
   });
 
   it('persists restorable geometry when a secondary window closes maximized', async () => {
-    let closeListener: (() => Promise<void>) | undefined;
+    let closeListener: (() => Promise<'allow'>) | undefined;
     const unlisten = vi.fn();
-    vi.mocked(getCurrentWindow).mockReturnValue({
+    vi.mocked(currentAppWindow).mockReturnValue({
       label: 'window-2',
-      onCloseRequested: vi.fn(async (listener: () => Promise<void>) => {
+      onCloseRequested: vi.fn(async (listener: () => Promise<'allow'>) => {
         closeListener = listener;
-        return unlisten;
+        return { ok: true, value: unlisten };
       }),
-      isMaximized: vi.fn(async () => true),
-    } as unknown as ReturnType<typeof getCurrentWindow>);
+      isMaximized: vi.fn(async () => ({ ok: true, value: true })),
+    } as unknown as AppWindowHandle);
 
     await act(async () => {
       root.render(<Harness />);
@@ -59,14 +60,14 @@ describe('useEditorWindowGeometryPersistence', () => {
   });
 
   it('disposes a close listener that resolves after unmount', async () => {
-    let resolveListener: ((unlisten: () => void) => void) | undefined;
+    let resolveListener: ((outcome: { ok: true; value: () => void }) => void) | undefined;
     const unlisten = vi.fn();
-    vi.mocked(getCurrentWindow).mockReturnValue({
+    vi.mocked(currentAppWindow).mockReturnValue({
       label: 'window-2',
-      onCloseRequested: vi.fn(() => new Promise<() => void>((resolve) => {
+      onCloseRequested: vi.fn(() => new Promise<{ ok: true; value: () => void }>((resolve) => {
         resolveListener = resolve;
       })),
-    } as unknown as ReturnType<typeof getCurrentWindow>);
+    } as unknown as AppWindowHandle);
 
     await act(async () => {
       root.render(<Harness />);
@@ -74,7 +75,7 @@ describe('useEditorWindowGeometryPersistence', () => {
     await act(async () => {
       root.unmount();
     });
-    resolveListener?.(unlisten);
+    resolveListener?.({ ok: true, value: unlisten });
     await Promise.resolve();
 
     expect(unlisten).toHaveBeenCalledOnce();

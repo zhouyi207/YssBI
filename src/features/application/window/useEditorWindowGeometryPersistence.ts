@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { currentAppWindow } from '@/services/platform/appWindow';
 import { WindowStateService } from '@/services/window/windowStateService';
 import { logger } from '@/utils/appLogger';
 import { captureWindowGeometryPreservingMaximized } from './windowGeometryCapture';
@@ -19,46 +19,43 @@ export function useEditorWindowGeometryPersistence(): void {
     let unlistenClose: (() => void) | null = null;
 
     const setup = async () => {
-      const win = getCurrentWindow();
+      const win = currentAppWindow();
       const isMain = win.label === 'main';
 
       try {
-        const unlisten = await win.onCloseRequested(async () => {
+        const subscription = await win.onCloseRequested(async (): Promise<'allow'> => {
           if (isMain) {
             const next = await captureWindowGeometryPreservingMaximized(
               win,
               () => WindowStateService.get('main'),
             );
-            if (!next) return;
+            if (!next) return 'allow';
             try {
               await WindowStateService.save('main', next);
-            } catch (error) {
-              logger.app.error(
-                `Failed to persist window state for main: ${error instanceof Error ? error.message : String(error)}`,
-                'Window',
-              );
+            } catch {
+              logger.app.error('window state persistence failed', 'Window');
             }
-            return;
+            return 'allow';
           }
 
           const next = await captureWindowGeometryPreservingMaximized(
             win,
             () => readSecondaryWindowState(win.label),
           );
-          if (!next) return;
+          if (!next) return 'allow';
           saveSecondaryWindowState(win.label, next);
+          return 'allow';
         });
 
         if (cancelled) {
-          unlisten();
+          if (subscription.ok) subscription.value();
+        } else if (subscription.ok) {
+          unlistenClose = subscription.value;
         } else {
-          unlistenClose = unlisten;
+          logger.app.warn('editor window close listener unavailable', 'Window');
         }
-      } catch (error) {
-        logger.app.warn(
-          `Failed to attach editor window close listener: ${error instanceof Error ? error.message : String(error)}`,
-          'Window',
-        );
+      } catch {
+        logger.app.warn('editor window close listener unavailable', 'Window');
       }
     };
 

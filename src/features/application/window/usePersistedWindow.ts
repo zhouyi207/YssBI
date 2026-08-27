@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentAppWindow } from '@/services/platform/appWindow';
 import { WindowStateService } from "@/services/window/windowStateService";
 import type { WindowKind } from "@/shared/types/settings";
 import { logger } from "@/utils/appLogger";
@@ -18,32 +18,32 @@ import { captureWindowGeometryPreservingMaximized } from "./windowGeometryCaptur
  */
 export function usePersistedWindow(kind: WindowKind): void {
     useEffect(() => {
-        const win = getCurrentWindow();
+        const win = currentAppWindow();
         let unlistenClose: (() => void) | null = null;
 
         const setup = async () => {
             if (win.label !== "main") return;
             try {
-                unlistenClose = await win.onCloseRequested(async () => {
+                const subscription = await win.onCloseRequested(async (): Promise<'allow'> => {
                     const next = await captureWindowGeometryPreservingMaximized(
                         win,
                         () => WindowStateService.get(kind),
                     );
-                    if (!next) return;
+                    if (!next) return 'allow';
                     try {
                         await WindowStateService.save(kind, next);
-                    } catch (e) {
-                        logger.app.error(
-                            `Failed to persist window state for ${kind}: ${e instanceof Error ? e.message : String(e)}`,
-                            "Window",
-                        );
+                    } catch {
+                        logger.app.error('window state persistence failed', "Window");
                     }
+                    return 'allow';
                 });
-            } catch (e) {
-                logger.app.warn(
-                    `Failed to attach close listener for ${kind}: ${e instanceof Error ? e.message : String(e)}`,
-                    "Window",
-                );
+                if (!subscription.ok) {
+                    logger.app.warn('window close listener unavailable', 'Window');
+                    return;
+                }
+                unlistenClose = subscription.value;
+            } catch {
+                logger.app.warn('window close listener unavailable', "Window");
             }
         };
 

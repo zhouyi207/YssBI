@@ -19,7 +19,7 @@ export interface AppWindowHandle {
   innerSize(): Promise<PlatformOutcome<Readonly<{ width: number; height: number }>>>;
   scaleFactor(): Promise<PlatformOutcome<number>>;
   onCloseRequested(
-    listener: () => CloseRequestDecision,
+    listener: () => CloseRequestDecision | Promise<CloseRequestDecision>,
   ): Promise<PlatformOutcome<PlatformUnsubscribe>>;
   onResized(listener: () => void): Promise<PlatformOutcome<PlatformUnsubscribe>>;
 }
@@ -69,8 +69,8 @@ export function currentAppWindow(): AppWindowHandle {
     scaleFactor: () => call('readWindowScaleFactor', () => native.scaleFactor()),
     onCloseRequested: (listener) => call(
       'subscribeWindowCloseRequested',
-      () => native.onCloseRequested((event) => {
-        if (listener() === 'prevent') event.preventDefault();
+      () => native.onCloseRequested(async (event) => {
+        if (await listener() === 'prevent') event.preventDefault();
       }),
     ),
     onResized: (listener) => call(
