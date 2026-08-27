@@ -30,7 +30,7 @@ fn active_control() -> BackendExecutionControl {
 }
 
 #[test]
-fn adapter_maps_settings_requests_results_controls_and_closed_errors() {
+fn adapter_maps_settings_requests_results_and_closed_errors() {
     let backend: &dyn ScientificBackend = &SciApiScientificBackend::new();
     assert_eq!(
         map_settings(settings(ExecutionMissingValuePolicy::Listwise)),
@@ -129,12 +129,20 @@ fn adapter_maps_settings_requests_results_controls_and_closed_errors() {
         })
     );
 
+    assert_eq!(
+        map_sci_error(SciError::ComputationFailed {
+            operation: SciOperationCode::Regression,
+        }),
+        ScientificBackendError::ComputationFailed
+    );
+}
+
+#[test]
+fn adapter_rejects_cancelled_or_expired_calls_at_admission() {
+    let backend: &dyn ScientificBackend = &SciApiScientificBackend::new();
     let cancelled = BackendCancellationToken::new();
     cancelled.cancel();
-    let cancelled_control = BackendExecutionControl {
-        cancellation: cancelled,
-        deadline: Instant::now() + Duration::from_secs(5),
-    };
+
     assert_eq!(
         backend.kernel_density(
             KernelDensityRequest {
@@ -142,30 +150,24 @@ fn adapter_maps_settings_requests_results_controls_and_closed_errors() {
                 grid_points: 8,
                 min_x: None,
             },
-            &cancelled_control,
+            &BackendExecutionControl {
+                cancellation: cancelled,
+                deadline: Instant::now() + Duration::from_secs(5),
+            },
         ),
         Err(ScientificBackendError::Cancelled)
     );
-
-    let expired_control = BackendExecutionControl {
-        cancellation: BackendCancellationToken::new(),
-        deadline: Instant::now(),
-    };
     assert_eq!(
         backend.acf_pacf(
             AcfPacfRequest {
                 values: vec![1.0, 0.0, -1.0, 0.0],
                 max_lag: 1,
             },
-            &expired_control,
+            &BackendExecutionControl {
+                cancellation: BackendCancellationToken::new(),
+                deadline: Instant::now(),
+            },
         ),
         Err(ScientificBackendError::DeadlineExceeded)
-    );
-
-    assert_eq!(
-        map_sci_error(SciError::ComputationFailed {
-            operation: SciOperationCode::Regression,
-        }),
-        ScientificBackendError::ComputationFailed
     );
 }

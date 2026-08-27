@@ -27,6 +27,10 @@ impl BackendCancellationToken {
     }
 }
 
+/// Admission control for a synchronous scientific backend call.
+///
+/// Implementations sample cancellation and the deadline before dispatch. This
+/// contract does not claim cooperative interruption after computation starts.
 pub struct BackendExecutionControl {
     pub cancellation: BackendCancellationToken,
     pub deadline: Instant,
@@ -160,6 +164,11 @@ pub enum ScientificBackendError {
     ComputationFailed,
 }
 
+/// Execution's scientific backend boundary.
+///
+/// Every method applies [`BackendExecutionControl`] at admission. A concrete
+/// backend may add real cooperative checkpoints, but callers cannot infer them
+/// from this synchronous port.
 pub trait ScientificBackend: Send + Sync {
     fn statistics(
         &self,

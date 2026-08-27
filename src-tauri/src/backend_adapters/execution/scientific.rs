@@ -38,7 +38,7 @@ impl ScientificBackend for SciApiScientificBackend {
         request: StatisticsRequest,
         control: &BackendExecutionControl,
     ) -> Result<StatisticsResult, ScientificBackendError> {
-        preflight(control)?;
+        admit(control)?;
         let settings = map_settings(request.settings)?;
         validate_statistics_request(&request.operation, &request.parameters, &request.inputs)?;
         let metadata = observation_metadata(&request.inputs, settings);
@@ -56,7 +56,7 @@ impl ScientificBackend for SciApiScientificBackend {
         request: KernelDensityRequest,
         control: &BackendExecutionControl,
     ) -> Result<KernelDensityResult, ScientificBackendError> {
-        preflight(control)?;
+        admit(control)?;
         validate_density_request(&request)?;
         let output = compute_kernel_density_api(KernelDensityInput {
             values: &request.values,
@@ -80,7 +80,7 @@ impl ScientificBackend for SciApiScientificBackend {
         request: AcfPacfRequest,
         control: &BackendExecutionControl,
     ) -> Result<AcfPacfResult, ScientificBackendError> {
-        preflight(control)?;
+        admit(control)?;
         validate_acf_pacf_request(&request)?;
         let output = compute_acf_pacf_api(AcfPacfInput {
             residuals: request.values,
@@ -95,7 +95,7 @@ impl ScientificBackend for SciApiScientificBackend {
     }
 }
 
-fn preflight(control: &BackendExecutionControl) -> Result<(), ScientificBackendError> {
+fn admit(control: &BackendExecutionControl) -> Result<(), ScientificBackendError> {
     let control = map_control(control);
     if control.is_cancelled() {
         return Err(ScientificBackendError::Cancelled);

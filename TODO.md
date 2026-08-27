@@ -1466,3 +1466,6 @@ Execution 不知道具体 UI
 - [ ] 将 context-free KDE canonical owner 迁入 `sci/api/density.rs`，删除旧 `sci/kde.rs` 并原子更新 Application Bayes 与 Plot callers，保持数值算法和输出形状。
 - [ ] 从 public ACF/PACF API 移除未使用的 `SciContext`，同步 command 与 Plot direct-SCI callers，保留当前唯一 production 行为。
 - [ ] 为 final scientific port/adapter 增加 RED/GREEN fake fixtures、exact capability/debt 与 zero-production-caller semantic guard，并将 staged activation debt 保留给 Execution Task 8。
+- [ ] 修复 ACF/PACF golden integration target 对已移除 `SciContext` 参数的遗留引用，改为调用唯一的单参数 SCI API。
+- [ ] 将 scientific port fake 收紧为 recording fixture，逐方法验证 typed request/result 与 cancellation/deadline control 透传。
+- [ ] 明确 synchronous scientific adapter 的 control 仅为 admission preflight，保留 Task 8 的真实 cooperative checkpoint activation debt。

@@ -58,6 +58,10 @@ fallback 或第二条 composition route。
 public API/error。它保持 production-unreachable；当前 node runtime、commands 与 Application
 仍直接调用 SCI，且是唯一 active scientific route。该 staged adapter 的构造注入、旧 direct-SCI
 route 删除和 capability 收敛同样由 Execution Task 8 在同一 compiling slice 完成。
+当前 SCI operations 是同步 API，adapter 只在 method admission 时将 Execution control 映射为
+Task 2 SCI control 并检查 cancellation/deadline；这不是 mid-computation cooperative
+cancellation 承诺。真实 checkpoint 若需要，由 Execution Task 8 activation slice 与 backend
+调用一起落地，不增加 polling shim 或伪异步路径。
 
 完成条件：`debt/backend_adapter.rs` 为空，且 production architecture audit、相关 focused
 tests、`pnpm rust:check` 与 `git diff --check` 全部通过。

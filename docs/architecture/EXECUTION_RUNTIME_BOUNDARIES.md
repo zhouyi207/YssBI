@@ -35,6 +35,10 @@ Concrete engine 只由 composition root 注入的 backend adapter 调用。Kerne
 plan-local parameter、grant-scoped resource 和 typed backend result。取消、deadline、output
 sequence 与 terminal result 必须属于同一 run identity。
 
+Staged synchronous scientific port 的 `BackendExecutionControl` 语义仅为 method admission
+preflight；没有 backend checkpoint 时不声称计算中途可 cooperative interrupt。Execution Task 8
+负责在 production activation 时保留这一区分，并只在真实 backend 支持点引入 checkpoints。
+
 ## 迁移规则
 
 抽取 port 或 runtime owner 时，先通过 public seam 的 focused test 固定 observable contract，
