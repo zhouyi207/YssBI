@@ -1655,6 +1655,9 @@ Execution 不知道具体 UI
 - [ ] 将 New Project、Database import、Bayes export 与 persisted webview 创建迁移到 Services platform adapters，保持 geometry/selection 行为。
 - [ ] 将 settings store 的跨窗口发布/订阅移入 Application SettingsSyncCoordinator，保留 own-echo suppression 与 malformed payload 安全忽略。
 - [ ] 完成 Frontend Task 2 platform caller typecheck 与 diff 校验；projectService、ProjectListener 等范围外 raw callers留待下一切片。
+- [ ] 建立 Application-owned project hydration coordinator，以 project identity/epoch/generation 拒绝 stale completion。
+- [ ] 建立 bounded FIFO project event ingress/reconciler，串行处理、精确 optimistic key settlement，并在 overflow/rejection/stream failure 时请求一次 authoritative recovery。
+- [ ] 完成 Frontend Task 3 staged hydration/event ingress typecheck 与 focused evidence；旧 Core ProjectListener/handler route 保持未切换。
 - [ ] 将 ProjectService 的目录选择、save-as 路径与 resource reveal 职责拆出到 Application actions 和 platform adapters，保留 IPC/ordered progress route。
 - [ ] 删除 ProjectService 的 raw dialog/opener imports，并完成 save-as/application-selected-path focused regression 与 typecheck/diff 校验。
 - [ ] 将 Frontend state-authority AST/snapshot bridge 接入 semantic architecture audit，对 manifest-listed store members 缺失时 fail closed。
