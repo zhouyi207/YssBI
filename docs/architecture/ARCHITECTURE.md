@@ -88,13 +88,16 @@ components/ui and shared/ui
 
 主窗口 chrome 的层级固定为：顶部 `Menubar`（包含 title/menu/window controls），中部 flex row 中只有一个 root `DockviewReact`，底部 `BottomBar` status bar。Settings 与 node documentation dialogs 作为 overlay 留在工作台之外。
 
-`Workspace` 的 root `DockviewReact` 是所有顶层 panels 的唯一 topology authority：左侧 native Activity edge group 直接承载 `Project`、`Nodes`、`Data`、`Commands` 四个 panels；editor、Details、Inspect、Result、Logs 和 Output 由同一个 root 继续承载。Activity tabs 只允许在该 left edge group 内原生重排，普通 panels 不得进入，Activity panels 不得离开。唯一保留的 nested Dockview 位于 root `Logs` panel 内，其 authority 仅限 log-domain panels 的局部 topology、顺序与 active state；root 仍拥有 `Logs` panel 本身的位置、尺寸和可见状态。
+`Workspace` 的 root `DockviewReact` 是所有顶层 panels 的唯一 topology authority：左侧 native Activity edge group 直接承载 `Project`、`Nodes`、`Data`、`Commands` 四个 panels；editor、Details、Assistant、Inspect、Result、Logs、Output 和 Diagnostics 由同一个 root 继续承载。Activity tabs 只允许在该 left edge group 内原生重排，普通 panels 不得进入，Activity panels 不得离开。唯一保留的 nested Dockview 位于 root `Logs` panel 内，其 authority 仅限 log-domain panels 的局部 topology、顺序与 active state；root 仍拥有 `Logs` panel 本身的位置、尺寸和可见状态。
 
 - Zustand 只保存 modal 等非 placement UI 状态，不镜像任何 panel placement、visibility 或 Activity active tab。
-- `Details` 与 `Inspect` 是按需创建的 root singleton panels，打开时从当前 editor session context 解析 resource/detail target、active editor group 和 node selection，而不是常驻右侧 leaf。
+- `Details` 是常驻的 permanent root singleton，固定在 canonical right edge，不能移动、split、关闭，也不能通过拖动包含它的整个 group 绕过限制。
+- `Assistant` 是 layout-persisted 的普通 root singleton：新默认布局和 Reset Layout 将它放在 Details 后面，但它可以独立移动、split、关闭，并可从 View 菜单重新打开；已有 panel 的 reveal 保留其实际位置。
+- `Inspect` 是按需创建的 contextual root singleton，从当前 editor session context 解析 resource/detail target、active editor group 和 node selection。
 - Result 是 root Dockview 中可并存的 multi-panel：`resultKey` 标识并 upsert logical result panel，opaque `resultId` 标识该 panel 当前从 Rust `ResultStore` 读取的 payload。
-- `Logs` 与 `Output` 默认位于 root 的 native bottom edge group；该 group 使用 bottom header position，因此 content 在上、tabs 在下，尺寸与 collapse 仍由 root Dockview 原生管理。
+- `Logs`、`Output` 与 `Diagnostics` 默认位于 root 的 native bottom edge group；该 group 使用 bottom header position，因此 content 在上、tabs 在下，尺寸与 collapse 仍由 root Dockview 原生管理。
 - root layout 只在启动 hydration 时恢复；当前按 window label 隔离的 key 是 `yssbi-workbench-layout:<window-label>`（空 label 回退为 `main`），payload 只有 `root` 与 `nested.logs`，不含版本字段、preferences、迁移或旧 reader。Project replacement 不会再次从该 key 恢复 root topology。
+- persisted Assistant 若存在则恢复其保存的 group/position；若用户已关闭 Assistant 且 snapshot 中缺失，startup restore 不会 additive ensure。Project replacement 保留 Details 与 Assistant topology，仅清理 project-scoped editor、Inspect 与 Result panels。
 
 ## 4. Commands → application → domain
 
