@@ -1646,3 +1646,6 @@ Execution 不知道具体 UI
 - [ ] 将窗口几何读取与 close-listener 订阅改为 AppWindowHandle/PlatformOutcome，阻止 native Window 类型和事件对象向 Application 扩散。
 - [ ] 保持主窗口后端几何与次窗口 localStorage 几何的既有持久化策略，并让关闭回调只返回 allow/prevent 决策。
 - [ ] 更新 geometry persistence focused fixture 到 platform adapter fake，完成 typecheck 与 diff 校验。
+- [ ] 将 Database runtime registry 拆为 session-owned lifecycle/lease/prepare/commit/recovery owner，补齐 prepared、committed 与 recovery outstanding 计数。
+- [ ] 让 Database session API 的 catalog/data snapshot、声明/运行时/schema revalidation 与 mutation resolution 使用同一 runtime snapshot，保持锁外语义。
+- [ ] 完成 Database session runtime focused recovery/compensation 回归与 Rust check/fmt/diff 验证；driver I/O 仍未引入 neutral snapshot。

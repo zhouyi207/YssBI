@@ -809,6 +809,7 @@ mod tests {
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionOpenRequest,
     };
+    use std::time::Instant;
 
     fn declaration(id: &str) -> DatabaseDecl {
         DatabaseDecl {
