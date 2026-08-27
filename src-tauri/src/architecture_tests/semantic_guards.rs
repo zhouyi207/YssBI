@@ -366,6 +366,15 @@ fn flatten_use_tree(tree: &UseTree, prefix: &mut Vec<String>, bindings: &mut Vec
             flatten_use_tree(&path.tree, prefix, bindings);
             prefix.pop();
         }
+        UseTree::Name(name) if name.ident == "self" => {
+            if let Some(local) = prefix.last().cloned() {
+                bindings.push(UseBinding {
+                    path: prefix.clone(),
+                    local: Some(local),
+                    glob: false,
+                });
+            }
+        }
         UseTree::Name(name) => {
             let local = name.ident.to_string();
             let mut path = prefix.clone();
@@ -373,6 +382,13 @@ fn flatten_use_tree(tree: &UseTree, prefix: &mut Vec<String>, bindings: &mut Vec
             bindings.push(UseBinding {
                 path,
                 local: Some(local),
+                glob: false,
+            });
+        }
+        UseTree::Rename(rename) if rename.ident == "self" => {
+            bindings.push(UseBinding {
+                path: prefix.clone(),
+                local: Some(rename.rename.to_string()),
                 glob: false,
             });
         }
@@ -1383,6 +1399,26 @@ fn allowed() {
         unrelated.is_empty(),
         "unrelated Handle must not canonicalize"
     );
+}
+
+#[test]
+fn bayes_group_self_module_alias_is_canonicalized() {
+    let findings = bayes_worker_source_violations(
+        "src-tauri/src/application/group_self_authority.rs",
+        RustLayer::Application,
+        r#"
+use crate::sci::api::bayes::worker::{self as w};
+use w::BayesTaskHandle as Handle;
+
+fn forge(task_id: BayesTaskId, generation: NonZeroU64) {
+    let _ = Handle::issue_for_worker(task_id, generation);
+}
+"#,
+    )
+    .expect("group self authority fixture must parse");
+    assert!(findings.iter().any(|finding| {
+        finding.kind == "authority-call" && finding.target == "BayesTaskHandle::issue_for_worker"
+    }));
 }
 
 #[test]

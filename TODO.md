@@ -1454,3 +1454,5 @@ Execution 不知道具体 UI
 - [ ] 规范化 `crate`、`self`、多级 `super` 与 relative/module-alias 路径，同时保持 `other::Handle` 等非 worker origin 不产生误报。
 - [ ] 将所有显式 associated-function visibility 纳入 exact allowance，仅允许 worker boundary 的 public `ValidatedBayesTask::try_new` 与 exact `pub(crate)` authority builders。
 - [ ] 增加 module alias、relative worker import、nested forward alias chain、`pub(super)`、`pub(in ...)` 与 syntactic `pub(in crate)` 恶意回归 fixtures。
+- [ ] 修正 grouped use tree 的 terminal `self` 语义，使 `{self}` 与 `{self as alias}` 保留当前 module prefix 而不生成伪 `worker::self` origin。
+- [ ] 增加 `worker::{self as w}` → `w::BayesTaskHandle as Handle` → authority call 的 focused semantic regression，锁住 module self-alias canonicalization。
