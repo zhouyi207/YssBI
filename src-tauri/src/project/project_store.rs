@@ -80,8 +80,8 @@ mod tests {
 
     #[test]
     fn replacing_project_session_invalidates_all_memo_entries() {
+        use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId};
         use crate::node_system::analysis::ResourceVersionSet;
-        use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
         use crate::node_system::plan::{
             ExecutionSemanticsVersion, OperationStableId, PlannedValueContract, ResultPresentation,
             ValueRef,
@@ -101,7 +101,7 @@ mod tests {
                 ActivationProvenance {
                     run_id: RunId::new(1),
                     activation_id,
-                    graph_path: GraphResourcePath("events/replaced".into()),
+                    graph_path: GraphResourcePath::new("events/replaced.yssbi-event").unwrap(),
                     graph_revision: GraphRevision::new(1),
                     node_id: NodeId::from_uuid(uuid::Uuid::nil()),
                     created_at_ms: 1,

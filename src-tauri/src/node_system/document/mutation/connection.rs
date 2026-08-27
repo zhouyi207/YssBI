@@ -339,17 +339,17 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                         .expect("function target is a valid parameter key"),
                 )
                 .and_then(serde_json::Value::as_str);
-            if target != Some(function.0.as_ref()) {
+            if target != Some(function.as_str()) {
                 return Err(invalid_editor_mutation(
                     "resolved function member does not match the node target",
                 ));
             }
-            let path = CatalogResourcePath::new(function.0.clone());
+            let path = CatalogResourcePath::new(function.as_str());
             let Some(crate::project::CatalogMutationResource::Function { signature, .. }) =
                 catalog.resources.get(&path)
             else {
                 return Err(MutationConflict::ReferencedResourceUnavailable(
-                    format!("function resource '{}' is unavailable", function.0).into(),
+                    format!("function resource '{}' is unavailable", function.as_str()).into(),
                 ));
             };
             let resolver_id = resolver.as_str();
@@ -364,7 +364,7 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
                     .map(|parameter| parameter.type_name.as_str())
             } else if resolver_id == crate::node_system::compiler::FUNCTION_CALL_RESULTS_RESOLVER
                 && spec.direction == PortDirection::Output
-                && parameter.0.as_ref() == "return"
+                && parameter.as_str() == "return"
             {
                 signature.return_type.as_deref()
             } else {
@@ -373,36 +373,44 @@ pub(crate) fn validate_resolved_dynamic_binding_authority(
             let type_name = type_name.ok_or_else(|| {
                 invalid_editor_mutation(format!(
                     "function member '{}:{}' is not authoritative for template '{}' on '{}'",
-                    function.0, parameter.0, spec.key, protocol.type_id
+                    function.as_str(),
+                    parameter.as_str(),
+                    spec.key,
+                    protocol.type_id
                 ))
             })?;
             crate::node_system::compatibility::function_type_expr(type_name).map_err(|error| {
                 invalid_editor_mutation(format!(
                     "function member '{}:{}' has invalid authoritative type '{}': {error}",
-                    function.0, parameter.0, type_name
+                    function.as_str(),
+                    parameter.as_str(),
+                    type_name
                 ))
             })
         }
         DynamicMemberLocator::SchemaField { source, field } => {
-            let path = CatalogResourcePath::new(source.0.clone());
+            let path = CatalogResourcePath::new(source.as_str());
             if !matches!(
                 catalog.resources.get(&path),
                 Some(crate::project::CatalogMutationResource::Database { .. })
             ) {
                 return Err(MutationConflict::ReferencedResourceUnavailable(
-                    format!("database resource '{}' is unavailable", source.0).into(),
+                    format!("database resource '{}' is unavailable", source.as_str()).into(),
                 ));
             }
             if resolver.as_str() != crate::node_system::compiler::DATAFRAME_COLUMNS_RESOLVER {
                 return Err(invalid_editor_mutation(format!(
                     "schema member '{}:{}' is invalid for template '{}'",
-                    source.0, field.0, spec.key
+                    source.as_str(),
+                    field.as_str(),
+                    spec.key
                 )));
             }
             Err(MutationConflict::ReferencedResourceUnavailable(
                 format!(
                     "current database field authority for '{}:{}' is unavailable",
-                    source.0, field.0
+                    source.as_str(),
+                    field.as_str()
                 )
                 .into(),
             ))

@@ -28,7 +28,7 @@ fn mixed_residency_history_rejects_variable_revision_and_tombstone_race() {
             "en-US",
             MutationRequest::new(
                 resource,
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -46,7 +46,7 @@ fn mixed_residency_history_rejects_variable_revision_and_tombstone_race() {
         .remove(&variable_id);
     state.variable_revisions.write().unwrap().insert(
         variable_id,
-        super::project_state::VariableRevisionEntry::deleted(GraphRevision::new(7)),
+        super::project_state::VariableRevisionEntry::deleted(ResourceRevision::new(7)),
     );
     let raced_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
     let raced_history = (
@@ -125,7 +125,7 @@ fn loaded_only_history_routing_rejects_specialized_policy_races() {
                 "en-US",
                 MutationRequest::new(
                     request_resource,
-                    GraphRevision::new(1),
+                    ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                     OperationId::new(),
                     HistoryMutation {},
                 ),
@@ -136,7 +136,7 @@ fn loaded_only_history_routing_rejects_specialized_policy_races() {
             .recv_timeout(std::time::Duration::from_secs(2))
             .expect("loaded-only History reached routing checkpoint");
         let mut specialized_head = state.history.read().unwrap().next_undo().cloned().unwrap();
-        specialized_head.history_id = crate::node_system::document::HistoryEntryId::new();
+        specialized_head.history_id = crate::project::HistoryEntryId::new();
         specialized_head.persistence = policy;
         match policy {
             crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects => {
@@ -152,8 +152,8 @@ fn loaded_only_history_routing_rejects_specialized_policy_races() {
                 specialized_head.resource_lifecycle = None;
                 specialized_head.resource_move =
                     Some(crate::node_system::document::ResourceMoveHistoryPatch {
-                        from: path.0.clone(),
-                        to: path.0,
+                        from: path.as_str().into(),
+                        to: path.as_str().into(),
                         kind: crate::node_system::document::ResourceLifecycleKind::Event,
                         payload: crate::node_system::document::ResourceMoveHistoryPayload::Graph {
                             persisted_move_payload: serde_json::Value::Null,
@@ -233,7 +233,7 @@ fn unloaded_graph_history_routing_rejects_specialized_head_race() {
             "en-US",
             MutationRequest::new(
                 resource,
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -246,7 +246,7 @@ fn unloaded_graph_history_routing_rejects_specialized_head_race() {
         .recv_timeout(std::time::Duration::from_secs(2))
         .expect("History reached routing checkpoint");
     let mut specialized_head = state.history.read().unwrap().next_undo().cloned().unwrap();
-    specialized_head.history_id = crate::node_system::document::HistoryEntryId::new();
+    specialized_head.history_id = crate::project::HistoryEntryId::new();
     specialized_head.persistence =
         crate::node_system::document::HistoryPersistencePolicy::DurableVariableEffects;
     specialized_head.variable_effect_snapshots = Some(Default::default());
@@ -348,7 +348,7 @@ fn unloaded_graph_history_rejects_stale_function_owner_graph_revision() {
             "en-US",
             MutationRequest::new(
                 resource,
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -389,7 +389,7 @@ fn mixed_residency_history_rejects_loaded_function_revision_race() {
     let event_path = GraphResourcePath::new("events/FunctionRace.yssbi-event").unwrap();
     let function_path =
         GraphResourcePath::new("functions/LoadedFunctionRace.yssbi-function").unwrap();
-    let event_key = crate::node_system::document::GraphResourcePath(event_path.as_str().into());
+    let event_key = event_path.clone();
     let function_key =
         crate::node_system::document::FunctionResourceKey(function_path.as_str().into());
     let event_patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
@@ -424,7 +424,7 @@ fn mixed_residency_history_rejects_loaded_function_revision_race() {
             ),
             crate::node_system::document::ResourcePatch::function(
                 function_key.clone(),
-                GraphRevision::INITIAL,
+                ResourceRevision::INITIAL,
                 function_patch,
             ),
         ],
@@ -477,7 +477,7 @@ fn mixed_residency_history_rejects_loaded_function_revision_race() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(event_key),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -497,7 +497,7 @@ fn mixed_residency_history_rejects_loaded_function_revision_race() {
         .function
         .as_mut()
         .unwrap()
-        .revision = GraphRevision::new(7);
+        .revision = ResourceRevision::new(7);
     let raced_data = serde_json::to_value(state.get_data().unwrap()).unwrap();
     let raced_revisions = state.revision_state_for_test();
     let raced_history = state.history_status();
@@ -535,12 +535,12 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
     let signature = crate::node_system::document::FunctionSignature {
         parameters: vec![
             crate::node_system::document::FunctionParameter {
-                id: crate::node_system::document::FunctionParameterId("request_id".into()),
+                id: crate::graph_document::FunctionParameterId::new("request_id"),
                 name: "Request ID".into(),
                 type_name: "string".into(),
             },
             crate::node_system::document::FunctionParameter {
-                id: crate::node_system::document::FunctionParameterId("payload".into()),
+                id: crate::graph_document::FunctionParameterId::new("payload"),
                 name: "Payload".into(),
                 type_name: "json".into(),
             },
@@ -597,7 +597,7 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
             "en-US",
             MutationRequest::new(
                 undo_resource,
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 undo_operation,
                 HistoryMutation {},
             ),
@@ -629,7 +629,7 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
     .unwrap();
     assert_eq!(
         staged_undo.function.as_ref().unwrap().revision,
-        GraphRevision::new(2)
+        ResourceRevision::from_graph_revision(GraphRevision::new(2))
     );
     assert_eq!(
         staged_undo.function.as_ref().unwrap().signature,
@@ -647,8 +647,14 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
     assert_eq!(undo.publication_revision, before_publication.1 + 1);
     assert_eq!(undo.deltas.len(), 1);
     assert_eq!(undo.deltas[0].resource, resource);
-    assert_eq!(undo.deltas[0].from_revision, GraphRevision::new(1));
-    assert_eq!(undo.deltas[0].to_revision, GraphRevision::new(2));
+    assert_eq!(
+        undo.deltas[0].from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
+    );
+    assert_eq!(
+        undo.deltas[0].to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(2))
+    );
     assert_eq!(undo.deltas[0].caused_by, Some(undo_operation));
     assert_eq!(undo.history, state.history_status());
     assert_eq!(
@@ -716,7 +722,7 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
             "en-US",
             MutationRequest::new(
                 resource.clone(),
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 redo_operation,
                 HistoryMutation {},
             ),
@@ -729,8 +735,14 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
     assert_eq!(redo.publication_revision, undo.publication_revision + 1);
     assert_eq!(redo.deltas.len(), 1);
     assert_eq!(redo.deltas[0].resource, resource);
-    assert_eq!(redo.deltas[0].from_revision, GraphRevision::new(2));
-    assert_eq!(redo.deltas[0].to_revision, GraphRevision::new(3));
+    assert_eq!(
+        redo.deltas[0].from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(2))
+    );
+    assert_eq!(
+        redo.deltas[0].to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(3))
+    );
     assert_eq!(redo.deltas[0].caused_by, Some(redo_operation));
     assert_eq!(redo.history, state.history_status());
     assert_eq!(
@@ -757,7 +769,7 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
     assert_eq!(redo_disk.revision, redo.deltas[0].to_revision);
     assert_eq!(
         state.revision_state_for_test().0[&function_path],
-        redo.deltas[0].to_revision
+        redo.deltas[0].to_revision.to_graph_revision()
     );
     assert_eq!(redo_function.signature, signature);
     assert_eq!(
@@ -765,7 +777,7 @@ fn unloaded_function_history_preserves_embedded_abi_and_publishes_after_finalize
             .signature
             .parameters
             .iter()
-            .map(|parameter| parameter.id.0.as_ref())
+            .map(|parameter| parameter.id.as_str())
             .collect::<Vec<_>>(),
         vec!["request_id", "payload"]
     );
@@ -806,7 +818,7 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
     let event_path = GraphResourcePath::new("events/LocalOwner.yssbi-event").unwrap();
     let function_path = GraphResourcePath::new("functions/LocalOwner.yssbi-function").unwrap();
     let loaded_path = GraphResourcePath::new("events/LoadedProjection.yssbi-event").unwrap();
-    let loaded_key = crate::node_system::document::GraphResourcePath(loaded_path.as_str().into());
+    let loaded_key = loaded_path.clone();
     let loaded_node = node("yssbi.constant.int64");
     let loaded_node_id = loaded_node.id;
 
@@ -865,7 +877,7 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
     state.activate_project_fixture(root_text.clone(), project);
     state.variable_revisions.write().unwrap().insert(
         created.id,
-        super::project_state::VariableRevisionEntry::deleted(GraphRevision::INITIAL),
+        super::project_state::VariableRevisionEntry::deleted(ResourceRevision::INITIAL),
     );
     let initial_operation = OperationId::new();
     let transaction = crate::node_system::document::ProjectHistoryTransaction::new(
@@ -880,7 +892,7 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             ),
             crate::node_system::document::ResourcePatch::variable(
                 created_key.clone(),
-                GraphRevision::INITIAL,
+                ResourceRevision::INITIAL,
                 crate::node_system::document::VariableDocumentPatch::new(
                     None,
                     Some(serde_json::to_value(&created).unwrap()),
@@ -888,7 +900,7 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             ),
             crate::node_system::document::ResourcePatch::variable(
                 updated_key.clone(),
-                GraphRevision::INITIAL,
+                ResourceRevision::INITIAL,
                 crate::node_system::document::VariableDocumentPatch::new(
                     Some(serde_json::to_value(&updated_before).unwrap()),
                     Some(serde_json::to_value(&updated_after).unwrap()),
@@ -896,7 +908,7 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             ),
             crate::node_system::document::ResourcePatch::variable(
                 removed_key.clone(),
-                GraphRevision::INITIAL,
+                ResourceRevision::INITIAL,
                 crate::node_system::document::VariableDocumentPatch::new(
                     Some(serde_json::to_value(&removed).unwrap()),
                     None,
@@ -904,7 +916,7 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             ),
             crate::node_system::document::ResourcePatch::variable(
                 global_key.clone(),
-                GraphRevision::INITIAL,
+                ResourceRevision::INITIAL,
                 crate::node_system::document::VariableDocumentPatch::new(
                     Some(serde_json::to_value(&global_before).unwrap()),
                     Some(serde_json::to_value(&global_after).unwrap()),
@@ -951,7 +963,7 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(loaded_key.clone()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 undo_operation,
                 HistoryMutation {},
             ),
@@ -966,8 +978,8 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
         vec![
             crate::node_system::document::ResourceDeltaEvent {
                 resource: ResourceKey::Graph(loaded_key.clone()),
-                from_revision: GraphRevision::new(1),
-                to_revision: GraphRevision::new(2),
+                from_revision: ResourceRevision::new(1),
+                to_revision: ResourceRevision::new(2),
                 caused_by: Some(undo_operation),
                 payload: crate::node_system::document::ResourceDocumentPatch::Graph(
                     GraphDocumentPatch::new(vec![GraphDocumentOperation::RemoveNode {
@@ -977,8 +989,8 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             },
             crate::node_system::document::ResourceDeltaEvent {
                 resource: ResourceKey::Variable(created_key.clone()),
-                from_revision: GraphRevision::new(1),
-                to_revision: GraphRevision::new(2),
+                from_revision: ResourceRevision::new(1),
+                to_revision: ResourceRevision::new(2),
                 caused_by: Some(undo_operation),
                 payload: crate::node_system::document::ResourceDocumentPatch::Variable(
                     crate::node_system::document::VariableDocumentPatch::new(
@@ -989,8 +1001,8 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             },
             crate::node_system::document::ResourceDeltaEvent {
                 resource: ResourceKey::Variable(updated_key.clone()),
-                from_revision: GraphRevision::new(1),
-                to_revision: GraphRevision::new(2),
+                from_revision: ResourceRevision::new(1),
+                to_revision: ResourceRevision::new(2),
                 caused_by: Some(undo_operation),
                 payload: crate::node_system::document::ResourceDocumentPatch::Variable(
                     crate::node_system::document::VariableDocumentPatch::new(
@@ -1001,8 +1013,8 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             },
             crate::node_system::document::ResourceDeltaEvent {
                 resource: ResourceKey::Variable(removed_key.clone()),
-                from_revision: GraphRevision::new(1),
-                to_revision: GraphRevision::new(2),
+                from_revision: ResourceRevision::new(1),
+                to_revision: ResourceRevision::new(2),
                 caused_by: Some(undo_operation),
                 payload: crate::node_system::document::ResourceDocumentPatch::Variable(
                     crate::node_system::document::VariableDocumentPatch::new(
@@ -1013,8 +1025,8 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             },
             crate::node_system::document::ResourceDeltaEvent {
                 resource: ResourceKey::Variable(global_key.clone()),
-                from_revision: GraphRevision::new(1),
-                to_revision: GraphRevision::new(2),
+                from_revision: ResourceRevision::new(1),
+                to_revision: ResourceRevision::new(2),
                 caused_by: Some(undo_operation),
                 payload: crate::node_system::document::ResourceDocumentPatch::Variable(
                     crate::node_system::document::VariableDocumentPatch::new(
@@ -1056,10 +1068,16 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
     let global_revision = state
         .variable_revision_entry_for_test(&global_before.id)
         .unwrap();
-    assert_eq!(created_revision.revision, GraphRevision::new(2));
+    assert_eq!(
+        created_revision.revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(2))
+    );
     assert!(!created_revision.is_present());
     for revision in [updated_revision, removed_revision, global_revision] {
-        assert_eq!(revision.revision, GraphRevision::new(2));
+        assert_eq!(
+            revision.revision,
+            ResourceRevision::from_graph_revision(GraphRevision::new(2))
+        );
         assert!(revision.is_present());
     }
     let undo_event =
@@ -1104,7 +1122,7 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(loaded_key.clone()),
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 redo_operation,
                 HistoryMutation {},
             ),
@@ -1120,8 +1138,8 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
         vec![
             crate::node_system::document::ResourceDeltaEvent {
                 resource: ResourceKey::Graph(loaded_key.clone()),
-                from_revision: GraphRevision::new(2),
-                to_revision: GraphRevision::new(3),
+                from_revision: ResourceRevision::new(2),
+                to_revision: ResourceRevision::new(3),
                 caused_by: Some(redo_operation),
                 payload: crate::node_system::document::ResourceDocumentPatch::Graph(
                     GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
@@ -1131,8 +1149,8 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             },
             crate::node_system::document::ResourceDeltaEvent {
                 resource: ResourceKey::Variable(created_key.clone()),
-                from_revision: GraphRevision::new(2),
-                to_revision: GraphRevision::new(3),
+                from_revision: ResourceRevision::new(2),
+                to_revision: ResourceRevision::new(3),
                 caused_by: Some(redo_operation),
                 payload: crate::node_system::document::ResourceDocumentPatch::Variable(
                     crate::node_system::document::VariableDocumentPatch::new(
@@ -1143,8 +1161,8 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             },
             crate::node_system::document::ResourceDeltaEvent {
                 resource: ResourceKey::Variable(updated_key.clone()),
-                from_revision: GraphRevision::new(2),
-                to_revision: GraphRevision::new(3),
+                from_revision: ResourceRevision::new(2),
+                to_revision: ResourceRevision::new(3),
                 caused_by: Some(redo_operation),
                 payload: crate::node_system::document::ResourceDocumentPatch::Variable(
                     crate::node_system::document::VariableDocumentPatch::new(
@@ -1155,8 +1173,8 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             },
             crate::node_system::document::ResourceDeltaEvent {
                 resource: ResourceKey::Variable(removed_key.clone()),
-                from_revision: GraphRevision::new(2),
-                to_revision: GraphRevision::new(3),
+                from_revision: ResourceRevision::new(2),
+                to_revision: ResourceRevision::new(3),
                 caused_by: Some(redo_operation),
                 payload: crate::node_system::document::ResourceDocumentPatch::Variable(
                     crate::node_system::document::VariableDocumentPatch::new(
@@ -1167,8 +1185,8 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
             },
             crate::node_system::document::ResourceDeltaEvent {
                 resource: ResourceKey::Variable(global_key.clone()),
-                from_revision: GraphRevision::new(2),
-                to_revision: GraphRevision::new(3),
+                from_revision: ResourceRevision::new(2),
+                to_revision: ResourceRevision::new(3),
                 caused_by: Some(redo_operation),
                 payload: crate::node_system::document::ResourceDocumentPatch::Variable(
                     crate::node_system::document::VariableDocumentPatch::new(
@@ -1211,10 +1229,16 @@ fn unloaded_local_variable_history_preserves_scope_tombstones_and_loaded_only_pr
         .variable_revision_entry_for_test(&global_before.id)
         .unwrap();
     for revision in [created_revision, updated_revision, global_revision] {
-        assert_eq!(revision.revision, GraphRevision::new(3));
+        assert_eq!(
+            revision.revision,
+            ResourceRevision::from_graph_revision(GraphRevision::new(3))
+        );
         assert!(revision.is_present());
     }
-    assert_eq!(removed_revision.revision, GraphRevision::new(3));
+    assert_eq!(
+        removed_revision.revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(3))
+    );
     assert!(!removed_revision.is_present());
     let redo_event =
         crate::project::project_io::load_project_graph_document_from_file(&root_text, &event_path)
@@ -1266,9 +1290,7 @@ fn unloaded_graph_edit_undo_redo_is_durable_and_keeps_graph_unloaded() {
     ));
     std::fs::create_dir_all(&root).unwrap();
     let graph_path = GraphResourcePath::new("events/DurableHistory.yssbi-event").unwrap();
-    let resource = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        graph_path.as_str().into(),
-    ));
+    let resource = ResourceKey::Graph(graph_path.clone());
     let inserted_node = node("yssbi.constant.int64");
     let inserted_node_id = inserted_node.id;
     let mut project = ProjectData::new();
@@ -1286,7 +1308,7 @@ fn unloaded_graph_edit_undo_redo_is_durable_and_keeps_graph_unloaded() {
             &graph_path,
             MutationRequest::new(
                 resource.clone(),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: inserted_node,
@@ -1303,7 +1325,7 @@ fn unloaded_graph_edit_undo_redo_is_durable_and_keeps_graph_unloaded() {
             "en-US",
             MutationRequest::new(
                 resource.clone(),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -1315,12 +1337,18 @@ fn unloaded_graph_edit_undo_redo_is_durable_and_keeps_graph_unloaded() {
             .unwrap();
     assert!(!undo_disk.document.nodes.contains_key(&inserted_node_id));
     assert_eq!(undo.deltas.len(), 1);
-    assert_eq!(undo.deltas[0].from_revision, GraphRevision::new(1));
-    assert_eq!(undo.deltas[0].to_revision, GraphRevision::new(2));
+    assert_eq!(
+        undo.deltas[0].from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
+    );
+    assert_eq!(
+        undo.deltas[0].to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(2))
+    );
     assert_eq!(undo_disk.revision, undo.deltas[0].to_revision);
     assert_eq!(
         state.revision_state_for_test().0.get(&graph_path).copied(),
-        Some(undo_disk.revision)
+        Some(undo_disk.revision.to_graph_revision())
     );
     assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
     assert!(undo.projection_replacements.is_empty());
@@ -1348,7 +1376,7 @@ fn unloaded_graph_edit_undo_redo_is_durable_and_keeps_graph_unloaded() {
     assert_eq!(redo_disk.revision, redo.deltas[0].to_revision);
     assert_eq!(
         state.revision_state_for_test().0.get(&graph_path).copied(),
-        Some(redo_disk.revision)
+        Some(redo_disk.revision.to_graph_revision())
     );
     assert!(!state.get_data().unwrap().graphs.contains_key(&graph_path));
     assert!(redo.projection_replacements.is_empty());
@@ -1403,7 +1431,7 @@ fn unloaded_graph_history_staging_and_live_replace_faults_preserve_state() {
                 "en-US",
                 MutationRequest::new(
                     resource,
-                    GraphRevision::new(1),
+                    ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                     OperationId::new(),
                     HistoryMutation {},
                 ),
@@ -1477,7 +1505,7 @@ fn unloaded_graph_post_disk_commit_revision_mismatch_rolls_back() {
             "en-US",
             MutationRequest::new(
                 resource,
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -1520,7 +1548,7 @@ fn unloaded_graph_post_disk_rollback_failure_enters_recovery_required() {
             "en-US",
             MutationRequest::new(
                 resource.clone(),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -1537,7 +1565,7 @@ fn unloaded_graph_post_disk_rollback_failure_enters_recovery_required() {
             "en-US",
             MutationRequest::new(
                 resource,
-                GraphRevision::new(7),
+                ResourceRevision::from_graph_revision(GraphRevision::new(7)),
                 OperationId::new(),
                 HistoryMutation {},
             ),

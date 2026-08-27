@@ -1,4 +1,5 @@
-use crate::node_system::document::{GraphResourcePath, PortAddressDto};
+use crate::graph_document::GraphResourcePath;
+use crate::node_system::document::PortAddressDto;
 use crate::node_system::plan::{
     ExecutionDemand, GraphOutputRef, MAX_SAFE_PREVIEW_GENERATION, PlannedValueKind,
     ResultPresentation,
@@ -23,7 +24,7 @@ pub struct GraphOutputRefDto {
 impl From<GraphOutputRef> for GraphOutputRefDto {
     fn from(output: GraphOutputRef) -> Self {
         Self {
-            graph_path: output.graph_path.0.into(),
+            graph_path: output.graph_path.into_string(),
             port: output.port.into(),
         }
     }
@@ -34,7 +35,8 @@ impl TryFrom<GraphOutputRefDto> for GraphOutputRef {
 
     fn try_from(output: GraphOutputRefDto) -> Result<Self, Self::Error> {
         Ok(Self {
-            graph_path: GraphResourcePath(output.graph_path.into()),
+            graph_path: GraphResourcePath::new(output.graph_path)
+                .map_err(|error| error.to_string())?,
             port: output.port.try_into()?,
         })
     }
@@ -140,7 +142,7 @@ impl From<GraphRunIdentity> for GraphRunIdentityDto {
     fn from(run: GraphRunIdentity) -> Self {
         Self {
             project_session_id: run.project_session_id.as_str().to_owned(),
-            graph_path: run.graph_path.0.into(),
+            graph_path: run.graph_path.into_string(),
             run_id: run.run_id.get().to_string(),
         }
     }
@@ -304,7 +306,7 @@ impl From<RunOutputEvent> for RunOutputEventDto {
             sequence: event.sequence,
             stream: event.stream.into(),
             text: event.text,
-            source_graph_path: event.source_graph_path.0.into(),
+            source_graph_path: event.source_graph_path.into_string(),
             source_node_id: event.source_node_id.to_string(),
         }
     }
@@ -344,7 +346,7 @@ impl From<RunOutputStatusEvent> for RunOutputStatusEventDto {
             sequence: event.sequence,
             stream: event.stream.into(),
             status: event.status.into(),
-            source_graph_path: event.source_graph_path.0.into(),
+            source_graph_path: event.source_graph_path.into_string(),
             source_node_id: event.source_node_id.to_string(),
         }
     }
@@ -536,7 +538,7 @@ impl From<&StoredResult> for ResultDescriptorDto {
             provenance: ResultProvenanceDto {
                 run_id: result.provenance.run_id.get().to_string(),
                 activation_id: result.provenance.activation_id.get().to_string(),
-                graph_path: result.provenance.graph_path.0.to_string(),
+                graph_path: result.provenance.graph_path.as_str().to_owned(),
                 graph_revision: result.provenance.graph_revision.get().to_string(),
                 node_id: result.provenance.node_id.to_string(),
                 output: result.provenance.output.clone().map(Into::into),
@@ -666,7 +668,7 @@ impl PinResultEntryDto {
 #[cfg(test)]
 mod execution_demand_tests {
     use super::*;
-    use crate::node_system::document::{PortAddress, PortRef};
+    use crate::graph_document::{PortAddress, PortRef};
     use crate::node_system::plan::ExecutionDemand;
     use crate::node_system::runtime::ResultId;
     use serde_json::{Value, json};
@@ -809,11 +811,9 @@ mod execution_demand_tests {
     #[test]
     fn pin_preview_result_ready_serializes_only_safe_generation_and_stable_ids() {
         let output = GraphOutputRef {
-            graph_path: GraphResourcePath("events/Main.yssbi-event".into()),
+            graph_path: GraphResourcePath::new("events/Main.yssbi-event").unwrap(),
             port: PortAddress::declared(
-                crate::node_system::document::NodeId::from_uuid(
-                    uuid::Uuid::parse_str(NODE_ID).unwrap(),
-                ),
+                crate::graph_document::NodeId::from_uuid(uuid::Uuid::parse_str(NODE_ID).unwrap()),
                 crate::node_system::protocol::PortKey::new("result").unwrap(),
             ),
         };
@@ -851,7 +851,7 @@ mod execution_demand_tests {
 
     #[test]
     fn result_dto_serializes_identity_state_and_provenance_without_artifacts() {
-        use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
+        use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId};
         use crate::node_system::plan::{PlannedValueContract, ResultPresentation, ValueRef};
         use crate::node_system::runtime::RunId;
         use crate::node_system::runtime::{
@@ -864,7 +864,7 @@ mod execution_demand_tests {
             provenance: ResultProvenance {
                 run_id: RunId::new(5),
                 activation_id: ActivationId::next().unwrap(),
-                graph_path: GraphResourcePath("events/test.yssbi-event".into()),
+                graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
                 graph_revision: GraphRevision::new(3),
                 node_id: NodeId::from_uuid(uuid::Uuid::nil()),
                 output: None,

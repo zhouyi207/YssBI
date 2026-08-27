@@ -5,9 +5,8 @@ use super::types::{
     ResolvedPortStatusDto, SchemaFieldDto, SchemaSummaryDto, SchemaSummaryKindDto, TypeSummaryDto,
 };
 use crate::data_contract::DataType;
-use crate::node_system::document::{
-    EffectiveInputBinding, GraphDocument, PortAddress, PortAddressDto,
-};
+use crate::graph_document::{GraphDocument, PortAddress};
+use crate::node_system::document::{EffectiveInputBinding, PortAddressDto};
 use crate::node_system::protocol::ResolvedSchemaFact;
 use crate::node_system::protocol::{
     ConnectionsPerPort, ParameterEditorSpec, PortDirection, PortEditorSpec, PortInstances,

@@ -279,7 +279,7 @@ fn validate_published_call(
             "function ABI provenance does not match its plan".into(),
         ));
     }
-    if callee.provenance.graph_path.0.as_ref() != target.as_str() {
+    if callee.provenance.graph_path.as_str() != target.as_str() {
         return Err(invalid(
             "function plan target does not match the Call target".into(),
         ));
@@ -853,7 +853,7 @@ impl<'a> RunExecutor<'a> {
         run_id: RunId,
         activation_id: ActivationId,
         plan: &ExecutionPlan,
-        node_id: crate::node_system::document::NodeId,
+        node_id: crate::graph_document::NodeId,
     ) -> ActivationProvenance {
         ActivationProvenance {
             run_id,
@@ -870,7 +870,7 @@ impl<'a> RunExecutor<'a> {
         &self,
         run_id: RunId,
         plan: &ExecutionPlan,
-        node_id: crate::node_system::document::NodeId,
+        node_id: crate::graph_document::NodeId,
         value_ref: ValueRef,
         contract: PlannedValueContract,
         value: Value,
@@ -903,7 +903,7 @@ impl<'a> RunExecutor<'a> {
             let result_id = self.create_internal_ready_result(
                 run_id,
                 plan,
-                crate::node_system::document::NodeId::from_uuid(uuid::Uuid::nil()),
+                crate::graph_document::NodeId::from_uuid(uuid::Uuid::nil()),
                 *value_ref,
                 plan.value_contracts
                     .get(value_ref)

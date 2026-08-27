@@ -1,4 +1,4 @@
-use crate::node_system::document::GraphDocument;
+use crate::graph_document::GraphDocument;
 use crate::node_system::plan::ExecutionPlan;
 use serde::Serialize;
 use serde_json::{Map, Value};

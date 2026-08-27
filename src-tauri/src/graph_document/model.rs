@@ -1,12 +1,11 @@
-use super::{ConnectionId, GraphRevision, NodeId, PortInstanceId};
-use crate::node_system::protocol::{
-    NodeTypeId, ParameterKey, PortKey, PortMemberGroupSpec, TypeExpr,
-};
+use super::{ConnectionId, GraphResourcePath, GraphRevision, NodeId, PortInstanceId};
+use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey, TypeExpr};
 use serde::{Deserialize, Serialize};
-pub type TypedValue = serde_json::Value;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt;
 
+/// Existing untagged JSON value embedded in persisted graph documents.
+pub type TypedValue = serde_json::Value;
 pub type ParameterValues = BTreeMap<ParameterKey, TypedValue>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -78,68 +77,44 @@ pub enum PortRef {
     },
 }
 
-pub(crate) struct PortMemberGroupState {
-    required_templates: BTreeSet<PortKey>,
-    present_templates: BTreeMap<PortInstanceId, BTreeSet<PortKey>>,
+macro_rules! string_identity {
+    ($name:ident) => {
+        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+        #[serde(transparent)]
+        pub struct $name(Box<str>);
+
+        impl $name {
+            pub fn new(value: impl Into<Box<str>>) -> Self {
+                Self(value.into())
+            }
+
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+
+            pub fn into_boxed_str(self) -> Box<str> {
+                self.0
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str(self.as_str())
+            }
+        }
+    };
 }
 
-impl PortMemberGroupState {
-    pub(crate) fn complete_count(&self) -> usize {
-        self.present_templates
-            .values()
-            .filter(|present| present.is_superset(&self.required_templates))
-            .count()
-    }
-
-    pub(crate) fn is_complete(&self, instance_id: PortInstanceId) -> bool {
-        self.present_templates
-            .get(&instance_id)
-            .is_some_and(|present| present.is_superset(&self.required_templates))
-    }
-
-    pub(crate) fn address_is_complete(&self, address: &PortAddress) -> bool {
-        match &address.port {
-            PortRef::Instance { instance_id, .. } => self.is_complete(*instance_id),
-            PortRef::Declared { .. } => false,
-        }
-    }
-}
-
-pub(crate) fn port_member_group_state<'a>(
-    node_id: NodeId,
-    group: &PortMemberGroupSpec,
-    bindings: impl IntoIterator<Item = (&'a PortAddress, &'a DynamicPortBinding)>,
-) -> PortMemberGroupState {
-    let required_templates = group.templates.iter().cloned().collect::<BTreeSet<_>>();
-    let mut present_templates = BTreeMap::<PortInstanceId, BTreeSet<PortKey>>::new();
-    for (address, binding) in bindings {
-        if address.node_id != node_id || !matches!(binding, DynamicPortBinding::UserCreated { .. })
-        {
-            continue;
-        }
-        let PortRef::Instance {
-            template,
-            instance_id,
-        } = &address.port
-        else {
-            continue;
-        };
-        if required_templates.contains(template) {
-            present_templates
-                .entry(*instance_id)
-                .or_default()
-                .insert(template.clone());
-        }
-    }
-    PortMemberGroupState {
-        required_templates,
-        present_templates,
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct OrderKey(pub Box<str>);
+string_identity!(FunctionParameterId);
+string_identity!(SchemaSourceIdentity);
+string_identity!(SchemaFieldIdentity);
+string_identity!(OrderKey);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentConnection {
@@ -180,19 +155,6 @@ pub enum DynamicMemberLocator {
     },
 }
 
-macro_rules! string_identity {
-    ($name:ident) => {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-        #[serde(transparent)]
-        pub struct $name(pub Box<str>);
-    };
-}
-
-string_identity!(GraphResourcePath);
-string_identity!(FunctionParameterId);
-string_identity!(SchemaSourceIdentity);
-string_identity!(SchemaFieldIdentity);
-
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LastKnownPortMetadata {
     pub label: String,
@@ -203,14 +165,6 @@ pub struct LastKnownPortMetadata {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputState {
     pub literal_override: Option<TypedValue>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EffectiveInputBinding {
-    Connections(Vec<ConnectionId>),
-    Literal(TypedValue),
-    ProtocolDefault(TypedValue),
-    Unbound,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

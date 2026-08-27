@@ -1,4 +1,8 @@
 use super::CompilerDiagnostic;
+use crate::graph_document::{
+    ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphRevision,
+    LastKnownPortMetadata, NodeId, OrderKey, PortAddress, PortInstanceId, PortRef,
+};
 use crate::node_system::analysis::{
     AnalysisResourceResolver, ResourceKey, ResourceObservationSet, ResourceObservedState,
 };
@@ -10,10 +14,6 @@ use crate::node_system::document::materialization::ProjectedMemberRef;
 use crate::node_system::document::{
     CompilationBasisToken, CompilationRegistryFingerprint, CompilationResourceKey,
     CompilationResourceVersion, MaterializationAuthorization,
-};
-use crate::node_system::document::{
-    ConnectionId, DynamicMemberLocator, DynamicPortBinding, GraphDocument, GraphRevision,
-    LastKnownPortMetadata, NodeId, OrderKey, PortAddress, PortInstanceId, PortRef,
 };
 use crate::node_system::protocol::{
     InterfaceResolverId, NodeProtocol, PortInstances, PortKey, PortSpec, ResolvedSchemaFact,
@@ -214,7 +214,7 @@ impl ValidatedProjectedMember {
 
     pub(crate) fn authorize_materialization(
         &self,
-        graph_path: crate::node_system::document::GraphResourcePath,
+        graph_path: crate::graph_document::GraphResourcePath,
         basis: &CompilationBasis<GraphRevision>,
         order: OrderKey,
     ) -> (ProjectedMemberRef, MaterializationAuthorization) {
@@ -289,7 +289,7 @@ impl ValidatedInterfaceProjection {
 
     pub(crate) fn authorize_materialization_candidate(
         &self,
-        graph_path: &crate::node_system::document::GraphResourcePath,
+        graph_path: &crate::graph_document::GraphResourcePath,
         projection_address: &PortAddress,
     ) -> Option<(
         &ValidatedProjectedMember,
@@ -300,7 +300,7 @@ impl ValidatedInterfaceProjection {
         let (member, authorization) = candidate.authorize_materialization(
             graph_path.clone(),
             &self.basis,
-            OrderKey(format!("{index:05}").into()),
+            OrderKey::new(format!("{index:05}")),
         );
         Some((candidate, member, authorization))
     }
@@ -429,18 +429,18 @@ struct EmptyResourceSnapshot {
 impl AnalysisResourceResolver for EmptyResourceSnapshot {
     fn resolve_function(
         &mut self,
-        path: &crate::node_system::document::GraphResourcePath,
+        path: &crate::graph_document::GraphResourcePath,
     ) -> Result<
         crate::node_system::analysis::ResolvedFunction<'_>,
         crate::node_system::analysis::ResourceResolutionError,
     > {
-        let key = ResourceKey::new(path.0.clone());
+        let key = ResourceKey::new(path.as_str());
         let state = ResourceObservedState::Absent(None);
         self.observations.insert(key.clone(), state.clone());
         Err(crate::node_system::analysis::ResourceResolutionError::new(
             key,
             state,
-            format!("function resource '{}' is unavailable", path.0),
+            format!("function resource '{path}' is unavailable"),
         ))
     }
 
@@ -957,10 +957,10 @@ fn locator_detail(locator: &DynamicMemberLocator) -> String {
             function,
             parameter,
         } => {
-            format!("function:{}/{}", function.0, parameter.0)
+            format!("function:{function}/{parameter}")
         }
         DynamicMemberLocator::SchemaField { source, field } => {
-            format!("schema:{}/{}", source.0, field.0)
+            format!("schema:{source}/{field}")
         }
     }
 }

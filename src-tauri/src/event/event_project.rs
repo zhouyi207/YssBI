@@ -63,7 +63,7 @@ pub struct ResourceMutationCommandResultDto<T> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourceMutationResultDto {
-    pub operation_id: crate::node_system::document::OperationId,
+    pub operation_id: crate::project::OperationId,
     pub project_instance_id: String,
     pub publication_revision: u64,
     pub moves: Vec<ResourceMoveDto>,
@@ -120,7 +120,7 @@ pub struct LifecycleInvalidationDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LifecycleMutationResultDto {
-    pub operation_id: crate::node_system::document::OperationId,
+    pub operation_id: crate::project::OperationId,
     pub kind: LifecycleMutationKindDto,
     pub old_project_instance_id: Option<String>,
     pub new_project_instance_id: Option<String>,
@@ -189,8 +189,7 @@ mod tests {
 
     #[test]
     fn lifecycle_committed_event_serializes_the_exact_direct_receipt() {
-        let operation_id =
-            crate::node_system::document::OperationId::from_uuid(uuid::Uuid::from_u128(0x790));
+        let operation_id = crate::project::OperationId::from_uuid(uuid::Uuid::from_u128(0x790));
         let result = LifecycleMutationResultDto {
             operation_id,
             kind: LifecycleMutationKindDto::SaveAs,
@@ -223,22 +222,20 @@ mod tests {
 
     #[test]
     fn resource_lifecycle_delta_serializes_explicit_optional_states() {
-        let operation_id =
-            crate::node_system::document::OperationId::from_uuid(uuid::Uuid::from_u128(0x780));
+        let operation_id = crate::project::OperationId::from_uuid(uuid::Uuid::from_u128(0x780));
         let delta = crate::node_system::document::ResourceDeltaEvent {
             resource: crate::node_system::document::ResourceKey::Graph(
-                crate::node_system::document::GraphResourcePath(
-                    "events/Created.yssbi-event".into(),
-                ),
+                crate::graph_document::GraphResourcePath::new("events/Created.yssbi-event")
+                    .unwrap(),
             ),
-            from_revision: crate::node_system::document::ResourceRevision::INITIAL,
-            to_revision: crate::node_system::document::ResourceRevision::new(1),
+            from_revision: crate::project::ResourceRevision::INITIAL,
+            to_revision: crate::project::ResourceRevision::new(1),
             caused_by: Some(operation_id),
             payload: crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
                 crate::node_system::document::ResourceLifecyclePatch {
                     before: None,
                     after: Some(crate::node_system::document::ResourceLifecycleState {
-                        revision: crate::node_system::document::ResourceRevision::INITIAL,
+                        revision: crate::project::ResourceRevision::INITIAL,
                         path: "events/Created.yssbi-event".into(),
                         kind: crate::node_system::document::ResourceLifecycleKind::Event,
                         name: "Created".into(),
@@ -272,16 +269,15 @@ mod tests {
 
     #[test]
     fn worksheet_document_delta_uses_common_resource_delta_wire() {
-        let operation_id =
-            crate::node_system::document::OperationId::from_uuid(uuid::Uuid::from_u128(0x781));
+        let operation_id = crate::project::OperationId::from_uuid(uuid::Uuid::from_u128(0x781));
         let delta = crate::node_system::document::ResourceDeltaEvent {
             resource: crate::node_system::document::ResourceKey::Worksheet(
                 crate::node_system::document::WorksheetResourceKey(
                     "worksheets/Sales Report.yssbi-worksheet".into(),
                 ),
             ),
-            from_revision: crate::node_system::document::ResourceRevision::new(4),
-            to_revision: crate::node_system::document::ResourceRevision::new(5),
+            from_revision: crate::project::ResourceRevision::new(4),
+            to_revision: crate::project::ResourceRevision::new(5),
             caused_by: Some(operation_id),
             payload: crate::node_system::document::ResourceDocumentPatch::Worksheet(
                 crate::node_system::document::WorksheetDocumentPatch {
@@ -336,22 +332,21 @@ mod tests {
 
     #[test]
     fn worksheet_lifecycle_delta_carries_rust_derived_name() {
-        let operation_id =
-            crate::node_system::document::OperationId::from_uuid(uuid::Uuid::from_u128(0x782));
+        let operation_id = crate::project::OperationId::from_uuid(uuid::Uuid::from_u128(0x782));
         let delta = crate::node_system::document::ResourceDeltaEvent {
             resource: crate::node_system::document::ResourceKey::Worksheet(
                 crate::node_system::document::WorksheetResourceKey(
                     "worksheets/Sales Report.yssbi-worksheet".into(),
                 ),
             ),
-            from_revision: crate::node_system::document::ResourceRevision::INITIAL,
-            to_revision: crate::node_system::document::ResourceRevision::new(1),
+            from_revision: crate::project::ResourceRevision::INITIAL,
+            to_revision: crate::project::ResourceRevision::new(1),
             caused_by: Some(operation_id),
             payload: crate::node_system::document::ResourceDocumentPatch::ResourceLifecycle(
                 crate::node_system::document::ResourceLifecyclePatch {
                     before: None,
                     after: Some(crate::node_system::document::ResourceLifecycleState {
-                        revision: crate::node_system::document::ResourceRevision::INITIAL,
+                        revision: crate::project::ResourceRevision::INITIAL,
                         path: "worksheets/Sales Report.yssbi-worksheet".into(),
                         kind: crate::node_system::document::ResourceLifecycleKind::Worksheet,
                         name: "Sales Report".into(),
@@ -380,7 +375,7 @@ mod tests {
     #[test]
     fn worksheet_move_uses_common_resource_move_wire() {
         let result = ResourceMutationResultDto {
-            operation_id: crate::node_system::document::OperationId::new(),
+            operation_id: crate::project::OperationId::new(),
             project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
             publication_revision: 9,
             moves: vec![ResourceMoveDto {
@@ -395,8 +390,8 @@ mod tests {
                         "worksheets/New.yssbi-worksheet".into(),
                     ),
                 ),
-                from_revision: crate::node_system::document::ResourceRevision::new(2),
-                to_revision: crate::node_system::document::ResourceRevision::new(3),
+                from_revision: crate::project::ResourceRevision::new(2),
+                to_revision: crate::project::ResourceRevision::new(3),
                 caused_by: None,
                 payload: crate::node_system::document::ResourceDocumentPatch::ResourceMove(
                     crate::node_system::document::ResourcePathMovePatch {
@@ -420,7 +415,7 @@ mod tests {
     #[test]
     fn resource_mutation_result_has_no_worksheet_side_channel() {
         let result = ResourceMutationResultDto {
-            operation_id: crate::node_system::document::OperationId::new(),
+            operation_id: crate::project::OperationId::new(),
             project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
             publication_revision: 1,
             moves: Vec::new(),
@@ -442,7 +437,7 @@ mod tests {
     #[test]
     fn resource_mutation_result_serializes_explicit_graph_move_identity() {
         let result = ResourceMutationResultDto {
-            operation_id: crate::node_system::document::OperationId::new(),
+            operation_id: crate::project::OperationId::new(),
             project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
             publication_revision: 9,
             moves: vec![ResourceMoveDto {
@@ -472,8 +467,7 @@ mod tests {
 
     #[test]
     fn resource_mutation_result_uses_explicit_atomic_wire_fields() {
-        let operation_id =
-            crate::node_system::document::OperationId::from_uuid(uuid::Uuid::from_u128(0x778));
+        let operation_id = crate::project::OperationId::from_uuid(uuid::Uuid::from_u128(0x778));
         let result = ResourceMutationResultDto {
             operation_id,
             project_instance_id: "00000000-0000-0000-0000-000000000601".into(),
@@ -522,12 +516,11 @@ mod tests {
     #[test]
     fn graph_delta_event_carries_project_identity() {
         let delta = crate::node_system::document::GraphDeltaEvent {
-            graph_path: crate::node_system::document::GraphResourcePath(
-                "events/Main.yssbi-event".into(),
-            ),
-            from_revision: crate::node_system::document::ResourceRevision::INITIAL,
-            to_revision: crate::node_system::document::ResourceRevision::new(1),
-            caused_by: Some(crate::node_system::document::OperationId::from_uuid(
+            graph_path: crate::graph_document::GraphResourcePath::new("events/Main.yssbi-event")
+                .unwrap(),
+            from_revision: crate::project::ResourceRevision::INITIAL,
+            to_revision: crate::project::ResourceRevision::new(1),
+            caused_by: Some(crate::project::OperationId::from_uuid(
                 uuid::Uuid::from_u128(0x401),
             )),
             payload: crate::node_system::document::GraphDocumentPatch {
@@ -588,8 +581,7 @@ mod tests {
 
     #[test]
     fn resource_mutation_result_marks_incomplete_projection_paths_on_wire() {
-        let operation_id =
-            crate::node_system::document::OperationId::from_uuid(uuid::Uuid::from_u128(0x779));
+        let operation_id = crate::project::OperationId::from_uuid(uuid::Uuid::from_u128(0x779));
         let result = ResourceMutationResultDto {
             operation_id,
             project_instance_id: "00000000-0000-0000-0000-000000000601".into(),

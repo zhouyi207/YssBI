@@ -13,7 +13,7 @@ fn parameterized_static_creation_is_editable_with_empty_parameters() {
         connect_from: None,
     }
     .into_patch(
-        &graph_path("events/parameterized"),
+        &graph_path("events/parameterized.yssbi-event"),
         &GraphDocument::default(),
         &registry,
     )
@@ -108,7 +108,11 @@ fn forged_parameterized_static_descriptors_have_zero_effects() {
             user_label: None,
             connect_from: None,
         }
-        .into_patch(&graph_path("events/forged"), &document, &registry);
+        .into_patch(
+            &graph_path("events/forged.yssbi-event"),
+            &document,
+            &registry,
+        );
         assert!(result.is_err());
         assert!(document.nodes.is_empty());
     }
@@ -148,7 +152,11 @@ fn set_parameters_atomically_replaces_and_validates_the_complete_map() {
     );
 
     let patch = mutation
-        .into_patch(&graph_path("events/parameters"), &document, &registry)
+        .into_patch(
+            &graph_path("events/parameters.yssbi-event"),
+            &document,
+            &registry,
+        )
         .unwrap();
     assert_eq!(patch.operations.len(), 1);
     let GraphDocumentOperation::UpdateNode { before, after } = &patch.operations[0] else {
@@ -188,7 +196,11 @@ fn invalid_atomic_parameter_mutations_have_zero_effects() {
             node_id,
             parameters,
         }
-        .into_patch(&graph_path("events/parameters"), &document, &registry);
+        .into_patch(
+            &graph_path("events/parameters.yssbi-event"),
+            &document,
+            &registry,
+        );
         assert!(result.is_err());
         assert!(document.nodes[&node_id].parameters.is_empty());
     }
@@ -208,7 +220,7 @@ fn create_node_rejects_protocol_scope_mismatch() {
 
     let error = mutation
         .into_patch(
-            &graph_path("functions/scope-mismatch"),
+            &graph_path("functions/scope-mismatch.yssbi-function"),
             &GraphDocument::default(),
             &registry,
         )
@@ -229,7 +241,7 @@ fn create_node_materializes_required_user_created_ports() {
         connect_from: None,
     }
     .into_patch(
-        &graph_path("events/initial-ports"),
+        &graph_path("events/initial-ports.yssbi-event"),
         &GraphDocument::default(),
         &registry,
     )
@@ -295,7 +307,7 @@ fn builtin_loop_create_materializes_one_complete_carried_member() {
 #[test]
 fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let path = graph_path("events/grouped-branch");
+    let path = graph_path("events/grouped-branch.yssbi-event");
     let owner = node_id(905);
     let templates = ["then_source", "else_source", "result"];
 
@@ -307,7 +319,7 @@ fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
         let patch = EditorGraphMutationDto::AddPortInstance {
             node_id: owner,
             template: PortKey::new(requested).unwrap(),
-            order: Some(OrderKey("member".into())),
+            order: Some(OrderKey::new("member")),
         }
         .into_patch(&path, &document, &registry)
         .unwrap();
@@ -337,7 +349,7 @@ fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
     let first = EditorGraphMutationDto::AddPortInstance {
         node_id: owner,
         template: PortKey::new("result").unwrap(),
-        order: Some(OrderKey("z".into())),
+        order: Some(OrderKey::new("z")),
     }
     .into_patch(&path, &document, &registry)
     .unwrap();
@@ -351,7 +363,7 @@ fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
     let second = EditorGraphMutationDto::AddPortInstance {
         node_id: owner,
         template: PortKey::new("then_source").unwrap(),
-        order: Some(OrderKey("a".into())),
+        order: Some(OrderKey::new("a")),
     }
     .into_patch(&path, &document, &registry)
     .unwrap();
@@ -377,7 +389,7 @@ fn builtin_branch_adds_complete_members_with_stable_shared_identities() {
 #[test]
 fn removing_any_group_member_atomically_removes_the_complete_member() {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let path = graph_path("events/grouped-remove");
+    let path = graph_path("events/grouped-remove.yssbi-event");
     let owner = node_id(906);
     let source = node_id(907);
     let sink = node_id(908);
@@ -392,7 +404,7 @@ fn removing_any_group_member_atomically_removes_the_complete_member() {
         let patch = EditorGraphMutationDto::AddPortInstance {
             node_id: owner,
             template: PortKey::new("else_source").unwrap(),
-            order: Some(OrderKey(order.into())),
+            order: Some(OrderKey::new(order)),
         }
         .into_patch(&path, &document, &registry)
         .unwrap();
@@ -452,7 +464,7 @@ fn removing_any_group_member_atomically_removes_the_complete_member() {
 #[test]
 fn loop_partial_member_does_not_inflate_complete_count_or_block_repair() {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let path = graph_path("events/partial-loop");
+    let path = graph_path("events/partial-loop.yssbi-event");
     let owner = node_id(909);
     let complete_id = instance_id(910);
     let partial_id = instance_id(911);
@@ -501,7 +513,7 @@ fn loop_partial_member_does_not_inflate_complete_count_or_block_repair() {
 #[test]
 fn loop_with_only_a_partial_member_can_remove_it_below_group_minimum() {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let path = graph_path("events/partial-only-loop");
+    let path = graph_path("events/partial-only-loop.yssbi-event");
     let owner = node_id(912);
     let partial_id = instance_id(913);
     let mut document = GraphDocument::default();
@@ -523,7 +535,7 @@ fn loop_with_only_a_partial_member_can_remove_it_below_group_minimum() {
 #[test]
 fn partial_member_does_not_consume_group_maximum() {
     let registry = builtin_registry_with_branch_group_max(1);
-    let path = graph_path("events/partial-max");
+    let path = graph_path("events/partial-max.yssbi-event");
     let owner = node_id(914);
     let partial_id = instance_id(915);
     let mut document = GraphDocument::default();
@@ -555,7 +567,7 @@ fn partial_member_does_not_consume_group_maximum() {
 #[test]
 fn create_node_with_connect_from_builds_one_atomic_patch_in_both_directions() {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let path = graph_path("events/atomic-create-connect");
+    let path = graph_path("events/atomic-create-connect.yssbi-event");
     let snapshot = compatibility_snapshot();
 
     let output_node = node_id(1200);
@@ -662,7 +674,7 @@ fn create_node_with_connect_from_builds_one_atomic_patch_in_both_directions() {
 #[test]
 fn phase1_connection_capability_create_and_connect_replaces_occupied_single_source() {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let path = graph_path("events/atomic-create-replace");
+    let path = graph_path("events/atomic-create-replace.yssbi-event");
     let snapshot = compatibility_snapshot();
     let input_node = node_id(1210);
     let incumbent_node = node_id(1211);
@@ -757,7 +769,7 @@ fn phase1_connection_capability_create_and_connect_replaces_occupied_single_sour
 fn phase1_connection_capability_create_and_connect_rejects_untrusted_source_types_before_replacement()
  {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let path = graph_path("events/atomic-create-replace-type-errors");
+    let path = graph_path("events/atomic-create-replace-type-errors.yssbi-event");
     let catalog = compatibility_snapshot();
     let input_node = node_id(1220);
     let incumbent_node = node_id(1221);
@@ -857,7 +869,7 @@ fn phase1_connection_capability_create_and_connect_rejects_untrusted_source_type
 #[test]
 fn incompatible_atomic_create_is_rejected_without_document_effects() {
     let registry = std::sync::Arc::unwrap_or_clone(build_builtin_node_system().unwrap().registry);
-    let path = graph_path("events/incompatible-create-connect");
+    let path = graph_path("events/incompatible-create-connect.yssbi-event");
     let snapshot = compatibility_snapshot();
     let source_node = node_id(1202);
     let mut document = GraphDocument::default();
@@ -920,7 +932,7 @@ fn incompatible_atomic_create_is_rejected_without_document_effects() {
 #[test]
 fn editor_connect_materializes_a_projected_input_on_the_input_side() {
     let registry = editor_mutation_registry();
-    let path = graph_path("events/projected-editor-input");
+    let path = graph_path("events/projected-editor-input.yssbi-event");
     let source_id = node_id(1203);
     let target_id = node_id(1204);
     let mut document = GraphDocument::default();
@@ -935,7 +947,7 @@ fn editor_connect_materializes_a_projected_input_on_the_input_side() {
         PortKey::new("inputs").unwrap(),
         PortInstanceId::from_uuid(Uuid::from_u128(1205)),
     );
-    let member = projected_member(path.0.as_ref(), document.revision, target_id);
+    let member = projected_member(path.as_str(), document.revision, target_id);
     let plan = super::ProjectedConnectPlan {
         projection_address: projected.clone(),
         direction: PortDirection::Input,
@@ -968,7 +980,7 @@ fn editor_connect_materializes_a_projected_input_on_the_input_side() {
 #[test]
 fn create_connect_and_add_port_allocate_identity_in_rust() {
     let registry = editor_mutation_registry();
-    let path = graph_path("events/editor-mutation");
+    let path = graph_path("events/editor-mutation.yssbi-event");
     let existing_id = node_id(911);
     let mut document = GraphDocument::default();
     document
@@ -1071,7 +1083,7 @@ fn create_connect_and_add_port_allocate_identity_in_rust() {
 #[test]
 fn move_nodes_is_atomic_and_reversible() {
     let registry = editor_mutation_registry();
-    let path = graph_path("events/move-nodes");
+    let path = graph_path("events/move-nodes.yssbi-event");
     let first = node_id(921);
     let second = node_id(922);
     let missing = node_id(923);
@@ -1127,7 +1139,7 @@ fn move_nodes_is_atomic_and_reversible() {
 #[test]
 fn user_created_port_enforces_protocol_min_and_max() {
     let registry = editor_mutation_registry();
-    let path = graph_path("events/user-created-port");
+    let path = graph_path("events/user-created-port.yssbi-event");
     let owner = node_id(931);
     let template = PortKey::new("inputs").unwrap();
     let first = PortAddress::instance(owner, template.clone(), instance_id(932));
@@ -1137,7 +1149,7 @@ fn user_created_port_enforces_protocol_min_and_max() {
         .bind_port(
             first.clone(),
             DynamicPortBinding::UserCreated {
-                order: OrderKey("a".into()),
+                order: OrderKey::new("a"),
             },
         )
         .unwrap();
@@ -1145,7 +1157,7 @@ fn user_created_port_enforces_protocol_min_and_max() {
     let add_patch = EditorGraphMutationDto::AddPortInstance {
         node_id: owner,
         template: template.clone(),
-        order: Some(OrderKey("b".into())),
+        order: Some(OrderKey::new("b")),
     }
     .into_patch(&path, &document, &registry)
     .unwrap();
@@ -1276,8 +1288,8 @@ fn connections_override_but_do_not_discard_literals() {
 
 #[test]
 fn mutation_rejects_wrong_resource_without_changing_the_graph() {
-    let path = graph_path("events/main");
-    let requested = ResourceKey::Graph(graph_path("events/other"));
+    let path = graph_path("events/main.yssbi-event");
+    let requested = ResourceKey::Graph(graph_path("events/other.yssbi-event"));
     let mut store = RevisionedGraphStore::new(path.clone(), GraphDocument::default());
     let before = store.document().clone();
 
@@ -1300,7 +1312,7 @@ fn mutation_rejects_wrong_resource_without_changing_the_graph() {
 
 #[test]
 fn mutation_rejects_stale_revision_without_changing_the_graph() {
-    let path = graph_path("events/main");
+    let path = graph_path("events/main.yssbi-event");
     let resource = ResourceKey::Graph(path.clone());
     let mut store = RevisionedGraphStore::new(path, GraphDocument::default());
     store
@@ -1337,7 +1349,7 @@ fn mutation_rejects_stale_revision_without_changing_the_graph() {
 
 #[test]
 fn mutation_events_use_the_complete_graph_envelope() {
-    let path = graph_path("events/main");
+    let path = graph_path("events/main.yssbi-event");
     let resource = ResourceKey::Graph(path.clone());
     let operation = operation_id(510);
     let mut store = RevisionedGraphStore::new(path.clone(), GraphDocument::default());
@@ -1363,7 +1375,7 @@ fn mutation_events_use_the_complete_graph_envelope() {
 #[test]
 fn revision_gap_reports_the_missing_delta_range() {
     let event = GraphDeltaEvent {
-        graph_path: graph_path("events/main"),
+        graph_path: graph_path("events/main.yssbi-event"),
         from_revision: ResourceRevision::new(4),
         to_revision: ResourceRevision::new(5),
         caused_by: None,

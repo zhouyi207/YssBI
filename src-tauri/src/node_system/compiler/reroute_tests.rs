@@ -1,14 +1,14 @@
 use super::*;
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, NodeId,
+    NodePosition, PortAddress,
+};
 use crate::node_system::analysis::{
     DiagnosticLocation, DiagnosticSeverity, ResourceVersionSet, SemanticDependency,
 };
 use crate::node_system::catalog::{
     CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
     REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT,
-};
-use crate::node_system::document::{
-    ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphResourcePath, NodeId,
-    NodePosition, PortAddress,
 };
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::*;
@@ -574,7 +574,7 @@ fn phase2_reroute_compile_called_function_is_transparent_to_dependency_lowering(
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> ResourceVersionSet {
             BTreeMap::from([(
-                crate::node_system::analysis::ResourceKey::new(self.path.0.as_ref()),
+                crate::node_system::analysis::ResourceKey::new(self.path.as_str()),
                 crate::node_system::analysis::ResourceVersion::new("callee-v1"),
             )])
         }
@@ -596,7 +596,7 @@ fn phase2_reroute_compile_called_function_is_transparent_to_dependency_lowering(
     }
 
     let builtin = crate::node_system::catalog::build_builtin_node_system().unwrap();
-    let path = GraphResourcePath("functions/reroute-callee".into());
+    let path = GraphResourcePath::new("functions/reroute-callee.yssbi-function").unwrap();
     let mut callee = GraphDocument::default();
     add_node(&mut callee, 20, "yssbi.project.function.entry");
     add_node(&mut callee, 21, CONTROL_REROUTE_NODE_TYPE);
@@ -608,7 +608,7 @@ fn phase2_reroute_compile_called_function_is_transparent_to_dependency_lowering(
         .parameters
         .insert(
             ParameterKey::new("function").unwrap(),
-            serde_json::json!(path.0.as_ref()),
+            serde_json::json!(path.as_str()),
         );
     callee
         .nodes
@@ -617,7 +617,7 @@ fn phase2_reroute_compile_called_function_is_transparent_to_dependency_lowering(
         .parameters
         .insert(
             ParameterKey::new("function").unwrap(),
-            serde_json::json!(path.0.as_ref()),
+            serde_json::json!(path.as_str()),
         );
     connect(&mut callee, 101, 20, "then", 21, REROUTE_INPUT_PORT);
     connect(&mut callee, 102, 21, REROUTE_OUTPUT_PORT, 22, "enter");
@@ -640,7 +640,7 @@ fn phase2_reroute_compile_called_function_is_transparent_to_dependency_lowering(
         .parameters
         .insert(
             ParameterKey::new("target").unwrap(),
-            serde_json::json!(path.0.as_ref()),
+            serde_json::json!(path.as_str()),
         );
 
     let result = GraphCompiler::with_interface_resolvers(

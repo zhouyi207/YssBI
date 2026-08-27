@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn create_and_connect_transaction_undoes_and_redoes_with_original_identities() {
-    let path = graph_path("events/history-test");
+    let path = graph_path("events/history-test.yssbi-event");
     let first = node_id(101);
     let second = node_id(102);
     let port_instance = instance_id(103);
@@ -75,8 +75,8 @@ fn create_and_connect_transaction_undoes_and_redoes_with_original_identities() {
 
 #[test]
 fn failed_multi_resource_transaction_is_atomic() {
-    let first_path = graph_path("events/first");
-    let second_path = graph_path("events/second");
+    let first_path = graph_path("events/first.yssbi-event");
+    let second_path = graph_path("events/second.yssbi-event");
     let valid_node = node(node_id(201));
     let missing_node = node_id(202);
     let first_patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
@@ -120,7 +120,7 @@ fn failed_multi_resource_transaction_is_atomic() {
 
 #[test]
 fn normal_mutation_after_undo_clears_redo_branch() {
-    let path = graph_path("events/branch");
+    let path = graph_path("events/branch.yssbi-event");
     let mut state = ProjectDocumentState::new(
         BTreeMap::from([(path.clone(), GraphDocument::default())]),
         BTreeMap::new(),
@@ -170,8 +170,8 @@ fn normal_mutation_after_undo_clears_redo_branch() {
 
 #[test]
 fn function_signature_and_caller_graph_undo_as_one_project_transaction() {
-    let graph_path = graph_path("events/caller");
-    let function_key = function_key("functions/callee");
+    let graph_path = graph_path("events/caller.yssbi-event");
+    let function_key = function_key("functions/callee.yssbi-function");
     let caller_node = node_id(620);
     let before_signature = signature("old");
     let after_signature = signature("new");
@@ -196,7 +196,7 @@ fn function_signature_and_caller_graph_undo_as_one_project_transaction() {
                 ResourceRevision::INITIAL,
                 function_patch,
             ),
-            ResourcePatch::graph(graph_path.clone(), ResourceRevision::INITIAL, graph_patch),
+            ResourcePatch::graph(graph_path.clone(), GraphRevision::INITIAL, graph_patch),
         ],
     );
     let mut history = ProjectHistory::default();

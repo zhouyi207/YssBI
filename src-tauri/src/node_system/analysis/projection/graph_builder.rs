@@ -13,9 +13,8 @@ use super::{
     project_parameter_editor, project_schema_aware_editor, project_schema_summary,
     project_type_summary, statistics_parameter_options,
 };
-use crate::node_system::document::{
-    ConnectionId, GraphDocument, GraphRevision, NodeId, PortAddress, port_member_group_state,
-};
+use crate::graph_document::{ConnectionId, GraphDocument, GraphRevision, NodeId, PortAddress};
+use crate::node_system::document::port_member_group_state;
 use crate::node_system::protocol::{
     I18nKey, PortDirection, PortInstances, PortKey, SchemaExpr, TypeExpr, protocol_value_to_json,
     validate_typed_literal,
@@ -119,7 +118,7 @@ impl EditorGraphProjectionDto {
                 connection_id: connection.id.to_string().into(),
                 output: project_address(&connection.output),
                 input: project_address(&connection.input),
-                order: connection.order.as_ref().map(|order| order.0.clone()),
+                order: connection.order.as_ref().map(|order| order.as_str().into()),
             })
             .collect();
 

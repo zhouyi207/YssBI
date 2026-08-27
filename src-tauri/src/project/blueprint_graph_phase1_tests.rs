@@ -1,12 +1,11 @@
 use crate::event::GraphMutationResultDto;
-use crate::node_system::document::{
-    DocumentConnection, GraphDocument, HistoryMutation, MutationConflict, MutationRequest,
-    OperationId,
-};
+use crate::graph_document::{DocumentConnection, GraphDocument};
+use crate::node_system::document::{HistoryMutation, MutationConflict, MutationRequest};
 use crate::node_system::testing::blueprint_phase1::{
     BlueprintPhase1Fixture, PHASE1_COMPLEX_MUTATIONS, Phase1AuthoritySnapshot,
     Phase1ComplexMutation,
 };
+use crate::project::OperationId;
 use std::collections::BTreeMap;
 
 #[test]
@@ -134,7 +133,7 @@ fn assert_success_commit(
     assert_eq!(result.delta.to_revision, committed.revision);
     assert_eq!(result.delta.caused_by, Some(operation_id));
     assert_eq!(
-        result.delta.graph_path.0.as_ref(),
+        result.delta.graph_path.as_str(),
         result.projection_replacement.graph_path
     );
     assert_eq!(
@@ -235,7 +234,7 @@ fn assert_one_step_undo_redo(
 
 fn history_request(
     fixture: &BlueprintPhase1Fixture,
-    revision: crate::node_system::document::ResourceRevision,
+    revision: crate::project::ResourceRevision,
     operation_id: u128,
 ) -> MutationRequest<HistoryMutation> {
     MutationRequest::new(

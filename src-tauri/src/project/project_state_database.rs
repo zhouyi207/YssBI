@@ -59,7 +59,7 @@ impl ProjectState {
     pub(crate) fn reserve_database_operation(
         &self,
         project_instance_id: &crate::project::ProjectInstanceId,
-        operation_id: crate::node_system::document::OperationId,
+        operation_id: crate::project::OperationId,
     ) -> Result<
         crate::project::resource_mutations::ResourceOperationReservation,
         ProjectDatabaseError,
@@ -131,8 +131,8 @@ impl ProjectState {
         &self,
         project_instance_id: &crate::project::ProjectInstanceId,
         id: &str,
-        expected_revision: crate::node_system::document::ResourceRevision,
-        operation_id: crate::node_system::document::OperationId,
+        expected_revision: crate::project::ResourceRevision,
+        operation_id: crate::project::OperationId,
         f: F,
     ) -> Result<crate::event::ResourceMutationCommandResultDto<R>, ProjectDatabaseError>
     where
@@ -221,7 +221,7 @@ impl ProjectState {
         session: &ProjectSession,
         project_instance_id: &crate::project::ProjectInstanceId,
         id: &str,
-        expected_revision: crate::node_system::document::ResourceRevision,
+        expected_revision: crate::project::ResourceRevision,
     ) -> Result<(DatabaseAuthorityToken, DatabaseInstance), ProjectDatabaseError> {
         Self::validate_database_project(session, project_instance_id)?;
         let (token, instance) = self.database_snapshot_for_session(session, id)?;
@@ -255,8 +255,8 @@ impl ProjectState {
 
     fn next_database_revision(
         id: &str,
-        retained: crate::node_system::document::ResourceRevision,
-    ) -> Result<crate::node_system::document::ResourceRevision, ProjectDatabaseError> {
+        retained: crate::project::ResourceRevision,
+    ) -> Result<crate::project::ResourceRevision, ProjectDatabaseError> {
         retained.checked_next().map_err(|error| {
             ProjectFilesystemError::ResourceRevisionOverflow {
                 resource: format!("databases/{id}"),
@@ -271,9 +271,9 @@ impl ProjectState {
         publication: &mut super::project_state::MutationPublication,
         revisions: &mut std::collections::HashMap<String, u64>,
         id: &str,
-        from_revision: crate::node_system::document::ResourceRevision,
-        to_revision: crate::node_system::document::ResourceRevision,
-        operation_id: crate::node_system::document::OperationId,
+        from_revision: crate::project::ResourceRevision,
+        to_revision: crate::project::ResourceRevision,
+        operation_id: crate::project::OperationId,
         publication_advance: super::project_state::PreparedPublicationAdvance,
         before: Option<DatabaseDecl>,
         after: Option<DatabaseDecl>,
@@ -312,7 +312,7 @@ impl ProjectState {
         session: &ProjectSession,
         token: &DatabaseAuthorityToken,
         instance: DatabaseInstance,
-        operation_id: crate::node_system::document::OperationId,
+        operation_id: crate::project::OperationId,
     ) -> Result<crate::event::ResourceMutationResultDto, ProjectDatabaseError> {
         let id = token.database_id.as_str();
         let mut publication = self.mutation_publication.lock().unwrap();
@@ -336,8 +336,7 @@ impl ProjectState {
             return Err(ProjectDatabaseError::DatabaseNotFound);
         }
         let publication_advance = publication.prepare_resource_revision()?;
-        let from_revision =
-            crate::node_system::document::ResourceRevision::new(token.database_revision);
+        let from_revision = crate::project::ResourceRevision::new(token.database_revision);
         let to_revision = Self::next_database_revision(id, from_revision)?;
         let after = instance.decl.clone();
         data.databases.insert(id.to_string(), after.clone());
@@ -361,7 +360,7 @@ impl ProjectState {
         &self,
         session: &ProjectSession,
         project_instance_id: &crate::project::ProjectInstanceId,
-        operation_id: crate::node_system::document::OperationId,
+        operation_id: crate::project::OperationId,
         instance: DatabaseInstance,
     ) -> Result<crate::event::ResourceMutationResultDto, ProjectDatabaseError> {
         let reservation = self.reserve_database_operation(project_instance_id, operation_id)?;
@@ -379,7 +378,7 @@ impl ProjectState {
         &self,
         session: &ProjectSession,
         project_instance_id: &crate::project::ProjectInstanceId,
-        operation_id: crate::node_system::document::OperationId,
+        operation_id: crate::project::OperationId,
         instance: DatabaseInstance,
     ) -> Result<crate::event::ResourceMutationResultDto, ProjectDatabaseError> {
         Self::validate_database_project(session, project_instance_id)?;
@@ -402,8 +401,8 @@ impl ProjectState {
         let from_revision = revisions
             .get(&id)
             .copied()
-            .map(crate::node_system::document::ResourceRevision::new)
-            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+            .map(crate::project::ResourceRevision::new)
+            .unwrap_or(crate::project::ResourceRevision::INITIAL);
         let to_revision = Self::next_database_revision(&id, from_revision)?;
         data.databases.insert(id.clone(), decl.clone());
         store.databases.insert(id.clone(), instance);
@@ -427,7 +426,7 @@ impl ProjectState {
         token: &DatabaseAuthorityToken,
         id: &str,
         name: &str,
-        operation_id: crate::node_system::document::OperationId,
+        operation_id: crate::project::OperationId,
     ) -> Result<crate::event::ResourceMutationResultDto, ProjectDatabaseError> {
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
@@ -451,8 +450,7 @@ impl ProjectState {
             .get_mut(id)
             .ok_or(ProjectDatabaseError::DatabaseNotFound)?;
         let publication_advance = publication.prepare_resource_revision()?;
-        let from_revision =
-            crate::node_system::document::ResourceRevision::new(token.database_revision);
+        let from_revision = crate::project::ResourceRevision::new(token.database_revision);
         let to_revision = Self::next_database_revision(id, from_revision)?;
         declaration.name = name.to_string();
         instance.decl.name = name.to_string();
@@ -475,8 +473,8 @@ impl ProjectState {
         &self,
         project_instance_id: &crate::project::ProjectInstanceId,
         id: &str,
-        expected_revision: crate::node_system::document::ResourceRevision,
-        operation_id: crate::node_system::document::OperationId,
+        expected_revision: crate::project::ResourceRevision,
+        operation_id: crate::project::OperationId,
     ) -> Result<crate::event::ResourceMutationCommandResultDto<()>, ProjectDatabaseError> {
         let reservation = self.reserve_database_operation(project_instance_id, operation_id)?;
         let (session, _lease) = self.acquire_database_write_lease()?;
@@ -502,7 +500,7 @@ impl ProjectState {
         session: &ProjectSession,
         token: &DatabaseAuthorityToken,
         id: &str,
-        operation_id: crate::node_system::document::OperationId,
+        operation_id: crate::project::OperationId,
     ) -> Result<crate::event::ResourceMutationResultDto, ProjectDatabaseError> {
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
@@ -517,8 +515,7 @@ impl ProjectState {
             id,
         )?;
         let publication_advance = publication.prepare_resource_revision()?;
-        let from_revision =
-            crate::node_system::document::ResourceRevision::new(token.database_revision);
+        let from_revision = crate::project::ResourceRevision::new(token.database_revision);
         let to_revision = Self::next_database_revision(id, from_revision)?;
         let before = data
             .databases
@@ -565,8 +562,8 @@ mod tests {
         id: &str,
     ) -> (
         crate::project::ProjectInstanceId,
-        crate::node_system::document::ResourceRevision,
-        crate::node_system::document::OperationId,
+        crate::project::ResourceRevision,
+        crate::project::OperationId,
     ) {
         let project_instance_id = state.capture_project_session().unwrap().instance_id;
         let revision = state
@@ -575,12 +572,12 @@ mod tests {
             .unwrap()
             .get(id)
             .copied()
-            .map(crate::node_system::document::ResourceRevision::new)
-            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+            .map(crate::project::ResourceRevision::new)
+            .unwrap_or(crate::project::ResourceRevision::INITIAL);
         (
             project_instance_id,
             revision,
-            crate::node_system::document::OperationId::new(),
+            crate::project::OperationId::new(),
         )
     }
 
@@ -592,7 +589,7 @@ mod tests {
         state.add_database_for_session(
             &session,
             &session.instance_id,
-            crate::node_system::document::OperationId::new(),
+            crate::project::OperationId::new(),
             instance,
         )
     }
@@ -605,7 +602,7 @@ mod tests {
         crate::application::database::load_database(
             state,
             &project_instance_id,
-            crate::node_system::document::OperationId::new(),
+            crate::project::OperationId::new(),
             engine,
         )
         .map(|result| result.data)
@@ -681,7 +678,8 @@ mod tests {
         )
         .unwrap();
         let graph_path =
-            crate::project::GraphResourcePath::new("events/DatabaseWriter.yssbi-event").unwrap();
+            crate::graph_document::GraphResourcePath::new("events/DatabaseWriter.yssbi-event")
+                .unwrap();
         state
             .insert_graph(
                 graph_path.clone(),
@@ -693,8 +691,7 @@ mod tests {
             .unwrap();
         state.graph_projection(&graph_path, "en-US").unwrap();
         let coordinator = state.compile_coordinator.read().unwrap().clone();
-        let document_path =
-            crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        let document_path = graph_path.clone();
         assert!(coordinator.contains_slot_for_test(&document_path));
         let generation = state.authority_generation_for_test();
 
@@ -787,7 +784,8 @@ mod tests {
         )
         .unwrap();
         let graph_path =
-            crate::project::GraphResourcePath::new("events/DatabaseSnapshot.yssbi-event").unwrap();
+            crate::graph_document::GraphResourcePath::new("events/DatabaseSnapshot.yssbi-event")
+                .unwrap();
         state
             .insert_graph(
                 graph_path.clone(),
@@ -799,8 +797,7 @@ mod tests {
             .unwrap();
         state.graph_projection(&graph_path, "en-US").unwrap();
         let coordinator = state.compile_coordinator.read().unwrap().clone();
-        let document_path =
-            crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        let document_path = graph_path.clone();
         assert!(coordinator.contains_slot_for_test(&document_path));
         let generation = state.authority_generation_for_test();
 
@@ -845,7 +842,7 @@ mod tests {
         let imported_result = crate::application::database::load_database(
             &state,
             &project_instance_id,
-            crate::node_system::document::OperationId::new(),
+            crate::project::OperationId::new(),
             crate::schema::DatabaseEngineDTO::Csv {
                 path: csv.to_string_lossy().into_owned(),
                 delimiter: ',',
@@ -995,7 +992,8 @@ mod tests {
 
         state
             .insert_graph(
-                crate::project::GraphResourcePath::new("events/Unrelated.yssbi-event").unwrap(),
+                crate::graph_document::GraphResourcePath::new("events/Unrelated.yssbi-event")
+                    .unwrap(),
                 crate::project::GraphResourceDocument::new(
                     "Unrelated",
                     crate::project::GraphDocumentKind::Event,
@@ -1010,7 +1008,7 @@ mod tests {
                 &token,
                 "writer",
                 "Committed",
-                crate::node_system::document::OperationId::new(),
+                crate::project::OperationId::new(),
             )
             .unwrap();
 
@@ -1084,7 +1082,7 @@ mod tests {
             .unwrap();
         state
             .insert_graph(
-                crate::project::GraphResourcePath::new("events/UnrelatedRename.yssbi-event")
+                crate::graph_document::GraphResourcePath::new("events/UnrelatedRename.yssbi-event")
                     .unwrap(),
                 crate::project::GraphResourceDocument::new(
                     "Unrelated Rename",
@@ -1133,7 +1131,7 @@ mod tests {
                 &stale_session,
                 &token,
                 instance,
-                crate::node_system::document::OperationId::new(),
+                crate::project::OperationId::new(),
             )
         });
         snapshot_ready_rx
@@ -1170,7 +1168,7 @@ mod tests {
 
     #[test]
     fn database_operation_ids_reject_in_flight_and_completed_replays_and_release_failures() {
-        use crate::node_system::document::{OperationId, ResourceRevision};
+        use crate::project::{OperationId, ResourceRevision};
         use std::sync::atomic::{AtomicUsize, Ordering};
         use std::time::Duration;
 
@@ -1287,8 +1285,9 @@ mod tests {
     #[test]
     fn discovery_database_commits_publish_once_and_failures_have_zero_effects() {
         use crate::node_system::document::{
-            DatabaseResourceKey, OperationId, ResourceDocumentPatch, ResourceKey, ResourceRevision,
+            DatabaseResourceKey, ResourceDocumentPatch, ResourceKey,
         };
+        use crate::project::{OperationId, ResourceRevision};
 
         let root = project_root("canonical-publication");
         let state = ProjectState::new();
@@ -1521,7 +1520,7 @@ mod tests {
                     &rename_token,
                     "writer",
                     "Stale Rename",
-                    crate::node_system::document::OperationId::new(),
+                    crate::project::OperationId::new(),
                 )
                 .unwrap_err()
                 .command_code(),
@@ -1553,7 +1552,7 @@ mod tests {
                     &session,
                     &delete_token,
                     "writer",
-                    crate::node_system::document::OperationId::new(),
+                    crate::project::OperationId::new(),
                 )
                 .unwrap_err()
                 .command_code(),

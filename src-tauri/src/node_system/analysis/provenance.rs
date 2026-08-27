@@ -1,6 +1,6 @@
 use super::{CompilationBasis, CompileId};
+use crate::graph_document::{GraphResourcePath, GraphRevision};
 use crate::node_system::ProjectSessionId;
-use crate::node_system::document::{GraphResourcePath, GraphRevision};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

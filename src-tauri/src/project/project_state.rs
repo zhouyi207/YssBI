@@ -2,24 +2,28 @@
 
 use crate::database::DatabaseState;
 use crate::event::GraphMutationResultDto;
+#[cfg(test)]
+use crate::graph_document::ConnectionId;
+use crate::graph_document::GraphResourcePath;
+use crate::graph_document::NodeId;
 use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::node_system::compiler::{GraphCompiler, ResourceSnapshot};
 use crate::node_system::document::{
     ClipboardSubgraphDto, EditorGraphMutationDto, GraphDeltaEvent, GraphDocumentPatch,
-    HistoryEntryId, HistoryMutation, HistoryStatusDto, MutationConflict, MutationRequest, NodeId,
-    OperationId, ProjectDocumentState, ProjectHistory, ProjectHistoryTransaction, ResourceKey,
-    ResourceRevision, export_subgraph,
+    HistoryMutation, HistoryStatusDto, MutationConflict, MutationRequest, ProjectDocumentState,
+    ProjectHistory, ProjectHistoryTransaction, ResourceKey, export_subgraph,
 };
 #[cfg(test)]
-use crate::node_system::document::{ConnectionId, GraphMutation, RevisionedGraphStore};
+use crate::node_system::document::{GraphMutation, RevisionedGraphStore};
 use crate::project::{
-    GraphResourceDocument, GraphResourcePath, NormalizedProjectRoot, PreparedProjectActivation,
-    ProjectData, ProjectFilesystemCoordinator, ProjectFilesystemError,
-    ProjectFilesystemTransaction, ProjectInstanceId, ProjectSession, ProjectStore,
-    ProjectTransactionContext, ResourceDocumentPatch, ResourceLifecycleIntent,
-    ResourceLifecycleOperation, ResourceLifecycleRegistry, ResourceRenameOwnershipLease,
-    StagedFilesystemMutation, WorksheetResourcePath, load_project_graph_from_file,
+    GraphResourceDocument, NormalizedProjectRoot, PreparedProjectActivation, ProjectData,
+    ProjectFilesystemCoordinator, ProjectFilesystemError, ProjectFilesystemTransaction,
+    ProjectInstanceId, ProjectSession, ProjectStore, ProjectTransactionContext,
+    ResourceDocumentPatch, ResourceLifecycleIntent, ResourceLifecycleOperation,
+    ResourceLifecycleRegistry, ResourceRenameOwnershipLease, StagedFilesystemMutation,
+    WorksheetResourcePath, load_project_graph_from_file,
 };
+use crate::project::{HistoryEntryId, OperationId, ResourceRevision};
 use crate::tabular::normalize_variable_tabular;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -62,11 +66,12 @@ pub(super) use projection::{
 };
 use resource_history::{
     affected_projection_paths, authoritative_function_revision,
-    canonical_resource_lifecycle_events, compile_product_invalidation_for_resource_patch,
-    graph_document_references_path, normalize_function_patch_revisions,
-    normalize_loaded_function_resource_revision, patch_projection_paths,
-    preflight_resource_patch_graphs, validate_graph_resource, validate_worksheet_path_insertion,
-    variable_scope_references_path, worksheet_history_publication,
+    canonical_resource_lifecycle_events, checked_graph_revision,
+    compile_product_invalidation_for_resource_patch, graph_document_references_path,
+    normalize_function_patch_revisions, normalize_loaded_function_resource_revision,
+    patch_projection_paths, preflight_resource_patch_graphs, validate_graph_resource,
+    validate_worksheet_path_insertion, variable_scope_references_path,
+    worksheet_history_publication,
 };
 pub(super) use resource_history::{
     checked_resource_revision, normalize_function_resource_revision, validate_context_revisions,
@@ -802,12 +807,12 @@ impl ProjectState {
 
     #[cfg(test)]
     pub(crate) fn append_history_head_for_test(&self) {
-        let path = crate::node_system::document::GraphResourcePath(
-            "events/ConcurrentHistory.yssbi-event".into(),
-        );
+        let path =
+            crate::graph_document::GraphResourcePath::new("events/ConcurrentHistory.yssbi-event")
+                .unwrap();
         self.history.write().unwrap().record_committed_transaction(
             ProjectHistoryTransaction::graph_move(
-                crate::node_system::document::OperationId::new(),
+                crate::project::OperationId::new(),
                 path.clone(),
                 path,
                 serde_json::Value::Null,
@@ -954,18 +959,9 @@ impl ProjectState {
     pub(crate) fn revision_state_for_test(
         &self,
     ) -> (
-        std::collections::HashMap<
-            GraphResourcePath,
-            crate::node_system::document::ResourceRevision,
-        >,
-        std::collections::HashMap<
-            crate::variable::VariableId,
-            crate::node_system::document::ResourceRevision,
-        >,
-        std::collections::HashMap<
-            WorksheetResourcePath,
-            crate::node_system::document::ResourceRevision,
-        >,
+        std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
+        std::collections::HashMap<crate::variable::VariableId, crate::project::ResourceRevision>,
+        std::collections::HashMap<WorksheetResourcePath, crate::project::ResourceRevision>,
     ) {
         (
             self.graph_revisions.read().unwrap().clone(),
@@ -1067,7 +1063,7 @@ impl ProjectState {
     ) {
         self.worksheet_revisions.write().unwrap().insert(
             worksheet_path.clone(),
-            crate::node_system::document::ResourceRevision::INITIAL,
+            crate::project::ResourceRevision::INITIAL,
         );
     }
 

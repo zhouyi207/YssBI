@@ -18,22 +18,12 @@ pub struct ProjectState {
     pub(in crate::project) activation_generation: Arc<std::sync::atomic::AtomicU64>,
     pub(in crate::project) activation_identity: Arc<RwLock<ProjectionEnvironmentExpectation>>,
     pub(in crate::project) graph_revisions: Arc<
-        RwLock<
-            std::collections::HashMap<
-                GraphResourcePath,
-                crate::node_system::document::ResourceRevision,
-            >,
-        >,
+        RwLock<std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>>,
     >,
     pub(in crate::project) variable_revisions:
         Arc<RwLock<std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>>>,
     pub(in crate::project) worksheet_revisions: Arc<
-        RwLock<
-            std::collections::HashMap<
-                WorksheetResourcePath,
-                crate::node_system::document::ResourceRevision,
-            >,
-        >,
+        RwLock<std::collections::HashMap<WorksheetResourcePath, crate::project::ResourceRevision>>,
     >,
     pub(in crate::project) database_authority_revisions:
         Arc<RwLock<std::collections::HashMap<String, u64>>>,

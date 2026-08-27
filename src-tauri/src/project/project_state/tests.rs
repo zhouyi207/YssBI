@@ -133,9 +133,7 @@ mod execution_identity_tests {
 #[cfg(test)]
 mod run_parameter_tests {
     use super::*;
-    use crate::node_system::document::{
-        DocumentNode, GraphDocument, NodeId, NodePosition, PortAddress,
-    };
+    use crate::graph_document::{DocumentNode, GraphDocument, NodeId, NodePosition, PortAddress};
     use crate::node_system::plan::{
         CompiledParameterHandle, ExecutionPlan, ExecutionSemanticsVersion, GraphOutputRef,
         OperationStableId, PlannedKernel, PlannedOperation, PlannedPublication, PlannedRetry,
@@ -188,16 +186,16 @@ mod run_parameter_tests {
     }
 
     fn parameter_plan(node: &DocumentNode, params: CompiledParameterHandle) -> ExecutionPlan {
+        use crate::graph_document::{GraphResourcePath, GraphRevision};
         use crate::node_system::ProjectSessionId;
         use crate::node_system::analysis::{CompilationBasis, CompileId, CompileProvenance};
-        use crate::node_system::document::{GraphResourcePath, GraphRevision};
         use crate::node_system::plan::StructuredControlRegion;
         use crate::node_system::registry::RegistryFingerprint;
 
         ExecutionPlan {
             provenance: CompileProvenance {
                 project_session_id: ProjectSessionId::new("run-parameter-test"),
-                graph_path: GraphResourcePath("events/test".into()),
+                graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
                 basis: CompilationBasis {
                     graph_revision: GraphRevision::new(1),
                     registry_fingerprint: RegistryFingerprint::from_bytes([1; 32]),
@@ -239,7 +237,7 @@ mod run_parameter_tests {
     #[test]
     fn function_graph_replacement_changes_the_coherent_compile_resource_version() {
         let path = GraphResourcePath::new("functions/replaced.yssbi-function").unwrap();
-        let analysis_path = crate::node_system::document::GraphResourcePath(path.as_str().into());
+        let analysis_path = path.clone();
         let mut data = ProjectData::new();
         data.graphs.insert(
             path.clone(),

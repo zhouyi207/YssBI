@@ -1,5 +1,5 @@
+use crate::graph_document::{FunctionParameterId, GraphResourcePath, NodeId, PortAddress};
 use crate::node_system::analysis::{CompileProvenance, ResourceKey};
-use crate::node_system::document::{FunctionParameterId, GraphResourcePath, NodeId, PortAddress};
 use crate::node_system::protocol::{
     CachePolicy, CanonicalDecimal, InputConsumption, NodeTypeId, OutputProduction, RetryPolicy,
     TypeExpr, Value,

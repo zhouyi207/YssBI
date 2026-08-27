@@ -8,19 +8,19 @@ pub(crate) enum VariablePresence {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct VariableRevisionEntry {
-    pub(crate) revision: crate::node_system::document::ResourceRevision,
+    pub(crate) revision: crate::project::ResourceRevision,
     pub(crate) presence: VariablePresence,
 }
 
 impl VariableRevisionEntry {
-    pub(crate) const fn present(revision: crate::node_system::document::ResourceRevision) -> Self {
+    pub(crate) const fn present(revision: crate::project::ResourceRevision) -> Self {
         Self {
             revision,
             presence: VariablePresence::Present,
         }
     }
 
-    pub(crate) const fn deleted(revision: crate::node_system::document::ResourceRevision) -> Self {
+    pub(crate) const fn deleted(revision: crate::project::ResourceRevision) -> Self {
         Self {
             revision,
             presence: VariablePresence::Deleted,

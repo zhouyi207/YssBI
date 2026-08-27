@@ -1,5 +1,8 @@
 use super::localization::{Aliases, Text};
 use super::*;
+use crate::graph_document::{
+    DocumentNode, FunctionParameterId, GraphDocument, GraphResourcePath, NodeId, NodePosition,
+};
 use crate::node_system::analysis::{
     DiagnosticArguments, DiagnosticCode, DiagnosticLocation, DiagnosticSeverity,
     EditorGraphProjectionDto, LocalizationLookup, NodeDiagnostic, ResourceKey, ResourceVersion,
@@ -9,10 +12,7 @@ use crate::node_system::compiler::{
     GraphCompiler, LoweredKernel, LoweringContext, ResourceSnapshot, ValidatedNodeConfig,
     build_builtin_interface_resolvers,
 };
-use crate::node_system::document::{
-    DocumentNode, FunctionDocument, FunctionParameter, FunctionParameterId, FunctionSignature,
-    GraphDocument, GraphResourcePath, NodeId, NodePosition,
-};
+use crate::node_system::document::{FunctionDocument, FunctionParameter, FunctionSignature};
 
 use crate::node_system::protocol::{
     ConnectionsPerPort, I18nKey, ManagedNodeRole, NodeInstanceDisplaySpec, NodeScope, NodeTypeId,

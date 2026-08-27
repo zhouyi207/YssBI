@@ -2,9 +2,8 @@ use super::dynamic_interface::{
     InterfaceResolver, InterfaceResolverError, InterfaceResolverMember, InterfaceResolverOutput,
     InterfaceResolverRequest, InterfaceResolverSet, SchemaFieldIdentityGuarantee,
 };
-use crate::node_system::document::{
-    DynamicMemberLocator, FunctionDocument, FunctionParameterId, GraphResourcePath,
-};
+use crate::graph_document::{DynamicMemberLocator, FunctionParameterId, GraphResourcePath};
+use crate::node_system::document::FunctionDocument;
 use crate::node_system::protocol::{InterfaceResolverId, TypeExpr};
 use std::sync::Arc;
 
@@ -105,7 +104,7 @@ fn function_path(
                 .and_then(|(_, value)| value.as_str())
         })
         .filter(|path| !path.is_empty() && path.trim() == *path)
-        .map(|path| GraphResourcePath(path.into()))
+        .and_then(|path| GraphResourcePath::new(path).ok())
         .ok_or_else(|| {
             InterfaceResolverError::new(
                 "function interface resolver requires a non-empty function or target parameter",
@@ -114,9 +113,7 @@ fn function_path(
 }
 
 fn parameter_members(
-    basis: &crate::node_system::analysis::CompilationBasis<
-        crate::node_system::document::GraphRevision,
-    >,
+    basis: &crate::node_system::analysis::CompilationBasis<crate::graph_document::GraphRevision>,
     function: &GraphResourcePath,
     document: &FunctionDocument,
 ) -> Result<Box<[InterfaceResolverMember]>, InterfaceResolverError> {
@@ -141,9 +138,7 @@ fn parameter_members(
 }
 
 fn result_members(
-    basis: &crate::node_system::analysis::CompilationBasis<
-        crate::node_system::document::GraphRevision,
-    >,
+    basis: &crate::node_system::analysis::CompilationBasis<crate::graph_document::GraphRevision>,
     function: &GraphResourcePath,
     document: &FunctionDocument,
 ) -> Result<Box<[InterfaceResolverMember]>, InterfaceResolverError> {
@@ -156,7 +151,7 @@ fn result_members(
                 basis: basis.clone(),
                 locator: DynamicMemberLocator::FunctionParameter {
                     function: function.clone(),
-                    parameter: FunctionParameterId("return".into()),
+                    parameter: FunctionParameterId::new("return"),
                 },
                 label: return_type.clone(),
                 value_type: function_type(return_type)?,

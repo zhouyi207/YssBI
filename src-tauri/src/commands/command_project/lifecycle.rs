@@ -4,7 +4,7 @@ use crate::event::{
     Event, EventProject, LifecycleMutationOutcomeDto, LifecycleMutationResultDto,
     ProjectActivationResultDto, emit_project_event, emit_project_event_result,
 };
-use crate::node_system::document::OperationId;
+use crate::project::OperationId;
 use crate::project::project_writers::ProjectSaveResultDto;
 use crate::project::{ProjectInstanceId, ProjectRegistry, ProjectState, ProjectWatcherState};
 use std::path::Path;
@@ -222,7 +222,7 @@ mod tests {
         LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationPhaseDto,
         LifecycleRecoveryDto,
     };
-    use crate::node_system::document::OperationId;
+    use crate::project::OperationId;
     use crate::project::{ProjectData, ProjectFilesystemError};
 
     fn lifecycle_result(

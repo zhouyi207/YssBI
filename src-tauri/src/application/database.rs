@@ -68,13 +68,13 @@ pub struct DatabaseMetaResult {
 #[derive(Clone, Copy)]
 struct DatabaseCreateRequest<'a> {
     project_instance_id: &'a crate::project::ProjectInstanceId,
-    operation_id: crate::node_system::document::OperationId,
+    operation_id: crate::project::OperationId,
 }
 
 pub fn load_database(
     state: &ProjectState,
     project_instance_id: &crate::project::ProjectInstanceId,
-    operation_id: crate::node_system::document::OperationId,
+    operation_id: crate::project::OperationId,
     engine: DatabaseEngineDTO,
 ) -> Result<crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>, ProjectDatabaseError>
 {
@@ -745,9 +745,9 @@ pub fn rename_database(
     state: &ProjectState,
     project_instance_id: &crate::project::ProjectInstanceId,
     id: &str,
-    expected_revision: crate::node_system::document::ResourceRevision,
+    expected_revision: crate::project::ResourceRevision,
     name: &str,
-    operation_id: crate::node_system::document::OperationId,
+    operation_id: crate::project::OperationId,
 ) -> Result<crate::event::ResourceMutationCommandResultDto<()>, ProjectDatabaseError> {
     let reservation = state.reserve_database_operation(project_instance_id, operation_id)?;
     let (session, _lease) = state.acquire_database_write_lease()?;
@@ -794,8 +794,8 @@ pub fn save_database_changes(
     state: &ProjectState,
     project_instance_id: &crate::project::ProjectInstanceId,
     id: &str,
-    expected_revision: crate::node_system::document::ResourceRevision,
-    operation_id: crate::node_system::document::OperationId,
+    expected_revision: crate::project::ResourceRevision,
+    operation_id: crate::project::OperationId,
 ) -> Result<crate::event::ResourceMutationCommandResultDto<EditState>, ProjectDatabaseError> {
     state.with_database_writer(
         project_instance_id,
@@ -919,8 +919,8 @@ pub fn mutate_database_resource(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
     id: &str,
-    expected_revision: crate::node_system::document::ResourceRevision,
-    operation_id: crate::node_system::document::OperationId,
+    expected_revision: crate::project::ResourceRevision,
+    operation_id: crate::project::OperationId,
     mutation: DatabaseMutation,
 ) -> Result<crate::event::ResourceMutationCommandResultDto<EditState>, DatabaseApplicationError> {
     let operation = mutation.operation();

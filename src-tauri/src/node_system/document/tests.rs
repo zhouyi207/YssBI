@@ -55,7 +55,7 @@ fn operation_id(value: u128) -> OperationId {
 }
 
 fn graph_path(value: &str) -> GraphResourcePath {
-    GraphResourcePath(value.into())
+    GraphResourcePath::new(value).unwrap()
 }
 
 fn node(id: NodeId) -> DocumentNode {
@@ -82,10 +82,10 @@ fn assert_graph_content_eq(left: &GraphDocument, right: &GraphDocument) {
 fn binding() -> DynamicPortBinding {
     DynamicPortBinding::Resolved {
         origin: DynamicMemberLocator::SchemaField {
-            source: SchemaSourceIdentity("source".into()),
-            field: SchemaFieldIdentity("field".into()),
+            source: SchemaSourceIdentity::new("source"),
+            field: SchemaFieldIdentity::new("field"),
         },
-        order: OrderKey("a".into()),
+        order: OrderKey::new("a"),
         last_known: LastKnownPortMetadata::default(),
     }
 }
@@ -234,7 +234,7 @@ fn bind_user_port(
         .bind_port(
             PortAddress::instance(node_id, PortKey::new(template).unwrap(), instance_id),
             DynamicPortBinding::UserCreated {
-                order: OrderKey(instance_id.to_string().into()),
+                order: OrderKey::new(instance_id.to_string()),
             },
         )
         .unwrap();
@@ -322,8 +322,8 @@ fn projected_member(path: &str, revision: GraphRevision, node_id: NodeId) -> Pro
         PortKey::new("fields").unwrap(),
         PortDirection::Input,
         DynamicMemberLocator::SchemaField {
-            source: SchemaSourceIdentity("source".into()),
-            field: SchemaFieldIdentity("field".into()),
+            source: SchemaSourceIdentity::new("source"),
+            field: SchemaFieldIdentity::new("field"),
         },
         LastKnownPortMetadata {
             label: "Field".into(),
@@ -333,7 +333,7 @@ fn projected_member(path: &str, revision: GraphRevision, node_id: NodeId) -> Pro
 }
 
 fn authorization(member: ProjectedMemberRef) -> MaterializationAuthorization {
-    MaterializationAuthorization::new(member, OrderKey("a".into()))
+    MaterializationAuthorization::new(member, OrderKey::new("a"))
 }
 
 fn function_key(value: &str) -> FunctionResourceKey {
@@ -347,7 +347,7 @@ fn variable_key(value: &str) -> VariableResourceKey {
 fn signature(parameter_name: &str) -> FunctionSignature {
     FunctionSignature {
         parameters: vec![FunctionParameter {
-            id: FunctionParameterId("parameter-1".into()),
+            id: FunctionParameterId::new("parameter-1"),
             name: parameter_name.into(),
             type_name: "Number".into(),
         }],

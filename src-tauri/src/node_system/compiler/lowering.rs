@@ -1,6 +1,6 @@
 use super::relational::RelationalFragment;
 use super::{CompileCancellationToken, CompileCancelled};
-use crate::node_system::document::{NodeId, PortAddress};
+use crate::graph_document::{NodeId, PortAddress};
 use crate::node_system::plan::{
     CompiledParameterHandle, CompiledResourceRequirement, KernelHandle, RelationalBackendId,
     RelationalOperatorIndex, ResourceId, ValueRef,

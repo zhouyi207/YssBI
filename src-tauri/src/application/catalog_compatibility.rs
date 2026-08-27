@@ -1,6 +1,8 @@
+use crate::graph_document::GraphResourcePath;
 use crate::node_system::catalog::LocalizedCatalogDto;
-use crate::node_system::document::{PortAddressDto, ResourceRevision};
-use crate::project::{GraphResourcePath, ProjectFilesystemError, ProjectInstanceId, ProjectState};
+use crate::node_system::document::PortAddressDto;
+use crate::project::ResourceRevision;
+use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,7 +64,7 @@ pub fn get_compatible_node_catalog(
 
     Ok(crate::node_system::compatibility::compatible_catalog(
         &snapshot,
-        &crate::node_system::document::GraphResourcePath(request.graph_path.as_str().into()),
+        &request.graph_path,
         &source,
         &request.locale,
     ))
@@ -71,9 +73,8 @@ pub fn get_compatible_node_catalog(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::document::{
-        DocumentNode, NodeId, NodePosition, ParameterValues, PortAddressDto,
-    };
+    use crate::graph_document::{DocumentNode, NodeId, NodePosition, ParameterValues};
+    use crate::node_system::document::PortAddressDto;
     use crate::node_system::protocol::NodeTypeId;
     use crate::project::{GraphDocumentKind, GraphResourceDocument, ProjectData};
 

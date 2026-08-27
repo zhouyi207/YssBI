@@ -13,12 +13,12 @@ fn call_missing_caller_value_does_not_acquire_callee_resources() {
         access: ResourceAccess::Shared,
         optional: false,
     }]);
-    let published = published_function(callee, "functions/callee", &[0], &[]);
+    let published = published_function(callee, "functions/callee.yssbi-function", &[0], &[]);
     let caller = plan(
         vec![operation("source_not_in_region", &[], &[0])],
         1,
         StructuredControlRegion::Call {
-            target: id("functions/callee", FunctionPlanHandle::new),
+            target: id("functions/callee.yssbi-function", FunctionPlanHandle::new),
             arguments: Box::new([CallArgumentBinding {
                 caller_source: ValueRef::new(0),
                 callee_destination: ValueRef::new(0),
@@ -81,7 +81,7 @@ fn call_copies_values_across_different_caller_and_callee_layouts() {
         StructuredControlRegion::Sequence(Box::new([
             ControlStep::Operation(OperationIndex::new(0)),
             ControlStep::Region(Box::new(StructuredControlRegion::Call {
-                target: id("functions/callee", FunctionPlanHandle::new),
+                target: id("functions/callee.yssbi-function", FunctionPlanHandle::new),
                 arguments: Box::new([CallArgumentBinding {
                     caller_source: ValueRef::new(4),
                     callee_destination: ValueRef::new(1),
@@ -106,7 +106,7 @@ fn call_copies_values_across_different_caller_and_callee_layouts() {
     }]);
     publish_graph_results(&mut caller);
 
-    let function = published_function(callee, "functions/callee", &[1], &[3]);
+    let function = published_function(callee, "functions/callee.yssbi-function", &[1], &[3]);
     let result = RunExecutor::new(
         &kernels,
         &no_resources(),
@@ -197,7 +197,10 @@ fn function_call_preserves_data_series_artifact() {
             ControlStep::Operation(OperationIndex::new(0)),
             ControlStep::Operation(OperationIndex::new(1)),
             ControlStep::Region(Box::new(StructuredControlRegion::Call {
-                target: id("functions/data-series", FunctionPlanHandle::new),
+                target: id(
+                    "functions/data-series.yssbi-function",
+                    FunctionPlanHandle::new,
+                ),
                 arguments: Box::new([CallArgumentBinding {
                     caller_source: ValueRef::new(4),
                     callee_destination: ValueRef::new(1),
@@ -228,7 +231,8 @@ fn function_call_preserves_data_series_artifact() {
     }]);
     publish_graph_results(&mut caller);
 
-    let mut function = published_function(callee, "functions/data-series", &[1], &[3]);
+    let mut function =
+        published_function(callee, "functions/data-series.yssbi-function", &[1], &[3]);
     let published = Arc::make_mut(&mut function);
     Arc::make_mut(&mut published.abi)
         .parameter_contracts
@@ -287,7 +291,8 @@ fn call_rejects_stale_published_abi_before_entering_the_callee_frame() {
             0,
         ))])),
     );
-    callee.provenance.graph_path = GraphResourcePath("functions/callee".into());
+    callee.provenance.graph_path =
+        GraphResourcePath::new("functions/callee.yssbi-function").unwrap();
     let mut stale_provenance = callee.provenance.clone();
     stale_provenance.compile_id = CompileId::new(999);
     let published = Arc::new(PublishedFunctionPlan {
@@ -305,7 +310,7 @@ fn call_rejects_stale_published_abi_before_entering_the_callee_frame() {
         vec![],
         0,
         StructuredControlRegion::Call {
-            target: id("functions/callee", FunctionPlanHandle::new),
+            target: id("functions/callee.yssbi-function", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
             mandatory: true,
@@ -389,7 +394,8 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
         if matches!(case, InvalidCall::StaleResultProduction) {
             callee.operations[0].outputs[0].production = OutputProduction::Streaming;
         }
-        let mut published = published_function(callee, "functions/callee", &[0], &[2]);
+        let mut published =
+            published_function(callee, "functions/callee.yssbi-function", &[0], &[2]);
 
         let standard_argument = CallArgumentBinding {
             caller_source: ValueRef::new(0),
@@ -425,7 +431,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
             InvalidCall::OutOfBoundsParameter => {
                 let published_mut = Arc::make_mut(&mut published);
                 Arc::make_mut(&mut published_mut.abi).parameters =
-                    BTreeMap::from([(FunctionParameterId("parameter-0".into()), ValueRef::new(9))]);
+                    BTreeMap::from([(FunctionParameterId::new("parameter-0"), ValueRef::new(9))]);
                 (
                     vec![CallArgumentBinding {
                         caller_source: ValueRef::new(0),
@@ -437,7 +443,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
             InvalidCall::UnsourcedResult => {
                 let published_mut = Arc::make_mut(&mut published);
                 Arc::make_mut(&mut published_mut.abi).results =
-                    BTreeMap::from([(FunctionParameterId("result-0".into()), ValueRef::new(3))]);
+                    BTreeMap::from([(FunctionParameterId::new("result-0"), ValueRef::new(3))]);
                 (
                     vec![standard_argument],
                     vec![CallResultBinding {
@@ -450,7 +456,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
             InvalidCall::StaleResultProduction => {
                 let published_mut = Arc::make_mut(&mut published);
                 Arc::make_mut(&mut published_mut.abi).result_productions = BTreeMap::from([(
-                    FunctionParameterId("result-0".into()),
+                    FunctionParameterId::new("result-0"),
                     OutputProduction::Streaming,
                 )]);
                 (vec![standard_argument], vec![standard_result])
@@ -462,7 +468,7 @@ fn call_preflight_rejects_invalid_public_bindings_before_callee_side_effects() {
             StructuredControlRegion::Sequence(Box::new([
                 ControlStep::Operation(OperationIndex::new(0)),
                 ControlStep::Region(Box::new(StructuredControlRegion::Call {
-                    target: id("functions/callee", FunctionPlanHandle::new),
+                    target: id("functions/callee.yssbi-function", FunctionPlanHandle::new),
                     arguments: arguments.into_boxed_slice(),
                     results: results.into_boxed_slice(),
                     mandatory: true,
@@ -544,14 +550,14 @@ fn call_preflight_allows_reusing_one_caller_source_for_distinct_parameters() {
         PlanValueSource::ExternalInput(ValueRef::new(0), OutputProduction::FullyMaterialized),
         PlanValueSource::ExternalInput(ValueRef::new(1), OutputProduction::FullyMaterialized),
     ]);
-    let published = published_function(callee, "functions/callee", &[0, 1], &[]);
+    let published = published_function(callee, "functions/callee.yssbi-function", &[0, 1], &[]);
     let caller = plan(
         vec![operation("source", &[], &[0])],
         1,
         StructuredControlRegion::Sequence(Box::new([
             ControlStep::Operation(OperationIndex::new(0)),
             ControlStep::Region(Box::new(StructuredControlRegion::Call {
-                target: id("functions/callee", FunctionPlanHandle::new),
+                target: id("functions/callee.yssbi-function", FunctionPlanHandle::new),
                 arguments: Box::new([
                     CallArgumentBinding {
                         caller_source: ValueRef::new(0),
@@ -616,7 +622,7 @@ fn call_uses_an_independent_frame() {
         StructuredControlRegion::Sequence(Box::new([
             ControlStep::Operation(OperationIndex::new(0)),
             ControlStep::Region(Box::new(StructuredControlRegion::Call {
-                target: id("functions/callee", FunctionPlanHandle::new),
+                target: id("functions/callee.yssbi-function", FunctionPlanHandle::new),
                 arguments: Box::new([]),
                 results: Box::new([]),
                 mandatory: true,
@@ -629,7 +635,7 @@ fn call_uses_an_independent_frame() {
         &no_resources(),
         &OneFunction(published_function(
             Arc::unwrap_or_clone(callee),
-            "functions/callee",
+            "functions/callee.yssbi-function",
             &[],
             &[],
         )),
@@ -661,17 +667,17 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
 
     let versions = BTreeMap::from([
         (
-            ResourceKey::new("functions/a"),
+            ResourceKey::new("functions/a.yssbi-function"),
             ResourceVersion::new("a-v1"),
         ),
         (
-            ResourceKey::new("functions/b"),
+            ResourceKey::new("functions/b.yssbi-function"),
             ResourceVersion::new("b-v1"),
         ),
     ]);
     let make_function = |path: &str, root_region: StructuredControlRegion, operations| {
         let mut function = plan(operations, 0, root_region);
-        function.provenance.graph_path = GraphResourcePath(path.into());
+        function.provenance.graph_path = GraphResourcePath::new(path).unwrap();
         function.provenance.basis.resource_versions = versions.clone();
         let abi = FunctionPlanAbi {
             provenance: function.provenance.clone(),
@@ -684,16 +690,16 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
         (Arc::new(function), Arc::new(abi))
     };
     let (plan_a, abi_a) = make_function(
-        "functions/a",
+        "functions/a.yssbi-function",
         StructuredControlRegion::Sequence(Box::new([ControlStep::Operation(OperationIndex::new(
             0,
         ))])),
         vec![operation("function_a", &[], &[])],
     );
     let (plan_b, abi_b) = make_function(
-        "functions/b",
+        "functions/b.yssbi-function",
         StructuredControlRegion::Call {
-            target: id("functions/a", FunctionPlanHandle::new),
+            target: id("functions/a.yssbi-function", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
             mandatory: true,
@@ -702,13 +708,13 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
     );
     let entries = vec![
         (
-            GraphResourcePath("functions/a".into()),
+            GraphResourcePath::new("functions/a.yssbi-function").unwrap(),
             ResourceVersion::new("a-v1"),
             plan_a,
             abi_a,
         ),
         (
-            GraphResourcePath("functions/b".into()),
+            GraphResourcePath::new("functions/b.yssbi-function").unwrap(),
             ResourceVersion::new("b-v1"),
             plan_b,
             abi_b,
@@ -733,7 +739,7 @@ fn reversed_two_function_publication_is_equivalent_and_callable() {
         vec![],
         0,
         StructuredControlRegion::Call {
-            target: id("functions/b", FunctionPlanHandle::new),
+            target: id("functions/b.yssbi-function", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
             mandatory: true,
@@ -770,13 +776,16 @@ fn recursive_calls_stop_at_the_configured_limit() {
         vec![],
         0,
         StructuredControlRegion::Call {
-            target: id("recursive", FunctionPlanHandle::new),
+            target: id(
+                "functions/recursive.yssbi-function",
+                FunctionPlanHandle::new,
+            ),
             arguments: Box::new([]),
             results: Box::new([]),
             mandatory: true,
         },
     );
-    let recursive = published_function(recursive, "recursive", &[], &[]);
+    let recursive = published_function(recursive, "functions/recursive.yssbi-function", &[], &[]);
     let resources = no_resources();
 
     let error = RunExecutor::new(
@@ -810,7 +819,7 @@ fn call_failure_releases_caller_and_callee_resources() {
         vec![],
         0,
         StructuredControlRegion::Call {
-            target: id("functions/callee", FunctionPlanHandle::new),
+            target: id("functions/callee.yssbi-function", FunctionPlanHandle::new),
             arguments: Box::new([]),
             results: Box::new([]),
             mandatory: true,
@@ -823,7 +832,12 @@ fn call_failure_releases_caller_and_callee_resources() {
     let error = RunExecutor::new(
         &KernelRegistry::new(),
         &resources,
-        &OneFunction(published_function(callee, "functions/callee", &[], &[])),
+        &OneFunction(published_function(
+            callee,
+            "functions/callee.yssbi-function",
+            &[],
+            &[],
+        )),
         ResultStore::new(),
         std::sync::Arc::new(crate::node_system::runtime::SessionMemoization::new()),
     )
@@ -935,7 +949,10 @@ fn external_stream_fanout_before_branch_executes_once_and_delivers_complete_data
             StructuredControlRegion::Sequence(Box::new([
                 ControlStep::Operation(OperationIndex::new(0)),
                 ControlStep::Region(Box::new(StructuredControlRegion::Call {
-                    target: id("functions/external-branch", FunctionPlanHandle::new),
+                    target: id(
+                        "functions/external-branch.yssbi-function",
+                        FunctionPlanHandle::new,
+                    ),
                     arguments: Box::new([CallArgumentBinding {
                         caller_source: ValueRef::new(0),
                         callee_destination: ValueRef::new(0),
@@ -960,7 +977,12 @@ fn external_stream_fanout_before_branch_executes_once_and_delivers_complete_data
         }]);
         publish_graph_results(&mut caller);
 
-        let function = published_function(callee, "functions/external-branch", &[0], &[8]);
+        let function = published_function(
+            callee,
+            "functions/external-branch.yssbi-function",
+            &[0],
+            &[8],
+        );
         let result = RunExecutor::new(
             &kernels,
             &no_resources(),

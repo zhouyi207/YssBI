@@ -1502,3 +1502,21 @@ Execution 不知道具体 UI
 - [ ] 完成 focused scripts 的缺入口 RED 与 GREEN 验证，Frontend 66 项、Rust architecture 20 项测试通过。
 - [ ] 补全当前架构文档中的 Rust canonical origin 列表，明确 repository asset 是独立于 repository declaration、language builtin 与 external dependency 的分支。
 - [ ] 对照 `CanonicalOrigin::RepositoryAsset` 与 Include/Attribute resolver，记录 exact `repository-asset:<repository-relative-path>` target 规范。
+- [ ] 将 serialized GraphDocument、GraphResourcePath、GraphRevision 与 document identities 原子迁入 Pure Leaf graph_document，删除 node_system/project 旧声明及 re-export。
+- [ ] 将 OperationId、HistoryEntryId、ResourceRevision、ProjectRevision 与 ProjectTransactionRevision 拆为 Project-owned 独立 newtype，移除 ResourceRevision 到 GraphRevision 的 ownership alias。
+- [ ] 建立 Graph-owned schema、compile settings、immutable resource catalog 与 21 项 closed mutation/compile typed error contract，并保留 TypedValue untagged JSON wire。
+- [ ] 增加 resource catalog、graph-document wire、Pure Leaf JSON purpose 与 Project→Graph production edge focused guards，按 canonical origins 精确更新 architecture debt。
+- [ ] 修正 GraphResourcePath 测试 fixture 的 canonical `.yssbi-event`/`.yssbi-function` 扩展名及关联 lookup/JSON 断言，不放宽 opaque path validator。
+- [ ] 将 NFC、Unicode L/N、保留名、空格与长度规则下沉到 Pure Leaf graph-document name contract，并由 Project ResourceName 穷尽映射既有错误语义。
+- [ ] 删除 GraphRevision 与 Project ResourceRevision 的 From/跨类型 PartialEq 隐式桥，将 mutation constructor 和全部 caller 改为显式 named conversion。
+- [ ] 将 Pure Leaf serde_json guard 改为基于真实 production module/dependency facts 的 typed structured 审计，并覆盖 test module 后的 production source negative fixture。
+- [ ] 将 legacy tabular snapshot 的三项既有 serde_json finding 静态归入 Backend Task 5 双向 exact debt，不提前重分类或实现 mixed-owner 拆分。
+ - [ ] 将 serialized GraphDocument、GraphResourcePath、GraphRevision 与 document identities 原子迁入 Pure Leaf graph_document，删除 node_system/project 旧声明及 re-export。
+ - [ ] 将 OperationId、HistoryEntryId、ResourceRevision、ProjectRevision 与 ProjectTransactionRevision 拆为 Project-owned 独立 newtype，移除 ResourceRevision 到 GraphRevision 的 ownership alias。
+ - [ ] 建立 Graph-owned schema、compile settings、immutable resource catalog 与 21 项 closed mutation/compile typed error contract，并保留 TypedValue untagged JSON wire。
+ - [ ] 增加 resource catalog、graph-document wire、Pure Leaf JSON purpose 与 Project→Graph production edge focused guards，按 canonical origins 精确更新 architecture debt。
+ - [ ] 修正 GraphResourcePath 测试 fixture 的 canonical `.yssbi-event`/`.yssbi-function` 扩展名及关联 lookup/JSON 断言，不放宽 opaque path validator。
+ - [ ] 将 NFC、Unicode L/N、保留名、空格与长度规则下沉到 Pure Leaf graph-document name contract，并由 Project ResourceName 穷尽映射既有错误语义。
+ - [ ] 删除 GraphRevision 与 Project ResourceRevision 的 From/跨类型 PartialEq 隐式桥，将 mutation constructor 和全部 caller 改为显式 named conversion。
+ - [ ] 将 Pure Leaf serde_json guard 改为基于真实 production module/dependency facts 的 typed structured 审计，并覆盖 test module 后的 production source negative fixture。
+ - [ ] 将 legacy tabular snapshot 的三项既有 serde_json finding 静态归入 Backend Task 5 双向 exact debt，不提前重分类或实现 mixed-owner 拆分。

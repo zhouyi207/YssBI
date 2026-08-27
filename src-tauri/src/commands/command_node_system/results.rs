@@ -207,7 +207,8 @@ pub(super) fn get_pin_result_history_from_state(
         .try_into()
         .map_err(|_| CommandError::expected("invalid_output"))?;
     let output = crate::node_system::plan::GraphOutputRef {
-        graph_path: crate::node_system::document::GraphResourcePath(graph_path.into()),
+        graph_path: crate::graph_document::GraphResourcePath::new(graph_path)
+            .map_err(|_| CommandError::expected("invalid_graph_resource_path"))?,
         port,
     };
     state

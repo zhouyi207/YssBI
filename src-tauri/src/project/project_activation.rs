@@ -1,8 +1,9 @@
 use crate::database::{DatabaseEngine, DatabaseInstance, DatabaseState, bind_duckdb_instance};
-use crate::node_system::document::ResourceRevision;
+use crate::graph_document::GraphResourcePath;
+use crate::project::ResourceRevision;
 use crate::project::{
-    GraphResourcePath, NormalizedProjectRoot, ProjectData, ProjectFilesystemError,
-    ProjectInstanceId, ProjectSession, ProjectState, ProjectStore, WorksheetResourcePath,
+    NormalizedProjectRoot, ProjectData, ProjectFilesystemError, ProjectInstanceId, ProjectSession,
+    ProjectState, ProjectStore, WorksheetResourcePath,
 };
 use crate::tabular::normalize_variable_tabular;
 use crate::variable::VariableId;
@@ -73,7 +74,7 @@ pub struct PreparedProjectActivation {
     pub store: ProjectStore,
     pub(crate) variable_revisions:
         HashMap<VariableId, crate::project::project_state::VariableRevisionEntry>,
-    pub(crate) graph_revisions: HashMap<GraphResourcePath, ResourceRevision>,
+    pub(crate) graph_revisions: HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
     pub(crate) worksheet_revisions: HashMap<WorksheetResourcePath, ResourceRevision>,
     pub(crate) authority_basis: Option<PreparedAuthorityBasis>,
     pub(crate) requires_final_rebuild: bool,
@@ -240,14 +241,14 @@ impl ProjectState {
 #[cfg(test)]
 mod tests {
     use crate::data_contract::{DataType, DataValue};
-    use crate::node_system::document::{
-        ConnectionId, DocumentConnection, DocumentError, NodeId, PortAddress,
-    };
+    use crate::graph_document::GraphResourcePath;
+    use crate::graph_document::{ConnectionId, DocumentConnection, NodeId, PortAddress};
+    use crate::node_system::document::DocumentError;
     use crate::node_system::protocol::PortKey;
     use crate::node_system::runtime::NOOP_RUN_EVENT_SINK;
     use crate::project::{
-        GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, ProjectState,
-        fixtures, load_project_from_file,
+        GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectState, fixtures,
+        load_project_from_file,
     };
     use crate::variable::VariableScope;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -786,7 +787,7 @@ mod tests {
         let imported = crate::application::database::load_database(
             &state,
             &session.instance_id,
-            crate::node_system::document::OperationId::new(),
+            crate::project::OperationId::new(),
             crate::schema::DatabaseEngineDTO::Csv {
                 path: csv.to_string_lossy().into_owned(),
                 delimiter: ',',
@@ -837,7 +838,7 @@ mod tests {
         let imported = crate::application::database::load_database(
             &state,
             &project_instance_id,
-            crate::node_system::document::OperationId::new(),
+            crate::project::OperationId::new(),
             crate::schema::DatabaseEngineDTO::Csv {
                 path: initial_csv.to_string_lossy().into_owned(),
                 delimiter: ',',
@@ -1041,7 +1042,7 @@ mod tests {
             .add_database_for_session(
                 &database_session,
                 &database_session.instance_id,
-                crate::node_system::document::OperationId::new(),
+                crate::project::OperationId::new(),
                 crate::database::DatabaseInstance {
                     decl: crate::database::DatabaseDecl {
                         id: database_id.clone(),
@@ -1075,11 +1076,11 @@ mod tests {
             crate::project::GraphResourceDocument::new("Committed", GraphDocumentKind::Event);
         let context = crate::project::ProjectTransactionContext {
             session: session.clone(),
-            operation_id: crate::node_system::document::OperationId::new(),
+            operation_id: crate::project::OperationId::new(),
             affected_resources: Vec::new(),
             expected_revisions: Default::default(),
             expected_absent_resources: [crate::node_system::document::ResourceKey::Graph(
-                crate::node_system::document::GraphResourcePath(graph_path.as_str().into()),
+                graph_path.clone(),
             )]
             .into_iter()
             .collect(),

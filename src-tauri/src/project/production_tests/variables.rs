@@ -53,7 +53,7 @@ fn commit_tabular_effect(
                 variable.id
             ))
             .unwrap(),
-            expected_revision: GraphRevision::INITIAL,
+            expected_revision: ResourceRevision::INITIAL,
             before: variable.clone(),
             after: crate::data_contract::DataValue::DataFrame(values.into()),
         }],
@@ -92,7 +92,7 @@ fn global_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
                     variable.id
                 ))
                 .unwrap(),
-                expected_revision: GraphRevision::INITIAL,
+                expected_revision: ResourceRevision::INITIAL,
                 before: variable.clone(),
                 after: crate::data_contract::DataValue::Int64(2),
             }],
@@ -105,7 +105,7 @@ fn global_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
             "en-US",
             MutationRequest::new(
                 resource.clone(),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -130,7 +130,7 @@ fn global_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
             "en-US",
             MutationRequest::new(
                 resource,
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -190,7 +190,7 @@ fn local_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
                     variable.id
                 ))
                 .unwrap(),
-                expected_revision: GraphRevision::INITIAL,
+                expected_revision: ResourceRevision::INITIAL,
                 before: variable.clone(),
                 after: crate::data_contract::DataValue::Int64(2),
             }],
@@ -202,7 +202,7 @@ fn local_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
             "en-US",
             MutationRequest::new(
                 resource.clone(),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -215,7 +215,7 @@ fn local_variable_effect_undo_redo_remains_equal_to_reloaded_disk() {
             "en-US",
             MutationRequest::new(
                 resource,
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -266,7 +266,7 @@ fn durable_variable_history_conflict_rolls_disk_back_without_authority_transfer(
                     variable.id
                 ))
                 .unwrap(),
-                expected_revision: GraphRevision::INITIAL,
+                expected_revision: ResourceRevision::INITIAL,
                 before: variable.clone(),
                 after: crate::data_contract::DataValue::Int64(2),
             }],
@@ -286,7 +286,7 @@ fn durable_variable_history_conflict_rolls_disk_back_without_authority_transfer(
                 ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
                     format!("variables/{}", variable.id).into(),
                 )),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -362,7 +362,7 @@ fn tabular_variable_effect_updates_global_and_local_authority() {
         );
         assert_eq!(
             state.variable_revisions.read().unwrap()[&variable.id].revision,
-            GraphRevision::new(1)
+            ResourceRevision::from_graph_revision(GraphRevision::new(1))
         );
         let resource = ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
             format!("variables/{}", variable.id).into(),
@@ -373,7 +373,7 @@ fn tabular_variable_effect_updates_global_and_local_authority() {
                 "en-US",
                 MutationRequest::new(
                     resource.clone(),
-                    GraphRevision::new(1),
+                    ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                     OperationId::new(),
                     HistoryMutation {},
                 ),
@@ -390,7 +390,7 @@ fn tabular_variable_effect_updates_global_and_local_authority() {
                 "en-US",
                 MutationRequest::new(
                     resource,
-                    GraphRevision::new(2),
+                    ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                     OperationId::new(),
                     HistoryMutation {},
                 ),
@@ -462,7 +462,7 @@ fn failed_tabular_variable_effect_changes_neither_authority_nor_disk() {
     );
     assert_eq!(
         state.variable_revisions.read().unwrap()[&variable.id].revision,
-        GraphRevision::INITIAL
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL)
     );
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -494,7 +494,7 @@ fn variable_effect_commit_is_revisioned_and_undoable() {
             &session_id,
             vec![crate::node_system::runtime::VariableWriteEffect {
                 resource,
-                expected_revision: GraphRevision::INITIAL,
+                expected_revision: ResourceRevision::INITIAL,
                 before: variable.clone(),
                 after: crate::data_contract::DataValue::Int64(2),
             }],
@@ -504,8 +504,14 @@ fn variable_effect_commit_is_revisioned_and_undoable() {
     let event_result = committed.resource_mutation.clone().unwrap();
     assert_eq!(event_result.publication_revision, 1);
     assert_eq!(event_result.deltas.len(), 1);
-    assert_eq!(event_result.deltas[0].from_revision, GraphRevision::INITIAL);
-    assert_eq!(event_result.deltas[0].to_revision, GraphRevision::new(1));
+    assert_eq!(
+        event_result.deltas[0].from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL)
+    );
+    assert_eq!(
+        event_result.deltas[0].to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
+    );
     assert_eq!(
         event_result.history,
         crate::node_system::document::HistoryStatusDto {
@@ -538,7 +544,7 @@ fn variable_effect_commit_is_revisioned_and_undoable() {
                 ResourceKey::Variable(crate::node_system::document::VariableResourceKey(
                     format!("variables/{}", variable.id).into(),
                 )),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -582,7 +588,7 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
         crate::node_system::plan::ResourceId::new(format!("variables/{}", variable.id)).unwrap();
     let effect = crate::node_system::runtime::VariableWriteEffect {
         resource,
-        expected_revision: GraphRevision::INITIAL,
+        expected_revision: ResourceRevision::INITIAL,
         before: variable.clone(),
         after: crate::data_contract::DataValue::Int64(2),
     };
@@ -625,11 +631,11 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
     assert_eq!(resource_mutation.publication_revision, 1);
     assert_eq!(
         resource_mutation.deltas[0].from_revision,
-        GraphRevision::INITIAL
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL)
     );
     assert_eq!(
         resource_mutation.deltas[0].to_revision,
-        GraphRevision::new(1)
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
     );
     let success_index = state
         .read_project_index(&active_project_instance_id)
@@ -659,7 +665,7 @@ fn variable_effect_persistence_failure_rolls_back_before_publication() {
                 ResourceKey::Function(crate::node_system::document::FunctionResourceKey(
                     function_path.as_str().into(),
                 )),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 crate::node_system::document::FunctionDocumentPatch::new(
                     Default::default(),
@@ -721,7 +727,7 @@ fn variable_effect_authority_assignment_panic_restores_every_authoritative_proje
                     variable.id
                 ))
                 .unwrap(),
-                expected_revision: GraphRevision::INITIAL,
+                expected_revision: ResourceRevision::INITIAL,
                 before: variable.clone(),
                 after: crate::data_contract::DataValue::Int64(2),
             }],
@@ -774,7 +780,7 @@ fn concurrent_variable_effect_commit_returns_structured_revision_conflict() {
         crate::node_system::plan::ResourceId::new(format!("variables/{}", variable.id)).unwrap();
     let stale_effect = crate::node_system::runtime::VariableWriteEffect {
         resource,
-        expected_revision: GraphRevision::INITIAL,
+        expected_revision: ResourceRevision::INITIAL,
         before: variable.clone(),
         after: crate::data_contract::DataValue::Int64(2),
     };

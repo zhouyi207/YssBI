@@ -13,7 +13,7 @@ pub struct FunctionEditorPinDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FunctionEditorProjectionDto {
-    pub function_revision: crate::node_system::document::ResourceRevision,
+    pub function_revision: crate::project::ResourceRevision,
     pub inputs: Box<[FunctionEditorPinDto]>,
     pub outputs: Box<[FunctionEditorPinDto]>,
 }
@@ -27,7 +27,7 @@ pub fn build_function_editor_projection(
         .iter()
         .map(|parameter| {
             Ok(FunctionEditorPinDto {
-                id: parameter.id.0.clone(),
+                id: parameter.id.as_str().into(),
                 name: parameter.name.clone().into_boxed_str(),
                 data_type: resolve_function_data_type(&parameter.type_name)?,
             })

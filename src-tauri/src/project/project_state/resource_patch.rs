@@ -6,7 +6,7 @@ pub(super) enum CompileProductInvalidation {
 }
 
 pub(super) struct CommittedResourceMutation {
-    pub(in crate::project::project_state) operation_id: crate::node_system::document::OperationId,
+    pub(in crate::project::project_state) operation_id: crate::project::OperationId,
     pub(in crate::project::project_state) project_instance_id: String,
     pub(in crate::project::project_state) publication_revision: u64,
     pub(in crate::project::project_state) moves: Vec<crate::event::ResourceMoveDto>,
@@ -88,9 +88,7 @@ impl ProjectState {
         graph_path: &GraphResourcePath,
     ) {
         let coordinator = self.compile_coordinator.read().unwrap().clone();
-        coordinator.invalidate(&crate::node_system::document::GraphResourcePath(
-            graph_path.as_str().into(),
-        ));
+        coordinator.invalidate(&graph_path.clone());
     }
 
     pub(in crate::project::project_state) fn apply_compile_product_invalidation(
@@ -226,8 +224,8 @@ impl ProjectState {
                 } => Some(
                     crate::node_system::document::ProjectHistoryTransaction::graph_move(
                         context.operation_id,
-                        crate::node_system::document::GraphResourcePath(from.as_str().into()),
-                        crate::node_system::document::GraphResourcePath(to.as_str().into()),
+                        from.clone(),
+                        to.clone(),
                         serde_json::to_value(GraphMoveHistoryPayload {
                             moved_before: moved_before.clone(),
                             moved_after: moved.clone(),
@@ -271,7 +269,7 @@ impl ProjectState {
                     graph_revisions.insert(path, revision);
                 }
                 ResourceDocumentPatch::DeclareGraph { path, revision } => {
-                    graph_revisions.insert(path, revision);
+                    graph_revisions.insert(path, revision.to_graph_revision());
                 }
                 ResourceDocumentPatch::RemoveGraph { path, .. } => {
                     let existing = data.graphs.get(&path);
@@ -284,7 +282,7 @@ impl ProjectState {
                             .or_else(|| existing.map(|resource| resource.document.revision));
                         let incoming = existing
                             .map(|resource| resource.document.revision)
-                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                            .unwrap_or(crate::graph_document::GraphRevision::INITIAL);
                         Some(authoritative_function_revision(&path, incoming, retained)?)
                     } else {
                         None
@@ -303,7 +301,7 @@ impl ProjectState {
                             let retained = variable_revisions
                                 .get(id)
                                 .map(|entry| entry.revision)
-                                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                                .unwrap_or(crate::project::ResourceRevision::INITIAL);
                             checked_resource_revision(format!("variables/{id}"), retained)
                                 .map(|revision| (*id, revision))
                         })
@@ -344,7 +342,7 @@ impl ProjectState {
                                 .or_else(|| existing.map(|resource| resource.document.revision));
                             let incoming = existing
                                 .map(|resource| resource.document.revision)
-                                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                                .unwrap_or(crate::graph_document::GraphRevision::INITIAL);
                             Some(authoritative_function_revision(&from, incoming, retained)?)
                         } else {
                             None
@@ -355,7 +353,7 @@ impl ProjectState {
                             let retained = variable_revisions
                                 .get(id)
                                 .map(|entry| entry.revision)
-                                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                                .unwrap_or(crate::project::ResourceRevision::INITIAL);
                             checked_resource_revision(format!("variables/{id}"), retained)
                                 .map(|revision| (*id, revision))
                         })
@@ -392,7 +390,7 @@ impl ProjectState {
                         let retained = next_revisions
                             .get(id)
                             .map(|entry| entry.revision)
-                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                            .unwrap_or(crate::project::ResourceRevision::INITIAL);
                         let revision =
                             checked_resource_revision(format!("variables/{id}"), retained)?;
                         next_revisions.insert(*id, VariableRevisionEntry::deleted(revision));
@@ -401,7 +399,7 @@ impl ProjectState {
                         let retained = next_revisions
                             .get(id)
                             .map(|entry| entry.revision)
-                            .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL);
+                            .unwrap_or(crate::project::ResourceRevision::INITIAL);
                         let revision =
                             checked_resource_revision(format!("variables/{id}"), retained)?;
                         next_revisions.insert(*id, VariableRevisionEntry::present(revision));

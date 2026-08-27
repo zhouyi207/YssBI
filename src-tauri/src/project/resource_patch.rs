@@ -1,6 +1,5 @@
-use crate::project::{
-    GraphResourceDocument, GraphResourcePath, WorksheetDocument, WorksheetResourcePath,
-};
+use crate::graph_document::GraphResourcePath;
+use crate::project::{GraphResourceDocument, WorksheetDocument, WorksheetResourcePath};
 use crate::variable::{VariableId, VariableInstance};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -13,11 +12,11 @@ pub enum ResourceDocumentPatch {
     /// Publish an on-disk graph declaration without installing a resident document.
     DeclareGraph {
         path: GraphResourcePath,
-        revision: crate::node_system::document::ResourceRevision,
+        revision: crate::project::ResourceRevision,
     },
     RemoveGraph {
         path: GraphResourcePath,
-        revision: crate::node_system::document::ResourceRevision,
+        revision: crate::project::ResourceRevision,
     },
     UnloadGraph {
         path: GraphResourcePath,
@@ -43,7 +42,7 @@ pub enum ResourceDocumentPatch {
     },
     RemoveWorksheet {
         path: WorksheetResourcePath,
-        revision: crate::node_system::document::ResourceRevision,
+        revision: crate::project::ResourceRevision,
     },
     MoveWorksheet {
         from: WorksheetResourcePath,

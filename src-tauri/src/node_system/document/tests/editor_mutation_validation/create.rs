@@ -44,7 +44,7 @@ fn resource_descriptor_materializes_only_function_variable_and_database_bindings
     for (mutation, parameter, expected) in cases {
         let patch = mutation
             .into_patch_with_catalog_snapshot(
-                &graph_path("events/validation"),
+                &graph_path("events/validation.yssbi-event"),
                 &document,
                 &registry,
                 Some(&snapshot),
@@ -93,7 +93,7 @@ fn resource_descriptor_rejects_invalid_stale_scope_and_parameter_injection() {
         assert_eq!(
             mutation
                 .into_patch_with_catalog_snapshot(
-                    &graph_path("events/validation"),
+                    &graph_path("events/validation.yssbi-event"),
                     &document,
                     &registry,
                     Some(&snapshot),
@@ -121,7 +121,7 @@ fn resource_descriptor_rejects_invalid_stale_scope_and_parameter_injection() {
         assert_eq!(
             mutation
                 .into_patch_with_catalog_snapshot(
-                    &graph_path("events/validation"),
+                    &graph_path("events/validation.yssbi-event"),
                     &document,
                     &registry,
                     Some(&snapshot),
@@ -139,7 +139,7 @@ fn resource_descriptor_rejects_invalid_stale_scope_and_parameter_injection() {
         ResourceBoundCreateArgsDto::Variable,
     )
     .into_patch_with_catalog_snapshot(
-        &graph_path("events/other"),
+        &graph_path("events/other.yssbi-event"),
         &document,
         &registry,
         Some(&snapshot),
@@ -240,7 +240,7 @@ fn resource_descriptor_rejects_noncanonical_paths_before_snapshot_lookup() {
     for (node_type, path, create_args) in noncanonical {
         let error = resource_create(node_type, &path, 1, create_args)
             .into_patch_with_catalog_snapshot(
-                &graph_path("events/validation"),
+                &graph_path("events/validation.yssbi-event"),
                 &document,
                 &registry,
                 Some(&snapshot),
@@ -265,7 +265,7 @@ fn resource_descriptor_rejects_noncanonical_paths_before_snapshot_lookup() {
     ] {
         let error = missing
             .into_patch_with_catalog_snapshot(
-                &graph_path("events/validation"),
+                &graph_path("events/validation.yssbi-event"),
                 &document,
                 &registry,
                 Some(&snapshot),
@@ -339,13 +339,13 @@ fn phase1_collection_delete_nodes_is_deterministic_and_reversible() {
     document.port_bindings.insert(
         second_input.clone(),
         DynamicPortBinding::UserCreated {
-            order: OrderKey("b".into()),
+            order: OrderKey::new("b"),
         },
     );
     document.port_bindings.insert(
         first_input.clone(),
         DynamicPortBinding::UserCreated {
-            order: OrderKey("a".into()),
+            order: OrderKey::new("a"),
         },
     );
     document.input_states.insert(
@@ -568,7 +568,7 @@ fn phase1_collection_disconnect_connections_validates_sorts_and_restores() {
                 id,
                 output: declared(first, "data_out"),
                 input: declared(second, "ordered_in"),
-                order: Some(OrderKey(id.to_string().into())),
+                order: Some(OrderKey::new(id.to_string())),
             },
         );
     }
@@ -637,7 +637,7 @@ fn phase1_collection_disconnect_port_and_node_break_all_incident_links() {
             id: connection_id(52),
             output: declared(first, "data_out"),
             input: declared(second, "ordered_in"),
-            order: Some(OrderKey("b".into())),
+            order: Some(OrderKey::new("b")),
         },
         DocumentConnection {
             id: connection_id(51),
@@ -649,7 +649,7 @@ fn phase1_collection_disconnect_port_and_node_break_all_incident_links() {
             id: connection_id(53),
             output: declared(second, "data_out"),
             input: declared(third, "ordered_in"),
-            order: Some(OrderKey("c".into())),
+            order: Some(OrderKey::new("c")),
         },
     ] {
         document.connections.insert(connection.id, connection);

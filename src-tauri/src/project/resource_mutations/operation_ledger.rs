@@ -1,4 +1,4 @@
-use crate::node_system::document::OperationId;
+use crate::project::OperationId;
 use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
 use std::collections::HashSet;
 

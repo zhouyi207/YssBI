@@ -227,7 +227,7 @@ fn catalog_items_keep_creation_descriptors_narrow_with_focused_documentation() {
 
 #[test]
 fn resource_catalog_serializes_opaque_paths_and_revisions() {
-    use crate::node_system::document::ResourceRevision;
+    use crate::project::ResourceRevision;
 
     for (create_args, expected_kind) in [
         (ResourceBoundCreateArgsDto::Function, "function"),
@@ -412,7 +412,7 @@ fn resource_catalog_projects_localized_docs_ports_parameters_and_opaque_identity
         name: "Calculate Sales".into(),
         node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
         resource_path: CatalogResourcePath::new("functions/calculate-sales"),
-        resource_revision: crate::node_system::document::ResourceRevision::INITIAL,
+        resource_revision: crate::project::ResourceRevision::INITIAL,
         create_args: ResourceBoundCreateArgsDto::Function,
         technical_terms: vec!["call".into(), "function".into()],
     };
@@ -448,7 +448,7 @@ fn resource_catalog_projects_localized_docs_ports_parameters_and_opaque_identity
     );
     assert_eq!(
         zh_resource.resource_revision,
-        Some(crate::node_system::document::ResourceRevision::INITIAL)
+        Some(crate::project::ResourceRevision::INITIAL)
     );
     assert!(zh_resource.ports.iter().any(|port| {
         port.key.as_ref() == "enter"
@@ -513,7 +513,7 @@ fn resource_catalog_projects_raw_backend_text_and_authoritative_resource_names_s
         name: "Straße_Sales Cafe\u{301} 数据".into(),
         node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
         resource_path: CatalogResourcePath::new("functions/opaque-sales"),
-        resource_revision: crate::node_system::document::ResourceRevision::new(9),
+        resource_revision: crate::project::ResourceRevision::new(9),
         create_args: ResourceBoundCreateArgsDto::Function,
         technical_terms: vec!["Maße_Value\u{301}".into()],
     };
@@ -561,7 +561,7 @@ fn resource_catalog_localization_falls_back_without_changing_identity() {
         name: "Opaque Display Name".into(),
         node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
         resource_path: CatalogResourcePath::new("functions/Do Not Normalize/Case"),
-        resource_revision: crate::node_system::document::ResourceRevision::new(13),
+        resource_revision: crate::project::ResourceRevision::new(13),
         create_args: ResourceBoundCreateArgsDto::Function,
         technical_terms: Vec::new(),
     };
@@ -596,7 +596,7 @@ fn resource_catalog_output_is_deterministic_for_shuffled_resources() {
         name: "First".into(),
         node_type_id: NodeTypeId::new("yssbi.project.variable.get").unwrap(),
         resource_path: CatalogResourcePath::new("variables/a"),
-        resource_revision: crate::node_system::document::ResourceRevision::new(2),
+        resource_revision: crate::project::ResourceRevision::new(2),
         create_args: ResourceBoundCreateArgsDto::Variable,
         technical_terms: Vec::new(),
     };
@@ -604,7 +604,7 @@ fn resource_catalog_output_is_deterministic_for_shuffled_resources() {
         name: "Second".into(),
         node_type_id: NodeTypeId::new("yssbi.project.function.call").unwrap(),
         resource_path: CatalogResourcePath::new("functions/z"),
-        resource_revision: crate::node_system::document::ResourceRevision::new(3),
+        resource_revision: crate::project::ResourceRevision::new(3),
         create_args: ResourceBoundCreateArgsDto::Function,
         technical_terms: Vec::new(),
     };

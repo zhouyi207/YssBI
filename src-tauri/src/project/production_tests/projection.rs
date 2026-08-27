@@ -91,7 +91,7 @@ fn committed_signature_undo_redo_return_and_observe_after_recovery_marker() {
             "en-US",
             MutationRequest::new(
                 undo_resource.clone(),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -136,7 +136,7 @@ fn committed_signature_undo_redo_return_and_observe_after_recovery_marker() {
             "en-US",
             MutationRequest::new(
                 redo_resource.clone(),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -155,7 +155,7 @@ fn committed_signature_undo_redo_return_and_observe_after_recovery_marker() {
             "en-US",
             MutationRequest::new(
                 redo_resource.clone(),
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -252,7 +252,7 @@ fn committed_variable_effect_returns_canonical_result_after_recovery_marker() {
             &session_id,
             vec![crate::node_system::runtime::VariableWriteEffect {
                 resource: resource_id.clone(),
-                expected_revision: GraphRevision::INITIAL,
+                expected_revision: ResourceRevision::INITIAL,
                 before: variable.clone(),
                 after: crate::data_contract::DataValue::Int64(2),
             }],
@@ -267,8 +267,14 @@ fn committed_variable_effect_returns_canonical_result_after_recovery_marker() {
             resource_id.as_str().into()
         ))
     );
-    assert_eq!(result.deltas[0].from_revision, GraphRevision::INITIAL);
-    assert_eq!(result.deltas[0].to_revision, GraphRevision::new(1));
+    assert_eq!(
+        result.deltas[0].from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL)
+    );
+    assert_eq!(
+        result.deltas[0].to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
+    );
     assert_eq!(
         result.history,
         crate::node_system::document::HistoryStatusDto {
@@ -289,7 +295,7 @@ fn committed_variable_effect_returns_canonical_result_after_recovery_marker() {
         &session_id,
         vec![crate::node_system::runtime::VariableWriteEffect {
             resource: resource_id,
-            expected_revision: GraphRevision::new(1),
+            expected_revision: ResourceRevision::new(1),
             before: updated,
             after: crate::data_contract::DataValue::Int64(3),
         }],
@@ -608,7 +614,7 @@ fn committed_resource_observer_and_response_serialize_identically() {
             "en-US",
             MutationRequest::new(
                 resource.clone(),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -629,7 +635,7 @@ fn committed_resource_observer_and_response_serialize_identically() {
             "en-US",
             MutationRequest::new(
                 resource,
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 OperationId::new(),
                 HistoryMutation {},
             ),

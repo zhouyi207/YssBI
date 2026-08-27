@@ -6,15 +6,13 @@ pub(in crate::project) struct CompileResourceSnapshot {
     pub(in crate::project::project_state) resource_states:
         crate::node_system::analysis::ResourceObservationSet,
     pub(in crate::project::project_state) function_names:
-        BTreeMap<crate::node_system::document::GraphResourcePath, Box<str>>,
+        BTreeMap<crate::graph_document::GraphResourcePath, Box<str>>,
     pub(in crate::project::project_state) functions: BTreeMap<
-        crate::node_system::document::GraphResourcePath,
+        crate::graph_document::GraphResourcePath,
         crate::node_system::document::FunctionDocument,
     >,
-    pub(in crate::project::project_state) function_graphs: BTreeMap<
-        crate::node_system::document::GraphResourcePath,
-        crate::node_system::document::GraphDocument,
-    >,
+    pub(in crate::project::project_state) function_graphs:
+        BTreeMap<crate::graph_document::GraphResourcePath, crate::graph_document::GraphDocument>,
     pub(in crate::project::project_state) variables:
         std::collections::HashMap<crate::variable::VariableId, crate::variable::VariableInstance>,
     pub(in crate::project::project_state) database_names:
@@ -119,24 +117,21 @@ impl ResourceSnapshot for CompileResourceSnapshot {
         )
     }
 
-    fn function_name(
-        &self,
-        path: &crate::node_system::document::GraphResourcePath,
-    ) -> Option<&str> {
+    fn function_name(&self, path: &crate::graph_document::GraphResourcePath) -> Option<&str> {
         self.function_names.get(path).map(AsRef::as_ref)
     }
 
     fn function_document(
         &self,
-        path: &crate::node_system::document::GraphResourcePath,
+        path: &crate::graph_document::GraphResourcePath,
     ) -> Option<&crate::node_system::document::FunctionDocument> {
         self.functions.get(path)
     }
 
     fn function_graph_document(
         &self,
-        path: &crate::node_system::document::GraphResourcePath,
-    ) -> Option<&crate::node_system::document::GraphDocument> {
+        path: &crate::graph_document::GraphResourcePath,
+    ) -> Option<&crate::graph_document::GraphDocument> {
         self.function_graphs.get(path)
     }
 
@@ -195,7 +190,7 @@ pub(in crate::project::project_state) fn apply_compile_resource_authority(
     data: &ProjectData,
     graph_revisions: std::collections::HashMap<
         GraphResourcePath,
-        crate::node_system::document::ResourceRevision,
+        crate::graph_document::GraphRevision,
     >,
     variable_revisions: std::collections::HashMap<
         crate::variable::VariableId,
@@ -273,42 +268,36 @@ pub(in crate::project) fn compile_resources_from_data(
         .graphs
         .iter()
         .filter_map(|(path, graph)| {
-            graph.function.as_ref().map(|_| {
-                (
-                    crate::node_system::document::GraphResourcePath(path.as_str().into()),
-                    graph.name.clone().into_boxed_str(),
-                )
-            })
+            graph
+                .function
+                .as_ref()
+                .map(|_| (path.clone(), graph.name.clone().into_boxed_str()))
         })
         .collect::<BTreeMap<_, _>>();
     let functions = data
         .graphs
         .iter()
         .filter_map(|(path, graph)| {
-            graph.function.clone().map(|function| {
-                (
-                    crate::node_system::document::GraphResourcePath(path.as_str().into()),
-                    function,
-                )
-            })
+            graph
+                .function
+                .clone()
+                .map(|function| (path.clone(), function))
         })
         .collect::<BTreeMap<_, _>>();
     let function_graphs = data
         .graphs
         .iter()
         .filter_map(|(path, graph)| {
-            graph.function.as_ref().map(|_| {
-                (
-                    crate::node_system::document::GraphResourcePath(path.as_str().into()),
-                    graph.document.clone(),
-                )
-            })
+            graph
+                .function
+                .as_ref()
+                .map(|_| (path.clone(), graph.document.clone()))
         })
         .collect::<BTreeMap<_, _>>();
     let mut versions = crate::node_system::analysis::ResourceVersionSet::new();
     for (path, function) in &functions {
         let graph_path =
-            GraphResourcePath::new(path.0.as_ref()).map_err(|error| error.to_string())?;
+            GraphResourcePath::new(path.as_str()).map_err(|error| error.to_string())?;
         let graph = data
             .graphs
             .get(&graph_path)
@@ -316,7 +305,7 @@ pub(in crate::project) fn compile_resources_from_data(
         let version = serde_json::to_string(&(graph.name.as_str(), function, &graph.document))
             .map_err(|error| error.to_string())?;
         versions.insert(
-            AnalysisResourceKey::new(path.0.as_ref()),
+            AnalysisResourceKey::new(path.as_str()),
             ResourceVersion::new(version),
         );
     }
@@ -409,36 +398,30 @@ pub(in crate::project) fn snapshot_project_resources(
             .graphs
             .iter()
             .filter_map(|(path, graph)| {
-                graph.function.as_ref().map(|_| {
-                    (
-                        crate::node_system::document::GraphResourcePath(path.as_str().into()),
-                        graph.name.clone().into_boxed_str(),
-                    )
-                })
+                graph
+                    .function
+                    .as_ref()
+                    .map(|_| (path.clone(), graph.name.clone().into_boxed_str()))
             })
             .collect::<BTreeMap<_, _>>();
         let resources = data
             .graphs
             .iter()
             .filter_map(|(path, graph)| {
-                graph.function.clone().map(|function| {
-                    (
-                        crate::node_system::document::GraphResourcePath(path.as_str().into()),
-                        function,
-                    )
-                })
+                graph
+                    .function
+                    .clone()
+                    .map(|function| (path.clone(), function))
             })
             .collect::<BTreeMap<_, _>>();
         let graphs = data
             .graphs
             .iter()
             .filter_map(|(path, graph)| {
-                graph.function.as_ref().map(|_| {
-                    (
-                        crate::node_system::document::GraphResourcePath(path.as_str().into()),
-                        graph.document.clone(),
-                    )
-                })
+                graph
+                    .function
+                    .as_ref()
+                    .map(|_| (path.clone(), graph.document.clone()))
             })
             .collect::<BTreeMap<_, _>>();
         (names, resources, graphs)
@@ -447,14 +430,14 @@ pub(in crate::project) fn snapshot_project_resources(
     for (path, function) in &function_resources {
         let graph = function_graphs
             .get(path)
-            .ok_or_else(|| format!("function '{}' graph is not loaded", path.0))?;
+            .ok_or_else(|| format!("function '{}' graph is not loaded", path.as_str()))?;
         let name = function_names
             .get(path)
-            .ok_or_else(|| format!("function '{}' name is missing", path.0))?;
+            .ok_or_else(|| format!("function '{}' name is missing", path.as_str()))?;
         let version =
             serde_json::to_string(&(name, function, graph)).map_err(|error| error.to_string())?;
         versions.insert(
-            AnalysisResourceKey::new(path.0.as_ref()),
+            AnalysisResourceKey::new(path.as_str()),
             ResourceVersion::new(version),
         );
     }
@@ -499,7 +482,7 @@ pub(in crate::project) fn snapshot_project_resources(
             variable_revisions
                 .get(&id)
                 .map(|entry| entry.revision)
-                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL),
+                .unwrap_or(crate::project::ResourceRevision::INITIAL),
         );
     }
     for (id, dataframe, columns) in loaded_databases {

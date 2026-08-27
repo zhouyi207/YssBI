@@ -349,7 +349,7 @@ fn validate_resource_path(
 ) -> Result<(), MutationConflict> {
     let path = resource_path.as_str();
     let valid = match create_args {
-        ResourceBoundCreateArgsDto::Function => crate::project::GraphResourcePath::new(path)
+        ResourceBoundCreateArgsDto::Function => crate::graph_document::GraphResourcePath::new(path)
             .is_ok_and(|canonical| {
                 canonical.as_str() == path && canonical.as_str().starts_with("functions/")
             }),

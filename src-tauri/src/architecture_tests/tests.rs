@@ -6,7 +6,8 @@ use syn::{Item, Type};
 
 use super::cargo_targets::rust_workspace_model_from_metadata;
 use super::debt::{
-    DebtCountDifference, DebtMismatch, compare_exact_rust_debt, rust_architecture_debt,
+    DebtCountDifference, DebtMismatch, compare_exact_rust_debt, pure_leaf_graph_document_json_debt,
+    rust_architecture_debt,
 };
 use super::dependency_audit::{
     collect_production_dependencies, collect_production_modules,
@@ -27,6 +28,10 @@ use super::policy::{
     InternalDependencyCapability, classify_rust_sources, rust_dependency_findings,
     rust_dependency_findings_with_capabilities,
 };
+use super::semantic_guards::{
+    PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE, graph_project_revision_bridge_violations,
+    project_to_graph_production_edges, pure_leaf_graph_document_json_violations,
+};
 
 fn repository_root() -> PathBuf {
     let manifest_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -34,6 +39,35 @@ fn repository_root() -> PathBuf {
         .expect("src-tauri must have a repository parent")
         .to_path_buf();
     std::fs::canonicalize(manifest_root).expect("repository root must be canonicalizable")
+}
+
+struct ProductionFacts {
+    repository_root: PathBuf,
+    dependencies: Vec<CanonicalDependency>,
+    classification: BTreeMap<String, RustLayer>,
+}
+
+fn production_facts() -> &'static ProductionFacts {
+    static FACTS: std::sync::OnceLock<ProductionFacts> = std::sync::OnceLock::new();
+    FACTS.get_or_init(|| {
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+        let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
+            .expect("the real Cargo workspace must be discoverable");
+        let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
+            .expect("the production module graph must be discoverable");
+        let raw_dependencies =
+            collect_production_dependencies(&workspace.repository_root, &workspace.roots)
+                .expect("production dependency facts must be discoverable");
+        let dependencies = resolve_canonical_dependencies_detailed(&workspace, &raw_dependencies)
+            .expect("production dependencies must resolve");
+        let classification = classify_rust_sources(&workspace.roots, &modules)
+            .expect("production sources must classify");
+        ProductionFacts {
+            repository_root: workspace.repository_root,
+            dependencies,
+            classification,
+        }
+    })
 }
 
 fn source_path(relative: &str) -> String {
@@ -672,6 +706,12 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
         "src-tauri/src/data_contract/mod.rs",
         "src-tauri/src/data_contract/data_type.rs",
         "src-tauri/src/data_contract/data_value.rs",
+        "src-tauri/src/graph_document/mod.rs",
+        "src-tauri/src/graph_document/identity.rs",
+        "src-tauri/src/graph_document/model.rs",
+        "src-tauri/src/graph_document/resource_path.rs",
+        "src-tauri/src/node_system/protocol/identity.rs",
+        "src-tauri/src/node_system/protocol/types.rs",
     ] {
         assert_eq!(classification.get(source), Some(&RustLayer::PureLeaf));
     }
@@ -784,6 +824,130 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
             origins,
         );
     }
+}
+
+#[test]
+fn rust_pure_leaf_graph_document_json_is_serialization_only() {
+    let facts = production_facts();
+    assert_eq!(
+        pure_leaf_graph_document_json_violations(
+            &facts.repository_root,
+            &facts.dependencies,
+            &facts.classification,
+        ),
+        pure_leaf_graph_document_json_debt()
+    );
+}
+
+#[test]
+fn rust_pure_leaf_json_guard_rejects_production_use_after_test_module() {
+    const PREFIX: &str = "yssbi-pure-leaf-json-guard-";
+
+    struct Fixture {
+        root: PathBuf,
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            if self
+                .root
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(PREFIX))
+            {
+                let _ = std::fs::remove_dir_all(&self.root);
+            }
+        }
+    }
+
+    let fixture = Fixture {
+        root: repository_root()
+            .join("target")
+            .join(format!("{PREFIX}{}", uuid::Uuid::new_v4())),
+    };
+    let graph_document = fixture.root.join("src-tauri/src/graph_document");
+    std::fs::create_dir_all(&graph_document).expect("fixture graph_document must be created");
+    std::fs::write(
+        fixture.root.join("src-tauri/src/lib.rs"),
+        "pub mod graph_document;\n",
+    )
+    .expect("fixture library root must be written");
+    std::fs::write(
+        graph_document.join("mod.rs"),
+        "mod model;\n#[cfg(test)] mod tests {}\npub type RuntimeEscape = serde_json::Value;\n",
+    )
+    .expect("fixture graph_document mod must be written");
+    std::fs::write(
+        graph_document.join("model.rs"),
+        "pub type TypedValue = serde_json::Value;\n",
+    )
+    .expect("fixture graph_document model must be written");
+    let roots = vec![ProductionRoot {
+        package_id: "fixture-package".to_owned(),
+        package: "fixture".to_owned(),
+        target: "fixture_lib".to_owned(),
+        kind: ProductionRootKind::Library,
+        source_path: fixture.root.join("src-tauri/src/lib.rs"),
+    }];
+    let modules = collect_production_modules(&fixture.root, &roots)
+        .expect("fixture production modules must be discoverable");
+    let classification =
+        classify_rust_sources(&roots, &modules).expect("fixture production sources must classify");
+    let raw = collect_production_dependencies(&fixture.root, &roots)
+        .expect("fixture production dependencies must be discoverable");
+    assert!(raw.iter().any(|dependency| {
+        dependency.repository_relative_source_file == "src-tauri/src/graph_document/mod.rs"
+            && dependency.written_target == "serde_json::Value"
+    }));
+    let dependencies = raw
+        .iter()
+        .filter(|dependency| dependency.written_target == "serde_json::Value")
+        .map(|dependency| CanonicalDependency {
+            owning_package: dependency.owning_package.clone(),
+            source_file: dependency.repository_relative_source_file.clone(),
+            owner: dependency.fully_qualified_owner.clone(),
+            kind: dependency.kind,
+            mode: dependency.mode,
+            origin: CanonicalOrigin::External(ExternalDependencyOrigin {
+                declared_name: "serde_json".to_owned(),
+                package_name: "serde_json".to_owned(),
+                declaration_scope: CargoDependencyScope::Runtime,
+                target_condition: None,
+                canonical_subpath: Some("Value".to_owned()),
+            }),
+            canonical_origin_target: "external:serde_json::Value".to_owned(),
+            line: dependency.line,
+            column: dependency.column,
+        })
+        .collect::<Vec<_>>();
+
+    let violations =
+        pure_leaf_graph_document_json_violations(&fixture.root, &dependencies, &classification);
+    assert!(
+        violations.iter().any(
+            |violation| violation.rule_id == PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE
+                && violation.source_file == "src-tauri/src/graph_document/mod.rs"
+        ),
+        "production serde_json after a test module must be rejected: {violations:#?}"
+    );
+}
+
+#[test]
+fn rust_project_production_does_not_depend_on_graph_layer() {
+    let facts = production_facts();
+
+    assert_eq!(
+        project_to_graph_production_edges(&facts.dependencies, &facts.classification),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn rust_graph_project_revision_conversions_are_explicit() {
+    assert_eq!(
+        graph_project_revision_bridge_violations(&repository_root()),
+        Vec::<String>::new()
+    );
 }
 
 #[test]

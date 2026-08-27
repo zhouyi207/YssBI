@@ -4,7 +4,8 @@ use crate::application::catalog_compatibility::{
 };
 use crate::error::CommandError;
 use crate::node_system::catalog::LocalizedCatalogDto;
-use crate::node_system::document::{PortAddressDto, ResourceRevision};
+use crate::node_system::document::PortAddressDto;
+use crate::project::ResourceRevision;
 use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
 use tauri::State;
 

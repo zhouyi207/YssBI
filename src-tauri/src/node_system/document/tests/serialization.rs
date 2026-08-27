@@ -15,10 +15,10 @@ fn resolved_binding_serde_requires_and_serializes_metadata() {
 
     let value = serde_json::to_value(DynamicPortBinding::Resolved {
         origin: DynamicMemberLocator::SchemaField {
-            source: SchemaSourceIdentity("databases/main".into()),
-            field: SchemaFieldIdentity("customer_id".into()),
+            source: SchemaSourceIdentity::new("databases/main"),
+            field: SchemaFieldIdentity::new("customer_id"),
         },
-        order: OrderKey("a".into()),
+        order: OrderKey::new("a"),
         last_known: LastKnownPortMetadata {
             label: "customer_id".into(),
             value_type: Some(TypeExpr::Concrete(TypeId::new("core.int64").unwrap())),
@@ -263,7 +263,7 @@ fn phase1_collection_editor_mutation_wire_is_stable_and_camel_case() {
             EditorGraphMutationDto::Connect {
                 output: output.clone(),
                 input: input.clone(),
-                order: Some(OrderKey("a".into())),
+                order: Some(OrderKey::new("a")),
             },
             json!({
                 "type": "connect",
@@ -335,8 +335,8 @@ fn phase1_collection_editor_mutation_wire_is_stable_and_camel_case() {
 fn history_transaction_rejects_missing_persistence() {
     let transaction = ProjectHistoryTransaction::graph(
         operation_id(629),
-        graph_path("events/strict-history"),
-        ResourceRevision::INITIAL,
+        graph_path("events/strict-history.yssbi-event"),
+        GraphRevision::INITIAL,
         GraphDocumentPatch::new(Vec::new()),
     );
     let mut missing_persistence = serde_json::to_value(&transaction).unwrap();
@@ -380,8 +380,8 @@ fn history_persistence_policies_round_trip() {
     let transactions = [
         ProjectHistoryTransaction::graph(
             operation_id(630),
-            graph_path("events/in-memory-history"),
-            ResourceRevision::INITIAL,
+            graph_path("events/in-memory-history.yssbi-event"),
+            GraphRevision::INITIAL,
             GraphDocumentPatch::new(Vec::new()),
         ),
         ProjectHistoryTransaction::durable_variable_effects(
@@ -391,8 +391,8 @@ fn history_persistence_policies_round_trip() {
         ),
         ProjectHistoryTransaction::graph_move(
             operation_id(632),
-            graph_path("events/before-move"),
-            graph_path("events/after-move"),
+            graph_path("events/before-move.yssbi-event"),
+            graph_path("events/after-move.yssbi-event"),
             json!({}),
         ),
     ];

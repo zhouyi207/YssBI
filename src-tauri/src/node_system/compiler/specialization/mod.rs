@@ -1,8 +1,8 @@
 mod finalization;
 
 use super::relational::{RelationalConnection, RelationalFragment, RelationalPlanner};
+use crate::graph_document::{NodeId, PortAddress};
 use crate::node_system::analysis::CompileProvenance;
-use crate::node_system::document::{NodeId, PortAddress};
 use crate::node_system::plan::{
     CompiledParameterHandle, CompiledResourceRequirement, ControlStep,
     EXECUTION_SEMANTICS_SCHEMA_VERSION, EffectDependency, ExecutionDemand, ExecutionPlan,
@@ -66,7 +66,7 @@ impl fmt::Display for DemandPlanError {
             Self::GraphPathMismatch(output) => write!(
                 formatter,
                 "requested output belongs to '{}' instead of the compiled graph",
-                output.graph_path.0
+                output.graph_path.as_str()
             ),
             Self::MissingNode(output) => write!(
                 formatter,

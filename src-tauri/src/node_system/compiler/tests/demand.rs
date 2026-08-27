@@ -7,7 +7,10 @@ fn demand_specialization_ignores_unbound_inputs_outside_the_retained_closure() {
         .connections
         .remove(&ConnectionId::from_uuid(Uuid::from_u128(11)));
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/main.yssbi-event").unwrap(),
+        &graph,
+    );
 
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
@@ -29,7 +32,7 @@ fn demand_specialization_ignores_unbound_inputs_outside_the_retained_closure() {
         .expect("unbound orphan preserves basis");
     basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/main", 2, "out")]),
+            outputs: Box::new([demand_output("events/main.yssbi-event", 2, "out")]),
             include_default_results: false,
         })
         .expect("unbound input outside the retained closure must not block execution");
@@ -42,7 +45,10 @@ fn pin_preview_ignores_unbound_inputs_outside_the_retained_closure() {
         .connections
         .remove(&ConnectionId::from_uuid(Uuid::from_u128(11)));
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/main.yssbi-event").unwrap(),
+        &graph,
+    );
     let basis = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap()
@@ -51,7 +57,7 @@ fn pin_preview_ignores_unbound_inputs_outside_the_retained_closure() {
 
     basis
         .derive_plan(&ExecutionDemand::PinPreview {
-            output: demand_output("events/main", 2, "out"),
+            output: demand_output("events/main.yssbi-event", 2, "out"),
             generation: 7,
         })
         .expect("preview ignores unbound inputs outside its retained closure");
@@ -64,7 +70,10 @@ fn demand_specialization_rejects_a_required_unbound_input_with_its_port() {
         .connections
         .remove(&ConnectionId::from_uuid(Uuid::from_u128(11)));
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/main.yssbi-event").unwrap(),
+        &graph,
+    );
     let basis = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap()
@@ -75,7 +84,7 @@ fn demand_specialization_rejects_a_required_unbound_input_with_its_port() {
     assert_eq!(
         basis
             .derive_plan(&ExecutionDemand::Outputs {
-                outputs: Box::new([demand_output("events/main", 4, "out")]),
+                outputs: Box::new([demand_output("events/main.yssbi-event", 4, "out")]),
                 include_default_results: false,
             })
             .unwrap_err(),
@@ -107,7 +116,7 @@ fn demand_specialization_deletes_disconnected_if_control_sources() {
 
     let plan = basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/main", 2, "out")]),
+            outputs: Box::new([demand_output("events/main.yssbi-event", 2, "out")]),
             include_default_results: false,
         })
         .expect("disconnected If declarations are projected out");
@@ -157,7 +166,7 @@ fn demand_specialization_keeps_only_requested_if_result_declaration() {
             ]),
         },
     );
-    let requested = demand_output("events/main", 99, "out");
+    let requested = demand_output("events/main.yssbi-event", 99, "out");
     basis.nodes.insert(node_id(99));
     basis.port_facts.insert(
         requested.port.clone(),
@@ -251,7 +260,7 @@ fn demand_specialization_deletes_disconnected_loop_control_sources() {
 
     let plan = basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/main", 2, "out")]),
+            outputs: Box::new([demand_output("events/main.yssbi-event", 2, "out")]),
             include_default_results: false,
         })
         .expect("disconnected Loop declarations are projected out");
@@ -277,15 +286,18 @@ fn demand_specialization_deletes_disconnected_loop_control_sources() {
 fn demand_normalization_is_order_independent_and_default_modes_are_distinct() {
     let (registry, graph) = demand_fixture();
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/main.yssbi-event").unwrap(),
+        &graph,
+    );
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
     let basis = result
         .execution_basis
         .expect("valid graph has lowering basis");
-    let a = demand_output("events/main", 2, "out");
-    let b = demand_output("events/main", 4, "out");
+    let a = demand_output("events/main.yssbi-event", 2, "out");
+    let b = demand_output("events/main.yssbi-event", 4, "out");
 
     let first = ExecutionDemand::Outputs {
         outputs: Box::new([a.clone(), b.clone()]),
@@ -359,14 +371,17 @@ fn demand_normalization_is_order_independent_and_default_modes_are_distinct() {
 fn demand_driven_publication_preview_has_independent_normalized_identity_and_generation() {
     let (registry, graph) = demand_fixture();
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/main.yssbi-event").unwrap(),
+        &graph,
+    );
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
     let basis = result
         .execution_basis
         .expect("valid graph has lowering basis");
-    let output = demand_output("events/main", 2, "out");
+    let output = demand_output("events/main.yssbi-event", 2, "out");
     let ordinary = ExecutionDemand::Outputs {
         outputs: Box::new([output.clone()]),
         include_default_results: false,
@@ -433,7 +448,10 @@ fn invalid_requested_outputs_are_rejected_before_plan_construction() {
     let mut graph = graph_with_nodes(&[(1, "demand_validation_source"), (2, "demand_validation")]);
     connect(&mut graph, 10, 1, "out", 2, "in");
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/main.yssbi-event").unwrap(),
+        &graph,
+    );
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -441,7 +459,7 @@ fn invalid_requested_outputs_are_rejected_before_plan_construction() {
         .execution_basis
         .expect("valid graph has lowering basis");
     let stale_instance = GraphOutputRef {
-        graph_path: GraphResourcePath("events/main".into()),
+        graph_path: GraphResourcePath::new("events/main.yssbi-event").unwrap(),
         port: PortAddress::instance(
             node_id(2),
             key("out"),
@@ -450,14 +468,29 @@ fn invalid_requested_outputs_are_rejected_before_plan_construction() {
     };
     let invalid = [
         (
-            demand_output("events/other", 2, "out"),
+            demand_output("events/other.yssbi-event", 2, "out"),
             "graph_path_mismatch",
         ),
-        (demand_output("events/main", 99, "out"), "missing_node"),
-        (demand_output("events/main", 2, "missing"), "missing_port"),
-        (demand_output("events/main", 2, "in"), "input_port"),
-        (demand_output("events/main", 2, "effect"), "effect_port"),
-        (demand_output("events/main", 2, "control"), "control_port"),
+        (
+            demand_output("events/main.yssbi-event", 99, "out"),
+            "missing_node",
+        ),
+        (
+            demand_output("events/main.yssbi-event", 2, "missing"),
+            "missing_port",
+        ),
+        (
+            demand_output("events/main.yssbi-event", 2, "in"),
+            "input_port",
+        ),
+        (
+            demand_output("events/main.yssbi-event", 2, "effect"),
+            "effect_port",
+        ),
+        (
+            demand_output("events/main.yssbi-event", 2, "control"),
+            "control_port",
+        ),
         (stale_instance, "stale_instance"),
     ];
 
@@ -519,7 +552,10 @@ fn retained_operation_keeps_external_value_dependency_and_source() {
     let mut graph = graph_with_nodes(&[(1, "demand_external_entry"), (2, "demand_external_sink")]);
     connect(&mut graph, 10, 1, "payload", 2, "in");
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/external".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/external.yssbi-event").unwrap(),
+        &graph,
+    );
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -529,7 +565,7 @@ fn retained_operation_keeps_external_value_dependency_and_source() {
 
     let plan = basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/external", 2, "out")]),
+            outputs: Box::new([demand_output("events/external.yssbi-event", 2, "out")]),
             include_default_results: false,
         })
         .expect("external source dependency remains valid");
@@ -608,7 +644,10 @@ fn evaluation_policy_and_effect_predecessors_are_authoritative_roots() {
     connect(&mut graph, 10, 1, "effect", 2, "before");
     connect(&mut graph, 11, 2, "after", 3, "effect");
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/main.yssbi-event").unwrap(),
+        &graph,
+    );
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();

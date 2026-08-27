@@ -60,9 +60,7 @@ fn structurally_invalid_resource_patch_insert_has_zero_authoritative_effects() {
     let coordinator = state.compile_coordinator.read().unwrap().clone();
     assert!(coordinator.contains_slot_for_test(&document_path()));
     let invalid_path = GraphResourcePath::new("events/Invalid.yssbi-event").unwrap();
-    let invalid_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        invalid_path.as_str().into(),
-    ));
+    let invalid_key = ResourceKey::Graph(invalid_path.clone());
     let context = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
         operation_id: OperationId::from_uuid(uuid::Uuid::from_u128(0x203)),
@@ -133,17 +131,15 @@ fn structurally_invalid_move_graph_moved_has_zero_authoritative_effects() {
     state.graph_projection(&from, "en-US").unwrap();
     let coordinator = state.compile_coordinator.read().unwrap().clone();
     assert!(coordinator.contains_slot_for_test(&document_path()));
-    let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        from.as_str().into(),
-    ));
-    let destination_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        to.as_str().into(),
-    ));
+    let source_key = ResourceKey::Graph(from.clone());
+    let destination_key = ResourceKey::Graph(to.clone());
     let context = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
         operation_id: OperationId::from_uuid(uuid::Uuid::from_u128(0x205)),
         affected_resources: vec![source_key.clone()],
-        expected_revisions: [(source_key, GraphRevision::INITIAL)].into_iter().collect(),
+        expected_revisions: [(source_key, ResourceRevision::INITIAL)]
+            .into_iter()
+            .collect(),
         expected_absent_resources: [destination_key].into_iter().collect(),
         recovery_marker: Some(state.project_recovery_marker()),
     };
@@ -218,24 +214,19 @@ fn structurally_invalid_move_graph_referenced_graphs_have_zero_authoritative_eff
     state.graph_projection(&from, "en-US").unwrap();
     state.graph_projection(&referenced_path, "en-US").unwrap();
     let coordinator = state.compile_coordinator.read().unwrap().clone();
-    let referenced_document_path =
-        crate::node_system::document::GraphResourcePath(referenced_path.as_str().into());
+    let referenced_document_path = referenced_path.clone();
     assert!(coordinator.contains_slot_for_test(&document_path()));
     assert!(coordinator.contains_slot_for_test(&referenced_document_path));
-    let source_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        from.as_str().into(),
-    ));
+    let source_key = ResourceKey::Graph(from.clone());
     let referenced_key = ResourceKey::Graph(referenced_document_path.clone());
-    let destination_key = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        to.as_str().into(),
-    ));
+    let destination_key = ResourceKey::Graph(to.clone());
     let context = ProjectTransactionContext {
         session: state.capture_project_session().unwrap(),
         operation_id: OperationId::from_uuid(uuid::Uuid::from_u128(0x207)),
         affected_resources: vec![source_key.clone(), referenced_key.clone()],
         expected_revisions: [
-            (source_key, GraphRevision::INITIAL),
-            (referenced_key, GraphRevision::INITIAL),
+            (source_key, ResourceRevision::INITIAL),
+            (referenced_key, ResourceRevision::INITIAL),
         ]
         .into_iter()
         .collect(),
@@ -335,7 +326,7 @@ fn resource_descriptor_request(
 ) -> MutationRequest<EditorGraphMutationDto> {
     MutationRequest::new(
         ResourceKey::Graph(document_path()),
-        GraphRevision::INITIAL,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
         OperationId::new(),
         EditorGraphMutationDto::CreateNode {
             descriptor: crate::node_system::catalog::NodeCreationDescriptor::ResourceBound {
@@ -343,10 +334,10 @@ fn resource_descriptor_request(
                 resource_path: crate::node_system::catalog::CatalogResourcePath::new(format!(
                     "variables/{variable_id}"
                 )),
-                resource_revision: GraphRevision::INITIAL,
+                resource_revision: ResourceRevision::INITIAL,
                 create_args: crate::node_system::catalog::ResourceBoundCreateArgsDto::Variable,
             },
-            position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+            position: crate::graph_document::NodePosition { x: 10.0, y: 20.0 },
             user_label: None,
             connect_from: None,
         },
@@ -425,16 +416,16 @@ fn resource_descriptor_matrix_request(
 ) -> MutationRequest<EditorGraphMutationDto> {
     MutationRequest::new(
         ResourceKey::Graph(document_path()),
-        base_revision,
+        ResourceRevision::from_graph_revision(base_revision),
         OperationId::new(),
         EditorGraphMutationDto::CreateNode {
             descriptor: crate::node_system::catalog::NodeCreationDescriptor::ResourceBound {
                 node_type_id: NodeTypeId::new(node_type_id).unwrap(),
                 resource_path: crate::node_system::catalog::CatalogResourcePath::new(resource_path),
-                resource_revision,
+                resource_revision: ResourceRevision::from_graph_revision(resource_revision),
                 create_args,
             },
-            position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+            position: crate::graph_document::NodePosition { x: 10.0, y: 20.0 },
             user_label: None,
             connect_from: None,
         },
@@ -798,8 +789,14 @@ fn resource_descriptor_publication_materializes_exact_variable_binding() {
         )
         .unwrap();
 
-    assert_eq!(result.delta.from_revision, GraphRevision::INITIAL);
-    assert_eq!(result.delta.to_revision, GraphRevision::new(1));
+    assert_eq!(
+        result.delta.from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL)
+    );
+    assert_eq!(
+        result.delta.to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
+    );
     let data = state.get_data().unwrap();
     let node = data.graphs[&graph_path()]
         .document
@@ -912,14 +909,14 @@ fn narrow_graph_move_patch_preserves_unrelated_concurrent_mutation() {
     let original = GraphResourceDocument::new("Before", GraphDocumentKind::Event);
     state.insert_graph(from.clone(), original.clone()).unwrap();
     let session = state.capture_project_session().unwrap();
-    let resource = ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-        from.as_str().into(),
-    ));
+    let resource = ResourceKey::Graph(from.clone());
     let context = ProjectTransactionContext {
         session,
         operation_id: OperationId::new(),
         affected_resources: vec![resource.clone()],
-        expected_revisions: [(resource, GraphRevision::INITIAL)].into_iter().collect(),
+        expected_revisions: [(resource, ResourceRevision::INITIAL)]
+            .into_iter()
+            .collect(),
         expected_absent_resources: Default::default(),
         recovery_marker: Some(state.project_recovery_marker()),
     };

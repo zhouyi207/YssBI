@@ -74,9 +74,9 @@ impl<'a> AnalysisState<'a> {
                 );
                 continue;
             };
-            let path_scope = if self.graph_path.0.starts_with("events/") {
+            let path_scope = if self.graph_path.as_str().starts_with("events/") {
                 crate::node_system::protocol::NodeScope::Event
-            } else if self.graph_path.0.starts_with("functions/") {
+            } else if self.graph_path.as_str().starts_with("functions/") {
                 crate::node_system::protocol::NodeScope::Function
             } else {
                 crate::node_system::protocol::NodeScope::Any
@@ -181,9 +181,13 @@ impl<'a> AnalysisState<'a> {
             .get(parameter)
             .and_then(serde_json::Value::as_str);
         let result: Result<Box<str>, (String, bool)> = match (kind, resource) {
-            (ResourceDisplayKind::Function, Some(path)) => resources
-                .resolve_function(&GraphResourcePath(path.into()))
+            (ResourceDisplayKind::Function, Some(path)) => GraphResourcePath::new(path)
                 .map_err(|error| (error.to_string(), true))
+                .and_then(|path| {
+                    resources
+                        .resolve_function(&path)
+                        .map_err(|error| (error.to_string(), true))
+                })
                 .and_then(|resolved| {
                     resolved
                         .value
@@ -267,7 +271,7 @@ impl<'a> AnalysisState<'a> {
     }
 
     fn validate_function_abi_contract(&mut self, resources: &mut dyn AnalysisResourceResolver) {
-        if !self.graph_path.0.starts_with("functions/") {
+        if !self.graph_path.as_str().starts_with("functions/") {
             return;
         }
         let resolved = match resources.resolve_function(&self.graph_path) {
@@ -294,7 +298,7 @@ impl<'a> AnalysisState<'a> {
             .signature
             .return_type
             .as_ref()
-            .map(|_| FunctionParameterId("return".into()))
+            .map(|_| FunctionParameterId::new("return"))
             .into_iter()
             .collect::<BTreeSet<_>>();
         self.validate_function_abi_role(
@@ -386,7 +390,7 @@ impl<'a> AnalysisState<'a> {
             if function != self.graph_path {
                 self.push(
                     CompilerDiagnostic::FunctionAbiLocatorTargetMismatch {
-                        function_path: function.0.clone(),
+                        function_path: function.as_str().into(),
                     },
                     DiagnosticLocation::Port(address),
                 );
@@ -395,7 +399,7 @@ impl<'a> AnalysisState<'a> {
             if !expected_ids.contains(&parameter) {
                 self.push(
                     CompilerDiagnostic::FunctionAbiMemberUnexpected {
-                        field_name: parameter.0.clone(),
+                        field_name: parameter.as_str().into(),
                     },
                     DiagnosticLocation::Port(address),
                 );
@@ -407,14 +411,14 @@ impl<'a> AnalysisState<'a> {
             match counts.get(expected).copied().unwrap_or(0) {
                 0 => self.push(
                     CompilerDiagnostic::FunctionAbiMemberMissing {
-                        field_name: expected.0.clone(),
+                        field_name: expected.as_str().into(),
                     },
                     DiagnosticLocation::Node(node_id),
                 ),
                 1 => {}
                 _ => self.push(
                     CompilerDiagnostic::FunctionAbiMemberDuplicate {
-                        field_name: expected.0.clone(),
+                        field_name: expected.as_str().into(),
                     },
                     DiagnosticLocation::Node(node_id),
                 ),
@@ -435,7 +439,18 @@ impl<'a> AnalysisState<'a> {
             let Some(target) = function_target(&self.nodes[&node_id].parameters) else {
                 continue;
             };
-            let target = GraphResourcePath(target.into());
+            let target = match GraphResourcePath::new(target) {
+                Ok(target) => target,
+                Err(_) => {
+                    self.push(
+                        CompilerDiagnostic::ControlCallTargetInvalid {
+                            function_path: target.into(),
+                        },
+                        DiagnosticLocation::Node(node_id),
+                    );
+                    continue;
+                }
+            };
             let resolved = match resources.resolve_function(&target) {
                 Ok(resolved) => resolved,
                 Err(error) => {
@@ -460,7 +475,7 @@ impl<'a> AnalysisState<'a> {
                 .signature
                 .return_type
                 .as_ref()
-                .map(|_| FunctionParameterId("return".into()))
+                .map(|_| FunctionParameterId::new("return"))
                 .into_iter()
                 .collect::<BTreeSet<_>>();
             self.validate_call_abi_role(
@@ -545,7 +560,7 @@ impl<'a> AnalysisState<'a> {
             if &function != target {
                 self.push(
                     CompilerDiagnostic::ControlCallLocatorTargetMismatch {
-                        function_path: function.0.clone(),
+                        function_path: function.as_str().into(),
                     },
                     DiagnosticLocation::Port(address),
                 );
@@ -555,7 +570,7 @@ impl<'a> AnalysisState<'a> {
                 self.push(
                     CompilerDiagnostic::ControlCallMemberUnexpected {
                         member_role: call_member_role(expected_template).into(),
-                        member_id: parameter.0.clone(),
+                        member_id: parameter.as_str().into(),
                     },
                     DiagnosticLocation::Port(address),
                 );
@@ -572,15 +587,15 @@ impl<'a> AnalysisState<'a> {
                 [] => self.push(
                     CompilerDiagnostic::ControlCallMemberMissing {
                         member_role: call_member_role(expected_template).into(),
-                        member_id: expected.0.clone(),
+                        member_id: expected.as_str().into(),
                     },
                     DiagnosticLocation::Node(node_id),
                 ),
                 [_] => {}
                 [_, duplicate, ..] => self.push(
                     CompilerDiagnostic::ControlCallLocatorDuplicate {
-                        function_path: target.0.clone(),
-                        parameter_id: expected.0.clone(),
+                        function_path: target.as_str().into(),
+                        parameter_id: expected.as_str().into(),
                         port: duplicate.to_string().into(),
                     },
                     DiagnosticLocation::Port((*duplicate).clone()),

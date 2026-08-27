@@ -1,17 +1,17 @@
 use super::*;
 use crate::data_contract::DataType;
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+    FunctionParameterId, GraphDocument, GraphResourcePath, InputState, LastKnownPortMetadata,
+    NodeId, NodePosition, OrderKey, PortAddress, PortInstanceId,
+};
 use crate::node_system::analysis::{ResourceVersionSet, SemanticDependency};
 use crate::node_system::catalog::{
     CONTROL_REROUTE_NODE_TYPE, DATA_REROUTE_NODE_TYPE, EFFECT_REROUTE_NODE_TYPE,
     REROUTE_INPUT_PORT, REROUTE_OUTPUT_PORT, build_builtin_node_system,
 };
 use crate::node_system::compiler::{CompilationOutcome, GraphCompiler, ResourceSnapshot};
-use crate::node_system::document::{
-    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    FunctionDocument, FunctionParameterId, FunctionSignature, GraphDocument, GraphResourcePath,
-    InputState, LastKnownPortMetadata, NodeId, NodePosition, OrderKey, PortAddress, PortAddressDto,
-    PortInstanceId,
-};
+use crate::node_system::document::{FunctionDocument, FunctionSignature, PortAddressDto};
 use crate::node_system::protocol::{
     ConnectionsPerPort, NodeTypeId, ParameterKey, PortKey, SchemaExpr, TypeConstructorId, TypeExpr,
     TypeId, TypedValue, Value, numeric_data_series_type,
@@ -603,7 +603,7 @@ impl ResourceSnapshot for NamedResources {
     fn versions(&self) -> ResourceVersionSet {
         BTreeMap::from([
             (
-                crate::node_system::analysis::ResourceKey::new(self.function_path.0.clone()),
+                crate::node_system::analysis::ResourceKey::new(self.function_path.as_str()),
                 crate::node_system::analysis::ResourceVersion::new("function-v1"),
             ),
             (
@@ -654,7 +654,7 @@ fn resource_bound_editor_titles_use_authoritative_names_and_preserve_labels() {
     let registry = builtin.registry;
     let catalog = builtin.catalog;
     let variable_id = crate::variable::VariableId::from(Uuid::from_u128(100));
-    let function_path = GraphResourcePath("functions/calculate-sales".into());
+    let function_path = GraphResourcePath::new("functions/calculate-sales.yssbi-function").unwrap();
     let resources = NamedResources {
         function_path: function_path.clone(),
         function: FunctionDocument::new(FunctionSignature::default()),
@@ -680,7 +680,7 @@ fn resource_bound_editor_titles_use_authoritative_names_and_preserve_labels() {
             1,
             "yssbi.project.function.call",
             "target",
-            function_path.0.as_ref(),
+            function_path.as_str(),
             None,
         ),
         (
@@ -1126,7 +1126,7 @@ fn editor_projection_includes_positions_connections_and_input_bindings() {
             id: connection_id,
             output: branch_true,
             input: sleep_enter,
-            order: Some(OrderKey("rank-1".into())),
+            order: Some(OrderKey::new("rank-1")),
         },
     );
     document.input_states.insert(
@@ -1292,7 +1292,7 @@ fn grouped_port_removal_capability_distinguishes_complete_and_partial_members() 
             .bind_port(
                 PortAddress::instance(loop_id, PortKey::new(template).unwrap(), instance_id),
                 DynamicPortBinding::UserCreated {
-                    order: OrderKey(instance_id.to_string().into()),
+                    order: OrderKey::new(instance_id.to_string()),
                 },
             )
             .unwrap();
@@ -1351,27 +1351,27 @@ fn grouped_port_capability_ignores_non_user_created_siblings() {
             .bind_port(
                 PortAddress::instance(loop_id, PortKey::new(template).unwrap(), complete_id),
                 DynamicPortBinding::UserCreated {
-                    order: OrderKey("complete".into()),
+                    order: OrderKey::new("complete"),
                 },
             )
             .unwrap();
     }
     let locator = || DynamicMemberLocator::FunctionParameter {
-        function: GraphResourcePath("functions/mixed".into()),
-        parameter: FunctionParameterId("value".into()),
+        function: GraphResourcePath::new("functions/mixed.yssbi-function").unwrap(),
+        parameter: FunctionParameterId::new("value"),
     };
     for (template, binding) in [
         (
             "initial_source",
             DynamicPortBinding::UserCreated {
-                order: OrderKey("partial".into()),
+                order: OrderKey::new("partial"),
             },
         ),
         (
             "body_input",
             DynamicPortBinding::Resolved {
                 origin: locator(),
-                order: OrderKey("resolved-body".into()),
+                order: OrderKey::new("resolved-body"),
                 last_known: LastKnownPortMetadata::default(),
             },
         ),
@@ -1379,7 +1379,7 @@ fn grouped_port_capability_ignores_non_user_created_siblings() {
             "next_source",
             DynamicPortBinding::Orphan {
                 origin: locator(),
-                order: OrderKey("orphan-next".into()),
+                order: OrderKey::new("orphan-next"),
                 last_known: LastKnownPortMetadata {
                     label: "Next".into(),
                     value_type: None,
@@ -1390,7 +1390,7 @@ fn grouped_port_capability_ignores_non_user_created_siblings() {
             "result",
             DynamicPortBinding::Resolved {
                 origin: locator(),
-                order: OrderKey("resolved-result".into()),
+                order: OrderKey::new("resolved-result"),
                 last_known: LastKnownPortMetadata::default(),
             },
         ),

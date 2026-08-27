@@ -2,9 +2,7 @@
 
 mod error;
 mod history;
-mod ids;
 pub mod materialization;
-mod model;
 mod mutation;
 mod patch;
 mod subgraph;
@@ -22,20 +20,9 @@ pub use history::{
     VariableDocument, VariableDocumentPatch, VariableEffectHistorySnapshots, VariableResourceKey,
     WorksheetDocumentPatch, WorksheetDocumentState, WorksheetResourceKey,
 };
-pub use ids::{
-    ConnectionId, GraphRevision, HistoryEntryId, NodeId, OperationId, PortInstanceId,
-    ProjectRevision, ProjectTransactionRevision, ResourceRevision, RevisionExhausted,
-};
 pub use materialization::{
     CompilationBasisToken, CompilationRegistryFingerprint, CompilationResourceKey,
     CompilationResourceVersion, CompilationResourceVersions, MaterializationAuthorization,
-};
-pub(crate) use model::port_member_group_state;
-pub use model::{
-    DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
-    EffectiveInputBinding, FunctionParameterId, GraphDocument, GraphResourcePath, InputState,
-    LastKnownPortMetadata, NodePosition, OrderKey, ParameterValues, PortAddress, PortRef,
-    SchemaFieldIdentity, SchemaSourceIdentity, TypedValue,
 };
 pub(crate) use mutation::ProjectedConnectPlan;
 pub use mutation::{
@@ -56,6 +43,16 @@ pub use subgraph::{
     duplicate_subgraph, export_subgraph,
 };
 pub(crate) use subgraph::{deserialize_clipboard_subgraph, instantiate_subgraph};
+pub use transaction::EffectiveInputBinding;
+pub(crate) use transaction::port_member_group_state;
+
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, DynamicMemberLocator, DynamicPortBinding,
+    FunctionParameterId, GraphDocument, GraphResourcePath, GraphRevision, InputState,
+    LastKnownPortMetadata, NodeId, NodePosition, OrderKey, ParameterValues, PortAddress,
+    PortInstanceId, PortRef, SchemaFieldIdentity, SchemaSourceIdentity, TypedValue,
+};
+use crate::project::{HistoryEntryId, OperationId, ProjectRevision, ResourceRevision};
 
 #[cfg(test)]
 mod tests;

@@ -1,16 +1,10 @@
 use std::collections::HashSet;
-use std::sync::LazyLock;
 
-use regex::Regex;
 use thiserror::Error;
 use unicode_casefold::UnicodeCaseFold;
 use unicode_normalization::UnicodeNormalization;
 
 const MAX_RESOURCE_NAME_CHARACTERS: usize = 80;
-static LETTER_OR_NUMBER: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^[\p{L}\p{N}]$").expect("resource-name Unicode category regex is valid")
-});
-
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ResourceNameError {
     #[error("resource name cannot be empty")]
@@ -32,25 +26,7 @@ pub struct ResourceName(String);
 
 impl ResourceName {
     pub fn parse(input: &str) -> Result<Self, ResourceNameError> {
-        if input.is_empty() {
-            return Err(ResourceNameError::Empty);
-        }
-        if input.nfc().ne(input.chars()) {
-            return Err(ResourceNameError::NotNfc);
-        }
-        if input.chars().count() > MAX_RESOURCE_NAME_CHARACTERS {
-            return Err(ResourceNameError::TooLong);
-        }
-        if is_reserved(input) {
-            return Err(ResourceNameError::Reserved);
-        }
-        if input.starts_with(' ') || input.ends_with(' ') || input.contains("  ") {
-            return Err(ResourceNameError::InvalidSpacing);
-        }
-        if let Some(character) = input.chars().find(|character| !is_allowed(*character)) {
-            return Err(ResourceNameError::ForbiddenCharacter(character));
-        }
-
+        crate::graph_document::validate_resource_name(input).map_err(ResourceNameError::from)?;
         Ok(Self(input.to_owned()))
     }
 
@@ -60,6 +36,23 @@ impl ResourceName {
 
     pub fn portable_key(&self) -> String {
         self.0.case_fold().nfc().collect()
+    }
+}
+
+impl From<crate::graph_document::ResourceNameValidationError> for ResourceNameError {
+    fn from(source: crate::graph_document::ResourceNameValidationError) -> Self {
+        match source {
+            crate::graph_document::ResourceNameValidationError::Empty => Self::Empty,
+            crate::graph_document::ResourceNameValidationError::NotNfc => Self::NotNfc,
+            crate::graph_document::ResourceNameValidationError::ForbiddenCharacter(character) => {
+                Self::ForbiddenCharacter(character)
+            }
+            crate::graph_document::ResourceNameValidationError::InvalidSpacing => {
+                Self::InvalidSpacing
+            }
+            crate::graph_document::ResourceNameValidationError::Reserved => Self::Reserved,
+            crate::graph_document::ResourceNameValidationError::TooLong => Self::TooLong,
+        }
     }
 }
 
@@ -91,32 +84,6 @@ pub fn allocate_unique_resource_name<'a>(
     }
 
     unreachable!("the numeric resource-name suffix space is finite but cannot be exhausted")
-}
-
-fn is_allowed(character: char) -> bool {
-    if matches!(character, ' ' | '-' | '_' | '(' | ')') {
-        return true;
-    }
-
-    let mut encoded = [0; 4];
-    LETTER_OR_NUMBER.is_match(character.encode_utf8(&mut encoded))
-}
-
-fn is_reserved(input: &str) -> bool {
-    if matches!(input, "." | "..") {
-        return true;
-    }
-
-    let uppercase = input.to_ascii_uppercase();
-    matches!(uppercase.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || reserved_numbered_name(&uppercase, "COM")
-        || reserved_numbered_name(&uppercase, "LPT")
-}
-
-fn reserved_numbered_name(value: &str, prefix: &str) -> bool {
-    value
-        .strip_prefix(prefix)
-        .is_some_and(|number| matches!(number, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"))
 }
 
 #[cfg(test)]

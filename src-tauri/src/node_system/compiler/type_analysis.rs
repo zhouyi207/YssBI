@@ -1,6 +1,6 @@
 use super::{CompilerDiagnostic, CompilerDiagnosticLocation};
+use crate::graph_document::{ConnectionId, NodeId, PortAddress, PortRef};
 use crate::node_system::analysis::DiagnosticLocation;
-use crate::node_system::document::{ConnectionId, NodeId, PortAddress, PortRef};
 use crate::node_system::protocol::{
     NodeProtocol, ParameterKey, PortKey, TypeClassId, TypeConstraint, TypeConstructorId, TypeExpr,
     TypeId, TypeParameterId, TypeTerm,
@@ -375,8 +375,8 @@ impl TypeConstraintGraph {
 
 fn port_template(address: &PortAddress) -> &PortKey {
     match &address.port {
-        crate::node_system::document::PortRef::Declared { key } => key,
-        crate::node_system::document::PortRef::Instance { template, .. } => template,
+        crate::graph_document::PortRef::Declared { key } => key,
+        crate::graph_document::PortRef::Instance { template, .. } => template,
     }
 }
 

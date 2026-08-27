@@ -202,7 +202,10 @@ fn branch_builds_exclusive_true_and_false_regions() {
     connect(&mut graph, 108, 7, "then", 8, "enter");
 
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/branch-demand".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/branch-demand.yssbi-event").unwrap(),
+        &graph,
+    );
     let mut result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -261,7 +264,11 @@ fn branch_builds_exclusive_true_and_false_regions() {
     }
     let disconnected = disconnected_basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/branch-demand", 9, "value")]),
+            outputs: Box::new([demand_output(
+                "events/branch-demand.yssbi-event",
+                9,
+                "value",
+            )]),
             include_default_results: false,
         })
         .expect("a disconnected If with results is deleted without orphan declarations");
@@ -850,7 +857,7 @@ fn malformed_builtin_control_members_emit_blocking_structured_diagnostics() {
     incomplete_branch.port_bindings.retain(|address, _| {
         matches!(
             &address.port,
-            crate::node_system::document::PortRef::Instance { template, .. }
+            crate::graph_document::PortRef::Instance { template, .. }
                 if template.as_str() == "then_source"
         )
     });
@@ -954,7 +961,10 @@ fn loop_uses_explicit_condition_limit_and_carried_bindings() {
     );
 
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/loop-demand".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/loop-demand.yssbi-event").unwrap(),
+        &graph,
+    );
     let mut result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -1023,7 +1033,7 @@ fn loop_uses_explicit_condition_limit_and_carried_bindings() {
     body_eager.effects = EffectSemantics::None;
     let disconnected = disconnected_basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/loop-demand", 9, "value")]),
+            outputs: Box::new([demand_output("events/loop-demand.yssbi-event", 9, "value")]),
             include_default_results: false,
         })
         .expect("a disconnected carried Loop is deleted without orphan declarations");

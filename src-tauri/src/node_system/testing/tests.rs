@@ -1,6 +1,6 @@
 use super::*;
+use crate::graph_document::GraphDocument;
 use crate::node_system::catalog::{BuiltinCatalog, LocalizedCatalog, build_builtin_node_system};
-use crate::node_system::document::GraphDocument;
 use crate::node_system::protocol::{NodeTypeId, PortKey, Value};
 use crate::node_system::registry::{
     NodeRegistry, canonical_semantic_protocol_snapshot, i18n_inventory,

@@ -172,7 +172,9 @@ pub(super) fn collect_control_value_sources(
             results,
             ..
         } => {
-            let path = GraphResourcePath(target.as_str().into());
+            let path = GraphResourcePath::new(target.as_str()).map_err(|_| {
+                CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
+            })?;
             let abi = function_abis.get(&path).ok_or_else(|| {
                 CompilerDiagnostic::PlanInvalid {}.into_node(DiagnosticLocation::Graph)
             })?;

@@ -223,7 +223,7 @@ fn operation_stable_ids_include_canonical_graph_identity() {
     let compile = |path: &str| {
         compiler
             .compile_snapshot(
-                &compiler.snapshot(GraphResourcePath(path.into()), &graph),
+                &compiler.snapshot(GraphResourcePath::new(path).unwrap(), &graph),
                 &CompileCancellationToken::new(),
             )
             .unwrap()
@@ -234,7 +234,10 @@ fn operation_stable_ids_include_canonical_graph_identity() {
             .clone()
     };
 
-    assert_ne!(compile("events/first"), compile("events/second"));
+    assert_ne!(
+        compile("events/first.yssbi-event"),
+        compile("events/second.yssbi-event")
+    );
 }
 
 #[test]
@@ -342,7 +345,7 @@ fn effective_cache_policy_metadata_survives_demand_specialization() {
 
     let plan = basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/main", 4, "out")]),
+            outputs: Box::new([demand_output("events/main.yssbi-event", 4, "out")]),
             include_default_results: false,
         })
         .expect("selected chain should specialize");

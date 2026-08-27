@@ -10,7 +10,7 @@ fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
             BTreeMap::from([(
-                ResourceKey::new(self.path.0.as_ref()),
+                ResourceKey::new(self.path.as_str()),
                 ResourceVersion::new("callee-v1"),
             )])
         }
@@ -36,7 +36,7 @@ fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
         protocol: counted,
         implementation: NodeImplementation::new(CountingLowerer(calls.clone())),
     };
-    let function_path = GraphResourcePath("functions/blocking".into());
+    let function_path = GraphResourcePath::new("functions/blocking.yssbi-function").unwrap();
     let blocking_resources = FunctionResources {
         path: function_path.clone(),
         function: FunctionDocument::new(FunctionSignature {
@@ -49,7 +49,7 @@ fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
     for (name, target, expected_code) in [
         (
             "missing",
-            GraphResourcePath("functions/missing".into()),
+            GraphResourcePath::new("functions/missing.yssbi-function").unwrap(),
             "compiler.resource.resolution_failed",
         ),
         (
@@ -67,12 +67,12 @@ fn lowerability_missing_and_blocking_callees_block_at_call_before_lowering() {
         set_parameters(
             &mut graph,
             1,
-            &[("target", serde_json::json!(target.0.as_ref()))],
+            &[("target", serde_json::json!(target.as_str()))],
         );
         set_parameters(
             &mut graph,
             3,
-            &[("target", serde_json::json!(target.0.as_ref()))],
+            &[("target", serde_json::json!(target.as_str()))],
         );
         let compiler = GraphCompiler::with_interface_resolvers(
             &registry,
@@ -136,8 +136,8 @@ fn nested_blocking_callee_projects_to_root_call_with_exact_basis() {
         protocol: counted,
         implementation: NodeImplementation::new(CountingLowerer(calls.clone())),
     };
-    let outer_path = GraphResourcePath("functions/outer".into());
-    let inner_path = GraphResourcePath("functions/inner".into());
+    let outer_path = GraphResourcePath::new("functions/outer.yssbi-function").unwrap();
+    let inner_path = GraphResourcePath::new("functions/inner.yssbi-function").unwrap();
     let signature = FunctionDocument::new(FunctionSignature {
         parameters: Vec::new(),
         return_type: None,
@@ -150,28 +150,28 @@ fn nested_blocking_callee_projects_to_root_call_with_exact_basis() {
     set_parameters(
         &mut outer,
         20,
-        &[("function", serde_json::json!(outer_path.0.as_ref()))],
+        &[("function", serde_json::json!(outer_path.as_str()))],
     );
     set_parameters(
         &mut outer,
         21,
-        &[("target", serde_json::json!(inner_path.0.as_ref()))],
+        &[("target", serde_json::json!(inner_path.as_str()))],
     );
     set_parameters(
         &mut outer,
         22,
-        &[("function", serde_json::json!(outer_path.0.as_ref()))],
+        &[("function", serde_json::json!(outer_path.as_str()))],
     );
     connect(&mut outer, 100, 20, "then", 21, "enter");
     connect(&mut outer, 101, 21, "then", 22, "enter");
 
     let versions = BTreeMap::from([
         (
-            ResourceKey::new(outer_path.0.as_ref()),
+            ResourceKey::new(outer_path.as_str()),
             ResourceVersion::new("outer-v1"),
         ),
         (
-            ResourceKey::new(inner_path.0.as_ref()),
+            ResourceKey::new(inner_path.as_str()),
             ResourceVersion::new("inner-v1"),
         ),
     ]);
@@ -196,7 +196,7 @@ fn nested_blocking_callee_projects_to_root_call_with_exact_basis() {
     set_parameters(
         &mut caller,
         1,
-        &[("target", serde_json::json!(outer_path.0.as_ref()))],
+        &[("target", serde_json::json!(outer_path.as_str()))],
     );
 
     let result = GraphCompiler::with_interface_resolvers(
@@ -264,19 +264,19 @@ fn locally_invalid_callee_still_discovers_complete_outgoing_call_closure() {
         set_parameters(
             &mut graph,
             20,
-            &[("function", serde_json::json!(own_path.0.as_ref()))],
+            &[("function", serde_json::json!(own_path.as_str()))],
         );
         set_parameters(
             &mut graph,
             30,
-            &[("function", serde_json::json!(own_path.0.as_ref()))],
+            &[("function", serde_json::json!(own_path.as_str()))],
         );
         let mut previous = 20;
         for (index, (id, target)) in calls.iter().enumerate() {
             set_parameters(
                 &mut graph,
                 *id,
-                &[("target", serde_json::json!(target.0.as_ref()))],
+                &[("target", serde_json::json!(target.as_str()))],
             );
             connect(
                 &mut graph,
@@ -297,25 +297,25 @@ fn locally_invalid_callee_still_discovers_complete_outgoing_call_closure() {
             .unwrap()
             .registry,
     );
-    let path_a = GraphResourcePath("functions/local-invalid-a".into());
-    let path_b = GraphResourcePath("functions/present-b".into());
-    let path_c = GraphResourcePath("functions/missing-c".into());
-    let path_d = GraphResourcePath("functions/transitive-d".into());
+    let path_a = GraphResourcePath::new("functions/local-invalid-a.yssbi-function").unwrap();
+    let path_b = GraphResourcePath::new("functions/present-b.yssbi-function").unwrap();
+    let path_c = GraphResourcePath::new("functions/missing-c.yssbi-function").unwrap();
+    let path_d = GraphResourcePath::new("functions/transitive-d.yssbi-function").unwrap();
     let signature = FunctionDocument::new(FunctionSignature {
         parameters: Vec::new(),
         return_type: None,
     });
     let versions = BTreeMap::from([
         (
-            ResourceKey::new(path_a.0.as_ref()),
+            ResourceKey::new(path_a.as_str()),
             ResourceVersion::new("a-v1"),
         ),
         (
-            ResourceKey::new(path_b.0.as_ref()),
+            ResourceKey::new(path_b.as_str()),
             ResourceVersion::new("b-v1"),
         ),
         (
-            ResourceKey::new(path_d.0.as_ref()),
+            ResourceKey::new(path_d.as_str()),
             ResourceVersion::new("d-v1"),
         ),
     ]);
@@ -342,7 +342,7 @@ fn locally_invalid_callee_still_discovers_complete_outgoing_call_closure() {
     set_parameters(
         &mut caller,
         1,
-        &[("target", serde_json::json!(path_a.0.as_ref()))],
+        &[("target", serde_json::json!(path_a.as_str()))],
     );
 
     let result = GraphCompiler::with_interface_resolvers(
@@ -361,7 +361,7 @@ fn locally_invalid_callee_still_discovers_complete_outgoing_call_closure() {
             .keys()
             .map(ResourceKey::as_str)
             .collect::<Vec<_>>(),
-        vec![path_c.0.as_ref()],
+        vec![path_c.as_str()],
     );
     assert!(result.analysis.diagnostics.iter().any(|diagnostic| {
         diagnostic.code.as_str() == "compiler.control.call.abi_invalid"
@@ -413,19 +413,19 @@ fn mutual_call_scc_propagates_external_blocking_to_every_root_site() {
         set_parameters(
             &mut graph,
             20,
-            &[("function", serde_json::json!(own_path.0.as_ref()))],
+            &[("function", serde_json::json!(own_path.as_str()))],
         );
         set_parameters(
             &mut graph,
             30,
-            &[("function", serde_json::json!(own_path.0.as_ref()))],
+            &[("function", serde_json::json!(own_path.as_str()))],
         );
         let mut previous = 20;
         for (index, (id, target)) in calls.iter().enumerate() {
             set_parameters(
                 &mut graph,
                 *id,
-                &[("target", serde_json::json!(target.0.as_ref()))],
+                &[("target", serde_json::json!(target.as_str()))],
             );
             connect(
                 &mut graph,
@@ -446,9 +446,10 @@ fn mutual_call_scc_propagates_external_blocking_to_every_root_site() {
             .unwrap()
             .registry,
     );
-    let path_a = GraphResourcePath("functions/cycle-a".into());
-    let path_b = GraphResourcePath("functions/cycle-b".into());
-    let blocking_path = GraphResourcePath("functions/cycle-z-blocking".into());
+    let path_a = GraphResourcePath::new("functions/cycle-a.yssbi-function").unwrap();
+    let path_b = GraphResourcePath::new("functions/cycle-b.yssbi-function").unwrap();
+    let blocking_path =
+        GraphResourcePath::new("functions/cycle-z-blocking.yssbi-function").unwrap();
     let signature = FunctionDocument::new(FunctionSignature {
         parameters: Vec::new(),
         return_type: None,
@@ -461,7 +462,7 @@ fn mutual_call_scc_propagates_external_blocking_to_every_root_site() {
     .into_iter()
     .map(|(path, version)| {
         (
-            ResourceKey::new(path.0.as_ref()),
+            ResourceKey::new(path.as_str()),
             ResourceVersion::new(version),
         )
     })
@@ -498,7 +499,7 @@ fn mutual_call_scc_propagates_external_blocking_to_every_root_site() {
         set_parameters(
             &mut caller,
             id,
-            &[("target", serde_json::json!(target.0.as_ref()))],
+            &[("target", serde_json::json!(target.as_str()))],
         );
     }
 
@@ -539,7 +540,7 @@ fn function_abi_managed_role_error_emits_expected_role_and_actual_count() {
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
             BTreeMap::from([(
-                ResourceKey::new(self.path.0.clone()),
+                ResourceKey::new(self.path.as_str()),
                 ResourceVersion::new("fixture-v1"),
             )])
         }
@@ -576,7 +577,7 @@ fn function_abi_managed_role_error_emits_expected_role_and_actual_count() {
     let registry = TestRegistry::new(vec![entry, return_node])
         .structural(&entry_type, StructuralNodeRole::FunctionEntry)
         .structural(&return_type, StructuralNodeRole::FunctionReturn);
-    let path = GraphResourcePath("functions/duplicate-entry".into());
+    let path = GraphResourcePath::new("functions/duplicate-entry.yssbi-function").unwrap();
     let resources = FunctionResources {
         path: path.clone(),
         function: FunctionDocument::new(FunctionSignature {

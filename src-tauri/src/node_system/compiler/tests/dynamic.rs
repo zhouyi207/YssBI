@@ -29,7 +29,10 @@ fn valid_dynamic_output_derives_without_invalid_plan_fallback() {
     let mut graph = graph_with_nodes(&[(1, "demand_dynamic_output")]);
     let output = bind_member_port(&mut graph, 1, "items", 10, "a");
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/dynamic".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/dynamic.yssbi-event").unwrap(),
+        &graph,
+    );
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -37,7 +40,7 @@ fn valid_dynamic_output_derives_without_invalid_plan_fallback() {
         .execution_basis
         .expect("valid dynamic graph has basis");
     let requested = GraphOutputRef {
-        graph_path: GraphResourcePath("events/dynamic".into()),
+        graph_path: GraphResourcePath::new("events/dynamic.yssbi-event").unwrap(),
         port: output,
     };
 
@@ -62,7 +65,7 @@ fn function_abi_rejects_wrong_dynamic_member_direction() {
     impl ResourceSnapshot for FunctionResources {
         fn versions(&self) -> crate::node_system::analysis::ResourceVersionSet {
             BTreeMap::from([(
-                ResourceKey::new(self.path.0.clone()),
+                ResourceKey::new(self.path.as_str()),
                 ResourceVersion::new("fixture-v1"),
             )])
         }
@@ -101,8 +104,8 @@ fn function_abi_rejects_wrong_dynamic_member_direction() {
     let registry = TestRegistry::new(vec![entry, return_node])
         .structural(&entry_type, StructuralNodeRole::FunctionEntry)
         .structural(&return_type, StructuralNodeRole::FunctionReturn);
-    let path = GraphResourcePath("functions/wrong-direction".into());
-    let parameter = FunctionParameterId("amount".into());
+    let path = GraphResourcePath::new("functions/wrong-direction.yssbi-function").unwrap();
+    let parameter = FunctionParameterId::new("amount");
     let resources = FunctionResources {
         path: path.clone(),
         function: FunctionDocument::new(FunctionSignature {

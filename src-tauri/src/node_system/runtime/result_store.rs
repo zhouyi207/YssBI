@@ -534,7 +534,7 @@ impl fmt::Display for ResultStoreError {
             Self::OutputGraphMismatch(output) => write!(
                 formatter,
                 "public output graph '{}' does not match activation provenance",
-                output.graph_path.0
+                output.graph_path.as_str()
             ),
             Self::OutputNodeMismatch(output) => write!(
                 formatter,
@@ -578,7 +578,7 @@ impl std::error::Error for ResultStoreError {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
+    use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId, PortAddress};
     use crate::node_system::plan::{
         GraphOutputRef, PlannedValueContract, ResultPresentation, ValueRef,
     };
@@ -589,7 +589,7 @@ mod tests {
         PendingOutputDescriptor {
             value: ValueRef::new(value),
             output: Some(GraphOutputRef {
-                graph_path: GraphResourcePath("events/test".into()),
+                graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
                 port: PortAddress::declared(
                     NodeId::from_uuid(uuid::Uuid::nil()),
                     PortKey::new(port_key).unwrap(),
@@ -612,7 +612,7 @@ mod tests {
         ActivationProvenance {
             run_id: RunId::new(run),
             activation_id: ActivationId::next().unwrap(),
-            graph_path: GraphResourcePath("events/test".into()),
+            graph_path: GraphResourcePath::new("events/test.yssbi-event").unwrap(),
             graph_revision: GraphRevision::new(8),
             node_id: NodeId::from_uuid(uuid::Uuid::nil()),
             created_at_ms: run,
@@ -643,7 +643,7 @@ mod tests {
 
         let mut wrong_graph = test_outputs(["result"]);
         wrong_graph[0].output.as_mut().unwrap().graph_path =
-            GraphResourcePath("events/other".into());
+            GraphResourcePath::new("events/other.yssbi-event").unwrap();
         assert!(matches!(
             store.create_pending_group(test_provenance(6), &wrong_graph),
             Err(ResultStoreError::OutputGraphMismatch(_))

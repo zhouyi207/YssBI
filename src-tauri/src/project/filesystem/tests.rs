@@ -2,7 +2,7 @@ use super::{
     NormalizedProjectRoot, ProjectFilesystemCoordinator, ProjectFilesystemFaultPoint,
     ProjectFilesystemTransaction, StagedFilesystemMutation,
 };
-use crate::node_system::document::OperationId;
+use crate::project::OperationId;
 use crate::project::{
     PROJECT_METADATA_FILE, ProjectInstanceId, ProjectRecoveryMarker, ProjectSession,
     ProjectTransactionContext,

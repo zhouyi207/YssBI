@@ -1,5 +1,6 @@
 use super::project_state::{ProjectionSourceSnapshot, compile_resources_from_projection_snapshot};
 use super::{GraphResourcePath, ProjectState};
+use crate::graph_document::GraphRevision;
 #[cfg(test)]
 use crate::node_system::analysis::ResourceKey;
 use crate::node_system::analysis::{
@@ -11,7 +12,6 @@ use crate::node_system::compiler::{
     PublishOutcome, PublishedCompileAnalysis, PublishedExecutionPlan, ScheduleOutcome,
     compilation_basis,
 };
-use crate::node_system::document::GraphRevision;
 use crate::node_system::plan::ExecutionPlan;
 use std::sync::Arc;
 
@@ -35,7 +35,7 @@ type PublishedProducts = (
 pub(super) struct ExecutionAuthorityToken {
     pub(super) project_instance_id: String,
     pub(super) project_session_id: crate::node_system::ProjectSessionId,
-    pub(super) graph_path: crate::node_system::document::GraphResourcePath,
+    pub(super) graph_path: crate::graph_document::GraphResourcePath,
     pub(super) basis: CompilationBasis<GraphRevision>,
     coordinator: Arc<ProjectCompileCoordinator>,
 }
@@ -49,8 +49,8 @@ pub(super) struct CurrentCompilation {
 
 struct CompileInput {
     source: ProjectionSourceSnapshot,
-    document_path: crate::node_system::document::GraphResourcePath,
-    document: crate::node_system::document::GraphDocument,
+    document_path: crate::graph_document::GraphResourcePath,
+    document: crate::graph_document::GraphDocument,
     basis: CompilationBasis<GraphRevision>,
     project_instance_id: String,
     project_session_id: crate::node_system::ProjectSessionId,
@@ -116,7 +116,7 @@ impl ProjectState {
                 .get_candidate(&input.document_path, &input.basis)
                 .is_some()
             {
-                let graph_path = GraphResourcePath::new(input.document_path.0.as_ref())
+                let graph_path = GraphResourcePath::new(input.document_path.as_str())
                     .expect("captured graph path is normalized");
                 let refreshed = self.capture_compile_input(&graph_path)?;
                 if refreshed.project_session_id != input.project_session_id {
@@ -135,7 +135,7 @@ impl ProjectState {
                     let outcome = self.compile_and_publish(&coordinator, &task, &input)?;
                     self.finish_and_drive_pending(&coordinator, task, &input.project_session_id);
                     if outcome != PublishOutcome::Current {
-                        let graph_path = GraphResourcePath::new(input.document_path.0.as_ref())
+                        let graph_path = GraphResourcePath::new(input.document_path.as_str())
                             .expect("captured graph path is normalized");
                         let refreshed = self.capture_compile_input(&graph_path)?;
                         if refreshed.project_session_id != input.project_session_id {
@@ -273,7 +273,7 @@ impl ProjectState {
         expected_session_id: &crate::node_system::ProjectSessionId,
     ) {
         while let Some(next) = coordinator.finish(&finished.graph_path, finished.compile_id) {
-            let graph_path = match GraphResourcePath::new(next.graph_path.0.as_ref()) {
+            let graph_path = match GraphResourcePath::new(next.graph_path.as_str()) {
                 Ok(path) => path,
                 Err(_) => {
                     next.cancellation.cancel();
@@ -442,14 +442,13 @@ impl ProjectState {
 
     fn capture_current_basis_at_gate_for(
         &self,
-        graph_path: &crate::node_system::document::GraphResourcePath,
+        graph_path: &crate::graph_document::GraphResourcePath,
         candidate_basis: &CompilationBasis<GraphRevision>,
         project_instance_id: &str,
         project_session_id: &crate::node_system::ProjectSessionId,
     ) -> Result<CurrentBasis, String> {
         let data = self.project_data.read().unwrap();
-        let graph_path = GraphResourcePath::new(graph_path.0.as_ref())
-            .expect("captured graph path is normalized");
+        let graph_path = graph_path.clone();
         let document = data
             .graphs
             .get(&graph_path)
@@ -495,11 +494,16 @@ impl ProjectState {
                         .is_some_and(|resource| resource.function.is_some())
                     {
                         revision
+                            .map(crate::project::ResourceRevision::from_graph_revision)
                             .map(resource_revision_version)
                             .map(ResourceObservedState::Present)
                             .unwrap_or(ResourceObservedState::Absent(None))
                     } else {
-                        ResourceObservedState::Absent(revision.map(resource_revision_version))
+                        ResourceObservedState::Absent(
+                            revision
+                                .map(crate::project::ResourceRevision::from_graph_revision)
+                                .map(resource_revision_version),
+                        )
                     }
                 } else if let Some(id) = key.as_str().strip_prefix("variables/") {
                     uuid::Uuid::parse_str(id)
@@ -607,9 +611,7 @@ impl ProjectState {
     }
 }
 
-fn resource_revision_version(
-    revision: crate::node_system::document::ResourceRevision,
-) -> ResourceVersion {
+fn resource_revision_version(revision: crate::project::ResourceRevision) -> ResourceVersion {
     ResourceVersion::new(format!("revision:{}", revision.get()))
 }
 
@@ -685,9 +687,7 @@ impl CompileInput {
         let project_session_id = source.environment.project_session_id.clone();
         Ok(Self {
             source,
-            document_path: crate::node_system::document::GraphResourcePath(
-                graph_path.as_str().into(),
-            ),
+            document_path: graph_path.clone(),
             document,
             basis,
             project_instance_id,

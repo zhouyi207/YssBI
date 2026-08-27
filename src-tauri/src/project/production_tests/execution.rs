@@ -20,7 +20,7 @@ fn production_execution_preserves_current_session_and_graph_provenance() {
         .unwrap();
 
     assert_eq!(&result.provenance.project_session_id, &session_id);
-    assert_eq!(result.provenance.graph_path.0.as_ref(), path.as_str());
+    assert_eq!(result.provenance.graph_path.as_str(), path.as_str());
 
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -52,7 +52,7 @@ fn project_mutation_rejects_stale_revision_and_records_undo_history() {
     }]);
     let request = MutationRequest::new(
         ResourceKey::Graph(document_path()),
-        GraphRevision::INITIAL,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
         OperationId::new(),
         patch,
     );
@@ -60,8 +60,14 @@ fn project_mutation_rejects_stale_revision_and_records_undo_history() {
     let event = state
         .apply_graph_patch(&graph_path(), request.clone())
         .unwrap();
-    assert_eq!(event.from_revision, GraphRevision::INITIAL);
-    assert_eq!(event.to_revision, GraphRevision::new(1));
+    assert_eq!(
+        event.from_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::INITIAL)
+    );
+    assert_eq!(
+        event.to_revision,
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
+    );
     assert!(matches!(
         state.apply_graph_patch(&graph_path(), request),
         Err(MutationConflict::StaleRevision { .. })
@@ -73,7 +79,7 @@ fn project_mutation_rejects_stale_revision_and_records_undo_history() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -102,7 +108,7 @@ fn project_projection_hydrates_localized_editor_dto() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 patch,
             ),
@@ -150,14 +156,14 @@ fn project_execution_publishes_persisted_function_plans() {
         crate::node_system::protocol::ParameterKey::new("target").unwrap(),
         serde_json::json!(function.as_str()),
     );
-    let connection_id = crate::node_system::document::ConnectionId::new();
-    let connection = crate::node_system::document::DocumentConnection {
+    let connection_id = crate::graph_document::ConnectionId::new();
+    let connection = crate::graph_document::DocumentConnection {
         id: connection_id,
-        output: crate::node_system::document::PortAddress::declared(
+        output: crate::graph_document::PortAddress::declared(
             begin,
             crate::node_system::protocol::PortKey::new("then").unwrap(),
         ),
-        input: crate::node_system::document::PortAddress::declared(
+        input: crate::graph_document::PortAddress::declared(
             call.id,
             crate::node_system::protocol::PortKey::new("enter").unwrap(),
         ),
@@ -167,10 +173,8 @@ fn project_execution_publishes_persisted_function_plans() {
         .apply_graph_patch(
             &event,
             MutationRequest::new(
-                crate::node_system::document::ResourceKey::Graph(
-                    crate::node_system::document::GraphResourcePath(event.as_str().into()),
-                ),
-                GraphRevision::INITIAL,
+                crate::node_system::document::ResourceKey::Graph(event.clone()),
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![
                     GraphDocumentOperation::InsertNode { node: call },
@@ -192,19 +196,19 @@ fn project_execution_publishes_persisted_function_plans() {
 
 #[test]
 fn project_execution_uses_replaced_persisted_function_body_and_current_generation() {
-    use crate::node_system::analysis::ResourceKey as AnalysisResourceKey;
-    use crate::node_system::document::{
+    use crate::graph_document::{
         ConnectionId, DocumentConnection, DynamicMemberLocator, DynamicPortBinding,
-        FunctionDocument, FunctionParameter, FunctionParameterId, FunctionSignature, OrderKey,
-        PortAddress, PortInstanceId,
+        FunctionParameterId, OrderKey, PortAddress, PortInstanceId,
     };
+    use crate::node_system::analysis::ResourceKey as AnalysisResourceKey;
+    use crate::node_system::document::{FunctionDocument, FunctionParameter, FunctionSignature};
     use crate::node_system::protocol::{ParameterKey, PortKey};
 
     let state = ProjectState::new();
     let function_path = GraphResourcePath::new("functions/Current.yssbi-function").unwrap();
     let event_path = GraphResourcePath::new("events/CurrentCaller.yssbi-event").unwrap();
-    let parameter_id = FunctionParameterId("amount".into());
-    let return_id = FunctionParameterId("return".into());
+    let parameter_id = FunctionParameterId::new("amount");
+    let return_id = FunctionParameterId::new("return");
     let mut input_variable = test_variable("Input");
     input_variable.data_value = crate::data_contract::DataValue::Int64(41);
     let mut first_offset = test_variable("First Offset");
@@ -239,13 +243,11 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
     };
     let binding = |parameter: &FunctionParameterId, order: &str| DynamicPortBinding::Resolved {
         origin: DynamicMemberLocator::FunctionParameter {
-            function: crate::node_system::document::GraphResourcePath(
-                function_path.as_str().into(),
-            ),
+            function: function_path.clone(),
             parameter: parameter.clone(),
         },
-        order: OrderKey(order.into()),
-        last_known: crate::node_system::document::LastKnownPortMetadata::default(),
+        order: OrderKey::new(order),
+        last_known: crate::graph_document::LastKnownPortMetadata::default(),
     };
     let connection = |output: PortAddress, input: PortAddress| DocumentConnection {
         id: ConnectionId::new(),
@@ -382,10 +384,7 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
     let function_graph = &data.graphs[&function_path].document;
     let products = compiler
         .compile_snapshot(
-            &compiler.snapshot(
-                crate::node_system::document::GraphResourcePath(function_path.as_str().into()),
-                function_graph,
-            ),
+            &compiler.snapshot(function_path.clone(), function_graph),
             &crate::node_system::compiler::CompileCancellationToken::new(),
         )
         .unwrap();
@@ -407,10 +406,7 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
     let event_graph = &data.graphs[&event_path].document;
     let event_products = compiler
         .compile_snapshot(
-            &compiler.snapshot(
-                crate::node_system::document::GraphResourcePath(event_path.as_str().into()),
-                event_graph,
-            ),
+            &compiler.snapshot(event_path.clone(), event_graph),
             &crate::node_system::compiler::CompileCancellationToken::new(),
         )
         .unwrap();
@@ -444,10 +440,8 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
         .apply_graph_patch(
             &function_path,
             MutationRequest::new(
-                ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                    function_path.as_str().into(),
-                )),
-                GraphRevision::INITIAL,
+                ResourceKey::Graph(function_path.clone()),
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![
                     GraphDocumentOperation::RemoveConnection {
@@ -483,11 +477,11 @@ fn project_execution_uses_replaced_persisted_function_body_and_current_generatio
 
 #[test]
 fn reversed_persisted_function_insertion_publishes_equivalent_callable_generation() {
-    use crate::node_system::document::{
+    use crate::graph_document::{
         ConnectionId, DocumentConnection, DynamicMemberLocator, DynamicPortBinding,
-        FunctionDocument, FunctionParameter, FunctionParameterId, FunctionSignature, OrderKey,
-        PortAddress, PortInstanceId,
+        FunctionParameterId, OrderKey, PortAddress, PortInstanceId,
     };
+    use crate::node_system::document::{FunctionDocument, FunctionParameter, FunctionSignature};
     use crate::node_system::plan::FunctionPlanHandle;
     use crate::node_system::protocol::{ParameterKey, PortKey};
     use crate::node_system::runtime::FunctionPlanProvider;
@@ -495,8 +489,8 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
     let path_a = GraphResourcePath::new("functions/A.yssbi-function").unwrap();
     let path_b = GraphResourcePath::new("functions/B.yssbi-function").unwrap();
     let event_path = GraphResourcePath::new("events/Chain.yssbi-event").unwrap();
-    let parameter_id = FunctionParameterId("amount".into());
-    let return_id = FunctionParameterId("return".into());
+    let parameter_id = FunctionParameterId::new("amount");
+    let return_id = FunctionParameterId::new("return");
     let port = |node_id, template: &str, instance: u128| {
         PortAddress::instance(
             node_id,
@@ -514,11 +508,11 @@ fn reversed_persisted_function_insertion_publishes_equivalent_callable_generatio
     let binding = |path: &GraphResourcePath, parameter: &FunctionParameterId, order: &str| {
         DynamicPortBinding::Resolved {
             origin: DynamicMemberLocator::FunctionParameter {
-                function: crate::node_system::document::GraphResourcePath(path.as_str().into()),
+                function: path.clone(),
                 parameter: parameter.clone(),
             },
-            order: OrderKey(order.into()),
-            last_known: crate::node_system::document::LastKnownPortMetadata::default(),
+            order: OrderKey::new(order),
+            last_known: crate::graph_document::LastKnownPortMetadata::default(),
         }
     };
     let signature = || FunctionSignature {
@@ -940,7 +934,7 @@ fn project_execution_refuses_blocking_analysis() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 patch,
             ),
@@ -1032,7 +1026,7 @@ fn project_variable_get_executes_against_authoritative_resource() {
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: variable_node,
@@ -1092,7 +1086,7 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
             &graph_path(),
             MutationRequest::new(
                 ResourceKey::Graph(document_path()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![
                     GraphDocumentOperation::InsertNode { node: first_get },
@@ -1117,8 +1111,8 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
     let invalid_demand = crate::node_system::plan::ExecutionDemand::Outputs {
         outputs: Box::new([crate::node_system::plan::GraphOutputRef {
             graph_path: document_path(),
-            port: crate::node_system::document::PortAddress::declared(
-                crate::node_system::document::NodeId::new(),
+            port: crate::graph_document::PortAddress::declared(
+                crate::graph_document::NodeId::new(),
                 crate::node_system::protocol::PortKey::new("value").unwrap(),
             ),
         }]),
@@ -1140,7 +1134,7 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
     let demand = crate::node_system::plan::ExecutionDemand::Outputs {
         outputs: Box::new([crate::node_system::plan::GraphOutputRef {
             graph_path: document_path(),
-            port: crate::node_system::document::PortAddress::declared(
+            port: crate::graph_document::PortAddress::declared(
                 first_node,
                 crate::node_system::protocol::PortKey::new("value").unwrap(),
             ),
@@ -1167,7 +1161,7 @@ fn demanded_variable_get_preflights_only_its_retained_resource_and_releases_leas
     let unavailable_demand = crate::node_system::plan::ExecutionDemand::Outputs {
         outputs: Box::new([crate::node_system::plan::GraphOutputRef {
             graph_path: document_path(),
-            port: crate::node_system::document::PortAddress::declared(
+            port: crate::graph_document::PortAddress::declared(
                 second_node,
                 crate::node_system::protocol::PortKey::new("value").unwrap(),
             ),

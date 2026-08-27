@@ -3,7 +3,7 @@ use super::project_address;
 use super::types::{
     DiagnosticDto, DiagnosticLocationDto, DiagnosticSeverityDto, LocalizationLookup,
 };
-use crate::node_system::document::{ConnectionId, GraphDocument, NodeId, PortAddress};
+use crate::graph_document::{ConnectionId, GraphDocument, NodeId, PortAddress};
 
 type EditorDiagnostic = NodeDiagnostic<NodeId, PortAddress, ConnectionId, Box<str>>;
 

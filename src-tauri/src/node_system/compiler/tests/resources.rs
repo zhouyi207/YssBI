@@ -120,7 +120,10 @@ fn compiler_aggregates_fragment_resources_and_results() {
 fn demand_specialization_prunes_independent_pure_chain_and_owned_resource() {
     let (registry, graph) = demand_fixture();
     let compiler = GraphCompiler::new(&registry, &Resources);
-    let snapshot = compiler.snapshot(GraphResourcePath("events/main".into()), &graph);
+    let snapshot = compiler.snapshot(
+        GraphResourcePath::new("events/main.yssbi-event").unwrap(),
+        &graph,
+    );
     let result = compiler
         .compile_snapshot(&snapshot, &CompileCancellationToken::new())
         .unwrap();
@@ -130,7 +133,7 @@ fn demand_specialization_prunes_independent_pure_chain_and_owned_resource() {
 
     let plan = basis
         .derive_plan(&ExecutionDemand::Outputs {
-            outputs: Box::new([demand_output("events/main", 2, "out")]),
+            outputs: Box::new([demand_output("events/main.yssbi-event", 2, "out")]),
             include_default_results: false,
         })
         .unwrap();
@@ -146,7 +149,7 @@ fn demand_specialization_prunes_independent_pure_chain_and_owned_resource() {
     assert_eq!(plan.results.len(), 1);
     assert_eq!(
         plan.results[0].output,
-        demand_output("events/main", 2, "out")
+        demand_output("events/main.yssbi-event", 2, "out")
     );
     assert_eq!(
         plan.resources
@@ -230,7 +233,7 @@ fn rename_dataframe_configured_builtin_reaches_relational_plan() {
 
 #[test]
 fn builtin_relational_chain_specializes_final_and_intermediate_demands() {
-    let graph_path = "events/task-3-fix-round-1";
+    let graph_path = "events/task-3-fix-round-1.yssbi-event";
     let result = compile_builtin_relational_chain(graph_path);
     assert!(
         result.analysis.diagnostics.is_empty(),
@@ -240,7 +243,7 @@ fn builtin_relational_chain_specializes_final_and_intermediate_demands() {
     let basis = result.execution_basis.expect("chain keeps demand basis");
     assert_eq!(
         basis.provenance.graph_path,
-        GraphResourcePath(graph_path.into())
+        GraphResourcePath::new(graph_path).unwrap()
     );
     assert_eq!(
         basis.provenance.basis.resource_versions,
@@ -302,7 +305,7 @@ fn builtin_relational_chain_specializes_final_and_intermediate_demands() {
         assert_eq!(plan.operations.len(), 1);
         assert_eq!(plan.results.len(), 1);
         assert_eq!(plan.results[0].output, selected_output);
-        assert_eq!(plan.results[0].output.graph_path.0.as_ref(), graph_path);
+        assert_eq!(plan.results[0].output.graph_path.as_str(), graph_path);
         assert_eq!(
             plan.results[0].output.port,
             PortAddress::declared(node_id(node), key("result"))

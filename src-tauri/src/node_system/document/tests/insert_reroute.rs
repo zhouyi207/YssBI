@@ -443,10 +443,10 @@ fn phase2_insert_reroute_document_rejects_orphan_malformed_and_mismatched_endpoi
         orphan_address,
         DynamicPortBinding::Orphan {
             origin: DynamicMemberLocator::SchemaField {
-                source: SchemaSourceIdentity("source".into()),
-                field: SchemaFieldIdentity("field".into()),
+                source: SchemaSourceIdentity::new("source"),
+                field: SchemaFieldIdentity::new("field"),
             },
-            order: OrderKey("orphan".into()),
+            order: OrderKey::new("orphan"),
             last_known: LastKnownPortMetadata {
                 label: "Orphan".into(),
                 value_type: None,
@@ -541,7 +541,7 @@ impl Case {
             id: connection_id(ORIGINAL_CONNECTION),
             output: declared(node_id(SOURCE_NODE), self.source_port),
             input: declared(node_id(TARGET_NODE), self.target_port),
-            order: self.order.map(|value| OrderKey(value.into())),
+            order: self.order.map(|value| OrderKey::new(value)),
         };
         document
             .connections

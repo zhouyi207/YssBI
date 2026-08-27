@@ -42,7 +42,7 @@ impl ProjectState {
                 }
                 error => MutationConflict::CatalogResourceStale(error.to_string().into()),
             })?;
-        let node_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        let node_path = graph_path.clone();
         let expected_resource = ResourceKey::Graph(node_path.clone());
         let (document, registry) = {
             let publication = self.mutation_publication.lock().unwrap();
@@ -120,7 +120,7 @@ impl ProjectState {
         #[cfg(test)] allocate_connection_id: Option<&(dyn Fn() -> ConnectionId + Send + Sync)>,
     ) -> Result<GraphMutationResultDto, MutationConflict> {
         self.ensure_mutation_operational()?;
-        let node_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        let node_path = graph_path.clone();
         let expected_resource = ResourceKey::Graph(node_path.clone());
         if request.resource != expected_resource {
             return Err(MutationConflict::ResourceMismatch {
@@ -235,10 +235,12 @@ impl ProjectState {
                 environment.registry.as_ref(),
             )
             .map_err(|error| MutationConflict::Projection(error.into()))?;
-            if snapshot.graph_revision != request.base_revision {
+            if snapshot.graph_revision != request.base_revision.to_graph_revision() {
                 return Err(MutationConflict::StaleRevision {
                     base_revision: request.base_revision,
-                    current_revision: snapshot.graph_revision,
+                    current_revision: ResourceRevision::from_graph_revision(
+                        snapshot.graph_revision,
+                    ),
                 });
             }
             Some((snapshot, environment))
@@ -247,14 +249,12 @@ impl ProjectState {
         };
         let (projected_connect, projected_connect_authority_generation) =
             if let EditorGraphMutationDto::Connect { output, input, .. } = &request.payload {
-                let output = crate::node_system::document::PortAddress::try_from(output.clone())
-                    .map_err(|message: String| {
-                        MutationConflict::InvalidEditorMutation(message.into())
-                    })?;
-                let input = crate::node_system::document::PortAddress::try_from(input.clone())
-                    .map_err(|message: String| {
-                        MutationConflict::InvalidEditorMutation(message.into())
-                    })?;
+                let output = crate::graph_document::PortAddress::try_from(output.clone()).map_err(
+                    |message: String| MutationConflict::InvalidEditorMutation(message.into()),
+                )?;
+                let input = crate::graph_document::PortAddress::try_from(input.clone()).map_err(
+                    |message: String| MutationConflict::InvalidEditorMutation(message.into()),
+                )?;
                 let source = self
                     .capture_projection_source(graph_path)
                     .map_err(|error| MutationConflict::Projection(error.into()))?;
@@ -267,9 +267,11 @@ impl ProjectState {
                     .get_or_compile_current_from_source(graph_path, &source)
                     .map_err(|error| MutationConflict::Projection(error.into()))?;
                 let projection = &analysis.payload.interface_projection;
-                if projection.basis.graph_revision != request.base_revision {
+                if projection.basis.graph_revision != request.base_revision.to_graph_revision() {
                     return Err(MutationConflict::CompilationBasisStale {
-                        basis_revision: projection.basis.graph_revision,
+                        basis_revision: ResourceRevision::from_graph_revision(
+                            projection.basis.graph_revision,
+                        ),
                         current_revision: request.base_revision,
                     });
                 }
@@ -355,7 +357,7 @@ impl ProjectState {
         request: MutationRequest<GraphMutation>,
     ) -> Result<GraphDeltaEvent<GraphDocumentPatch>, MutationConflict> {
         self.ensure_mutation_operational()?;
-        let node_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        let node_path = graph_path.clone();
         let mut publication = self.mutation_publication.lock().unwrap();
         let mut data = self.project_data.write().unwrap();
         self.ensure_mutation_operational()?;
@@ -370,12 +372,7 @@ impl ProjectState {
         let mut documents = ProjectDocumentState::new(
             data.graphs
                 .iter()
-                .map(|(path, graph)| {
-                    (
-                        crate::node_system::document::GraphResourcePath(path.as_str().into()),
-                        graph.document.clone(),
-                    )
-                })
+                .map(|(path, graph)| (path.clone(), graph.document.clone()))
                 .collect::<BTreeMap<_, _>>(),
             BTreeMap::new(),
             BTreeMap::new(),
@@ -385,7 +382,7 @@ impl ProjectState {
                 .caused_by
                 .expect("mutation events carry operation IDs"),
             node_path,
-            event.from_revision,
+            event.from_revision.to_graph_revision(),
             event.payload.clone(),
         );
         self.history
@@ -395,7 +392,7 @@ impl ProjectState {
             .map_err(|error| MutationConflict::History(error.to_string().into()))?;
         self.run_mutation_publication_test_hook();
         for (path, graph) in &mut data.graphs {
-            let key = crate::node_system::document::GraphResourcePath(path.as_str().into());
+            let key = path.clone();
             if let Some(document) = documents.graphs.remove(&key) {
                 graph.document = document;
             }
@@ -473,7 +470,7 @@ impl ProjectState {
             operation_id,
             payload,
         } = request;
-        let node_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        let node_path = graph_path.clone();
         self.commit_graph_patch_planned(
             graph_path,
             resource,
@@ -523,12 +520,12 @@ impl ProjectState {
         projection_environment: Option<ProjectionEnvironmentSnapshot>,
         expected_authority_generation: Option<u64>,
         plan: impl FnOnce(
-            &crate::node_system::document::GraphDocument,
+            &crate::graph_document::GraphDocument,
             &crate::node_system::registry::NodeRegistry,
         ) -> Result<GraphDocumentPatch, MutationConflict>,
     ) -> Result<CommittedGraphMutation, MutationConflict> {
         self.ensure_mutation_operational()?;
-        let node_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+        let node_path = graph_path.clone();
         let expected_resource = ResourceKey::Graph(node_path.clone());
         if resource != expected_resource {
             return Err(MutationConflict::ResourceMismatch {
@@ -557,10 +554,12 @@ impl ProjectState {
                         requested: expected_resource.clone(),
                         store: expected_resource.clone(),
                     })?;
-            if graph.document.revision != base_revision {
+            if graph.document.revision != base_revision.to_graph_revision() {
                 return Err(MutationConflict::StaleRevision {
                     base_revision,
-                    current_revision: graph.document.revision,
+                    current_revision: ResourceRevision::from_graph_revision(
+                        graph.document.revision,
+                    ),
                 });
             }
             (
@@ -615,11 +614,9 @@ impl ProjectState {
         {
             return Err(MutationConflict::CompilationBasisStale {
                 basis_revision: base_revision,
-                current_revision: data
-                    .graphs
-                    .get(graph_path)
-                    .map(|graph| graph.document.revision)
-                    .unwrap_or(base_revision),
+                current_revision: data.graphs.get(graph_path).map_or(base_revision, |graph| {
+                    ResourceRevision::from_graph_revision(graph.document.revision)
+                }),
             });
         }
         if let Some(snapshot) = catalog_snapshot {
@@ -644,10 +641,10 @@ impl ProjectState {
                     requested: expected_resource.clone(),
                     store: expected_resource.clone(),
                 })?;
-        if graph.document.revision != base_revision {
+        if graph.document.revision != base_revision.to_graph_revision() {
             return Err(MutationConflict::StaleRevision {
                 base_revision,
-                current_revision: graph.document.revision,
+                current_revision: ResourceRevision::from_graph_revision(graph.document.revision),
             });
         }
         if !projection_environment.matches_publication(&publication) {
@@ -676,18 +673,17 @@ impl ProjectState {
         let mut documents = ProjectDocumentState::new(
             data.graphs
                 .iter()
-                .map(|(path, graph)| {
-                    (
-                        crate::node_system::document::GraphResourcePath(path.as_str().into()),
-                        graph.document.clone(),
-                    )
-                })
+                .map(|(path, graph)| (path.clone(), graph.document.clone()))
                 .collect(),
             BTreeMap::new(),
             BTreeMap::new(),
         );
-        let transaction =
-            ProjectHistoryTransaction::graph(operation_id, node_path, base_revision, patch.clone());
+        let transaction = ProjectHistoryTransaction::graph(
+            operation_id,
+            node_path,
+            base_revision.to_graph_revision(),
+            patch.clone(),
+        );
         let mut history = self.history.write().unwrap();
         history
             .apply_transaction(&mut documents, transaction)
@@ -695,9 +691,7 @@ impl ProjectState {
 
         let updated = documents
             .graphs
-            .remove(&crate::node_system::document::GraphResourcePath(
-                graph_path.as_str().into(),
-            ))
+            .remove(&graph_path.clone())
             .expect("patched graph remains present");
         let to_revision = updated.revision;
         data.graphs
@@ -711,11 +705,9 @@ impl ProjectState {
         Ok(CommittedGraphMutation {
             project_instance_id: publication.project_instance_id.clone(),
             delta: GraphDeltaEvent {
-                graph_path: crate::node_system::document::GraphResourcePath(
-                    graph_path.as_str().into(),
-                ),
+                graph_path: graph_path.clone(),
                 from_revision: base_revision,
-                to_revision,
+                to_revision: ResourceRevision::from_graph_revision(to_revision),
                 caused_by: Some(operation_id),
                 payload: patch,
             },

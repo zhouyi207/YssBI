@@ -1,6 +1,6 @@
 use super::*;
 use crate::data_contract::{DataType, DataValue};
-use crate::node_system::document::{
+use crate::graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, NodePosition, ParameterValues, PortAddress,
 };
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
@@ -152,7 +152,7 @@ fn project_with_variable_write(
 
 fn node(node_type: &str) -> DocumentNode {
     DocumentNode {
-        id: crate::node_system::document::NodeId::new(),
+        id: crate::graph_document::NodeId::new(),
         node_type: NodeTypeId::new(node_type).unwrap(),
         position: NodePosition { x: 0.0, y: 0.0 },
         parameters: ParameterValues::new(),

@@ -2,7 +2,7 @@ use super::*;
 
 fn history_request(
     resource: ResourceKey,
-    revision: GraphRevision,
+    revision: ResourceRevision,
 ) -> MutationRequest<HistoryMutation> {
     MutationRequest::new(resource, revision, OperationId::new(), HistoryMutation {})
 }
@@ -13,7 +13,7 @@ fn worksheet_history_key(path: &WorksheetResourcePath) -> ResourceKey {
     ))
 }
 
-fn worksheet_revision(state: &ProjectState, path: &WorksheetResourcePath) -> GraphRevision {
+fn worksheet_revision(state: &ProjectState, path: &WorksheetResourcePath) -> ResourceRevision {
     state.worksheet_revisions.read().unwrap()[path]
 }
 
@@ -290,7 +290,7 @@ fn worksheet_history_publication_failure_enters_authoritative_recovery() {
             .worksheet_revisions
             .write()
             .unwrap()
-            .insert(hook_path.clone(), GraphRevision::new(99));
+            .insert(hook_path.clone(), ResourceRevision::new(99));
     }));
     state.set_project_filesystem_rollback_fault(true);
 

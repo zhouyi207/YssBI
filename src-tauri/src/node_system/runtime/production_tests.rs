@@ -1,9 +1,9 @@
 use super::*;
+use crate::graph_document::{GraphResourcePath, GraphRevision};
 use crate::node_system::ProjectSessionId;
 use crate::node_system::analysis::{
     CompilationBasis, CompileId, CompileProvenance, ResourceKey, ResourceVersion,
 };
-use crate::node_system::document::{GraphResourcePath, GraphRevision};
 use crate::node_system::plan::{
     CompiledResourceRequirement, ExecutionPlan, FunctionPlanAbi, FunctionPlanHandle,
     PlannedValueContract, ResourceAccess, ResourceId, ResourceKind, StructuredControlRegion,
@@ -37,7 +37,7 @@ fn empty_plan(
     ExecutionPlan {
         provenance: CompileProvenance {
             project_session_id: session.clone(),
-            graph_path: GraphResourcePath(path.into()),
+            graph_path: GraphResourcePath::new(path).unwrap(),
             basis: CompilationBasis {
                 graph_revision: GraphRevision::new(1),
                 registry_fingerprint: registry.clone(),
@@ -101,7 +101,7 @@ fn project_variable_exclusive_access_is_allowed_for_durable_commit_collection() 
     let provider = ProjectResourceProvider::new(snapshot);
     let provenance = empty_plan(
         &session,
-        "events/main",
+        "events/main.yssbi-event",
         &RegistryFingerprint::from_bytes([7; 32]),
         resource_versions,
     )
@@ -139,7 +139,7 @@ fn project_resource_provider_rejects_unsupported_access_during_validation() {
     );
     let provenance = empty_plan(
         &session,
-        "events/main",
+        "events/main.yssbi-event",
         &RegistryFingerprint::from_bytes([7; 32]),
         resource_versions,
     )
@@ -214,7 +214,7 @@ fn run_executor_classifies_resource_plan_validation_errors() {
     );
     let mut unsupported = empty_plan(
         &session,
-        "events/main",
+        "events/main.yssbi-event",
         &RegistryFingerprint::from_bytes([7; 32]),
         resource_versions,
     );
@@ -239,7 +239,7 @@ fn run_executor_classifies_resource_plan_validation_errors() {
 
     let stale_session = empty_plan(
         &ProjectSessionId::new("project-b"),
-        "events/main",
+        "events/main.yssbi-event",
         &RegistryFingerprint::from_bytes([7; 32]),
         BTreeMap::new(),
     );
@@ -260,7 +260,7 @@ fn run_executor_classifies_resource_plan_validation_errors() {
 
     let mut stale_version = empty_plan(
         &session,
-        "events/main",
+        "events/main.yssbi-event",
         &RegistryFingerprint::from_bytes([7; 32]),
         versions(&[(resource.as_str(), "2")]),
     );
@@ -369,15 +369,16 @@ fn project_resource_lease_owns_data_until_cleanup() {
 fn function_plan_generation_rejects_stale_abi_provenance() {
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
-    let resource_versions = versions(&[("functions/shared", "4")]);
+    let resource_versions = versions(&[("functions/shared.yssbi-function", "4")]);
     let plan = Arc::new(empty_plan(
         &session,
-        "functions/shared",
+        "functions/shared.yssbi-function",
         &registry,
         resource_versions.clone(),
     ));
     let mut stale_provenance = plan.provenance.clone();
-    stale_provenance.basis.resource_versions = versions(&[("functions/shared", "3")]);
+    stale_provenance.basis.resource_versions =
+        versions(&[("functions/shared.yssbi-function", "3")]);
     let abi = Arc::new(FunctionPlanAbi {
         provenance: stale_provenance,
         parameters: BTreeMap::new(),
@@ -391,7 +392,7 @@ fn function_plan_generation_rejects_stale_abi_provenance() {
         registry,
         resource_versions,
         vec![(
-            GraphResourcePath("functions/shared".into()),
+            GraphResourcePath::new("functions/shared.yssbi-function").unwrap(),
             ResourceVersion::new("4"),
             plan,
             abi,
@@ -407,14 +408,14 @@ fn function_plan_generation_rejects_stale_abi_provenance() {
 
 #[test]
 fn function_plan_generation_rejects_aliased_abi_members() {
-    use crate::node_system::document::FunctionParameterId;
+    use crate::graph_document::FunctionParameterId;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
-    let resource_versions = versions(&[("functions/shared", "4")]);
+    let resource_versions = versions(&[("functions/shared.yssbi-function", "4")]);
     let mut plan = empty_plan(
         &session,
-        "functions/shared",
+        "functions/shared.yssbi-function",
         &registry,
         resource_versions.clone(),
     );
@@ -423,16 +424,16 @@ fn function_plan_generation_rejects_aliased_abi_members() {
     let abi = Arc::new(FunctionPlanAbi {
         provenance: plan.provenance.clone(),
         parameters: BTreeMap::from([
-            (FunctionParameterId("left".into()), ValueRef::new(0)),
-            (FunctionParameterId("right".into()), ValueRef::new(0)),
+            (FunctionParameterId::new("left"), ValueRef::new(0)),
+            (FunctionParameterId::new("right"), ValueRef::new(0)),
         ]),
         parameter_contracts: BTreeMap::from([
             (
-                FunctionParameterId("left".into()),
+                FunctionParameterId::new("left"),
                 PlannedValueContract::opaque(),
             ),
             (
-                FunctionParameterId("right".into()),
+                FunctionParameterId::new("right"),
                 PlannedValueContract::opaque(),
             ),
         ]),
@@ -445,7 +446,7 @@ fn function_plan_generation_rejects_aliased_abi_members() {
         registry,
         resource_versions,
         vec![(
-            GraphResourcePath("functions/shared".into()),
+            GraphResourcePath::new("functions/shared.yssbi-function").unwrap(),
             ResourceVersion::new("4"),
             plan,
             abi,
@@ -460,15 +461,15 @@ fn function_plan_generation_rejects_aliased_abi_members() {
 
 #[test]
 fn function_plan_generation_requires_exact_result_production_keys() {
-    use crate::node_system::document::FunctionParameterId;
+    use crate::graph_document::FunctionParameterId;
     use crate::node_system::plan::PlanValueSource;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
-    let resource_versions = versions(&[("functions/shared", "4")]);
+    let resource_versions = versions(&[("functions/shared.yssbi-function", "4")]);
     let mut plan = empty_plan(
         &session,
-        "functions/shared",
+        "functions/shared.yssbi-function",
         &registry,
         resource_versions.clone(),
     );
@@ -477,13 +478,13 @@ fn function_plan_generation_requires_exact_result_production_keys() {
         ValueRef::new(0),
         OutputProduction::Streaming,
     )]);
-    let result = FunctionParameterId("return".into());
+    let result = FunctionParameterId::new("return");
     let generate = |result_productions| {
         FunctionPlanStore::new(session.clone(), 64).generation(
             registry.clone(),
             resource_versions.clone(),
             vec![(
-                GraphResourcePath("functions/shared".into()),
+                GraphResourcePath::new("functions/shared.yssbi-function").unwrap(),
                 ResourceVersion::new("4"),
                 Arc::new(plan.clone()),
                 Arc::new(FunctionPlanAbi {
@@ -509,7 +510,7 @@ fn function_plan_generation_requires_exact_result_production_keys() {
         generate(BTreeMap::from([
             (result.clone(), OutputProduction::Streaming),
             (
-                FunctionParameterId("extra".into()),
+                FunctionParameterId::new("extra"),
                 OutputProduction::FullyMaterialized,
             ),
         ])),
@@ -519,15 +520,15 @@ fn function_plan_generation_requires_exact_result_production_keys() {
 
 #[test]
 fn function_plan_generation_rejects_stale_result_production_contract() {
-    use crate::node_system::document::FunctionParameterId;
+    use crate::graph_document::FunctionParameterId;
     use crate::node_system::plan::PlanValueSource;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
-    let resource_versions = versions(&[("functions/shared", "4")]);
+    let resource_versions = versions(&[("functions/shared.yssbi-function", "4")]);
     let mut plan = empty_plan(
         &session,
-        "functions/shared",
+        "functions/shared.yssbi-function",
         &registry,
         resource_versions.clone(),
     );
@@ -537,7 +538,7 @@ fn function_plan_generation_rejects_stale_result_production_contract() {
         ValueRef::new(0),
         OutputProduction::Streaming,
     )]);
-    let result = FunctionParameterId("return".into());
+    let result = FunctionParameterId::new("return");
     let abi = FunctionPlanAbi {
         provenance: plan.provenance.clone(),
         parameters: BTreeMap::new(),
@@ -551,7 +552,7 @@ fn function_plan_generation_rejects_stale_result_production_contract() {
         registry,
         resource_versions,
         vec![(
-            GraphResourcePath("functions/shared".into()),
+            GraphResourcePath::new("functions/shared.yssbi-function").unwrap(),
             ResourceVersion::new("4"),
             Arc::new(plan),
             Arc::new(abi),
@@ -567,18 +568,18 @@ fn function_plan_generation_rejects_stale_result_production_contract() {
 
 #[test]
 fn function_plan_generation_requires_initializable_parameters_and_sourced_results() {
-    use crate::node_system::document::FunctionParameterId;
+    use crate::graph_document::FunctionParameterId;
     use crate::node_system::plan::PlanValueSource;
 
     let session = ProjectSessionId::new("project-a");
     let registry = RegistryFingerprint::from_bytes([7; 32]);
-    let resource_versions = versions(&[("functions/shared", "4")]);
+    let resource_versions = versions(&[("functions/shared.yssbi-function", "4")]);
     let generate = |plan: ExecutionPlan, abi: FunctionPlanAbi| {
         FunctionPlanStore::new(session.clone(), 64).generation(
             registry.clone(),
             resource_versions.clone(),
             vec![(
-                GraphResourcePath("functions/shared".into()),
+                GraphResourcePath::new("functions/shared.yssbi-function").unwrap(),
                 ResourceVersion::new("4"),
                 Arc::new(plan),
                 Arc::new(abi),
@@ -588,14 +589,14 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
 
     let mut unsourced_parameter = empty_plan(
         &session,
-        "functions/shared",
+        "functions/shared.yssbi-function",
         &registry,
         resource_versions.clone(),
     );
     unsourced_parameter.value_count = 1;
     let parameter_abi = FunctionPlanAbi {
         provenance: unsourced_parameter.provenance.clone(),
-        parameters: BTreeMap::from([(FunctionParameterId("amount".into()), ValueRef::new(0))]),
+        parameters: BTreeMap::from([(FunctionParameterId::new("amount"), ValueRef::new(0))]),
         parameter_contracts: BTreeMap::new(),
         results: BTreeMap::new(),
         result_productions: BTreeMap::new(),
@@ -608,7 +609,7 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
 
     let mut unsourced_result = empty_plan(
         &session,
-        "functions/shared",
+        "functions/shared.yssbi-function",
         &registry,
         resource_versions.clone(),
     );
@@ -617,13 +618,13 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
         provenance: unsourced_result.provenance.clone(),
         parameters: BTreeMap::new(),
         parameter_contracts: BTreeMap::new(),
-        results: BTreeMap::from([(FunctionParameterId("return".into()), ValueRef::new(0))]),
+        results: BTreeMap::from([(FunctionParameterId::new("return"), ValueRef::new(0))]),
         result_productions: BTreeMap::from([(
-            FunctionParameterId("return".into()),
+            FunctionParameterId::new("return"),
             OutputProduction::FullyMaterialized,
         )]),
         result_contracts: BTreeMap::from([(
-            FunctionParameterId("return".into()),
+            FunctionParameterId::new("return"),
             PlannedValueContract::opaque(),
         )]),
     };
@@ -634,7 +635,7 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
 
     let mut sourced = empty_plan(
         &session,
-        "functions/shared",
+        "functions/shared.yssbi-function",
         &registry,
         resource_versions.clone(),
     );
@@ -646,18 +647,18 @@ fn function_plan_generation_requires_initializable_parameters_and_sourced_result
     )]);
     let sourced_abi = FunctionPlanAbi {
         provenance: sourced.provenance.clone(),
-        parameters: BTreeMap::from([(FunctionParameterId("amount".into()), ValueRef::new(0))]),
+        parameters: BTreeMap::from([(FunctionParameterId::new("amount"), ValueRef::new(0))]),
         parameter_contracts: BTreeMap::from([(
-            FunctionParameterId("amount".into()),
+            FunctionParameterId::new("amount"),
             PlannedValueContract::opaque(),
         )]),
-        results: BTreeMap::from([(FunctionParameterId("return".into()), ValueRef::new(0))]),
+        results: BTreeMap::from([(FunctionParameterId::new("return"), ValueRef::new(0))]),
         result_productions: BTreeMap::from([(
-            FunctionParameterId("return".into()),
+            FunctionParameterId::new("return"),
             OutputProduction::FullyMaterialized,
         )]),
         result_contracts: BTreeMap::from([(
-            FunctionParameterId("return".into()),
+            FunctionParameterId::new("return"),
             PlannedValueContract::opaque(),
         )]),
     };

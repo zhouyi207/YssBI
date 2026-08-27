@@ -36,10 +36,8 @@ fn graph_cache_unload_preserves_complete_project_history() {
             .apply_graph_patch(
                 path,
                 MutationRequest::new(
-                    ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-                        path.as_str().into(),
-                    )),
-                    GraphRevision::INITIAL,
+                    ResourceKey::Graph(path.clone()),
+                    ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                     OperationId::new(),
                     GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                         node: node("yssbi.constant.int64"),
@@ -52,8 +50,7 @@ fn graph_cache_unload_preserves_complete_project_history() {
     state.graph_projection(&unloaded, "en-US").unwrap();
     state.graph_projection(&retained, "en-US").unwrap();
     let coordinator = state.compile_coordinator.read().unwrap().clone();
-    let retained_document_path =
-        crate::node_system::document::GraphResourcePath(retained.as_str().into());
+    let retained_document_path = retained.clone();
     assert!(coordinator.contains_slot_for_test(&document_path()));
     assert!(coordinator.contains_slot_for_test(&retained_document_path));
 
@@ -115,7 +112,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
         std::env::temp_dir().join(format!("yssbi-history-hydration-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
     let graph_path = GraphResourcePath::new("events/Hydrated.yssbi-event").unwrap();
-    let document_path = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+    let document_path = graph_path.clone();
     let mut local_variable = test_variable("Hydrated local");
     local_variable.scope = crate::variable::VariableScope::Event {
         event_path: graph_path.as_str().into(),
@@ -142,7 +139,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
             &graph_path,
             MutationRequest::new(
                 ResourceKey::Graph(document_path.clone()),
-                GraphRevision::INITIAL,
+                ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                 OperationId::new(),
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: inserted_node,
@@ -166,7 +163,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
             true,
             MutationRequest::new(
                 ResourceKey::Graph(document_path.clone()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -209,7 +206,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
     assert_eq!(prepared.basis.history_id, before_head.unwrap());
     assert_eq!(
         prepared.basis.expected_revisions[&ResourceKey::Graph(document_path.clone())],
-        GraphRevision::new(1)
+        ResourceRevision::from_graph_revision(GraphRevision::new(1))
     );
     drop(prepared);
 
@@ -219,7 +216,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
         true,
         MutationRequest::new(
             ResourceKey::Graph(document_path.clone()),
-            GraphRevision::new(1),
+            ResourceRevision::from_graph_revision(GraphRevision::new(1)),
             OperationId::new(),
             HistoryMutation {},
         ),
@@ -245,7 +242,7 @@ fn unloaded_graph_history_preparation_hydrates_disk_without_loading_cache() {
         true,
         MutationRequest::new(
             ResourceKey::Graph(document_path),
-            GraphRevision::new(1),
+            ResourceRevision::from_graph_revision(GraphRevision::new(1)),
             OperationId::new(),
             HistoryMutation {},
         ),
@@ -309,7 +306,7 @@ fn assert_history_lifecycle_replacement_has_zero_effects(
             "en-US",
             MutationRequest::new(
                 resource,
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -394,9 +391,8 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
     std::fs::create_dir_all(&root).unwrap();
     let loaded_path = GraphResourcePath::new("events/LoadedHistory.yssbi-event").unwrap();
     let unloaded_path = GraphResourcePath::new("events/UnloadedHistory.yssbi-event").unwrap();
-    let loaded_key = crate::node_system::document::GraphResourcePath(loaded_path.as_str().into());
-    let unloaded_key =
-        crate::node_system::document::GraphResourcePath(unloaded_path.as_str().into());
+    let loaded_key = loaded_path.clone();
+    let unloaded_key = unloaded_path.clone();
     let loaded_node = node("yssbi.constant.int64");
     let unloaded_node = node("yssbi.constant.int64");
     let loaded_node_id = loaded_node.id;
@@ -431,7 +427,7 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
                 path,
                 MutationRequest::new(
                     ResourceKey::Graph(key.clone()),
-                    GraphRevision::INITIAL,
+                    ResourceRevision::from_graph_revision(GraphRevision::INITIAL),
                     OperationId::new(),
                     patch,
                 ),
@@ -468,7 +464,7 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(loaded_key.clone()),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -506,7 +502,8 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
         loaded_path.as_str()
     );
     assert!(undo.deltas.iter().all(|delta| {
-        delta.from_revision == GraphRevision::new(1) && delta.to_revision == GraphRevision::new(2)
+        delta.from_revision == ResourceRevision::from_graph_revision(GraphRevision::new(1))
+            && delta.to_revision == ResourceRevision::from_graph_revision(GraphRevision::new(2))
     }));
 
     let redo = state
@@ -515,7 +512,7 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(loaded_key),
-                GraphRevision::new(2),
+                ResourceRevision::from_graph_revision(GraphRevision::new(2)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -549,7 +546,8 @@ fn mixed_residency_graph_history_is_atomic_and_preserves_residency() {
     assert_eq!(redo.deltas.len(), 2);
     assert_eq!(redo.projection_replacements.len(), 1);
     assert!(redo.deltas.iter().all(|delta| {
-        delta.from_revision == GraphRevision::new(2) && delta.to_revision == GraphRevision::new(3)
+        delta.from_revision == ResourceRevision::from_graph_revision(GraphRevision::new(2))
+            && delta.to_revision == ResourceRevision::from_graph_revision(GraphRevision::new(3))
     }));
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -562,7 +560,7 @@ fn mixed_residency_unloaded_graph_and_global_variable_commit_atomically() {
     ));
     std::fs::create_dir_all(&root).unwrap();
     let graph_path = GraphResourcePath::new("events/GraphGlobal.yssbi-event").unwrap();
-    let graph_key = crate::node_system::document::GraphResourcePath(graph_path.as_str().into());
+    let graph_key = graph_path.clone();
     let inserted_node = node("yssbi.constant.int64");
     let inserted_node_id = inserted_node.id;
     let graph_patch = GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
@@ -602,7 +600,7 @@ fn mixed_residency_unloaded_graph_and_global_variable_commit_atomically() {
             ),
             crate::node_system::document::ResourcePatch::variable(
                 variable_key,
-                GraphRevision::INITIAL,
+                ResourceRevision::INITIAL,
                 variable_patch,
             ),
         ],
@@ -633,7 +631,7 @@ fn mixed_residency_unloaded_graph_and_global_variable_commit_atomically() {
             "en-US",
             MutationRequest::new(
                 ResourceKey::Graph(graph_key),
-                GraphRevision::new(1),
+                ResourceRevision::from_graph_revision(GraphRevision::new(1)),
                 OperationId::new(),
                 HistoryMutation {},
             ),
@@ -661,7 +659,8 @@ fn mixed_residency_unloaded_graph_and_global_variable_commit_atomically() {
     assert_eq!(undo.deltas.len(), 2);
     assert!(undo.projection_replacements.is_empty());
     assert!(undo.deltas.iter().all(|delta| {
-        delta.from_revision == GraphRevision::new(1) && delta.to_revision == GraphRevision::new(2)
+        delta.from_revision == ResourceRevision::from_graph_revision(GraphRevision::new(1))
+            && delta.to_revision == ResourceRevision::from_graph_revision(GraphRevision::new(2))
     }));
     std::fs::remove_dir_all(root).unwrap();
 }

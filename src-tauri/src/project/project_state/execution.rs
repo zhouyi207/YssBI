@@ -1,13 +1,11 @@
 use super::*;
 
 struct ExecutionSnapshot {
-    document: crate::node_system::document::GraphDocument,
+    document: crate::graph_document::GraphDocument,
     data: ProjectData,
     database_instances: std::collections::HashMap<String, crate::database::DatabaseInstance>,
-    graph_revisions: std::collections::HashMap<
-        GraphResourcePath,
-        crate::node_system::document::ResourceRevision,
-    >,
+    graph_revisions:
+        std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
     variable_revisions:
         std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
     database_revisions: std::collections::HashMap<String, u64>,
@@ -484,7 +482,7 @@ fn snapshot_execution_resources(
                 .variable_revisions
                 .get(id)
                 .map(|entry| entry.revision)
-                .unwrap_or(crate::node_system::document::ResourceRevision::INITIAL),
+                .unwrap_or(crate::project::ResourceRevision::INITIAL),
         );
     }
     for (id, instance) in &snapshot.database_instances {

@@ -1,15 +1,16 @@
 use super::mutate_graph_document_with_emitter;
 use crate::event::{Event, EventProject};
-use crate::node_system::catalog::build_builtin_node_system;
-use crate::node_system::document::{
+use crate::graph_document::GraphResourcePath;
+use crate::graph_document::{
     ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphRevision, NodeId,
-    NodePosition, OperationId, OrderKey, ParameterValues, PortAddress, ResourceRevision,
+    NodePosition, OrderKey, ParameterValues, PortAddress,
 };
+use crate::node_system::catalog::build_builtin_node_system;
 use crate::node_system::protocol::{NodeTypeId, PortKey};
 use crate::project::{
-    GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, ProjectInstanceId,
-    ProjectState,
+    GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectInstanceId, ProjectState,
 };
+use crate::project::{OperationId, ResourceRevision};
 
 const ORIGINAL_ID: u128 = 0x8101;
 const SOURCE_ID: u128 = 0x8201;
@@ -124,9 +125,11 @@ impl Fixture {
     }
 
     fn revision(&self) -> ResourceRevision {
-        self.state.get_data().unwrap().graphs[&self.graph_path]
-            .document
-            .revision
+        ResourceRevision::from_graph_revision(
+            self.state.get_data().unwrap().graphs[&self.graph_path]
+                .document
+                .revision,
+        )
     }
 
     fn serialized_authority(&self) -> serde_json::Value {
@@ -161,7 +164,7 @@ fn base_document() -> GraphDocument {
         id: connection_id(ORIGINAL_ID),
         output: declared(node_id(SOURCE_ID), "value"),
         input: declared(node_id(TARGET_ID), "data"),
-        order: Some(OrderKey("original-order".into())),
+        order: Some(OrderKey::new("original-order")),
     };
     document.connections.insert(connection.id, connection);
     document.revision = GraphRevision::INITIAL;

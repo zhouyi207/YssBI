@@ -8,7 +8,7 @@ use crate::event::{
     LifecycleMutationPhaseDto, LifecycleMutationResultDto, LifecycleRecoveryDto,
     ProjectActivationResultDto,
 };
-use crate::node_system::document::OperationId;
+use crate::project::OperationId;
 use crate::project::{
     ProjectFilesystemError, ProjectInstanceId, ProjectRecord, ProjectRegistry, ProjectState,
     normalize_existing_path,

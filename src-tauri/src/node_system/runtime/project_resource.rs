@@ -50,11 +50,7 @@ impl ProjectResourceSnapshot {
     }
 
     pub fn with_variable(mut self, id: ResourceId, variable: Arc<VariableInstance>) -> Self {
-        self = self.with_variable_revision(
-            id,
-            variable,
-            crate::node_system::document::ResourceRevision::INITIAL,
-        );
+        self = self.with_variable_revision(id, variable, crate::project::ResourceRevision::INITIAL);
         self
     }
 
@@ -62,7 +58,7 @@ impl ProjectResourceSnapshot {
         mut self,
         id: ResourceId,
         variable: Arc<VariableInstance>,
-        revision: crate::node_system::document::ResourceRevision,
+        revision: crate::project::ResourceRevision,
     ) -> Self {
         self.variables.insert(
             id.clone(),
@@ -400,7 +396,7 @@ pub trait ProjectVariableAccess: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct VariableWriteEffect {
     pub resource: ResourceId,
-    pub expected_revision: crate::node_system::document::ResourceRevision,
+    pub expected_revision: crate::project::ResourceRevision,
     pub before: VariableInstance,
     pub after: DataValue,
 }
@@ -408,7 +404,7 @@ pub struct VariableWriteEffect {
 struct SnapshotVariableAccess {
     resource: ResourceId,
     variable: Arc<VariableInstance>,
-    revision: crate::node_system::document::ResourceRevision,
+    revision: crate::project::ResourceRevision,
     effects: Arc<Mutex<BTreeMap<ResourceId, VariableWriteEffect>>>,
 }
 

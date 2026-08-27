@@ -1,13 +1,13 @@
 use super::ResourceMutationTestPoint;
 use crate::data_contract::{DataType, DataValue};
-use crate::node_system::document::{
-    DocumentNode, NodeId, OperationId, ParameterValues, ResourceRevision,
-};
+use crate::graph_document::GraphResourcePath;
+use crate::graph_document::{DocumentNode, GraphRevision, NodeId, ParameterValues};
 use crate::node_system::protocol::NodeTypeId;
 use crate::project::{
-    GraphDocument, GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData,
-    ProjectFilesystemError, ProjectState, ResourceNameError,
+    GraphDocument, GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectFilesystemError,
+    ProjectState, ResourceNameError,
 };
+use crate::project::{OperationId, ResourceRevision};
 use crate::variable::{VariableId, VariableInstance, VariableScope};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, Mutex};
@@ -55,7 +55,7 @@ fn graph_path(path: &str) -> GraphResourcePath {
 
 fn function_data(
     path: &GraphResourcePath,
-    owner_revision: ResourceRevision,
+    owner_revision: GraphRevision,
     embedded_revision: ResourceRevision,
 ) -> ProjectData {
     let mut resource = GraphResourceDocument::new("Source", GraphDocumentKind::Function);
@@ -85,7 +85,7 @@ fn duplicate_boundary_snapshot(
     root: &std::path::Path,
 ) -> (
     serde_json::Value,
-    HashMap<GraphResourcePath, ResourceRevision>,
+    HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
     (u64, u64),
     BTreeMap<String, Vec<u8>>,
 ) {
@@ -132,7 +132,7 @@ fn rewrite_persisted_function_revisions(
     root: &std::path::Path,
     source: &GraphResourcePath,
     owner_revision: ResourceRevision,
-    graph_revision: ResourceRevision,
+    graph_revision: GraphRevision,
     embedded_revision: ResourceRevision,
 ) {
     let path = root.join(source.as_str());
@@ -269,7 +269,7 @@ fn function_create_after_same_path_removal_continues_the_tombstone_revision() {
         .remove_graph_resource_transaction(
             &session.instance_id,
             &path,
-            created_revision,
+            ResourceRevision::from_graph_revision(created_revision),
             OperationId::new(),
         )
         .unwrap();
@@ -291,8 +291,14 @@ fn function_create_after_same_path_removal_continues_the_tombstone_revision() {
 
     assert_eq!(recreated_path, path);
     assert_eq!(recreated_revision, tombstone_revision.next());
-    assert_eq!(persisted.revision, recreated_revision);
-    assert_eq!(persisted.function.unwrap().revision, recreated_revision);
+    assert_eq!(
+        persisted.revision,
+        ResourceRevision::from_graph_revision(recreated_revision)
+    );
+    assert_eq!(
+        persisted.function.unwrap().revision,
+        ResourceRevision::from_graph_revision(recreated_revision)
+    );
 }
 
 fn result_graph_path(result: &crate::event::ResourceMutationResultDto) -> GraphResourcePath {
@@ -456,7 +462,7 @@ fn reference_node(path: &GraphResourcePath) -> DocumentNode {
     DocumentNode {
         id: NodeId::new(),
         node_type: NodeTypeId::new("yssbi.project.function.call").unwrap(),
-        position: crate::node_system::document::NodePosition { x: 10.0, y: 20.0 },
+        position: crate::graph_document::NodePosition { x: 10.0, y: 20.0 },
         parameters,
         user_label: None,
     }
@@ -983,14 +989,14 @@ fn duplicate_loaded_function_requires_owner_embedded_and_ledger_exact() {
     let owner_mismatch = TestProject::new("duplicate-loaded-owner-ledger-mismatch");
     let owner_state = owner_mismatch.state(function_data(
         &source,
-        ResourceRevision::INITIAL,
+        ResourceRevision::INITIAL.to_graph_revision(),
         ResourceRevision::INITIAL,
     ));
     owner_state
         .graph_revisions
         .write()
         .unwrap()
-        .insert(source.clone(), ResourceRevision::new(1));
+        .insert(source.clone(), GraphRevision::new(1));
     assert_duplicate_revision_conflict_without_effects(
         &owner_state,
         &owner_mismatch.root,
@@ -1001,7 +1007,7 @@ fn duplicate_loaded_function_requires_owner_embedded_and_ledger_exact() {
     let embedded_mismatch = TestProject::new("duplicate-loaded-embedded-mismatch");
     let embedded_state = embedded_mismatch.state(function_data(
         &source,
-        ResourceRevision::INITIAL,
+        ResourceRevision::INITIAL.to_graph_revision(),
         ResourceRevision::INITIAL,
     ));
     embedded_state
@@ -1030,21 +1036,21 @@ fn duplicate_unloaded_function_rejects_ahead_or_incoherent_persisted_revisions()
             "owner-ahead",
             ResourceRevision::new(1),
             ResourceRevision::new(2),
-            ResourceRevision::new(2),
+            ResourceRevision::new(2).to_graph_revision(),
             ResourceRevision::new(2),
         ),
         (
             "embedded-ahead",
             ResourceRevision::new(1),
             ResourceRevision::INITIAL,
-            ResourceRevision::INITIAL,
+            ResourceRevision::INITIAL.to_graph_revision(),
             ResourceRevision::new(2),
         ),
         (
             "embedded-incoherent",
             ResourceRevision::new(2),
             ResourceRevision::INITIAL,
-            ResourceRevision::INITIAL,
+            ResourceRevision::INITIAL.to_graph_revision(),
             ResourceRevision::new(1),
         ),
     ];
@@ -1054,7 +1060,7 @@ fn duplicate_unloaded_function_rejects_ahead_or_incoherent_persisted_revisions()
         let source = graph_path("functions/UnloadedAuthority.yssbi-function");
         let state = project.state(function_data(
             &source,
-            ResourceRevision::INITIAL,
+            ResourceRevision::INITIAL.to_graph_revision(),
             ResourceRevision::INITIAL,
         ));
         state.project_data.write().unwrap().graphs.remove(&source);
@@ -1062,7 +1068,7 @@ fn duplicate_unloaded_function_rejects_ahead_or_incoherent_persisted_revisions()
             .graph_revisions
             .write()
             .unwrap()
-            .insert(source.clone(), authority);
+            .insert(source.clone(), authority.to_graph_revision());
         rewrite_persisted_function_revisions(&project.root, &source, owner, graph, embedded);
 
         assert_duplicate_revision_conflict_without_effects(
@@ -1082,7 +1088,7 @@ fn duplicate_unloaded_function_uses_exact_retained_token_and_initial_target() {
     let source_variable_id = variable.id;
     let mut data = function_data(
         &source,
-        ResourceRevision::INITIAL,
+        ResourceRevision::INITIAL.to_graph_revision(),
         ResourceRevision::INITIAL,
     );
     data.variables.insert(variable.id, variable);
@@ -1093,12 +1099,12 @@ fn duplicate_unloaded_function_uses_exact_retained_token_and_initial_target() {
         .graph_revisions
         .write()
         .unwrap()
-        .insert(source.clone(), retained);
+        .insert(source.clone(), retained.to_graph_revision());
     rewrite_persisted_function_revisions(
         &project.root,
         &source,
         ResourceRevision::new(1),
-        ResourceRevision::new(1),
+        ResourceRevision::new(1).to_graph_revision(),
         ResourceRevision::new(1),
     );
 
@@ -1124,7 +1130,10 @@ fn duplicate_unloaded_function_uses_exact_retained_token_and_initial_target() {
             .unwrap();
 
     assert_eq!(target_document.revision, ResourceRevision::INITIAL);
-    assert_eq!(target_document.document.revision, ResourceRevision::INITIAL);
+    assert_eq!(
+        target_document.document.revision,
+        ResourceRevision::INITIAL.to_graph_revision()
+    );
     assert_eq!(
         target_document.function.as_ref().unwrap().revision,
         ResourceRevision::INITIAL
@@ -1137,10 +1146,13 @@ fn duplicate_unloaded_function_uses_exact_retained_token_and_initial_target() {
     assert!(target_document.local_variables.values().all(|variable| {
             matches!(&variable.scope, VariableScope::Function { function_path } if function_path == target.as_str())
         }));
-    assert_eq!(state.graph_revisions.read().unwrap()[&source], retained);
+    assert_eq!(
+        state.graph_revisions.read().unwrap()[&source],
+        retained.to_graph_revision()
+    );
     assert_eq!(
         state.graph_revisions.read().unwrap()[&target],
-        ResourceRevision::INITIAL
+        ResourceRevision::INITIAL.to_graph_revision()
     );
     assert!(!state.get_data().unwrap().graphs.contains_key(&target));
 }
@@ -1165,7 +1177,7 @@ fn remove_rolls_back_file_when_authoritative_revision_changed() {
                 .get_mut(&concurrent_path)
                 .unwrap()
                 .document
-                .revision = ResourceRevision::new(1);
+                .revision = GraphRevision::new(1);
         }
     })));
     let session = state.capture_project_session().unwrap();
@@ -1446,7 +1458,7 @@ fn rename_rollback_restores_only_target_graph_global_and_worksheet_paths() {
                 .get_mut(&source_for_hook)
                 .unwrap()
                 .document
-                .revision = ResourceRevision::new(1);
+                .revision = GraphRevision::new(1);
         }
     })));
     let session = state.capture_project_session().unwrap();
@@ -1515,7 +1527,7 @@ fn rename_narrow_patch_preserves_unrelated_graph_variable_and_history_mutations(
                 .graph_revisions
                 .write()
                 .unwrap()
-                .insert(unrelated_for_hook.clone(), ResourceRevision::new(9));
+                .insert(unrelated_for_hook.clone(), GraphRevision::new(9));
             concurrent.variable_revisions.write().unwrap().insert(
                 variable_id,
                 crate::project::project_state::VariableRevisionEntry::present(
@@ -1543,7 +1555,7 @@ fn rename_narrow_patch_preserves_unrelated_graph_variable_and_history_mutations(
     assert_eq!(authority.variables[&variable_id].name, "Concurrent");
     assert_eq!(
         state.graph_revisions.read().unwrap()[&unrelated_path],
-        ResourceRevision::new(9)
+        ResourceRevision::new(9).to_graph_revision()
     );
     assert_eq!(
         state.variable_revisions.read().unwrap()[&variable_id].revision,

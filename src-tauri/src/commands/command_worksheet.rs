@@ -1,7 +1,7 @@
 use crate::database::DatabaseInstance;
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, ResourceMutationResultDto, emit_project_event};
-use crate::node_system::document::{OperationId, ResourceRevision};
+use crate::project::{OperationId, ResourceRevision};
 use crate::project::{
     ProjectFilesystemError, ProjectInstanceId, ProjectState, ResourceName, WorksheetDocument,
     WorksheetResourcePath,
@@ -615,7 +615,7 @@ mod tests {
             project_instance_id.clone(),
             OperationId::new(),
             worksheet_path.clone(),
-            crate::node_system::document::ResourceRevision::INITIAL,
+            crate::project::ResourceRevision::INITIAL,
             |event| events.push(event),
         )
         .unwrap();
@@ -626,7 +626,7 @@ mod tests {
             project_instance_id.clone(),
             OperationId::new(),
             worksheet_path.clone(),
-            crate::node_system::document::ResourceRevision::INITIAL,
+            crate::project::ResourceRevision::INITIAL,
             document,
             |event| events.push(event),
         )
@@ -636,7 +636,7 @@ mod tests {
             project_instance_id.clone(),
             OperationId::new(),
             worksheet_path,
-            crate::node_system::document::ResourceRevision::new(1),
+            crate::project::ResourceRevision::new(1),
             "Renamed".into(),
             1,
             |event| events.push(event),
@@ -647,7 +647,7 @@ mod tests {
             project_instance_id.clone(),
             OperationId::new(),
             duplicate_path,
-            crate::node_system::document::ResourceRevision::INITIAL,
+            crate::project::ResourceRevision::INITIAL,
             |event| events.push(event),
         )
         .unwrap();

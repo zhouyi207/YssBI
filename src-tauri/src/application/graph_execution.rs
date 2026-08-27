@@ -1,8 +1,9 @@
 use crate::event::ResourceMutationResultDto;
 use crate::node_system::plan::ExecutionDemand;
 
+use crate::graph_document::GraphResourcePath;
 use crate::node_system::runtime::{RunEvent, RunEventKind, RunEventSink, RunOutputMessage};
-use crate::project::{GraphResourcePath, ProjectExecutionError, ProjectInstanceId, ProjectState};
+use crate::project::{ProjectExecutionError, ProjectInstanceId, ProjectState};
 use std::sync::Mutex;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

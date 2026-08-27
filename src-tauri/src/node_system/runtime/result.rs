@@ -1,5 +1,5 @@
 use super::{ActivationId, StoredValue};
-use crate::node_system::document::{GraphResourcePath, GraphRevision, NodeId};
+use crate::graph_document::{GraphResourcePath, GraphRevision, NodeId};
 use crate::node_system::plan::{
     GraphOutputRef, PlannedValueContract, ResultPresentation, ValueRef,
 };

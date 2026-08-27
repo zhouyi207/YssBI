@@ -141,7 +141,7 @@ fn history_state_tracks_worksheet_paths_and_revisions() {
 
 #[test]
 fn reload_replaces_project_state_and_clears_history() {
-    let path = graph_path("events/reload");
+    let path = graph_path("events/reload.yssbi-event");
     let mut state = ProjectDocumentState::new(
         BTreeMap::from([(path.clone(), GraphDocument::default())]),
         BTreeMap::new(),
@@ -154,7 +154,7 @@ fn reload_replaces_project_state_and_clears_history() {
             ProjectHistoryTransaction::graph(
                 operation_id(640),
                 path,
-                ResourceRevision::INITIAL,
+                GraphRevision::INITIAL,
                 GraphDocumentPatch::new(vec![GraphDocumentOperation::InsertNode {
                     node: node(node_id(641)),
                 }]),

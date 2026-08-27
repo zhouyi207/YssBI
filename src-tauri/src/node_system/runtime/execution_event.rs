@@ -1,7 +1,7 @@
 use super::run_output::RunOutputMessage;
 use super::{RelationalErrorCode, ResultId, RunError, RunId, RunPhase};
+use crate::graph_document::GraphResourcePath;
 use crate::node_system::ProjectSessionId;
-use crate::node_system::document::GraphResourcePath;
 use crate::node_system::plan::GraphOutputRef;
 use serde::{Deserialize, Serialize};
 
@@ -317,8 +317,8 @@ pub static NOOP_RUN_EVENT_SINK: NoopRunEventSink = NoopRunEventSink;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph_document::GraphResourcePath;
     use crate::node_system::ProjectSessionId;
-    use crate::node_system::document::GraphResourcePath;
     use crate::node_system::runtime::RunId;
 
     #[test]
@@ -326,7 +326,7 @@ mod tests {
         let event = RunEvent {
             run: GraphRunIdentity {
                 project_session_id: ProjectSessionId::new("session"),
-                graph_path: GraphResourcePath("events/main".into()),
+                graph_path: GraphResourcePath::new("events/main.yssbi-event").unwrap(),
                 run_id: RunId::new(15),
             },
             kind: RunEventKind::RunStarted,

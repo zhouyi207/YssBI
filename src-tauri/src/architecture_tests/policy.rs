@@ -79,6 +79,24 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/src/data_contract/data_value.rs",
         RustLayer::PureLeaf,
     ),
+    ("src-tauri/src/graph_document/mod.rs", RustLayer::PureLeaf),
+    (
+        "src-tauri/src/graph_document/identity.rs",
+        RustLayer::PureLeaf,
+    ),
+    ("src-tauri/src/graph_document/model.rs", RustLayer::PureLeaf),
+    (
+        "src-tauri/src/graph_document/resource_path.rs",
+        RustLayer::PureLeaf,
+    ),
+    (
+        "src-tauri/src/node_system/protocol/identity.rs",
+        RustLayer::PureLeaf,
+    ),
+    (
+        "src-tauri/src/node_system/protocol/types.rs",
+        RustLayer::PureLeaf,
+    ),
     ("src-tauri/src/graph/value/type_system.rs", RustLayer::Graph),
     ("src-tauri/src/tabular/mod.rs", RustLayer::PureLeaf),
     ("src-tauri/src/tabular/contract.rs", RustLayer::PureLeaf),
@@ -510,7 +528,7 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
             "yssbi_lib::node_system::document::history::HistoryStatusDto",
             "yssbi_lib::node_system::document::history::ResourceDeltaEvent",
             "yssbi_lib::node_system::document::history::ResourceLifecycleKind",
-            "yssbi_lib::node_system::document::ids::OperationId",
+            "yssbi_lib::project::identity::OperationId",
             "yssbi_lib::node_system::document::mutation::GraphDeltaEvent",
             "yssbi_lib::node_system::document::patch::GraphDocumentPatch",
             "yssbi_lib::project::computation_settings::ComputationSettingsMutationReceipt",
@@ -694,12 +712,13 @@ fn cohesive_owner_layer(namespace: &str, exact_layer: Option<RustLayer>) -> Opti
         "event" | "schema" | "error" => Some(RustLayer::Transport),
         "window_state" => Some(RustLayer::PlatformAdapter),
         "math" => Some(RustLayer::Execution),
-        "graph" if exact_layer == Some(RustLayer::Graph) => None,
-        "graph" | "tabular" | "variable" => Some(RustLayer::PureLeaf),
+        "graph" => Some(RustLayer::Graph),
+        "graph_document" | "tabular" | "variable" => Some(RustLayer::PureLeaf),
         "node_system" if exact_layer == Some(RustLayer::BuiltinComposition) => None,
         "node_system" if namespace.starts_with("node_system::runtime") => {
             Some(RustLayer::Execution)
         }
+        "node_system" if exact_layer == Some(RustLayer::PureLeaf) => None,
         "node_system" => Some(RustLayer::Graph),
         "backend_adapters" => Some(RustLayer::BackendAdapter),
         "database_contract" => Some(RustLayer::PureLeaf),

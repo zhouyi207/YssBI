@@ -391,7 +391,7 @@ impl Fixture {
 fn production_graph_document_exposes_no_raw_mutation_methods() {
     let bypasses = audit_raw_graph_document_mutations(
         r#"
-use crate::node_system::document::GraphDocument;
+use crate::graph_document::GraphDocument;
 
 fn method_call(document: &mut GraphDocument) {
     document.create_node(todo!()).unwrap();

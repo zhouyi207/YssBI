@@ -1,12 +1,15 @@
+use crate::graph_document::GraphResourcePath;
+use crate::graph_document::{
+    ConnectionId, DocumentConnection, DocumentNode, GraphDocument, GraphRevision, NodeId,
+    NodePosition, OrderKey, ParameterValues, PortAddress,
+};
 use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::node_system::compiler::{
     LoweredKernel, LoweredNode, LoweringContext, LoweringError, NodeImplementation, NodeLowerer,
 };
 use crate::node_system::document::{
-    ConnectionId, DocumentConnection, DocumentNode, EditorGraphMutationDto, GraphDocument,
-    GraphDocumentOperation, GraphRevision, MutationConflict, MutationRequest, NodeId, NodePosition,
-    OperationId, OrderKey, ParameterValues, PortAddress, PortAddressDto, ResourceKey,
-    ResourceRevision,
+    EditorGraphMutationDto, GraphDocumentOperation, MutationConflict, MutationRequest,
+    PortAddressDto, ResourceKey,
 };
 use crate::node_system::plan::{CompiledParameterHandle, KernelHandle};
 use crate::node_system::protocol::{
@@ -22,9 +25,9 @@ use crate::node_system::registry::{
     RegisteredNode, StructuralNodeRole, TypeRegistration,
 };
 use crate::project::{
-    GraphDocumentKind, GraphResourceDocument, GraphResourcePath, ProjectData, ProjectInstanceId,
-    ProjectState,
+    GraphDocumentKind, GraphResourceDocument, ProjectData, ProjectInstanceId, ProjectState,
 };
+use crate::project::{OperationId, ResourceRevision};
 use std::collections::BTreeSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -274,7 +277,7 @@ impl BlueprintPhase1Fixture {
                         id: allocated_connection_id(kind, 1),
                         output: declared(node_id(0x202), "out"),
                         input: declared(node_id(0x203), "ordered_in"),
-                        order: Some(OrderKey("move-first".into())),
+                        order: Some(OrderKey::new("move-first")),
                     },
                 },
                 InsertConnection {
@@ -282,7 +285,7 @@ impl BlueprintPhase1Fixture {
                         id: allocated_connection_id(kind, 2),
                         output: declared(node_id(0x202), "out"),
                         input: declared(node_id(0x204), "ordered_in"),
-                        order: Some(OrderKey("move-second".into())),
+                        order: Some(OrderKey::new("move-second")),
                     },
                 },
             ],
@@ -426,7 +429,7 @@ impl BlueprintPhase1Fixture {
         drop(data);
         Phase1AuthoritySnapshot {
             serialized_document: serde_json::to_vec(&document).unwrap(),
-            revision: document.revision,
+            revision: ResourceRevision::from_graph_revision(document.revision),
             document,
             history_lengths: self.state.history_lengths_for_test(),
             projection: self.projection(),
@@ -441,15 +444,15 @@ impl BlueprintPhase1Fixture {
     }
 
     pub(crate) fn resource_key(&self) -> ResourceKey {
-        ResourceKey::Graph(crate::node_system::document::GraphResourcePath(
-            self.graph_path.as_str().into(),
-        ))
+        ResourceKey::Graph(self.graph_path.clone())
     }
 
     fn current_revision(&self) -> ResourceRevision {
-        self.state.get_data().unwrap().graphs[&self.graph_path]
-            .document
-            .revision
+        ResourceRevision::from_graph_revision(
+            self.state.get_data().unwrap().graphs[&self.graph_path]
+                .document
+                .revision,
+        )
     }
 
     fn request(
@@ -899,7 +902,7 @@ fn fixture_port<'a>(
 ) -> Option<&'a PortSpec> {
     let node = document.nodes.get(&address.node_id)?;
     let protocol = registry.protocol(&node.node_type)?;
-    let crate::node_system::document::PortRef::Declared { key } = &address.port else {
+    let crate::graph_document::PortRef::Declared { key } = &address.port else {
         return None;
     };
     protocol
@@ -969,7 +972,7 @@ fn connection(
         id: connection_id(id),
         output: declared(node_id(output_node), output),
         input: declared(node_id(input_node), input),
-        order: order.map(|value| OrderKey(value.into())),
+        order: order.map(|value| OrderKey::new(value)),
     }
 }
 

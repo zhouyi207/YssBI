@@ -6,16 +6,12 @@ struct ActivationGarbage {
     _lifecycle: crate::project::resource_lifecycle::ResourceLifecycleState,
     _data: ProjectData,
     _store: ProjectStore,
-    _graph_revisions: std::collections::HashMap<
-        GraphResourcePath,
-        crate::node_system::document::ResourceRevision,
-    >,
+    _graph_revisions:
+        std::collections::HashMap<GraphResourcePath, crate::graph_document::GraphRevision>,
     _variable_revisions:
         std::collections::HashMap<crate::variable::VariableId, VariableRevisionEntry>,
-    _worksheet_revisions: std::collections::HashMap<
-        WorksheetResourcePath,
-        crate::node_system::document::ResourceRevision,
-    >,
+    _worksheet_revisions:
+        std::collections::HashMap<WorksheetResourcePath, crate::project::ResourceRevision>,
     _database_authority_revisions: std::collections::HashMap<String, u64>,
     _identity: ProjectionEnvironmentExpectation,
     _recovery_message: Option<String>,

@@ -348,11 +348,7 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "src-tauri/src/commands/command_dataframe/error.rs",
         "yssbi_lib::commands::command_dataframe::error",
         [
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::ids::ResourceRevision"
-            ),
+            (Use, 1, "yssbi_lib::project::identity::ResourceRevision"),
             (
                 Use,
                 1,
@@ -368,12 +364,8 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "yssbi_lib::commands::command_dataframe",
         [
             (Use, 1, "yssbi_lib::application::database"),
-            (Use, 1, "yssbi_lib::node_system::document::ids::OperationId"),
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::ids::ResourceRevision"
-            ),
+            (Use, 1, "yssbi_lib::project::identity::OperationId"),
+            (Use, 1, "yssbi_lib::project::identity::ResourceRevision"),
             (
                 Use,
                 1,
@@ -413,11 +405,7 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 1,
                 "yssbi_lib::node_system::catalog::localization::LocalizedCatalogDto"
             ),
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::ids::ResourceRevision"
-            ),
+            (Use, 1, "yssbi_lib::project::identity::ResourceRevision"),
             (
                 Use,
                 1,
@@ -447,11 +435,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "src-tauri/src/commands/command_node_system/common.rs",
         "yssbi_lib::commands::command_node_system::common",
         [
-            (
-                Use,
-                1,
-                "yssbi_lib::project::graph_resource_path::GraphResourcePath"
-            ),
             (
                 Path,
                 1,
@@ -521,7 +504,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 1,
                 "yssbi_lib::node_system::analysis::projection::types::EditorGraphProjectionDto"
             ),
-            (Use, 1, "yssbi_lib::node_system::document::ids::NodeId"),
             (
                 Use,
                 1,
@@ -655,21 +637,12 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "src-tauri/src/commands/command_node_system/resources.rs",
         "yssbi_lib::commands::command_node_system::resources",
         [
-            (Use, 1, "yssbi_lib::node_system::document::ids::OperationId"),
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::ids::ResourceRevision"
-            ),
+            (Use, 1, "yssbi_lib::project::identity::OperationId"),
+            (Use, 1, "yssbi_lib::project::identity::ResourceRevision"),
             (
                 Use,
                 1,
                 "yssbi_lib::node_system::document::mutation::MutationRequest"
-            ),
-            (
-                Use,
-                1,
-                "yssbi_lib::project::graph_resource_path::GraphResourcePath"
             ),
             (
                 Use,
@@ -741,11 +714,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (
                 Path,
                 1,
-                "yssbi_lib::node_system::document::model::GraphResourcePath"
-            ),
-            (
-                Path,
-                1,
                 "yssbi_lib::node_system::plan::model::GraphOutputRef"
             ),
             (Path, 2, "yssbi_lib::node_system::protocol::value::Value"),
@@ -783,7 +751,7 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "yssbi_lib::commands::command_project::lifecycle",
         [
             (Use, 1, "yssbi_lib::application::project_lifecycle"),
-            (Use, 1, "yssbi_lib::node_system::document::ids::OperationId"),
+            (Use, 1, "yssbi_lib::project::identity::OperationId"),
             (
                 Use,
                 1,
@@ -870,11 +838,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             ),
             (
                 Path,
-                1,
-                "yssbi_lib::project::graph_resource_path::GraphResourcePath::new"
-            ),
-            (
-                Path,
                 2,
                 "yssbi_lib::project::project_session::ProjectInstanceId::from_existing"
             ),
@@ -887,7 +850,7 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "src-tauri/src/commands/command_project/registry.rs",
         "yssbi_lib::commands::command_project::registry",
         [
-            (Use, 1, "yssbi_lib::node_system::document::ids::OperationId"),
+            (Use, 1, "yssbi_lib::project::identity::OperationId"),
             (
                 Use,
                 1,
@@ -1028,12 +991,8 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "src-tauri/src/commands/command_variable/mod.rs",
         "yssbi_lib::commands::command_variable",
         [
-            (Use, 1, "yssbi_lib::node_system::document::ids::OperationId"),
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::ids::ResourceRevision"
-            ),
+            (Use, 1, "yssbi_lib::project::identity::OperationId"),
+            (Use, 1, "yssbi_lib::project::identity::ResourceRevision"),
             (
                 Use,
                 1,
@@ -1058,12 +1017,8 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 1,
                 "yssbi_lib::database::database_instance::DatabaseInstance"
             ),
-            (Use, 1, "yssbi_lib::node_system::document::ids::OperationId"),
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::ids::ResourceRevision"
-            ),
+            (Use, 1, "yssbi_lib::project::identity::OperationId"),
+            (Use, 1, "yssbi_lib::project::identity::ResourceRevision"),
             (
                 Use,
                 1,
@@ -1104,11 +1059,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "src-tauri/src/commands/node_system_execution_dto.rs",
         "yssbi_lib::commands::node_system_execution_dto",
         [
-            (
-                Use,
-                1,
-                "yssbi_lib::node_system::document::model::GraphResourcePath"
-            ),
             (
                 Use,
                 1,

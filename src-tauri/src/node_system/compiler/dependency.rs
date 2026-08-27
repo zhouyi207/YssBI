@@ -1,4 +1,4 @@
-use crate::node_system::document::{ConnectionId, NodeId};
+use crate::graph_document::{ConnectionId, NodeId};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Returns one stable representative connection for every cyclic value SCC.

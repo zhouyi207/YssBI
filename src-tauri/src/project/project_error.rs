@@ -146,6 +146,12 @@ pub enum ProjectError {
     },
 }
 
+impl From<crate::graph_document::GraphResourcePathError> for ProjectError {
+    fn from(source: crate::graph_document::GraphResourcePathError) -> Self {
+        Self::InvalidProjectFormat(source.to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::ProjectFilesystemError;
