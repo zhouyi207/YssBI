@@ -1,9 +1,39 @@
-use super::identity::PlanSourceIdentity;
+use super::identity::{PlanOperationKind, PlanPortAddress, PlanSourceIdentity};
 use super::observation::{PlanObservationIntent, ValueRef};
+use super::parameter::CompiledParameterHandle;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum PlanInputSource {
+    Value(ValueRef),
+    Parameter(CompiledParameterHandle),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PlanInputBinding {
+    port: PlanPortAddress,
+    source: PlanInputSource,
+}
+
+impl PlanInputBinding {
+    pub fn new(port: PlanPortAddress, source: PlanInputSource) -> Self {
+        Self { port, source }
+    }
+
+    pub fn port(&self) -> &PlanPortAddress {
+        &self.port
+    }
+
+    pub fn source(&self) -> &PlanInputSource {
+        &self.source
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PlanOperation {
     source: PlanSourceIdentity,
+    kind: PlanOperationKind,
+    parameter_handles: Box<[CompiledParameterHandle]>,
+    inputs: Box<[PlanInputBinding]>,
     observation_intents: Box<[PlanObservationIntent]>,
     output: Option<ValueRef>,
 }
@@ -11,11 +41,17 @@ pub struct PlanOperation {
 impl PlanOperation {
     pub fn new(
         source: PlanSourceIdentity,
+        kind: PlanOperationKind,
+        parameter_handles: Box<[CompiledParameterHandle]>,
+        inputs: Box<[PlanInputBinding]>,
         observation_intents: Box<[PlanObservationIntent]>,
         output: Option<ValueRef>,
     ) -> Self {
         Self {
             source,
+            kind,
+            parameter_handles,
+            inputs,
             observation_intents,
             output,
         }
@@ -23,6 +59,18 @@ impl PlanOperation {
 
     pub fn source(&self) -> &PlanSourceIdentity {
         &self.source
+    }
+
+    pub fn kind(&self) -> &PlanOperationKind {
+        &self.kind
+    }
+
+    pub fn parameter_handles(&self) -> &[CompiledParameterHandle] {
+        &self.parameter_handles
+    }
+
+    pub fn inputs(&self) -> &[PlanInputBinding] {
+        &self.inputs
     }
 
     pub fn observation_intents(&self) -> &[PlanObservationIntent] {

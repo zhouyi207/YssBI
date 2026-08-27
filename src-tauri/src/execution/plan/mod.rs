@@ -15,10 +15,11 @@ pub use basis::{
 };
 pub use identity::{
     InvalidPlanIdentity, PlanCompileId, PlanFunctionParameterId, PlanGraphId, PlanGraphRevision,
-    PlanNodeId, PlanOutputRef, PlanPortAddress, PlanProjectSessionId, PlanProvenance,
-    PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion, PlanSourceIdentity,
+    PlanNodeId, PlanOperationKind, PlanOutputRef, PlanPortAddress, PlanProjectSessionId,
+    PlanProvenance, PlanRegistryFingerprint, PlanResourceId, PlanResourceVersion,
+    PlanSourceIdentity,
 };
-pub use model::{ExecutionPlan, FunctionPlanAbi, PlanOperation};
+pub use model::{ExecutionPlan, FunctionPlanAbi, PlanInputBinding, PlanInputSource, PlanOperation};
 pub use observation::{PlanObservationIntent, ValueRef};
 pub use package::{CompiledExecutionPackage, CompiledFunctionBundle, CompiledFunctionPlan};
 pub use parameter::{

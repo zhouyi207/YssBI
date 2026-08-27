@@ -59,6 +59,7 @@ plan_id!(PlanPortAddress);
 plan_id!(PlanFunctionParameterId);
 plan_id!(PlanResourceId);
 plan_id!(PlanResourceVersion);
+plan_id!(PlanOperationKind);
 
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlanGraphRevision(u64);
