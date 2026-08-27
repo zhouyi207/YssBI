@@ -1563,3 +1563,5 @@ Execution 不知道具体 UI
 - [ ] 为运行时输出补充结构化 `sourcePort`，同步 Rust/TypeScript execution wire、投影与契约测试。
 - [ ] 统一 Output、Diagnostics、Pin result search 与 Node detail 的节点/Pin 语义化显示，并新增画布节点选择器交互。
 - [ ] 接入禁用发送的 Assistant UI Workbench Shell，注册 root Dockview、布局持久化、View 菜单及中英文文案。
+- [ ] 新增仓库级 `.gitattributes`，统一文本文件使用 LF 换行。
+- [ ] 通过 Git 属性与 `git diff --check` 验证换行策略。
