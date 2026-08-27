@@ -1565,3 +1565,13 @@ Execution 不知道具体 UI
 - [ ] 接入禁用发送的 Assistant UI Workbench Shell，注册 root Dockview、布局持久化、View 菜单及中英文文案。
 - [ ] 新增仓库级 `.gitattributes`，统一文本文件使用 LF 换行。
 - [ ] 通过 Git 属性与 `git diff --check` 验证换行策略。
+- [ ] 更新 `AGENTS.md`，明确 Rust 后端测试的编译与运行成本较高，避免迭代期间频繁运行。
+- [ ] 保持 Rust 聚焦测试与完整测试套件之间的执行边界，仅在必要场景运行 broader/full suite。
+- [ ] 更新 `AGENTS.md`，统一后端 Rust 错误使用 `thiserror` 定义类型化错误。
+- [ ] 明确禁止以裸 `String` 传播后端错误，并在 IPC 边界统一映射为 `CommandError`。
+- [ ] 完成现有 Plot、Worksheet、Info 与 Bayes 绘图链路审计，确认 D3 继续作为唯一绘图库，重构重点收敛到模块边界、数据契约、公共绘图能力和增量渲染。
+- [ ] 新增 Plot 模块十二任务实施计划，固定 Rust DTO、source adapter、数据空间 `ChartModel`、typed registry 与 shared renderer 的单向数据流。
+- [ ] 规划 Rust 生成的 Plot golden contract、单一 Result plot-kind guard、nullable correlation 语义和 canonical camelCase wire，防止 Rust 与 TypeScript 字段漂移。
+- [ ] 规划 `shared/charts/core`、`cartesian`、`statistical` 三层目录及 theme、margin、ResizeObserver、tooltip、domain 和稳定 D3 layer 的公共契约。
+- [ ] 规划 Scatter、Line、Histogram、ECDF、KDE、MultiLine、Correlation、Correlogram、DID、VAR stability 与 PredictiveInterval 的渐进迁移和旧路径原子删除。
+- [ ] 明确本轮不引入 ECharts、Vega-Lite、Canvas 或万能 Chart grammar，并将 Binary margins、Bayes 诊断 authority、Worksheet backend preview DTO 与 datetime 规范化保留为独立后续计划。

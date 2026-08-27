@@ -58,6 +58,10 @@ graph compilation/execution, databases, results, and scientific orchestration.
   smuggle backend prose through nested `message`, `detail`, or `hint` fields;
   use stable codes, safe structured fields, and incident IDs. Frontend services
   route ordinary invokes through `src/services/ipc/invokeCommand.ts`.
+- Backend Rust errors must use typed error enums derived from `thiserror` at
+  domain, application, and infrastructure seams; do not use bare `String` as
+  an error contract or propagate formatted error strings. Map typed errors once
+  at the command/IPC seam into the canonical `CommandError` wire.
 - Do not hold global locks during I/O, sleeps, model loading, or long-running
   inference. Take short lock snapshots and perform work outside the lock.
 - Graph resources are identified by `events/...` and `functions/...` paths;
@@ -193,6 +197,11 @@ graph compilation/execution, databases, results, and scientific orchestration.
   local checks unless the task explicitly requests it.
 - Add or update a focused regression test before changing behavior, then run it
   and the relevant broader test suite.
+- Backend Rust tests are especially expensive in both compile time and runtime.
+  Avoid running them repeatedly during incremental iteration; after a Rust
+  change is coherent, prefer one focused test run and defer broader or full
+  suites until the change is stable, cross-cutting, explicitly requested, or
+  required for delivery validation.
 - For Rust changes, run `pnpm rust:check` and focused tests for the touched
   area. Do not run full `cargo test` / full `pnpm rust:test` by default because
   it is slow; only run broader Rust suites when the change is cross-cutting,
