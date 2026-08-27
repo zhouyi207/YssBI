@@ -17,6 +17,14 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         "src-tauri/src/execution/package_preparation.rs",
         RustLayer::Execution,
     ),
+    (
+        "src-tauri/src/execution/result_store.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/run_registry.rs",
+        RustLayer::Execution,
+    ),
     ("src-tauri/src/execution/settings.rs", RustLayer::Execution),
     ("src-tauri/src/execution/plan/mod.rs", RustLayer::Execution),
     (

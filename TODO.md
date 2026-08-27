@@ -1619,3 +1619,5 @@ Execution 不知道具体 UI
 - [ ] 建立 Services-owned platform outcome/failure contracts 与 path/window/webview/opener/clipboard/settings event seams，隔离原始平台 API。
 - [ ] 建立 Application-owned settings synchronization coordinator 与 Core settings UI capability，保持跨窗口 echo suppression 与 UI state ownership边界。
 - [ ] 完成 Frontend platform capability staged typecheck 与 diff 校验，未改动现有 production listener/invoke routes。
+- [ ] 让 ExecutionRuntimeState session-local 持有 run registry 与 result store typed owners，支持后续 finalization/result query cutover。
+- [ ] 完成 run/result owner 的 Rust check、fmt 与 diff 校验，继续保留旧 node-system runtime production route。

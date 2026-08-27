@@ -1,6 +1,8 @@
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
+use crate::execution::result_store::ResultStore;
+use crate::execution::run_registry::RunRegistry;
 
 #[derive(Default)]
 struct RuntimeAdmission {
@@ -14,6 +16,8 @@ pub struct ExecutionRuntimeState {
     session_id: ExecutionSessionId,
     generation: RuntimeGeneration,
     admission: Arc<(Mutex<RuntimeAdmission>, Condvar)>,
+    results: ResultStore,
+    runs: RunRegistry,
 }
 
 impl ExecutionRuntimeState {
@@ -22,6 +26,8 @@ impl ExecutionRuntimeState {
             session_id,
             generation,
             admission: Arc::new((Mutex::new(RuntimeAdmission::default()), Condvar::new())),
+            results: ResultStore::new(),
+            runs: RunRegistry::new(),
         }
     }
 
@@ -41,6 +47,14 @@ impl ExecutionRuntimeState {
     pub fn is_admission_closed(&self) -> bool {
         let (state, _) = &*self.admission;
         state.lock().unwrap_or_else(PoisonError::into_inner).closed
+    }
+
+    pub(crate) fn results(&self) -> &ResultStore {
+        &self.results
+    }
+
+    pub(crate) fn runs(&self) -> &RunRegistry {
+        &self.runs
     }
 
     #[cfg(test)]

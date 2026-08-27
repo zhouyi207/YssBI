@@ -72,8 +72,7 @@ impl TryFrom<PortAddressDto> for PortAddress {
                 instance_id,
             } => Ok(Self::instance(
                 parse_node_id(&node_id)?,
-                PortKey::new(template_key)
-                    .map_err(|_| PortAddressMappingError::InvalidPortKey)?,
+                PortKey::new(template_key).map_err(|_| PortAddressMappingError::InvalidPortKey)?,
                 PortInstanceId::from_uuid(
                     uuid::Uuid::parse_str(&instance_id)
                         .map_err(|_| PortAddressMappingError::InvalidInstanceId)?,
