@@ -1586,3 +1586,7 @@ Execution 不知道具体 UI
 - [ ] 建立 Application-owned pure Project/Database snapshot mapper，将完整函数、变量、数据库声明与 neutral schema facts 映射为 Graph ResourceCatalogSnapshot。
 - [ ] 增加数据库 schema ID 完整性校验与独立 GraphCompileSettings 映射，保持 Database basis/revalidation 与旧 Project compiler route 隔离。
 - [ ] 完成 Project–Graph Task 2 mapper focused test、Rust check、fmt 与 diff 校验；graph-open/catalog production routing继续留待后续任务。
+- [ ] 建立 Project-free Graph analysis/compiler staged entry，只消费 GraphDocument、ResourceCatalog、GraphCompileSettings 与完整 Execution plan basis。
+- [ ] 建立 GraphRuntimeState 的 epoch-bound component contract，保留旧 Project-owned registry/catalog/compiler production route 不变。
+- [ ] 建立 Project-owned graph history before/after residency snapshots与可逆 change contract，避免将 Graph patch 穿透到 Project history。
+- [ ] 完成 Project–Graph Tasks 3–6 的 focused owner checks、Rust check、fmt 与 diff 校验，graph mutation/open/catalog activation继续留待后续原子切换。

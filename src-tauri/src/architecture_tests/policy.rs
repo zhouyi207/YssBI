@@ -49,10 +49,14 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
     ),
     ("src-tauri/src/execution/ports/mod.rs", RustLayer::Execution),
     ("src-tauri/src/graph/value/semantics.rs", RustLayer::Graph),
+    ("src-tauri/src/graph/analysis/mod.rs", RustLayer::Graph),
+    ("src-tauri/src/graph/compiler/mod.rs", RustLayer::Graph),
+    ("src-tauri/src/graph/runtime_state.rs", RustLayer::Graph),
     (
         "src-tauri/src/project/variable_defaults.rs",
         RustLayer::Project,
     ),
+    ("src-tauri/src/project/history.rs", RustLayer::Project),
     (
         "src-tauri/src/application/execution/session_factory.rs",
         RustLayer::Application,

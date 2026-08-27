@@ -4,6 +4,7 @@ mod compile_publication;
 pub mod computation_settings;
 pub mod filesystem;
 pub mod graph_resource_index;
+pub mod history;
 mod history_hydration;
 pub mod identity;
 pub mod path_format;
@@ -43,6 +44,7 @@ pub mod worksheet_resource_path;
 pub use computation_settings::*;
 pub use filesystem::*;
 pub use graph_resource_index::*;
+pub use history::*;
 pub use identity::{
     HistoryEntryId, OperationId, ProjectRevision, ProjectTransactionRevision, ResourceRevision,
     RevisionExhausted,
