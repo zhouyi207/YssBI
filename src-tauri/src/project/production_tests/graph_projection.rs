@@ -47,9 +47,9 @@ fn dataframe_decompose_production_fixture(
             .unwrap();
         data.databases.insert(
             "main".into(),
-            crate::database::DatabaseDecl {
+            crate::database_contract::DatabaseDecl {
                 id: "main".into(),
-                engine: crate::database::DatabaseEngine::DuckDb {
+                engine: crate::database_contract::DatabaseEngine::DuckDb {
                     path: "database/main.duckdb".into(),
                     table: "main".into(),
                 },
@@ -70,9 +70,9 @@ fn production_decompose_projects_database_column_metadata() {
     let mut data = ProjectData::new();
     data.databases.insert(
         "main".into(),
-        crate::database::DatabaseDecl {
+        crate::database_contract::DatabaseDecl {
             id: "main".into(),
-            engine: crate::database::DatabaseEngine::InMemory {
+            engine: crate::database_contract::DatabaseEngine::InMemory {
                 name: "main".into(),
             },
             schema_version: 1,
@@ -652,9 +652,9 @@ fn resource_rename_updates_editor_title() {
 
 #[test]
 fn database_schema_resolver_attaches_canonical_field_lineage() {
-    let declaration = crate::database::DatabaseDecl {
+    let declaration = crate::database_contract::DatabaseDecl {
         id: "main".into(),
-        engine: crate::database::DatabaseEngine::InMemory {
+        engine: crate::database_contract::DatabaseEngine::InMemory {
             name: "main".into(),
         },
         schema_version: 1,
@@ -704,9 +704,9 @@ fn database_schema_resolver_attaches_canonical_field_lineage() {
 
 #[test]
 fn database_resource_version_changes_with_resolved_column_type() {
-    let declaration = crate::database::DatabaseDecl {
+    let declaration = crate::database_contract::DatabaseDecl {
         id: "main".into(),
-        engine: crate::database::DatabaseEngine::InMemory {
+        engine: crate::database_contract::DatabaseEngine::InMemory {
             name: "main".into(),
         },
         schema_version: 1,

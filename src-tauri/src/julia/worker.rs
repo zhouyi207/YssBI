@@ -229,6 +229,25 @@ impl JuliaWorkerManager {
         write_input: impl FnOnce(&Path) -> Result<(), String>,
         progress: Option<JuliaWorkerProgressCallback>,
     ) -> Result<JuliaWorkerTaskOutput, JuliaWorkerError> {
+        self.run_task_with_typed_input(
+            app_data_dir,
+            task,
+            |path| {
+                write_input(path).map_err(|diagnostic| {
+                    JuliaWorkerError::new(JuliaWorkerErrorCode::InputWriteFailed, diagnostic)
+                })
+            },
+            progress,
+        )
+    }
+
+    pub(crate) fn run_task_with_typed_input(
+        &self,
+        app_data_dir: &Path,
+        task: JuliaWorkerTask,
+        write_input: impl FnOnce(&Path) -> Result<(), JuliaWorkerError>,
+        progress: Option<JuliaWorkerProgressCallback>,
+    ) -> Result<JuliaWorkerTaskOutput, JuliaWorkerError> {
         let _request_guard = self.inner.request_gate.lock().map_err(|_| {
             JuliaWorkerError::new(
                 JuliaWorkerErrorCode::StateUnavailable,
@@ -243,9 +262,7 @@ impl JuliaWorkerManager {
         let metadata_path = task_directory.path().join("metadata.json");
 
         let result = (|| {
-            write_input(&input_path).map_err(|error| {
-                JuliaWorkerError::new(JuliaWorkerErrorCode::InputWriteFailed, error)
-            })?;
+            write_input(&input_path)?;
             let worker = self.worker(app_data_dir)?;
             let request_id = Uuid::new_v4().to_string();
             self.set_active_task(Some(task_id.clone()))?;
@@ -278,15 +295,30 @@ impl JuliaWorkerManager {
     }
 
     pub fn cancel(&self, task_id: &str) -> Result<bool, JuliaWorkerError> {
-        let active_task_id = self.inner.active_task_id.lock().map_err(|_| {
-            JuliaWorkerError::new(
-                JuliaWorkerErrorCode::StateUnavailable,
-                "Julia worker active task state is unavailable.",
-            )
-        })?;
-        if active_task_id.as_deref() != Some(task_id) {
+        self.cancel_with_io_hook(task_id, || {})
+    }
+
+    fn cancel_with_io_hook(
+        &self,
+        task_id: &str,
+        before_io: impl FnOnce(),
+    ) -> Result<bool, JuliaWorkerError> {
+        let is_active = self
+            .inner
+            .active_task_id
+            .lock()
+            .map_err(|_| {
+                JuliaWorkerError::new(
+                    JuliaWorkerErrorCode::StateUnavailable,
+                    "Julia worker active task state is unavailable.",
+                )
+            })?
+            .as_deref()
+            == Some(task_id);
+        if !is_active {
             return Ok(false);
         }
+        before_io();
         let worker = self
             .inner
             .worker
@@ -312,15 +344,27 @@ impl JuliaWorkerManager {
     }
 
     pub fn restart_task(&self, task_id: &str) -> Result<bool, JuliaWorkerError> {
-        let mut active_task_id = self.inner.active_task_id.lock().map_err(|_| {
-            JuliaWorkerError::new(
-                JuliaWorkerErrorCode::StateUnavailable,
-                "Julia worker active task state is unavailable.",
-            )
-        })?;
-        if active_task_id.as_deref() != Some(task_id) {
-            return Ok(false);
+        self.restart_task_with_io_hook(task_id, || {})
+    }
+
+    fn restart_task_with_io_hook(
+        &self,
+        task_id: &str,
+        before_io: impl FnOnce(),
+    ) -> Result<bool, JuliaWorkerError> {
+        {
+            let mut active_task_id = self.inner.active_task_id.lock().map_err(|_| {
+                JuliaWorkerError::new(
+                    JuliaWorkerErrorCode::StateUnavailable,
+                    "Julia worker active task state is unavailable.",
+                )
+            })?;
+            if active_task_id.as_deref() != Some(task_id) {
+                return Ok(false);
+            }
+            *active_task_id = None;
         }
+        before_io();
         let worker = self
             .inner
             .worker
@@ -332,7 +376,6 @@ impl JuliaWorkerManager {
                 )
             })?
             .take();
-        *active_task_id = None;
         if let Some(worker) = worker {
             worker.terminate();
         }
@@ -614,6 +657,7 @@ mod tests {
     use std::cell::Cell;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::sync::{Arc, Barrier};
 
     use super::{
         JuliaRuntimeState, JuliaWorkerErrorCode, JuliaWorkerManager, JuliaWorkerStartupState,
@@ -789,5 +833,47 @@ mod tests {
                 .as_deref(),
             Some("active-task")
         );
+    }
+
+    #[test]
+    fn cancellation_and_restart_release_active_task_lock_before_worker_io() {
+        let manager = JuliaWorkerManager::new();
+        manager
+            .set_active_task(Some("active-task".to_owned()))
+            .expect("set active task");
+        let cancel_entered = Arc::new(Barrier::new(2));
+        let cancel_release = Arc::new(Barrier::new(2));
+        let thread_manager = manager.clone();
+        let thread_entered = Arc::clone(&cancel_entered);
+        let thread_release = Arc::clone(&cancel_release);
+        let cancel = std::thread::spawn(move || {
+            thread_manager.cancel_with_io_hook("active-task", || {
+                thread_entered.wait();
+                thread_release.wait();
+            })
+        });
+        cancel_entered.wait();
+        assert!(manager.inner.active_task_id.try_lock().is_ok());
+        cancel_release.wait();
+        assert!(!cancel.join().expect("cancel thread must finish").unwrap());
+
+        manager
+            .set_active_task(Some("active-task".to_owned()))
+            .expect("reset active task");
+        let restart_entered = Arc::new(Barrier::new(2));
+        let restart_release = Arc::new(Barrier::new(2));
+        let thread_manager = manager.clone();
+        let thread_entered = Arc::clone(&restart_entered);
+        let thread_release = Arc::clone(&restart_release);
+        let restart = std::thread::spawn(move || {
+            thread_manager.restart_task_with_io_hook("active-task", || {
+                thread_entered.wait();
+                thread_release.wait();
+            })
+        });
+        restart_entered.wait();
+        assert!(manager.inner.active_task_id.try_lock().is_ok());
+        restart_release.wait();
+        assert!(restart.join().expect("restart thread must finish").unwrap());
     }
 }

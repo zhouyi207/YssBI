@@ -954,7 +954,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 1,
                 "yssbi_lib::sci::api::time_series::acf_pacf::compute_acf_pacf"
             ),
-            (Use, 1, "yssbi_lib::sci::engine::SciContext"),
             (Use, 1, "yssbi_lib::sci::error::SciError"),
         ],
     );

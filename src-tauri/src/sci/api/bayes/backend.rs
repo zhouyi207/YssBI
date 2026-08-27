@@ -107,61 +107,39 @@ impl BayesBackend for PlaceholderBayesBackend {
 #[cfg(test)]
 mod tests {
     use super::{BayesBackend, BayesBackendRequest, PlaceholderBayesBackend};
-    use crate::sci::api::bayes::{
-        BayesModelSpec, DatasetRef, DatasetSourceType, Expression, InferenceConfig, LikelihoodSpec,
-        ParameterConstraint, ParameterRef, ParameterSpec, PredictorSource, PredictorSourceKind,
-        PriorSpec, ResponseSpec, SamplerAlgorithm,
-    };
-    use std::collections::BTreeMap;
+    use crate::sci::api::bayes::BayesModelSpec;
 
     fn spec() -> BayesModelSpec {
-        BayesModelSpec {
-            dataset: DatasetRef {
-                source_type: DatasetSourceType::Table,
-                source_id: "demo".to_string(),
+        serde_json::from_value(serde_json::json!({
+            "dataset": { "sourceType": "table", "sourceId": "demo" },
+            "response": {
+                "expression": { "type": "data_variable", "name": "y" },
+                "dataVariables": { "y": "response" }
             },
-            response: ResponseSpec {
-                expression: Expression::DataVariable {
-                    name: "y".to_string(),
-                },
-                data_variables: BTreeMap::from([("y".to_string(), "response".to_string())]),
+            "predictor": { "type": "parameter", "name": "a" },
+            "dataVariables": {},
+            "likelihood": {
+                "type": "normal",
+                "mean": { "source": "predictor" },
+                "sigma": { "parameter": "sigma" }
             },
-            predictor: Expression::Parameter {
-                name: "a".to_string(),
-            },
-            data_variables: BTreeMap::new(),
-            likelihood: LikelihoodSpec::Normal {
-                mean: PredictorSource {
-                    source: PredictorSourceKind::Predictor,
-                },
-                sigma: ParameterRef {
-                    parameter: "sigma".to_string(),
-                },
-            },
-            parameters: vec![
-                ParameterSpec {
-                    name: "a".to_string(),
-                    constraint: ParameterConstraint::Real,
-                    prior: PriorSpec::Normal([0.0, 10.0]),
-                },
-                ParameterSpec {
-                    name: "sigma".to_string(),
-                    constraint: ParameterConstraint::Positive,
-                    prior: PriorSpec::Exponential([1.0]),
-                },
+            "parameters": [
+                { "name": "a", "constraint": { "type": "real" }, "prior": { "distribution": "normal", "args": [0.0, 10.0] } },
+                { "name": "sigma", "constraint": { "type": "positive" }, "prior": { "distribution": "exponential", "args": [1.0] } }
             ],
-            sampler: InferenceConfig {
-                algorithm: SamplerAlgorithm::Nuts,
-                chains: 1,
-                samples: 10,
-                warmup: 5,
-                seed: None,
-                target_accept: Some(0.8),
-                max_tree_depth: Some(10),
-                save_samples: false,
+            "sampler": {
+                "algorithm": "nuts",
+                "chains": 1,
+                "samples": 10,
+                "warmup": 5,
+                "seed": null,
+                "targetAccept": 0.8,
+                "maxTreeDepth": 10,
+                "saveSamples": false
             },
-            display_formula: "y ~ Normal(a, sigma)".to_string(),
-        }
+            "displayFormula": "y ~ Normal(a, sigma)"
+        }))
+        .expect("backend test model must deserialize")
     }
 
     #[test]

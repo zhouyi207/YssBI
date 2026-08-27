@@ -91,7 +91,7 @@ pub fn enrich_database_decl_dto(dto: &mut DatabaseDeclDTO, instance: &DatabaseIn
 }
 
 pub fn enriched_database_dtos(
-    databases: &std::collections::HashMap<String, crate::database::DatabaseDecl>,
+    databases: &std::collections::HashMap<String, crate::database_contract::DatabaseDecl>,
     runtime_databases: &std::collections::HashMap<String, DatabaseInstance>,
 ) -> std::collections::HashMap<String, DatabaseDeclDTO> {
     let mut enriched = std::collections::HashMap::new();

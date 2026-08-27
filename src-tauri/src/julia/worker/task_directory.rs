@@ -84,6 +84,22 @@ impl JuliaWorkerTaskDirectory {
         &self.task_id
     }
 
+    pub(crate) fn claim_artifact(&self, candidate: &Path) -> Result<PathBuf, JuliaWorkerError> {
+        let canonical = fs::canonicalize(candidate).map_err(|error| {
+            JuliaWorkerError::new(
+                JuliaWorkerErrorCode::TaskDirectoryInvalid,
+                format!("Failed to resolve Julia task artifact: {error}"),
+            )
+        })?;
+        if canonical.parent() != Some(self.path.as_path()) {
+            return Err(JuliaWorkerError::new(
+                JuliaWorkerErrorCode::TaskDirectoryInvalid,
+                "Julia task artifact is not an owned direct child.",
+            ));
+        }
+        Ok(canonical)
+    }
+
     pub fn cleanup(&self) -> Result<(), JuliaWorkerError> {
         match fs::symlink_metadata(&self.path) {
             Ok(_) => {}

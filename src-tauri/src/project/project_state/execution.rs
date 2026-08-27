@@ -496,7 +496,8 @@ fn snapshot_execution_resources(
                 runtime = runtime.with_database(resource, Arc::clone(dataframe));
             }
             DatabaseState::DuckDb { .. } => {
-                let crate::database::DatabaseEngine::DuckDb { path, table } = &instance.decl.engine
+                let crate::database_contract::DatabaseEngine::DuckDb { path, table } =
+                    &instance.decl.engine
                 else {
                     return Err(format!("database '{id}' runtime/declaration mismatch"));
                 };

@@ -54,11 +54,14 @@ fn normal_response_rejects_non_finite_values() {
 
 #[test]
 fn transformed_normal_response_rejects_ln_domain_errors() {
-    let mut fixture = fixture(SIMPLE_LINEAR_NORMAL);
-    fixture.model_spec.response.expression = Expression::Call {
+    let fixture = fixture(SIMPLE_LINEAR_NORMAL);
+    let mut model = serde_json::to_value(fixture.model_spec).expect("model spec wire");
+    model["response"]["expression"] = serde_json::to_value(Expression::Call {
         function: MathFunction::Ln,
         args: vec![Expression::DataVariable { name: "y".into() }],
-    };
+    })
+    .expect("response expression wire");
+    let model_spec = serde_json::from_value(model).expect("transformed model spec wire");
     let table = DataFrame::new(
         3,
         vec![
@@ -68,8 +71,7 @@ fn transformed_normal_response_rejects_ln_domain_errors() {
     )
     .expect("test dataframe");
 
-    let error =
-        validate_bayes_input_table(&fixture.model_spec, &table).expect_err("invalid ln domain");
+    let error = validate_bayes_input_table(&model_spec, &table).expect_err("invalid ln domain");
     assert_eq!(error.code, "bayes_input_response_ln_domain");
     assert_eq!(error.column.as_deref(), Some("y"));
     assert_eq!(error.row, Some(1));

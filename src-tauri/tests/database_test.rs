@@ -2,12 +2,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use polars::prelude::*;
-use yssbi_lib::application::database::bind_duckdb_instance;
 use yssbi_lib::database::{
-    DatabaseDecl, DatabaseEngine, DatabaseExportFormat, DatabaseInstance, DatabaseState,
-    EditHistory, MAX_DELETE_COLUMN_SNAPSHOT_ROWS, MAX_IN_MEMORY_EDIT_ROWS, ingest_csv_to_duckdb,
-    ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta, write_display_name,
+    DatabaseExportFormat, DatabaseInstance, DatabaseState, EditHistory,
+    MAX_DELETE_COLUMN_SNAPSHOT_ROWS, MAX_IN_MEMORY_EDIT_ROWS, bind_duckdb_instance,
+    ingest_csv_to_duckdb, ingest_parquet_to_duckdb, query_page_to_dataframe, read_table_meta,
+    write_display_name,
 };
+use yssbi_lib::database_contract::{DatabaseDecl, DatabaseEngine};
 use yssbi_lib::node_system::document::{
     DatabaseResourceKey, OperationId, ResourceKey, ResourceRevision,
 };

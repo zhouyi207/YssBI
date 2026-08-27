@@ -557,11 +557,11 @@ fn remove_result_artifacts(result: &StoredInferenceResult) {
 
 fn artifact_path(result: &InferenceResult, kind: ResultArtifactKind) -> Option<String> {
     result
-        .artifact_manifest
-        .artifacts
+        .artifact_manifest()
+        .artifacts()
         .iter()
-        .find(|artifact| artifact.kind == kind)
-        .map(|artifact| artifact.path.clone())
+        .find(|artifact| artifact.kind() == kind)
+        .map(|artifact| artifact.path().to_owned())
 }
 
 fn result_from_state(
@@ -831,13 +831,20 @@ fn density_series(
     DensitySeries {
         parameter: parameter.to_string(),
         chain,
-        points: crate::sci::kde::gaussian_kde_grid(values, grid_points)
-            .into_iter()
-            .map(|point| DensityPoint {
-                x: point.x,
-                density: point.density,
-            })
-            .collect(),
+        points: crate::sci::api::density::compute_kernel_density(
+            crate::sci::api::density::KernelDensityInput {
+                values,
+                grid_points,
+                min_x: None,
+            },
+        )
+        .points
+        .into_iter()
+        .map(|point| DensityPoint {
+            x: point.x,
+            density: point.density,
+        })
+        .collect(),
     }
 }
 
@@ -926,14 +933,14 @@ fn materialize_input_table(
     spec: &BayesModelSpec,
     project_state: &ProjectState,
 ) -> Result<DataFrame, BayesApplicationError> {
-    if spec.dataset.source_type != DatasetSourceType::Table {
+    if spec.dataset().source_type != DatasetSourceType::Table {
         return Err(BayesApplicationError::DatasetSourceUnsupported);
     }
 
     let columns = required_input_columns(spec);
     let column_refs = columns.iter().map(String::as_str).collect::<Vec<_>>();
     project_state
-        .with_database_snapshot(&spec.dataset.source_id, |database| {
+        .with_database_snapshot(&spec.dataset().source_id, |database| {
             database
                 .load_columns(&column_refs)
                 .map_err(|error| error.to_string())
@@ -943,12 +950,12 @@ fn materialize_input_table(
 
 fn required_input_columns(spec: &BayesModelSpec) -> Vec<String> {
     let mut columns = spec
-        .response
+        .response()
         .data_variables
         .values()
         .cloned()
         .collect::<Vec<_>>();
-    for column in spec.data_variables.values() {
+    for column in spec.data_variables().values() {
         if !columns.iter().any(|existing| existing == column) {
             columns.push(column.clone());
         }
@@ -1037,12 +1044,10 @@ mod tests {
 
     use crate::sci::api::bayes::{
         BayesBackend, BayesBackendError, BayesBackendRequest, BayesModelDraft, BinaryOp,
-        ColumnDType, ColumnMeta, DatasetSelection, DatasetSourceType, DiagnosticMetric,
-        DiagnosticWarning, Expression, InferenceConfig, InferenceDiagnostics, InferenceResult,
-        LikelihoodSpec, ParameterConstraint, ParameterRef, ParameterSpec, PredictorSource,
-        PredictorSourceKind, PriorSpec, ResponseBinding, ResultArtifact, ResultArtifactFormat,
-        ResultArtifactKind, ResultArtifactManifest, SamplerAlgorithm, SymbolDraft, SymbolRole,
-        TaskErrorDetails,
+        ColumnDType, ColumnMeta, DatasetSelection, DatasetSourceType, Expression, InferenceConfig,
+        InferenceResult, LikelihoodSpec, ParameterConstraint, ParameterRef, ParameterSpec,
+        PredictorSource, PredictorSourceKind, PriorSpec, ResponseBinding, SamplerAlgorithm,
+        SymbolDraft, SymbolRole, TaskErrorDetails,
     };
 
     use super::{
@@ -1082,32 +1087,33 @@ mod tests {
         fn fit(&self, request: BayesBackendRequest) -> Result<InferenceResult, BayesBackendError> {
             assert!(request.task_id.starts_with("bayes-"));
             assert_eq!(
-                request.spec.response.data_variables.get("y"),
+                request.spec.response().data_variables.get("y"),
                 Some(&"response".to_string())
             );
             assert!(request.input_table.is_none());
             *self.calls.lock().expect("calls lock") += 1;
-            Ok(InferenceResult::new(
-                Vec::new(),
-                InferenceDiagnostics {
-                    chains: 1,
-                    draws_per_chain: 10,
-                    warmup: 5,
-                    divergences: Some(0),
-                    max_treedepth_hits: Some(0),
-                    warnings: vec![DiagnosticWarning {
-                        code: "test_backend".to_string(),
-                        metric: DiagnosticMetric::Rhat,
-                        value: 1.02,
-                        threshold: 1.01,
-                        parameter: "a".to_string(),
-                    }],
+            serde_json::from_value(serde_json::json!({
+                "summaries": [],
+                "diagnostics": {
+                    "chains": 1,
+                    "drawsPerChain": 10,
+                    "warmup": 5,
+                    "divergences": 0,
+                    "maxTreedepthHits": 0,
+                    "warnings": [{
+                        "code": "test_backend",
+                        "metric": "rhat",
+                        "value": 1.02,
+                        "threshold": 1.01,
+                        "parameter": "a"
+                    }]
                 },
-                ResultArtifactManifest {
-                    task_id: request.task_id,
-                    artifacts: Vec::new(),
-                },
-            ))
+                "artifactManifest": {
+                    "taskId": request.task_id,
+                    "artifacts": []
+                }
+            }))
+            .map_err(|error| BayesBackendError::new("test_result_invalid", error.to_string()))
         }
     }
 
@@ -1126,26 +1132,27 @@ mod tests {
                 .expect("write owned artifact");
             *self.owned_directory.lock().expect("owned directory lock") = Some(owned_directory);
 
-            let mut result = InferenceResult::new(
-                Vec::new(),
-                InferenceDiagnostics {
-                    chains: 1,
-                    draws_per_chain: 1,
-                    warmup: 0,
-                    divergences: Some(0),
-                    max_treedepth_hits: Some(0),
-                    warnings: Vec::new(),
+            let mut result: InferenceResult = serde_json::from_value(serde_json::json!({
+                "summaries": [],
+                "diagnostics": {
+                    "chains": 1,
+                    "drawsPerChain": 1,
+                    "warmup": 0,
+                    "divergences": 0,
+                    "maxTreedepthHits": 0,
+                    "warnings": []
                 },
-                ResultArtifactManifest {
-                    task_id: request.task_id,
-                    artifacts: vec![ResultArtifact {
-                        kind: ResultArtifactKind::PosteriorSamples,
-                        format: ResultArtifactFormat::ArrowIpc,
-                        path: self.external_artifact.to_string_lossy().into_owned(),
-                        rows: Some(1),
-                    }],
-                },
-            );
+                "artifactManifest": {
+                    "taskId": request.task_id,
+                    "artifacts": [{
+                        "kind": "posterior_samples",
+                        "format": "arrow_ipc",
+                        "path": self.external_artifact.to_string_lossy(),
+                        "rows": 1
+                    }]
+                }
+            }))
+            .map_err(|error| BayesBackendError::new("test_result_invalid", error.to_string()))?;
             result.set_artifact_owner(owner);
             Ok(result)
         }
@@ -1503,7 +1510,7 @@ mod tests {
         );
         let result = service.result(&task.task_id).expect("stored result");
         assert_eq!(*calls.lock().expect("calls lock"), 1);
-        assert_eq!(result.diagnostics.warnings[0].code, "test_backend");
+        assert_eq!(result.diagnostics().warnings()[0].code(), "test_backend");
     }
 
     #[test]

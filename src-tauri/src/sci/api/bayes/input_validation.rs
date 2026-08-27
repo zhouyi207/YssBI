@@ -50,7 +50,7 @@ pub fn validate_bayes_input_table(
     }
 
     validate_response_column(spec, table)?;
-    for column in spec.data_variables.values() {
+    for column in spec.data_variables().values() {
         validate_numeric_predictor_column(table, column)?;
     }
     Ok(())
@@ -60,7 +60,7 @@ fn validate_response_column(
     spec: &BayesModelSpec,
     table: &DataFrame,
 ) -> Result<(), BayesInputValidationError> {
-    for column_name in spec.response.data_variables.values() {
+    for column_name in spec.response().data_variables.values() {
         validate_finite_numeric_column(
             table,
             column_name,
@@ -70,7 +70,7 @@ fn validate_response_column(
         )?;
     }
     let column_name = sole_response_column(spec)?;
-    match &spec.likelihood {
+    match spec.likelihood() {
         LikelihoodSpec::Normal { .. } => validate_response_expression(spec, table),
         LikelihoodSpec::BernoulliLogit { .. } => validate_bernoulli_response(table, column_name),
         LikelihoodSpec::PoissonLog { .. } => validate_poisson_response(table, column_name),
@@ -78,7 +78,7 @@ fn validate_response_column(
 }
 
 fn sole_response_column(spec: &BayesModelSpec) -> Result<&str, BayesInputValidationError> {
-    if spec.response.data_variables.len() != 1 {
+    if spec.response().data_variables.len() != 1 {
         return Err(BayesInputValidationError::new(
             "bayes_input_response_binding_invalid",
             "Bayesian response must bind exactly one data variable.",
@@ -87,7 +87,7 @@ fn sole_response_column(spec: &BayesModelSpec) -> Result<&str, BayesInputValidat
         ));
     }
     Ok(spec
-        .response
+        .response()
         .data_variables
         .values()
         .next()
@@ -101,9 +101,9 @@ fn validate_response_expression(
     let column = sole_response_column(spec)?.to_string();
     for row in 0..table.height() {
         evaluate_response(
-            &spec.response.expression,
+            &spec.response().expression,
             table,
-            &spec.response.data_variables,
+            &spec.response().data_variables,
             row,
             &column,
         )?;

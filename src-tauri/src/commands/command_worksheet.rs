@@ -441,7 +441,8 @@ pub fn get_plot_column_pair(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseState, EditHistory};
+    use crate::database::{DatabaseState, EditHistory};
+    use crate::database_contract::{DatabaseDecl, DatabaseEngine};
     use crate::event::{Event, EventProject};
     use crate::project::ProjectData;
 

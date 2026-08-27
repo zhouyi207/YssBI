@@ -17,6 +17,13 @@ const PROJECT_GRAPH_SPEC: &str = "docs/architecture/PROJECT_GRAPH_OWNERSHIP_BOUN
 const EXECUTION_RUNTIME_SPEC: &str = "docs/architecture/EXECUTION_RUNTIME_BOUNDARIES.md";
 const PRESENTATION_COMMAND_SPEC: &str = "docs/architecture/PRESENTATION_COMMAND_BOUNDARIES.md";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct StagedAdapterDebt {
+    pub(super) adapter: &'static str,
+    pub(super) activation_owner: &'static str,
+    pub(super) owning_migration_spec: &'static str,
+}
+
 macro_rules! debt_group {
     (
         $entries:ident,
@@ -79,6 +86,10 @@ pub(super) fn pure_leaf_graph_document_json_debt() -> Vec<SemanticGuardViolation
         },
     )
     .collect()
+}
+
+pub(super) fn staged_backend_adapter_debt() -> &'static [StagedAdapterDebt] {
+    backend_adapter::STAGED_ADAPTER_DEBT
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

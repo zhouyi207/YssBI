@@ -5,8 +5,8 @@ use crate::node_system::runtime::{
     Kernel, KernelContext, KernelError, NullPolicy, NumericSeriesView, ResourceLease, RuntimeValue,
     numeric_series, require_data_series,
 };
+use crate::sci::api::density::{KernelDensityInput, compute_kernel_density};
 use crate::sci::api::time_series::acf_pacf::{AcfPacfInput, compute_acf_pacf};
-use crate::sci::engine::SciContext;
 use serde::Serialize;
 use statrs::distribution::{ChiSquared, ContinuousCDF, StudentsT};
 use std::any::Any;
@@ -262,13 +262,18 @@ fn kde_payload(inputs: &[RuntimeValue]) -> Result<String, KernelError> {
             "KDE: at least two valid numeric values are required",
         ));
     }
-    let data = crate::sci::kde::gaussian_kde_grid(&values, KDE_GRID_POINTS)
-        .into_iter()
-        .map(|point| XYPoint {
-            x: point.x,
-            y: point.density,
-        })
-        .collect();
+    let data = compute_kernel_density(KernelDensityInput {
+        values: &values,
+        grid_points: KDE_GRID_POINTS,
+        min_x: None,
+    })
+    .points
+    .into_iter()
+    .map(|point| XYPoint {
+        x: point.x,
+        y: point.density,
+    })
+    .collect();
     serialize(
         "KDE",
         &XYPlotData {
@@ -472,13 +477,10 @@ fn correlogram_payload(inputs: &[RuntimeValue]) -> Result<String, KernelError> {
         ));
     }
     let maximum_lag = positive_integer(inputs, 1).unwrap_or(DEFAULT_MAX_LAG);
-    let result = compute_acf_pacf(
-        &SciContext::rust(),
-        AcfPacfInput {
-            residuals: values.clone(),
-            max_lag: maximum_lag,
-        },
-    )
+    let result = compute_acf_pacf(AcfPacfInput {
+        residuals: values.clone(),
+        max_lag: maximum_lag,
+    })
     .map_err(|error| KernelError::new(format!("Correlogram: {error}")))?;
     let acf = result.acf.get(1..).unwrap_or_default();
     let statistics = cumulative_ljung_box(acf, values.len());

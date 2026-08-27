@@ -1,6 +1,5 @@
 use serde::Deserialize;
 use yssbi_lib::sci::api::time_series::acf_pacf::{AcfPacfInput, AcfPacfOutput, compute_acf_pacf};
-use yssbi_lib::sci::engine::SciContext;
 
 const SIMPLE_EXPONENTIAL: &str =
     include_str!("sci/fixtures/time_series/acf_pacf/simple_exponential.json");
@@ -22,7 +21,7 @@ struct Tolerance {
 #[test]
 fn rust_acf_pacf_matches_golden_fixtures() {
     for fixture in fixtures() {
-        let result = compute_acf_pacf(&SciContext::rust(), fixture.input.clone())
+        let result = compute_acf_pacf(fixture.input.clone())
             .unwrap_or_else(|error| panic!("{} rust acf/pacf failed: {error}", fixture.name));
 
         assert_output_close(

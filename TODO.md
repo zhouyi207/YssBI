@@ -1511,12 +1511,39 @@ Execution 不知道具体 UI
 - [ ] 删除 GraphRevision 与 Project ResourceRevision 的 From/跨类型 PartialEq 隐式桥，将 mutation constructor 和全部 caller 改为显式 named conversion。
 - [ ] 将 Pure Leaf serde_json guard 改为基于真实 production module/dependency facts 的 typed structured 审计，并覆盖 test module 后的 production source negative fixture。
 - [ ] 将 legacy tabular snapshot 的三项既有 serde_json finding 静态归入 Backend Task 5 双向 exact debt，不提前重分类或实现 mixed-owner 拆分。
- - [ ] 将 serialized GraphDocument、GraphResourcePath、GraphRevision 与 document identities 原子迁入 Pure Leaf graph_document，删除 node_system/project 旧声明及 re-export。
- - [ ] 将 OperationId、HistoryEntryId、ResourceRevision、ProjectRevision 与 ProjectTransactionRevision 拆为 Project-owned 独立 newtype，移除 ResourceRevision 到 GraphRevision 的 ownership alias。
- - [ ] 建立 Graph-owned schema、compile settings、immutable resource catalog 与 21 项 closed mutation/compile typed error contract，并保留 TypedValue untagged JSON wire。
- - [ ] 增加 resource catalog、graph-document wire、Pure Leaf JSON purpose 与 Project→Graph production edge focused guards，按 canonical origins 精确更新 architecture debt。
- - [ ] 修正 GraphResourcePath 测试 fixture 的 canonical `.yssbi-event`/`.yssbi-function` 扩展名及关联 lookup/JSON 断言，不放宽 opaque path validator。
- - [ ] 将 NFC、Unicode L/N、保留名、空格与长度规则下沉到 Pure Leaf graph-document name contract，并由 Project ResourceName 穷尽映射既有错误语义。
- - [ ] 删除 GraphRevision 与 Project ResourceRevision 的 From/跨类型 PartialEq 隐式桥，将 mutation constructor 和全部 caller 改为显式 named conversion。
- - [ ] 将 Pure Leaf serde_json guard 改为基于真实 production module/dependency facts 的 typed structured 审计，并覆盖 test module 后的 production source negative fixture。
- - [ ] 将 legacy tabular snapshot 的三项既有 serde_json finding 静态归入 Backend Task 5 双向 exact debt，不提前重分类或实现 mixed-owner 拆分。
+- [ ] 新增 SCI-owned cancellation source/token、显式 monotonic absolute deadline、run control 与独立 cancel-delivery control，禁止 wall clock、sentinel、global token 和 hidden default。
+- [ ] 定义 validated opaque Bayes task/artifact IDs、非零 generation task handle 与 task-bound artifact handle，并用 closed typed errors 拒绝空值、超长、分隔符、NUL 和保留序列。
+- [ ] 建立 `ValidatedBayesTask::try_new` 唯一构造路径，在 neutral `StatisticalInput` 上重验 model、binding、sampler、响应表达式和 indexed input invariants。
+- [ ] 定义 production-unreachable `BayesWorkerPort`、typed terminal/phase/cancel errors、full-handle validated task result 与 immutable artifact bytes，保持旧 BayesBackend/Application/Julia production route 原样唯一。
+- [ ] 增加 barrier/channel-free-sleep bounded worker fake 与 semantic authority guard，覆盖 cancel/completion linearization、retry、generation ownership、artifact deadline、private constructors/fields 及 broad import 拒绝。
+- [ ] 将 Bayes summaries、diagnostics 与 warning DTO 迁入单一 neutral contract owner，并以 full-handle `BayesInferenceSnapshot` 替换 worker result 对旧 `InferenceResult` 的依赖。
+- [ ] 收紧旧 `InferenceResult`、artifact manifest 与 artifact path fields 为 private getters，保持现有 serde wire、Julia owner 生命周期和唯一 production route 行为不变。
+- [ ] 将 `BayesModelSpec` 八个 fields 全部私有化，仅公开 predictor、likelihood、parameters、data variables 与 sampler 五项 final-adapter capability。
+- [ ] 将旧 dataset/response/display 访问限制为 crate-private canonical getters，并将测试 fixture 改走现有 serde wire，禁止 setter、compatibility view 与 old/new converter。
+- [ ] 将 Bayes authority guard 改为 exact owner+method allowlist，覆盖 function-item alias、wrong-owner 同名函数、伪造 associated constructor 与 neutral result path/source 泄漏。
+- [ ] 扩展 Bayes authority semantic guard，为 worker module 的显式 import rename、glob import 与多级 type alias 建立 per-source canonical owner map。
+- [ ] 在扫描每个 production `ItemImpl` 时保存 canonical impl owner，将 `Self::...` authority reference 解析回真实 worker owner，并拒绝外部 inherent builder 声明。
+- [ ] 增加独立恶意 fixtures，分别覆盖 `Handle`/type-alias function reference 与外部 `impl BayesTaskHandle` public forge/`Self::issue_for_worker` 绕过。
+- [ ] 将 Bayes authority resolver 从 file-global alias map 改为递归 module-scoped symbol tables，对每个 inline scope 独立执行 use/type alias fixed-point。
+- [ ] 规范化 `crate`、`self`、多级 `super` 与 relative/module-alias 路径，同时保持 `other::Handle` 等非 worker origin 不产生误报。
+- [ ] 将所有显式 associated-function visibility 纳入 exact allowance，仅允许 worker boundary 的 public `ValidatedBayesTask::try_new` 与 exact `pub(crate)` authority builders。
+- [ ] 增加 module alias、relative worker import、nested forward alias chain、`pub(super)`、`pub(in ...)` 与 syntactic `pub(in crate)` 恶意回归 fixtures。
+- [ ] 修正 grouped use tree 的 terminal `self` 语义，使 `{self}` 与 `{self as alias}` 保留当前 module prefix 而不生成伪 `worker::self` origin。
+- [ ] 增加 `worker::{self as w}` → `w::BayesTaskHandle as Handle` → authority call 的 focused semantic regression，锁住 module self-alias canonicalization。
+- [ ] 新增 production-unreachable `JuliaBayesWorkerAdapter`，仅实现 final SCI `BayesWorkerPort`，constructor 只接收 app-data directory 与 `JuliaWorkerManager`，保持旧 Bayes route 唯一。
+- [ ] 直接从 `ValidatedBayesTask`、五项 model projection 与 neutral inference DTO 生成 Julia task/source/result，使用 full task handle 封存 task directory 与 artifact ownership，不引入旧新转换。
+- [ ] 为 accepted/cancel/deadline/stale/ownership/unknown-extension 与 JSON/CSV/PNG/Binary artifact mapping 增加 barrier/fake-runtime focused regressions，并保留原 Julia cancellation characterization owner。
+- [ ] 将三个 final Julia adapter files 精确分类为 Backend Adapter，登记 literal SCI capability manifest，并将零 production caller activation debt 明确归属 Execution Task 8。
+- [ ] 缩短 Julia worker cancel/restart 的 active-task mutex scope，以 barrier regression 证明 send/terminate 边界不持有该状态锁，同时保留原 non-active-task characterization。
+- [ ] 新增 Execution-owned scientific request/result/error/control contracts 与单一 dynamic `ScientificBackend`，以三个 typed methods 固定 statistics、KDE、ACF/PACF 结果族。
+- [ ] 新增 production-unreachable `SciApiScientificBackend`，穷尽映射 Execution settings、control、operations、results 与 closed SCI errors，不引入旧新 converter 或第二条 production route。
+- [ ] 将 context-free KDE canonical owner 迁入 `sci/api/density.rs`，删除旧 `sci/kde.rs` 并原子更新 Application Bayes 与 Plot callers，保持数值算法和输出形状。
+- [ ] 从 public ACF/PACF API 移除未使用的 `SciContext`，同步 command 与 Plot direct-SCI callers，保留当前唯一 production 行为。
+- [ ] 为 final scientific port/adapter 增加 RED/GREEN fake fixtures、exact capability/debt 与 zero-production-caller semantic guard，并将 staged activation debt 保留给 Execution Task 8。
+- [ ] 修复 ACF/PACF golden integration target 对已移除 `SciContext` 参数的遗留引用，改为调用唯一的单参数 SCI API。
+- [ ] 将 scientific port fake 收紧为 recording fixture，逐方法验证 typed request/result 与 cancellation/deadline control 透传。
+- [ ] 明确 synchronous scientific adapter 的 control 仅为 admission preflight，保留 Task 8 的真实 cooperative checkpoint activation debt。
+- [ ] 将 DatabaseDecl、DatabaseEngine 与 DatabaseEngineSql 原子迁入顶层 database_contract Pure Leaf owner，保持既有 serde wire、InMemory 与 DuckDB table 语义。
+- [ ] 全量切换 Application、Project、Schema、Commands、Database runtime 与测试 caller 到 crate::database_contract，删除 database 旧 declaration module/re-export。
+- [ ] 移除已消失 database declaration origins 对应的 exact capability/debt 条目，保留 DatabaseInstance、DuckDB storage 与 schema conversion 的现有职责和债务。
+- [ ] 增加 database contract 单一 owner 与 wire focused regressions，并完成 Rust architecture、数据库测试编译、fmt、check 与 diff 校验。

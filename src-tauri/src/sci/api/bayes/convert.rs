@@ -17,22 +17,22 @@ pub fn draft_to_model_spec(draft: BayesModelDraft) -> Result<BayesModelSpec, Val
     let response = draft.bound_response.expect("validated response expression");
     let predictor = draft.bound_predictor.expect("validated predictor");
 
-    Ok(BayesModelSpec {
-        dataset: DatasetRef {
+    Ok(BayesModelSpec::from_validated_parts(
+        DatasetRef {
             source_type: dataset.source_type,
             source_id: dataset.source_id,
         },
-        response: ResponseSpec {
+        ResponseSpec {
             expression: response,
             data_variables: BTreeMap::from([(response_binding.symbol, response_binding.column)]),
         },
         predictor,
         data_variables,
-        likelihood: draft.likelihood,
-        parameters: draft.parameters,
-        sampler: draft.sampler,
-        display_formula: draft.formula_text,
-    })
+        draft.likelihood,
+        draft.parameters,
+        draft.sampler,
+        draft.formula_text,
+    ))
 }
 
 fn filter_data_bindings(draft: &BayesModelDraft) -> BTreeMap<String, String> {

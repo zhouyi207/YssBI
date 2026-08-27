@@ -9,4 +9,6 @@ mod policy;
 mod semantic_guards;
 
 #[cfg(test)]
+mod semantic_guards;
+#[cfg(test)]
 mod tests;

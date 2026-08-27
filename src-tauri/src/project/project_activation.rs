@@ -1,4 +1,5 @@
-use crate::database::{DatabaseEngine, DatabaseInstance, DatabaseState, bind_duckdb_instance};
+use crate::database::{DatabaseInstance, DatabaseState, bind_duckdb_instance};
+use crate::database_contract::DatabaseEngine;
 use crate::graph_document::GraphResourcePath;
 use crate::project::ResourceRevision;
 use crate::project::{
@@ -1044,9 +1045,9 @@ mod tests {
                 &database_session.instance_id,
                 crate::project::OperationId::new(),
                 crate::database::DatabaseInstance {
-                    decl: crate::database::DatabaseDecl {
+                    decl: crate::database_contract::DatabaseDecl {
                         id: database_id.clone(),
-                        engine: crate::database::DatabaseEngine::InMemory {
+                        engine: crate::database_contract::DatabaseEngine::InMemory {
                             name: "generation".into(),
                         },
                         schema_version: 1,

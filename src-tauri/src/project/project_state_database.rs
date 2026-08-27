@@ -1,5 +1,6 @@
 use super::ProjectState;
 use crate::database::*;
+use crate::database_contract::DatabaseDecl;
 use crate::project::{
     ProjectFilesystemError, ProjectFilesystemLeaseSet, ProjectInstanceId, ProjectSession,
 };
@@ -616,7 +617,7 @@ mod tests {
             "sales".into(),
             DatabaseDecl {
                 id: "sales".into(),
-                engine: DatabaseEngine::InMemory {
+                engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "sales".into(),
                 },
                 schema_version: 1,
@@ -631,7 +632,7 @@ mod tests {
             "sales".into(),
             DatabaseDecl {
                 id: "sales".into(),
-                engine: DatabaseEngine::InMemory {
+                engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "sales".into(),
                 },
                 schema_version: 1,
@@ -664,7 +665,7 @@ mod tests {
             DatabaseInstance {
                 decl: DatabaseDecl {
                     id: database_id.into(),
-                    engine: DatabaseEngine::InMemory {
+                    engine: crate::database_contract::DatabaseEngine::InMemory {
                         name: "writer".into(),
                     },
                     schema_version: 1,
@@ -770,7 +771,7 @@ mod tests {
             DatabaseInstance {
                 decl: DatabaseDecl {
                     id: database_id.into(),
-                    engine: DatabaseEngine::InMemory {
+                    engine: crate::database_contract::DatabaseEngine::InMemory {
                         name: "snapshot".into(),
                     },
                     schema_version: 1,
@@ -966,7 +967,7 @@ mod tests {
             DatabaseInstance {
                 decl: DatabaseDecl {
                     id: id.into(),
-                    engine: DatabaseEngine::InMemory { name: id.into() },
+                    engine: crate::database_contract::DatabaseEngine::InMemory { name: id.into() },
                     schema_version: 1,
                     required: false,
                     name: name.into(),
@@ -1303,7 +1304,7 @@ mod tests {
                 DatabaseInstance {
                     decl: DatabaseDecl {
                         id: database_id.into(),
-                        engine: DatabaseEngine::InMemory {
+                        engine: crate::database_contract::DatabaseEngine::InMemory {
                             name: database_id.into(),
                         },
                         schema_version: 1,
@@ -1466,7 +1467,7 @@ mod tests {
             "replacement".into(),
             DatabaseDecl {
                 id: "replacement".into(),
-                engine: DatabaseEngine::InMemory {
+                engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "replacement".into(),
                 },
                 schema_version: 1,

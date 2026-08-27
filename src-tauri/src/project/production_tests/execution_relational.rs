@@ -28,9 +28,9 @@ impl SourceRenameLimitFixture {
         let mut project_data = ProjectData::new();
         project_data.databases.insert(
             "main".into(),
-            crate::database::DatabaseDecl {
+            crate::database_contract::DatabaseDecl {
                 id: "main".into(),
-                engine: crate::database::DatabaseEngine::DuckDb {
+                engine: crate::database_contract::DatabaseEngine::DuckDb {
                     path: "database/project.duckdb".into(),
                     table: "main".into(),
                 },
@@ -418,9 +418,9 @@ fn project_execute_graph_runs_builtin_dataframe_source_limit() {
     let mut project_data = ProjectData::new();
     project_data.databases.insert(
         "main".into(),
-        crate::database::DatabaseDecl {
+        crate::database_contract::DatabaseDecl {
             id: "main".into(),
-            engine: crate::database::DatabaseEngine::DuckDb {
+            engine: crate::database_contract::DatabaseEngine::DuckDb {
                 path: "database/project.duckdb".into(),
                 table: "main".into(),
             },
@@ -595,9 +595,9 @@ impl ProductionRelationalChainFixture {
         let mut project_data = ProjectData::new();
         project_data.databases.insert(
             "main".into(),
-            crate::database::DatabaseDecl {
+            crate::database_contract::DatabaseDecl {
                 id: "main".into(),
-                engine: crate::database::DatabaseEngine::DuckDb {
+                engine: crate::database_contract::DatabaseEngine::DuckDb {
                     path: "database/project.duckdb".into(),
                     table: "main".into(),
                 },

@@ -11,17 +11,17 @@ pub struct JuliaPredictorKernel {
 
 pub fn compile_predictor(spec: &BayesModelSpec) -> Result<JuliaPredictorKernel, String> {
     let parameters = spec
-        .parameters
+        .parameters()
         .iter()
         .enumerate()
         .map(|(index, parameter)| (parameter.name.as_str(), index + 1))
         .collect::<BTreeMap<_, _>>();
     let mut compiler = PredictorCompiler {
         parameters,
-        data_variables: &spec.data_variables,
+        data_variables: spec.data_variables(),
         columns: Vec::new(),
     };
-    let expression = compiler.emit(&spec.predictor)?;
+    let expression = compiler.emit(spec.predictor())?;
 
     Ok(JuliaPredictorKernel {
         predictor_source: format!(
@@ -114,10 +114,10 @@ impl PredictorCompiler<'_> {
 fn emit_likelihood_kernel(spec: &BayesModelSpec, predictor: &str) -> Result<String, String> {
     use crate::sci::api::bayes::LikelihoodSpec;
 
-    let contribution = match &spec.likelihood {
+    let contribution = match spec.likelihood() {
         LikelihoodSpec::Normal { sigma, .. } => {
             let sigma_index = spec
-                .parameters
+                .parameters()
                 .iter()
                 .position(|parameter| parameter.name == sigma.parameter)
                 .ok_or_else(|| {
@@ -176,13 +176,14 @@ mod tests {
     use crate::sci::api::bayes::{BayesModelSpec, BinaryOp, Expression, MathFunction};
 
     fn compile(expression: Expression) -> super::JuliaPredictorKernel {
-        let mut spec: BayesModelSpec = serde_json::from_value(serde_json::json!({
+        let predictor = serde_json::to_value(expression).expect("predictor fixture must serialize");
+        let spec: BayesModelSpec = serde_json::from_value(serde_json::json!({
             "dataset": { "sourceType": "table", "sourceId": "data" },
             "response": {
                 "expression": { "type": "data_variable", "name": "y" },
                 "dataVariables": { "y": "response" }
             },
-            "predictor": { "type": "number", "value": 0.0 },
+            "predictor": predictor,
             "dataVariables": { "x": "time" },
             "likelihood": {
                 "type": "normal",
@@ -198,7 +199,6 @@ mod tests {
             "displayFormula": "test"
         }))
         .unwrap();
-        spec.predictor = expression;
         compile_predictor(&spec).unwrap()
     }
 
