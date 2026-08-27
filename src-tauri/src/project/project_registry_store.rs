@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
+use thiserror::Error;
 
 use super::{ProjectInstanceId, ProjectRootIdentity, ProjectRootIdentityState};
 
@@ -73,10 +74,13 @@ impl ProjectRegistryRecord {
 
 pub type ProjectRegistryStoreFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
 pub enum ProjectRegistryStoreError {
+    #[error("project registry store is unavailable")]
     Unavailable,
+    #[error("project registry store conflict")]
     Conflict,
+    #[error("project registry storage failed")]
     StorageFailed,
 }
 
