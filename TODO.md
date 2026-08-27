@@ -1625,3 +1625,4 @@ Execution 不知道具体 UI
 - [ ] 删除已无 production caller 的 `useEditActions`、数据库表 mutation context menu 及其生命周期测试，避免保留第二条编辑路径。
 - [ ] 将数据库导出路径选择隔离到 Services platform adapter，由 Application hook 负责 project identity revalidation 与 typed export 调用。
 - [ ] 扩展 Rust architecture resolver 对 execution plan 的 `plan_id!` 生成 identity，修复 canonical target 解析门禁。
+- [ ] 同步登记 `parameter_id!` 生成的 compiled parameter identity，确保 plan re-export 的 canonical target 可解析。

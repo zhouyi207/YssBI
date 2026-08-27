@@ -983,6 +983,7 @@ fn project_macro_declares_symbol(item: &syn::ItemMacro, symbol: &str) -> bool {
             | "index_type"
             | "opaque_id"
             | "opaque_resource_type"
+            | "parameter_id"
             | "plan_id"
             | "runtime_id"
             | "string_identity"
