@@ -967,7 +967,6 @@ mod tests {
         ));
         let resource_provider_factory = Arc::new(ResourceProviderFactory::new(
             project_session_id.as_str().into(),
-            Some(Arc::clone(&database)),
         ));
         Arc::new(ApplicationSession::new_for_test(
             ApplicationSessionEpoch::from_existing(epoch),

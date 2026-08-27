@@ -275,27 +275,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         entries,
         BACKEND_ADAPTER_SPEC,
         "rust.external.runtime-source-layer",
-        "src-tauri/src/project/project_registry.rs",
-        "yssbi_lib::project::project_registry",
-        [
-            (Path, 7, "external:sqlx::Error"),
-            (Path, 1, "external:sqlx::Error::Decode"),
-            (Path, 6, "external:sqlx::query"),
-            (Path, 4, "external:sqlx::query_as"),
-            (Path, 1, "external:sqlx::query_scalar"),
-            (Path, 2, "external:tauri::ipc::Channel"),
-            (Use, 1, "external:sqlx::FromRow"),
-            (Use, 1, "external:sqlx::sqlite::SqliteConnectOptions"),
-            (Use, 1, "external:sqlx::sqlite::SqliteJournalMode"),
-            (Use, 1, "external:sqlx::sqlite::SqlitePoolOptions"),
-            (Use, 1, "external:sqlx::sqlite::SqliteSynchronous"),
-            (Use, 1, "external:sqlx::SqlitePool"),
-        ],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.external.runtime-source-layer",
         "src-tauri/src/window_state/kind.rs",
         "yssbi_lib::window_state::kind",
         [
@@ -575,5 +554,180 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (Use, 1, "yssbi_lib::sci::api::bayes::model::MathFunction"),
             (Use, 1, "yssbi_lib::sci::api::bayes::model::UnaryOp"),
         ],
+    );
+    debt_group!(
+        entries,
+        BACKEND_ADAPTER_SPEC,
+        "rust.internal.source-layer",
+        "src-tauri/src/backend_adapters/execution/relational.rs",
+        "yssbi_lib::backend_adapters::execution::relational",
+        [
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::ports::relational::RelationalBackend"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::ports::relational::RelationalError"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::ports::relational::RelationalExecutionControl"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::ports::relational::RelationalRequest"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::ports::relational::RelationalResult"
+            ),
+        ],
+    );
+    debt_group!(
+        entries,
+        BACKEND_ADAPTER_SPEC,
+        "rust.internal.source-layer",
+        "src-tauri/src/backend_adapters/execution/resources.rs",
+        "yssbi_lib::backend_adapters::execution::resources",
+        [
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::identity::PlanProjectSessionId"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::resource_preparation::ResourceProviderFactory"
+            ),
+        ],
+    );
+    debt_group!(
+        entries,
+        BACKEND_ADAPTER_SPEC,
+        "rust.internal.source-layer",
+        "src-tauri/src/backend_adapters/project_registry_sqlite.rs",
+        "yssbi_lib::backend_adapters::project_registry_sqlite",
+        [
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_registry_store::ProjectRegistryRecord"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_registry_store::ProjectRegistryStore"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_registry_store::ProjectRegistryStoreError"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_registry_store::ProjectRegistryStoreFuture"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_session::ProjectInstanceId"
+            ),
+            (
+                Path,
+                1,
+                "yssbi_lib::project::filesystem::root::ProjectRootIdentity::from_stored"
+            ),
+            (
+                Path,
+                2,
+                "yssbi_lib::project::project_registry::ProjectRootIdentityState::Invalid"
+            ),
+            (
+                Path,
+                2,
+                "yssbi_lib::project::project_registry::ProjectRootIdentityState::Valid"
+            ),
+        ],
+    );
+    debt_group!(
+        entries,
+        BACKEND_ADAPTER_SPEC,
+        "rust.internal.source-layer",
+        "src-tauri/src/platform/project_file_watcher.rs",
+        "yssbi_lib::platform::project_file_watcher",
+        [
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::FileWatcherStartError"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::ObservedProjectFileChange"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::ProjectFileChangeSink"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::ProjectFileWatcherDrain"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::ProjectFileWatcherDrainOutcome"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::ProjectFileWatcherFactory"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::ProjectFileWatcherSession"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::ProjectWatcherEpoch"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::WatcherShutdownControl"
+            ),
+            (Use, 1, "yssbi_lib::project::project_change::FileChange"),
+            (Use, 1, "yssbi_lib::project::project_change::FileChangeKind"),
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_change::ProjectRelativePath"
+            ),
+        ],
+    );
+    debt_group!(
+        entries,
+        BACKEND_ADAPTER_SPEC,
+        "rust.internal.source-layer",
+        "src-tauri/src/lib.rs",
+        "yssbi_lib",
+        [(
+            Path,
+            1,
+            "yssbi_lib::platform::project_file_watcher::NotifyProjectFileWatcher::new"
+        ),],
     );
 }

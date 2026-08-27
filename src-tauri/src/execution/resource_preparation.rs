@@ -1,5 +1,4 @@
 use std::collections::BTreeSet;
-use std::sync::Arc;
 
 use thiserror::Error;
 
@@ -65,18 +64,11 @@ impl PreparedRunResources {
 #[derive(Clone)]
 pub struct ResourceProviderFactory {
     session_identity: Box<str>,
-    database_session: Option<Arc<crate::database::runtime::DatabaseRuntimeSession>>,
 }
 
 impl ResourceProviderFactory {
-    pub(crate) fn new(
-        session_identity: Box<str>,
-        database_session: Option<Arc<crate::database::runtime::DatabaseRuntimeSession>>,
-    ) -> Self {
-        Self {
-            session_identity,
-            database_session,
-        }
+    pub(crate) fn new(session_identity: Box<str>) -> Self {
+        Self { session_identity }
     }
 
     fn prepare(
@@ -141,7 +133,7 @@ mod tests {
 
     #[test]
     fn preparation_rejects_duplicate_requirement_before_grant_sealing() {
-        let factory = ResourceProviderFactory::new("session".into(), None);
+        let factory = ResourceProviderFactory::new("session".into());
         let resource = PlanResourceId::from_existing("database/main".into());
         let requirements = [
             PlanResourceRequirement::new(

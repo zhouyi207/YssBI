@@ -746,6 +746,26 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "yssbi_lib::commands::command_project::lifecycle",
         [
             (Use, 1, "yssbi_lib::application::project_lifecycle"),
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::ObservedProjectFileChange"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::application::project_watcher::ProjectFileChangeSink"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_change::ProjectDomainEvent"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_change::ProjectWatchError"
+            ),
             (Use, 1, "yssbi_lib::project::identity::OperationId"),
             (
                 Use,
@@ -874,17 +894,44 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (
                 Path,
                 1,
-                "yssbi_lib::project::project_picker_task::ProjectCleanupProgressEvent"
-            ),
-            (
-                Path,
-                1,
-                "yssbi_lib::project::project_scan::ProjectScanProgressEvent"
-            ),
-            (
-                Path,
-                1,
                 "yssbi_lib::project::project_state::state::ProjectState"
+            ),
+        ],
+    );
+    debt_group!(
+        entries,
+        PRESENTATION_COMMAND_SPEC,
+        "rust.external.runtime-source-layer",
+        "src-tauri/src/commands/command_project/progress.rs",
+        "yssbi_lib::commands::command_project::progress",
+        [(Use, 1, "external:serde::Serialize")],
+    );
+    debt_group!(
+        entries,
+        PRESENTATION_COMMAND_SPEC,
+        "rust.internal.source-layer",
+        "src-tauri/src/commands/command_project/progress.rs",
+        "yssbi_lib::commands::command_project::progress",
+        [
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_progress::ProjectCleanupProgress"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_progress::ProjectProgress"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_progress::ProjectProgressSink"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::project::project_progress::ProjectScanProgress"
             ),
         ],
     );

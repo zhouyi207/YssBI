@@ -2058,4 +2058,47 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (Use, 1, "yssbi_lib::project::identity::ResourceRevision"),
         ],
     );
+    debt_group!(
+        entries,
+        PROJECT_GRAPH_SPEC,
+        "rust.internal.source-layer",
+        "src-tauri/src/graph/analysis/mod.rs",
+        "yssbi_lib::graph::analysis",
+        [(
+            Use,
+            1,
+            "yssbi_lib::execution::plan::basis::PlanCompilationBasis"
+        ),],
+    );
+    debt_group!(
+        entries,
+        PROJECT_GRAPH_SPEC,
+        "rust.internal.source-layer",
+        "src-tauri/src/graph/compiler/mod.rs",
+        "yssbi_lib::graph::compiler",
+        [
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::basis::PlanCompilationBasis"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::package::CompiledExecutionPackage"
+            ),
+        ],
+    );
+    debt_group!(
+        entries,
+        PROJECT_GRAPH_SPEC,
+        "rust.internal.source-layer",
+        "src-tauri/src/graph/runtime_state.rs",
+        "yssbi_lib::graph::runtime_state",
+        [(
+            Use,
+            1,
+            "yssbi_lib::execution::plan::basis::PlanCompilationBasis"
+        ),],
+    );
 }

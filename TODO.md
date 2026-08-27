@@ -1658,3 +1658,6 @@ Execution 不知道具体 UI
 - [ ] 实现 Project–Graph Task 7 的单次 Application session capture、Graph consuming mutation handoff 与 Project linearized authority commit。
 - [ ] 让 graph mutation commit 返回 Project-owned before/after history 与 invalidation facts，并委托 canonical resident graph installer。
 - [ ] 完成 Project–Graph Task 7 focused authority regression、Rust check/fmt/diff 校验，保留 session replacement 与 history-owner 后续 cutover。
+- [ ] 按真实 production dependency facts 更新 Rust exact debt，登记 staged Graph/Execution/Backend/Application seams 并移除已删除的 Project SQLx/旧 progress edges。
+- [ ] 从 Execution resource preparation 移除具体 Database runtime 持有，保留 Database 句柄只在 Backend adapter factory boundary。
+- [ ] 完成跨 Database/Graph/Project watcher 边界的 architecture debt re-audit 前置 check、fmt 与 diff 校验，随后进入下一轮 owner cutover。
