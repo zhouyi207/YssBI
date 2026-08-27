@@ -1655,6 +1655,10 @@ Execution 不知道具体 UI
 - [ ] 将 New Project、Database import、Bayes export 与 persisted webview 创建迁移到 Services platform adapters，保持 geometry/selection 行为。
 - [ ] 将 settings store 的跨窗口发布/订阅移入 Application SettingsSyncCoordinator，保留 own-echo suppression 与 malformed payload 安全忽略。
 - [ ] 完成 Frontend Task 2 platform caller typecheck 与 diff 校验；projectService、ProjectListener 等范围外 raw callers留待下一切片。
+- [ ] 将 ProjectService 的目录选择、save-as 路径与 resource reveal 职责拆出到 Application actions 和 platform adapters，保留 IPC/ordered progress route。
+- [ ] 删除 ProjectService 的 raw dialog/opener imports，并完成 save-as/application-selected-path focused regression 与 typecheck/diff 校验。
+- [ ] 将 Frontend state-authority AST/snapshot bridge 接入 semantic architecture audit，对 manifest-listed store members 缺失时 fail closed。
+- [ ] 保留 authority writer/dirty/delegate cycle 规则与最小 fixture，完成 state-authority typecheck/diff 校验；真实 production audit 待稳定 runner 复核。
 - [ ] 将 Database runtime registry 拆为 session-owned lifecycle/lease/prepare/commit/recovery owner，补齐 prepared、committed 与 recovery outstanding 计数。
 - [ ] 让 Database session API 的 catalog/data snapshot、声明/运行时/schema revalidation 与 mutation resolution 使用同一 runtime snapshot，保持锁外语义。
 - [ ] 完成 Database session runtime focused recovery/compensation 回归与 Rust check/fmt/diff 验证；driver I/O 仍未引入 neutral snapshot。
