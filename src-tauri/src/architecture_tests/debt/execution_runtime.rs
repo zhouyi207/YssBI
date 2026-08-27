@@ -590,8 +590,12 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 1,
                 "yssbi_lib::sci::api::time_series::acf_pacf::compute_acf_pacf"
             ),
-            (Use, 1, "yssbi_lib::sci::engine::SciContext"),
-            (Path, 1, "yssbi_lib::sci::kde::gaussian_kde_grid"),
+            (Use, 1, "yssbi_lib::sci::api::density::KernelDensityInput"),
+            (
+                Use,
+                1,
+                "yssbi_lib::sci::api::density::compute_kernel_density"
+            ),
         ],
     );
     debt_group!(

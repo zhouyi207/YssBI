@@ -1461,3 +1461,8 @@ Execution 不知道具体 UI
 - [ ] 为 accepted/cancel/deadline/stale/ownership/unknown-extension 与 JSON/CSV/PNG/Binary artifact mapping 增加 barrier/fake-runtime focused regressions，并保留原 Julia cancellation characterization owner。
 - [ ] 将三个 final Julia adapter files 精确分类为 Backend Adapter，登记 literal SCI capability manifest，并将零 production caller activation debt 明确归属 Execution Task 8。
 - [ ] 缩短 Julia worker cancel/restart 的 active-task mutex scope，以 barrier regression 证明 send/terminate 边界不持有该状态锁，同时保留原 non-active-task characterization。
+- [ ] 新增 Execution-owned scientific request/result/error/control contracts 与单一 dynamic `ScientificBackend`，以三个 typed methods 固定 statistics、KDE、ACF/PACF 结果族。
+- [ ] 新增 production-unreachable `SciApiScientificBackend`，穷尽映射 Execution settings、control、operations、results 与 closed SCI errors，不引入旧新 converter 或第二条 production route。
+- [ ] 将 context-free KDE canonical owner 迁入 `sci/api/density.rs`，删除旧 `sci/kde.rs` 并原子更新 Application Bayes 与 Plot callers，保持数值算法和输出形状。
+- [ ] 从 public ACF/PACF API 移除未使用的 `SciContext`，同步 command 与 Plot direct-SCI callers，保留当前唯一 production 行为。
+- [ ] 为 final scientific port/adapter 增加 RED/GREEN fake fixtures、exact capability/debt 与 zero-production-caller semantic guard，并将 staged activation debt 保留给 Execution Task 8。

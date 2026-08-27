@@ -1,20 +1,62 @@
-//! Shared Gaussian kernel density estimation.
+//! Context-free Gaussian kernel density estimation API.
 
-/// A point on a kernel density estimate curve.
+pub struct KernelDensityInput<'a> {
+    pub values: &'a [f64],
+    pub grid_points: usize,
+    pub min_x: Option<f64>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct KdePoint {
+pub struct DensityPoint {
     pub x: f64,
     pub density: f64,
 }
 
-/// Standard Gaussian kernel `K(u) = exp(-u² / 2) / sqrt(2π)`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct KernelDensityOutput {
+    pub points: Vec<DensityPoint>,
+}
+
+pub fn compute_kernel_density(input: KernelDensityInput<'_>) -> KernelDensityOutput {
+    let values = input
+        .values
+        .iter()
+        .copied()
+        .filter(|value| value.is_finite())
+        .collect::<Vec<_>>();
+    if values.is_empty() || input.grid_points < 2 {
+        return KernelDensityOutput { points: Vec::new() };
+    }
+
+    let bandwidth = silverman_bandwidth(&values);
+    let min = values.iter().copied().fold(f64::INFINITY, f64::min);
+    let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let padding = ((max - min) * 0.15).max(bandwidth * 2.0).max(0.1);
+    let padded_min = min - padding;
+    let grid_min = input
+        .min_x
+        .filter(|value| value.is_finite())
+        .map_or(padded_min, |value| value.max(padded_min));
+    let grid_max = max + padding;
+    let denominator = (input.grid_points - 1) as f64;
+    let points = (0..input.grid_points)
+        .map(|index| {
+            let x = grid_min + index as f64 / denominator * (grid_max - grid_min);
+            DensityPoint {
+                x,
+                density: kde_at(x, &values, bandwidth),
+            }
+        })
+        .collect();
+    KernelDensityOutput { points }
+}
+
 #[inline]
 fn gaussian_kernel(u: f64) -> f64 {
     const INV_SQRT_2PI: f64 = 0.398_942_280_401_432_7;
     INV_SQRT_2PI * (-0.5 * u * u).exp()
 }
 
-/// Silverman's rule-of-thumb bandwidth.
 fn silverman_bandwidth(values: &[f64]) -> f64 {
     let finite = values
         .iter()
@@ -40,51 +82,6 @@ fn silverman_bandwidth(values: &[f64]) -> f64 {
     1.06 * sigma * n.powf(-0.2)
 }
 
-/// Computes a Gaussian KDE on an evenly spaced, padded grid.
-///
-/// `grid_points` is the exact number of returned points. Non-finite samples are
-/// ignored, and fewer than two requested grid points produce an empty curve.
-pub fn gaussian_kde_grid(values: &[f64], grid_points: usize) -> Vec<KdePoint> {
-    gaussian_kde_grid_with_min_x(values, grid_points, None)
-}
-
-/// Computes a Gaussian KDE with an optional lower bound for the grid.
-pub fn gaussian_kde_grid_with_min_x(
-    values: &[f64],
-    grid_points: usize,
-    min_x: Option<f64>,
-) -> Vec<KdePoint> {
-    let values = values
-        .iter()
-        .copied()
-        .filter(|value| value.is_finite())
-        .collect::<Vec<_>>();
-    if values.is_empty() || grid_points < 2 {
-        return Vec::new();
-    }
-
-    let bandwidth = silverman_bandwidth(&values);
-    let min = values.iter().copied().fold(f64::INFINITY, f64::min);
-    let max = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let padding = ((max - min) * 0.15).max(bandwidth * 2.0).max(0.1);
-    let padded_min = min - padding;
-    let grid_min = min_x
-        .filter(|value| value.is_finite())
-        .map_or(padded_min, |value| value.max(padded_min));
-    let grid_max = max + padding;
-    let denominator = (grid_points - 1) as f64;
-
-    (0..grid_points)
-        .map(|index| {
-            let x = grid_min + index as f64 / denominator * (grid_max - grid_min);
-            KdePoint {
-                x,
-                density: kde_at(x, &values, bandwidth),
-            }
-        })
-        .collect()
-}
-
 fn kde_at(x: f64, values: &[f64], bandwidth: f64) -> f64 {
     let kernel_sum = values
         .iter()
@@ -95,9 +92,7 @@ fn kde_at(x: f64, values: &[f64], bandwidth: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        gaussian_kde_grid, gaussian_kde_grid_with_min_x, gaussian_kernel, silverman_bandwidth,
-    };
+    use super::{KernelDensityInput, compute_kernel_density, gaussian_kernel, silverman_bandwidth};
 
     #[test]
     fn gaussian_kernel_is_symmetric_and_normalized_at_zero() {
@@ -114,7 +109,12 @@ mod tests {
 
     #[test]
     fn kde_grid_returns_requested_finite_ordered_points() {
-        let points = gaussian_kde_grid(&[0.0, 1.0, 2.0, f64::NAN], 32);
+        let points = compute_kernel_density(KernelDensityInput {
+            values: &[0.0, 1.0, 2.0, f64::NAN],
+            grid_points: 32,
+            min_x: None,
+        })
+        .points;
         assert_eq!(points.len(), 32);
         assert!(points.windows(2).all(|pair| pair[0].x < pair[1].x));
         assert!(
@@ -126,7 +126,12 @@ mod tests {
 
     #[test]
     fn kde_grid_respects_finite_min_x_without_changing_point_count() {
-        let points = gaussian_kde_grid_with_min_x(&[0.1, 0.2, 0.3], 32, Some(0.0));
+        let points = compute_kernel_density(KernelDensityInput {
+            values: &[0.1, 0.2, 0.3],
+            grid_points: 32,
+            min_x: Some(0.0),
+        })
+        .points;
         assert_eq!(points.len(), 32);
         assert_eq!(points.first().map(|point| point.x), Some(0.0));
     }

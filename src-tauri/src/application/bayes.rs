@@ -831,13 +831,20 @@ fn density_series(
     DensitySeries {
         parameter: parameter.to_string(),
         chain,
-        points: crate::sci::kde::gaussian_kde_grid(values, grid_points)
-            .into_iter()
-            .map(|point| DensityPoint {
-                x: point.x,
-                density: point.density,
-            })
-            .collect(),
+        points: crate::sci::api::density::compute_kernel_density(
+            crate::sci::api::density::KernelDensityInput {
+                values,
+                grid_points,
+                min_x: None,
+            },
+        )
+        .points
+        .into_iter()
+        .map(|point| DensityPoint {
+            x: point.x,
+            density: point.density,
+        })
+        .collect(),
     }
 }
 

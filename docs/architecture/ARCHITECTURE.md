@@ -75,11 +75,12 @@ owner、dependency kind、canonical target 与 occurrence count。审计对实�
 | `src/` | React views、application hooks、Zustand 投影、IPC adapter 和 UI |
 | `src-tauri/src/commands/` | Tauri transport、DTO 转换、错误映射、event/channel 交付 |
 | `src-tauri/src/application/` | 跨 module 用例编排 |
+| `src-tauri/src/backend_adapters/` | final consumer-owned ports 到 concrete backend API 的 exact adapters；staged adapter 在 composition 切换前保持 production-unreachable |
 | `src-tauri/src/project/` | project/session authority、resource revision、事务提交与 publication、持久化协调和 coherent snapshots |
 | `src-tauri/src/node_system/` | graph document、catalog/registry、analysis、compiler、plan 与 runtime |
 | `src-tauri/src/database/` | DatabaseDecl/DatabaseInstance semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
-| `src-tauri/src/sci/` | 主应用的科学计算 interface、typed models 与 backend adapters |
+| `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface、models 与当前 direct-SCI backend orchestration |
 | `src-tauri/sci/` | 独立 `yss-sci` Rust 数值算法 crate |
 | `src-tauri/src/julia/` | Julia runtime/worker host、typed worker errors 和 task ownership |
 | `src-tauri/julia/` | Julia worker assets 与 Bayes operation |
@@ -377,7 +378,12 @@ Dataset overview 对 unavailable metric 使用 `null`，不伪造为 0。DuckDB-
 科学计算分为两层：
 
 1. `src-tauri/sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
-2. `src-tauri/src/sci/`：主应用 interface，包含 typed request/result、application-facing models、backend adapters 与 stable error mapping。
+2. `src-tauri/src/sci/`：主应用 SCI-facing interface，包含 typed request/result、application-facing models、当前 direct-SCI orchestration 与 stable error mapping。
+
+Final Execution-facing scientific request/result/error/control 由 `execution/ports/scientific.rs`
+拥有；`backend_adapters/execution/scientific.rs` 负责与 SCI public API 穷尽映射。该 adapter
+在 Execution Task 8 composition 切换前保持 production-unreachable，当前 direct-SCI route
+仍唯一 active。
 
 Graph kernels 和 commands 依赖 `crate::sci::api`，不直接依赖 Julia worker internals。这个 seam 将输入规范化、错误类型和 backend choice 集中起来。
 

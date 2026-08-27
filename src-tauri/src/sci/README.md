@@ -38,6 +38,7 @@ commands / application / node_system kernels
 sci/
 ├─ api/
 │  ├─ bayes/
+│  ├─ density.rs
 │  ├─ node_statistics.rs
 │  ├─ stats/hypothesis.rs
 │  └─ time_series/{acf_pacf,serial_tests}.rs
@@ -46,8 +47,7 @@ sci/
 │  └─ julia/bayes/
 ├─ models/{regression,panel_did}.rs
 ├─ engine.rs
-├─ error.rs
-└─ kde.rs
+└─ error.rs
 ```
 
 ## Production execution
@@ -60,7 +60,10 @@ sci/
 | Node regression/time-series statistics | Rust over `yss-sci` |
 | Bayesian inference | `JuliaBayesBackend` |
 
-`SciContext::rust()` makes the production Rust path explicit for ACF/serial/hypothesis. There is no Julia time-series adapter. Julia is used only as the real adapter at the `BayesBackend` seam; see [backends](./backends/README.md) and the [Julia worker protocol](../../julia/README.md).
+ACF/PACF 与 context-free KDE 直接位于 SCI API；`SciContext::rust()` 仍为 serial/hypothesis
+显式选择当前 Rust path。不存在 Julia time-series adapter；Julia 只在 `BayesBackend` seam
+作为真实 adapter。参见 [backends](./backends/README.md) 与
+[Julia worker protocol](../../julia/README.md)。
 
 ## Typed regression statistics
 

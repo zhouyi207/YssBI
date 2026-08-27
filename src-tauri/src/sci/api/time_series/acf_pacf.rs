@@ -1,7 +1,6 @@
 //! ACF/PACF application API and Rust backend orchestration.
 
 use crate::sci::backends::rust;
-use crate::sci::engine::SciContext;
 use crate::sci::error::{SciError, SciInputViolation, SciOperationCode};
 use serde::{Deserialize, Serialize};
 
@@ -24,10 +23,7 @@ pub struct AcfPacfOutput {
 }
 
 /// Computes ACF/PACF through the Rust scientific backend.
-pub fn compute_acf_pacf(
-    _context: &SciContext,
-    input: AcfPacfInput,
-) -> Result<AcfPacfOutput, SciError> {
+pub fn compute_acf_pacf(input: AcfPacfInput) -> Result<AcfPacfOutput, SciError> {
     let max_lag = command_max_lag(&input)?;
     rust::time_series::acf_pacf::compute_at_lag(&input.residuals, max_lag)
 }

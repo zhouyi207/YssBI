@@ -15,6 +15,14 @@ const JULIA_WORKER_ADAPTER_FILES: &[&str] = &[
     "src-tauri/src/julia/bayes_worker_adapter/fit.rs",
     "src-tauri/src/julia/bayes_worker_adapter/predictor.rs",
 ];
+const SCIENTIFIC_BOUNDARY_FILES: &[&str] = &[
+    "src-tauri/src/execution/ports/scientific.rs",
+    "src-tauri/src/backend_adapters/mod.rs",
+    "src-tauri/src/backend_adapters/execution/mod.rs",
+    "src-tauri/src/backend_adapters/execution/scientific.rs",
+];
+const SCIENTIFIC_PORT_FILE: &str = "src-tauri/src/execution/ports/scientific.rs";
+const SCIENTIFIC_ADAPTER_FILE: &str = "src-tauri/src/backend_adapters/execution/scientific.rs";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct WorkerFunction {
     owner: &'static str,
@@ -1291,7 +1299,7 @@ impl<'ast> Visit<'ast> for JuliaBayesAdapterVisitor<'_> {
 #[test]
 fn julia_bayes_worker_adapter_is_port_only_and_production_unreachable() {
     let staged_debt = super::debt::staged_backend_adapter_debt();
-    assert_eq!(staged_debt.len(), 1);
+    assert_eq!(staged_debt.len(), 2);
     assert_eq!(
         staged_debt[0].adapter,
         "yssbi_lib::julia::bayes_worker_adapter::JuliaBayesWorkerAdapter"
@@ -1365,6 +1373,223 @@ impl BayesWorkerPort for JuliaBayesWorkerAdapter {}
     .expect("production constructor fixture must parse");
     assert!(production_constructor.iter().any(|finding| {
         finding.kind == "production-reference" && finding.target == "JuliaBayesWorkerAdapter"
+    }));
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct ScientificAdapterViolation {
+    source_file: String,
+    kind: &'static str,
+    target: String,
+}
+
+fn scientific_adapter_source_violations(
+    source_file: &str,
+    source: &str,
+) -> Result<Vec<ScientificAdapterViolation>, syn::Error> {
+    let syntax = syn::parse_file(source)?;
+    let mut violations = Vec::new();
+    let mut visitor = ScientificAdapterVisitor {
+        source_file,
+        adapter_source: source_file == SCIENTIFIC_ADAPTER_FILE,
+        port_source: source_file == SCIENTIFIC_PORT_FILE,
+        violations: &mut violations,
+    };
+    visitor.visit_file(&syntax);
+    violations.sort();
+    Ok(violations)
+}
+
+struct ScientificAdapterVisitor<'a> {
+    source_file: &'a str,
+    adapter_source: bool,
+    port_source: bool,
+    violations: &'a mut Vec<ScientificAdapterViolation>,
+}
+
+impl ScientificAdapterVisitor<'_> {
+    fn record(&mut self, kind: &'static str, target: impl Into<String>) {
+        self.violations.push(ScientificAdapterViolation {
+            source_file: self.source_file.to_owned(),
+            kind,
+            target: target.into(),
+        });
+    }
+
+    fn inspect_segments(&mut self, segments: &[String]) {
+        if self.adapter_source {
+            for forbidden in ["engine", "models", "kde", "backends"] {
+                if segments.windows(2).any(|pair| pair == ["sci", forbidden]) {
+                    self.record("forbidden-sci-owner", format!("sci::{forbidden}"));
+                }
+            }
+        }
+        if self.port_source && segments.iter().any(|segment| segment == "sci") {
+            self.record("execution-imports-sci", segments.join("::"));
+        }
+        if !self.adapter_source
+            && segments
+                .iter()
+                .any(|segment| segment == "SciApiScientificBackend")
+        {
+            self.record("production-reference", "SciApiScientificBackend");
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for ScientificAdapterVisitor<'_> {
+    fn visit_item(&mut self, item: &'ast Item) {
+        if is_test_only(item_attributes(item)) {
+            return;
+        }
+        visit::visit_item(self, item);
+    }
+
+    fn visit_impl_item(&mut self, item: &'ast ImplItem) {
+        if is_test_only(impl_item_attributes(item)) {
+            return;
+        }
+        visit::visit_impl_item(self, item);
+    }
+
+    fn visit_expr(&mut self, expression: &'ast Expr) {
+        if is_test_only(expr_attributes(expression)) {
+            return;
+        }
+        visit::visit_expr(self, expression);
+    }
+
+    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        if is_test_only(&item.attrs) {
+            return;
+        }
+        if self.adapter_source
+            && impl_owner(&item.self_ty).as_deref() == Some("SciApiScientificBackend")
+            && let Some((trait_path, _)) = &item.trait_
+            && trait_path
+                .segments
+                .last()
+                .is_none_or(|segment| segment.ident != "ScientificBackend")
+        {
+            self.record(
+                "non-port-trait",
+                trait_path
+                    .segments
+                    .last()
+                    .map_or_else(String::new, |segment| segment.ident.to_string()),
+            );
+        }
+        visit::visit_item_impl(self, item);
+    }
+
+    fn visit_item_use(&mut self, item: &'ast syn::ItemUse) {
+        if is_test_only(&item.attrs) {
+            return;
+        }
+        let mut bindings = Vec::new();
+        flatten_use_tree(&item.tree, &mut Vec::new(), &mut bindings);
+        for binding in bindings {
+            self.inspect_segments(&binding.path);
+        }
+        visit::visit_item_use(self, item);
+    }
+
+    fn visit_path(&mut self, path: &'ast syn::Path) {
+        let segments = path
+            .segments
+            .iter()
+            .map(|segment| segment.ident.to_string())
+            .collect::<Vec<_>>();
+        self.inspect_segments(&segments);
+        visit::visit_path(self, path);
+    }
+}
+
+#[test]
+fn scientific_backend_adapter_is_exact_port_only_and_production_unreachable() {
+    let staged_debt = super::debt::staged_backend_adapter_debt();
+    let debt = staged_debt
+        .iter()
+        .find(|debt| debt.adapter.ends_with("::SciApiScientificBackend"))
+        .expect("the staged scientific adapter must retain activation debt");
+    assert_eq!(debt.activation_owner, "Execution Task 8");
+    assert_eq!(
+        debt.owning_migration_spec,
+        "docs/architecture/RUST_BACKEND_ADAPTER_BOUNDARIES.md"
+    );
+
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
+        .expect("the real Cargo workspace must be discoverable");
+    let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
+        .expect("the production module graph must be discoverable");
+    let source_files = modules
+        .iter()
+        .map(|module| module.repository_relative_source_file.as_str())
+        .collect::<BTreeSet<_>>();
+    let missing = SCIENTIFIC_BOUNDARY_FILES
+        .iter()
+        .filter(|source_file| !source_files.contains(**source_file))
+        .copied()
+        .collect::<Vec<_>>();
+    assert!(
+        missing.is_empty(),
+        "the final scientific boundary files must be production modules: {missing:#?}"
+    );
+
+    let mut actual = Vec::new();
+    for source_file in source_files {
+        let path = workspace.repository_root.join(source_file);
+        let source = std::fs::read_to_string(&path).expect("production source must be readable");
+        actual.extend(
+            scientific_adapter_source_violations(source_file, &source)
+                .expect("production source must parse"),
+        );
+    }
+    actual.sort();
+    assert!(
+        actual.is_empty(),
+        "the final scientific adapter escaped its exact staged boundary: {actual:#?}"
+    );
+
+    let adapter_fixture = scientific_adapter_source_violations(
+        SCIENTIFIC_ADAPTER_FILE,
+        r#"
+use crate::sci::engine::SciContext;
+struct SciApiScientificBackend;
+impl LegacyScientificBackend for SciApiScientificBackend {}
+"#,
+    )
+    .expect("adapter fixture must parse");
+    assert!(
+        adapter_fixture
+            .iter()
+            .any(|finding| finding.kind == "forbidden-sci-owner")
+    );
+    assert!(
+        adapter_fixture
+            .iter()
+            .any(|finding| finding.kind == "non-port-trait")
+    );
+
+    let port_fixture = scientific_adapter_source_violations(
+        SCIENTIFIC_PORT_FILE,
+        "use crate::sci::api::node_statistics::RegressionKind;",
+    )
+    .expect("port fixture must parse");
+    assert!(
+        port_fixture
+            .iter()
+            .any(|finding| finding.kind == "execution-imports-sci")
+    );
+
+    let production_constructor = scientific_adapter_source_violations(
+        "src-tauri/src/lib.rs",
+        "fn compose() { let _ = SciApiScientificBackend::new(); }",
+    )
+    .expect("production constructor fixture must parse");
+    assert!(production_constructor.iter().any(|finding| {
+        finding.kind == "production-reference" && finding.target == "SciApiScientificBackend"
     }));
 }
 
