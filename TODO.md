@@ -1671,3 +1671,6 @@ Execution 不知道具体 UI
 - [ ] 按真实 production dependency facts 更新 Rust exact debt，登记 staged Graph/Execution/Backend/Application seams 并移除已删除的 Project SQLx/旧 progress edges。
 - [ ] 从 Execution resource preparation 移除具体 Database runtime 持有，保留 Database 句柄只在 Backend adapter factory boundary。
 - [ ] 完成跨 Database/Graph/Project watcher 边界的 architecture debt re-audit 前置 check、fmt 与 diff 校验，随后进入下一轮 owner cutover。
+- [ ] 完成 Execution Task 5 的 generation-pinned package preparation seam，统一 RootPlan、FunctionBundle 与 ParameterBundle 的 typed 校验入口。
+- [ ] 为 prepared execution handle 增加 root provenance/source、bundle basis、函数 resource/version 唯一性及参数 identity 的非变更性校验。
+- [ ] 保持 PreparedExecutionPlan 的私有不可伪造构造、只读内部 package 与旧 node_system production route 不变；未执行生产 cutover。
