@@ -1,6 +1,12 @@
 use crate::architecture_tests::model::RustDebtEntry;
 
-use super::BACKEND_ADAPTER_SPEC;
+use super::{BACKEND_ADAPTER_SPEC, StagedAdapterDebt};
+
+pub(super) const STAGED_ADAPTER_DEBT: &[StagedAdapterDebt] = &[StagedAdapterDebt {
+    adapter: "yssbi_lib::julia::bayes_worker_adapter::JuliaBayesWorkerAdapter",
+    activation_owner: "Execution Task 8",
+    owning_migration_spec: BACKEND_ADAPTER_SPEC,
+}];
 
 pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
     debt_group!(

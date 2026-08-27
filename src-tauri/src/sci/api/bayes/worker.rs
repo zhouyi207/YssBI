@@ -304,6 +304,8 @@ pub enum BayesWorkerError {
     StaleTaskHandle { task: BayesTaskHandle },
     #[error("Bayes worker artifact is not owned by the task")]
     ArtifactNotOwned { artifact: BayesArtifactHandle },
+    #[error("Bayes worker artifact format is unsupported")]
+    ArtifactFormatUnsupported { artifact: BayesArtifactHandle },
     #[error("Bayes worker task was cancelled")]
     Cancelled { task: BayesTaskHandle },
     #[error("Bayes worker task reached a terminal state")]

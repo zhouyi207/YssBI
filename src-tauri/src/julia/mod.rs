@@ -13,6 +13,7 @@ use std::thread;
 use std::os::windows::process::CommandExt;
 use std::time::{Duration, Instant};
 
+pub mod bayes_worker_adapter;
 pub mod worker;
 
 const VERSION_TIMEOUT: Duration = Duration::from_secs(5);

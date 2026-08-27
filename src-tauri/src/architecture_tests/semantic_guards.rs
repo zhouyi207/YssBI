@@ -45,6 +45,10 @@ const AUTHORITY_FUNCTIONS: &[WorkerFunction] = &[
 ];
 const ALLOWED_WORKER_FUNCTIONS: &[WorkerFunction] = &[
     WorkerFunction {
+        owner: "ArtifactId",
+        method: "try_from",
+    },
+    WorkerFunction {
         owner: "ValidatedBayesTask",
         method: "try_new",
     },
@@ -1166,6 +1170,202 @@ impl<'ast> Visit<'ast> for ForbiddenResultTypeVisitor<'_> {
         }
         visit::visit_type_path(self, path);
     }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct JuliaBayesAdapterViolation {
+    source_file: String,
+    kind: &'static str,
+    target: String,
+}
+
+fn julia_bayes_adapter_source_violations(
+    source_file: &str,
+    source: &str,
+) -> Result<Vec<JuliaBayesAdapterViolation>, syn::Error> {
+    let syntax = syn::parse_file(source)?;
+    let mut violations = Vec::new();
+    let adapter_source = JULIA_WORKER_ADAPTER_FILES.contains(&source_file);
+    let mut visitor = JuliaBayesAdapterVisitor {
+        source_file,
+        adapter_source,
+        violations: &mut violations,
+    };
+    visitor.visit_file(&syntax);
+    violations.sort();
+    Ok(violations)
+}
+
+struct JuliaBayesAdapterVisitor<'a> {
+    source_file: &'a str,
+    adapter_source: bool,
+    violations: &'a mut Vec<JuliaBayesAdapterViolation>,
+}
+
+impl JuliaBayesAdapterVisitor<'_> {
+    fn record(&mut self, kind: &'static str, target: impl Into<String>) {
+        self.violations.push(JuliaBayesAdapterViolation {
+            source_file: self.source_file.to_owned(),
+            kind,
+            target: target.into(),
+        });
+    }
+
+    fn inspect_path(&mut self, path: &syn::Path) {
+        const OLD_ROUTE_TYPES: &[&str] = &[
+            "BayesBackend",
+            "BayesBackendRequest",
+            "InferenceResult",
+            "ResultArtifact",
+            "ResultArtifactManifest",
+        ];
+
+        for segment in &path.segments {
+            let name = segment.ident.to_string();
+            if self.adapter_source && OLD_ROUTE_TYPES.contains(&name.as_str()) {
+                self.record("old-route-origin", name);
+            }
+        }
+        if !self.adapter_source
+            && path
+                .segments
+                .iter()
+                .any(|segment| segment.ident == "JuliaBayesWorkerAdapter")
+        {
+            self.record("production-reference", "JuliaBayesWorkerAdapter");
+        }
+    }
+}
+
+impl<'ast> Visit<'ast> for JuliaBayesAdapterVisitor<'_> {
+    fn visit_item(&mut self, item: &'ast Item) {
+        if is_test_only(item_attributes(item)) {
+            return;
+        }
+        visit::visit_item(self, item);
+    }
+
+    fn visit_impl_item(&mut self, item: &'ast ImplItem) {
+        if is_test_only(impl_item_attributes(item)) {
+            return;
+        }
+        visit::visit_impl_item(self, item);
+    }
+
+    fn visit_expr(&mut self, expression: &'ast Expr) {
+        if is_test_only(expr_attributes(expression)) {
+            return;
+        }
+        visit::visit_expr(self, expression);
+    }
+
+    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        if is_test_only(&item.attrs) {
+            return;
+        }
+        if self.adapter_source
+            && impl_owner(&item.self_ty).as_deref() == Some("JuliaBayesWorkerAdapter")
+            && let Some((trait_path, _)) = &item.trait_
+            && trait_path
+                .segments
+                .last()
+                .is_none_or(|segment| segment.ident != "BayesWorkerPort")
+        {
+            self.record(
+                "non-port-trait",
+                trait_path
+                    .segments
+                    .last()
+                    .map_or_else(String::new, |segment| segment.ident.to_string()),
+            );
+        }
+        visit::visit_item_impl(self, item);
+    }
+
+    fn visit_path(&mut self, path: &'ast syn::Path) {
+        self.inspect_path(path);
+        visit::visit_path(self, path);
+    }
+}
+
+#[test]
+fn julia_bayes_worker_adapter_is_port_only_and_production_unreachable() {
+    let staged_debt = super::debt::staged_backend_adapter_debt();
+    assert_eq!(staged_debt.len(), 1);
+    assert_eq!(
+        staged_debt[0].adapter,
+        "yssbi_lib::julia::bayes_worker_adapter::JuliaBayesWorkerAdapter"
+    );
+    assert_eq!(staged_debt[0].activation_owner, "Execution Task 8");
+    assert_eq!(
+        staged_debt[0].owning_migration_spec,
+        "docs/architecture/RUST_BACKEND_ADAPTER_BOUNDARIES.md"
+    );
+
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
+    let workspace = super::cargo_targets::discover_rust_workspace_model(&manifest)
+        .expect("the real Cargo workspace must be discoverable");
+    let modules = collect_production_modules(&workspace.repository_root, &workspace.roots)
+        .expect("the production module graph must be discoverable");
+    let source_files = modules
+        .iter()
+        .map(|module| module.repository_relative_source_file.as_str())
+        .collect::<BTreeSet<_>>();
+    let missing = JULIA_WORKER_ADAPTER_FILES
+        .iter()
+        .filter(|source_file| !source_files.contains(**source_file))
+        .copied()
+        .collect::<Vec<_>>();
+    assert!(
+        missing.is_empty(),
+        "the final Julia Bayes adapter files must be production modules: {missing:#?}"
+    );
+
+    let mut actual = Vec::new();
+    for source_file in source_files {
+        let path = workspace.repository_root.join(source_file);
+        let source = std::fs::read_to_string(&path).expect("production source must be readable");
+        actual.extend(
+            julia_bayes_adapter_source_violations(source_file, &source)
+                .expect("production source must parse"),
+        );
+    }
+    actual.sort();
+    assert!(
+        actual.is_empty(),
+        "the final Julia Bayes adapter escaped its staged port-only boundary: {actual:#?}"
+    );
+
+    let fixture = julia_bayes_adapter_source_violations(
+        JULIA_WORKER_ADAPTER_FILES[0],
+        r#"
+use crate::sci::api::bayes::{BayesBackend, BayesBackendRequest, InferenceResult};
+
+pub struct JuliaBayesWorkerAdapter;
+impl BayesBackend for JuliaBayesWorkerAdapter {}
+impl BayesWorkerPort for JuliaBayesWorkerAdapter {}
+"#,
+    )
+    .expect("adapter authority fixture must parse");
+    assert!(
+        fixture.iter().any(|finding| {
+            finding.kind == "non-port-trait" && finding.target == "BayesBackend"
+        })
+    );
+    assert!(
+        fixture
+            .iter()
+            .any(|finding| finding.kind == "old-route-origin")
+    );
+
+    let production_constructor = julia_bayes_adapter_source_violations(
+        "src-tauri/src/lib.rs",
+        "fn compose() { let _ = JuliaBayesWorkerAdapter::new(root, worker); }",
+    )
+    .expect("production constructor fixture must parse");
+    assert!(production_constructor.iter().any(|finding| {
+        finding.kind == "production-reference" && finding.target == "JuliaBayesWorkerAdapter"
+    }));
 }
 
 #[test]

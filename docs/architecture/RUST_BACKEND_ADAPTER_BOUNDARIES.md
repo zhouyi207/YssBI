@@ -45,5 +45,13 @@ sanitized `tracing`，不能成为 IPC code、details 或成功 DTO 的一部分
 删除旧 declaration、旧 route、重复 test 和对应精确债务。任何时刻只有一条 production
 route；不建立 forwarder、双注册或按运行时条件选择旧新实现的分支。
 
+## Staged activation debt
+
+`julia/bayes_worker_adapter/` 已实现最终 SCI `BayesWorkerPort`，但保持 production-unreachable。
+它没有 `lib.rs`、Application、Commands 或 Project constructor caller；当前
+`sci/backends/julia/**` 仍是唯一 active Bayes route。该 staged adapter 的激活与旧 pipeline
+删除由 Execution Task 8 在同一 compiling slice 完成，不能提前增加 converter、forwarder、
+fallback 或第二条 composition route。
+
 完成条件：`debt/backend_adapter.rs` 为空，且 production architecture audit、相关 focused
 tests、`pnpm rust:check` 与 `git diff --check` 全部通过。

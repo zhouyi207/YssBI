@@ -14,6 +14,13 @@ const PROJECT_GRAPH_SPEC: &str = "docs/architecture/PROJECT_GRAPH_OWNERSHIP_BOUN
 const EXECUTION_RUNTIME_SPEC: &str = "docs/architecture/EXECUTION_RUNTIME_BOUNDARIES.md";
 const PRESENTATION_COMMAND_SPEC: &str = "docs/architecture/PRESENTATION_COMMAND_BOUNDARIES.md";
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct StagedAdapterDebt {
+    pub(super) adapter: &'static str,
+    pub(super) activation_owner: &'static str,
+    pub(super) owning_migration_spec: &'static str,
+}
+
 macro_rules! debt_group {
     (
         $entries:ident,
@@ -51,6 +58,10 @@ pub(super) fn rust_architecture_debt() -> Vec<RustDebtEntry> {
     presentation_command::extend(&mut entries);
     project_graph::extend(&mut entries);
     entries
+}
+
+pub(super) fn staged_backend_adapter_debt() -> &'static [StagedAdapterDebt] {
+    backend_adapter::STAGED_ADAPTER_DEBT
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

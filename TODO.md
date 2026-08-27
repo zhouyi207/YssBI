@@ -1456,3 +1456,8 @@ Execution 不知道具体 UI
 - [ ] 增加 module alias、relative worker import、nested forward alias chain、`pub(super)`、`pub(in ...)` 与 syntactic `pub(in crate)` 恶意回归 fixtures。
 - [ ] 修正 grouped use tree 的 terminal `self` 语义，使 `{self}` 与 `{self as alias}` 保留当前 module prefix 而不生成伪 `worker::self` origin。
 - [ ] 增加 `worker::{self as w}` → `w::BayesTaskHandle as Handle` → authority call 的 focused semantic regression，锁住 module self-alias canonicalization。
+- [ ] 新增 production-unreachable `JuliaBayesWorkerAdapter`，仅实现 final SCI `BayesWorkerPort`，constructor 只接收 app-data directory 与 `JuliaWorkerManager`，保持旧 Bayes route 唯一。
+- [ ] 直接从 `ValidatedBayesTask`、五项 model projection 与 neutral inference DTO 生成 Julia task/source/result，使用 full task handle 封存 task directory 与 artifact ownership，不引入旧新转换。
+- [ ] 为 accepted/cancel/deadline/stale/ownership/unknown-extension 与 JSON/CSV/PNG/Binary artifact mapping 增加 barrier/fake-runtime focused regressions，并保留原 Julia cancellation characterization owner。
+- [ ] 将三个 final Julia adapter files 精确分类为 Backend Adapter，登记 literal SCI capability manifest，并将零 production caller activation debt 明确归属 Execution Task 8。
+- [ ] 缩短 Julia worker cancel/restart 的 active-task mutex scope，以 barrier regression 证明 send/terminate 边界不持有该状态锁，同时保留原 non-active-task characterization。
