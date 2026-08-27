@@ -2,6 +2,7 @@ pub mod column_distribution;
 pub mod column_stats;
 pub mod error;
 pub mod runtime;
+pub mod session_api;
 
 pub mod database_instance;
 pub mod database_state;

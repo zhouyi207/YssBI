@@ -11,6 +11,10 @@ pub(crate) struct DatabaseRuntimeRevision(u64);
 impl DatabaseRuntimeRevision {
     pub(crate) const INITIAL: Self = Self(0);
 
+    pub(crate) const fn from_existing(value: u64) -> Self {
+        Self(value)
+    }
+
     #[allow(
         dead_code,
         reason = "revision projection is staged for the database session API"
@@ -25,6 +29,10 @@ pub(crate) struct DatabaseSchemaRevision(u64);
 
 impl DatabaseSchemaRevision {
     pub(crate) const INITIAL: Self = Self(0);
+
+    pub(crate) const fn from_existing(value: u64) -> Self {
+        Self(value)
+    }
 
     #[allow(
         dead_code,
@@ -75,6 +83,30 @@ pub(crate) enum DatabaseSchemaFactError {
 }
 
 impl DatabaseSchemaFact {
+    #[cfg(test)]
+    pub(crate) fn from_columns(
+        database: DatabaseId,
+        runtime_revision: u64,
+        schema_revision: u64,
+        columns: Box<[DatabaseColumnFact]>,
+    ) -> Self {
+        Self {
+            database,
+            runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision),
+            schema_revision: DatabaseSchemaRevision::from_existing(schema_revision),
+            columns,
+        }
+    }
+
+    pub(crate) fn empty(database: DatabaseId, runtime_revision: u64, schema_revision: u64) -> Self {
+        Self {
+            database,
+            runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision),
+            schema_revision: DatabaseSchemaRevision::from_existing(schema_revision),
+            columns: Box::new([]),
+        }
+    }
+
     pub(crate) fn from_dataframe(
         database: &DatabaseId,
         dataframe: &DataFrame,
@@ -149,6 +181,19 @@ impl DatabaseSchemaFact {
 
     pub(crate) fn columns(&self) -> &[DatabaseColumnFact] {
         &self.columns
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn database_column_fact_fixture(
+    name: TabularColumnName,
+    data_type: DataType,
+    nullable: bool,
+) -> DatabaseColumnFact {
+    DatabaseColumnFact {
+        name,
+        data_type,
+        nullable,
     }
 }
 

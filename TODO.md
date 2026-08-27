@@ -1574,3 +1574,6 @@ Execution 不知道具体 UI
 - [ ] 建立 production-unreachable Execution identity、runtime generation 与 canonical commit receipt 合约，保持其与 Project/Graph/SCI 独立。
 - [ ] 建立最终 `execution::plan` 的 opaque provenance/basis、resource requirement、parameter tree、observation intent 与 immutable package owner。
 - [ ] 增加 duplicate parameter handle、空/空白 identity 拒绝的 focused regression，并完成 Rust check、focused plan tests、fmt 与 diff 校验。
+- [ ] 建立 Database-owned session API 的 neutral catalog/data snapshot、ordered column selection 与 private query-basis seams，保持旧 Project database route 不变。
+- [ ] 增加 whole-catalog session/generation/declaration/runtime/schema revalidation 与 typed mutation prepare/commit evidence，所有基础验证保持锁外。
+- [ ] 完成 session API focused tests、Rust check、fmt 与 diff 校验；plot query、relational/resource adapters 与生产 session cutover继续由后续任务负责。

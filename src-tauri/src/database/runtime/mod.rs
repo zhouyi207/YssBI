@@ -1,8 +1,9 @@
 use crate::database::error::{DatabaseError, DatabaseOperation};
 use crate::database_contract::{
-    DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseSessionIdentity,
+    DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseId, DatabaseSessionIdentity,
     DatabaseSessionOpenRequest,
 };
+use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
@@ -19,6 +20,13 @@ pub struct DatabaseRuntimeSession {
     basis: DatabaseSessionBasis,
     admission: Mutex<DatabaseAdmissionState>,
     drain: Arc<DatabaseSessionDrainState>,
+    revisions: Mutex<HashMap<DatabaseId, DatabaseRuntimeRevisions>>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct DatabaseRuntimeRevisions {
+    pub(crate) runtime: u64,
+    pub(crate) schema: u64,
 }
 
 struct DatabaseSessionBasis {
@@ -126,6 +134,10 @@ impl DatabaseRuntimeRegistry {
             .validate()
             .map_err(|_| DatabaseError::invalid_request(DatabaseOperation::OpenSession, None))?;
         let (identity, generation, root, declarations, observations) = request.into_parts();
+        let revisions = declarations
+            .iter()
+            .map(|declaration| (declaration.id.clone(), DatabaseRuntimeRevisions::default()))
+            .collect();
         Ok(DatabaseRuntimeSession {
             basis: DatabaseSessionBasis {
                 identity,
@@ -142,6 +154,7 @@ impl DatabaseRuntimeRegistry {
                 }),
                 changed: Condvar::new(),
             }),
+            revisions: Mutex::new(revisions),
         })
     }
 }
@@ -153,6 +166,38 @@ impl DatabaseRuntimeSession {
 
     pub fn generation(&self) -> NonZeroU64 {
         self.basis.generation
+    }
+
+    pub(crate) fn declarations(&self) -> &[DatabaseDecl] {
+        &self.basis._declarations
+    }
+
+    pub(crate) fn observations(&self) -> &DatabaseDeclarationObservationSet {
+        &self.basis._observations
+    }
+
+    pub(crate) fn revisions(&self, database: &DatabaseId) -> Option<DatabaseRuntimeRevisions> {
+        lock_or_recover(&self.revisions).get(database).copied()
+    }
+
+    pub(crate) fn advance_revisions(
+        &self,
+        database: &DatabaseId,
+        schema_changed: bool,
+    ) -> Result<DatabaseRuntimeRevisions, DatabaseError> {
+        let mut revisions = lock_or_recover(&self.revisions);
+        let current = revisions.get_mut(database).ok_or_else(|| {
+            DatabaseError::not_found(DatabaseOperation::CommitMutation, Some(database.clone()))
+        })?;
+        current.runtime = current.runtime.checked_add(1).ok_or_else(|| {
+            DatabaseError::conflict(DatabaseOperation::CommitMutation, Some(database.clone()))
+        })?;
+        if schema_changed {
+            current.schema = current.schema.checked_add(1).ok_or_else(|| {
+                DatabaseError::conflict(DatabaseOperation::CommitMutation, Some(database.clone()))
+            })?;
+        }
+        Ok(*current)
     }
 
     pub fn close_admission(&self) -> DatabaseAdmissionCloseOutcome {
