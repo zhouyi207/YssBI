@@ -295,6 +295,7 @@ pub struct RunOutputEventDto {
     text: Box<str>,
     source_graph_path: String,
     source_node_id: String,
+    source_port: PortAddressDto,
 }
 
 impl From<RunOutputEvent> for RunOutputEventDto {
@@ -306,6 +307,7 @@ impl From<RunOutputEvent> for RunOutputEventDto {
             text: event.text,
             source_graph_path: event.source_graph_path.0.into(),
             source_node_id: event.source_node_id.to_string(),
+            source_port: event.source_port.into(),
         }
     }
 }
@@ -335,6 +337,7 @@ pub struct RunOutputStatusEventDto {
     status: RunOutputStatusDto,
     source_graph_path: String,
     source_node_id: String,
+    source_port: PortAddressDto,
 }
 
 impl From<RunOutputStatusEvent> for RunOutputStatusEventDto {
@@ -346,6 +349,7 @@ impl From<RunOutputStatusEvent> for RunOutputStatusEventDto {
             status: event.status.into(),
             source_graph_path: event.source_graph_path.0.into(),
             source_node_id: event.source_node_id.to_string(),
+            source_port: event.source_port.into(),
         }
     }
 }

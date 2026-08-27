@@ -309,6 +309,7 @@ fn execution_wire_contract(_registry: &NodeRegistry) -> Value {
         })
         .collect::<Vec<_>>();
     let source_graph_path = GraphResourcePath("functions/contract-output.yssbi-function".into());
+    let source_port = PortAddress::declared(node_id, PortKey::new("message").unwrap());
     let run_output_events = [
         RunOutputMessage::Output(RunOutputEvent {
             run_id,
@@ -317,6 +318,7 @@ fn execution_wire_contract(_registry: &NodeRegistry) -> Value {
             text: "stdout value".into(),
             source_graph_path: source_graph_path.clone(),
             source_node_id: node_id,
+            source_port: source_port.clone(),
         }),
         RunOutputMessage::Output(RunOutputEvent {
             run_id,
@@ -325,6 +327,7 @@ fn execution_wire_contract(_registry: &NodeRegistry) -> Value {
             text: "stderr value".into(),
             source_graph_path: source_graph_path.clone(),
             source_node_id: node_id,
+            source_port: source_port.clone(),
         }),
         RunOutputMessage::Status(RunOutputStatusEvent {
             run_id,
@@ -333,6 +336,7 @@ fn execution_wire_contract(_registry: &NodeRegistry) -> Value {
             status: RunOutputStatus::Truncated,
             source_graph_path: source_graph_path.clone(),
             source_node_id: node_id,
+            source_port: source_port.clone(),
         }),
         RunOutputMessage::Status(RunOutputStatusEvent {
             run_id,
@@ -341,6 +345,7 @@ fn execution_wire_contract(_registry: &NodeRegistry) -> Value {
             status: RunOutputStatus::Dropped,
             source_graph_path,
             source_node_id: node_id,
+            source_port,
         }),
     ]
     .into_iter()
@@ -946,6 +951,12 @@ fn execution_and_project_event_contract_inventories_are_complete() {
         event["runId"] == "9007199254740993"
             && event["sourceGraphPath"] == "functions/contract-output.yssbi-function"
             && event["sourceNodeId"] == "00000000-0000-0000-0000-000000000002"
+            && event["sourcePort"]
+                == json!({
+                    "kind": "declared",
+                    "nodeId": "00000000-0000-0000-0000-000000000002",
+                    "portKey": "message",
+                })
     }));
     assert_eq!(run_output_events[0]["stream"], "stdout");
     assert_eq!(run_output_events[1]["stream"], "stderr");

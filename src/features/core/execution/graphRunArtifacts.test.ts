@@ -41,6 +41,11 @@ describe('graphHasClearableArtifacts', () => {
           text: 'value',
           sourceGraphPath: 'events/Main.yssbi-event',
           sourceNodeId: '00000000-0000-0000-0000-000000000002',
+          sourcePort: {
+            kind: 'declared',
+            nodeId: '00000000-0000-0000-0000-000000000002',
+            portKey: 'message',
+          },
         }],
         projectionDropped: false,
       },

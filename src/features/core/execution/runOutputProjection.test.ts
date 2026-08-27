@@ -8,6 +8,7 @@ import {
 
 const sourceGraphPath = 'functions/output.yssbi-function';
 const sourceNodeId = '00000000-0000-0000-0000-000000000002';
+const sourcePort = { kind: 'declared' as const, nodeId: sourceNodeId, portKey: 'message' };
 
 function output(sequence: number, runId = '41'): RunOutputEvent {
   return {
@@ -17,6 +18,7 @@ function output(sequence: number, runId = '41'): RunOutputEvent {
     text: `output-${sequence}`,
     sourceGraphPath,
     sourceNodeId,
+    sourcePort,
   };
 }
 
@@ -50,6 +52,7 @@ describe('run output projection', () => {
       status: 'dropped',
       sourceGraphPath,
       sourceNodeId,
+      sourcePort,
     };
     projection = appendRunOutput(projection, status);
 

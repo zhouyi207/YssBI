@@ -223,13 +223,15 @@ export function parseRunOutputChannelEvent(value: unknown): RunOutputChannelEven
     || !Number.isSafeInteger(value.sequence)
     || (value.sequence as number) < 1
     || !isGraphResourcePath(value.sourceGraphPath)
-    || !isUuid(value.sourceNodeId)) {
+    || !isUuid(value.sourceNodeId)
+    || !isPortAddressDto(value.sourcePort)
+    || value.sourcePort.nodeId !== value.sourceNodeId) {
     return fail('run output event');
   }
   const stream = parseDiscriminant(value.stream, RUN_OUTPUT_STREAMS, 'run output stream');
   if (Object.prototype.hasOwnProperty.call(value, 'text')) {
     if (!hasExactKeys(value, [
-      'runId', 'sequence', 'stream', 'text', 'sourceGraphPath', 'sourceNodeId',
+      'runId', 'sequence', 'stream', 'text', 'sourceGraphPath', 'sourceNodeId', 'sourcePort',
     ]) || typeof value.text !== 'string') return fail('run output event');
     return {
       runId: value.runId,
@@ -238,10 +240,11 @@ export function parseRunOutputChannelEvent(value: unknown): RunOutputChannelEven
       text: value.text,
       sourceGraphPath: value.sourceGraphPath,
       sourceNodeId: value.sourceNodeId,
+      sourcePort: value.sourcePort,
     };
   }
   if (!hasExactKeys(value, [
-    'runId', 'sequence', 'stream', 'status', 'sourceGraphPath', 'sourceNodeId',
+    'runId', 'sequence', 'stream', 'status', 'sourceGraphPath', 'sourceNodeId', 'sourcePort',
   ])) {
     return fail('run output status event');
   }
@@ -252,6 +255,7 @@ export function parseRunOutputChannelEvent(value: unknown): RunOutputChannelEven
     status: parseDiscriminant(value.status, RUN_OUTPUT_STATUSES, 'run output status'),
     sourceGraphPath: value.sourceGraphPath,
     sourceNodeId: value.sourceNodeId,
+    sourcePort: value.sourcePort,
   };
 }
 

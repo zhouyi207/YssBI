@@ -254,6 +254,11 @@ describe('ProjectService execution contract', () => {
       text: 'user-visible value',
       sourceGraphPath: 'functions/output.yssbi-function',
       sourceNodeId: '00000000-0000-0000-0000-000000000002',
+      sourcePort: {
+        kind: 'declared',
+        nodeId: '00000000-0000-0000-0000-000000000002',
+        portKey: 'message',
+      },
     };
     const status: RunOutputChannelEvent = {
       runId: '41',
@@ -262,6 +267,11 @@ describe('ProjectService execution contract', () => {
       status: 'truncated',
       sourceGraphPath: 'functions/output.yssbi-function',
       sourceNodeId: '00000000-0000-0000-0000-000000000002',
+      sourcePort: {
+        kind: 'declared',
+        nodeId: '00000000-0000-0000-0000-000000000002',
+        portKey: 'message',
+      },
     };
     const completed = runEvent({ type: 'runCompleted' });
 

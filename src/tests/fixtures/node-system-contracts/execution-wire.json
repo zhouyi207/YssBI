@@ -205,6 +205,11 @@
       "sequence": 1,
       "sourceGraphPath": "functions/contract-output.yssbi-function",
       "sourceNodeId": "00000000-0000-0000-0000-000000000002",
+      "sourcePort": {
+        "kind": "declared",
+        "nodeId": "00000000-0000-0000-0000-000000000002",
+        "portKey": "message"
+      },
       "stream": "stdout",
       "text": "stdout value"
     },
@@ -213,6 +218,11 @@
       "sequence": 2,
       "sourceGraphPath": "functions/contract-output.yssbi-function",
       "sourceNodeId": "00000000-0000-0000-0000-000000000002",
+      "sourcePort": {
+        "kind": "declared",
+        "nodeId": "00000000-0000-0000-0000-000000000002",
+        "portKey": "message"
+      },
       "stream": "stderr",
       "text": "stderr value"
     },
@@ -221,6 +231,11 @@
       "sequence": 3,
       "sourceGraphPath": "functions/contract-output.yssbi-function",
       "sourceNodeId": "00000000-0000-0000-0000-000000000002",
+      "sourcePort": {
+        "kind": "declared",
+        "nodeId": "00000000-0000-0000-0000-000000000002",
+        "portKey": "message"
+      },
       "status": "truncated",
       "stream": "stdout"
     },
@@ -229,6 +244,11 @@
       "sequence": 4,
       "sourceGraphPath": "functions/contract-output.yssbi-function",
       "sourceNodeId": "00000000-0000-0000-0000-000000000002",
+      "sourcePort": {
+        "kind": "declared",
+        "nodeId": "00000000-0000-0000-0000-000000000002",
+        "portKey": "message"
+      },
       "status": "dropped",
       "stream": "stdout"
     }

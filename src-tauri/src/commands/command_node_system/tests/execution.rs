@@ -225,6 +225,10 @@ fn run_output_channel_adapter_uses_a_separate_exact_wire_shape() {
     let source_graph_path =
         crate::node_system::document::GraphResourcePath("functions/output.yssbi-function".into());
     let source_node_id = NodeId::from_uuid(uuid::Uuid::from_u128(2));
+    let source_port = crate::node_system::document::PortAddress::declared(
+        source_node_id,
+        crate::node_system::protocol::PortKey::new("message").unwrap(),
+    );
     let output = execution_channel_event_dto(GraphExecutionStreamEvent::RunOutput(
         RunOutputMessage::Output(crate::node_system::runtime::RunOutputEvent {
             run_id,
@@ -233,6 +237,7 @@ fn run_output_channel_adapter_uses_a_separate_exact_wire_shape() {
             text: "user-visible value".into(),
             source_graph_path: source_graph_path.clone(),
             source_node_id,
+            source_port: source_port.clone(),
         }),
     ))
     .unwrap();
@@ -244,6 +249,7 @@ fn run_output_channel_adapter_uses_a_separate_exact_wire_shape() {
             status: crate::node_system::runtime::RunOutputStatus::Truncated,
             source_graph_path,
             source_node_id,
+            source_port,
         }),
     ))
     .unwrap();
@@ -257,6 +263,11 @@ fn run_output_channel_adapter_uses_a_separate_exact_wire_shape() {
             "text": "user-visible value",
             "sourceGraphPath": "functions/output.yssbi-function",
             "sourceNodeId": "00000000-0000-0000-0000-000000000002",
+            "sourcePort": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000002",
+                "portKey": "message",
+            },
         })
     );
     assert_eq!(
@@ -268,6 +279,11 @@ fn run_output_channel_adapter_uses_a_separate_exact_wire_shape() {
             "status": "truncated",
             "sourceGraphPath": "functions/output.yssbi-function",
             "sourceNodeId": "00000000-0000-0000-0000-000000000002",
+            "sourcePort": {
+                "kind": "declared",
+                "nodeId": "00000000-0000-0000-0000-000000000002",
+                "portKey": "message",
+            },
         })
     );
 }

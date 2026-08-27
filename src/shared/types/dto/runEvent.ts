@@ -1,4 +1,5 @@
 import type { GraphOutputRefDto } from './executionDemand';
+import type { PortAddressDto } from './editorProjection';
 
 export type RunErrorCode =
   | 'invalidPlan'
@@ -130,6 +131,7 @@ export interface RunOutputEvent {
   text: string;
   sourceGraphPath: string;
   sourceNodeId: string;
+  sourcePort: PortAddressDto;
 }
 
 export type RunOutputStatus = 'truncated' | 'dropped';
@@ -146,6 +148,7 @@ export interface RunOutputStatusEvent {
   status: RunOutputStatus;
   sourceGraphPath: string;
   sourceNodeId: string;
+  sourcePort: PortAddressDto;
 }
 
 export type RunOutputChannelEvent = RunOutputEvent | RunOutputStatusEvent;
