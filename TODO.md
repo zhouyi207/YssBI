@@ -1640,3 +1640,6 @@ Execution 不知道具体 UI
 - [ ] 让 Application window actions 通过 Services platform handle 统一提供 show/minimize/maximize/close/title，Views 与 shared chrome 不再直接持有 Tauri Window。
 - [ ] 迁移 ProjectPicker、Menubar、Database/Bayes/Log/Presentation 窗口 chrome 与 workbench label 到 Application/platform seam，保持现有窗口行为。
 - [ ] 删除对应 raw window architecture debt，完成窗口 caller typecheck 与 diff 校验，保留 geometry/close coordinator 的后续 owner migration。
+- [ ] 将 Presentation/Database/Bayes/Log 窗口与主编辑 chrome 的原始 Window 调用迁移到 Application-owned current-window actions。
+- [ ] 让 useWindowMaximized、decoration、presentation reveal 与 workbench binding 只消费 Services platform outcome，不传播 native event/error。
+- [ ] 删除已迁移 window caller 的 exact raw-Tauri debt，保持 shared WindowChromeControls 只接收显式回调。
