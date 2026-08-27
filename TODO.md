@@ -1626,3 +1626,6 @@ Execution 不知道具体 UI
 - [ ] 将数据库导出路径选择隔离到 Services platform adapter，由 Application hook 负责 project identity revalidation 与 typed export 调用。
 - [ ] 扩展 Rust architecture resolver 对 execution plan 的 `plan_id!` 生成 identity，修复 canonical target 解析门禁。
 - [ ] 同步登记 `parameter_id!` 生成的 compiled parameter identity，确保 plan re-export 的 canonical target 可解析。
+- [ ] 将 ExecutionRuntimeState 的 admission、work lease 与显式 deadline drain 收敛为 session-local typed owner。
+- [ ] 让 close/cancel-and-drain 在新工作拒绝、活动 lease 超时与 lease 释放后的重试之间保持可观测且不持锁等待。
+- [ ] 完成 Execution state focused lease/drain regression 与 Rust compile/test/diff 校验，继续保留旧 Project runtime route。
