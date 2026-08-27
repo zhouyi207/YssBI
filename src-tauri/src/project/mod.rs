@@ -2,6 +2,7 @@
 
 mod compile_publication;
 pub mod computation_settings;
+pub mod execution_authority;
 pub mod filesystem;
 pub mod graph_resource_index;
 pub mod history;

@@ -3,6 +3,7 @@
 pub mod canonical;
 pub mod error;
 pub mod identity;
+pub mod package_preparation;
 pub mod plan;
 pub mod ports;
 pub mod resource_preparation;

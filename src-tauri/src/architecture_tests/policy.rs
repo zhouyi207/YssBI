@@ -13,6 +13,10 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
     ("src-tauri/src/execution/identity.rs", RustLayer::Execution),
     ("src-tauri/src/execution/error.rs", RustLayer::Execution),
     ("src-tauri/src/execution/canonical.rs", RustLayer::Execution),
+    (
+        "src-tauri/src/execution/package_preparation.rs",
+        RustLayer::Execution,
+    ),
     ("src-tauri/src/execution/settings.rs", RustLayer::Execution),
     ("src-tauri/src/execution/plan/mod.rs", RustLayer::Execution),
     (
@@ -54,6 +58,10 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
     ("src-tauri/src/graph/runtime_state.rs", RustLayer::Graph),
     (
         "src-tauri/src/project/variable_defaults.rs",
+        RustLayer::Project,
+    ),
+    (
+        "src-tauri/src/project/execution_authority.rs",
         RustLayer::Project,
     ),
     ("src-tauri/src/project/history.rs", RustLayer::Project),
