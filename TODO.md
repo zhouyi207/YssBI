@@ -1601,3 +1601,6 @@ Execution 不知道具体 UI
 - [ ] 将 ProjectRegistry 的 SQLx pool/row/query ownership 移出 Project，改由 `Arc<dyn ProjectRegistryStore>` 驱动域验证、排序与 registry authority。
 - [ ] 让 `backend_adapters/project_registry_sqlite.rs` 成为唯一 SQLite schema/query/row mapping owner，并在组合根一次性构造/擦除 concrete store。
 - [ ] 完成 registry persistence 与 lifecycle focused 回归、Rust check、fmt 与 diff 校验，保留错误与项目生命周期语义。
+- [ ] 建立正常编译但不路由的 Application editor projection model/mapper，消费 Graph analysis/document/catalog 的 neutral facts。
+- [ ] 保持现有 Graph-owned editor projection 与 wire DTO 生产路径唯一，新增 Application projection 仅作为后续 Project–Graph/Presentation cutover handoff。
+- [ ] 完成 Presentation Task 2A editor projection focused regression、Rust check、fmt 与 diff 校验。

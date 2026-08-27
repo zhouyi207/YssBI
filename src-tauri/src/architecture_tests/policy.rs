@@ -70,6 +70,10 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Application,
     ),
     (
+        "src-tauri/src/application/editor_projection/mod.rs",
+        RustLayer::Application,
+    ),
+    (
         "src-tauri/src/execution/ports/scientific.rs",
         RustLayer::Execution,
     ),
