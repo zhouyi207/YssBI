@@ -5,8 +5,9 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use super::{
-    NormalizedProjectRoot, ProjectRootBinding, ProjectRootIdentity, format_path_for_user,
-    format_path_for_user_path,
+    NormalizedProjectRoot, ProjectCleanupProgress, ProjectCleanupProgressEvent, ProjectProgress,
+    ProjectProgressSink, ProjectRootBinding, ProjectRootIdentity, ProjectScanProgress,
+    ProjectScanProgressEvent, format_path_for_user, format_path_for_user_path,
 };
 
 pub const PROJECT_METADATA_FILE: &str = "metadata.yssbi";
@@ -366,16 +367,21 @@ impl ProjectRegistry {
     /// 从注册表移除磁盘上已不存在 `metadata.yssbi` 的项目记录（不删除项目文件）。
     pub async fn cleanup_invalid_projects(
         &self,
-        progress: Option<tauri::ipc::Channel<crate::project::ProjectCleanupProgressEvent>>,
+        progress: Option<&dyn ProjectProgressSink>,
         cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<CleanupInvalidProjectsResult, String> {
-        use crate::project::{
-            ProjectCleanupProgressEvent, is_picker_task_cancelled, picker_task_cancelled_error,
-        };
+        use crate::project::{is_picker_task_cancelled, picker_task_cancelled_error};
 
         let emit = |event: ProjectCleanupProgressEvent| {
-            if let Some(channel) = progress.as_ref() {
-                let _ = channel.send(event);
+            if let Some(sink) = progress {
+                sink.publish(ProjectProgress::Cleanup(match event {
+                    ProjectCleanupProgressEvent::Checking { current, total } => {
+                        ProjectCleanupProgress::Checking { current, total }
+                    }
+                    ProjectCleanupProgressEvent::Removing { removed, total } => {
+                        ProjectCleanupProgress::Removing { removed, total }
+                    }
+                }));
             }
         };
 
@@ -418,7 +424,7 @@ impl ProjectRegistry {
     pub async fn scan_directory(
         &self,
         directory: &str,
-        progress: Option<tauri::ipc::Channel<crate::project::ProjectScanProgressEvent>>,
+        progress: Option<&dyn ProjectProgressSink>,
         cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
     ) -> Result<crate::project::ScanProjectsResult, String> {
         use crate::project::{
@@ -428,8 +434,16 @@ impl ProjectRegistry {
         use std::path::PathBuf;
 
         let emit = |event: ProjectScanProgressEvent| {
-            if let Some(channel) = progress.as_ref() {
-                let _ = channel.send(event);
+            if let Some(sink) = progress {
+                sink.publish(ProjectProgress::Scan(match event {
+                    ProjectScanProgressEvent::Scanning => ProjectScanProgress::Scanning,
+                    ProjectScanProgressEvent::Discovered { count } => {
+                        ProjectScanProgress::Discovered { count }
+                    }
+                    ProjectScanProgressEvent::Registering { current, total } => {
+                        ProjectScanProgress::Registering { current, total }
+                    }
+                }));
             }
         };
 

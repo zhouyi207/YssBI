@@ -1,3 +1,7 @@
+use super::progress::{
+    ProgressAdapterShutdownControl, ProjectProgressDrainOutcome, ProjectProgressDto,
+    bounded_project_progress_adapter, reap_project_progress_worker,
+};
 use crate::error::CommandError;
 use crate::event::LifecycleMutationResultDto;
 use crate::project::OperationId;
@@ -5,6 +9,7 @@ use crate::project::{
     CleanupInvalidProjectsResult, ProjectInstanceId, ProjectPickerTaskCancelRegistry,
     ProjectRecord, ProjectRegistry, ScanProjectsResult,
 };
+use std::time::{Duration, Instant};
 use tauri::{State, ipc::Channel};
 
 #[tauri::command]
@@ -22,12 +27,29 @@ pub async fn scan_projects_in_directory(
     registry: State<'_, ProjectRegistry>,
     task_cancel: State<'_, ProjectPickerTaskCancelRegistry>,
     directory: String,
-    on_progress: Channel<crate::project::ProjectScanProgressEvent>,
+    on_progress: Channel<ProjectProgressDto>,
 ) -> Result<ScanProjectsResult, CommandError> {
     let cancel = task_cancel.begin();
+    let (publisher, worker) = bounded_project_progress_adapter(on_progress);
     let result = registry
-        .scan_directory(&directory, Some(on_progress), cancel.clone())
+        .scan_directory(&directory, Some(publisher.as_ref()), cancel.clone())
         .await;
+    publisher.close();
+    drop(publisher);
+    match worker.finish(ProgressAdapterShutdownControl::new(
+        Instant::now() + Duration::from_secs(1),
+    )) {
+        ProjectProgressDrainOutcome::TimedOut(worker) => reap_project_progress_worker(worker),
+        ProjectProgressDrainOutcome::Drained(Ok(())) => {}
+        ProjectProgressDrainOutcome::Drained(Err(error)) => {
+            tracing::warn!(
+                target: "yssbi::commands::project",
+                diagnostic_domain = "system",
+                error_kind = ?error,
+                "Project progress delivery failed"
+            );
+        }
+    }
     task_cancel.end(&cancel);
     result.map_err(CommandError::internal)
 }
@@ -41,12 +63,29 @@ pub fn cancel_project_picker_task(task_cancel: State<'_, ProjectPickerTaskCancel
 pub async fn cleanup_invalid_registered_projects(
     registry: State<'_, ProjectRegistry>,
     task_cancel: State<'_, ProjectPickerTaskCancelRegistry>,
-    on_progress: Channel<crate::project::ProjectCleanupProgressEvent>,
+    on_progress: Channel<ProjectProgressDto>,
 ) -> Result<CleanupInvalidProjectsResult, CommandError> {
     let cancel = task_cancel.begin();
+    let (publisher, worker) = bounded_project_progress_adapter(on_progress);
     let result = registry
-        .cleanup_invalid_projects(Some(on_progress), cancel.clone())
+        .cleanup_invalid_projects(Some(publisher.as_ref()), cancel.clone())
         .await;
+    publisher.close();
+    drop(publisher);
+    match worker.finish(ProgressAdapterShutdownControl::new(
+        Instant::now() + Duration::from_secs(1),
+    )) {
+        ProjectProgressDrainOutcome::TimedOut(worker) => reap_project_progress_worker(worker),
+        ProjectProgressDrainOutcome::Drained(Ok(())) => {}
+        ProjectProgressDrainOutcome::Drained(Err(error)) => {
+            tracing::warn!(
+                target: "yssbi::commands::project",
+                diagnostic_domain = "system",
+                error_kind = ?error,
+                "Project progress delivery failed"
+            );
+        }
+    }
     task_cancel.end(&cancel);
     result.map_err(CommandError::internal)
 }

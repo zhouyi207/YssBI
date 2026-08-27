@@ -1595,3 +1595,6 @@ Execution 不知道具体 UI
 - [ ] 完成 Execution Tasks 2–3 的 staged state focused compile/test gate，session replacement recovery workflow与生产安装继续留待后续 cutover。
 - [ ] 建立 Graph-owned linear `PlannedGraphMutation` candidate handoff 与 Project-owned graph operation capture/receipt capability。
 - [ ] 建立 Application-only captured graph mutation planner，保持 Commands 旧 mutation route 不变，避免第二条 production mutation path。
+- [ ] 将 Project registry scan/cleanup 的 progress 入参切换为借用 `ProjectProgressSink`，移除 Project 对 Tauri Channel 的直接依赖。
+- [ ] 让 Commands registry 创建 bounded progress publisher/worker，在每个返回路径关闭 admission 并保留 timeout drain owner。
+- [ ] 完成 Backend Task 7 progress seam 的 Rust check、focused publisher test、fmt 与 diff 校验；SQLx persistence owner 仍待同一任务的后续切换。

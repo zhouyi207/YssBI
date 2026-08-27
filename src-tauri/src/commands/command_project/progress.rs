@@ -15,44 +15,28 @@ pub const PROJECT_PROGRESS_QUEUE_CAPACITY: usize = 64;
 #[derive(Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ProjectProgressDto {
-    Scan(ProjectScanProgressDto),
-    Cleanup(ProjectCleanupProgressDto),
-}
-
-#[derive(Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum ProjectScanProgressDto {
     Scanning,
     Discovered { count: usize },
     Registering { current: usize, total: usize },
-}
-
-#[derive(Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum ProjectCleanupProgressDto {
     Checking { current: usize, total: usize },
     Removing { removed: usize, total: usize },
 }
 
 fn to_dto(progress: ProjectProgress) -> ProjectProgressDto {
     match progress {
-        ProjectProgress::Scan(progress) => ProjectProgressDto::Scan(match progress {
-            ProjectScanProgress::Scanning => ProjectScanProgressDto::Scanning,
-            ProjectScanProgress::Discovered { count } => {
-                ProjectScanProgressDto::Discovered { count }
-            }
-            ProjectScanProgress::Registering { current, total } => {
-                ProjectScanProgressDto::Registering { current, total }
-            }
-        }),
-        ProjectProgress::Cleanup(progress) => ProjectProgressDto::Cleanup(match progress {
-            ProjectCleanupProgress::Checking { current, total } => {
-                ProjectCleanupProgressDto::Checking { current, total }
-            }
-            ProjectCleanupProgress::Removing { removed, total } => {
-                ProjectCleanupProgressDto::Removing { removed, total }
-            }
-        }),
+        ProjectProgress::Scan(ProjectScanProgress::Scanning) => ProjectProgressDto::Scanning,
+        ProjectProgress::Scan(ProjectScanProgress::Discovered { count }) => {
+            ProjectProgressDto::Discovered { count }
+        }
+        ProjectProgress::Scan(ProjectScanProgress::Registering { current, total }) => {
+            ProjectProgressDto::Registering { current, total }
+        }
+        ProjectProgress::Cleanup(ProjectCleanupProgress::Checking { current, total }) => {
+            ProjectProgressDto::Checking { current, total }
+        }
+        ProjectProgress::Cleanup(ProjectCleanupProgress::Removing { removed, total }) => {
+            ProjectProgressDto::Removing { removed, total }
+        }
     }
 }
 
@@ -175,6 +159,21 @@ impl ProjectProgressWorker {
             ProjectProgressWorkerTerminal::Panicked => Err(ProgressAdapterTerminalError::Panicked),
         })
     }
+}
+
+pub(crate) fn reap_project_progress_worker(mut worker: ProjectProgressWorker) {
+    let _ = thread::Builder::new()
+        .name("yssbi-project-progress-reaper".into())
+        .spawn(move || {
+            loop {
+                match worker.finish(ProgressAdapterShutdownControl::new(
+                    Instant::now() + Duration::from_secs(1),
+                )) {
+                    ProjectProgressDrainOutcome::TimedOut(next) => worker = next,
+                    ProjectProgressDrainOutcome::Drained(_) => break,
+                }
+            }
+        });
 }
 
 pub fn bounded_project_progress_adapter(
