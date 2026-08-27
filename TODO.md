@@ -1447,3 +1447,6 @@ Execution 不知道具体 UI
 - [ ] 将 `BayesModelSpec` 八个 fields 全部私有化，仅公开 predictor、likelihood、parameters、data variables 与 sampler 五项 final-adapter capability。
 - [ ] 将旧 dataset/response/display 访问限制为 crate-private canonical getters，并将测试 fixture 改走现有 serde wire，禁止 setter、compatibility view 与 old/new converter。
 - [ ] 将 Bayes authority guard 改为 exact owner+method allowlist，覆盖 function-item alias、wrong-owner 同名函数、伪造 associated constructor 与 neutral result path/source 泄漏。
+- [ ] 扩展 Bayes authority semantic guard，为 worker module 的显式 import rename、glob import 与多级 type alias 建立 per-source canonical owner map。
+- [ ] 在扫描每个 production `ItemImpl` 时保存 canonical impl owner，将 `Self::...` authority reference 解析回真实 worker owner，并拒绝外部 inherent builder 声明。
+- [ ] 增加独立恶意 fixtures，分别覆盖 `Handle`/type-alias function reference 与外部 `impl BayesTaskHandle` public forge/`Self::issue_for_worker` 绕过。

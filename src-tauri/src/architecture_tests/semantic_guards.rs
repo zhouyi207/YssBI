@@ -223,6 +223,7 @@ fn bayes_worker_source_violations(
     source: &str,
 ) -> Result<Vec<BayesWorkerAuthorityViolation>, syn::Error> {
     let syntax = syn::parse_file(source)?;
+    let canonical_types = canonical_worker_types(source_file, &syntax.items);
     let allow_authority =
         source_file == WORKER_FILE || JULIA_WORKER_ADAPTER_FILES.contains(&source_file);
     let mut violations = Vec::new();
@@ -230,6 +231,9 @@ fn bayes_worker_source_violations(
         source_file,
         layer,
         allow_authority,
+        worker_boundary: source_file == WORKER_FILE,
+        canonical_types,
+        current_impl_owner: None,
         worker_bindings: BTreeSet::new(),
         violations: &mut violations,
     };
@@ -238,10 +242,125 @@ fn bayes_worker_source_violations(
     Ok(violations)
 }
 
+fn canonical_worker_types(source_file: &str, items: &[Item]) -> BTreeMap<String, String> {
+    let mut aliases = BTreeMap::new();
+    if source_file == WORKER_FILE {
+        for owner in WORKER_SURFACE_TYPES {
+            aliases.insert((*owner).to_owned(), (*owner).to_owned());
+        }
+    }
+    for item in items {
+        if let Item::Use(item_use) = item {
+            collect_worker_use_aliases(&item_use.tree, &mut Vec::new(), &mut aliases);
+        }
+    }
+
+    loop {
+        let mut changed = false;
+        for item in items {
+            let Item::Type(item_type) = item else {
+                continue;
+            };
+            let alias = item_type.ident.to_string();
+            if aliases.contains_key(&alias) {
+                continue;
+            }
+            if let Some(owner) = canonical_worker_owner_from_type(&item_type.ty, &aliases) {
+                aliases.insert(alias, owner);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    aliases
+}
+
+fn collect_worker_use_aliases(
+    tree: &UseTree,
+    prefix: &mut Vec<String>,
+    aliases: &mut BTreeMap<String, String>,
+) {
+    match tree {
+        UseTree::Path(path) => {
+            prefix.push(path.ident.to_string());
+            collect_worker_use_aliases(&path.tree, prefix, aliases);
+            prefix.pop();
+        }
+        UseTree::Name(name) if is_worker_module_path(prefix) => {
+            let owner = name.ident.to_string();
+            if WORKER_SURFACE_TYPES.contains(&owner.as_str()) {
+                aliases.insert(owner.clone(), owner);
+            }
+        }
+        UseTree::Rename(rename) if is_worker_module_path(prefix) => {
+            let owner = rename.ident.to_string();
+            if WORKER_SURFACE_TYPES.contains(&owner.as_str()) {
+                aliases.insert(rename.rename.to_string(), owner);
+            }
+        }
+        UseTree::Group(group) => {
+            for item in &group.items {
+                collect_worker_use_aliases(item, prefix, aliases);
+            }
+        }
+        UseTree::Glob(_) if is_worker_module_path(prefix) => {
+            for owner in WORKER_SURFACE_TYPES {
+                aliases.insert((*owner).to_owned(), (*owner).to_owned());
+            }
+        }
+        UseTree::Name(_) | UseTree::Rename(_) | UseTree::Glob(_) => {}
+    }
+}
+
+fn is_worker_module_path(segments: &[String]) -> bool {
+    let expected = ["sci", "api", "bayes", "worker"];
+    segments.len() >= expected.len()
+        && segments[segments.len() - expected.len()..]
+            .iter()
+            .map(String::as_str)
+            .eq(expected)
+}
+
+fn canonical_worker_owner_from_type(
+    ty: &Type,
+    aliases: &BTreeMap<String, String>,
+) -> Option<String> {
+    match ty {
+        Type::Path(path) => canonical_worker_owner_from_path(&path.path, aliases),
+        Type::Reference(reference) => canonical_worker_owner_from_type(&reference.elem, aliases),
+        Type::Group(group) => canonical_worker_owner_from_type(&group.elem, aliases),
+        Type::Paren(paren) => canonical_worker_owner_from_type(&paren.elem, aliases),
+        _ => None,
+    }
+}
+
+fn canonical_worker_owner_from_path(
+    path: &syn::Path,
+    aliases: &BTreeMap<String, String>,
+) -> Option<String> {
+    let owner = path.segments.last()?.ident.to_string();
+    if let Some(canonical) = aliases.get(&owner) {
+        return Some(canonical.clone());
+    }
+    let prefix = path
+        .segments
+        .iter()
+        .take(path.segments.len().saturating_sub(1))
+        .map(|segment| segment.ident.to_string())
+        .collect::<Vec<_>>();
+    (WORKER_SURFACE_TYPES.contains(&owner.as_str()) && is_worker_module_path(&prefix))
+        .then_some(owner)
+}
+
 struct BayesWorkerAuthorityVisitor<'a> {
     source_file: &'a str,
     layer: RustLayer,
     allow_authority: bool,
+    worker_boundary: bool,
+    canonical_types: BTreeMap<String, String>,
+    current_impl_owner: Option<String>,
     worker_bindings: BTreeSet<String>,
     violations: &'a mut Vec<BayesWorkerAuthorityViolation>,
 }
@@ -267,12 +386,9 @@ impl BayesWorkerAuthorityVisitor<'_> {
     }
 
     fn inspect_worker_function(&mut self, path: &syn::Path, call: bool) {
-        let Some((owner, method)) = path_owner_and_method(path) else {
+        let Some((owner, method)) = self.canonical_owner_and_method(path) else {
             return;
         };
-        if !WORKER_SURFACE_TYPES.contains(&owner.as_str()) {
-            return;
-        }
         let target = format!("{owner}::{method}");
         if authority_function(&owner, &method).is_some() {
             if !self.allow_authority {
@@ -290,11 +406,65 @@ impl BayesWorkerAuthorityVisitor<'_> {
         }
     }
 
+    fn canonical_owner_and_method(&self, path: &syn::Path) -> Option<(String, String)> {
+        let mut segments = path.segments.iter().rev();
+        let method = segments.next()?.ident.to_string();
+        let written_owner = segments.next()?.ident.to_string();
+        let owner = if written_owner == "Self" {
+            self.current_impl_owner.clone()?
+        } else if let Some(owner) = self.canonical_types.get(&written_owner) {
+            owner.clone()
+        } else {
+            let prefix = path
+                .segments
+                .iter()
+                .take(path.segments.len().saturating_sub(2))
+                .map(|segment| segment.ident.to_string())
+                .collect::<Vec<_>>();
+            if WORKER_SURFACE_TYPES.contains(&written_owner.as_str())
+                && is_worker_module_path(&prefix)
+            {
+                written_owner
+            } else {
+                return None;
+            }
+        };
+        Some((owner, method))
+    }
+
+    fn inspect_impl_function(&mut self, function: &syn::ImplItemFn) {
+        if function.sig.receiver().is_some() {
+            return;
+        }
+        let Some(owner) = self.current_impl_owner.clone() else {
+            return;
+        };
+        let method = function.sig.ident.to_string();
+        let target = format!("{owner}::{method}");
+        let allowed_public = PUBLIC_ASSOCIATED_FUNCTIONS
+            .iter()
+            .any(|function| function.owner == owner && function.method == method);
+        if matches!(function.vis, Visibility::Public(_))
+            && (!allowed_public || !self.worker_boundary)
+        {
+            self.record("public-associated-function", target.clone());
+        }
+        if is_crate_visibility(&function.vis) {
+            if authority_function(&owner, &method).is_some() {
+                if !self.worker_boundary {
+                    self.record("authority-declaration", target);
+                }
+            } else {
+                self.record("forbidden-associated-function", target);
+            }
+        }
+    }
+
     fn record_worker_binding(&mut self, pattern: &syn::Pat, ty: &Type) {
         let syn::Pat::Ident(binding) = pattern else {
             return;
         };
-        if type_owner(ty).is_some_and(|owner| WORKER_SURFACE_TYPES.contains(&owner.as_str())) {
+        if canonical_worker_owner_from_type(ty, &self.canonical_types).is_some() {
             self.worker_bindings.insert(binding.ident.to_string());
         }
     }
@@ -336,7 +506,30 @@ impl<'ast> Visit<'ast> for BayesWorkerAuthorityVisitor<'_> {
         if use_tree_has_worker_glob(&item.tree, &mut Vec::new()) {
             self.record("broad-import", "worker::*");
         }
+        collect_worker_use_aliases(&item.tree, &mut Vec::new(), &mut self.canonical_types);
         visit::visit_item_use(self, item);
+    }
+
+    fn visit_item_type(&mut self, item: &'ast syn::ItemType) {
+        if let Some(owner) = canonical_worker_owner_from_type(&item.ty, &self.canonical_types) {
+            self.canonical_types.insert(item.ident.to_string(), owner);
+        }
+        visit::visit_item_type(self, item);
+    }
+
+    fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
+        let previous = self.current_impl_owner.clone();
+        self.current_impl_owner =
+            canonical_worker_owner_from_type(&item.self_ty, &self.canonical_types);
+        if self.current_impl_owner.is_some() {
+            for impl_item in &item.items {
+                if let ImplItem::Fn(function) = impl_item {
+                    self.inspect_impl_function(function);
+                }
+            }
+        }
+        visit::visit_item_impl(self, item);
+        self.current_impl_owner = previous;
     }
 
     fn visit_item_fn(&mut self, function: &'ast syn::ItemFn) {
@@ -381,11 +574,20 @@ impl<'ast> Visit<'ast> for BayesWorkerAuthorityVisitor<'_> {
     }
 
     fn visit_expr_struct(&mut self, construction: &'ast syn::ExprStruct) {
-        if !self.allow_authority
-            && let Some(ty) = construction.path.segments.last()
-            && SEALED_AUTHORITY_TYPES.contains(&ty.ident.to_string().as_str())
-        {
-            self.record("construction", ty.ident.to_string());
+        if !self.allow_authority {
+            let owner = construction.path.segments.last().and_then(|segment| {
+                let written = segment.ident.to_string();
+                if written == "Self" {
+                    self.current_impl_owner.clone()
+                } else {
+                    canonical_worker_owner_from_path(&construction.path, &self.canonical_types)
+                }
+            });
+            if let Some(owner) = owner
+                && SEALED_AUTHORITY_TYPES.contains(&owner.as_str())
+            {
+                self.record("construction", owner);
+            }
         }
         visit::visit_expr_struct(self, construction);
     }
@@ -419,25 +621,6 @@ fn use_tree_has_worker_glob(tree: &UseTree, prefix: &mut Vec<String>) -> bool {
             .any(|item| use_tree_has_worker_glob(item, prefix)),
         UseTree::Glob(_) => prefix.last().is_some_and(|segment| segment == "worker"),
         UseTree::Name(_) | UseTree::Rename(_) => false,
-    }
-}
-
-fn path_owner_and_method(path: &syn::Path) -> Option<(String, String)> {
-    let mut segments = path.segments.iter().rev();
-    let method = segments.next()?.ident.to_string();
-    let owner = segments.next()?.ident.to_string();
-    Some((owner, method))
-}
-
-fn type_owner(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Path(path) => path
-            .path
-            .segments
-            .last()
-            .map(|segment| segment.ident.to_string()),
-        Type::Reference(reference) => type_owner(&reference.elem),
-        _ => None,
     }
 }
 
@@ -911,6 +1094,56 @@ impl BayesTaskResult { pub(crate) fn validated_worker_result() {} }
         surface.is_empty(),
         "Bayes worker authority/result fields or constructors became public: {surface:#?}"
     );
+}
+
+#[test]
+fn bayes_import_and_type_alias_authority_is_rejected() {
+    let findings = bayes_worker_source_violations(
+        "src-tauri/src/application/aliased_worker_authority.rs",
+        RustLayer::Application,
+        r#"
+use crate::sci::api::bayes::worker::BayesTaskHandle as Handle;
+type TaskAuthority = Handle;
+
+fn forge(task_id: BayesTaskId, generation: NonZeroU64) {
+    let _ = Handle::issue_for_worker(task_id.clone(), generation);
+    let issue = TaskAuthority::issue_for_worker;
+    let _ = issue(task_id, generation);
+}
+"#,
+    )
+    .expect("aliased authority fixture must parse");
+    assert!(findings.iter().any(|finding| {
+        finding.kind == "authority-call" && finding.target == "BayesTaskHandle::issue_for_worker"
+    }));
+    assert!(findings.iter().any(|finding| {
+        finding.kind == "authority-reference"
+            && finding.target == "BayesTaskHandle::issue_for_worker"
+    }));
+}
+
+#[test]
+fn bayes_external_impl_self_authority_is_rejected() {
+    let findings = bayes_worker_source_violations(
+        "src-tauri/src/application/external_worker_impl.rs",
+        RustLayer::Application,
+        r#"
+use crate::sci::api::bayes::worker::BayesTaskHandle;
+
+impl BayesTaskHandle {
+    pub fn forge(task_id: BayesTaskId, generation: NonZeroU64) -> Self {
+        Self::issue_for_worker(task_id, generation)
+    }
+}
+"#,
+    )
+    .expect("external authority impl fixture must parse");
+    assert!(findings.iter().any(|finding| {
+        finding.kind == "public-associated-function" && finding.target == "BayesTaskHandle::forge"
+    }));
+    assert!(findings.iter().any(|finding| {
+        finding.kind == "authority-call" && finding.target == "BayesTaskHandle::issue_for_worker"
+    }));
 }
 
 #[test]
