@@ -1583,3 +1583,6 @@ Execution 不知道具体 UI
 - [ ] 建立 production-unreachable Execution relational/resource ports 与 canonical plan-version preparation，使用 fields-private sealed grants 和 typed failures。
 - [ ] 补齐 Graph value semantics、Project variable defaults 与 Execution RuntimeValue final owners，保持当前 node-system runtime caller 尚未切换。
 - [ ] 完成 relational/resource/value owner 的 Rust check、fmt 与 diff 校验，保留旧 Project resource/provider route 至 Execution Task 8 原子切换。
+- [ ] 建立 Application-owned pure Project/Database snapshot mapper，将完整函数、变量、数据库声明与 neutral schema facts 映射为 Graph ResourceCatalogSnapshot。
+- [ ] 增加数据库 schema ID 完整性校验与独立 GraphCompileSettings 映射，保持 Database basis/revalidation 与旧 Project compiler route 隔离。
+- [ ] 完成 Project–Graph Task 2 mapper focused test、Rust check、fmt 与 diff 校验；graph-open/catalog production routing继续留待后续任务。
