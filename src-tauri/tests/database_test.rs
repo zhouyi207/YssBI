@@ -9,11 +9,10 @@ use yssbi_lib::database::{
     write_display_name,
 };
 use yssbi_lib::database_contract::{DatabaseDecl, DatabaseEngine};
-use yssbi_lib::node_system::document::{
-    DatabaseResourceKey, OperationId, ResourceKey, ResourceRevision,
-};
+use yssbi_lib::node_system::document::{DatabaseResourceKey, ResourceKey};
 use yssbi_lib::project::{
-    ProjectInstanceId, ProjectState, discover_databases_from_root, project_duckdb_abs,
+    OperationId, ProjectInstanceId, ProjectState, ResourceRevision, discover_databases_from_root,
+    project_duckdb_abs,
 };
 
 fn database_authority(

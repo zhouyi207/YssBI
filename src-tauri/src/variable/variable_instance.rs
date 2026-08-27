@@ -1,6 +1,6 @@
 use super::{VariableId, VariableScope};
 use crate::data_contract::{DataType, DataValue};
-use crate::tabular::TabularSnapshot;
+use crate::tabular::contract::TabularSnapshot;
 use serde::{Deserialize, Serialize};
 
 /// 变量定义（持久化到项目文件）

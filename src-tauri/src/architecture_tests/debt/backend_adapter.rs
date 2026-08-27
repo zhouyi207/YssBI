@@ -20,6 +20,24 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         entries,
         BACKEND_ADAPTER_SPEC,
         "rust.external.runtime-source-layer",
+        "src-tauri/src/backend_adapters/tabular/polars.rs",
+        "yssbi_lib::backend_adapters::tabular::polars",
+        [
+            (Use, 1, "external:chrono::Datelike"),
+            (Use, 1, "external:chrono::NaiveDate"),
+            (Use, 1, "external:chrono::NaiveDateTime"),
+            (Use, 1, "external:chrono::Utc"),
+            (
+                Path,
+                1,
+                "external:chrono::DateTime::from_naive_utc_and_offset"
+            ),
+        ],
+    );
+    debt_group!(
+        entries,
+        BACKEND_ADAPTER_SPEC,
+        "rust.external.runtime-source-layer",
         "src-tauri/src/application/bayes.rs",
         "yssbi_lib::application::bayes",
         [
@@ -124,7 +142,7 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (Macro, 2, "external:serde_json::json"),
             (Path, 1, "external:serde_json::from_str"),
             (Path, 1, "external:serde_json::to_string"),
-            (Path, 2, "external:serde_json::Value"),
+            (Path, 1, "external:serde_json::Value"),
             (Path, 1, "external:serde_json::Value::Bool"),
             (Path, 1, "external:serde_json::Value::Null"),
             (Path, 1, "external:serde_json::Value::String"),
@@ -297,37 +315,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "src-tauri/src/schema/database.rs",
         "yssbi_lib::schema::database",
         [(Path, 1, "external:polars::prelude::Schema")],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.external.runtime-source-layer",
-        "src-tauri/src/tabular/dataframe_io.rs",
-        "yssbi_lib::tabular::dataframe_io",
-        [
-            (Use, 1, "external:polars::prelude::CsvWriter"),
-            (Use, 1, "external:polars::prelude::DataFrame"),
-            (Use, 1, "external:polars::prelude::IpcReader"),
-            (Use, 1, "external:polars::prelude::IpcWriter"),
-            (Use, 1, "external:polars::prelude::ParquetWriter"),
-            (Use, 1, "external:polars::prelude::SerReader"),
-            (Use, 1, "external:polars::prelude::SerWriter"),
-        ],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.external.runtime-source-layer",
-        "src-tauri/src/tabular/snapshot.rs",
-        "yssbi_lib::tabular::snapshot",
-        [
-            (Use, 1, "external:polars::prelude::AnyValue"),
-            (Use, 1, "external:polars::prelude::Column"),
-            (Use, 1, "external:polars::prelude::DataFrame"),
-            (Use, 1, "external:polars::prelude::DataType"),
-            (Use, 1, "external:polars::prelude::PlSmallStr"),
-            (Use, 1, "external:polars::prelude::Series"),
-        ],
     );
     debt_group!(
         entries,
@@ -619,17 +606,5 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (Use, 1, "yssbi_lib::sci::api::bayes::model::MathFunction"),
             (Use, 1, "yssbi_lib::sci::api::bayes::model::UnaryOp"),
         ],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.internal.source-layer",
-        "src-tauri/src/tabular/snapshot.rs",
-        "yssbi_lib::tabular::snapshot",
-        [(
-            Use,
-            1,
-            "yssbi_lib::database::edit_operation::json_to_anyvalue"
-        )],
     );
 }

@@ -1547,3 +1547,10 @@ Execution 不知道具体 UI
 - [ ] 全量切换 Application、Project、Schema、Commands、Database runtime 与测试 caller 到 crate::database_contract，删除 database 旧 declaration module/re-export。
 - [ ] 移除已消失 database declaration origins 对应的 exact capability/debt 条目，保留 DatabaseInstance、DuckDB storage 与 schema conversion 的现有职责和债务。
 - [ ] 增加 database contract 单一 owner 与 wire focused regressions，并完成 Rust architecture、数据库测试编译、fmt、check 与 diff 校验。
+- [ ] 将 `TabularSnapshot` 的持久化 JSON 与 shape 事实迁入 `tabular/contract.rs` Pure Leaf，删除混合 snapshot owner。
+- [ ] 将 snapshot→Polars materialization、dtype inference 与严格 JSON→AnyValue 转换集中到唯一 tabular Polars adapter，并切换 Database edit callers。
+- [ ] 删除旧 tabular snapshot 的 Polars/Database imports 与 exact debt，补齐 contract wire/shape、adapter conversion/edit regression 及 Rust architecture 验证。
+- [ ] 完成 Backend Task 5b 的 Pure Tabular ordered contract、manual serde 与 duplicate/ragged shape 校验，保持既有 wire shape。
+- [ ] 将变量 JSON/handle normalization、Polars materialization、DataFrame I/O 分别归入 Project、Backend adapter、Database owner，并删除旧 mixed tabular owners。
+- [ ] 补充 typed tabular/materialization/I/O/DTO mapping errors、atomic normalization 与 architecture/debt guard，避免 raw backend prose 和 lossy unsigned conversion。
+- [ ] 通过 tabular 聚焦回归、数据库编辑 integration 回归、Rust 编译/格式/debt 验证及独立 review；保留当前 worktree 未提交状态等待集成授权。

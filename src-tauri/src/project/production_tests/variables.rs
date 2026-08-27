@@ -16,7 +16,7 @@ fn tabular_variable(
         scope,
         tags: Vec::new(),
     };
-    crate::tabular::normalize_variable_tabular(&mut variable).unwrap();
+    crate::project::variable_tabular::normalize_variable_tabular(&mut variable).unwrap();
     variable
 }
 
@@ -24,14 +24,13 @@ fn authoritative_tabular_json(
     state: &ProjectState,
     variable_id: crate::variable::VariableId,
 ) -> String {
-    state
+    let snapshot = state
         .get_variable(&variable_id)
         .unwrap()
         .unwrap()
         .tabular
-        .unwrap()
-        .to_json()
-        .unwrap()
+        .unwrap();
+    serde_json::to_string(&snapshot.columns_view()).unwrap()
 }
 
 fn commit_tabular_effect(
@@ -352,12 +351,12 @@ fn tabular_variable_effect_updates_global_and_local_authority() {
         let canonical = state.get_variable(&variable.id).unwrap().unwrap();
         assert_eq!(
             canonical.data_value,
-            crate::data_contract::DataValue::DataFrame(crate::tabular::variable_handle(
-                &variable.id
-            ))
+            crate::data_contract::DataValue::DataFrame(
+                crate::project::variable_tabular::variable_handle(&variable.id),
+            )
         );
         assert_eq!(
-            canonical.tabular.unwrap().to_json().unwrap(),
+            serde_json::to_string(&canonical.tabular.unwrap().columns_view()).unwrap(),
             r#"{"value":[7,8,9]}"#
         );
         assert_eq!(

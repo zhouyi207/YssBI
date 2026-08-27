@@ -1,9 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::model::{ArchitectureFinding, DebtKey, RustDebtEntry};
-use super::semantic_guards::{
-    PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE, SemanticGuardViolation, SemanticGuardViolationReason,
-};
 
 const APPROVED_MIGRATION_SPECS: &[&str] = &[
     BACKEND_ADAPTER_SPEC,
@@ -61,31 +58,6 @@ pub(super) fn rust_architecture_debt() -> Vec<RustDebtEntry> {
     presentation_command::extend(&mut entries);
     project_graph::extend(&mut entries);
     entries
-}
-
-pub(super) fn pure_leaf_graph_document_json_debt() -> Vec<SemanticGuardViolation> {
-    use super::model::RustDependencyKind::{Path, Use};
-
-    // Backend-adapter Task 5 owns the atomic split of the legacy mixed tabular
-    // snapshot. Keep its already-existing JSON dependencies visible and
-    // bidirectionally ratcheted until that owner replacement lands.
-    [
-        (Use, "external:serde_json::Value"),
-        (Path, "external:serde_json::from_str"),
-        (Path, "external:serde_json::to_string"),
-    ]
-    .into_iter()
-    .map(
-        |(dependency_kind, canonical_origin_target)| SemanticGuardViolation {
-            rule_id: PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE,
-            source_file: "src-tauri/src/tabular/snapshot.rs".to_owned(),
-            reason: SemanticGuardViolationReason::UnexpectedSerdeJsonDependency {
-                dependency_kind,
-                canonical_origin_target: canonical_origin_target.to_owned(),
-            },
-        },
-    )
-    .collect()
 }
 
 pub(super) fn staged_backend_adapter_debt() -> &'static [StagedAdapterDebt] {

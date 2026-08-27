@@ -13,6 +13,7 @@ use syn::visit::{self, Visit};
 use syn::{Expr, ImplItem, Item, Token, TraitItem, Type, UseTree, Visibility};
 
 pub(super) const PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE: &str = "rust.pure-leaf.graph-document-json";
+pub(super) const TABULAR_CONTRACT_RULE: &str = "rust.tabular.contract";
 const GRAPH_DOCUMENT_MODEL: &str = "src-tauri/src/graph_document/model.rs";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -40,7 +41,7 @@ pub(super) fn pure_leaf_graph_document_json_violations(
     classification: &BTreeMap<String, RustLayer>,
 ) -> Vec<SemanticGuardViolation> {
     let mut violations = Vec::new();
-    let mut allowed_dependencies = 0;
+    let mut graph_document_allowed_dependencies = 0;
     for dependency in dependencies.iter().filter(|dependency| {
         classification.get(&dependency.source_file) == Some(&RustLayer::PureLeaf)
             && matches!(
@@ -48,11 +49,14 @@ pub(super) fn pure_leaf_graph_document_json_violations(
                 CanonicalOrigin::External(origin) if origin.package_name == "serde_json"
             )
     }) {
-        let allowed = dependency.source_file == GRAPH_DOCUMENT_MODEL
-            && dependency.kind == RustDependencyKind::Path
-            && dependency.canonical_origin_target == "external:serde_json::Value";
+        let allowed = if dependency.source_file == GRAPH_DOCUMENT_MODEL {
+            dependency.kind == RustDependencyKind::Path
+                && dependency.canonical_origin_target == "external:serde_json::Value"
+        } else {
+            false
+        };
         if allowed {
-            allowed_dependencies += 1;
+            graph_document_allowed_dependencies += 1;
         } else {
             violations.push(SemanticGuardViolation {
                 rule_id: PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE,
@@ -95,7 +99,7 @@ pub(super) fn pure_leaf_graph_document_json_violations(
             _ => None,
         })
         .collect::<Vec<_>>();
-    if typed_value_aliases.is_empty() || allowed_dependencies != 1 {
+    if typed_value_aliases.is_empty() || graph_document_allowed_dependencies != 1 {
         violations.push(SemanticGuardViolation {
             rule_id: PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE,
             source_file: GRAPH_DOCUMENT_MODEL.to_owned(),
@@ -107,6 +111,80 @@ pub(super) fn pure_leaf_graph_document_json_violations(
             source_file: GRAPH_DOCUMENT_MODEL.to_owned(),
             reason: SemanticGuardViolationReason::InvalidTypedValueAlias,
         });
+    }
+    violations
+}
+
+pub(super) fn tabular_contract_source_violations(repository_root: &Path) -> Vec<String> {
+    let files = [
+        "src-tauri/src/tabular/mod.rs",
+        "src-tauri/src/tabular/contract.rs",
+        "src-tauri/src/project/variable_tabular.rs",
+        "src-tauri/src/backend_adapters/tabular/polars.rs",
+        "src-tauri/src/database/tabular_io.rs",
+    ];
+    let mut violations = Vec::new();
+    for relative in files {
+        let Ok(source) = std::fs::read_to_string(repository_root.join(relative)) else {
+            violations.push(format!("{relative}: source is unreadable"));
+            continue;
+        };
+        if source.contains("Result<") && source.contains(", String>") {
+            violations.push(format!("{relative}: public String result error"));
+        }
+        if relative == "src-tauri/src/tabular/mod.rs"
+            && [
+                "VariableInstance",
+                "serde_json",
+                "polars",
+                "dataframe_io",
+                "normalize_variable",
+            ]
+            .iter()
+            .any(|forbidden| source.contains(forbidden))
+        {
+            violations.push(format!("{relative}: mixed-owner dependency or re-export"));
+        }
+        if relative == "src-tauri/src/tabular/contract.rs" {
+            for forbidden in [
+                "serde_json",
+                "polars",
+                "VariableInstance",
+                "BTreeMap",
+                "pub columns",
+                "#[derive(Serialize, Deserialize)]",
+            ] {
+                if source.contains(forbidden) {
+                    violations.push(format!("{relative}: forbidden {forbidden}"));
+                }
+            }
+            for required in [
+                "columns: Box<[TabularColumn]>",
+                "pub fn try_from_columns",
+                "pub fn columns(&self)",
+                "pub fn columns_view(&self)",
+                "impl<'de> Deserialize<'de> for TabularSnapshot",
+                "impl Serialize for TabularColumnsView",
+            ] {
+                if !source.contains(required) {
+                    violations.push(format!("{relative}: missing {required}"));
+                }
+            }
+        }
+        if relative == "src-tauri/src/project/variable_tabular.rs"
+            && !source.contains("VariableTabularNormalizationError")
+        {
+            violations.push(format!("{relative}: missing typed normalization error"));
+        }
+        if relative == "src-tauri/src/backend_adapters/tabular/polars.rs"
+            && !source.contains("TabularMaterializationError")
+        {
+            violations.push(format!("{relative}: missing typed materialization error"));
+        }
+        if relative == "src-tauri/src/database/tabular_io.rs" && !source.contains("TabularIoError")
+        {
+            violations.push(format!("{relative}: missing typed I/O error"));
+        }
     }
     violations
 }

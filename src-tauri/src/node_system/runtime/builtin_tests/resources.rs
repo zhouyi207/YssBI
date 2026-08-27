@@ -10,11 +10,11 @@ fn variable_data_series_materializes_artifact_without_serialized_runtime_interna
             crate::data_contract::DataType::Int64,
         )),
         data_value: crate::data_contract::DataValue::DataSeries(
-            crate::data_contract::DataSeriesValue::new(crate::tabular::variable_handle(&id)),
+            crate::data_contract::DataSeriesValue::new(
+                crate::project::variable_tabular::variable_handle(&id),
+            ),
         ),
-        tabular: Some(
-            crate::tabular::TabularSnapshot::from_json(r#"{"observations":[1,null,3]}"#).unwrap(),
-        ),
+        tabular: Some(serde_json::from_str(r#"{"columns":{"observations":[1,null,3]}}"#).unwrap()),
         description: String::new(),
         scope: crate::variable::VariableScope::Global,
         tags: Vec::new(),
@@ -36,7 +36,7 @@ fn variable_data_series_materializes_artifact_without_serialized_runtime_interna
     );
     assert_eq!(
         serde_json::to_value(variable).unwrap()["dataValue"],
-        serde_json::json!({"DataSeries": crate::tabular::variable_handle(&id)})
+        serde_json::json!({"DataSeries": crate::project::variable_tabular::variable_handle(&id)})
     );
 }
 
@@ -117,7 +117,7 @@ fn data_series_variable_get_set_flows_into_statistics() {
     let series_json = series.id.clone();
     let persisted = crate::variable::VariableInstance {
         data_value: after,
-        tabular: Some(crate::tabular::TabularSnapshot::from_json(&series_json).unwrap()),
+        tabular: Some(serde_json::from_str(&format!(r#"{{"columns":{series_json}}}"#)).unwrap()),
         ..empty
     };
 

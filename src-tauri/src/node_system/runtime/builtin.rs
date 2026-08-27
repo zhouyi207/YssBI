@@ -175,23 +175,24 @@ fn variable_runtime_value(
         .tabular
         .as_ref()
         .ok_or_else(|| KernelError::new("DataSeries variable has no persisted tabular snapshot"))?;
-    let (name, values) = snapshot.columns.iter().next().ok_or_else(|| {
+    let column = snapshot.columns().first().ok_or_else(|| {
         KernelError::new("DataSeries variable snapshot must contain exactly one column")
     })?;
-    if snapshot.columns.len() != 1 {
+    if snapshot.columns().len() != 1 {
         return Err(KernelError::new(
             "DataSeries variable snapshot must contain exactly one column",
         ));
     }
     let element_type = data_series_element_type(element_type)?;
-    let values = values
+    let values = column
+        .values()
         .iter()
         .enumerate()
-        .map(|(index, value)| json_series_value(element_type, value, index))
+        .map(|(index, value)| tabular_series_value(element_type, value, index))
         .collect::<Result<Vec<_>, _>>()?;
     let artifact = DataSeriesBuilder::new(element_type)
         .values(values)
-        .name(name.as_str())
+        .name(column.name().as_str())
         .build(ArtifactKind::Collected)
         .map_err(|error| KernelError::new(error.to_string()))?;
     Ok(RuntimeValue::Artifact(artifact))
@@ -215,28 +216,45 @@ fn data_series_element_type(
     }
 }
 
-fn json_series_value(
+fn tabular_series_value(
     element_type: DataSeriesElementType,
-    value: &serde_json::Value,
+    value: &crate::tabular::contract::TabularScalar,
     index: usize,
 ) -> Result<Value, KernelError> {
-    if value.is_null() {
+    use crate::tabular::contract::TabularScalar;
+
+    if matches!(value, TabularScalar::Null) {
         return Ok(Value::Null);
     }
     let converted = match element_type {
-        DataSeriesElementType::Int64 => value.as_i64().map(Value::Integer),
-        DataSeriesElementType::Float64 => value.as_f64().and_then(|value| {
-            CanonicalDecimal::new(value.to_string())
+        DataSeriesElementType::Int64 => match value {
+            TabularScalar::Integer(value) => Some(Value::Integer(*value)),
+            TabularScalar::Unsigned(value) => i64::try_from(*value).ok().map(Value::Integer),
+            _ => None,
+        },
+        DataSeriesElementType::Float64 => match value {
+            TabularScalar::Integer(value) => CanonicalDecimal::new(value.to_string())
                 .ok()
-                .map(Value::Decimal)
-        }),
-        DataSeriesElementType::Boolean => value.as_bool().map(Value::Bool),
+                .map(Value::Decimal),
+            TabularScalar::Unsigned(value) => CanonicalDecimal::new(value.to_string())
+                .ok()
+                .map(Value::Decimal),
+            TabularScalar::Decimal(value) => CanonicalDecimal::new(value.as_f64().to_string())
+                .ok()
+                .map(Value::Decimal),
+            _ => None,
+        },
+        DataSeriesElementType::Boolean => match value {
+            TabularScalar::Bool(value) => Some(Value::Bool(*value)),
+            _ => None,
+        },
         DataSeriesElementType::String
         | DataSeriesElementType::Date
         | DataSeriesElementType::Datetime
-        | DataSeriesElementType::Categorical => value
-            .as_str()
-            .map(|value| Value::String(value.to_owned().into_boxed_str())),
+        | DataSeriesElementType::Categorical => match value {
+            TabularScalar::String(value) => Some(Value::String(value.clone())),
+            _ => None,
+        },
     };
     converted.ok_or_else(|| {
         KernelError::new(format!(

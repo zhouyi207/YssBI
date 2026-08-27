@@ -157,6 +157,14 @@ pub(super) struct InternalDependencyCapability {
 
 const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     InternalDependencyCapability {
+        source_layer: RustLayer::DatabaseCore,
+        repository_relative_source_file: "src-tauri/src/database/edit_operation.rs",
+        fully_qualified_owner: "yssbi_lib::database::edit_operation",
+        canonical_origin_targets: &[
+            "yssbi_lib::backend_adapters::tabular::polars::json_to_anyvalue",
+        ],
+    },
+    InternalDependencyCapability {
         source_layer: RustLayer::BackendAdapter,
         repository_relative_source_file: "src-tauri/src/backend_adapters/execution/scientific.rs",
         fully_qualified_owner: "yssbi_lib::backend_adapters::execution::scientific",
