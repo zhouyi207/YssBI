@@ -32,7 +32,6 @@ function readyCatalogState(): LocalizedNodeCatalogState {
       {
         nodeTypeId: 'yssbi.numeric.add.int64',
         title: 'Add',
-        description: null,
         documentation: null,
         categoryId: 'math',
         iconId: 'math',
