@@ -1,6 +1,7 @@
-import type {
-  GraphOutputRefDto,
-  ResultPresentation,
+import {
+  isResultPlotKind,
+  type GraphOutputRefDto,
+  type ResultPresentation,
 } from '@/shared/types/dto/result';
 import type { LayoutTab } from '@/shared/types/layout/layout';
 
@@ -80,16 +81,6 @@ const WORKBENCH_ACTIVITY_VIEW_ID_SET = new Set<WorkbenchActivityViewId>(
   WORKBENCH_ACTIVITY_VIEW_IDS,
 );
 const WORKBENCH_VIEW_ID_SET = new Set<WorkbenchViewId>(WORKBENCH_VIEW_IDS);
-const RESULT_PLOT_KINDS = new Set([
-  'scatter',
-  'line',
-  'plot',
-  'ecdf',
-  'kde',
-  'histogram',
-  'correlation',
-  'correlogram',
-]);
 const RESULT_REPORT_KINDS = new Set([
   'olsSummary',
   'binarySummary',
@@ -147,8 +138,7 @@ function isResultPresentation(value: unknown): value is ResultPresentation {
       return hasKnownKeys(value, ['kind']);
     case 'plot':
       return hasKnownKeys(value, ['kind', 'chart'])
-        && typeof value.chart === 'string'
-        && RESULT_PLOT_KINDS.has(value.chart);
+        && isResultPlotKind(value.chart);
     case 'report':
       return hasKnownKeys(value, ['kind', 'report'])
         && typeof value.report === 'string'

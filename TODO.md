@@ -1548,6 +1548,12 @@ Execution 不知道具体 UI
 - [ ] 增加 production Plot kernel 路径回归测试，验证 constant series 产生的未定义 correlation 与 p-value cells 序列化为 null 而不是 `0.0`。
 - [ ] 锁定 Rust Plot fixture 的七种 chart inventory，防止删除 payload record 后 TypeScript parser 契约测试静默通过。
 - [ ] 通过 zero-fallback 与缺失 scatter record 的定向 mutation 完成两项 review finding 的 RED/GREEN 验证。
+- [ ] 新增 source-independent `ChartModel` 与唯一 `AxisValueType`，仅表达七种图表的数据空间语义。
+- [ ] 新增 Result Plot adapter，将 canonical payload 转换为 `ChartModel` 并统一归一化 `plot` 为 `scatter`。
+- [ ] 新增 Worksheet preview adapter，仅转换 histogram、scatter 与 line，并将 empty/error 状态留给 Worksheet view。
+- [ ] 由唯一 `RESULT_PLOT_KINDS` 常量派生 `ResultPlotKind` 与 `isResultPlotKind`，移除三个生产 allowlist 副本。
+- [ ] 保持 correlation nullable cells 与 correlogram camelCase scientific fields 原样穿过 source adapter，不增加兼容读取。
+- [ ] 以 focused RED/GREEN adapter、guard 与 Result service 测试及 TypeScript typecheck 验证 Task 2 契约。
 - [ ] 更新 `AGENTS.md`，明确 Rust 后端测试的编译与运行成本较高，避免迭代期间频繁运行。
 - [ ] 保持 Rust 聚焦测试与完整测试套件之间的执行边界，仅在必要场景运行 broader/full suite。
 - [ ] 更新 `AGENTS.md`，统一后端 Rust 错误使用 `thiserror` 定义类型化错误。

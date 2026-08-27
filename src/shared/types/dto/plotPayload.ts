@@ -8,8 +8,7 @@ import {
   type PlotCorrelogramBarDTO,
   parsePlotCorrelogramBar,
 } from '@/shared/types/report';
-
-export type AxisFormat = 'date' | 'datetime' | 'number';
+import type { AxisValueType } from '@/shared/types/visualization';
 
 export interface PlotPointDTO {
   x: number;
@@ -20,8 +19,8 @@ export interface XySeriesPlotDTO {
   data: PlotPointDTO[];
   xLabel?: string;
   yLabel?: string;
-  xFormat?: AxisFormat;
-  yFormat?: AxisFormat;
+  xFormat?: AxisValueType;
+  yFormat?: AxisValueType;
 }
 
 export interface HistogramBinDTO {
@@ -78,10 +77,10 @@ function readOptionalString(record: Record<string, unknown>, key: string): strin
   return undefined;
 }
 
-function readOptionalAxisFormat(
+function readOptionalAxisValueType(
   record: Record<string, unknown>,
   key: string,
-): AxisFormat | undefined {
+): AxisValueType | undefined {
   const value = record[key];
   if (value === 'date' || value === 'datetime' || value === 'number') {
     return value;
@@ -117,8 +116,8 @@ export function parseXySeriesPlot(raw: unknown): XySeriesPlotDTO | null {
     data,
     xLabel: readOptionalString(raw, 'xLabel'),
     yLabel: readOptionalString(raw, 'yLabel'),
-    xFormat: readOptionalAxisFormat(raw, 'xFormat'),
-    yFormat: readOptionalAxisFormat(raw, 'yFormat'),
+    xFormat: readOptionalAxisValueType(raw, 'xFormat'),
+    yFormat: readOptionalAxisValueType(raw, 'yFormat'),
   };
 }
 
