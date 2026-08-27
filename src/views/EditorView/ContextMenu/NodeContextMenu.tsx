@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { VscCopy, VscLink, VscTrash } from "react-icons/vsc";
+import { VscCopy, VscLink, VscListSelection, VscTrash } from "react-icons/vsc";
 import { ActionMenu, type ActionMenuPosition, type ActionMenuSection } from "@/shared/ui/actionMenu";
 import type { NodeCapabilitiesDto } from '@/shared/types/dto/editorProjection';
 
@@ -14,6 +14,7 @@ export interface NodeContextMenuProps {
   onDelete: () => void;
   onBreakAllLinks: () => void;
   onSelectLinked: () => void;
+  onOpenNodePicker?: () => void;
   onClose: () => void;
 }
 
@@ -27,6 +28,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
   onDelete,
   onBreakAllLinks,
   onSelectLinked,
+  onOpenNodePicker,
   onClose,
 }) => {
   const { t } = useTranslation();
@@ -39,6 +41,14 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
     return [
       {
         items: [
+          {
+            id: "selectNode",
+            label: n("selectNode"),
+            icon: <VscListSelection size={12} />,
+            disabled: !onOpenNodePicker,
+            shortcut: "↵ ↑ ↓",
+            onClick: onOpenNodePicker,
+          },
           { id: "copy", label: n("copy"), icon: <VscCopy size={12} />, disabled: !canCopy, shortcut: "Ctrl+C", onClick: onCopy },
           { id: "cut", label: n("cut"), icon: <VscCopy size={12} />, disabled: !canCut, shortcut: "Ctrl+X", onClick: onCut },
           {
@@ -63,7 +73,7 @@ export const NodeContextMenu: React.FC<NodeContextMenuProps> = ({
         ],
       },
     ];
-  }, [t, canCopy, canCut, canDelete, hasLinks, onCopy, onCut, onDuplicate, onDelete, onBreakAllLinks, onSelectLinked]);
+  }, [t, canCopy, canCut, canDelete, hasLinks, onCopy, onCut, onDuplicate, onDelete, onBreakAllLinks, onSelectLinked, onOpenNodePicker]);
 
   return (
     <ActionMenu

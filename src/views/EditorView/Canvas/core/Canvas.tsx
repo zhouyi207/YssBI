@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import {
   useCanvasDrop,
@@ -21,6 +21,7 @@ import {
 import { editorViewportScope } from '@/features/core/viewport';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
+import { getNodeSelectionOptions } from '../../ContextMenu/nodeSelectionOptions';
 import { CanvasNode } from '../../Nodes/CanvasNode';
 import CanvasOverlays, { type CanvasOverlaysModel } from '../overlays/CanvasOverlays';
 import { ConnectionLine } from './ConnectionLine';
@@ -97,6 +98,10 @@ export default function Canvas({
 
   const canvasElementRef = useRef<HTMLDivElement>(null);
   const selectionBoxRef = useRef<HTMLDivElement>(null);
+  const [nodePicker, setNodePicker] = useState<{
+    nodeId: string;
+    position: { x: number; y: number };
+  } | null>(null);
 
   const viewportScope = useMemo(
     () => (activeTabId ? editorViewportScope(groupId, activeTabId) : null),
@@ -120,6 +125,9 @@ export default function Canvas({
   const graphNodeIds = useGraphDataStore(
     useShallow((state) => (activeTabId ? state.getGraphNodeIds(activeTabId) : EMPTY_NODE_IDS)),
   );
+  const nodeSelectionNodes = useGraphDataStore((state) => (
+    getNodeSelectionOptions(activeTabId ? state.graphEntities[activeTabId] : undefined)
+  ));
   const graphRevision = useGraphDataStore((state) => (
     interactive && activeTabId
       ? state.graphEntities[activeTabId]?.sourceRevision ?? null
@@ -195,6 +203,16 @@ export default function Canvas({
     setPendingConnection(null);
   }, [setContextMenu, setPendingConnection]);
 
+  const openNodePicker = useCallback((nodeId: string, position: { x: number; y: number }) => {
+    setNodePicker({ nodeId, position });
+    setContextMenu(null);
+  }, [setContextMenu]);
+
+  const selectNodeFromPicker = useCallback((nodeId: string) => {
+    setSelectedNodeIds([nodeId], groupId);
+    setNodePicker(null);
+  }, [groupId, setSelectedNodeIds]);
+
   const overlayModel = useMemo((): CanvasOverlaysModel => ({
     graph: activeGraph
       ? { kind: activeGraph.kind, graphPath: activeGraph.graphPath }
@@ -209,6 +227,17 @@ export default function Canvas({
           sourcePort,
           onSelect: handlePaletteSelect,
           onClose: closePalette,
+      }
+      : { kind: 'hidden' },
+    nodeSelection: nodePicker
+      ? {
+          kind: 'visible',
+          x: nodePicker.position.x,
+          y: nodePicker.position.y,
+          nodes: nodeSelectionNodes,
+          currentNodeId: nodePicker.nodeId,
+          onSelect: selectNodeFromPicker,
+          onClose: () => setNodePicker(null),
         }
       : { kind: 'hidden' },
     variable: variableDropMenu
@@ -243,6 +272,9 @@ export default function Canvas({
     handlePaletteSelect,
     handleVariableDropGet,
     handleVariableDropSet,
+    nodePicker,
+    nodeSelectionNodes,
+    selectNodeFromPicker,
     setVariableDropMenu,
     sourcePort,
     variableDropMenu,
@@ -251,6 +283,7 @@ export default function Canvas({
   const isDraggingPin = activePin != null;
   const contextMenuActions = useMemo((): CanvasContextMenuActions => ({
     selectNode: (nodeId, targetGroupId) => setSelectedNodeIds([nodeId], targetGroupId ?? groupId),
+    openNodePicker,
     copyNode: (nodeId) => copyNodes([nodeId]),
     cutNode: (nodeId) => cutNodes([nodeId]),
     duplicateNode: (nodeId) => duplicateNodes([nodeId]),
@@ -269,6 +302,7 @@ export default function Canvas({
     duplicateNodes,
     groupId,
     handleNodeRemovePin,
+    openNodePicker,
     resetPinValue,
     selectLinkedNodes,
     setSelectedNodeIds,

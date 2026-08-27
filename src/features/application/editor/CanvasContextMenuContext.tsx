@@ -2,6 +2,7 @@ import { createContext, useContext } from "react";
 
 export interface CanvasContextMenuActions {
   selectNode: (nodeId: string, groupId?: string) => void;
+  openNodePicker: (nodeId: string, position: { x: number; y: number }) => void;
   copyNode: (nodeId: string) => void;
   cutNode: (nodeId: string) => Promise<boolean | undefined>;
   duplicateNode: (nodeId: string) => Promise<boolean | undefined>;

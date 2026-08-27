@@ -124,6 +124,7 @@ export const NodeContainer = React.memo<NodeContainerProps>(({
           onDelete={() => void menuActions.deleteNode(node.id)}
           onBreakAllLinks={() => void menuActions.breakAllNodeLinks(node.id)}
           onSelectLinked={() => menuActions.selectLinkedNodes(node.id)}
+          onOpenNodePicker={() => menuActions.openNodePicker(node.id, contextMenu)}
           onClose={() => setContextMenu(null)}
         />
       )}
