@@ -107,7 +107,7 @@ fn lower_package(
         .nodes
         .values()
         .enumerate()
-        .map(|(index, node)| {
+        .map(|(_index, node)| {
             let value_ref = value_refs
                 .get(&node.id)
                 .copied()

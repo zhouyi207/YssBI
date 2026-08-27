@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use thiserror::Error;
 
-use super::ApplicationSession;
+use super::execution::ApplicationSession;
 use crate::database::error::DatabaseError;
 use crate::database::runtime::{DatabaseRuntimeRegistry, DatabaseRuntimeSession};
 use crate::database_contract::DatabaseSessionOpenRequest;
