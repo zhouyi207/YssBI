@@ -12,6 +12,7 @@ import {
 import { logsDockviewLayoutController } from '@/features/core/dockview/logsDockviewLayoutController';
 import { useVisibleGraphPanel } from '@/features/application/editor/useVisibleGraphPanel';
 import { GroupContext } from '@/features/core/editor';
+import { AssistantPanel } from '@/views/AssistantView/AssistantPanel';
 import { LogWorkspaceDockview } from '@/views/LogView/LogWorkspaceDockview';
 import { OutputPanel } from '@/views/LogView/OutputPanel';
 import { DiagnosticsPanel } from '@/views/LogView/DiagnosticsPanel';
@@ -123,6 +124,7 @@ export const workbenchDockviewComponents = {
   Data: WorkbenchDataPanel,
   Commands: WorkbenchCommandsPanel,
   Details: DetailsPane,
+  Assistant: AssistantPanel,
   Inspect: InspectPane,
   Result: ResultPanel,
   Logs: MainLogsPanel,

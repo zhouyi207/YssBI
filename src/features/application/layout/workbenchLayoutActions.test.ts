@@ -144,11 +144,12 @@ function componentFor(metadata: WorkbenchPanelMetadata): WorkbenchPanelInfo['com
     data: 'Data',
     commands: 'Commands',
     details: 'Details',
-      inspect: 'Inspect',
-      logs: 'Logs',
-      output: 'Output',
-      diagnostics: 'Diagnostics',
-    } as const)[metadata.viewId];
+    assistant: 'Assistant',
+    inspect: 'Inspect',
+    logs: 'Logs',
+    output: 'Output',
+    diagnostics: 'Diagnostics',
+  } as const)[metadata.viewId];
 }
 
 function panel(
@@ -805,7 +806,8 @@ describe('resetWorkbenchLayout', () => {
 
     expect(harness.panelIds().sort()).toEqual([
       ...beforeIds,
-      'created:diagnostics:1',
+      'created:assistant:1',
+      'created:diagnostics:2',
     ].sort());
     expect(harness.groupPanelIds('grid-a')).toEqual([
       'editor-left-a',
@@ -827,10 +829,11 @@ describe('resetWorkbenchLayout', () => {
     expect(harness.groupPanelIds('edge-bottom')).toEqual([
       'logs',
       'output',
-      'created:diagnostics:1',
+      'created:diagnostics:2',
     ]);
     expect(harness.groupPanelIds('edge-right')).toEqual([
       'details',
+      'created:assistant:1',
       'result-grid',
       'result-right',
       'inspect',

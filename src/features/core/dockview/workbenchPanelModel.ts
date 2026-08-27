@@ -16,6 +16,7 @@ export type WorkbenchActivityViewId = (typeof WORKBENCH_ACTIVITY_VIEW_IDS)[numbe
 export const WORKBENCH_VIEW_IDS = [
   ...WORKBENCH_ACTIVITY_VIEW_IDS,
   'details',
+  'assistant',
   'inspect',
   'logs',
   'output',
@@ -32,6 +33,7 @@ export type WorkbenchComponentId =
   | 'Data'
   | 'Commands'
   | 'Details'
+  | 'Assistant'
   | 'Inspect'
   | 'Result'
   | 'Logs'
@@ -110,6 +112,7 @@ const COMPONENT_BY_VIEW_ID: Readonly<Record<WorkbenchViewId, WorkbenchComponentI
   data: 'Data',
   commands: 'Commands',
   details: 'Details',
+  assistant: 'Assistant',
   inspect: 'Inspect',
   logs: 'Logs',
   output: 'Output',

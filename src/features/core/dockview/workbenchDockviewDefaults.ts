@@ -22,6 +22,7 @@ export const WORKBENCH_HOME_EDGE = {
   data: 'left',
   commands: 'left',
   details: 'right',
+  assistant: 'right',
   inspect: 'right',
   logs: 'bottom',
   output: 'bottom',

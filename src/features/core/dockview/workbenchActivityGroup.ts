@@ -73,10 +73,27 @@ function sourcePanel(
   return event.api.getPanel(transfer.panelId);
 }
 
+function sourceGroupContainsPersistentView(
+  event: Pick<WorkbenchActivityDropEvent, 'api' | 'getData'>,
+): boolean {
+  const transfer = event.getData();
+  if (!transfer
+    || transfer.viewId !== event.api.id
+    || transfer.panelId !== null
+    || transfer.tabGroupId !== undefined) return false;
+
+  const sourceGroup = event.api.getGroup(transfer.groupId);
+  return sourceGroup?.panels.some((panel) => (
+    persistentSidebarMetadata(panel) !== undefined
+  )) === true;
+}
+
 export function shouldAllowWorkbenchActivityDrop(
   event: WorkbenchActivityDropEvent,
 ): boolean {
   const transfer = event.getData();
+  if (sourceGroupContainsPersistentView(event)) return false;
+
   const source = sourcePanel(event);
   const sourceIsPersistent = persistentSidebarMetadata(source) !== undefined;
   const sourceIsActivity = isWorkbenchActivityPanel(source)

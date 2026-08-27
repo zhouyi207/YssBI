@@ -28,6 +28,7 @@ const VIEW_TITLE_KEYS = {
   data: 'activityBar.data',
   commands: 'activityBar.commands',
   details: 'panel.details',
+  assistant: 'panel.assistant',
   inspect: 'panel.inspect',
   logs: 'panel.logs',
   output: 'panel.output',
@@ -52,6 +53,30 @@ function viewRequest(viewId: WorkbenchViewId) {
   };
 }
 
+async function createAssistantAtDefaultHome(): Promise<WorkbenchPanelInfo | null> {
+  let assistantPanelInstanceId: string | undefined;
+
+  await workbenchDockviewInternal.runLayoutTransaction((tx) => {
+    const details = tx.ensureView(viewRequest('details'));
+    const assistant = tx.ensureView(viewRequest('assistant'));
+    const detailsIndex = tx.listGroupPanels(details.groupId).findIndex((panel) => (
+      panel.panelInstanceId === details.panelInstanceId
+    ));
+
+    tx.move({
+      panelInstanceId: assistant.panelInstanceId,
+      groupId: details.groupId,
+      index: detailsIndex < 0 ? 1 : detailsIndex + 1,
+      activate: true,
+    });
+    assistantPanelInstanceId = assistant.panelInstanceId;
+  });
+
+  return assistantPanelInstanceId
+    ? workbenchDockviewPort.getPanel(assistantPanelInstanceId) ?? null
+    : null;
+}
+
 export async function revealWorkbenchView(
   viewId: WorkbenchViewId,
 ): Promise<WorkbenchPanelInfo | null> {
@@ -63,6 +88,7 @@ export async function revealWorkbenchView(
         : null;
     }
     if (!hasContextFor(viewId)) return null;
+    if (viewId === 'assistant') return await createAssistantAtDefaultHome();
     return await workbenchDockviewPort.ensureView(viewRequest(viewId));
   } catch (error) {
     showWorkbenchLayoutError(error);
@@ -173,6 +199,7 @@ export async function resetWorkbenchLayout(): Promise<void> {
       const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
         tx.ensureView(viewRequest(viewId)));
       const details = tx.ensureView(viewRequest('details'));
+      const assistant = tx.ensureView(viewRequest('assistant'));
       const logs = tx.ensureView(viewRequest('logs'));
       const output = tx.ensureView(viewRequest('output'));
       const diagnostics = tx.ensureView(viewRequest('diagnostics'));
@@ -219,6 +246,12 @@ export async function resetWorkbenchLayout(): Promise<void> {
         activate: false,
       });
       tx.move({
+        panelInstanceId: assistant.panelInstanceId,
+        groupId: right.groupId,
+        index: 1,
+        activate: false,
+      });
+      tx.move({
         panelInstanceId: logs.panelInstanceId,
         groupId: bottom.groupId,
         index: 0,
@@ -250,7 +283,7 @@ export async function resetWorkbenchLayout(): Promise<void> {
         tx.move({
           panelInstanceId: panel.panelInstanceId,
           groupId: right.groupId,
-          index: index + 1,
+          index: index + 2,
         });
       }
 
