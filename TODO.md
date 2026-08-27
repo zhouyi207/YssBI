@@ -1694,3 +1694,9 @@ Execution 不知道具体 UI
 - [ ] 建立 owned ProjectDatabaseSessionFacts 到 DatabaseRuntimeSession 的 typed Application open seam，保持 Database 工作在 Project snapshot/lock 之外。
 - [ ] 建立 Project prepare、Database prepare/commit、Project finalize 的 non-Clone linear handoff contract，失败显式进入 typed compensation/recovery。
 - [ ] 为 staged run/database coordinator 增加 stale session、无公共 RunId 的 admission/cancellation 与 database handoff failure focused 回归，保留旧 production route。
+- [ ] 完成 Presentation Task 3 的 test-gated neutral result category、Graph output matrix 与 Worksheet plot policy seam，旧 OpenResultWindow/worksheet route 仍保持唯一生产路径。
+- [ ] 为 Worksheet plot 复用 Database-owned NumericColumnPair，执行有限点过滤、cap/stride、axis format 与 Project/Database/session basis revalidation，不向 Application 泄漏 Polars 或 DatabaseInstance。
+- [ ] 完成 Graph Task 9 的 production-unreachable neutral package compiler，补齐 PlanOperation kind/input bindings，并仅为精确 debug view lower observation intent。
+- [ ] 验证 Graph compiler 的两个 focused cases 与 staged catalog mapper，Rust fmt/check/diff 均通过；完整 Rust architecture gate 延后至原子 cutover 稳定后执行。
+- [ ] 建立 Worksheet committed/draft/dirty/pending-save 分离、四字段 optimistic key、项目替换 stale suppression 与 matching committed echo rebase 的 staged Application capabilities。
+- [ ] 完成 Worksheet Task 6 focused Vitest 4/4 与 typecheck，保留 production caller、worksheetApplicationPort 和旧 preview route 待 Task 8 原子切换。
