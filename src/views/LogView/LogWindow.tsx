@@ -1,33 +1,20 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { LogWorkspaceDockview } from './LogWorkspaceDockview';
-import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
-import { logger } from '@/utils/appLogger';
+import { useCurrentWindowActions, usePersistedWindow, useWindowMaximized } from '@/features/application/window';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowChrome } from '@/shared/ui/WindowChrome';
 
 export const LogWindow = () => {
   const { t } = useTranslation();
   const isMaximized = useWindowMaximized('LogWindow');
+  const windowActions = useCurrentWindowActions('LogWindow');
 
   usePersistedWindow('logs');
 
   useEffect(() => {
-    void getCurrentWindow().show().catch((e) => logger.app.error(String(e), 'LogWindow'));
-  }, []);
-
-  const handleMinimize = async () => {
-    await getCurrentWindow().minimize();
-  };
-
-  const handleMaximize = async () => {
-    await getCurrentWindow().toggleMaximize();
-  };
-
-  const handleClose = async () => {
-    await getCurrentWindow().close();
-  };
+    void windowActions.show();
+  }, [windowActions]);
 
   return (
     <div className="flex flex-col h-screen bg-[var(--workbench-bg)] text-foreground overflow-hidden" data-yssbi-workbench>
@@ -37,9 +24,9 @@ export const LogWindow = () => {
         actions={
           <WindowChromeControls
             isMaximized={isMaximized}
-            onMinimize={handleMinimize}
-            onMaximize={handleMaximize}
-            onClose={handleClose}
+            onMinimize={windowActions.minimize}
+            onMaximize={windowActions.maximize}
+            onClose={windowActions.close}
           />
         }
       >

@@ -5,6 +5,8 @@ export {
   readSecondaryWindowState,
 } from "./secondaryWindowGeometryStore";
 export { useWindowMaximized } from "./useWindowMaximized";
+export { useCurrentWindowActions } from './useCurrentWindowActions';
+export type { CurrentWindowActions } from './useCurrentWindowActions';
 export { createPersistedWindow } from "./createPersistedWindow";
 export type {
   PersistedWindowOptions,

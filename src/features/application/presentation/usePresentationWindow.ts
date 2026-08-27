@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { WindowKind } from '@/shared/types/settings';
 import { usePersistedWindow } from '@/features/application/window/usePersistedWindow';
 import { usePresentationWindowLifecycle } from '@/features/application/window/usePresentationWindowLifecycle';
 import { useWindowMaximized } from '@/features/application/window/useWindowMaximized';
-import { logger } from '@/utils/appLogger';
+import { useCurrentWindowActions } from '@/features/application/window/useCurrentWindowActions';
 import { loadPresentationWindow, type PresentationWindowState } from './loadPresentationWindow';
 import { parsePresentationWindowQuery } from './parsePresentationWindowQuery';
 
@@ -18,20 +17,14 @@ export function usePresentationWindow(windowKind: WindowKind, logTag: string) {
   usePresentationWindowLifecycle(resultId);
   usePersistedWindow(windowKind);
   const isMaximized = useWindowMaximized(logTag);
+  const windowActions = useCurrentWindowActions(logTag);
 
   useEffect(() => {
     let cancelled = false;
 
     const revealWindow = async (title?: string) => {
-      if (title) {
-        await getCurrentWindow().setTitle(title).catch(() => {});
-      }
-      await getCurrentWindow().show().catch((error) => {
-        logger.app.error(
-          `Failed to show window: ${error instanceof Error ? error.message : String(error)}`,
-          logTag,
-        );
-      });
+      if (title) await windowActions.setTitle(title);
+      await windowActions.show();
     };
 
     if (!resultId) {
@@ -53,7 +46,7 @@ export function usePresentationWindow(windowKind: WindowKind, logTag: string) {
     return () => {
       cancelled = true;
     };
-  }, [resultId, logTag]);
+  }, [resultId, windowActions]);
 
   return { resultId, state, isMaximized };
 }

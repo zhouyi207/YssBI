@@ -14,7 +14,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getRememberedColorTheme } from '@/features/application/settings/colorThemePresets';
-import { openExternalUrlWithDialog, useWindowMaximized } from '@/features/application/window';
+import { openExternalUrlWithDialog, useCurrentWindowActions, useWindowMaximized } from '@/features/application/window';
 import { useProjectIOStore } from '@/features/core/dataStore';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import { BrandLockup } from '@/shared/ui/BrandMark';
@@ -36,6 +36,7 @@ export function ProjectPickerTitleBar({
   const updateAppearance = useSettingsStore((state) => state.updateAppearance);
   const isLightTheme = themeMode === 'light';
   const isMaximized = useWindowMaximized('ProjectPicker');
+  const windowActions = useCurrentWindowActions('ProjectPicker');
   const toggleThemeMode = () => {
     const nextMode = isLightTheme ? 'dark' : 'light';
     updateAppearance({
@@ -102,7 +103,14 @@ export function ProjectPickerTitleBar({
           </ToolbarIconButton>
         </>
       }
-      windowActions={<WindowChromeControls isMaximized={isMaximized} />}
+      windowActions={(
+        <WindowChromeControls
+          isMaximized={isMaximized}
+          onMinimize={windowActions.minimize}
+          onMaximize={windowActions.maximize}
+          onClose={windowActions.close}
+        />
+      )}
     >
       <BrandLockup className="pointer-events-none self-center px-4" />
       <div className="pointer-events-none my-2.5 flex items-center border-l border-[var(--strong-border)] pl-4 font-heading text-[11px] font-medium tracking-wide text-muted-foreground">

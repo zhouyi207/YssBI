@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useWindowMaximized } from '@/features/application/window';
+import { useCurrentWindowActions, useWindowMaximized } from '@/features/application/window';
 import { useCustomTitleBar } from '@/features/application/window/useWindowDecorations';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowTitleBar, WindowTitleBarActions } from '@/shared/ui/WindowTitleBar';
@@ -37,6 +37,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 }) => {
   const { t } = useTranslation();
   const isMaximized = useWindowMaximized('DatabaseEditorTitleBar');
+  const windowActions = useCurrentWindowActions('DatabaseEditorTitleBar');
   const showCustomChrome = useCustomTitleBar();
 
   const selectValue = selectedDataframeId && dataframes.some((o) => o.value === selectedDataframeId)
@@ -111,7 +112,12 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     <WindowTitleBar className="z-50">
       {toolbarBody}
       <WindowTitleBarActions>
-        <WindowChromeControls isMaximized={isMaximized} />
+        <WindowChromeControls
+          isMaximized={isMaximized}
+          onMinimize={windowActions.minimize}
+          onMaximize={windowActions.maximize}
+          onClose={windowActions.close}
+        />
       </WindowTitleBarActions>
     </WindowTitleBar>
   );

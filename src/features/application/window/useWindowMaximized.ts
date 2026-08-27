@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { currentAppWindow } from '@/services/platform/appWindow';
 import { logger } from '@/utils/appLogger';
 
 /** 跟踪当前 Tauri 窗口是否最大化（用于最大化按钮 tooltip） */
@@ -11,24 +11,26 @@ export function useWindowMaximized(logTag = 'Window') {
     let cleanup: (() => void) | null = null;
 
     const setup = async () => {
-      const win = getCurrentWindow();
-      const maximized = await win.isMaximized().catch(() => false);
-      if (!disposed) setIsMaximized(maximized);
+      const win = currentAppWindow();
+      const maximized = await win.isMaximized();
+      if (!disposed && maximized.ok) setIsMaximized(maximized.value);
 
-      const unlisten = await win.onResized(async () => {
+      const unlisten = await win.onResized(() => {
         if (disposed) return;
-        try {
-          setIsMaximized(await win.isMaximized());
-        } catch (e) {
-          logger.sys.warn(`Failed to check maximized state: ${String(e)}`, logTag);
-        }
+        void win.isMaximized().then((result) => {
+          if (result.ok && !disposed) setIsMaximized(result.value);
+          else if (!result.ok) logger.sys.warn('window maximized state unavailable', logTag);
+        });
       });
 
-      if (disposed) unlisten();
-      else cleanup = unlisten;
+      if (disposed) {
+        if (unlisten.ok) unlisten.value();
+      } else if (unlisten.ok) {
+        cleanup = unlisten.value;
+      }
     };
 
-    setup().catch((e) => logger.app.error(String(e), logTag));
+    void setup();
 
     return () => {
       disposed = true;

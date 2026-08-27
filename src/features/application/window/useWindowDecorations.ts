@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentAppWindow } from '@/services/platform/appWindow';
 import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import { logger } from "@/utils/appLogger";
 import { resolveWindowDecorations, usesCustomTitleBar } from "./windowDecorationPolicy";
@@ -10,14 +10,9 @@ export function useWindowDecorationEffect(): void {
 
     useEffect(() => {
         const native = resolveWindowDecorations(titleBarStyle);
-        void getCurrentWindow()
-            .setDecorations(native)
-            .catch((error) => {
-                logger.app.warn(
-                    `Failed to set window decorations: ${error instanceof Error ? error.message : String(error)}`,
-                    "Window",
-                );
-            });
+        void currentAppWindow().setDecorations(native).then((result) => {
+            if (!result.ok) logger.app.warn('window decorations unavailable', 'Window');
+        });
     }, [titleBarStyle]);
 }
 

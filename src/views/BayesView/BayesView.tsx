@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -11,7 +10,7 @@ import { issueTargetStep } from '@/features/domain/bayes';
 import { useProjectSync } from '@/features/application/initialization';
 import { initProjectSync, useDatabaseStore } from '@/features/core/dataStore';
 import { DatabaseService } from '@/services/database/databaseService';
-import { usePersistedWindow, useWindowMaximized } from '@/features/application/window';
+import { useCurrentWindowActions, usePersistedWindow, useWindowMaximized } from '@/features/application/window';
 import { logger } from '@/utils/appLogger';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowMenuBar } from '@/shared/ui/WindowChrome';
@@ -66,6 +65,7 @@ export async function hydrateBayesDatabaseMetadata(
 export function BayesView() {
   const { t } = useTranslation();
   const isMaximized = useWindowMaximized('BayesView');
+  const windowActions = useCurrentWindowActions('BayesView');
 
   usePersistedWindow('bayes');
   useProjectSync();
@@ -76,13 +76,13 @@ export function BayesView() {
       try {
         await initProjectSync();
         if (cancelled) return;
-        await getCurrentWindow().show();
+        await windowActions.show();
       } catch (error) {
         logger.app.error(String(error), 'BayesView');
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [windowActions]);
 
   const databases = useDatabaseStore(state => state.databases);
   const updateDatabase = useDatabaseStore(state => state.updateDatabase);
@@ -134,7 +134,16 @@ export function BayesView() {
 
   return (
     <div className="flex h-screen min-h-0 flex-col bg-background text-foreground" data-yssbi-workbench>
-      <WindowMenuBar windowActions={<WindowChromeControls isMaximized={isMaximized} />}>
+      <WindowMenuBar
+        windowActions={(
+          <WindowChromeControls
+            isMaximized={isMaximized}
+            onMinimize={windowActions.minimize}
+            onMaximize={windowActions.maximize}
+            onClose={windowActions.close}
+          />
+        )}
+      >
         <div className="flex items-center gap-2 px-4 pointer-events-none self-center">
           <div className="flex size-5 items-center justify-center rounded bg-(--accent-color)">
             <span className="text-white font-black text-xs">B</span>

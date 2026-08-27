@@ -12,7 +12,7 @@ import {
   type MenubarMenuItem,
 } from '@/features/application/menubar/menubarViewItems';
 import { getRememberedColorTheme } from '@/features/application/settings/colorThemePresets';
-import { openExternalUrlWithDialog, useWindowMaximized } from '@/features/application/window';
+import { openExternalUrlWithDialog, useCurrentWindowActions, useWindowMaximized } from '@/features/application/window';
 import { useActiveProjectPath } from '@/features/core/dataStore';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import { APP_LINKS } from '@/app/appConfig/default';
@@ -285,6 +285,7 @@ export function Menubar() {
   const updateAppearance = useSettingsStore((state) => state.updateAppearance);
   const isLightTheme = themeMode === 'light';
   const isMaximized = useWindowMaximized('Menubar');
+  const windowActions = useCurrentWindowActions('Menubar');
 
   const toggleThemeMode = () => {
     const nextMode = isLightTheme ? 'dark' : 'light';
@@ -403,7 +404,14 @@ export function Menubar() {
             </ToolbarIconButton>
           </>
         }
-        windowActions={<WindowChromeControls isMaximized={isMaximized} />}
+        windowActions={(
+          <WindowChromeControls
+            isMaximized={isMaximized}
+            onMinimize={windowActions.minimize}
+            onMaximize={windowActions.maximize}
+            onClose={windowActions.close}
+          />
+        )}
       >
         <BrandLockup className="pointer-events-none self-center px-4" />
 

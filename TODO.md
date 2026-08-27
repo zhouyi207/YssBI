@@ -1637,3 +1637,6 @@ Execution 不知道具体 UI
 - [ ] 移除 shared URL、Bayes reveal 与 graph clipboard 的直接 Tauri runtime imports，统一通过 platform adapter 处理失败。
 - [ ] 保留 platform adapter 的 invalid argument/result 与 operation failure closed variants，避免暴露原始 native error prose。
 - [ ] 完成 Frontend Task 2 platform contract slice 的 typecheck 与 diff 校验；Vitest runner 的既有 Windows 阻塞继续记录。
+- [ ] 让 Application window actions 通过 Services platform handle 统一提供 show/minimize/maximize/close/title，Views 与 shared chrome 不再直接持有 Tauri Window。
+- [ ] 迁移 ProjectPicker、Menubar、Database/Bayes/Log/Presentation 窗口 chrome 与 workbench label 到 Application/platform seam，保持现有窗口行为。
+- [ ] 删除对应 raw window architecture debt，完成窗口 caller typecheck 与 diff 校验，保留 geometry/close coordinator 的后续 owner migration。

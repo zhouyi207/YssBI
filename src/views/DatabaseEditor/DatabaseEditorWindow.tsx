@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { DatabaseService } from '@/services/database/databaseService';
 import { useProjectSync } from '@/features/application/initialization';
-import { usePersistedWindow } from '@/features/application/window';
+import { useCurrentWindowActions, usePersistedWindow } from '@/features/application/window';
 import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
 import { useDataLoader, useSelection, useDatabaseEditorKeyboard, getGridSelectionPrimaryCellText, useDatabaseExport } from '@/features/application/databaseEditor';
 import { TitleBar, Toolbar, type DataframeOption } from './Layout';
@@ -67,6 +66,7 @@ export const DatabaseEditorWindow: React.FC = () => {
   // Data loading
   const dataLoader = useDataLoader(selectedDfId);
   const exportDatabase = useDatabaseExport(selectedDfId);
+  const windowActions = useCurrentWindowActions('DatabaseEditorWindow');
 
   // Selection
   const sel = useSelection({
@@ -140,13 +140,13 @@ export const DatabaseEditorWindow: React.FC = () => {
       try {
         await initProjectSync();
         if (cancelled) return;
-        await getCurrentWindow().show();
+        await windowActions.show();
       } catch (e) {
         logger.app.error(String(e), 'DatabaseEditorWindow');
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [windowActions]);
 
   const dfOptions: DataframeOption[] = useMemo(() => Object.entries(dataframes).map(([id, df]) => {
     const d = df as { name?: string; engine?: { csv?: { path?: string }; parquet?: { path?: string }; duckDb?: { table?: string } } };

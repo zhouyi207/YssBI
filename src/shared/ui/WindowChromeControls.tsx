@@ -1,5 +1,4 @@
 import { useTranslation } from 'react-i18next';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { cn } from '@/lib/utils';
 
 function MinimizeIcon() {
@@ -60,17 +59,14 @@ export function WindowChromeControls({
 
   const handleMinimize = () => {
     if (onMinimize) void onMinimize();
-    else void getCurrentWindow().minimize();
   };
 
   const handleMaximize = () => {
     if (onMaximize) void onMaximize();
-    else void getCurrentWindow().toggleMaximize();
   };
 
   const handleClose = () => {
     if (onClose) void onClose();
-    else void getCurrentWindow().close();
   };
 
   return (

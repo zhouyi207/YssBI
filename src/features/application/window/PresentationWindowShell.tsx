@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import {
   presentationWindowErrorMessage,
   type PresentationWindowState,
 } from '@/features/application/presentation';
+import { useCurrentWindowActions } from './useCurrentWindowActions';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowChrome } from '@/shared/ui/WindowChrome';
-import { logger } from '@/utils/appLogger';
 
 interface PresentationWindowShellProps {
   logTag: string;
@@ -35,6 +34,7 @@ export function PresentationWindowShell({
   children,
 }: PresentationWindowShellProps) {
   const { t } = useTranslation();
+  const windowActions = useCurrentWindowActions(logTag);
   const error = presentationWindowErrorMessage(state, {
     ...errorMessages,
     pending: (completed, total) => t('resultState.pending', { completed, total: total ?? '?' }),
@@ -42,30 +42,6 @@ export function PresentationWindowShell({
     upstreamFailed: t('resultState.upstreamFailed'),
     cancelled: t('resultState.cancelled'),
   });
-
-  const handleMinimize = async () => {
-    try {
-      await getCurrentWindow().minimize();
-    } catch (e) {
-      logger.app.error(`Failed to minimize: ${String(e)}`, logTag);
-    }
-  };
-
-  const handleMaximize = async () => {
-    try {
-      await getCurrentWindow().toggleMaximize();
-    } catch (e) {
-      logger.app.error(`Failed to maximize: ${String(e)}`, logTag);
-    }
-  };
-
-  const handleClose = async () => {
-    try {
-      await getCurrentWindow().close();
-    } catch (e) {
-      logger.app.error(`Failed to close: ${String(e)}`, logTag);
-    }
-  };
 
   if (state.status === 'loading') {
     return (
@@ -82,9 +58,9 @@ export function PresentationWindowShell({
         actions={
           <WindowChromeControls
             isMaximized={isMaximized}
-            onMinimize={handleMinimize}
-            onMaximize={handleMaximize}
-            onClose={handleClose}
+            onMinimize={windowActions.minimize}
+            onMaximize={windowActions.maximize}
+            onClose={windowActions.close}
           />
         }
       >
