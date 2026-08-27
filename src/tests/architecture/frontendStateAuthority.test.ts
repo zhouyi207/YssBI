@@ -1,6 +1,8 @@
+import { withIsolatedTypeScriptProject } from '@/tests/helpers/typescriptAudit';
 import { describe, expect, it } from 'vitest';
 import {
   auditFrontendStateAuthority,
+  discoverFrontendStateAuthorityMembers,
   type FrontendStateAuthorityMember,
 } from './frontendStateAuthority';
 
@@ -64,5 +66,45 @@ describe('frontend state authority audit', () => {
       expect.objectContaining({ ruleId: 'frontend-state-authority-action-cycle' }),
       expect.objectContaining({ ruleId: 'frontend-state-authority-unresolved-delegate' }),
     ]));
+  });
+
+  it('discovers manifest members from the project snapshot and fails closed when one is absent', () => {
+    const storeModule = 'src/features/core/fixture/authorityStore.ts';
+    const sources = [{
+      path: storeModule,
+      source: `
+        import { create } from 'zustand';
+        interface FixtureStore {
+          projectInstanceId: string | null;
+          updateDocument(path: string): void;
+        }
+        export const useFixtureStore = create<FixtureStore>((set) => ({
+          projectInstanceId: null,
+          updateDocument: (path) => set({ projectInstanceId: path }),
+        }));
+      `,
+    }];
+    const manifest = [
+      field({ storeModule, member: 'projectInstanceId' }),
+      field({ storeModule, member: 'updateDocument', memberKind: 'action' }),
+      field({ storeModule, member: 'missingAction', memberKind: 'action' }),
+    ];
+
+    withIsolatedTypeScriptProject(new Map(sources.map(({ path, source }) => [path, source])), (context) => {
+      const members = discoverFrontendStateAuthorityMembers(context, sources, manifest);
+      expect(members.map(({ member, discovered }) => ({ member, discovered }))).toEqual([
+        { member: 'projectInstanceId', discovered: true },
+        { member: 'updateDocument', discovered: true },
+        { member: 'missingAction', discovered: false },
+      ]);
+      expect(auditFrontendStateAuthority(members, manifest)).toEqual([
+        expect.objectContaining({
+          ruleId: 'frontend-state-authority-missing-member',
+          storeModule,
+          member: 'missingAction',
+          memberKind: 'action',
+        }),
+      ]);
+    });
   });
 });

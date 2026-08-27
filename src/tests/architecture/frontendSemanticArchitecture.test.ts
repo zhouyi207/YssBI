@@ -25,6 +25,7 @@ import {
 } from './frontendExternalDependencyPolicy';
 import { createRepositoryTextReader } from './frontendArchitectureModel';
 import { auditFrontendSemantics } from './frontendSemanticAudit';
+import { FRONTEND_STATE_AUTHORITY } from './frontendStateAuthority';
 
 const fixtureSources = new Map<string, string>([
   ['src/services/ipc/invokeCommand.ts', `
@@ -297,6 +298,7 @@ describe('frontend semantic architecture', () => {
         context,
         productionTypeScriptSources(context),
         FRONTEND_ARCHITECTURE_POLICY,
+        { stateAuthorityManifest: FRONTEND_STATE_AUTHORITY },
       );
       const debt = compareExactFrontendDebt(
         [...dependencyReport.findings, ...semanticFindings],

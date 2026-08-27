@@ -15,6 +15,12 @@ import {
   normalizeTypeScriptPath,
   type TypeScriptAuditProject,
 } from '@/tests/helpers/typescriptAudit';
+import {
+  auditFrontendStateAuthority,
+  discoverFrontendStateAuthorityMembers,
+  type FrontendStateAuthorityEntry,
+  type FrontendStateAuthorityFinding,
+} from './frontendStateAuthority';
 import { classifyFrontendSources } from './frontendArchitecturePolicy';
 import type {
   FrontendArchitecturePolicy,
@@ -99,6 +105,22 @@ function semanticFinding(
     line: location.line,
     column: location.column,
   };
+}
+
+function stateAuthoritySemanticFinding(
+  finding: FrontendStateAuthorityFinding,
+  classification: ReadonlyMap<string, FrontendLayer>,
+): FrontendFinding {
+  return semanticFinding(
+    finding.ruleId,
+    finding.storeModule,
+    classification.get(finding.storeModule) ?? 'core',
+    finding.memberKind === 'action' ? 'call' : 'property-access',
+    `state-authority:${finding.storeModule}::${finding.memberKind}::${finding.member}`,
+    null,
+    finding.member,
+    { line: finding.line ?? 1, column: finding.column ?? 1 },
+  );
 }
 
 function exactCapability(
@@ -434,6 +456,7 @@ export function auditFrontendSemantics(
   context: TypeScriptAuditProject,
   sources: readonly ArchitectureSource[],
   policy: FrontendArchitecturePolicy,
+  options: FrontendSemanticAuditOptions = {},
 ): readonly FrontendFinding[] {
   const sourcePaths = new Set(sources.map(({ path }) => path));
   const classificationReport = classifyFrontendSources(sources);
@@ -457,6 +480,18 @@ export function auditFrontendSemantics(
       'invoke',
       occurrence,
     ));
+
+  if (options.stateAuthorityManifest) {
+    const stateAuthorityMembers = discoverFrontendStateAuthorityMembers(
+      context,
+      sources,
+      options.stateAuthorityManifest,
+    );
+    findings.push(...auditFrontendStateAuthority(
+      stateAuthorityMembers,
+      options.stateAuthorityManifest,
+    ).map((finding) => stateAuthoritySemanticFinding(finding, classification)));
+  }
 
   for (const source of sources) {
     const sourceLayer = classification.get(source.path);
@@ -482,4 +517,8 @@ export function auditFrontendSemantics(
     findingIdentity(finding),
     finding,
   ])).values()].sort(findingSort);
+}
+
+export interface FrontendSemanticAuditOptions {
+  readonly stateAuthorityManifest?: readonly FrontendStateAuthorityEntry[];
 }
