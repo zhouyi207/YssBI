@@ -8,6 +8,45 @@ use super::model::{
 const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
     ("src-tauri/src/lib.rs", RustLayer::CompositionRoot),
     ("src-tauri/src/main.rs", RustLayer::CompositionRoot),
+    ("src-tauri/src/execution/mod.rs", RustLayer::Execution),
+    ("src-tauri/src/execution/identity.rs", RustLayer::Execution),
+    ("src-tauri/src/execution/error.rs", RustLayer::Execution),
+    ("src-tauri/src/execution/canonical.rs", RustLayer::Execution),
+    ("src-tauri/src/execution/settings.rs", RustLayer::Execution),
+    ("src-tauri/src/execution/plan/mod.rs", RustLayer::Execution),
+    (
+        "src-tauri/src/execution/plan/identity.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/plan/basis.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/plan/model.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/plan/package.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/plan/parameter.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/plan/observation.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/plan/validation.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/plan/validation/control.rs",
+        RustLayer::Execution,
+    ),
+    ("src-tauri/src/execution/ports/mod.rs", RustLayer::Execution),
     (
         "src-tauri/src/application/execution/session_factory.rs",
         RustLayer::Application,

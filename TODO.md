@@ -1571,3 +1571,6 @@ Execution 不知道具体 UI
 - [ ] 将项目文件变更收敛为 neutral Project contract，并保持 watcher 相关路径过滤与 burst coalescing 语义。
 - [ ] 让 Application watcher session 以 epoch 和可重试 drain/join owner 管理替换与关闭生命周期，禁止 stale/closed worker 回写。
 - [ ] 将 notify/filesystem 具体实现限制在 Platform adapter，保留 typed source/sink errors 与 watcher architecture guard。
+- [ ] 建立 production-unreachable Execution identity、runtime generation 与 canonical commit receipt 合约，保持其与 Project/Graph/SCI 独立。
+- [ ] 建立最终 `execution::plan` 的 opaque provenance/basis、resource requirement、parameter tree、observation intent 与 immutable package owner。
+- [ ] 增加 duplicate parameter handle、空/空白 identity 拒绝的 focused regression，并完成 Rust check、focused plan tests、fmt 与 diff 校验。
