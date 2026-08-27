@@ -196,4 +196,59 @@ describe('attachMarkTooltip', () => {
     expect(mark.getAttribute('data-active')).toBe('false');
     expect(enterCount).toBe(1);
   });
+
+  it('coordinates active marks and cleanup across bindings sharing one controller', () => {
+    const container = document.createElement('div');
+    const tooltipElement = document.createElement('div');
+    const markA = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    const markB = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    const tooltip = new PlotTooltipController(tooltipElement, container);
+    let leaveACount = 0;
+    let leaveBCount = 0;
+    container.append(markA, markB, tooltipElement);
+    document.body.appendChild(container);
+
+    const detachA = attachMarkTooltip(select(markA).datum({ label: 'A' }), {
+      tooltip,
+      getHtml: (value) => value.label,
+      onEnter: (element) => element.setAttribute('data-active', 'true'),
+      onLeave: (element) => {
+        leaveACount++;
+        element.setAttribute('data-active', 'false');
+      },
+    });
+    const detachB = attachMarkTooltip(select(markB).datum({ label: 'B' }), {
+      tooltip,
+      getHtml: (value) => value.label,
+      onEnter: (element) => element.setAttribute('data-active', 'true'),
+      onLeave: (element) => {
+        leaveBCount++;
+        element.setAttribute('data-active', 'false');
+      },
+    });
+
+    markA.dispatchEvent(new FocusEvent('focus'));
+    markB.dispatchEvent(new MouseEvent('mouseenter', { clientX: 20, clientY: 20 }));
+    expect(tooltipElement.innerHTML).toBe('B');
+    markB.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(tooltipElement.style.opacity).toBe('1');
+    expect(tooltipElement.innerHTML).toBe('A');
+    expect(markA.getAttribute('data-active')).toBe('true');
+    expect(leaveBCount).toBe(1);
+
+    markB.dispatchEvent(new MouseEvent('mouseenter', { clientX: 20, clientY: 20 }));
+    detachB();
+    expect(tooltipElement.style.opacity).toBe('1');
+    expect(tooltipElement.innerHTML).toBe('A');
+    expect(markA.getAttribute('data-active')).toBe('true');
+    expect(markB.getAttribute('data-active')).toBe('false');
+    expect(leaveBCount).toBe(2);
+    detachB();
+    expect(leaveBCount).toBe(2);
+
+    detachA();
+    expect(tooltipElement.style.opacity).toBe('0');
+    expect(markA.getAttribute('data-active')).toBe('false');
+    expect(leaveACount).toBe(1);
+  });
 });

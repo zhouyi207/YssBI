@@ -6,5 +6,11 @@ export const LazyBinaryFormulaBlock = React.lazy(() => import('../BinaryFormulaB
 export const LazyVARFormulaBlock = React.lazy(() => import('../VARFormulaBlock'));
 export const LazyPanelFormulaBlock = React.lazy(() => import('../PanelFormulaBlock'));
 export const LazyResidualPlot = React.lazy(() => import('../ResidualPlot'));
-export const LazyScatter = React.lazy(() => import('@/views/PlotView/Scatter'));
-export const LazyKDE = React.lazy(() => import('@/views/PlotView/KDE'));
+export const LazyScatter = React.lazy(() =>
+  import('@/shared/charts/cartesian/ScatterChart')
+    .then(({ ScatterChart }) => ({ default: ScatterChart })),
+);
+export const LazyKDE = React.lazy(() =>
+  import('@/shared/charts/cartesian/KdeChart')
+    .then(({ KdeChart }) => ({ default: KdeChart })),
+);

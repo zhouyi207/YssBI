@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { numToPlotDate, plotAxisTickFormatter } from './plotTime';
+import { numToPlotDate, plotAxisTickFormatter } from './axisFormat';
 
-describe('plotTime', () => {
+describe('axisFormat', () => {
   it('numToPlotDate converts day and microsecond encodings', () => {
     expect(numToPlotDate(1, 'date').getTime()).toBe(86400000);
     expect(numToPlotDate(1_000_000, 'datetime').getTime()).toBe(1000);

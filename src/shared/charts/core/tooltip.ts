@@ -177,13 +177,87 @@ export interface AttachMarkTooltipConfig<GElement extends Element, Datum> {
 
 type MarkInputMode = 'pointer' | 'keyboard';
 
-interface ActiveMarkState<Datum> {
+interface CoordinatedMarkState {
+  order: number;
+  render(mode: MarkInputMode): void;
+  getPreferredMode(): MarkInputMode;
+  leave(): void;
+}
+
+interface ActiveMarkState<Datum> extends CoordinatedMarkState {
   datum: Datum;
   pointerHovered: boolean;
   keyboardFocused: boolean;
   pointerEvent: MouseEvent | null;
   lastMode: MarkInputMode;
-  order: number;
+}
+
+interface TooltipInteractionState {
+  activeMarks: Set<CoordinatedMarkState>;
+  activationOrder: number;
+  visibleMark: { mark: CoordinatedMarkState; mode: MarkInputMode } | null;
+}
+
+const tooltipInteractionStates = new WeakMap<
+  PlotTooltipController,
+  TooltipInteractionState
+>();
+
+function getTooltipInteractionState(
+  tooltip: PlotTooltipController,
+): TooltipInteractionState {
+  const existing = tooltipInteractionStates.get(tooltip);
+  if (existing) return existing;
+
+  const created: TooltipInteractionState = {
+    activeMarks: new Set(),
+    activationOrder: 0,
+    visibleMark: null,
+  };
+  tooltipInteractionStates.set(tooltip, created);
+  return created;
+}
+
+function renderCoordinatedMark(
+  interaction: TooltipInteractionState,
+  mark: CoordinatedMarkState,
+  mode: MarkInputMode,
+): void {
+  mark.render(mode);
+  interaction.visibleMark = { mark, mode };
+}
+
+function renderFallback(
+  tooltip: PlotTooltipController,
+  interaction: TooltipInteractionState,
+): void {
+  let fallback: CoordinatedMarkState | null = null;
+  for (const mark of interaction.activeMarks) {
+    if (!fallback || mark.order > fallback.order) fallback = mark;
+  }
+
+  if (fallback) {
+    renderCoordinatedMark(interaction, fallback, fallback.getPreferredMode());
+    return;
+  }
+
+  interaction.visibleMark = null;
+  tooltip.hide();
+}
+
+function removeCoordinatedMarks(
+  tooltip: PlotTooltipController,
+  interaction: TooltipInteractionState,
+  marks: Iterable<CoordinatedMarkState>,
+): void {
+  let removedVisibleMark = false;
+  for (const mark of marks) {
+    if (!interaction.activeMarks.delete(mark)) continue;
+    removedVisibleMark ||= interaction.visibleMark?.mark === mark;
+    mark.leave();
+  }
+
+  if (removedVisibleMark) renderFallback(tooltip, interaction);
 }
 
 const MARK_TOOLTIP_EVENT_NAMESPACE = '.markTooltip';
@@ -194,9 +268,9 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
   config: AttachMarkTooltipConfig<GElement, Datum>,
 ): () => void {
   const position = config.position ?? 'cursor';
+  const interaction = getTooltipInteractionState(config.tooltip);
   const activeMarks = new Map<GElement, ActiveMarkState<Datum>>();
-  let activationOrder = 0;
-  let visibleMark: { element: GElement; mode: MarkInputMode } | null = null;
+  let detached = false;
 
   const isActive = (state: ActiveMarkState<Datum>) =>
     state.pointerHovered || state.keyboardFocused;
@@ -207,7 +281,7 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
     return state.keyboardFocused ? 'keyboard' : 'pointer';
   };
 
-  const show = (
+  const renderMark = (
     element: GElement,
     state: ActiveMarkState<Datum>,
     mode: MarkInputMode,
@@ -218,7 +292,6 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
     } else if (state.pointerEvent) {
       config.tooltip.moveToCursor(state.pointerEvent, config.cursorOffset);
     }
-    visibleMark = { element, mode };
   };
 
   const activate = (
@@ -227,27 +300,43 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
     event: MarkInteractionEvent,
     mode: MarkInputMode,
   ) => {
-    const state = activeMarks.get(element) ?? {
-      datum,
-      pointerHovered: false,
-      keyboardFocused: false,
-      pointerEvent: null,
-      lastMode: mode,
-      order: 0,
-    };
+    let state = activeMarks.get(element);
+    if (!state) {
+      state = {
+        datum,
+        pointerHovered: false,
+        keyboardFocused: false,
+        pointerEvent: null,
+        lastMode: mode,
+        order: 0,
+        render(modeToRender) {
+          renderMark(element, this, modeToRender);
+        },
+        getPreferredMode() {
+          return preferredMode(this);
+        },
+        leave() {
+          config.onLeave?.(element, this.datum);
+        },
+      };
+      activeMarks.set(element, state);
+    }
+
     const wasActive = isActive(state);
     state.datum = datum;
     state.lastMode = mode;
-    state.order = ++activationOrder;
+    state.order = ++interaction.activationOrder;
     if (mode === 'pointer') {
       state.pointerHovered = true;
       state.pointerEvent = event as MouseEvent;
     } else {
       state.keyboardFocused = true;
     }
-    activeMarks.set(element, state);
-    if (!wasActive) config.onEnter?.(element, datum, event);
-    show(element, state, mode);
+    if (!wasActive) {
+      interaction.activeMarks.add(state);
+      config.onEnter?.(element, datum, event);
+    }
+    renderCoordinatedMark(interaction, state, mode);
   };
 
   const deactivate = (element: GElement, datum: Datum, mode: MarkInputMode) => {
@@ -262,26 +351,14 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
     }
 
     if (isActive(state)) {
-      if (visibleMark?.element === element && visibleMark.mode === mode) {
-        show(element, state, preferredMode(state));
+      if (interaction.visibleMark?.mark === state && interaction.visibleMark.mode === mode) {
+        renderCoordinatedMark(interaction, state, preferredMode(state));
       }
       return;
     }
 
     activeMarks.delete(element);
-    config.onLeave?.(element, datum);
-    if (visibleMark?.element !== element) return;
-
-    let fallback: [GElement, ActiveMarkState<Datum>] | null = null;
-    for (const entry of activeMarks) {
-      if (!fallback || entry[1].order > fallback[1].order) fallback = entry;
-    }
-    if (fallback) {
-      show(fallback[0], fallback[1], preferredMode(fallback[1]));
-    } else {
-      visibleMark = null;
-      config.tooltip.hide();
-    }
+    removeCoordinatedMarks(config.tooltip, interaction, [state]);
   };
 
   selection.attr('tabindex', 0);
@@ -303,11 +380,11 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
         if (state?.pointerHovered) {
           state.pointerEvent = mouseEvent;
           state.lastMode = 'pointer';
-          state.order = ++activationOrder;
-          if (visibleMark?.element === this && visibleMark.mode === 'pointer') {
+          state.order = ++interaction.activationOrder;
+          if (interaction.visibleMark?.mark === state && interaction.visibleMark.mode === 'pointer') {
             config.tooltip.moveToCursor(mouseEvent, config.cursorOffset);
           } else {
-            show(this, state, 'pointer');
+            renderCoordinatedMark(interaction, state, 'pointer');
           }
         }
       }
@@ -323,12 +400,11 @@ export function attachMarkTooltip<GElement extends Element, Datum>(
     });
 
   return () => {
+    if (detached) return;
+    detached = true;
     selection.on(MARK_TOOLTIP_EVENT_NAMESPACE, null);
-    for (const [element, state] of activeMarks) {
-      config.onLeave?.(element, state.datum);
-    }
+    const bindingMarks = [...activeMarks.values()];
     activeMarks.clear();
-    visibleMark = null;
-    config.tooltip.hide();
+    removeCoordinatedMarks(config.tooltip, interaction, bindingMarks);
   };
 }

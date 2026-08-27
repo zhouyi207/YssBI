@@ -1,6 +1,5 @@
 import { timeFormat } from 'd3';
-
-export type PlotAxisTimeFormat = 'date' | 'datetime' | 'number';
+import type { AxisValueType } from '@/shared/types/visualization';
 
 /** 将 plot 轴数值转为 Date（date=天数, datetime=微秒） */
 export function numToPlotDate(v: number, format: 'date' | 'datetime'): Date {
@@ -12,7 +11,7 @@ export function numToPlotDate(v: number, format: 'date' | 'datetime'): Date {
 
 /** D3 轴 tick 格式化；`number` 时返回 undefined（使用默认格式）。 */
 export function plotAxisTickFormatter(
-  format: PlotAxisTimeFormat,
+  format: AxisValueType,
 ): ((value: { valueOf(): number }) => string) | undefined {
   if (format === 'date') {
     return (d) => timeFormat('%Y-%m-%d')(numToPlotDate(Number(d.valueOf()), 'date'));

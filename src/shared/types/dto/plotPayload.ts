@@ -3,7 +3,7 @@
  * IPC → Plot 窗口边界单点窄化，禁止 View 层 `as unknown as`。
  */
 
-import type { PlotChart } from '@/features/core/resultSource';
+import type { ResultPlotKind } from './result';
 import {
   type PlotCorrelogramBarDTO,
   parsePlotCorrelogramBar,
@@ -205,7 +205,7 @@ export function parseCorrelationPlot(raw: unknown): CorrelationPlotDTO | null {
 
 
 /** 按 descriptor chart 窄化 plot payload；失败返回 null（由调用方渲染局部 invalid 状态）。 */
-export function parsePlotPayload(chart: PlotChart, raw: unknown): ParsedPlotPayload | null {
+export function parsePlotPayload(chart: ResultPlotKind, raw: unknown): ParsedPlotPayload | null {
   switch (chart) {
     case 'correlogram': {
       const data = parseCorrelogramPlot(raw);

@@ -55,16 +55,3 @@ export function acfSeriesToBars(acf: number[]): CorrelogramBarDTO[] {
 export function pacfSeriesToBars(pacf: number[]): CorrelogramBarDTO[] {
   return pacf.map((value, i) => ({ lag: i + 1, value }));
 }
-
-export function formatPValueDisplay(p: number): string {
-  return p < 0.0001 ? p.toExponential(2) : p.toFixed(4);
-}
-
-/** Correlogram tooltip 中 Q / p-value 行（仅 Plot 柱条有内容） */
-export function correlogramLjungBoxTooltipHtml(bar: CorrelogramBarDTO): string {
-  if (!hasLjungBoxStats(bar)) return '';
-  return (
-    `Q(${bar.lag}): <b>${bar.qStat.toFixed(4)}</b><br/>` +
-    `p-value: <b>${formatPValueDisplay(bar.pValue)}</b>`
-  );
-}

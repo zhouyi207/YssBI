@@ -11,7 +11,7 @@ import { useChartTheme } from '@/shared/charts/core';
 import { SectionHeader } from './RegressionShared';
 import { InfoAccentButton } from './InfoViewControls';
 
-const CorrelogramChart = React.lazy(() => import('@/views/PlotView/CorrelogramChart'));
+const CorrelogramChart = React.lazy(() => import('@/shared/charts/statistical/CorrelogramChart'));
 
 export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[]; residualLabel?: string }) {
   const { t } = useTranslation();

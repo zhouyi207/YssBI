@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { parsePlotPayload, usePresentationWindow } from '@/features/application/presentation';
+import { PlotResultView } from '@/features/application/presentation/PlotResultView';
 import { PresentationWindowShell } from '@/features/application/window/PresentationWindowShell';
-import { PlotWindowContent } from './PlotWindowContent';
 
 const PLOT_ICON = (
   <svg className="h-4 w-4 text-[var(--accent-color)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -42,9 +42,9 @@ export const PlotWindow: React.FC = () => {
       }}
       contentClassName="flex min-h-0 flex-1 flex-col p-4"
     >
-      <PlotWindowContent
+      <PlotResultView
         payload={plotPayload}
-        invalidFormatMessage={t('plot.invalidData')}
+        invalidContent={t('plot.invalidData')}
       />
     </PresentationWindowShell>
   );

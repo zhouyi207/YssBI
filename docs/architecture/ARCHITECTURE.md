@@ -99,6 +99,16 @@ components/ui and shared/ui
 - root layout 只在启动 hydration 时恢复；当前按 window label 隔离的 key 是 `yssbi-workbench-layout:<window-label>`（空 label 回退为 `main`），payload 只有 `root` 与 `nested.logs`，不含版本字段、preferences、迁移或旧 reader。Project replacement 不会再次从该 key 恢复 root topology。
 - persisted Assistant 若存在则恢复其保存的 group/position；若用户已关闭 Assistant 且 snapshot 中缺失，startup restore 不会 additive ensure。Project replacement 保留 Details 与 Assistant topology，仅清理 project-scoped editor、Inspect 与 Result panels。
 
+### 3.1 Plot / Visualization
+
+Rust scientific modules 与 result payloads 拥有统计计算、canonical ordering、confidence fields 和其他科学决策。React 不成为第二套 scientific authority：Result 与 Worksheet source adapters 将 authoritative DTOs 转换为 source-independent discriminated `ChartModel` union；renderers 不感知 Rust、IPC、stores、report workflows 或 Bayes workflows。
+
+- `src/shared/charts/ChartRenderer.tsx` 是唯一的 generic `ChartModel` dispatcher。其 registry 将 model kinds 映射到 final leaf renderers；已有窄 presentation contract 的 specialized report composition 可以直接导入 leaf renderer。
+- `src/shared/charts/core/` 拥有共享 sizing、theme、geometry、stable SVG layers 与 tooltip behavior。`cartesian/` 拥有 generic Cartesian marks/axes；`statistical/` 拥有 domain-specific statistical visual grammars。两个 renderer categories 不互相依赖，category/core modules 也不导入 root public barrel。
+- 当前 D3/SVG renderers 通过 keyed incremental joins 更新 stable named layers，不清空整个 SVG；`core/useChartContainerSize.ts` 是 chart production modules 中唯一创建 `ResizeObserver` 的位置。
+- `views/PlotView/PlotWindow.tsx` 只保留 standalone window shell/router。Reusable renderers 不位于 `views/`，obsolete compatibility paths 直接删除而不包装。
+- Canvas 与 ECharts 是需要 profiling 和显式设计决策的未实现 future options；两者都不是当前 renderer 或 project dependency。
+
 ## 4. Commands → application → domain
 
 ### 4.1 Command interface

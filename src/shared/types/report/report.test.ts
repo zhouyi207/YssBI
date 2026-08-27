@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import * as correlogramModule from './correlogram';
 import {
   normalizeDurbinWatsonResult,
   normalizeSerialTestsResponse,
@@ -41,6 +42,10 @@ describe('normalizeSerialTestsResponse', () => {
 });
 
 describe('correlogram report DTO', () => {
+  it('keeps tooltip HTML builders out of the report type boundary', () => {
+    expect(correlogramModule).not.toHaveProperty('correlogramLjungBoxTooltipHtml');
+  });
+
   it('builds report bars without ljung-box stats', () => {
     const acf = acfSeriesToBars([1, 0.5, 0.2]);
     expect(acf[0]).toEqual({ lag: 0, value: 1 });

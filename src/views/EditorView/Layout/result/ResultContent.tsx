@@ -10,10 +10,10 @@ import {
   presentationWindowErrorMessage,
   type PresentationWindowState,
 } from '@/features/application/presentation';
+import { PlotResultView } from '@/features/application/presentation/PlotResultView';
 import { ReportResultView, UnifiedResultView } from '@/features/core/resultSource';
 import { ResultViewPresentationProvider } from '@/features/core/resultSource/resultViewPresentation';
 import type { ResultDescriptor } from '@/shared/types/dto/result';
-import { PlotWindowContent } from '@/views/PlotView/PlotWindowContent';
 
 function ResultStatus({ message }: { message: string }) {
   return (
@@ -129,9 +129,9 @@ export function ResultContent({ resultId }: { resultId: string }) {
           </Alert>
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col p-3">
-          <PlotWindowContent
+          <PlotResultView
             payload={plotPayload}
-            invalidFormatMessage={t('detail.result.invalidPlot')}
+            invalidContent={t('detail.result.invalidPlot')}
           />
         </div>
       </div>
