@@ -2000,14 +2000,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "rust.internal.source-layer",
         "src-tauri/src/database/database_instance.rs",
         "yssbi_lib::database::database_instance",
-        [(Use, 1, "yssbi_lib::graph::schema::DataSchema")],
-    );
-    debt_group!(
-        entries,
-        PROJECT_GRAPH_SPEC,
-        "rust.internal.source-layer",
-        "src-tauri/src/database/database_schema.rs",
-        "yssbi_lib::database::database_schema",
         [
             (Use, 1, "yssbi_lib::graph::schema::ColumnSchema"),
             (Use, 1, "yssbi_lib::graph::schema::DataSchema"),

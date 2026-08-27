@@ -157,6 +157,12 @@ pub(super) struct InternalDependencyCapability {
 
 const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
     InternalDependencyCapability {
+        source_layer: RustLayer::Transport,
+        repository_relative_source_file: "src-tauri/src/schema/database.rs",
+        fully_qualified_owner: "yssbi_lib::schema::database",
+        canonical_origin_targets: &["yssbi_lib::database::schema_snapshot::DatabaseColumnFact"],
+    },
+    InternalDependencyCapability {
         source_layer: RustLayer::DatabaseCore,
         repository_relative_source_file: "src-tauri/src/database/edit_operation.rs",
         fully_qualified_owner: "yssbi_lib::database::edit_operation",

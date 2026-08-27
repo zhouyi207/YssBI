@@ -240,16 +240,29 @@ impl ProjectState {
                         }
                         let columns = match &database.state {
                             DatabaseState::DuckDb { columns, .. } => {
-                                crate::schema::column_info_from_duckdb(columns)
+                                crate::database::schema_snapshot::DatabaseSchemaFact::from_duckdb(
+                                    &database.decl.id,
+                                    columns,
+                                )
+                                .map(|fact| {
+                                    crate::schema::column_info_from_schema(fact.columns())
+                                })
                             }
                             DatabaseState::Loaded { dataframe, .. } => {
-                                crate::schema::column_info_from_schema(dataframe.schema().as_ref())
+                                crate::database::schema_snapshot::DatabaseSchemaFact::from_dataframe(
+                                    &database.decl.id,
+                                    dataframe,
+                                )
+                                .map(|fact| {
+                                    crate::schema::column_info_from_schema(fact.columns())
+                                })
                             }
                             DatabaseState::Failed { .. } => return None,
                         };
-                        Some((id.clone(), columns))
+                        Some(columns.map(|columns| (id.clone(), columns)))
                     })
-                    .collect::<BTreeMap<_, _>>();
+                    .collect::<Result<BTreeMap<_, _>, _>>()
+                    .map_err(|error| error.to_string())?;
                 (
                     Arc::clone(&store.node_registry),
                     Arc::clone(&store.catalog),
@@ -292,10 +305,23 @@ impl ProjectState {
                 };
                 match crate::database::read_table_meta(&root.as_path().join(path), table) {
                     Ok(metadata) => {
-                        database_schemas.insert(
-                            id.clone(),
-                            crate::schema::column_info_from_duckdb(&metadata.columns),
-                        );
+                        let database_id =
+                            crate::database_contract::DatabaseId::from_existing(id.clone().into());
+                        match crate::database::schema_snapshot::DatabaseSchemaFact::from_duckdb(
+                            &database_id,
+                            &metadata.columns,
+                        ) {
+                            Ok(fact) => {
+                                database_schemas.insert(
+                                    id.clone(),
+                                    crate::schema::column_info_from_schema(fact.columns()),
+                                );
+                            }
+                            Err(error) => {
+                                metadata_error = Some(error.to_string());
+                                break;
+                            }
+                        }
                     }
                     Err(error) => {
                         metadata_error = Some(error);

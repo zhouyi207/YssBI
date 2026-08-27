@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::database::schema_snapshot::DatabaseColumnFact;
+
 fn default_csv_delimiter() -> char {
     ','
 }
@@ -16,26 +18,12 @@ pub struct ColumnInfoDTO {
     pub dtype: String,
 }
 
-pub fn column_info_from_schema(schema: &polars::prelude::Schema) -> Vec<ColumnInfoDTO> {
-    schema
-        .iter_names()
-        .filter_map(|name| {
-            schema.get(name).map(|dtype| ColumnInfoDTO {
-                name: name.to_string(),
-                dtype: crate::database::database_schema::polars_dtype_to_raw_string(dtype),
-            })
-        })
-        .collect()
-}
-
-pub fn column_info_from_duckdb(
-    columns: &[crate::database::DuckDbColumnMeta],
-) -> Vec<ColumnInfoDTO> {
+pub(crate) fn column_info_from_schema(columns: &[DatabaseColumnFact]) -> Vec<ColumnInfoDTO> {
     columns
         .iter()
         .map(|column| ColumnInfoDTO {
-            name: column.name.clone(),
-            dtype: column.dtype.clone(),
+            name: column.name().as_str().to_string(),
+            dtype: column.data_type().to_string(),
         })
         .collect()
 }

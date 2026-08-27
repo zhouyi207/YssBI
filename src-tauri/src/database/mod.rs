@@ -4,9 +4,9 @@ pub mod error;
 pub mod runtime;
 
 pub mod database_instance;
-pub mod database_schema;
 pub mod database_state;
 pub mod project_storage;
+pub mod schema_snapshot;
 
 pub mod dataset_overview;
 pub mod duckdb_analytics;
@@ -25,7 +25,6 @@ pub use column_distribution::*;
 pub use column_stats::*;
 
 pub use database_instance::*;
-pub use database_schema::*;
 pub use database_state::*;
 pub use project_storage::*;
 

@@ -1561,3 +1561,10 @@ Execution 不知道具体 UI
 - [ ] 修正 DatabaseError 公共 Debug/source 边界，保留私有 driver source 供 Database 内部使用且不向公共错误视图泄漏。
 - [ ] 增加 database error module 的 focused regression，覆盖 Display、Debug 与 Error::source() 的 driver secret redaction。
 - [ ] 完成 Database foundation fix round 的 RED/GREEN、Rust fmt/check 与 diff 校验，并提交仅含代码/测试的修复 commit。
+
+## 2026.08.28
+
+- [ ] 完成 Backend Task 5 的 Database neutral schema-facts owner：私有 revision/column/schema facts、Polars/DuckDB 类型归一化与 canonical column-name typed failure。
+- [ ] 将现有 Loaded/DuckDB schema projection 与 Project runtime caller 切换到 neutral facts，再由 Transport 保持 `ColumnInfoDTO` 的 `name`/`type` wire shape 映射。
+- [ ] 精确移除 Transport→Polars/dtype helper architecture debt，登记 neutral Database fact capability 与当前 Project runtime 的新增 exact occurrences。
+- [ ] 完成 schema-facts RED/GREEN、Rust fmt/check、focused architecture audit 与 diff 校验；session API、catalog/data snapshot、mutations、Execution、Presentation 和 frontend 继续留待后续任务。

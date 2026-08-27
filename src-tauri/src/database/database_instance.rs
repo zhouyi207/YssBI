@@ -18,8 +18,8 @@ use super::{
     compute_all_column_distributions_duckdb, compute_all_column_stats_duckdb,
     compute_dataset_overview_duckdb,
 };
-use crate::database::database_schema::{dataframe_to_schema, duckdb_columns_to_schema};
-use crate::graph::schema::DataSchema;
+use crate::database::schema_snapshot::DatabaseSchemaFact;
+use crate::graph::schema::{ColumnSchema, DataSchema};
 use polars::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -32,11 +32,29 @@ pub struct DatabaseInstance {
 
 impl DatabaseInstance {
     pub fn data_schema(&mut self) -> PolarsResult<DataSchema> {
-        match &self.state {
-            DatabaseState::DuckDb { columns, .. } => Ok(duckdb_columns_to_schema(columns)),
-            DatabaseState::Loaded { dataframe, .. } => Ok(dataframe_to_schema(dataframe)),
-            DatabaseState::Failed { error } => Err(PolarsError::ComputeError(error.clone().into())),
+        let fact = match &self.state {
+            DatabaseState::DuckDb { columns, .. } => {
+                DatabaseSchemaFact::from_duckdb(&self.decl.id, columns)
+            }
+            DatabaseState::Loaded { dataframe, .. } => {
+                DatabaseSchemaFact::from_dataframe(&self.decl.id, dataframe)
+            }
+            DatabaseState::Failed { error } => {
+                return Err(PolarsError::ComputeError(error.clone().into()));
+            }
         }
+        .map_err(|error| PolarsError::ComputeError(error.to_string().into()))?;
+
+        Ok(DataSchema {
+            columns: fact
+                .columns()
+                .iter()
+                .map(|column| ColumnSchema {
+                    name: column.name().as_str().to_string(),
+                    data_type: column.data_type().clone(),
+                })
+                .collect(),
+        })
     }
 
     /// 分页读取行数据。DuckDB 走 `LIMIT/OFFSET`，不触发整表物化。

@@ -1,8 +1,9 @@
+use crate::database::schema_snapshot::{DatabaseSchemaFact, DatabaseSchemaFactError};
 use crate::database::{DatabaseInstance, DatabaseState};
 use crate::project::{ProjectFilesystemError, ProjectResourceSnapshot, ProjectState};
 use crate::schema::{
     ColumnInfoDTO, DatabaseDeclDTO, DatabasesVariablesDTO, VariableInstanceDTO,
-    column_info_from_duckdb, column_info_from_schema,
+    column_info_from_schema,
 };
 
 pub fn name_from_path(path: &str) -> String {
@@ -31,13 +32,14 @@ pub enum DatabaseSchemaSnapshot {
     },
 }
 
-pub fn extract_database_schema(instance: &DatabaseInstance) -> DatabaseSchemaSnapshot {
-    let name = database_display_name(instance);
-
-    match &instance.state {
-        DatabaseState::Loaded { dataframe, .. } => {
-            let columns = column_info_from_schema(dataframe.schema().as_ref());
-            let row_count = dataframe.height();
+fn schema_snapshot_from_fact(
+    name: String,
+    fact: Result<DatabaseSchemaFact, DatabaseSchemaFactError>,
+    row_count: usize,
+) -> DatabaseSchemaSnapshot {
+    match fact {
+        Ok(fact) => {
+            let columns = column_info_from_schema(fact.columns());
             let column_count = columns.len();
             DatabaseSchemaSnapshot::Ready {
                 name,
@@ -46,18 +48,29 @@ pub fn extract_database_schema(instance: &DatabaseInstance) -> DatabaseSchemaSna
                 column_count,
             }
         }
+        Err(error) => DatabaseSchemaSnapshot::Failed {
+            name,
+            error: error.to_string(),
+        },
+    }
+}
+
+pub fn extract_database_schema(instance: &DatabaseInstance) -> DatabaseSchemaSnapshot {
+    let name = database_display_name(instance);
+
+    match &instance.state {
+        DatabaseState::Loaded { dataframe, .. } => schema_snapshot_from_fact(
+            name,
+            DatabaseSchemaFact::from_dataframe(&instance.decl.id, dataframe),
+            dataframe.height(),
+        ),
         DatabaseState::DuckDb {
             row_count, columns, ..
-        } => {
-            let columns = column_info_from_duckdb(columns);
-            let column_count = columns.len();
-            DatabaseSchemaSnapshot::Ready {
-                name,
-                columns,
-                row_count: *row_count,
-                column_count,
-            }
-        }
+        } => schema_snapshot_from_fact(
+            name,
+            DatabaseSchemaFact::from_duckdb(&instance.decl.id, columns),
+            *row_count,
+        ),
         DatabaseState::Failed { error } => DatabaseSchemaSnapshot::Failed {
             name,
             error: error.clone(),

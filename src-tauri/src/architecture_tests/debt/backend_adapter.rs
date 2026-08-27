@@ -312,14 +312,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         entries,
         BACKEND_ADAPTER_SPEC,
         "rust.external.runtime-source-layer",
-        "src-tauri/src/schema/database.rs",
-        "yssbi_lib::schema::database",
-        [(Path, 1, "external:polars::prelude::Schema")],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.external.runtime-source-layer",
         "src-tauri/src/window_state/kind.rs",
         "yssbi_lib::window_state::kind",
         [
@@ -476,11 +468,23 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "rust.internal.source-layer",
         "src-tauri/src/project/project_state/projection.rs",
         "yssbi_lib::project::project_state::projection",
-        [(
-            Path,
-            1,
-            "yssbi_lib::database::duckdb_reader::read_table_meta"
-        ),],
+        [
+            (
+                Path,
+                1,
+                "yssbi_lib::database::duckdb_reader::read_table_meta"
+            ),
+            (
+                Path,
+                1,
+                "yssbi_lib::database::schema_snapshot::DatabaseSchemaFact::from_dataframe"
+            ),
+            (
+                Path,
+                2,
+                "yssbi_lib::database::schema_snapshot::DatabaseSchemaFact::from_duckdb"
+            ),
+        ],
     );
     debt_group!(
         entries,
@@ -508,25 +512,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             1,
             "yssbi_lib::database::database_instance::DatabaseInstance"
         )],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.internal.source-layer",
-        "src-tauri/src/schema/database.rs",
-        "yssbi_lib::schema::database",
-        [
-            (
-                Path,
-                1,
-                "yssbi_lib::database::database_schema::polars_dtype_to_raw_string"
-            ),
-            (
-                Path,
-                1,
-                "yssbi_lib::database::duckdb_reader::DuckDbColumnMeta"
-            ),
-        ],
     );
     debt_group!(
         entries,

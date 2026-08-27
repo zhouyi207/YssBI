@@ -381,14 +381,23 @@ pub(in crate::project) fn snapshot_project_resources(
             .databases
             .iter()
             .filter_map(|(id, database)| match &database.state {
-                DatabaseState::Loaded { dataframe, .. } => Some((
-                    id.clone(),
-                    Arc::clone(dataframe),
-                    crate::schema::column_info_from_schema(dataframe.schema().as_ref()),
-                )),
+                DatabaseState::Loaded { dataframe, .. } => Some(
+                    crate::database::schema_snapshot::DatabaseSchemaFact::from_dataframe(
+                        &database.decl.id,
+                        dataframe,
+                    )
+                    .map(|fact| {
+                        (
+                            id.clone(),
+                            Arc::clone(dataframe),
+                            crate::schema::column_info_from_schema(fact.columns()),
+                        )
+                    }),
+                ),
                 _ => None,
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())?;
         (store.project_session_id.clone(), loaded)
     };
 
@@ -503,9 +512,15 @@ pub(in crate::project) fn snapshot_project_resources(
         let metadata = crate::database::read_table_meta(&absolute, &table)?;
         let resource =
             ResourceId::new(format!("databases/{id}")).map_err(|error| error.to_string())?;
+        let database_id = crate::database_contract::DatabaseId::from_existing(id.clone().into());
+        let fact = crate::database::schema_snapshot::DatabaseSchemaFact::from_duckdb(
+            &database_id,
+            &metadata.columns,
+        )
+        .map_err(|error| error.to_string())?;
         database_schemas.insert(
             resource.clone(),
-            crate::schema::column_info_from_duckdb(&metadata.columns),
+            crate::schema::column_info_from_schema(fact.columns()),
         );
         runtime =
             runtime.with_duckdb_database(resource, absolute.to_string_lossy().into_owned(), table);

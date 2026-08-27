@@ -179,7 +179,7 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (
                 Use,
                 1,
-                "yssbi_lib::schema::database::column_info_from_duckdb"
+                "yssbi_lib::schema::database::column_info_from_schema"
             ),
             (
                 Path,
@@ -197,11 +197,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         [
             (Use, 1, "yssbi_lib::schema::database::ColumnInfoDTO"),
             (Use, 1, "yssbi_lib::schema::database::DatabaseDeclDTO"),
-            (
-                Use,
-                1,
-                "yssbi_lib::schema::database::column_info_from_duckdb"
-            ),
             (
                 Use,
                 1,
@@ -1298,12 +1293,7 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (Path, 1, "yssbi_lib::schema::database::ColumnInfoDTO"),
             (
                 Path,
-                2,
-                "yssbi_lib::schema::database::column_info_from_duckdb"
-            ),
-            (
-                Path,
-                1,
+                3,
                 "yssbi_lib::schema::database::column_info_from_schema"
             ),
         ],

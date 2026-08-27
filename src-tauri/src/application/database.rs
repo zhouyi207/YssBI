@@ -9,6 +9,7 @@ pub use crate::application::database_schema::name_from_path;
 use crate::application::database_schema::{
     DatabaseSchemaSnapshot, database_display_name, extract_database_schema,
 };
+use crate::database::schema_snapshot::DatabaseSchemaFact;
 use crate::database::{
     DatabaseExportFormat, DatabaseInstance, DatabaseState, ingest_csv_to_duckdb,
     ingest_dataframe_to_duckdb, ingest_excel_to_duckdb, ingest_parquet_to_duckdb, sql_reader,
@@ -20,7 +21,7 @@ use crate::project::{
     ProjectDatabaseError, ProjectFilesystemError, ProjectInstanceId, ProjectSession, ProjectState,
     relative_project_duckdb_path, unique_name,
 };
-use crate::schema::{ColumnInfoDTO, DatabaseEngineDTO, column_info_from_duckdb};
+use crate::schema::{ColumnInfoDTO, DatabaseEngineDTO, column_info_from_schema};
 use serde::Serialize;
 use uuid::Uuid;
 
@@ -259,7 +260,10 @@ fn register_duckdb_instance(
     let name = unique_database_name(state, &base_name);
     write_display_name(&duckdb_abs, &table, &name).map_err(ProjectDatabaseError::operation)?;
 
-    let columns = column_info_from_duckdb(&meta.columns);
+    let database_id = DatabaseId::from_existing(id.clone().into());
+    let fact = DatabaseSchemaFact::from_duckdb(&database_id, &meta.columns)
+        .map_err(ProjectDatabaseError::operation)?;
+    let columns = column_info_from_schema(fact.columns());
     let column_count = columns.len();
     let row_count = meta.row_count;
 
@@ -269,7 +273,7 @@ fn register_duckdb_instance(
     };
 
     let decl = DatabaseDecl {
-        id: DatabaseId::from_existing(id.clone().into()),
+        id: database_id,
         engine: engine_domain,
         schema_version: 1,
         required: false,
