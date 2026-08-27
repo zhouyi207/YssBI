@@ -1677,3 +1677,17 @@ Execution 不知道具体 UI
 - [ ] 完成 Execution Task 5 的 generation-pinned package preparation seam，统一 RootPlan、FunctionBundle 与 ParameterBundle 的 typed 校验入口。
 - [ ] 为 prepared execution handle 增加 root provenance/source、bundle basis、函数 resource/version 唯一性及参数 identity 的非变更性校验。
 - [ ] 保持 PreparedExecutionPlan 的私有不可伪造构造、只读内部 package 与旧 node_system production route 不变；未执行生产 cutover。
+- [ ] 在 cfg(test) 隔离的 schema editor mapper 中复用 Application projection model，保持旧 EditorGraphProjectionDto wire owner 未路由。
+- [ ] 对当前不完整的 Application editor model 返回 closed typed TransportMappingError，不伪造 resource versions、节点 presentation、连接端点或诊断字段。
+- [ ] 通过 CatalogQueryResult transport parts 映射并回归验证 localized catalog 的 camelCase metadata、资源路径/版本与 creation descriptor wire shape。
+- [ ] 保持 Presentation Task 2B 两个 schema mapper test-only/unrouted，不新增 production command/event、兼容 re-export 或第二 mapper。
+- [ ] 当前 Application editor model 尚未提供 FunctionEditorProjectionDto 所需事实，继续保持既有 function wire owner 未路由，待后续 cutover 提供完整输入。
+- [ ] 建立 staged Graph、Resource、History 深只读 snapshot/read capability，使用缓存发布快照隔离 store-owned nested references。
+- [ ] 建立 Graph/Resource/History 精确 publication 与 UI capability，optimistic overlay key 固定包含 projectInstanceId、resourceKey、operationId、fromRevision。
+- [ ] 补齐 GraphSession、Editor、Viewport、GraphInteraction、Gesture、Keyboard、Sidebar、SidebarDrag 与 Node Catalog 的窄 UI/read/publication seams，保持生产 caller 未接线。
+- [ ] 增加最小 optimistic registry/publication focused regression；完成 typecheck 与 diff 校验，Vitest 仅运行一次并记录修正后的未复跑状态。
+- [ ] 建立 session-bound Application run_graph coordinator：先捕获 ApplicationSession、执行匿名 admission 与 Project preparation，再等待可消费的 prepared plan seam。
+- [ ] 将 Project variable grants 的 DataValue 快照映射为带 session identity/version 的 Execution-neutral bindings，并在最终 gate 重验 captured session。
+- [ ] 建立 owned ProjectDatabaseSessionFacts 到 DatabaseRuntimeSession 的 typed Application open seam，保持 Database 工作在 Project snapshot/lock 之外。
+- [ ] 建立 Project prepare、Database prepare/commit、Project finalize 的 non-Clone linear handoff contract，失败显式进入 typed compensation/recovery。
+- [ ] 为 staged run/database coordinator 增加 stale session、无公共 RunId 的 admission/cancellation 与 database handoff failure focused 回归，保留旧 production route。
