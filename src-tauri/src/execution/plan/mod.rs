@@ -1,10 +1,10 @@
-mod basis;
-mod identity;
-mod model;
-mod observation;
-mod package;
-mod parameter;
-mod validation;
+pub(crate) mod basis;
+pub(crate) mod identity;
+pub(crate) mod model;
+pub(crate) mod observation;
+pub(crate) mod package;
+pub(crate) mod parameter;
+pub(crate) mod validation;
 
 pub use basis::{
     PlanCompilationBasis, PlanResourceObservationSet, PlanResourceObservedState,

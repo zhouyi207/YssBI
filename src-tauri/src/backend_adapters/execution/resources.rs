@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::database::runtime::DatabaseRuntimeSession;
-use crate::execution::plan::PlanProjectSessionId;
+use crate::execution::plan::identity::PlanProjectSessionId;
 use crate::execution::resource_preparation::ResourceProviderFactory;
 
 pub fn database_resource_provider_factory(
