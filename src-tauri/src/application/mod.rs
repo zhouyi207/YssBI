@@ -7,4 +7,5 @@ pub mod graph_execution;
 pub mod hypothesis;
 pub mod pin_preview_generation;
 pub mod project_lifecycle;
+pub mod project_watcher;
 pub mod statistical_input;

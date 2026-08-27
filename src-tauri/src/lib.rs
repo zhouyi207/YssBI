@@ -18,6 +18,7 @@ pub mod graph_document;
 pub mod julia;
 pub mod math;
 pub mod node_system;
+pub mod platform;
 pub mod project;
 mod schema;
 pub mod sci;
@@ -52,7 +53,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         // 注册全局状态管理器
-        .manage(project::ProjectWatcherState::new())
+        .manage(application::project_watcher::ProjectWatcherState::new(
+            std::sync::Arc::new(platform::NotifyProjectFileWatcher::new()),
+        ))
         .manage(project::ProjectPickerTaskCancelRegistry::new())
         .manage(julia_worker)
         .setup(move |app| {

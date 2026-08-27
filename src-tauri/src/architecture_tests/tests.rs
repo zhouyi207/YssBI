@@ -28,9 +28,10 @@ use super::policy::{
     rust_dependency_findings_with_capabilities,
 };
 use super::semantic_guards::{
-    PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE, TABULAR_CONTRACT_RULE,
+    PROJECT_WATCHER_BOUNDARY_RULE, PURE_LEAF_GRAPH_DOCUMENT_JSON_RULE, TABULAR_CONTRACT_RULE,
     graph_project_revision_bridge_violations, project_to_graph_production_edges,
-    pure_leaf_graph_document_json_violations, tabular_contract_source_violations,
+    project_watcher_source_violations, pure_leaf_graph_document_json_violations,
+    tabular_contract_source_violations,
 };
 
 fn repository_root() -> PathBuf {
@@ -983,6 +984,26 @@ fn tabular_contract_and_adapters_are_acyclic_and_typed() {
     assert!(
         violations.is_empty(),
         "{TABULAR_CONTRACT_RULE} violations: {violations:#?}"
+    );
+}
+
+#[test]
+fn project_watcher_ownership_is_neutral_and_platform_only() {
+    let facts = production_facts();
+    for source in [
+        "src-tauri/src/platform/mod.rs",
+        "src-tauri/src/platform/project_file_watcher.rs",
+    ] {
+        assert_eq!(
+            facts.classification.get(source),
+            Some(&RustLayer::PlatformAdapter),
+            "watcher platform source must use the exact Platform classification"
+        );
+    }
+    let violations = project_watcher_source_violations(&repository_root());
+    assert!(
+        violations.is_empty(),
+        "{PROJECT_WATCHER_BOUNDARY_RULE} violations: {violations:#?}"
     );
 }
 

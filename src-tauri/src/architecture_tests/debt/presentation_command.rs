@@ -765,11 +765,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (
                 Use,
                 1,
-                "yssbi_lib::project::project_watcher::ProjectWatcherState"
-            ),
-            (
-                Use,
-                1,
                 "yssbi_lib::project::project_writers::ProjectSaveResultDto"
             ),
         ],
@@ -1357,18 +1352,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 6,
                 "yssbi_lib::event::event_project::ResourceMutationResultDto"
             ),
-        ],
-    );
-    debt_group!(
-        entries,
-        PRESENTATION_COMMAND_SPEC,
-        "rust.internal.source-layer",
-        "src-tauri/src/project/project_watcher.rs",
-        "yssbi_lib::project::project_watcher",
-        [
-            (Use, 1, "yssbi_lib::event::Event"),
-            (Use, 1, "yssbi_lib::event::emit_project_event"),
-            (Use, 1, "yssbi_lib::event::event_resource::EventResource"),
         ],
     );
     debt_group!(

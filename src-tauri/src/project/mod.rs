@@ -7,6 +7,7 @@ pub mod graph_resource_index;
 mod history_hydration;
 pub mod identity;
 pub mod path_format;
+pub mod project_change;
 pub mod project_data;
 pub mod project_error;
 pub mod resource_lifecycle;
@@ -30,7 +31,6 @@ pub mod project_state_variable;
 pub mod project_store;
 pub mod variable_tabular;
 
-pub mod project_watcher;
 pub mod resource_patch;
 pub mod resource_reveal;
 pub mod unique_name;
@@ -45,6 +45,7 @@ pub use identity::{
     RevisionExhausted,
 };
 pub use path_format::*;
+pub use project_change::*;
 pub use project_data::*;
 pub use project_error::*;
 pub use resource_lifecycle::*;
@@ -66,7 +67,6 @@ pub use project_state::*;
 pub use project_state_database::ProjectDatabaseError;
 pub use project_store::*;
 
-pub use project_watcher::*;
 pub use resource_patch::*;
 pub use resource_reveal::*;
 pub use worksheet_io::*;

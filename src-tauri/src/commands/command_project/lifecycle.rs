@@ -1,13 +1,19 @@
 use crate::application::project_lifecycle::{self, ProjectLifecycleError};
+use crate::application::project_watcher::{
+    ObservedProjectFileChange, ProjectFileChangeSink, ProjectWatcherError, ProjectWatcherState,
+};
 use crate::error::CommandError;
 use crate::event::{
-    Event, EventProject, LifecycleMutationOutcomeDto, LifecycleMutationResultDto,
+    Event, EventProject, EventResource, LifecycleMutationOutcomeDto, LifecycleMutationResultDto,
     ProjectActivationResultDto, emit_project_event, emit_project_event_result,
 };
 use crate::project::OperationId;
 use crate::project::project_writers::ProjectSaveResultDto;
-use crate::project::{ProjectInstanceId, ProjectRegistry, ProjectState, ProjectWatcherState};
+use crate::project::{
+    ProjectDomainEvent, ProjectInstanceId, ProjectRegistry, ProjectState, ProjectWatchError,
+};
 use std::path::Path;
+use std::sync::{Arc, Mutex, PoisonError};
 use tauri::{AppHandle, State};
 
 fn emit_project_loaded(app: &AppHandle, result: ProjectActivationResultDto) {
@@ -28,18 +34,106 @@ pub(crate) fn map_project_lifecycle_error(error: ProjectLifecycleError) -> Comma
 
 fn start_project_watcher(
     app: &AppHandle,
+    project: &ProjectState,
     watcher: &ProjectWatcherState,
     path: &str,
     project_instance_id: &ProjectInstanceId,
 ) {
-    if let Err(error) = watcher.watch_project(app.clone(), path, project_instance_id.clone()) {
+    let sink = Arc::new(ProjectEventWatcherSink {
+        app: app.clone(),
+        project: project.clone(),
+        project_instance_id: project_instance_id.clone(),
+        version: Mutex::new(0),
+    });
+    if let Err(error) = watcher.watch_project(path, sink) {
         tracing::warn!(
             target: "yssbi::project::watcher",
             diagnostic_domain = "system",
+            error_kind = watcher_error_kind(&error),
             error = %error,
             "Failed to start project watcher"
         );
     }
+}
+
+struct ProjectEventWatcherSink {
+    app: AppHandle,
+    project: ProjectState,
+    project_instance_id: ProjectInstanceId,
+    version: Mutex<u64>,
+}
+
+impl ProjectFileChangeSink for ProjectEventWatcherSink {
+    fn publish(&self, change: ObservedProjectFileChange) {
+        let domain_event = match self
+            .project
+            .reconcile_file_change(&self.project_instance_id, change.change)
+        {
+            Ok(event) => event,
+            Err(ProjectWatchError::Irrelevant) => return,
+            Err(error) => {
+                tracing::warn!(
+                    target: "yssbi::project::watcher",
+                    diagnostic_domain = "system",
+                    diagnostic_event = "projectIndexRefreshFailed",
+                    error_kind = project_watch_error_kind(&error),
+                    "Failed to reconcile watched project file change"
+                );
+                return;
+            }
+        };
+
+        let ProjectDomainEvent::ProjectIndexInvalidated {
+            project_instance_id,
+        } = domain_event;
+        let Some(version) = next_watcher_version(&self.version) else {
+            tracing::error!(
+                target: "yssbi::project::watcher",
+                diagnostic_domain = "system",
+                diagnostic_event = "watcherVersionExhausted",
+                "Project watcher event version is exhausted"
+            );
+            return;
+        };
+        if let Err(error) = emit_project_event_result(
+            &self.app,
+            &Event::Resource(EventResource::ProjectIndexInvalidated {
+                project_instance_id,
+                source: "watcher".to_owned(),
+                version,
+            }),
+        ) {
+            tracing::warn!(
+                target: "yssbi::project::watcher",
+                diagnostic_domain = "system",
+                diagnostic_event = "projectEventEmitFailed",
+                error = %error,
+                "Failed to emit project index invalidation"
+            );
+        }
+    }
+}
+
+fn watcher_error_kind(error: &ProjectWatcherError) -> &'static str {
+    match error {
+        ProjectWatcherError::Start(_) => "source_start_failed",
+        ProjectWatcherError::EpochExhausted => "epoch_exhausted",
+        ProjectWatcherError::TimedOut(_) => "drain_timeout",
+    }
+}
+
+fn project_watch_error_kind(error: &ProjectWatchError) -> &'static str {
+    match error {
+        ProjectWatchError::Irrelevant => "irrelevant",
+        ProjectWatchError::Reconciliation(_) => "reconciliation_failed",
+    }
+}
+
+fn next_watcher_version(version: &Mutex<u64>) -> Option<u64> {
+    let mut version = version.lock().unwrap_or_else(PoisonError::into_inner);
+    let next = version.checked_add(1)?;
+    *version = next;
+    Some(next)
 }
 
 /// 加载项目（从状态管理层）
@@ -70,7 +164,13 @@ pub fn load_project(
     );
 
     let project_instance_id = ProjectInstanceId::from_existing(result.project_instance_id.clone());
-    start_project_watcher(&app, &watcher, &result.path, &project_instance_id);
+    start_project_watcher(
+        &app,
+        state.inner(),
+        &watcher,
+        &result.path,
+        &project_instance_id,
+    );
     emit_project_loaded(&app, result.clone());
     Ok(result)
 }
@@ -110,7 +210,13 @@ pub async fn save_project_as(
             result.new_project_instance_id.as_deref(),
         ) {
             let project_instance_id = ProjectInstanceId::from_existing(project_instance_id.into());
-            start_project_watcher(&app, &watcher, metadata_path, &project_instance_id);
+            start_project_watcher(
+                &app,
+                state.inner(),
+                &watcher,
+                metadata_path,
+                &project_instance_id,
+            );
         }
     }
     Ok(result)

@@ -1568,3 +1568,6 @@ Execution 不知道具体 UI
 - [ ] 将现有 Loaded/DuckDB schema projection 与 Project runtime caller 切换到 neutral facts，再由 Transport 保持 `ColumnInfoDTO` 的 `name`/`type` wire shape 映射。
 - [ ] 精确移除 Transport→Polars/dtype helper architecture debt，登记 neutral Database fact capability 与当前 Project runtime 的新增 exact occurrences。
 - [ ] 完成 schema-facts RED/GREEN、Rust fmt/check、focused architecture audit 与 diff 校验；session API、catalog/data snapshot、mutations、Execution、Presentation 和 frontend 继续留待后续任务。
+- [ ] 将项目文件变更收敛为 neutral Project contract，并保持 watcher 相关路径过滤与 burst coalescing 语义。
+- [ ] 让 Application watcher session 以 epoch 和可重试 drain/join owner 管理替换与关闭生命周期，禁止 stale/closed worker 回写。
+- [ ] 将 notify/filesystem 具体实现限制在 Platform adapter，保留 typed source/sink errors 与 watcher architecture guard。

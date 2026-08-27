@@ -296,22 +296,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         entries,
         BACKEND_ADAPTER_SPEC,
         "rust.external.runtime-source-layer",
-        "src-tauri/src/project/project_watcher.rs",
-        "yssbi_lib::project::project_watcher",
-        [
-            (Path, 1, "external:notify::recommended_watcher"),
-            (Path, 1, "external:notify::Result"),
-            (Use, 1, "external:notify::Event"),
-            (Use, 1, "external:notify::RecommendedWatcher"),
-            (Use, 1, "external:notify::RecursiveMode"),
-            (Use, 1, "external:notify::Watcher"),
-            (Use, 1, "external:tauri::AppHandle"),
-        ],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.external.runtime-source-layer",
         "src-tauri/src/window_state/kind.rs",
         "yssbi_lib::window_state::kind",
         [
