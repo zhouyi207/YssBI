@@ -332,6 +332,19 @@ Menubar / Watermark 仍分「新建 Event / 新建 Function」两项（入口文
 
 # TODOLIST
 
+zed 的 .rules 文件需要学习，同时还有根目录中的内容，有必要学习一下
+
+"lint:rs": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings", 这里的 -D warnings 后续肯定需要处理掉
+
+当前 `pnpm run ci` 尚未全绿，原因均为既有基线：
+
+1. Oxfmt 检测到 1592 个文件尚未建立格式化基线。本次没有运行 `pnpm format`，避免产生全仓批量格式化改动。
+2. 严格 Clippy 在 `yss-sci` 中报告 84 个 library、86 个 library-test 既有 `-D warnings` 问题。
+3. 主工作区前端测试为 1830 通过、1 失败；失败测试
+   `src/features/core/dockview/workbenchDockviewDefaults.test.ts:115` 的期望值缺少现有的 `assistant: "right"`。
+4. 默认 Vitest 仍会扫描嵌套的 `.worktrees/`；本次完整主工作区验证通过 CLI 临时排除了该目录。
+
+
 绘图组件库需要重构
 
 xt align 进行对齐，在这里是不是可以于 ts align 可以共用呢
@@ -1537,3 +1550,34 @@ Execution 不知道具体 UI
 - [ ] 规划 `shared/charts/core`、`cartesian`、`statistical` 三层目录及 theme、margin、ResizeObserver、tooltip、domain 和稳定 D3 layer 的公共契约。
 - [ ] 规划 Scatter、Line、Histogram、ECDF、KDE、MultiLine、Correlation、Correlogram、DID、VAR stability 与 PredictiveInterval 的渐进迁移和旧路径原子删除。
 - [ ] 明确本轮不引入 ECharts、Vega-Lite、Canvas 或万能 Chart grammar，并将 Binary margins、Bayes 诊断 authority、Worksheet backend preview DTO 与 datetime 规范化保留为独立后续计划。
+
+## 2026.08.28
+
+- [ ] 将 `package.json` 收敛为 14 个稳定任务入口，删除 preview、原始 Tauri、library test 及分层 verify convenience scripts。
+- [ ] 移除 Rust 测试命令硬编码的 `--jobs 1`，恢复 Cargo 默认构建/链接并行度，并保留低内存机器的按需降并行说明。
+- [ ] 保留 `RUST_TEST_THREADS=1` 作为测试运行期数据库与全局状态隔离，不再与 Cargo 构建并行度混为一谈。
+- [ ] 使用 `rust-toolchain.toml` 固定 Rust 1.94.0，并让 GitHub Release workflow 安装同一版本。
+- [ ] 新增 YssBI 功能开发检查清单，覆盖 authority、IPC、生命周期、输出、Dockview、性能、测试及分发决策。
+- [ ] 同步本地工作流、仓库规则、README 与图标生成命令，确保文档只引用保留的任务入口。
+- [ ] 将任务入口重组为 dev/build 与 check、lint、test、format、format:check 五组，并新增统一 `pnpm ci` 聚合门禁。
+- [ ] 将前端 lint/format 工具收敛为 Oxlint 与 Oxfmt，避免 TypeScript 7 与 typescript-eslint peer 范围不兼容。
+- [ ] 将 Rust 检查、Clippy、测试和格式命令统一覆盖 workspace，同时继续使用 Cargo 默认构建并行度。
+- [ ] 调整 Tauri 的 Vite 前置命令为直接执行，避免 `pnpm dev`/`pnpm build` 改为 Tauri 入口后递归调用。
+- [ ] 移除 benchmark/clean convenience scripts，并在本地工作流中保留显式 manifest 的一次性 Cargo 命令。
+- [ ] 明确同名聚合脚本必须通过 `pnpm run ci` 调用，避免裸 `pnpm ci` 误执行 pnpm 的冻结安装命令。
+- [ ] 将 Rust workspace 测试入口从 `cargo test` 切换为 cargo-nextest 0.9.143，并保留现有参数透传能力。
+- [ ] 使用 Nextest 默认 CPU 并发运行测试，不增加仓库级 `test-threads` 限制。
+- [ ] 删除根目录 `.cargo/` 及其 target/env 覆盖，让 Cargo 与 Tauri 恢复标准 `src-tauri/target/`。
+- [ ] 更新开发工作流和仓库规则，记录 Nextest 安装方式及单次低并行调试参数。
+- [ ] 将 Rust 聚焦测试示例改用 Nextest 原生 filterset，避免 libtest 参数分隔符和 `--nocapture` 强制串行。
+- [ ] 以最终确认的 18 个 scripts 为准：保留 dev/build、五组聚合/TS/Rust 任务和 ci；早期“14 个入口”记录不再代表最终矩阵。
+- [ ] 以 Nextest 默认 CPU 并发为最终方案，删除 `RUST_TEST_THREADS=1` 环境覆盖；早期保留串行限制的记录已被后续确认取代。
+- [ ] 修正 `database_test` 对已迁移 `bind_duckdb_instance` 的旧 Application 导入，改用 Database 模块现有公开 seam。
+- [ ] 使用 cargo-nextest 验证 DuckDB 绑定聚焦用例及完整 `database_test` integration binary，确认 19 个测试全部通过。
+- [ ] 以最终确认方案取消 cargo-nextest，恢复 `cargo test --workspace`，并继续使用 Cargo/libtest 默认并发而不设置仓库级限制。
+- [ ] 删除维护文档中的 Nextest 安装、filterset 和降并发说明，并卸载本次通过 WinGet 安装的全局 cargo-nextest。
+- [ ] 使用原生 Cargo 重新验证 DuckDB 绑定聚焦用例及完整 `database_test`，确认 19 个 integration tests 全部通过。
+- [ ] 在 Vitest 配置中继承默认 exclude 并统一排除 `.worktrees/**`，避免主工作区测试重复扫描隔离 worktree。
+- [ ] 通过测试发现 RED/GREEN 验证 worktree 测试从大量命中降为 0；完整前端套件仅保留主工作区既有的 Dockview 默认值失败。
+- [ ] 按最终决策移除 Vite 的 `**/target/**` watch 忽略项，仅保留 `**/src-tauri/**` 以覆盖标准 Cargo 产物目录。
+- [ ] 将任务脚本、Vitest 排除、Vite watch、Database integration 与开发文档拆分为独立 Git 提交，并在推送前逐层复核 staged diff。

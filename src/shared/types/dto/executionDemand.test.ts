@@ -24,7 +24,7 @@ describe('ExecutionDemandDto', () => {
   });
 });
 
-// These compile-time assertions are checked by `pnpm typecheck`.
+// These compile-time assertions are checked by `pnpm check:ts`.
 // @ts-expect-error outputs demand requires outputs
 const missingOutputs: ExecutionDemandDto = {
   type: 'outputs',

@@ -73,13 +73,13 @@
 pnpm install
 
 # 开发
-pnpm tauri:dev
+pnpm dev
+
+# 检查
+pnpm run ci
 
 # 构建
-pnpm tauri:build
-
-# 清理
-cargo clean --manifest-path src-tauri/Cargo.toml
+pnpm build
 ```
 
 <!-- ## 致谢

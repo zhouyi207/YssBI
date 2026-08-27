@@ -13,6 +13,7 @@ graph compilation/execution, databases, results, and scientific orchestration.
 - `AGENTS.md` owns repository rules and delivery policy.
 - `docs/architecture/ARCHITECTURE.md` owns the current implementation map.
 - `docs/development/LOCAL_WORKFLOW.md` owns toolchain, commands, and validation.
+- `docs/development/FEATURE_PROCESS.md` owns the feature design and delivery checklist.
 - `docs/architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md` owns diagnostics, IPC
   errors, results, and program output details.
 - `docs/superpowers/` is agent-local design and planning output, not maintained
@@ -188,30 +189,33 @@ graph compilation/execution, databases, results, and scientific orchestration.
 ## Local development and verification
 
 - 每项任务完成后，必须在 `TODO.md` 对应日期标题下追加多条 `- [ ] ...` 格式的修改摘要；若该日期标题不存在，则以 `## YYYY.MM.DD` 创建，且不得删除或改写既有条目。
-- Run project commands from the repository root through `pnpm` scripts. Rust
-  scripts explicitly target `src-tauri/Cargo.toml`; `.cargo/config.toml` keeps
-  all Cargo artifacts in the root `target/` directory. Do not create a second
-  `src-tauri/target/` through ad-hoc Cargo invocations.
+- Run grouped project tasks from the repository root through `pnpm` scripts.
+  Rust scripts and one-off Cargo maintenance commands explicitly target
+  `src-tauri/Cargo.toml`; Cargo and Tauri use the standard workspace artifact
+  directory at `src-tauri/target/`.
 - The canonical workflow and command matrix are documented in
-  `docs/development/LOCAL_WORKFLOW.md`. Do not add CI as a substitute for these
-  local checks unless the task explicitly requests it.
+  `docs/development/LOCAL_WORKFLOW.md`; use `docs/development/FEATURE_PROCESS.md`
+  before adding features or changing behavior. Keep `package.json` scripts as
+  stable task entry points instead of aliases for every command combination. Do
+  not add CI as a substitute for local checks unless the task explicitly requests it.
 - Add or update a focused regression test before changing behavior, then run it
   and the relevant broader test suite.
 - Backend Rust tests are especially expensive in both compile time and runtime.
   Avoid running them repeatedly during incremental iteration; after a Rust
   change is coherent, prefer one focused test run and defer broader or full
   suites until the change is stable, cross-cutting, explicitly requested, or
-  required for delivery validation.
-- For Rust changes, run `pnpm rust:check` and focused tests for the touched
-  area. Do not run full `cargo test` / full `pnpm rust:test` by default because
-  it is slow; only run broader Rust suites when the change is cross-cutting,
-  explicitly requested, or the focused checks cannot cover the risk. For
-  frontend changes, run `pnpm typecheck` and the relevant `pnpm test` coverage.
-  Run `git diff --check` before reporting completion.
-- Use `pnpm verify` before delivery when changes span both frontend and Rust. It
-  runs the frontend suite plus Rust format/compile checks; run focused Rust tests
-  separately for the touched area. Use `pnpm verify:full` only for release
-  validation, cross-cutting runtime changes, or when explicitly requested. Neither
-  command builds a release installer.
+  required for delivery validation. Rust scripts and `pnpm test:rs` keep Cargo
+  and libtest's default build, link, and test concurrency; do not hardcode
+  repository-wide job or test-thread limits.
+- For Rust changes, run `pnpm format:check:rs`, `pnpm check:rs`, and focused
+  `pnpm test:rs` coverage. Do not run full `pnpm test:rs` repeatedly because it
+  is slow; use it for stable, cross-cutting, or explicitly requested validation.
+  For frontend changes, run `pnpm format:check:ts`, `pnpm check:ts`,
+  `pnpm lint:ts`, and relevant `pnpm test:ts` coverage.
+- Use `pnpm run ci` before cross-stack delivery. It runs format checks,
+  TypeScript and Rust checks, Oxlint and strict Clippy, then the full frontend
+  and Rust test suites. Bare `pnpm ci` is pnpm's install command and must not be
+  used for this script. Run `git diff --check` separately before reporting
+  completion. `pnpm run ci` does not build a release installer.
 - Do not claim success without fresh command output. Preserve unrelated user
   changes in the working tree.
