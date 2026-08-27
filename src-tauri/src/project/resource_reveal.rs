@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::database::{DatabaseDecl, DatabaseEngine};
+use crate::database_contract::{DatabaseDecl, DatabaseEngine};
 use crate::project::{GraphResourcePath, WorksheetResourcePath};
 
 use super::{ProjectError, ProjectState};

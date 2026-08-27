@@ -10,11 +10,12 @@ use crate::application::database_schema::{
     DatabaseSchemaSnapshot, database_display_name, extract_database_schema,
 };
 use crate::database::{
-    DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseExportFormat, DatabaseInstance,
-    DatabaseState, ingest_csv_to_duckdb, ingest_dataframe_to_duckdb, ingest_excel_to_duckdb,
-    ingest_parquet_to_duckdb, sql_reader, write_display_name,
+    DatabaseExportFormat, DatabaseInstance, DatabaseState, ingest_csv_to_duckdb,
+    ingest_dataframe_to_duckdb, ingest_excel_to_duckdb, ingest_parquet_to_duckdb, sql_reader,
+    write_display_name,
 };
 use crate::database::{EditHistory, EditState};
+use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql};
 use crate::project::{
     ProjectDatabaseError, ProjectFilesystemError, ProjectInstanceId, ProjectSession, ProjectState,
     relative_project_duckdb_path, unique_name,

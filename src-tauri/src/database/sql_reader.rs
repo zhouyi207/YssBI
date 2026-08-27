@@ -4,7 +4,7 @@
 use polars::prelude::*;
 use sqlx::{AssertSqlSafe, Column as SqlxColumn, ConnectOptions, Row, Value, ValueRef};
 
-use super::DatabaseEngineSql;
+use crate::database_contract::DatabaseEngineSql;
 
 /// 列出 PostgreSQL 数据库中的用户表（public schema）
 pub fn list_postgres_tables(connection_string: &str) -> Result<Vec<String>, String> {

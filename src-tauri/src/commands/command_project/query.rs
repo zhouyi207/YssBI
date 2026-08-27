@@ -483,9 +483,9 @@ mod tests {
         let mut data = ProjectData::new();
         data.databases.insert(
             "shared".into(),
-            crate::database::DatabaseDecl {
+            crate::database_contract::DatabaseDecl {
                 id: "shared".into(),
-                engine: crate::database::DatabaseEngine::InMemory {
+                engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: format!("{label} engine"),
                 },
                 schema_version: 1,

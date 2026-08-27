@@ -2,7 +2,7 @@ use super::{
     GraphDocumentKind, GraphResourcePath, ProjectComputationSettings, ProjectError,
     ProjectMetadata, WorksheetDocument, WorksheetResourcePath,
 };
-use crate::database::DatabaseDecl;
+use crate::database_contract::DatabaseDecl;
 use crate::node_system::document::{
     DocumentError, FunctionDocument, FunctionSignature, GraphDocument,
 };

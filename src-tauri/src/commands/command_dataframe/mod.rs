@@ -652,7 +652,8 @@ pub fn get_edit_state(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::{DatabaseDecl, DatabaseEngine, DatabaseState};
+    use crate::database::DatabaseState;
+    use crate::database_contract::{DatabaseDecl, DatabaseEngine};
     use crate::event::{Event, EventProject};
     use crate::node_system::document::{OperationId, ResourceRevision};
     use crate::project::ProjectData;

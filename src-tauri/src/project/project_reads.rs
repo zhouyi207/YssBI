@@ -1,4 +1,5 @@
-use crate::database::{DatabaseDecl, DatabaseInstance};
+use crate::database::DatabaseInstance;
+use crate::database_contract::DatabaseDecl;
 use crate::node_system::catalog::{
     BuiltinCatalog, CatalogResourceEntry, CatalogResourcePath, ResourceBoundCreateArgsDto,
 };
@@ -967,7 +968,7 @@ mod tests {
             let mut data = changed_state.project_data.write().unwrap();
             let mut revisions = changed_state.database_authority_revisions.write().unwrap();
             let database = data.databases.get_mut("sales").unwrap();
-            database.engine = crate::database::DatabaseEngine::DuckDb {
+            database.engine = crate::database_contract::DatabaseEngine::DuckDb {
                 path: "database/coherent.duckdb".into(),
                 table: "sales_after".into(),
             };
@@ -1016,7 +1017,7 @@ mod tests {
             )
         };
         let before = (
-            crate::database::DatabaseEngine::InMemory {
+            crate::database_contract::DatabaseEngine::InMemory {
                 name: "sales".into(),
             },
             1,
@@ -1025,7 +1026,7 @@ mod tests {
             0,
         );
         let after = (
-            crate::database::DatabaseEngine::DuckDb {
+            crate::database_contract::DatabaseEngine::DuckDb {
                 path: "database/coherent.duckdb".into(),
                 table: "sales_after".into(),
             },
@@ -1259,9 +1260,9 @@ mod tests {
             .insert(loaded_variable_id, loaded_variable);
         authoritative.databases.insert(
             "sales".into(),
-            crate::database::DatabaseDecl {
+            crate::database_contract::DatabaseDecl {
                 id: "sales".into(),
-                engine: crate::database::DatabaseEngine::InMemory {
+                engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "sales".into(),
                 },
                 schema_version: 1,

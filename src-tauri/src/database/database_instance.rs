@@ -1,7 +1,6 @@
-use super::DatabaseDecl;
-use super::DatabaseEngine;
 use super::DatabaseExportFormat;
 use super::DatabaseState;
+use crate::database_contract::{DatabaseDecl, DatabaseEngine};
 
 use super::{
     EditHistory, EditOperation, EditState, anyvalue_to_json, apply_operation, capture_column_data,

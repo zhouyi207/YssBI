@@ -1,6 +1,10 @@
 # Database module
 
-`src-tauri/src/database/` 是 DatabaseDecl/DatabaseInstance semantics、DuckDB storage、runtime binding、schema metadata、query/edit/history、overview 与 export 的 locality。Project/session authority 与 resource commit 位于 `project/`；跨 module 用例编排位于 `application/database.rs`；可序列化 wire DTO 与转换位于 `schema/`。
+`src-tauri/src/database_contract/` owns the persisted `DatabaseDecl`, `DatabaseEngine`, and
+`DatabaseEngineSql` contracts. `src-tauri/src/database/` owns `DatabaseInstance` semantics、
+DuckDB storage、runtime binding、schema metadata、query/edit/history、overview 与 export。
+Project/session authority 与 resource commit 位于 `project/`；跨 module 用例编排位于
+`application/database.rs`；可序列化 wire DTO 与转换位于 `schema/`。
 
 `yss-sci` 只承载数值与统计/计量算法，不包含 database edit history、DuckDB state 或 export workflow。
 

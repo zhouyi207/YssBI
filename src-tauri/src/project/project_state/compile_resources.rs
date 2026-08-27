@@ -381,7 +381,7 @@ pub(in crate::project) fn snapshot_project_resources(
         crate::variable::VariableId,
         crate::variable::VariableInstance,
     >,
-    databases: std::collections::HashMap<String, crate::database::DatabaseDecl>,
+    databases: std::collections::HashMap<String, crate::database_contract::DatabaseDecl>,
 ) -> Result<ProductionResourceSnapshots, String> {
     use crate::node_system::analysis::{ResourceKey as AnalysisResourceKey, ResourceVersion};
     use crate::node_system::plan::ResourceId;
@@ -509,7 +509,8 @@ pub(in crate::project) fn snapshot_project_resources(
         runtime = runtime.with_database(resource, dataframe);
     }
     for (id, declaration) in databases {
-        let crate::database::DatabaseEngine::DuckDb { path, table } = declaration.engine else {
+        let crate::database_contract::DatabaseEngine::DuckDb { path, table } = declaration.engine
+        else {
             continue;
         };
         let root = project_root

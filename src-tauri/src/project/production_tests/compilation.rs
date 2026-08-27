@@ -1075,9 +1075,9 @@ fn project_resource_authority_tracks_missing_tombstones_and_prevents_aba() {
         data.variables.insert(variable_id, variable.clone());
         data.databases.insert(
             "authority".into(),
-            crate::database::DatabaseDecl {
+            crate::database_contract::DatabaseDecl {
                 id: "authority".into(),
-                engine: crate::database::DatabaseEngine::InMemory {
+                engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "authority".into(),
                 },
                 schema_version: 1,
@@ -1134,9 +1134,9 @@ fn project_resource_authority_tracks_missing_tombstones_and_prevents_aba() {
         data.variables.insert(variable_id, variable);
         data.databases.insert(
             "authority".into(),
-            crate::database::DatabaseDecl {
+            crate::database_contract::DatabaseDecl {
                 id: "authority".into(),
-                engine: crate::database::DatabaseEngine::InMemory {
+                engine: crate::database_contract::DatabaseEngine::InMemory {
                     name: "authority".into(),
                 },
                 schema_version: 1,

@@ -60,8 +60,8 @@ pub struct DatabaseDeclDTO {
     pub load_failed: bool,
 }
 
-impl From<&crate::database::DatabaseDecl> for DatabaseDeclDTO {
-    fn from(value: &crate::database::DatabaseDecl) -> Self {
+impl From<&crate::database_contract::DatabaseDecl> for DatabaseDeclDTO {
+    fn from(value: &crate::database_contract::DatabaseDecl) -> Self {
         Self {
             id: value.id.clone(),
             engine: (&value.engine).into(),
@@ -194,10 +194,10 @@ impl From<DatabaseImportSourceDTO> for DatabaseEngineDTO {
     }
 }
 
-impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
-    fn from(value: &crate::database::DatabaseEngine) -> Self {
+impl From<&crate::database_contract::DatabaseEngine> for DatabaseEngineDTO {
+    fn from(value: &crate::database_contract::DatabaseEngine) -> Self {
         match value {
-            crate::database::DatabaseEngine::Sql {
+            crate::database_contract::DatabaseEngine::Sql {
                 engine,
                 connection_string,
                 table,
@@ -206,7 +206,7 @@ impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
                 connection_string: connection_string.clone(),
                 table: table.clone(),
             },
-            crate::database::DatabaseEngine::Csv {
+            crate::database_contract::DatabaseEngine::Csv {
                 path,
                 delimiter,
                 has_header,
@@ -217,21 +217,25 @@ impl From<&crate::database::DatabaseEngine> for DatabaseEngineDTO {
                 has_header: *has_header,
                 infer_schema_length: *infer_schema_length,
             },
-            crate::database::DatabaseEngine::Parquet { path, columns } => {
+            crate::database_contract::DatabaseEngine::Parquet { path, columns } => {
                 DatabaseEngineDTO::Parquet {
                     path: path.clone(),
                     columns: columns.clone(),
                 }
             }
-            crate::database::DatabaseEngine::Excel { path, sheet } => DatabaseEngineDTO::Excel {
-                path: path.clone(),
-                sheet: sheet.clone(),
-            },
-            crate::database::DatabaseEngine::DuckDb { path, table } => DatabaseEngineDTO::DuckDb {
-                path: path.clone(),
-                table: table.clone(),
-            },
-            crate::database::DatabaseEngine::InMemory { name } => {
+            crate::database_contract::DatabaseEngine::Excel { path, sheet } => {
+                DatabaseEngineDTO::Excel {
+                    path: path.clone(),
+                    sheet: sheet.clone(),
+                }
+            }
+            crate::database_contract::DatabaseEngine::DuckDb { path, table } => {
+                DatabaseEngineDTO::DuckDb {
+                    path: path.clone(),
+                    table: table.clone(),
+                }
+            }
+            crate::database_contract::DatabaseEngine::InMemory { name } => {
                 DatabaseEngineDTO::InMemory { name: name.clone() }
             }
         }
@@ -253,43 +257,45 @@ pub enum DatabaseEngineSqlDTO {
     },
 }
 
-impl From<&crate::database::DatabaseEngineSql> for DatabaseEngineSqlDTO {
-    fn from(value: &crate::database::DatabaseEngineSql) -> Self {
+impl From<&crate::database_contract::DatabaseEngineSql> for DatabaseEngineSqlDTO {
+    fn from(value: &crate::database_contract::DatabaseEngineSql) -> Self {
         match value {
-            crate::database::DatabaseEngineSql::Sqlite { auto_create } => {
+            crate::database_contract::DatabaseEngineSql::Sqlite { auto_create } => {
                 DatabaseEngineSqlDTO::Sqlite {
                     auto_create: *auto_create,
                 }
             }
-            crate::database::DatabaseEngineSql::Postgres { ssl } => {
+            crate::database_contract::DatabaseEngineSql::Postgres { ssl } => {
                 DatabaseEngineSqlDTO::Postgres { ssl: *ssl }
             }
-            crate::database::DatabaseEngineSql::Mysql { charset } => DatabaseEngineSqlDTO::Mysql {
-                charset: charset.clone(),
-            },
+            crate::database_contract::DatabaseEngineSql::Mysql { charset } => {
+                DatabaseEngineSqlDTO::Mysql {
+                    charset: charset.clone(),
+                }
+            }
         }
     }
 }
 
-impl TryFrom<DatabaseEngineSqlDTO> for crate::database::DatabaseEngineSql {
+impl TryFrom<DatabaseEngineSqlDTO> for crate::database_contract::DatabaseEngineSql {
     type Error = String;
 
     fn try_from(dto: DatabaseEngineSqlDTO) -> Result<Self, Self::Error> {
         match dto {
             DatabaseEngineSqlDTO::Sqlite { auto_create } => {
-                Ok(crate::database::DatabaseEngineSql::Sqlite { auto_create })
+                Ok(crate::database_contract::DatabaseEngineSql::Sqlite { auto_create })
             }
             DatabaseEngineSqlDTO::Postgres { ssl } => {
-                Ok(crate::database::DatabaseEngineSql::Postgres { ssl })
+                Ok(crate::database_contract::DatabaseEngineSql::Postgres { ssl })
             }
             DatabaseEngineSqlDTO::Mysql { charset } => {
-                Ok(crate::database::DatabaseEngineSql::Mysql { charset })
+                Ok(crate::database_contract::DatabaseEngineSql::Mysql { charset })
             }
         }
     }
 }
 
-impl TryFrom<DatabaseEngineDTO> for crate::database::DatabaseEngine {
+impl TryFrom<DatabaseEngineDTO> for crate::database_contract::DatabaseEngine {
     type Error = String;
 
     fn try_from(dto: DatabaseEngineDTO) -> Result<Self, Self::Error> {
@@ -299,35 +305,35 @@ impl TryFrom<DatabaseEngineDTO> for crate::database::DatabaseEngine {
                 delimiter,
                 has_header,
                 infer_schema_length,
-            } => Ok(crate::database::DatabaseEngine::Csv {
+            } => Ok(crate::database_contract::DatabaseEngine::Csv {
                 path,
                 delimiter,
                 has_header,
                 infer_schema_length,
             }),
             DatabaseEngineDTO::Parquet { path, columns } => {
-                Ok(crate::database::DatabaseEngine::Parquet { path, columns })
+                Ok(crate::database_contract::DatabaseEngine::Parquet { path, columns })
             }
             DatabaseEngineDTO::Excel { path, sheet } => {
-                Ok(crate::database::DatabaseEngine::Excel { path, sheet })
+                Ok(crate::database_contract::DatabaseEngine::Excel { path, sheet })
             }
             DatabaseEngineDTO::DuckDb { path, table } => {
-                Ok(crate::database::DatabaseEngine::DuckDb { path, table })
+                Ok(crate::database_contract::DatabaseEngine::DuckDb { path, table })
             }
             DatabaseEngineDTO::Sql {
                 engine,
                 connection_string,
                 table,
             } => {
-                let engine = crate::database::DatabaseEngineSql::try_from(engine)?;
-                Ok(crate::database::DatabaseEngine::Sql {
+                let engine = crate::database_contract::DatabaseEngineSql::try_from(engine)?;
+                Ok(crate::database_contract::DatabaseEngine::Sql {
                     engine,
                     connection_string,
                     table,
                 })
             }
             DatabaseEngineDTO::InMemory { name } => {
-                Ok(crate::database::DatabaseEngine::InMemory { name })
+                Ok(crate::database_contract::DatabaseEngine::InMemory { name })
             }
         }
     }

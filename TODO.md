@@ -1469,3 +1469,7 @@ Execution 不知道具体 UI
 - [ ] 修复 ACF/PACF golden integration target 对已移除 `SciContext` 参数的遗留引用，改为调用唯一的单参数 SCI API。
 - [ ] 将 scientific port fake 收紧为 recording fixture，逐方法验证 typed request/result 与 cancellation/deadline control 透传。
 - [ ] 明确 synchronous scientific adapter 的 control 仅为 admission preflight，保留 Task 8 的真实 cooperative checkpoint activation debt。
+- [ ] 将 DatabaseDecl、DatabaseEngine 与 DatabaseEngineSql 原子迁入顶层 database_contract Pure Leaf owner，保持既有 serde wire、InMemory 与 DuckDB table 语义。
+- [ ] 全量切换 Application、Project、Schema、Commands、Database runtime 与测试 caller 到 crate::database_contract，删除 database 旧 declaration module/re-export。
+- [ ] 移除已消失 database declaration origins 对应的 exact capability/debt 条目，保留 DatabaseInstance、DuckDB storage 与 schema conversion 的现有职责和债务。
+- [ ] 增加 database contract 单一 owner 与 wire focused regressions，并完成 Rust architecture、数据库测试编译、fmt、check 与 diff 校验。

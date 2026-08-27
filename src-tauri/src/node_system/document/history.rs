@@ -223,8 +223,8 @@ impl WorksheetDocumentPatch {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DatabaseDocumentPatch {
-    pub before: Option<crate::database::DatabaseDecl>,
-    pub after: Option<crate::database::DatabaseDecl>,
+    pub before: Option<crate::database_contract::DatabaseDecl>,
+    pub after: Option<crate::database_contract::DatabaseDecl>,
 }
 
 impl DatabaseDocumentPatch {

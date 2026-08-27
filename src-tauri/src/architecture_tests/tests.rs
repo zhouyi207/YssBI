@@ -787,6 +787,33 @@ fn persisted_data_contract_has_one_pure_owner_without_graph_compatibility_reexpo
 }
 
 #[test]
+fn database_contract_has_one_pure_owner_without_legacy_declaration_files() {
+    let root = repository_root();
+    let contract_files = [
+        "src-tauri/src/database_contract/mod.rs",
+        "src-tauri/src/database_contract/declaration.rs",
+        "src-tauri/src/database_contract/engine.rs",
+    ];
+    for relative in contract_files {
+        assert!(
+            root.join(relative).is_file(),
+            "database contract owner must exist at {relative}"
+        );
+    }
+
+    for relative in [
+        "src-tauri/src/database/database_decl.rs",
+        "src-tauri/src/database/database_engine.rs",
+        "src-tauri/src/database/database_engine_sql.rs",
+    ] {
+        assert!(
+            !root.join(relative).exists(),
+            "legacy database declaration owner must be removed: {relative}"
+        );
+    }
+}
+
+#[test]
 fn categorical_role_owner_policy_requires_persisted_owner_and_only_approved_sci_origin() {
     let expectation = CanonicalOwnerExpectation {
         symbol: "CategoricalRole",

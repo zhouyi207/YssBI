@@ -78,7 +78,8 @@ owner、dependency kind、canonical target 与 occurrence count。审计对实�
 | `src-tauri/src/backend_adapters/` | final consumer-owned ports 到 concrete backend API 的 exact adapters；staged adapter 在 composition 切换前保持 production-unreachable |
 | `src-tauri/src/project/` | project/session authority、resource revision、事务提交与 publication、持久化协调和 coherent snapshots |
 | `src-tauri/src/node_system/` | graph document、catalog/registry、analysis、compiler、plan 与 runtime |
-| `src-tauri/src/database/` | DatabaseDecl/DatabaseInstance semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
+| `src-tauri/src/database_contract/` | persisted database declaration、engine identity 与 DuckDB table identity contract |
+| `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface、models 与当前 direct-SCI backend orchestration |
 | `src-tauri/sci/` | 独立 `yss-sci` Rust 数值算法 crate |

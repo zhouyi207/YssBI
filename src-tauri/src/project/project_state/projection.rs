@@ -282,7 +282,8 @@ impl ProjectState {
                 if database_schemas.contains_key(id) {
                     continue;
                 }
-                let crate::database::DatabaseEngine::DuckDb { path, table } = &declaration.engine
+                let crate::database_contract::DatabaseEngine::DuckDb { path, table } =
+                    &declaration.engine
                 else {
                     continue;
                 };

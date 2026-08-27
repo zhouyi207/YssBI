@@ -636,26 +636,6 @@ const RUST_INTERNAL_CAPABILITIES: &[InternalDependencyCapability] = &[
         fully_qualified_owner: "yssbi_lib::event::event_resource",
         canonical_origin_targets: &["yssbi_lib::project::project_session::ProjectInstanceId"],
     },
-    InternalDependencyCapability {
-        source_layer: RustLayer::Transport,
-        repository_relative_source_file: "src-tauri/src/schema/database.rs",
-        fully_qualified_owner: "yssbi_lib::schema::database",
-        canonical_origin_targets: &[
-            "yssbi_lib::database::database_decl::DatabaseDecl",
-            "yssbi_lib::database::database_engine::DatabaseEngine",
-            "yssbi_lib::database::database_engine::DatabaseEngine::Csv",
-            "yssbi_lib::database::database_engine::DatabaseEngine::DuckDb",
-            "yssbi_lib::database::database_engine::DatabaseEngine::Excel",
-            "yssbi_lib::database::database_engine::DatabaseEngine::InMemory",
-            "yssbi_lib::database::database_engine::DatabaseEngine::Parquet",
-            "yssbi_lib::database::database_engine::DatabaseEngine::Sql",
-            "yssbi_lib::database::database_engine_sql::DatabaseEngineSql",
-            "yssbi_lib::database::database_engine_sql::DatabaseEngineSql::Mysql",
-            "yssbi_lib::database::database_engine_sql::DatabaseEngineSql::Postgres",
-            "yssbi_lib::database::database_engine_sql::DatabaseEngineSql::Sqlite",
-            "yssbi_lib::database::database_engine_sql::DatabaseEngineSql::try_from",
-        ],
-    },
 ];
 
 pub(super) fn classify_rust_sources(

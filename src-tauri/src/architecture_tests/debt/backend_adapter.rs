@@ -401,14 +401,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         entries,
         BACKEND_ADAPTER_SPEC,
         "rust.internal.source-layer",
-        "src-tauri/src/node_system/document/history.rs",
-        "yssbi_lib::node_system::document::history",
-        [(Path, 2, "yssbi_lib::database::database_decl::DatabaseDecl")],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.internal.source-layer",
         "src-tauri/src/node_system/runtime/builtin.rs",
         "yssbi_lib::node_system::runtime::builtin",
         [
@@ -430,11 +422,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             (
                 Use,
                 1,
-                "yssbi_lib::database::database_engine::DatabaseEngine"
-            ),
-            (
-                Use,
-                1,
                 "yssbi_lib::database::database_instance::DatabaseInstance"
             ),
             (Use, 1, "yssbi_lib::database::database_state::DatabaseState"),
@@ -449,22 +436,9 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         entries,
         BACKEND_ADAPTER_SPEC,
         "rust.internal.source-layer",
-        "src-tauri/src/project/project_data.rs",
-        "yssbi_lib::project::project_data",
-        [(Use, 1, "yssbi_lib::database::database_decl::DatabaseDecl")],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.internal.source-layer",
         "src-tauri/src/project/project_io.rs",
         "yssbi_lib::project::project_io",
         [
-            (
-                Path,
-                1,
-                "yssbi_lib::database::database_engine::DatabaseEngine"
-            ),
             (
                 Path,
                 1,
@@ -475,12 +449,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 1,
                 "yssbi_lib::database::duckdb_reader::read_display_name"
             ),
-            (Use, 1, "yssbi_lib::database::database_decl::DatabaseDecl"),
-            (
-                Use,
-                1,
-                "yssbi_lib::database::database_engine::DatabaseEngine"
-            ),
         ],
     );
     debt_group!(
@@ -489,14 +457,11 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "rust.internal.source-layer",
         "src-tauri/src/project/project_reads.rs",
         "yssbi_lib::project::project_reads",
-        [
-            (Use, 1, "yssbi_lib::database::database_decl::DatabaseDecl"),
-            (
-                Use,
-                1,
-                "yssbi_lib::database::database_instance::DatabaseInstance"
-            ),
-        ],
+        [(
+            Use,
+            1,
+            "yssbi_lib::database::database_instance::DatabaseInstance"
+        ),],
     );
     debt_group!(
         entries,
@@ -512,18 +477,11 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "rust.internal.source-layer",
         "src-tauri/src/project/project_state/execution.rs",
         "yssbi_lib::project::project_state::execution",
-        [
-            (
-                Path,
-                1,
-                "yssbi_lib::database::database_engine::DatabaseEngine::DuckDb"
-            ),
-            (
-                Path,
-                1,
-                "yssbi_lib::database::database_instance::DatabaseInstance"
-            ),
-        ],
+        [(
+            Path,
+            1,
+            "yssbi_lib::database::database_instance::DatabaseInstance"
+        ),],
     );
     debt_group!(
         entries,
@@ -531,18 +489,11 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
         "rust.internal.source-layer",
         "src-tauri/src/project/project_state/projection.rs",
         "yssbi_lib::project::project_state::projection",
-        [
-            (
-                Path,
-                1,
-                "yssbi_lib::database::database_engine::DatabaseEngine::DuckDb"
-            ),
-            (
-                Path,
-                1,
-                "yssbi_lib::database::duckdb_reader::read_table_meta"
-            ),
-        ],
+        [(
+            Path,
+            1,
+            "yssbi_lib::database::duckdb_reader::read_table_meta"
+        ),],
     );
     debt_group!(
         entries,
@@ -570,21 +521,6 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
             1,
             "yssbi_lib::database::database_instance::DatabaseInstance"
         )],
-    );
-    debt_group!(
-        entries,
-        BACKEND_ADAPTER_SPEC,
-        "rust.internal.source-layer",
-        "src-tauri/src/project/resource_reveal.rs",
-        "yssbi_lib::project::resource_reveal",
-        [
-            (Use, 1, "yssbi_lib::database::database_decl::DatabaseDecl"),
-            (
-                Use,
-                1,
-                "yssbi_lib::database::database_engine::DatabaseEngine"
-            ),
-        ],
     );
     debt_group!(
         entries,
