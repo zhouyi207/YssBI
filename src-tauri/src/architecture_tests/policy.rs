@@ -9,6 +9,7 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
     ("src-tauri/src/lib.rs", RustLayer::CompositionRoot),
     ("src-tauri/src/main.rs", RustLayer::CompositionRoot),
     ("src-tauri/src/execution/mod.rs", RustLayer::Execution),
+    ("src-tauri/src/execution/value.rs", RustLayer::Execution),
     ("src-tauri/src/execution/identity.rs", RustLayer::Execution),
     ("src-tauri/src/execution/error.rs", RustLayer::Execution),
     ("src-tauri/src/execution/canonical.rs", RustLayer::Execution),
@@ -47,12 +48,29 @@ const EXACT_SOURCE_MEMBERSHIP: &[(&str, RustLayer)] = &[
         RustLayer::Execution,
     ),
     ("src-tauri/src/execution/ports/mod.rs", RustLayer::Execution),
+    ("src-tauri/src/graph/value/semantics.rs", RustLayer::Graph),
+    (
+        "src-tauri/src/project/variable_defaults.rs",
+        RustLayer::Project,
+    ),
     (
         "src-tauri/src/application/execution/session_factory.rs",
         RustLayer::Application,
     ),
     (
         "src-tauri/src/execution/ports/scientific.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/ports/relational.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/ports/resources.rs",
+        RustLayer::Execution,
+    ),
+    (
+        "src-tauri/src/execution/resource_preparation.rs",
         RustLayer::Execution,
     ),
     (

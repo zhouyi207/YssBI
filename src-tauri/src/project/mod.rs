@@ -31,6 +31,7 @@ pub mod resource_mutations;
 
 pub mod project_state_variable;
 pub mod project_store;
+pub mod variable_defaults;
 pub mod variable_tabular;
 
 pub mod resource_patch;

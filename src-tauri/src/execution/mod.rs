@@ -5,4 +5,5 @@ pub mod error;
 pub mod identity;
 pub mod plan;
 pub mod ports;
+pub mod resource_preparation;
 pub mod settings;

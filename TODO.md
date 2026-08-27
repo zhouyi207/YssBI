@@ -1580,3 +1580,6 @@ Execution 不知道具体 UI
 - [ ] 建立 Project-owned typed `ProjectRegistryStore` 与 bounded `ProjectProgress` contracts，隔离 registry persistence/progress 的消费者接口。
 - [ ] 建立 Commands-owned FIFO progress publisher/worker、shared close state 与 retryable shutdown outcome，保留 Tauri Channel 仅在 delivery adapter。
 - [ ] 完成 registry/progress staged contracts 的 Rust check、fmt 与 diff 校验；旧 Project SQLx/Channel route 保留至后续原子 caller cutover。
+- [ ] 建立 production-unreachable Execution relational/resource ports 与 canonical plan-version preparation，使用 fields-private sealed grants 和 typed failures。
+- [ ] 补齐 Graph value semantics、Project variable defaults 与 Execution RuntimeValue final owners，保持当前 node-system runtime caller 尚未切换。
+- [ ] 完成 relational/resource/value owner 的 Rust check、fmt 与 diff 校验，保留旧 Project resource/provider route 至 Execution Task 8 原子切换。
