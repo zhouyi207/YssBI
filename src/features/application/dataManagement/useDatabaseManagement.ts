@@ -1,11 +1,11 @@
 import { useCallback } from 'react';
-import { open } from '@tauri-apps/plugin-dialog';
 import { i18n } from '@/app/i18n';
 import { useDatabaseStore } from '@/features/core/dataStore';
 import { useEditorStore } from '@/features/core/editor';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { DatabaseService } from '@/services/database/databaseService';
 import { normalizeIpcError } from '@/services/ipc';
+import { openPathDialog } from '@/services/platform/pathDialog';
 import type { LoadDatabaseResult } from '@/shared/types/dto/database';
 import { databaseRecordFromLoad } from '@/shared/types/dto/database';
 import type { DatabaseImportSourceDTO, DatabaseRecord } from '@/shared/types/dto/database';
@@ -36,6 +36,14 @@ function showDataOperationError(
     incidentId: ipcError.incidentId,
     incidentLabel: i18n.t('common.incidentId'),
   });
+}
+
+function logDataOperationFailure(error: unknown, command: string, context: string): void {
+  const ipcError = normalizeIpcError(command, error);
+  logger.data.error(
+    `${context} failed code=${ipcError.code} incidentId=${ipcError.incidentId ?? 'none'}`,
+    'DatabaseManagement',
+  );
 }
 
 function commitLoadedDatabase(result: LoadDatabaseResult) {
@@ -130,27 +138,31 @@ export function triggerImportData() {
     onSelect: async (type) => {
       if (type === 'csv') {
         try {
-          const selected = await open({
+          const result = await openPathDialog({
             multiple: false,
             filters: [{ name: 'CSV File', extensions: ['csv'] }],
           });
+          if (!result.ok) throw new Error(result.failure.code);
+          const selected = result.value;
           if (selected && !Array.isArray(selected)) {
             await loadCsv(selected);
           }
         } catch (error) {
-          logger.data.error('Failed to import CSV: ' + String(error), 'DatabaseManagement');
+          logDataOperationFailure(error, 'load_database', 'CSV import');
           showDataOperationError(error, 'load_database', (code) =>
             i18n.t('dataOperation.importFailed', { error: code }));
         }
       } else if (type === 'sqlite') {
         try {
-          const selected = await open({
+          const result = await openPathDialog({
             multiple: false,
             filters: [
               { name: 'SQLite Database', extensions: ['db', 'sqlite', 'sqlite3'] },
               { name: 'All Files', extensions: ['*'] },
             ],
           });
+          if (!result.ok) throw new Error(result.failure.code);
+          const selected = result.value;
           if (selected && !Array.isArray(selected)) {
             const tables = await runWithDataOperationProgress(
               i18n.t('dataOperation.reading'),
@@ -169,7 +181,7 @@ export function triggerImportData() {
                 tables,
                 onSelect: (table) => {
                   loadSqliteTable(selected, table).catch((error) => {
-                    logger.data.error('Failed to load SQLite table: ' + String(error), 'DatabaseManagement');
+                    logDataOperationFailure(error, 'load_database', 'SQLite table load');
                     showDataOperationError(error, 'load_database', (code) =>
                       i18n.t('dataOperation.importFailed', { error: code }));
                   });
@@ -178,7 +190,7 @@ export function triggerImportData() {
             }
           }
         } catch (error) {
-          logger.data.error('Failed to import SQLite: ' + String(error), 'DatabaseManagement');
+          logDataOperationFailure(error, 'list_sqlite_tables', 'SQLite import');
           showDataOperationError(error, 'list_sqlite_tables', (code) =>
             i18n.t('dataOperation.importFailed', { error: code }));
         }
@@ -207,7 +219,7 @@ export function triggerImportData() {
                   tables,
                   onSelect: (table) => {
                     loadSqlRemoteTable(engine, connectionString, table).catch((error) => {
-                      logger.data.error(`Failed to load ${label} table: ${String(error)}`, 'DatabaseManagement');
+                      logDataOperationFailure(error, 'load_database', `${label} table load`);
                       showDataOperationError(error, 'load_database', (code) =>
                         i18n.t('dataOperation.importFailed', { error: code }));
                     });
@@ -215,7 +227,7 @@ export function triggerImportData() {
                 });
               }
             } catch (error) {
-              logger.data.error(`Failed to list ${label} tables: ${String(error)}`, 'DatabaseManagement');
+              logDataOperationFailure(error, 'list_sql_tables', `${label} table listing`);
               showDataOperationError(error, 'list_sql_tables', (code) =>
                 i18n.t('dataOperation.connectFailed', { label, error: code }));
             }
@@ -223,13 +235,15 @@ export function triggerImportData() {
         });
       } else if (type === 'xlsx') {
         try {
-          const selected = await open({
+          const result = await openPathDialog({
             multiple: false,
             filters: [
               { name: 'Excel File', extensions: ['xlsx', 'xls'] },
               { name: 'All Files', extensions: ['*'] },
             ],
           });
+          if (!result.ok) throw new Error(result.failure.code);
+          const selected = result.value;
           if (selected && !Array.isArray(selected)) {
             const sheets = await runWithDataOperationProgress(
               i18n.t('dataOperation.reading'),
@@ -248,7 +262,7 @@ export function triggerImportData() {
                 sheets,
                 onSelect: (sheet) => {
                   loadExcelSheet(selected, sheet).catch((error) => {
-                    logger.data.error('Failed to load Excel sheet: ' + String(error), 'DatabaseManagement');
+                    logDataOperationFailure(error, 'load_database', 'Excel sheet load');
                     showDataOperationError(error, 'load_database', (code) =>
                       i18n.t('dataOperation.importFailed', { error: code }));
                   });
@@ -257,7 +271,7 @@ export function triggerImportData() {
             }
           }
         } catch (error) {
-          logger.data.error('Failed to import Excel: ' + String(error), 'DatabaseManagement');
+          logDataOperationFailure(error, 'list_excel_sheets', 'Excel import');
           showDataOperationError(error, 'list_excel_sheets', (code) =>
             i18n.t('dataOperation.importFailed', { error: code }));
         }
@@ -299,7 +313,7 @@ export function useDatabaseManagement() {
         clearDetailFocus();
       }
     } catch (e) {
-      logger.data.warn('deleteDatabase backend failed: ' + String(e), 'DatabaseManagement');
+      logDataOperationFailure(e, 'delete_database', 'Database deletion');
       showDataOperationError(e, 'delete_database', (code) =>
         i18n.t('dataOperation.deleteFailed', { error: code }));
     }
@@ -318,7 +332,7 @@ export function useDatabaseManagement() {
         trimmed,
       ));
     } catch (e) {
-      logger.data.warn('renameDatabase backend failed: ' + String(e), 'DatabaseManagement');
+      logDataOperationFailure(e, 'rename_database', 'Database rename');
       showDataOperationError(e, 'rename_database', (code) =>
         i18n.t('dataOperation.renameFailed', { error: code }));
     }

@@ -8,12 +8,7 @@ import {
   DEFAULT_THEME,
 } from '@/app/appConfig/default';
 import { COLOR_THEME_PRESETS } from '@/features/application/settings/colorThemePresets';
-import { useSettingsStore } from './settingsStore';
-
-vi.mock('@tauri-apps/api/event', () => ({
-  emit: vi.fn(async () => undefined),
-  listen: vi.fn(async () => () => undefined),
-}));
+import { setClientSettingsPublisher, useSettingsStore } from './settingsStore';
 
 vi.mock('@/utils/appLogger', () => ({
   logger: {
@@ -84,6 +79,7 @@ const APPEARANCE_KEYS = [
 describe('settingsStore appearance persistence', () => {
   beforeEach(() => {
     localStorage.clear();
+    setClientSettingsPublisher(null);
     useSettingsStore.setState({
       theme: DEFAULT_THEME,
       editor: DEFAULT_EDITOR,

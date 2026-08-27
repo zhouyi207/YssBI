@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { save } from '@tauri-apps/plugin-dialog';
 import { VscCloudDownload, VscFolderOpened } from 'react-icons/vsc';
 import type { DensitySeriesDTO, InferenceResultDTO, PosteriorPredictiveRowDTO, TraceSeriesDTO } from '@/shared/types/bayes';
 import { MultiLineChart, PredictiveIntervalChart } from '@/shared/charts';
@@ -18,6 +17,7 @@ import {
   type DiagnosticSuggestion,
 } from '@/features/domain/bayes';
 import { exportBayesArtifactCsv, readBayesAutocorrelationData, readBayesDensityPlotData, readBayesPosteriorPredictive, readBayesTracePlotData, revealBayesResultFolder } from '@/services/bayes/bayesInferenceService';
+import { savePathDialog } from '@/services/platform/pathDialog';
 import { PanelTitle, formatNumber } from './model/BayesFields';
 import { LatexInline, latexSymbol } from './model/LatexPresentation';
 import { bayesActionErrorMessage, bayesDiagnosticWarningText } from '../bayesIssuePresentation';
@@ -449,11 +449,13 @@ export function BayesCsvExportButton({
     if (!result || !available) return;
     setFeedback(null);
     try {
-      const destination = await save({
+      const selection = await savePathDialog({
         title: t('bayes.results.actions.exportCsv'),
         defaultPath: fileName,
         filters: [{ name: 'CSV', extensions: ['csv'] }],
       });
+      if (!selection.ok) throw new Error(selection.failure.code);
+      const destination = selection.value;
       if (!destination) return;
       await exportBayesArtifactCsv(result.artifactManifest.taskId, kind, destination);
       setFeedback({ kind: 'success', message: t('bayes.results.messages.exportSuccess') });

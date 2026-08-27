@@ -1,5 +1,5 @@
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { WindowStateService } from "@/services/window/windowStateService";
+import { createWebviewWindow } from "@/services/platform/webviewWindow";
 import type { WindowKind, WindowState } from "@/shared/types/settings";
 import { readWindowDecorationsFromSettings } from "@/features/application/window/windowDecorationPolicy";
 import { logger } from "@/utils/appLogger";
@@ -53,29 +53,26 @@ async function resolveWindowGeometry(policy: WindowGeometryPolicy): Promise<Wind
 }
 
 /**
- * 异步创建一个 `WebviewWindow`。几何状态由显式 policy 决定：
+ * 异步创建一个 webview 窗口。几何状态由显式 policy 决定：
  * 普通窗口读取后端，独立窗口可提供自己的 per-label 状态。
  *
  * 调用方应 `await` 本函数；这与「创建窗口本身就是异步操作」一致。
  */
-export async function createPersistedWindow(opts: PersistedWindowOptions): Promise<WebviewWindow> {
+export async function createPersistedWindow(opts: PersistedWindowOptions): Promise<void> {
     const saved = await resolveWindowGeometry(opts.geometry);
 
-    const config: Record<string, unknown> = {
+    const result = await createWebviewWindow({
+        label: opts.label,
         url: opts.url,
         title: opts.title,
         width: saved.width,
         height: saved.height,
         decorations: opts.decorations ?? readWindowDecorationsFromSettings(),
         visible: opts.visible ?? false,
-    };
-    if (typeof saved.x === "number" && typeof saved.y === "number") {
-        config.x = saved.x;
-        config.y = saved.y;
-    }
-    if (saved.isMaximized) {
-        config.maximized = true;
-    }
-
-    return new WebviewWindow(opts.label, config);
+        ...(typeof saved.x === "number" && typeof saved.y === "number"
+            ? { x: saved.x, y: saved.y }
+            : {}),
+        ...(saved.isMaximized ? { maximized: true } : {}),
+    });
+    if (!result.ok) throw new Error(result.failure.code);
 }

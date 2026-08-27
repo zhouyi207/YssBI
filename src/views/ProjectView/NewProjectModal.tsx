@@ -1,4 +1,3 @@
-import { open } from "@tauri-apps/plugin-dialog";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { VscError, VscWarning } from "react-icons/vsc";
@@ -22,6 +21,7 @@ import {
 } from "@/features/application/project";
 import { DEFAULT_PROJECT_NAME } from "@/shared/constants/defaultResourceNames";
 import { ProjectService } from "@/services/project/projectService";
+import { openPathDialog } from "@/services/platform/pathDialog";
 import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import {
   ProjectPickerErrorDetails,
@@ -196,12 +196,14 @@ export function NewProjectModal({ open: isOpen, onOpenChange, onCreate }: NewPro
     clearFieldErrors();
     setIssue(null);
     try {
-      const selected = await open({
+      const result = await openPathDialog({
         directory: true,
         multiple: false,
         title: t("projectPicker.newProjectModal.browseTitle"),
         defaultPath: parentBase || undefined,
       });
+      if (!result.ok) throw new Error(result.failure.code);
+      const selected = result.value;
       if (!selected || Array.isArray(selected)) return;
       const parent = formatDisplayPath(selected);
       setParentBase(parent);

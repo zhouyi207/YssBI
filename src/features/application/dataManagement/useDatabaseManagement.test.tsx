@@ -11,7 +11,7 @@ import { normalizeIpcError } from '@/services/ipc';
 import { uiStore } from '@/features/core/ui/UIStore';
 import { useDatabaseManagement } from './useDatabaseManagement';
 
-vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
+vi.mock('@/services/platform/pathDialog', () => ({ openPathDialog: vi.fn() }));
 
 const projectInstanceId = '00000000-0000-0000-0000-000000000601';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

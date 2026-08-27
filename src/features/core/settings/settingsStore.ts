@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { emit, listen } from "@tauri-apps/api/event";
 import {
     ThemeSettings,
     EditorSettings,
@@ -18,10 +17,14 @@ import { logger } from '@/utils/appLogger';
 const SETTINGS_STORAGE_KEY = "yssbi-client-settings-v2";
 const LEGACY_SETTINGS_STORAGE_KEY = "yssbi-client-settings";
 
-/** 多 WebView 窗口间同步客户端设置（主题等），与 localStorage 同源 */
-export const CLIENT_SETTINGS_UPDATED_EVENT = "client-settings-updated";
-
 let suppressClientSettingsCrossWindowBroadcast = false;
+let publishClientSettings: ((settings: AppSettings) => void) | null = null;
+
+export function setClientSettingsPublisher(
+    publisher: ((settings: AppSettings) => void) | null,
+): void {
+    publishClientSettings = publisher;
+}
 
 function clientSettingsFingerprint(s: AppSettings): string {
     return JSON.stringify({
@@ -103,56 +106,39 @@ function saveLocalSettings(settings: AppSettings): void {
     }
 }
 
-async function emitClientSettingsUpdated(settings: AppSettings): Promise<void> {
-    try {
-        await emit(CLIENT_SETTINGS_UPDATED_EVENT, settings);
-    } catch {
-        // 非 Tauri 环境或事件不可用时忽略
-    }
-}
-
 function persistClientSettings(settings: AppSettings): void {
     saveLocalSettings(settings);
     if (suppressClientSettingsCrossWindowBroadcast) return;
-    void emitClientSettingsUpdated(settings);
+    publishClientSettings?.(settings);
 }
 
-/**
- * 订阅其他窗口写入的客户端设置；返回取消监听函数。
- * 收到后与当前指纹比对，避免回声与多余渲染。
- */
-export async function subscribeClientSettingsCrossWindow(): Promise<() => void> {
-    const unlisten = await listen<AppSettings>(CLIENT_SETTINGS_UPDATED_EVENT, (event) => {
-        const incoming = event.payload;
-        if (!incoming || typeof incoming !== "object") return;
+/** 应用其他窗口写入的客户端设置，避免相同快照回声与多余渲染。 */
+export function applyClientSettingsFromRemote(incoming: AppSettings): void {
+    const merged = mergeSettings(incoming);
+    const cur = useSettingsStore.getState();
+    const currentPayload: AppSettings = {
+        theme: cur.theme,
+        editor: cur.editor,
+        appearance: cur.appearance,
+        project: cur.project,
+    };
+    if (clientSettingsFingerprint(currentPayload) === clientSettingsFingerprint(merged)) {
+        return;
+    }
 
-        const merged = mergeSettings(incoming as Partial<AppSettings>);
-        const cur = useSettingsStore.getState();
-        const currentPayload: AppSettings = {
-            theme: cur.theme,
-            editor: cur.editor,
-            appearance: cur.appearance,
-            project: cur.project,
-        };
-        if (clientSettingsFingerprint(currentPayload) === clientSettingsFingerprint(merged)) {
-            return;
-        }
-
-        suppressClientSettingsCrossWindowBroadcast = true;
-        try {
-            saveLocalSettings(merged);
-            useSettingsStore.setState({
-                theme: merged.theme,
-                editor: merged.editor,
-                appearance: merged.appearance,
-                project: merged.project,
-                isLoading: false,
-            });
-        } finally {
-            suppressClientSettingsCrossWindowBroadcast = false;
-        }
-    });
-    return unlisten;
+    suppressClientSettingsCrossWindowBroadcast = true;
+    try {
+        saveLocalSettings(merged);
+        useSettingsStore.setState({
+            theme: merged.theme,
+            editor: merged.editor,
+            appearance: merged.appearance,
+            project: merged.project,
+            isLoading: false,
+        });
+    } finally {
+        suppressClientSettingsCrossWindowBroadcast = false;
+    }
 }
 
 interface SettingsStore {

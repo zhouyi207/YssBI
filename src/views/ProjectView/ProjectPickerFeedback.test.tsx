@@ -14,6 +14,8 @@ import { NewProjectModal } from './NewProjectModal';
 import { DeleteProjectConfirmDialog } from './DeleteProjectConfirmDialog';
 import { ProjectPickerPageIssueAlert } from './ProjectPickerPageIssueAlert';
 
+const openPathDialog = vi.hoisted(() => vi.fn());
+
 vi.mock('react-i18next', () => ({
   initReactI18next: { type: '3rdParty', init: vi.fn() },
   useTranslation: () => ({
@@ -32,8 +34,8 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
 }));
 
-vi.mock('@tauri-apps/plugin-dialog', () => ({
-  open: vi.fn(),
+vi.mock('@/services/platform/pathDialog', () => ({
+  openPathDialog,
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -68,6 +70,7 @@ describe('project picker visible feedback', () => {
     document.body.appendChild(host);
     root = createRoot(host);
     vi.spyOn(ProjectService, 'defaultProjectParentDirectory').mockResolvedValue('C:/Projects');
+    openPathDialog.mockResolvedValue({ ok: true, value: null });
   });
 
   afterEach(() => {
@@ -105,6 +108,32 @@ describe('project picker visible feedback', () => {
     expect(host.querySelector('[role="alert"]')).not.toBeNull();
     expect(host.textContent).toContain('invalid_project_root');
     expect(host.textContent).toContain('incident-create');
+  });
+
+  it('maps path dialog failures without exposing native error text', async () => {
+    openPathDialog.mockResolvedValueOnce({
+      ok: false,
+      failure: { operation: 'openPathDialog', code: 'operationFailed' },
+    });
+
+    await act(async () => {
+      root.render(
+        <NewProjectModal
+          open
+          onOpenChange={vi.fn()}
+          onCreate={vi.fn()}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    const browse = [...host.querySelectorAll('button')].find(
+      (button) => button.textContent === 'projectPicker.newProjectModal.browse',
+    );
+    click(browse ?? null);
+    await flush();
+
+    expect(host.textContent).toContain('unknown_error');
   });
 
   it('keeps the delete dialog open when deletion fails', async () => {

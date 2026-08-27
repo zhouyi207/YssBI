@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { WindowStateService } from '@/services/window/windowStateService';
+import { createWebviewWindow } from '@/services/platform/webviewWindow';
 import {
   createPersistedWindow,
   type PersistedWindowOptions,
 } from './createPersistedWindow';
 
-vi.mock('@tauri-apps/api/webviewWindow', () => ({
-  WebviewWindow: vi.fn(),
+vi.mock('@/services/platform/webviewWindow', () => ({
+  createWebviewWindow: vi.fn(),
 }));
 
 vi.mock('@/services/window/windowStateService', () => ({
@@ -18,7 +18,8 @@ vi.mock('@/services/window/windowStateService', () => ({
 
 describe('createPersistedWindow', () => {
   beforeEach(() => {
-    vi.mocked(WebviewWindow).mockClear();
+    vi.mocked(createWebviewWindow).mockReset();
+    vi.mocked(createWebviewWindow).mockResolvedValue({ ok: true, value: undefined });
     vi.mocked(WindowStateService.get).mockReset();
   });
 
@@ -43,11 +44,15 @@ describe('createPersistedWindow', () => {
     await createPersistedWindow(request);
 
     expect(WindowStateService.get).not.toHaveBeenCalled();
-    expect(WebviewWindow).toHaveBeenCalledWith('window-2', expect.objectContaining({
+    expect(createWebviewWindow).toHaveBeenCalledWith(expect.objectContaining({
+      label: 'window-2',
+      url: 'index.html#/editor',
+      title: 'YssBI Node Editor',
       width: 840,
       height: 620,
       x: 120,
       y: 90,
+      visible: true,
       maximized: true,
     }));
   });
@@ -74,9 +79,29 @@ describe('createPersistedWindow', () => {
     });
 
     expect(WindowStateService.get).toHaveBeenCalledWith('logs');
-    expect(WebviewWindow).toHaveBeenCalledWith('logs-2', expect.objectContaining({
+    expect(createWebviewWindow).toHaveBeenCalledWith(expect.objectContaining({
+      label: 'logs-2',
+      url: 'index.html#/logs',
+      title: 'Logs',
       x: 140,
       y: 110,
     }));
+  });
+
+  it('exposes only the stable platform failure code to callers', async () => {
+    vi.mocked(createWebviewWindow).mockResolvedValueOnce({
+      ok: false,
+      failure: { operation: 'createWebviewWindow', code: 'operationFailed' },
+    });
+
+    await expect(createPersistedWindow({
+      geometry: {
+        source: 'provided',
+        state: { width: 840, height: 620, x: null, y: null, isMaximized: false },
+      },
+      label: 'window-3',
+      url: 'index.html#/editor',
+      title: 'YssBI Node Editor',
+    })).rejects.toThrow('operationFailed');
   });
 });

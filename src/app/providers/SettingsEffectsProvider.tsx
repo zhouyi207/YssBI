@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect } from "react";
 import { i18n } from "@/app/i18n";
-import { subscribeClientSettingsCrossWindow, useSettingsStore } from "@/features/core/settings/settingsStore";
+import { useSettingsStore } from "@/features/core/settings/settingsStore";
 import {
   applySmoothScrollSetting,
   syncColorThemePreset,
@@ -12,6 +12,7 @@ import {
 } from "@/shared/theme/themeTokens";
 
 import { useWindowDecorationEffect } from "@/features/application/window/useWindowDecorations";
+import { SettingsSyncCoordinator } from "@/features/application/settings/settingsSyncCoordinator";
 
 export function applyThemeTokens(root: HTMLElement, tokens: ResolvedThemeTokens): void {
     const set = (name: string, value: string) => root.style.setProperty(name, value);
@@ -122,15 +123,9 @@ export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = 
     }, [load]);
 
     useEffect(() => {
-        let cancelled = false;
-        let unlisten: (() => void) | undefined;
-        void subscribeClientSettingsCrossWindow().then((fn) => {
-            if (!cancelled) unlisten = fn;
-        });
-        return () => {
-            cancelled = true;
-            unlisten?.();
-        };
+        const coordinator = new SettingsSyncCoordinator();
+        void coordinator.start();
+        return () => coordinator.stop();
     }, []);
 
     useEffect(() => {

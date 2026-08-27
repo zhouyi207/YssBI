@@ -12,12 +12,12 @@ import {
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const mocks = vi.hoisted(() => ({
-  save: vi.fn(),
+  savePathDialog: vi.fn(),
   exportCsv: vi.fn(),
   revealFolder: vi.fn(),
 }));
 
-vi.mock('@tauri-apps/plugin-dialog', () => ({ save: mocks.save }));
+vi.mock('@/services/platform/pathDialog', () => ({ savePathDialog: mocks.savePathDialog }));
 vi.mock('@/services/bayes/bayesInferenceService', () => ({
   exportBayesArtifactCsv: mocks.exportCsv,
   revealBayesResultFolder: mocks.revealFolder,
@@ -79,7 +79,7 @@ describe('Bayes result action feedback', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.save.mockResolvedValue('C:/exports/posterior.csv');
+    mocks.savePathDialog.mockResolvedValue({ ok: true, value: 'C:/exports/posterior.csv' });
     mocks.exportCsv.mockResolvedValue(undefined);
     mocks.revealFolder.mockResolvedValue(undefined);
     host = document.createElement('div');
