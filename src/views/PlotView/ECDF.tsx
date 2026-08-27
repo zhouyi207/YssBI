@@ -1,9 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, extent, line, curveStepAfter } from 'd3';
-import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
-import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
+import {
+  DEFAULT_CARTESIAN_MARGIN,
+  useChartContainerSize,
+  useChartTheme,
+  type ChartMargin,
+} from '@/shared/charts/core';
 import { cn } from '@/lib/utils';
-import { DEFAULT_PLOT_MARGIN, plotContainerClass, type PlotMargin } from './plotShellStyles';
+import { plotContainerClass } from './plotShellStyles';
 
 export interface ECDFPoint {
   x: number;
@@ -22,7 +26,7 @@ export interface ECDFProps {
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
-  margin?: PlotMargin;
+  margin?: ChartMargin;
 }
 
 const ECDF: React.FC<ECDFProps> = ({
@@ -31,12 +35,11 @@ const ECDF: React.FC<ECDFProps> = ({
   yLabel = 'Cumulative Proportion',
   color,
   height: heightProp,
-  margin = DEFAULT_PLOT_MARGIN,
+  margin = DEFAULT_CARTESIAN_MARGIN,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
-  const { containerRef, size } = usePlotContainerSize();
-  const chartTheme = useChartThemeColors();
-  const seriesColors = useChartSeriesColors();
+  const { containerRef, size } = useChartContainerSize();
+  const { colors: chartTheme, series: seriesColors } = useChartTheme();
   const plotColor = color ?? seriesColors.primary;
 
   useEffect(() => {

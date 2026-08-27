@@ -1,13 +1,17 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, extent, line } from 'd3';
-import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import {
+  DEFAULT_CARTESIAN_MARGIN,
+  useChartContainerSize,
+  useChartTheme,
+  type ChartMargin,
+} from '@/shared/charts/core';
 import { plotAxisTickFormatter } from '@/shared/plot/plotTime';
-import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { cn } from '@/lib/utils';
-import { plotShellClass, plotToolbarClass, DEFAULT_PLOT_MARGIN, type PlotMargin } from './plotShellStyles';
+import { plotShellClass, plotToolbarClass } from './plotShellStyles';
 
 export interface LinePoint {
   x: number;
@@ -33,7 +37,7 @@ export interface LineProps {
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
-  margin?: PlotMargin;
+  margin?: ChartMargin;
   /** 嵌入编辑器工作表：无边框、无圆角、填满容器 */
   embedded?: boolean;
 }
@@ -59,15 +63,14 @@ const Line: React.FC<LineProps> = ({
   strokeWidth = 2,
   showPoints: showPointsInit = true,
   height: heightProp,
-  margin = DEFAULT_PLOT_MARGIN,
+  margin = DEFAULT_CARTESIAN_MARGIN,
   embedded = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
-  const { containerRef, size } = usePlotContainerSize();
+  const { containerRef, size } = useChartContainerSize();
   const [toolbarOpen, setToolbarOpen] = useState(false);
   const [pointsVisible, setPointsVisible] = useState(showPointsInit);
-  const chartTheme = useChartThemeColors();
-  const seriesColors = useChartSeriesColors();
+  const { colors: chartTheme, series: seriesColors } = useChartTheme();
   const plotColor = color ?? seriesColors.primary;
 
   const toggleToolbar = useCallback(() => setToolbarOpen((v) => !v), []);

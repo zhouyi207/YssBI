@@ -1,9 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { area, axisBottom, axisLeft, extent, line, scaleLinear, select } from 'd3';
 import { cn } from '@/lib/utils';
-import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
-import { useChartSeriesColors, useChartThemeColors } from '@/shared/theme/chartTheme';
-import { DEFAULT_CHART_MARGIN, type ChartMargin } from './KDEChart';
+import {
+  DEFAULT_CARTESIAN_MARGIN,
+  useChartContainerSize,
+  useChartTheme,
+  type ChartMargin,
+} from '@/shared/charts/core';
 
 export interface PredictiveIntervalPoint {
   observation: number;
@@ -27,13 +30,12 @@ export function PredictiveIntervalChart({
   xLabel = 'observation',
   yLabel = 'value',
   height = 280,
-  margin = DEFAULT_CHART_MARGIN,
+  margin = DEFAULT_CARTESIAN_MARGIN,
   className,
 }: PredictiveIntervalChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const { containerRef, size } = usePlotContainerSize();
-  const chartTheme = useChartThemeColors();
-  const seriesColors = useChartSeriesColors();
+  const { containerRef, size } = useChartContainerSize();
+  const { colors: chartTheme, series: seriesColors } = useChartTheme();
 
   useEffect(() => {
     const svg = select(svgRef.current);

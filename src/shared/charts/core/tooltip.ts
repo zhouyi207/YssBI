@@ -1,10 +1,22 @@
 import type { ChartThemeColors } from '@/shared/theme/chartTheme';
 
-/** d3 selection subset used for `.on()` handlers without `as unknown` casts */
+export type MarkInteractionEvent = MouseEvent | FocusEvent;
+
+/** D3 selection subset used by mark tooltip bindings. */
 export type D3Onable<GElement extends Element = Element, Datum = unknown> = {
+  attr(
+    name: string,
+    value:
+      | string
+      | number
+      | null
+      | ((this: GElement, datum: Datum) => string | number | null),
+  ): D3Onable<GElement, Datum>;
   on(
     typenames: string,
-    listener: ((this: GElement, event: MouseEvent, datum: Datum) => void) | null,
+    listener:
+      | ((this: GElement, event: MarkInteractionEvent, datum: Datum) => void)
+      | null,
   ): D3Onable<GElement, Datum>;
 };
 
@@ -42,38 +54,19 @@ export function computeAnchorTooltipPosition(input: AnchorTooltipPositionInput):
 }
 
 export interface PointerTooltipPositionInput {
-  containerWidth: number;
-  containerHeight: number;
   pointerLeft: number;
   pointerTop: number;
-  tooltipWidth: number;
-  tooltipHeight: number;
   offset?: TooltipOffset;
-  centerX?: boolean;
 }
 
-/** Cursor tooltip with optional horizontal centering and above/below flip. */
+/** Cursor tooltip positioned at a stable offset from the pointer. */
 export function computePointerTooltipPosition(input: PointerTooltipPositionInput): {
   left: number;
   top: number;
 } {
   const offset = input.offset ?? { x: 8, y: -36 };
-  const left = input.centerX
-    ? Math.max(
-        4,
-        Math.min(
-          input.pointerLeft - input.tooltipWidth / 2,
-          input.containerWidth - input.tooltipWidth - 4,
-        ),
-      )
-    : input.pointerLeft + offset.x;
-  if (input.centerX) {
-    const above = input.pointerTop - input.tooltipHeight - 8;
-    const below = input.pointerTop + 8;
-    return { left, top: above > 0 ? above : below };
-  }
   return {
-    left,
+    left: input.pointerLeft + offset.x,
     top: input.pointerTop + offset.y,
   };
 }
@@ -141,29 +134,9 @@ export class PlotTooltipController {
     if (!this.tooltipEl || !this.containerEl) return;
     const containerRect = this.containerEl.getBoundingClientRect();
     const { left, top } = computePointerTooltipPosition({
-      containerWidth: containerRect.width,
-      containerHeight: containerRect.height,
       pointerLeft: event.clientX - containerRect.left,
       pointerTop: event.clientY - containerRect.top,
-      tooltipWidth: this.tooltipEl.offsetWidth,
-      tooltipHeight: this.tooltipEl.offsetHeight,
       offset,
-    });
-    this.tooltipEl.style.left = `${left}px`;
-    this.tooltipEl.style.top = `${top}px`;
-  }
-
-  moveToPointerCentered(event: MouseEvent): void {
-    if (!this.tooltipEl || !this.containerEl) return;
-    const containerRect = this.containerEl.getBoundingClientRect();
-    const { left, top } = computePointerTooltipPosition({
-      containerWidth: containerRect.width,
-      containerHeight: containerRect.height,
-      pointerLeft: event.clientX - containerRect.left,
-      pointerTop: event.clientY - containerRect.top,
-      tooltipWidth: this.tooltipEl.offsetWidth,
-      tooltipHeight: this.tooltipEl.offsetHeight,
-      centerX: true,
     });
     this.tooltipEl.style.left = `${left}px`;
     this.tooltipEl.style.top = `${top}px`;
@@ -187,68 +160,63 @@ export class PlotTooltipController {
   }
 }
 
-export interface AttachHoverTooltipConfig<GElement extends Element, Datum> {
+export interface AttachMarkTooltipConfig<GElement extends Element, Datum> {
   tooltip: PlotTooltipController;
   getHtml: (datum: Datum, element: GElement) => string;
+  getAriaLabel?: (datum: Datum, element: GElement) => string;
   position?: 'cursor' | 'anchor';
   cursorOffset?: TooltipOffset;
-  onEnter?: (element: GElement, datum: Datum, event: MouseEvent) => void;
+  onEnter?: (
+    element: GElement,
+    datum: Datum,
+    event: MarkInteractionEvent,
+  ) => void;
   onMove?: (element: GElement, datum: Datum, event: MouseEvent) => void;
   onLeave?: (element: GElement, datum: Datum) => void;
 }
 
-/** Standard enter / move / leave tooltip wiring for bar, cell, point marks. */
-export function attachHoverTooltip<GElement extends Element, Datum>(
+/** Pointer and keyboard tooltip wiring for bar, cell, and point marks. */
+export function attachMarkTooltip<GElement extends Element, Datum>(
   selection: D3Onable<GElement, Datum>,
-  config: AttachHoverTooltipConfig<GElement, Datum>,
+  config: AttachMarkTooltipConfig<GElement, Datum>,
 ): void {
   const position = config.position ?? 'cursor';
 
+  selection.attr('tabindex', 0);
+  if (config.getAriaLabel) {
+    selection.attr('aria-label', function (this: GElement, datum: Datum) {
+      return config.getAriaLabel?.(datum, this) ?? null;
+    });
+  }
+
   selection
-    .on('mouseenter', function (this: GElement, event: MouseEvent, datum: Datum) {
+    .on('mouseenter', function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
       config.onEnter?.(this, datum, event);
       config.tooltip.show(config.getHtml(datum, this));
       if (position === 'anchor') {
         config.tooltip.moveToAnchor(this.getBoundingClientRect());
       } else {
-        config.tooltip.moveToCursor(event, config.cursorOffset);
+        config.tooltip.moveToCursor(event as MouseEvent, config.cursorOffset);
       }
     })
-    .on('mousemove', function (this: GElement, event: MouseEvent, datum: Datum) {
-      config.onMove?.(this, datum, event);
+    .on('mousemove', function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
+      const mouseEvent = event as MouseEvent;
+      config.onMove?.(this, datum, mouseEvent);
       if (position === 'cursor') {
-        config.tooltip.moveToCursor(event, config.cursorOffset);
+        config.tooltip.moveToCursor(mouseEvent, config.cursorOffset);
       }
     })
-    .on('mouseleave', function (this: GElement, _event: MouseEvent, datum: Datum) {
+    .on('mouseleave', function (this: GElement, _event: MarkInteractionEvent, datum: Datum) {
       config.onLeave?.(this, datum);
       config.tooltip.hide();
-    });
-}
-
-export interface AttachOverlayCursorTooltipConfig {
-  tooltip: PlotTooltipController;
-  onMove: (event: MouseEvent) => string;
-  onLeave?: () => void;
-  centered?: boolean;
-}
-
-/** Transparent plot overlay: tooltip follows pointer (IRF-style). */
-export function attachOverlayCursorTooltip(
-  selection: D3Onable<SVGRectElement, unknown>,
-  config: AttachOverlayCursorTooltipConfig,
-): void {
-  selection
-    .on('mousemove', function (event: MouseEvent) {
-      config.tooltip.show(config.onMove(event));
-      if (config.centered) {
-        config.tooltip.moveToPointerCentered(event);
-      } else {
-        config.tooltip.moveToCursor(event);
-      }
     })
-    .on('mouseleave', () => {
-      config.onLeave?.();
+    .on('focus', function (this: GElement, event: MarkInteractionEvent, datum: Datum) {
+      config.onEnter?.(this, datum, event);
+      config.tooltip.show(config.getHtml(datum, this));
+      config.tooltip.moveToAnchor(this.getBoundingClientRect());
+    })
+    .on('blur', function (this: GElement, _event: MarkInteractionEvent, datum: Datum) {
+      config.onLeave?.(this, datum);
       config.tooltip.hide();
     });
 }

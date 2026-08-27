@@ -1,5 +1,5 @@
 import type { ParsedPlotPayload } from '@/features/application/presentation';
-import { useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { useChartTheme } from '@/shared/charts/core';
 import Scatter from '@/views/PlotView/Scatter';
 import Line from '@/views/PlotView/Line';
 import ECDF from '@/views/PlotView/ECDF';
@@ -33,7 +33,7 @@ export function PlotWindowContent({
   payload,
   invalidFormatMessage,
 }: PlotWindowContentProps) {
-  const seriesColors = useChartSeriesColors();
+  const { series: seriesColors } = useChartTheme();
 
   if (!payload) {
     return <PlotInvalidState message={invalidFormatMessage} />;

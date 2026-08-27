@@ -1,17 +1,25 @@
 import React, { useEffect, useRef } from 'react';
 import { select, scaleBand, scaleSequential, interpolateRdBu } from 'd3';
-import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
-import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import {
-  attachHoverTooltip,
+  attachMarkTooltip,
   type D3Onable,
   PlotTooltipController,
   tooltipMutedLine,
   tooltipStrongLine,
   tooltipTickLine,
-} from '@/shared/plot/d3Tooltip';
+  useChartContainerSize,
+  useChartTheme,
+  type ChartMargin,
+} from '@/shared/charts/core';
 import { cn } from '@/lib/utils';
-import { CORRELATION_PLOT_MARGIN, plotContainerClass, plotTooltipClass, type PlotMargin } from './plotShellStyles';
+import { plotContainerClass, plotTooltipClass } from './plotShellStyles';
+
+const CORRELATION_PLOT_MARGIN: ChartMargin = {
+  top: 40,
+  right: 24,
+  bottom: 120,
+  left: 120,
+};
 
 export interface CorrelationPlotProps {
   /** 变量名列表，与 matrix 行列顺序一致 */
@@ -23,7 +31,7 @@ export interface CorrelationPlotProps {
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
-  margin?: PlotMargin;
+  margin?: ChartMargin;
 }
 
 const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
@@ -35,9 +43,8 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const { containerRef, size } = usePlotContainerSize();
-  const chartTheme = useChartThemeColors();
-  const seriesColors = useChartSeriesColors();
+  const { containerRef, size } = useChartContainerSize();
+  const { colors: chartTheme, series: seriesColors } = useChartTheme();
 
   useEffect(() => {
     const svg = select(svgRef.current);
@@ -122,7 +129,7 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
       .attr('stroke-width', 0.5)
       .attr('rx', 2);
 
-    attachHoverTooltip(
+    attachMarkTooltip(
       cellRects as D3Onable<
         SVGRectElement,
         { i: number; j: number; value: number; pValue?: number | null }
@@ -134,6 +141,8 @@ const CorrelationPlot: React.FC<CorrelationPlotProps> = ({
           tooltipMutedLine(`${labels[d.i]} × ${labels[d.j]}`, chartTheme) +
           tooltipStrongLine(`r = ${d.value.toFixed(3)}`, chartTheme) +
           tooltipTickLine(formatP(d.pValue), chartTheme),
+        getAriaLabel: (d) =>
+          `Correlation between ${labels[d.i]} and ${labels[d.j]}, r ${d.value.toFixed(3)}, ${formatP(d.pValue)}`,
         onEnter: (el) =>
           select(el).attr('stroke', seriesColors.primary).attr('stroke-width', 2),
         onLeave: (el) =>

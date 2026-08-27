@@ -6,19 +6,23 @@
  */
 import React, { useEffect, useRef } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft } from 'd3';
-import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
-import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import {
-  attachHoverTooltip,
+  attachMarkTooltip,
   type D3Onable,
   PlotTooltipController,
   tooltipRichBlock,
-} from '@/shared/plot/d3Tooltip';
+  useChartContainerSize,
+  useChartTheme,
+} from '@/shared/charts/core';
 import {
   type CorrelogramBarDTO,
   correlogramLjungBoxTooltipHtml,
+  formatPValueDisplay,
+  hasLjungBoxStats,
 } from '@/shared/types/report';
-import { CORRELOGRAM_MARGIN, plotFlexShellClass, plotTooltipRichClass } from './plotShellStyles';
+import { plotFlexShellClass, plotTooltipRichClass } from './plotShellStyles';
+
+const CORRELOGRAM_MARGIN = { top: 28, right: 24, bottom: 36, left: 52 };
 
 export interface CorrelogramChartProps {
   data: CorrelogramBarDTO[];
@@ -38,9 +42,8 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const { containerRef, size } = usePlotContainerSize();
-  const chartTheme = useChartThemeColors();
-  const seriesColors = useChartSeriesColors();
+  const { containerRef, size } = useChartContainerSize();
+  const { colors: chartTheme, series: seriesColors } = useChartTheme();
   const plotColor = color ?? seriesColors.primary;
   const negativeColor = seriesColors.negative;
 
@@ -116,7 +119,7 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
         .attr('rx', 2)
         .style('cursor', 'pointer');
 
-      attachHoverTooltip(bar as D3Onable<SVGRectElement, CorrelogramBarDTO>, {
+      attachMarkTooltip(bar as D3Onable<SVGRectElement, CorrelogramBarDTO>, {
         tooltip: tip,
         position: 'anchor',
         getHtml: (datum) => {
@@ -127,6 +130,12 @@ const CorrelogramChart: React.FC<CorrelogramChartProps> = ({
               (ljungBox ? `${ljungBox}` : ''),
             chartTheme,
           );
+        },
+        getAriaLabel: (datum) => {
+          const label = `Lag ${datum.lag}, ${valueLabel} ${datum.value.toFixed(4)}`;
+          return hasLjungBoxStats(datum)
+            ? `${label}, Q(${datum.lag}) ${datum.qStat.toFixed(4)}, p-value ${formatPValueDisplay(datum.pValue)}`
+            : label;
         },
         onEnter: (el) =>
           select(el)

@@ -1,20 +1,15 @@
 import { useEffect, useRef } from 'react';
 import { area, axisBottom, axisLeft, extent, line, scaleLinear, select } from 'd3';
 import { cn } from '@/lib/utils';
-import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
-import { useChartSeriesColors, useChartThemeColors } from '@/shared/theme/chartTheme';
+import {
+  DEFAULT_CARTESIAN_MARGIN,
+  useChartContainerSize,
+  useChartTheme,
+  type ChartMargin,
+} from '@/shared/charts/core';
 import type { PlotPointDTO } from '@/shared/types/dto/plotPayload';
 
 export type KDEPoint = PlotPointDTO;
-
-export interface ChartMargin {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-}
-
-export const DEFAULT_CHART_MARGIN: ChartMargin = { top: 20, right: 24, bottom: 40, left: 56 };
 
 export interface KDEChartProps {
   data: KDEPoint[];
@@ -33,14 +28,13 @@ export function KDEChart({
   yLabel = 'Density',
   color,
   height: heightProp,
-  margin = DEFAULT_CHART_MARGIN,
+  margin = DEFAULT_CARTESIAN_MARGIN,
   xMin,
   className,
 }: KDEChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const { containerRef, size } = usePlotContainerSize();
-  const chartTheme = useChartThemeColors();
-  const seriesColors = useChartSeriesColors();
+  const { containerRef, size } = useChartContainerSize();
+  const { colors: chartTheme, series: seriesColors } = useChartTheme();
   const plotColor = color ?? seriesColors.primary;
 
   useEffect(() => {

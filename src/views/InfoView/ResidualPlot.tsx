@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { useChartTheme } from '@/shared/charts/core';
 import Scatter from '@/views/PlotView/Scatter';
 
 interface ResidualPlotProps {
@@ -21,7 +21,7 @@ const ResidualPlot: React.FC<ResidualPlotProps> = ({
   yLabel = 'Residuals',
 }) => {
   const [outlierPct, setOutlierPct] = useState(5);
-  const seriesColors = useChartSeriesColors();
+  const { series: seriesColors } = useChartTheme();
 
   const data = useMemo(
     () => fitted.map((f, i) => ({ x: f, y: residuals[i] })),

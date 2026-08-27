@@ -1,9 +1,9 @@
 /**
  * DID 事件研究图：相对政策时点 rel_time 上 treat×I(rel=k) 的系数与 95% CI（与平行趋势 Wald 同一回归）。
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft } from 'd3';
-import { useChartSeriesColors, useChartThemeColors } from '@/shared/theme/chartTheme';
+import { useChartContainerSize, useChartTheme } from '@/shared/charts/core';
 import type { DidEventStudyPoint } from '@/shared/types/report';
 
 const MARGIN = { top: 20, right: 16, bottom: 36, left: 52 };
@@ -12,22 +12,9 @@ export const DidEventStudyChart: React.FC<{
   points: DidEventStudyPoint[];
   treatLabel?: string;
 }> = ({ points, treatLabel = 'Treat' }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  const chartTheme = useChartThemeColors();
-  const seriesColors = useChartSeriesColors();
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => {
-      setSize({ width: el.clientWidth, height: el.clientHeight });
-    });
-    ro.observe(el);
-    setSize({ width: el.clientWidth, height: el.clientHeight });
-    return () => ro.disconnect();
-  }, []);
+  const { containerRef, size } = useChartContainerSize();
+  const { colors: chartTheme, series: seriesColors } = useChartTheme();
 
   useEffect(() => {
     const svg = select(svgRef.current);

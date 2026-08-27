@@ -1,6 +1,4 @@
-import { useMemo } from 'react';
-import { useSettingsStore } from '@/features/core/settings/settingsStore';
-import { resolveThemeTokens, type ResolvedThemeTokens } from './themeTokens';
+import type { ResolvedThemeTokens } from './themeTokens';
 
 /** D3 / SVG 图表在 dark / light 下的配色（Summary、Plot 窗口共用） */
 export interface ChartThemeColors {
@@ -29,11 +27,6 @@ export function getChartThemeColors(tokens: ResolvedThemeTokens): ChartThemeColo
   };
 }
 
-export function useChartThemeColors(): ChartThemeColors {
-  const theme = useSettingsStore((s) => s.theme);
-  return useMemo(() => getChartThemeColors(resolveThemeTokens(theme)), [theme]);
-}
-
 /** D3 序列色：主色跟随主题 accent，其余为固定语义色 */
 export interface ChartSeriesColors {
   primary: string;
@@ -59,9 +52,4 @@ export function getChartSeriesColors(tokens: ResolvedThemeTokens): ChartSeriesCo
       tokens.pins.table,
     ],
   };
-}
-
-export function useChartSeriesColors(): ChartSeriesColors {
-  const theme = useSettingsStore((s) => s.theme);
-  return useMemo(() => getChartSeriesColors(resolveThemeTokens(theme)), [theme]);
 }

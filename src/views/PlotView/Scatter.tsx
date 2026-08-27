@@ -1,10 +1,14 @@
 import React, { useEffect, useRef } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft, extent } from 'd3';
-import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
+import {
+  DEFAULT_CARTESIAN_MARGIN,
+  useChartContainerSize,
+  useChartTheme,
+  type ChartMargin,
+} from '@/shared/charts/core';
 import { plotAxisTickFormatter } from '@/shared/plot/plotTime';
-import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import { cn } from '@/lib/utils';
-import { DEFAULT_PLOT_MARGIN, plotContainerClass, type PlotMargin } from './plotShellStyles';
+import { plotContainerClass } from './plotShellStyles';
 
 export interface ScatterPoint {
   x: number;
@@ -28,7 +32,7 @@ export interface ScatterProps {
   /** 图表高度，不传则随容器填充 */
   height?: number;
   /** 图表边距 */
-  margin?: PlotMargin;
+  margin?: ChartMargin;
   /** Y 轴是否关于 0 对称（如残差图），默认 false */
   symmetricY?: boolean;
   /** 是否绘制 y=0 参考线，默认 false */
@@ -50,7 +54,7 @@ const Scatter: React.FC<ScatterProps> = ({
   color,
   radius = 3,
   height: heightProp,
-  margin = DEFAULT_PLOT_MARGIN,
+  margin = DEFAULT_CARTESIAN_MARGIN,
   symmetricY = false,
   zeroLine = false,
   highlightIndices,
@@ -58,9 +62,8 @@ const Scatter: React.FC<ScatterProps> = ({
   embedded = false,
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
-  const { containerRef, size } = usePlotContainerSize();
-  const chartTheme = useChartThemeColors();
-  const seriesColors = useChartSeriesColors();
+  const { containerRef, size } = useChartContainerSize();
+  const { colors: chartTheme, series: seriesColors } = useChartTheme();
   const plotColor = color ?? seriesColors.primary;
   const plotHighlightColor = highlightColor ?? seriesColors.highlight;
 

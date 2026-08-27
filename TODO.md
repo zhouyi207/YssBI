@@ -1554,6 +1554,12 @@ Execution 不知道具体 UI
 - [ ] 由唯一 `RESULT_PLOT_KINDS` 常量派生 `ResultPlotKind` 与 `isResultPlotKind`，移除三个生产 allowlist 副本。
 - [ ] 保持 correlation nullable cells 与 correlogram camelCase scientific fields 原样穿过 source adapter，不增加兼容读取。
 - [ ] 以 focused RED/GREEN adapter、guard 与 Result service 测试及 TypeScript typecheck 验证 Task 2 契约。
+- [ ] 新增 chart core 的 `ChartMargin`、`ChartSize`、`ChartSurfaceVariant` 与唯一共享 Cartesian margin 契约。
+- [ ] 将图表容器测量统一为单 ResizeObserver、单 animation frame 合并、等尺寸跳过及完整清理的响应式 hook。
+- [ ] 将 chart theme settings 读取收敛到 App provider，并让 AppRouter 与 UIHost 下的 renderer 统一消费 chart context。
+- [ ] 将 D3 mark tooltip 迁入 chart core，补充 pointer/focus/blur 对等交互、语义 aria-label 与既有 HTML escaping。
+- [ ] 删除旧 theme hooks、plot size hook、hover/overlay tooltip API，并将 specialized margins 保持在各自 renderer 内。
+- [ ] 通过 Task 3 focused RED/GREEN tests、TypeScript typecheck、production build 与 architecture search audits。
 - [ ] 更新 `AGENTS.md`，明确 Rust 后端测试的编译与运行成本较高，避免迭代期间频繁运行。
 - [ ] 保持 Rust 聚焦测试与完整测试套件之间的执行边界，仅在必要场景运行 broader/full suite。
 - [ ] 更新 `AGENTS.md`，统一后端 Rust 错误使用 `thiserror` 定义类型化错误。

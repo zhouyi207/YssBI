@@ -4,15 +4,16 @@
  * 在复平面上绘制特征值，单位圆（模=1）作为参考。
  * X 轴：实部，Y 轴：虚部。
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { select, scaleLinear, axisBottom, axisLeft } from 'd3';
-import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
 import {
-  attachHoverTooltip,
+  attachMarkTooltip,
   type D3Onable,
   PlotTooltipController,
   tooltipRichBlock,
-} from '@/shared/plot/d3Tooltip';
+  useChartContainerSize,
+  useChartTheme,
+} from '@/shared/charts/core';
 import { formatNum } from './utils';
 import type { VARStableRow } from '@/shared/types/report';
 
@@ -24,23 +25,10 @@ const MARGIN = { top: 28, right: 24, bottom: 40, left: 48 };
 const DEFAULT_RANGE = 1.3; // 显示范围 [-1.3, 1.3] 以包含单位圆
 
 const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  const chartTheme = useChartThemeColors();
-  const seriesColors = useChartSeriesColors();
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const ro = new ResizeObserver(() => {
-      setSize({ width: container.clientWidth, height: container.clientHeight });
-    });
-    ro.observe(container);
-    setSize({ width: container.clientWidth, height: container.clientHeight });
-    return () => ro.disconnect();
-  }, []);
+  const { containerRef, size } = useChartContainerSize();
+  const { colors: chartTheme, series: seriesColors } = useChartTheme();
 
   useEffect(() => {
     const svg = select(svgRef.current);
@@ -111,7 +99,7 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
         .attr('fill-opacity', 0.9)
         .style('cursor', 'pointer');
 
-      attachHoverTooltip(point as D3Onable<SVGCircleElement, VARStableRow>, {
+      attachMarkTooltip(point as D3Onable<SVGCircleElement, VARStableRow>, {
         tooltip: tip,
         position: 'anchor',
         getHtml: () => {
@@ -129,6 +117,8 @@ const VARStableChart: React.FC<VARStableChartProps> = ({ data }) => {
             chartTheme,
           );
         },
+        getAriaLabel: (datum) =>
+          `Eigenvalue ${i + 1}, real ${formatNum(datum.re)}, imaginary ${formatNum(datum.im)}, modulus ${formatNum(datum.modulus, 6)}, ${isUnstable ? 'unstable' : 'stable'}`,
         onEnter: (el) => select(el).attr('r', 6).attr('stroke-width', 2),
         onLeave: (el) => select(el).attr('r', 5).attr('stroke-width', 1.5),
       });

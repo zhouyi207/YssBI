@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { axisBottom, axisLeft, extent, line, scaleLinear, select } from 'd3';
 import { cn } from '@/lib/utils';
-import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
-import { useChartSeriesColors, useChartThemeColors } from '@/shared/theme/chartTheme';
-import { DEFAULT_CHART_MARGIN, type ChartMargin } from './KDEChart';
+import {
+  DEFAULT_CARTESIAN_MARGIN,
+  useChartContainerSize,
+  useChartTheme,
+  type ChartMargin,
+} from '@/shared/charts/core';
 
 export interface MultiLinePoint {
   x: number;
@@ -42,16 +45,15 @@ export function MultiLineChart({
   xLabel,
   yLabel,
   height = 224,
-  margin = DEFAULT_CHART_MARGIN,
+  margin = DEFAULT_CARTESIAN_MARGIN,
   xDomain,
   yDomain,
   showLegend = true,
   className,
 }: MultiLineChartProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const { containerRef, size } = usePlotContainerSize();
-  const chartTheme = useChartThemeColors();
-  const themeSeries = useChartSeriesColors();
+  const { containerRef, size } = useChartContainerSize();
+  const { colors: chartTheme, series: themeSeries } = useChartTheme();
   const visibleSeries = useMemo(() => series.filter(item => item.points.length > 0), [series]);
   const colors = useMemo(
     () => themeSeries.palette,

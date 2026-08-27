@@ -1,15 +1,24 @@
 import React, { useEffect, useRef } from 'react';
 import { select, scaleLinear, scaleBand, axisBottom, axisLeft, max } from 'd3';
-import { useChartThemeColors, useChartSeriesColors } from '@/shared/theme/chartTheme';
-import { usePlotContainerSize } from '@/shared/plot/usePlotContainerSize';
 import {
-  attachHoverTooltip,
+  attachMarkTooltip,
+  DEFAULT_CARTESIAN_MARGIN,
   type D3Onable,
   PlotTooltipController,
   tooltipTwoLine,
-} from '@/shared/plot/d3Tooltip';
+  useChartContainerSize,
+  useChartTheme,
+  type ChartMargin,
+} from '@/shared/charts/core';
 import { cn } from '@/lib/utils';
-import { COMPACT_PLOT_MARGIN, DEFAULT_PLOT_MARGIN, plotContainerClass, plotTooltipClass, type PlotMargin } from './plotShellStyles';
+import { plotContainerClass, plotTooltipClass } from './plotShellStyles';
+
+const COMPACT_HISTOGRAM_MARGIN: ChartMargin = {
+  top: 4,
+  right: 4,
+  bottom: 4,
+  left: 4,
+};
 
 export interface HistogramBin {
   label: string;
@@ -23,7 +32,7 @@ export interface HistogramProps {
   color?: string;
   /** 图表高度，传 0 或不传则自适应容器高度 */
   height?: number;
-  margin?: PlotMargin;
+  margin?: ChartMargin;
   /** 紧凑模式：无轴线，用 tooltip 显示信息 */
   compact?: boolean;
   /** 嵌入编辑器工作表：无边框、无圆角、填满容器 */
@@ -42,12 +51,11 @@ const Histogram: React.FC<HistogramProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
-  const chartTheme = useChartThemeColors();
-  const seriesColors = useChartSeriesColors();
+  const { colors: chartTheme, series: seriesColors } = useChartTheme();
   const plotColor = color ?? seriesColors.primary;
 
-  const margin = marginProp ?? (compact ? COMPACT_PLOT_MARGIN : DEFAULT_PLOT_MARGIN);
-  const { containerRef, size } = usePlotContainerSize();
+  const margin = marginProp ?? (compact ? COMPACT_HISTOGRAM_MARGIN : DEFAULT_CARTESIAN_MARGIN);
+  const { containerRef, size } = useChartContainerSize();
 
   useEffect(() => {
     const svg = select(svgRef.current);
@@ -104,9 +112,10 @@ const Histogram: React.FC<HistogramProps> = ({
       .attr('rx', compact ? 1 : 0);
 
     if (compact) {
-      attachHoverTooltip(bars as D3Onable<SVGRectElement, HistogramBin>, {
+      attachMarkTooltip(bars as D3Onable<SVGRectElement, HistogramBin>, {
         tooltip,
         getHtml: (d) => tooltipTwoLine(chartTheme, d.label, String(d.count), plotColor),
+        getAriaLabel: (d) => `Histogram bin ${d.label}, ${yLabel} ${d.count}`,
         onEnter: (el) => select(el).attr('fill-opacity', 1),
         onLeave: (el) => select(el).attr('fill-opacity', 0.75),
       });
