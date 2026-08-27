@@ -348,7 +348,6 @@ gls 的 data input pin 中我认为可以设置为 matrix，这就意味着需�
 
 wls 和 gls 的 predict 节点有问题，目前 wls 报错：Node 6b7c0693-8d92-4c76-a253-6d49333221ab failed: Predict: Model input is not connected or invalid
 
-
 HAC 已实现（Bartlett、Parzen、Quadratic Spectral kernel，lag 参数）；hac-panel、hac-groupsum 尚未实现。
 
 目前使用 fixed scale 并没有提供 scale pin ，同时在 ols configure vce 可接受的结构体中删除掉 hac-panel 和 hac-groupsum
@@ -400,8 +399,6 @@ dataframe 抽样方法，是在 ols 配置还是 dataframe 层面配置呢
 ols_summary 打开 ols_result_viewer 并返回 ols_result, 这里面存储了一些统计模型信息可以使用节点进行提取；这些节点应该是使用类似于函数或者其他功能的注册的方式而不是定义，不然后续结构体太多了这里会爆炸
 
 ols model 可以引申出一个新的节点 predict，这个节点可以使用 endog, exog 两个玩意获得拟合值，然后真实值 - 拟合值可以得到残差。这是基本操作不应该删除
-
-deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感觉好卡
 
 下面这玩意在软件退出时保存了两次
 
@@ -1519,41 +1516,6 @@ Execution 不知道具体 UI
 [8]: https://github.com/zhouyi207/YssBI/tree/shadcn/src/features "YssBI/src/features at shadcn · zhouyi207/YssBI · GitHub"
 [9]: https://github.com/zhouyi207/YssBI/tree/shadcn/.github/workflows "YssBI/.github/workflows at shadcn · zhouyi207/YssBI · GitHub"
 
-
-这种代码是不是没有什么必要
-
-
-+pub fn canonical_port_title(key: &str) -> Box<str> {
-    132 +    let title = match key {
-    133 +        "value" => "Value",
-    134 +        "left" => "Left",
-    135 +        "right" => "Right",
-    136 +        "result" => "Result",
-    137 +        "input" => "Input",
-    138 +        "output" => "Output",
-    139 +        "enter" => "Enter",
-    140 +        "then" => "Then",
-    141 +        "true" => "True",
-    142 +        "false" => "False",
-    143 +        "condition" => "Condition",
-    144 +        "operands" => "Operands",
-    145 +        "source" => "Source",
-    146 +        "dataframe" => "DataFrame",
-    147 +        "series" => "Data Series",
-    148 +        "values" => "Values",
-    149 +        "samples" => "Samples",
-    150 +        "sample_count" => "Sample Count",
-    151 +        "maximum_lag" => "Maximum Lag",
-    152 +        "standard_deviation" => "Standard Deviation",
-    153 +        "lower_bound" => "Lower Bound",
-    154 +        "upper_bound" => "Upper Bound",
-    155 +        "then_source" => "Then Source",
-    156 +        "else_source" => "Else Source",
-    157 +        "initial_source" => "Initial Source",
-    158 +        "next_source" => "Next Source",
-    169 +    };
-    170 +    title.into()
-    171 +}
 
 ## 2026.08.27
 
