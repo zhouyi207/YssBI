@@ -1629,3 +1629,7 @@ Execution 不知道具体 UI
 - [ ] 将 ExecutionRuntimeState 的 admission、work lease 与显式 deadline drain 收敛为 session-local typed owner。
 - [ ] 让 close/cancel-and-drain 在新工作拒绝、活动 lease 超时与 lease 释放后的重试之间保持可观测且不持锁等待。
 - [ ] 完成 Execution state focused lease/drain regression 与 Rust compile/test/diff 校验，继续保留旧 Project runtime route。
+- [ ] 新增 `cfg(test)` 隔离的 ApplicationEvent 低频 ProjectLifecycle/ResourceCommitted typed facts，明确不包含 ordered result-inspection 语义。
+- [ ] 新增 schema application-event staged mapper，穷尽映射到现有 EventProject wire shape，不启用新的 production emitter 或 route。
+- [ ] 为生命周期/资源提交各保留一个独特 wire mapping regression，并覆盖资源结果缺失 project identity 的 serde failure。
+- [ ] 完成 Presentation/Command Boundaries Task 1 staged event contract slice 的 focused Rust test、check、fmt 与 diff 验证，旧 event_project route 保持唯一活跃。
