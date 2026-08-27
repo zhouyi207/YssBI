@@ -1606,3 +1606,6 @@ Execution 不知道具体 UI
 - [ ] 完成 Presentation Task 2A editor projection focused regression、Rust check、fmt 与 diff 校验。
 - [ ] 建立 staged Application catalog query result/transport-parts seam，统一 localized/compatible query 的 session capture/revalidation 入口。
 - [ ] 保持 catalog commands 与旧 Graph/Project snapshot route 不变，待 Project–Graph Task 8 / Execution Task 8 一次性切换并删除旧 owner。
+- [ ] 建立 Frontend state-authority manifest 与 fail-closed audit，区分 backend base、optimistic overlay、local draft 与 frontend UI ownership。
+- [ ] 增加缺失成员、View writer、delegated dirty writer、action cycle/unresolved delegate 的 focused TypeScript fixtures。
+- [ ] 完成 Frontend Task 1 的 typecheck 与 diff 校验；Vitest focused runner 在当前 Windows 环境启动异常，未扩大到全量 suite。
