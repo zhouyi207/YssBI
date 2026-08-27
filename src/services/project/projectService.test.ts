@@ -156,6 +156,29 @@ describe('ProjectService computation settings', () => {
   });
 });
 
+describe('ProjectService save-as path contract', () => {
+  beforeEach(() => {
+    ipc.invoke.mockClear();
+    ipc.response = { operationId: 'operation-a', kind: 'saveAs' };
+  });
+
+  it('forwards an application-selected destination without opening a native dialog', async () => {
+    const destination = 'C:/Projects/Selected Destination';
+
+    await expect(ProjectService.saveProjectAs('project-a', 'operation-a', destination))
+      .resolves.toEqual(ipc.response);
+
+    expect(ipc.invoke).toHaveBeenNthCalledWith(1, 'validate_new_project_path', {
+      path: destination,
+    });
+    expect(ipc.invoke).toHaveBeenNthCalledWith(2, 'save_project_as', {
+      path: destination,
+      projectInstanceId: 'project-a',
+      operationId: 'operation-a',
+    });
+  });
+});
+
 describe('ProjectService.getProjectIndex function editor projection parser', () => {
   beforeEach(() => {
     ipc.invoke.mockClear();

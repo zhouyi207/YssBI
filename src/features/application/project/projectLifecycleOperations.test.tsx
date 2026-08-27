@@ -38,6 +38,7 @@ import { createProjectLifecycleReceiptDependencies } from '@/features/applicatio
 import { removeProjectScopedWorkbenchPanels } from './projectWorkbenchLifecycle';
 
 const navigate = vi.fn();
+const openPathDialog = vi.hoisted(() => vi.fn());
 
 vi.mock('react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-router')>()),
@@ -61,6 +62,7 @@ vi.mock('@/features/core/execution', () => ({
 vi.mock('@/features/application/graphDiagnostics/warnCallFunctionIssues', () => ({
   warnCallFunctionIssuesBeforeSave: vi.fn(),
 }));
+vi.mock('@/services/platform/pathDialog', () => ({ openPathDialog }));
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean })
   .IS_REACT_ACT_ENVIRONMENT = true;
@@ -203,6 +205,10 @@ describe('project lifecycle initiating operations', () => {
       },
     });
     vi.mocked(saveAllDirtyGraphs).mockResolvedValue(true);
+    openPathDialog.mockResolvedValue({
+      ok: true,
+      value: 'C:/project-destination',
+    });
     vi.spyOn(logger.app, 'error').mockImplementation(() => undefined);
     vi.spyOn(ProjectService, 'listRegisteredProjects').mockResolvedValue([]);
     vi.spyOn(ProjectService, 'registerProject').mockResolvedValue(record('project-a', 'C:/project-a/metadata.yssbi'));
@@ -238,7 +244,7 @@ describe('project lifecycle initiating operations', () => {
     installCoreApplicationTestPorts({
       projectIO: { removeProjectScopedWorkbenchPanels },
     });
-    const direct = deferred<LifecycleMutationResultDto | null>();
+    const direct = deferred<LifecycleMutationResultDto>();
     const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
     vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-b/metadata.yssbi');
     vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({ databases: {}, variables: {} });
@@ -294,7 +300,7 @@ describe('project lifecycle initiating operations', () => {
     installCoreApplicationTestPorts({
       projectIO: { removeProjectScopedWorkbenchPanels },
     });
-    const direct = deferred<LifecycleMutationResultDto | null>();
+    const direct = deferred<LifecycleMutationResultDto>();
     const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
     mockProjectBHydration();
     const unsubscribe = useResourceStore.subscribe(() => {
@@ -347,7 +353,7 @@ describe('project lifecycle initiating operations', () => {
     installCoreApplicationTestPorts({
       projectIO: { removeProjectScopedWorkbenchPanels },
     });
-    const direct = deferred<LifecycleMutationResultDto | null>();
+    const direct = deferred<LifecycleMutationResultDto>();
     const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
     mockProjectBHydration();
     const projectWrites = vi.spyOn(useProjectIOStore, 'setState');
@@ -379,7 +385,7 @@ describe('project lifecycle initiating operations', () => {
   });
 
   it('gives a mismatching direct save-as DTO zero initiating effects', async () => {
-    const direct = deferred<LifecycleMutationResultDto | null>();
+    const direct = deferred<LifecycleMutationResultDto>();
     const saveAs = vi.spyOn(ProjectService, 'saveProjectAs').mockReturnValue(direct.promise);
     vi.spyOn(ProjectService, 'getProjectPath').mockResolvedValue('C:/project-b/metadata.yssbi');
     vi.spyOn(ProjectService, 'getDatabasesVariables').mockResolvedValue({ databases: {}, variables: {} });

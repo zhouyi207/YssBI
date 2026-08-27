@@ -2,6 +2,7 @@ import { logger } from '@/utils/appLogger';
 
 import { ProjectService, type RevealProjectResourceRequest } from '@/services/project/projectService';
 import { normalizeIpcError } from '@/services/ipc';
+import { revealPath } from '@/services/platform/opener';
 
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { renameResource } from '@/features/application/resource/resourceActions';
@@ -12,7 +13,10 @@ export async function revealProjectResourceInExplorer(
 ): Promise<void> {
   const context = captureProjectCommandContext();
   try {
-    await ProjectService.revealProjectResource(context.projectInstanceId, request);
+    const path = await ProjectService.getProjectResourcePath(context.projectInstanceId, request);
+    if (!context.isCurrent()) return;
+    const result = await revealPath(path);
+    if (!result.ok) throw new Error(result.failure.code);
     if (!context.isCurrent()) return;
   } catch (error) {
     if (!context.isCurrent()) return;

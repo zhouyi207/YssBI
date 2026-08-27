@@ -14,6 +14,8 @@ import {
   ProjectService,
   isPickerTaskCancelledError,
 } from "@/services/project/projectService";
+import { revealPath } from '@/services/platform/opener';
+import { openPathDialog } from '@/services/platform/pathDialog';
 import type { ProjectRecordRow } from "@/shared/types/dto/project";
 import { formatDisplayPath, pathsEqualForCompare } from "@/shared/utils/formatDisplayPath";
 import {
@@ -164,10 +166,15 @@ export function useProjectPicker() {
   const scanProjectsFromFolder = useCallback(async (): Promise<ProjectPickerPageActionOutcome> => {
     setPageIssue(null);
     try {
-      const directory = await ProjectService.pickProjectScanDirectory(
-        projectPickerScanFolderTitle(),
-      );
+      const selection = await openPathDialog({
+        directory: true,
+        multiple: false,
+        title: projectPickerScanFolderTitle(),
+      });
+      if (!selection.ok) throw new Error(selection.failure.code);
+      const directory = selection.value;
       if (!directory) return { status: 'cancelled' };
+      if (Array.isArray(directory)) return { status: 'cancelled' };
 
       setBusy("scan");
       const { result, cancelled } = await runWithProjectPickerProgress(
@@ -396,8 +403,14 @@ export function useProjectPicker() {
   const importProjectFromDisk = useCallback(async (): Promise<ProjectPickerPageActionOutcome> => {
     setPageIssue(null);
     try {
-      const path = await ProjectService.pickProjectMetadataFile();
+      const selection = await openPathDialog({
+        multiple: false,
+        filters: [{ name: 'YssBI Project', extensions: ['yssbi'] }],
+      });
+      if (!selection.ok) throw new Error(selection.failure.code);
+      const path = selection.value;
       if (!path) return { status: 'cancelled' };
+      if (Array.isArray(path)) return { status: 'cancelled' };
 
       setBusy("import");
       const row = await ProjectService.registerProject(pathFileName(path), path);
@@ -523,7 +536,8 @@ export function useProjectPicker() {
   ): Promise<ProjectPickerPageActionOutcome> => {
     setPageIssue(null);
     try {
-      await ProjectService.revealProjectPath(projectPath);
+      const result = await revealPath(projectPath);
+      if (!result.ok) throw new Error(result.failure.code);
       return { status: 'completed' };
     } catch (error) {
       return publishPageIssue({

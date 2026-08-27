@@ -13,6 +13,7 @@ import {
   type ProjectIdentitySnapshot,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { ProjectService, isExecutionCancelledError } from '@/services/project/projectService';
+import { openPathDialog } from '@/services/platform/pathDialog';
 import { GraphService } from '@/services/graph/graphService';
 import { saveAllDirtyGraphs } from './saveAllDirtyGraphs';
 import { cancelActiveGraphRun } from './cancelActiveGraphRun';
@@ -61,6 +62,13 @@ import {
   type EditorCommandTarget,
 } from './editorCommandFocus';
 
+function projectParentDirectory(metadataOrRootPath: string): string {
+  const normalized = metadataOrRootPath.replace(/\\/g, '/');
+  const root = normalized.replace(/\/metadata\.yssbi$/i, '');
+  const index = root.lastIndexOf('/');
+  return index > 0 ? root.slice(0, index) : root;
+}
+
 /**
  * Project Operations Hook
  * Handles flush, load, and execute operations
@@ -92,15 +100,40 @@ export function useProjectOperations() {
         return;
       }
 
-      const result = await ProjectService.saveProjectAs(
-        pending.projectInstanceId!,
-        pending.operationId,
-      );
+      const currentPath = await ProjectService.getProjectPath(pending.projectInstanceId!);
       if (!pending.isCurrent()) return;
-      if (!result) {
+      if (!currentPath) {
+        cancelPendingProjectLifecycleOperation(pending.operationId);
+        showBlockingMessage(t('notifications.project.notLoaded'));
+        return;
+      }
+
+      const selection = await openPathDialog({
+        directory: true,
+        multiple: false,
+        title: '项目另存为',
+        defaultPath: projectParentDirectory(currentPath) || undefined,
+      });
+      if (!pending.isCurrent()) return;
+      if (!selection.ok) {
+        cancelPendingProjectLifecycleOperation(pending.operationId);
+        showBlockingMessage(t('notifications.project.saveAsFailed', {
+          error: selection.failure.code,
+        }));
+        return;
+      }
+      const destination = selection.value;
+      if (!destination || Array.isArray(destination)) {
         cancelPendingProjectLifecycleOperation(pending.operationId);
         return;
       }
+
+      const result = await ProjectService.saveProjectAs(
+        pending.projectInstanceId!,
+        pending.operationId,
+        destination,
+      );
+      if (!pending.isCurrent()) return;
       const settlement = await applyProjectLifecycleReceipt(
         result,
         'direct',
@@ -175,8 +208,17 @@ export function useProjectOperations() {
 
   const importGraph = useCallback(async () => {
     try {
-      const path = await ProjectService.pickProjectMetadataFile();
+      const selection = await openPathDialog({
+        multiple: false,
+        filters: [{ name: 'YssBI Project', extensions: ['yssbi'] }],
+      });
+      if (!selection.ok) {
+        showBlockingMessage(`${t('notifications.project.loadFailed')} (${selection.failure.code})`);
+        return;
+      }
+      const path = selection.value;
       if (!path) return;
+      if (Array.isArray(path)) return;
 
       const activation = await ProjectService.loadProjectToState(path);
 

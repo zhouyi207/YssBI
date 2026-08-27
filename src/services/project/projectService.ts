@@ -1,5 +1,3 @@
-import { open } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Channel } from "@tauri-apps/api/core";
 import type {
     RunEvent,
@@ -400,16 +398,6 @@ export class ProjectService {
         return await invokeCommand("list_registered_projects");
     }
 
-    static async pickProjectScanDirectory(title?: string): Promise<string | null> {
-        const selected = await open({
-            directory: true,
-            multiple: false,
-            title,
-        });
-        if (!selected || Array.isArray(selected)) return null;
-        return selected as string;
-    }
-
     static async cancelProjectPickerTask(): Promise<void> {
         await invokeCommand("cancel_project_picker_task");
     }
@@ -473,18 +461,6 @@ export class ProjectService {
     }
 
     /**
-     * 弹出对话框选择 metadata.yssbi；用户取消时返回 null。
-     */
-    static async pickProjectMetadataFile(): Promise<string | null> {
-        const selected = await open({
-            multiple: false,
-            filters: [{ name: "YssBI Project", extensions: ["yssbi"] }],
-        });
-        if (!selected || Array.isArray(selected)) return null;
-        return selected as string;
-    }
-
-    /**
      * 从文件加载项目到状态管理器
      * 前端只传路径，后端负责加载；加载完成后会发出 ProjectLoaded 事件，前端通过 loadProject 刷新 store
      */
@@ -502,38 +478,18 @@ export class ProjectService {
         return await invokeCommand("flush_project", { projectInstanceId, operationId });
     }
 
-    /** 项目根目录的父路径（用于另存为默认目录） */
-    static projectParentDirectory(metadataOrRootPath: string): string {
-        const normalized = metadataOrRootPath.replace(/\\/g, "/");
-        const root = normalized.replace(/\/metadata\.yssbi$/i, "");
-        const idx = root.lastIndexOf("/");
-        return idx > 0 ? root.slice(0, idx) : root;
-    }
-
     /**
-     * 另存为：选择空目录，复制当前项目并切换工作路径。
+     * 另存为：使用 Application 已选择的空目录，复制当前项目并切换工作路径。
      */
     static async saveProjectAs(
         projectInstanceId: string,
         operationId: string,
-    ): Promise<LifecycleMutationResultDto | null> {
-        const currentPath = await this.getProjectPath(projectInstanceId);
-        if (!currentPath) {
-            throw new Error("项目尚未加载");
-        }
-
-        const selected = await open({
-            directory: true,
-            multiple: false,
-            title: "项目另存为",
-            defaultPath: this.projectParentDirectory(currentPath) || undefined,
-        });
-        if (!selected || Array.isArray(selected)) return null;
-
-        await this.validateNewProjectPath(selected);
+        path: string,
+    ): Promise<LifecycleMutationResultDto> {
+        await this.validateNewProjectPath(path);
 
         return await invokeCommand<LifecycleMutationResultDto>("save_project_as", {
-            path: selected,
+            path,
             projectInstanceId,
             operationId,
         });
@@ -581,20 +537,15 @@ export class ProjectService {
     }
 
 
-    static async revealProjectResource(
+    static async getProjectResourcePath(
         projectInstanceId: string,
         request: RevealProjectResourceRequest,
-    ): Promise<void> {
-        const path = await invokeCommand<string>("get_project_resource_path", {
+    ): Promise<string> {
+        return await invokeCommand<string>("get_project_resource_path", {
             projectInstanceId,
             kind: request.kind,
             resourceId: request.resourceId,
         });
-        await revealItemInDir(path);
-    }
-
-    static async revealProjectPath(projectPath: string): Promise<void> {
-        await revealItemInDir(projectPath);
     }
 
 }
