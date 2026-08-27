@@ -1,6 +1,7 @@
 pub mod analysis;
 pub mod compiler;
 pub mod error;
+pub mod mutation;
 pub mod node;
 pub mod resource_catalog;
 pub mod runtime_state;

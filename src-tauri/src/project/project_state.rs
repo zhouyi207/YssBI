@@ -41,6 +41,7 @@ pub(super) use compile_resources::{
 };
 
 mod graph_lifecycle;
+pub(crate) mod graph_operation;
 mod history;
 mod lifecycle;
 mod projection;

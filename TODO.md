@@ -1593,3 +1593,5 @@ Execution 不知道具体 UI
 - [ ] 建立 production-unreachable `ExecutionRuntimeState` 的 session/generation/admission owner，保持旧 Project/node-system runtime path 唯一活跃。
 - [ ] 建立 `ApplicationSessionSlot` 的 Inactive/Replacing/Recovering/Active capture/revalidation contract，禁止暴露混合 session tuple 或第二 production owner。
 - [ ] 完成 Execution Tasks 2–3 的 staged state focused compile/test gate，session replacement recovery workflow与生产安装继续留待后续 cutover。
+- [ ] 建立 Graph-owned linear `PlannedGraphMutation` candidate handoff 与 Project-owned graph operation capture/receipt capability。
+- [ ] 建立 Application-only captured graph mutation planner，保持 Commands 旧 mutation route 不变，避免第二条 production mutation path。
