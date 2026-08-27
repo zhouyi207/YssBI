@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::database_contract::DatabaseId;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -27,14 +29,24 @@ pub enum DatabaseOperation {
     Recovery,
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(thiserror::Error)]
 #[error("database operation failed")]
 pub struct DatabaseError {
     code: DatabaseErrorCode,
     operation: DatabaseOperation,
     resource: Option<DatabaseId>,
-    #[source]
     driver: Option<DatabaseDriverError>,
+}
+
+impl fmt::Debug for DatabaseError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DatabaseError")
+            .field("code", &self.code)
+            .field("operation", &self.operation)
+            .field("resource", &self.resource)
+            .finish()
+    }
 }
 
 impl PartialEq for DatabaseError {
@@ -147,4 +159,23 @@ pub(crate) enum DatabaseDriverError {
     Filesystem(#[source] std::io::Error),
     #[error("Polars driver failure")]
     Polars(#[source] polars::error::PolarsError),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DatabaseDriverError, DatabaseError, DatabaseOperation};
+
+    #[test]
+    fn database_error_redacts_driver_details_from_public_views() {
+        let secret = "driver detail: SELECT token FROM secrets";
+        let error = DatabaseError::driver(
+            DatabaseOperation::Query,
+            None,
+            DatabaseDriverError::Filesystem(std::io::Error::new(std::io::ErrorKind::Other, secret)),
+        );
+
+        assert!(!error.to_string().contains(secret));
+        assert!(!format!("{error:?}").contains(secret));
+        assert!(std::error::Error::source(&error).is_none());
+    }
 }
