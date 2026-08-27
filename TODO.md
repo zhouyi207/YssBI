@@ -1612,3 +1612,6 @@ Execution 不知道具体 UI
 - [ ] 建立 Frontend state-authority manifest 与 fail-closed audit，区分 backend base、optimistic overlay、local draft 与 frontend UI ownership。
 - [ ] 增加缺失成员、View writer、delegated dirty writer、action cycle/unresolved delegate 的 focused TypeScript fixtures。
 - [ ] 完成 Frontend Task 1 的 typecheck 与 diff 校验；Vitest focused runner 在当前 Windows 环境启动异常，未扩大到全量 suite。
+- [ ] 建立 Frontend Application 的 project hydration/event ingress/reconciliation、database metadata、worksheet、result query、execution projection 与 window-close coordinator seams。
+- [ ] 建立 Core 只读 read/publication/UI capability 类型，保持 Zustand stores、Views 与旧生产 publication route 尚未切换。
+- [ ] 完成 Frontend Application staged capability 的 typecheck 与 diff 校验；Vitest runner 的环境阻塞继续记录，不引入重复测试路径。
