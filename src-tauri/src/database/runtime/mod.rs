@@ -1,57 +1,42 @@
+mod registry;
+
 use crate::database::error::{DatabaseError, DatabaseOperation};
 use crate::database_contract::{
     DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseId, DatabaseSessionIdentity,
     DatabaseSessionOpenRequest,
 };
-use std::collections::HashMap;
+use registry::DatabaseSessionRuntime;
+use std::fmt;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
-use std::sync::{Arc, Condvar, Mutex, PoisonError};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+
+pub(crate) use registry::{
+    DatabaseCommittedRegistration, DatabasePreparedRegistration, DatabaseRuntimeChangeRecord,
+    DatabaseRuntimeCommittedChange, DatabaseRuntimeCompensationFailureCode,
+    DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError,
+    DatabaseRuntimeRecoveryResolutionKind, DatabaseRuntimeRevisions, DatabaseRuntimeSnapshot,
+};
 
 #[derive(Clone, Default)]
 pub struct DatabaseRuntimeRegistry;
 
-struct DatabaseAdmissionState {
-    closed: bool,
-}
-
 pub struct DatabaseRuntimeSession {
     basis: DatabaseSessionBasis,
-    admission: Mutex<DatabaseAdmissionState>,
-    drain: Arc<DatabaseSessionDrainState>,
-    revisions: Mutex<HashMap<DatabaseId, DatabaseRuntimeRevisions>>,
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct DatabaseRuntimeRevisions {
-    pub(crate) runtime: u64,
-    pub(crate) schema: u64,
+    runtime: Arc<DatabaseSessionRuntime>,
 }
 
 struct DatabaseSessionBasis {
     identity: DatabaseSessionIdentity,
     generation: NonZeroU64,
     _root: Option<PathBuf>,
-    _declarations: Arc<[DatabaseDecl]>,
-    _observations: DatabaseDeclarationObservationSet,
+    declarations: Arc<[DatabaseDecl]>,
 }
 
 #[derive(Clone)]
 pub struct DatabaseSessionDrainControl {
     deadline: DatabaseDrainDeadline,
-}
-
-#[derive(Debug)]
-struct DatabaseSessionDrainState {
-    state: Mutex<DatabaseDrainState>,
-    changed: Condvar,
-}
-
-#[derive(Debug)]
-struct DatabaseDrainState {
-    draining: bool,
-    outstanding: DatabaseOutstandingWork,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -62,7 +47,7 @@ impl DatabaseDrainDeadline {
         Self(deadline)
     }
 
-    fn remaining(&self, now: Instant) -> Option<Duration> {
+    pub(crate) fn remaining(&self, now: Instant) -> Option<Duration> {
         self.0.checked_duration_since(now)
     }
 }
@@ -97,6 +82,7 @@ pub enum DatabaseDrainOutcome {
 pub struct DatabaseOutstandingWork {
     operation_leases: usize,
     pending_prepares: usize,
+    committed_changes: usize,
     recoveries: usize,
 }
 
@@ -106,19 +92,80 @@ impl DatabaseOutstandingWork {
         self.operation_leases
     }
 
+    #[cfg(test)]
+    pub(crate) const fn pending_prepares(self) -> usize {
+        self.pending_prepares
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn committed_changes(self) -> usize {
+        self.committed_changes
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn recoveries(self) -> usize {
+        self.recoveries
+    }
+
     fn is_empty(self) -> bool {
-        self.operation_leases == 0 && self.pending_prepares == 0 && self.recoveries == 0
+        self.operation_leases == 0
+            && self.pending_prepares == 0
+            && self.committed_changes == 0
+            && self.recoveries == 0
+    }
+
+    fn increment_operation_lease(&mut self) {
+        self.operation_leases = self.operation_leases.saturating_add(1);
+    }
+
+    fn release_operation_lease(&mut self) {
+        debug_assert!(self.operation_leases > 0);
+        self.operation_leases = self.operation_leases.saturating_sub(1);
+    }
+
+    fn increment_pending_prepare(&mut self) {
+        self.pending_prepares = self.pending_prepares.saturating_add(1);
+    }
+
+    fn release_pending_prepare(&mut self) {
+        debug_assert!(self.pending_prepares > 0);
+        self.pending_prepares = self.pending_prepares.saturating_sub(1);
+    }
+
+    fn move_prepare_to_committed(&mut self) {
+        debug_assert!(self.pending_prepares > 0);
+        self.pending_prepares = self.pending_prepares.saturating_sub(1);
+        self.committed_changes = self.committed_changes.saturating_add(1);
+    }
+
+    fn release_committed(&mut self) {
+        debug_assert!(self.committed_changes > 0);
+        self.committed_changes = self.committed_changes.saturating_sub(1);
+    }
+
+    fn add_recovery(&mut self) {
+        self.recoveries = self.recoveries.saturating_add(1);
+    }
+
+    fn release_recovery(&mut self) {
+        debug_assert!(self.recoveries > 0);
+        self.recoveries = self.recoveries.saturating_sub(1);
     }
 }
 
 #[must_use = "database operation leases are released when this guard is dropped"]
-#[derive(Debug)]
-#[allow(
-    dead_code,
-    reason = "the operation lease is staged until a later Database operation seam"
-)]
 pub(crate) struct DatabaseOperationLease {
-    shared: Arc<DatabaseSessionDrainState>,
+    pub(crate) runtime: Arc<DatabaseSessionRuntime>,
+    pub(crate) active: bool,
+}
+
+impl fmt::Debug for DatabaseOperationLease {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DatabaseOperationLease")
+            .field("active", &self.active)
+            .finish_non_exhaustive()
+    }
 }
 
 impl DatabaseRuntimeRegistry {
@@ -134,27 +181,14 @@ impl DatabaseRuntimeRegistry {
             .validate()
             .map_err(|_| DatabaseError::invalid_request(DatabaseOperation::OpenSession, None))?;
         let (identity, generation, root, declarations, observations) = request.into_parts();
-        let revisions = declarations
-            .iter()
-            .map(|declaration| (declaration.id.clone(), DatabaseRuntimeRevisions::default()))
-            .collect();
         Ok(DatabaseRuntimeSession {
+            runtime: DatabaseSessionRuntime::new(&declarations, observations),
             basis: DatabaseSessionBasis {
                 identity,
                 generation,
                 _root: root,
-                _declarations: declarations,
-                _observations: observations,
+                declarations,
             },
-            admission: Mutex::new(DatabaseAdmissionState { closed: false }),
-            drain: Arc::new(DatabaseSessionDrainState {
-                state: Mutex::new(DatabaseDrainState {
-                    draining: false,
-                    outstanding: DatabaseOutstandingWork::default(),
-                }),
-                changed: Condvar::new(),
-            }),
-            revisions: Mutex::new(revisions),
         })
     }
 }
@@ -169,115 +203,83 @@ impl DatabaseRuntimeSession {
     }
 
     pub(crate) fn declarations(&self) -> &[DatabaseDecl] {
-        &self.basis._declarations
+        &self.basis.declarations
     }
 
-    pub(crate) fn observations(&self) -> &DatabaseDeclarationObservationSet {
-        &self.basis._observations
+    pub(crate) fn observations(&self) -> DatabaseDeclarationObservationSet {
+        self.runtime.observations()
     }
 
     pub(crate) fn revisions(&self, database: &DatabaseId) -> Option<DatabaseRuntimeRevisions> {
-        lock_or_recover(&self.revisions).get(database).copied()
+        self.runtime.revisions(database)
     }
 
-    pub(crate) fn advance_revisions(
+    pub(crate) fn capture_operation(
         &self,
-        database: &DatabaseId,
-        schema_changed: bool,
-    ) -> Result<DatabaseRuntimeRevisions, DatabaseError> {
-        let mut revisions = lock_or_recover(&self.revisions);
-        let current = revisions.get_mut(database).ok_or_else(|| {
-            DatabaseError::not_found(DatabaseOperation::CommitMutation, Some(database.clone()))
-        })?;
-        current.runtime = current.runtime.checked_add(1).ok_or_else(|| {
-            DatabaseError::conflict(DatabaseOperation::CommitMutation, Some(database.clone()))
-        })?;
-        if schema_changed {
-            current.schema = current.schema.checked_add(1).ok_or_else(|| {
-                DatabaseError::conflict(DatabaseOperation::CommitMutation, Some(database.clone()))
-            })?;
-        }
-        Ok(*current)
+        operation: DatabaseOperation,
+    ) -> Result<(DatabaseOperationLease, DatabaseRuntimeSnapshot), DatabaseError> {
+        self.runtime.capture_operation(operation)
     }
 
-    pub fn close_admission(&self) -> DatabaseAdmissionCloseOutcome {
-        let mut state = lock_or_recover(&self.admission);
-        if state.closed {
-            DatabaseAdmissionCloseOutcome::AlreadyClosed
-        } else {
-            state.closed = true;
-            DatabaseAdmissionCloseOutcome::Closed
-        }
-    }
-
-    #[allow(
-        dead_code,
-        reason = "admission is staged until a later Database operation seam"
-    )]
     pub(crate) fn admit_operation(
         &self,
         operation: DatabaseOperation,
     ) -> Result<DatabaseOperationLease, DatabaseError> {
-        let admission = lock_or_recover(&self.admission);
-        if admission.closed {
-            return Err(DatabaseError::admission_closed(operation, None));
-        }
+        self.runtime.admit_operation(operation)
+    }
 
-        let mut drain = lock_or_recover(&self.drain.state);
-        if drain.draining {
-            return Err(DatabaseError::admission_closed(operation, None));
-        }
-        drain.outstanding.operation_leases += 1;
-        drop(drain);
-        drop(admission);
-        Ok(DatabaseOperationLease {
-            shared: Arc::clone(&self.drain),
-        })
+    pub(crate) fn begin_prepare(
+        &self,
+        operation: DatabaseOperation,
+    ) -> Result<DatabasePreparedRegistration, DatabaseError> {
+        self.runtime.begin_prepare(operation)
+    }
+
+    pub(crate) fn commit_prepared(
+        &self,
+        registration: DatabasePreparedRegistration,
+        database: DatabaseId,
+        expected_runtime_revision: u64,
+        expected_observation: crate::database_contract::DatabaseDeclarationObservation,
+        next_observation: crate::database_contract::DatabaseDeclarationObservation,
+        schema_changed: bool,
+    ) -> Result<DatabaseRuntimeCommittedChange, DatabaseError> {
+        self.runtime.commit_prepared(
+            registration,
+            database,
+            expected_runtime_revision,
+            expected_observation,
+            next_observation,
+            schema_changed,
+        )
+    }
+
+    pub(crate) fn runtime_snapshot(&self) -> DatabaseRuntimeSnapshot {
+        self.runtime.snapshot()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn outstanding_work(&self) -> DatabaseOutstandingWork {
+        self.runtime.outstanding()
+    }
+
+    pub fn close_admission(&self) -> DatabaseAdmissionCloseOutcome {
+        self.runtime.close_admission()
     }
 
     pub fn drain(&self, control: &DatabaseSessionDrainControl) -> DatabaseDrainOutcome {
-        let admission = lock_or_recover(&self.admission);
-        let mut state = lock_or_recover(&self.drain.state);
-        state.draining = true;
-        drop(admission);
-        loop {
-            if state.outstanding.is_empty() {
-                return DatabaseDrainOutcome::Drained {
-                    outstanding: state.outstanding,
-                };
-            }
-
-            let now = Instant::now();
-            let Some(remaining) = control.deadline.remaining(now) else {
-                return DatabaseDrainOutcome::TimedOut {
-                    outstanding: state.outstanding,
-                };
-            };
-            let (next_state, wait_result) = self
-                .drain
-                .changed
-                .wait_timeout(state, remaining)
-                .unwrap_or_else(PoisonError::into_inner);
-            state = next_state;
-            if wait_result.timed_out() && !state.outstanding.is_empty() {
-                return DatabaseDrainOutcome::TimedOut {
-                    outstanding: state.outstanding,
-                };
-            }
-        }
+        self.runtime.drain(control)
     }
-}
 
-impl Drop for DatabaseOperationLease {
-    fn drop(&mut self) {
-        let mut state = lock_or_recover(&self.shared.state);
-        debug_assert!(state.outstanding.operation_leases > 0);
-        state.outstanding.operation_leases = state.outstanding.operation_leases.saturating_sub(1);
-        drop(state);
-        self.shared.changed.notify_all();
+    pub(crate) fn runtime_recovery_requirements(&self) -> Vec<DatabaseRuntimeChangeRecord> {
+        self.runtime.recovery_requirements()
     }
-}
 
-fn lock_or_recover<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+    pub(crate) fn claim_runtime_recovery(
+        &self,
+        recovery_id: u64,
+        current_authority: &crate::database_contract::DatabaseDeclarationObservation,
+    ) -> Result<DatabaseRuntimeRecoveryClaim, DatabaseRuntimeRecoveryClaimError> {
+        self.runtime.claim_recovery(recovery_id, current_authority)
+    }
 }

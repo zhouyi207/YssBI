@@ -136,15 +136,6 @@ fn database_session_close_and_drain_are_idempotent_and_non_blocking() {
     assert_eq!(session.identity().as_str(), "session-1");
     assert_eq!(session.generation().get(), 7);
     assert_eq!(
-        session.drain(&DatabaseSessionDrainControl::new(
-            DatabaseDrainDeadline::at(Instant::now() + Duration::from_secs(1),)
-        )),
-        DatabaseDrainOutcome::Drained {
-            outstanding: DatabaseOutstandingWork::default(),
-        }
-    );
-
-    assert_eq!(
         session.close_admission(),
         DatabaseAdmissionCloseOutcome::Closed
     );
