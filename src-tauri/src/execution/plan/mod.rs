@@ -6,6 +6,9 @@ pub(crate) mod package;
 pub(crate) mod parameter;
 pub(crate) mod validation;
 
+#[cfg(test)]
+pub(crate) mod result_category;
+
 pub use basis::{
     PlanCompilationBasis, PlanResourceObservationSet, PlanResourceObservedState,
     PlanResourceRequirement, PlanResourceVersionSet, ResourceAccess, ResourceKind,

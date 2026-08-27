@@ -20,3 +20,6 @@ pub mod statistical_input;
 
 #[cfg(test)]
 pub mod events;
+
+#[cfg(test)]
+pub(crate) mod worksheet_plot;

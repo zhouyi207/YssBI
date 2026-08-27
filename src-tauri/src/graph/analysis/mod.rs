@@ -3,6 +3,9 @@ use crate::graph::resource_catalog::ResourceCatalogSnapshot;
 use crate::graph::settings::GraphCompileSettings;
 use crate::graph_document::GraphDocument;
 
+#[cfg(test)]
+pub(crate) mod result_category;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GraphNodeFact {
     pub node_id: crate::graph_document::NodeId,

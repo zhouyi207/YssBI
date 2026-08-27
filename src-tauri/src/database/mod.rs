@@ -1,6 +1,7 @@
 pub mod column_distribution;
 pub mod column_stats;
 pub mod error;
+pub mod plot_query;
 pub mod runtime;
 pub mod session_api;
 
