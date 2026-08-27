@@ -1558,3 +1558,6 @@ Execution 不知道具体 UI
 - [ ] 分离 DatabaseOutstandingWork 的 Copy 计数投影与私有 DatabaseOperationLease RAII 所有权，保持未来 prepare/recovery 计数为私有字段。
 - [ ] 让 DatabaseSessionDrainControl 携带显式单调 deadline，使用带 outstanding 计数的 closed drain/timeout outcome，并保持 timeout 后 lease 不脱离、Drop 不阻塞等待。
 - [ ] 完成 Database foundation 的 Pure Leaf contract、typed error、显式 declaration caller migration 与 focused RED/GREEN、fmt/check/diff 交付记录。
+- [ ] 修正 DatabaseError 公共 Debug/source 边界，保留私有 driver source 供 Database 内部使用且不向公共错误视图泄漏。
+- [ ] 增加 database error module 的 focused regression，覆盖 Display、Debug 与 Error::source() 的 driver secret redaction。
+- [ ] 完成 Database foundation fix round 的 RED/GREEN、Rust fmt/check 与 diff 校验，并提交仅含代码/测试的修复 commit。
