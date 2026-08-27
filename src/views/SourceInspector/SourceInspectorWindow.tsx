@@ -32,7 +32,15 @@ export const SourceInspectorWindow: React.FC = () => {
       }}
     >
       {state.status === 'ready' && state.payload.mode === 'inspector' ? (
-        <UnifiedResultView payload={state.payload.descriptor} />
+        <UnifiedResultView
+          payload={state.payload.descriptor}
+          renderInfo={(descriptor) => descriptor.presentation.kind === 'report' ? (
+            <ReportView
+              descriptor={descriptor}
+              report={descriptor.presentation.report}
+            />
+          ) : null}
+        />
       ) : null}
       {state.status === 'ready' &&
       state.payload.mode === 'report' &&

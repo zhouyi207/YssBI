@@ -98,7 +98,15 @@ export function ResultContent({ resultId }: { resultId: string }) {
   if (state.payload.mode === 'inspector') {
     return (
       <ResultViewPresentationProvider presentation="embedded">
-        <UnifiedResultView payload={state.payload.descriptor} />
+        <UnifiedResultView
+          payload={state.payload.descriptor}
+          renderInfo={(descriptor) => descriptor.presentation.kind === 'report' ? (
+            <ReportView
+              descriptor={descriptor}
+              report={descriptor.presentation.report}
+            />
+          ) : null}
+        />
       </ResultViewPresentationProvider>
     );
   }

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ResultDescriptor } from '../types';
 import { resolveResultRenderer } from '../resolveRenderer';
 import {
@@ -9,9 +10,10 @@ import {
 
 export interface UnifiedResultViewProps {
   payload: ResultDescriptor;
+  renderInfo?: (payload: ResultDescriptor) => ReactNode;
 }
 
-export function UnifiedResultView({ payload }: UnifiedResultViewProps) {
+export function UnifiedResultView({ payload, renderInfo }: UnifiedResultViewProps) {
   const kind = resolveResultRenderer(payload);
 
   switch (kind) {
@@ -23,7 +25,7 @@ export function UnifiedResultView({ payload }: UnifiedResultViewProps) {
       return <ScalarResultView payload={payload} />;
 
     case 'info':
-      return null;
+      return renderInfo?.(payload) ?? null;
     case 'json':
       return <JsonResultView payload={payload} />;
     default:

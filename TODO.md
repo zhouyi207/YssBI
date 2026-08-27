@@ -1649,6 +1649,12 @@ Execution 不知道具体 UI
 - [ ] 将编辑器 dirty/flush close guard 改为 Platform adapter 的同步 allow/prevent 决策，native event 只在 adapter 内调用 preventDefault。
 - [ ] 保留 confirmed recursive close、deferred flush、typed failure 与重复请求合并行为，并将 focused fixture 改为无 native event 对象的 fake。
 - [ ] 完成 editor close guard typecheck/diff 校验，close coordinator 的全量 Application wiring继续由后续 cutover 负责。
+- [ ] 删除 Core `ReportResultView` 并将报告校验、ScrollArea 与 renderer 选择归入 Info View，切换 Info/SourceInspector/editor result callers。
+- [ ] 为 UnifiedResultView 保留 View-provided report renderer callback，确保 inspector-mode 的 report 不因 Core→View 解耦而静默丢失。
+- [ ] 完成 Report renderer focused ResultContent/ReportView typecheck 与 diff 校验，修正后的 ReportView Vitest 尚待统一前端 runner 验证。
+- [ ] 将 New Project、Database import、Bayes export 与 persisted webview 创建迁移到 Services platform adapters，保持 geometry/selection 行为。
+- [ ] 将 settings store 的跨窗口发布/订阅移入 Application SettingsSyncCoordinator，保留 own-echo suppression 与 malformed payload 安全忽略。
+- [ ] 完成 Frontend Task 2 platform caller typecheck 与 diff 校验；projectService、ProjectListener 等范围外 raw callers留待下一切片。
 - [ ] 将 Database runtime registry 拆为 session-owned lifecycle/lease/prepare/commit/recovery owner，补齐 prepared、committed 与 recovery outstanding 计数。
 - [ ] 让 Database session API 的 catalog/data snapshot、声明/运行时/schema revalidation 与 mutation resolution 使用同一 runtime snapshot，保持锁外语义。
 - [ ] 完成 Database session runtime focused recovery/compensation 回归与 Rust check/fmt/diff 验证；driver I/O 仍未引入 neutral snapshot。

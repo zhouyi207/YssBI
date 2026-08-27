@@ -1,6 +1,9 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useResultValue } from '@/features/core/resultSource';
+import { reportResultValuePayload } from '@/features/core/resultSource/resultValuePayload';
+import { ResultReadError } from '@/features/core/resultSource/components/ResultReadError';
 import type { ReportKind, ResultDescriptor } from '@/features/core/resultSource';
 import { validateReportPayload } from '@/shared/types/report/reportValidation';
 import { logger } from '@/utils/appLogger';
@@ -9,20 +12,29 @@ import { resolveReportComponent } from './reportViewResolver';
 interface ReportViewProps {
   descriptor: ResultDescriptor;
   report: ReportKind;
-  data: unknown;
+  data?: unknown;
 }
 
 export function ReportView({ descriptor, report, data }: ReportViewProps) {
+  const loaded = useResultValue(data === undefined ? descriptor.resultId : null);
+  const resolvedData = data ?? (loaded.value ? reportResultValuePayload(loaded.value) : loaded.value);
   const validation = useMemo(
-    () => validateReportPayload(descriptor, report, data),
-    [data, descriptor, report],
+    () => validateReportPayload(descriptor, report, resolvedData),
+    [descriptor, report, resolvedData],
   );
 
   useEffect(() => {
-    if (!validation.ok) {
+    if (!validation.ok && (data !== undefined || (!loaded.loading && !loaded.error))) {
       logger.data.error(JSON.stringify(validation.diagnostic), 'ReportValidation');
     }
-  }, [validation]);
+  }, [data, loaded.error, loaded.loading, validation]);
+
+  if (data === undefined && loaded.error) {
+    return <ResultReadError error={loaded.error} />;
+  }
+  if (data === undefined && loaded.loading) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
 
   let content: ReactNode;
   if (!validation.ok) {
