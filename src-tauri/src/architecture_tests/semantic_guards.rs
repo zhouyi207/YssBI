@@ -223,7 +223,7 @@ fn bayes_worker_source_violations(
     source: &str,
 ) -> Result<Vec<BayesWorkerAuthorityViolation>, syn::Error> {
     let syntax = syn::parse_file(source)?;
-    let canonical_types = canonical_worker_types(source_file, &syntax.items);
+    let root_scope = build_worker_scope(source_module_path(source_file), &syntax.items, &[]);
     let allow_authority =
         source_file == WORKER_FILE || JULIA_WORKER_ADAPTER_FILES.contains(&source_file);
     let mut violations = Vec::new();
@@ -232,7 +232,7 @@ fn bayes_worker_source_violations(
         layer,
         allow_authority,
         worker_boundary: source_file == WORKER_FILE,
-        canonical_types,
+        scopes: vec![root_scope],
         current_impl_owner: None,
         worker_bindings: BTreeSet::new(),
         violations: &mut violations,
@@ -242,116 +242,252 @@ fn bayes_worker_source_violations(
     Ok(violations)
 }
 
-fn canonical_worker_types(source_file: &str, items: &[Item]) -> BTreeMap<String, String> {
-    let mut aliases = BTreeMap::new();
-    if source_file == WORKER_FILE {
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum WorkerSymbol {
+    Module,
+    Type(String),
+}
+
+#[derive(Clone, Debug)]
+struct WorkerScope {
+    module_path: Vec<String>,
+    symbols: BTreeMap<String, WorkerSymbol>,
+}
+
+#[derive(Clone, Debug)]
+struct UseBinding {
+    path: Vec<String>,
+    local: Option<String>,
+    glob: bool,
+}
+
+fn source_module_path(source_file: &str) -> Vec<String> {
+    let normalized = source_file.replace('\\', "/");
+    let relative = normalized
+        .strip_prefix("src-tauri/src/")
+        .unwrap_or(normalized.as_str());
+    let mut segments = relative.split('/').map(str::to_owned).collect::<Vec<_>>();
+    let Some(file) = segments.pop() else {
+        return Vec::new();
+    };
+    if !matches!(file.as_str(), "lib.rs" | "main.rs" | "mod.rs") {
+        segments.push(file.trim_end_matches(".rs").to_owned());
+    }
+    segments
+}
+
+fn build_worker_scope(
+    module_path: Vec<String>,
+    items: &[Item],
+    parents: &[WorkerScope],
+) -> WorkerScope {
+    let mut scope = WorkerScope {
+        module_path,
+        symbols: BTreeMap::new(),
+    };
+    if is_worker_module_path(&scope.module_path) {
         for owner in WORKER_SURFACE_TYPES {
-            aliases.insert((*owner).to_owned(), (*owner).to_owned());
+            scope
+                .symbols
+                .insert((*owner).to_owned(), WorkerSymbol::Type((*owner).to_owned()));
         }
     }
+
+    let mut use_bindings = Vec::new();
     for item in items {
         if let Item::Use(item_use) = item {
-            collect_worker_use_aliases(&item_use.tree, &mut Vec::new(), &mut aliases);
+            flatten_use_tree(&item_use.tree, &mut Vec::new(), &mut use_bindings);
         }
     }
 
     loop {
+        let mut scopes = parents.to_vec();
+        scopes.push(scope.clone());
         let mut changed = false;
+
+        for binding in &use_bindings {
+            let Some(symbol) = resolve_worker_symbol(&binding.path, &scopes) else {
+                continue;
+            };
+            if binding.glob {
+                if symbol == WorkerSymbol::Module {
+                    for owner in WORKER_SURFACE_TYPES {
+                        changed |= insert_worker_symbol(
+                            &mut scope.symbols,
+                            (*owner).to_owned(),
+                            WorkerSymbol::Type((*owner).to_owned()),
+                        );
+                    }
+                }
+            } else if let Some(local) = &binding.local {
+                changed |= insert_worker_symbol(&mut scope.symbols, local.clone(), symbol);
+            }
+        }
+
+        let mut scopes = parents.to_vec();
+        scopes.push(scope.clone());
         for item in items {
             let Item::Type(item_type) = item else {
                 continue;
             };
-            let alias = item_type.ident.to_string();
-            if aliases.contains_key(&alias) {
-                continue;
-            }
-            if let Some(owner) = canonical_worker_owner_from_type(&item_type.ty, &aliases) {
-                aliases.insert(alias, owner);
-                changed = true;
+            if let Some(owner) = canonical_worker_owner_from_type(&item_type.ty, &scopes) {
+                changed |= insert_worker_symbol(
+                    &mut scope.symbols,
+                    item_type.ident.to_string(),
+                    WorkerSymbol::Type(owner),
+                );
             }
         }
+
         if !changed {
             break;
         }
     }
-    aliases
+    scope
 }
 
-fn collect_worker_use_aliases(
-    tree: &UseTree,
-    prefix: &mut Vec<String>,
-    aliases: &mut BTreeMap<String, String>,
-) {
+fn insert_worker_symbol(
+    symbols: &mut BTreeMap<String, WorkerSymbol>,
+    local: String,
+    symbol: WorkerSymbol,
+) -> bool {
+    if symbols.get(&local) == Some(&symbol) {
+        false
+    } else {
+        symbols.insert(local, symbol);
+        true
+    }
+}
+
+fn flatten_use_tree(tree: &UseTree, prefix: &mut Vec<String>, bindings: &mut Vec<UseBinding>) {
     match tree {
         UseTree::Path(path) => {
             prefix.push(path.ident.to_string());
-            collect_worker_use_aliases(&path.tree, prefix, aliases);
+            flatten_use_tree(&path.tree, prefix, bindings);
             prefix.pop();
         }
-        UseTree::Name(name) if is_worker_module_path(prefix) => {
-            let owner = name.ident.to_string();
-            if WORKER_SURFACE_TYPES.contains(&owner.as_str()) {
-                aliases.insert(owner.clone(), owner);
-            }
+        UseTree::Name(name) => {
+            let local = name.ident.to_string();
+            let mut path = prefix.clone();
+            path.push(local.clone());
+            bindings.push(UseBinding {
+                path,
+                local: Some(local),
+                glob: false,
+            });
         }
-        UseTree::Rename(rename) if is_worker_module_path(prefix) => {
-            let owner = rename.ident.to_string();
-            if WORKER_SURFACE_TYPES.contains(&owner.as_str()) {
-                aliases.insert(rename.rename.to_string(), owner);
-            }
+        UseTree::Rename(rename) => {
+            let mut path = prefix.clone();
+            path.push(rename.ident.to_string());
+            bindings.push(UseBinding {
+                path,
+                local: Some(rename.rename.to_string()),
+                glob: false,
+            });
         }
         UseTree::Group(group) => {
             for item in &group.items {
-                collect_worker_use_aliases(item, prefix, aliases);
+                flatten_use_tree(item, prefix, bindings);
             }
         }
-        UseTree::Glob(_) if is_worker_module_path(prefix) => {
-            for owner in WORKER_SURFACE_TYPES {
-                aliases.insert((*owner).to_owned(), (*owner).to_owned());
-            }
+        UseTree::Glob(_) => bindings.push(UseBinding {
+            path: prefix.clone(),
+            local: None,
+            glob: true,
+        }),
+    }
+}
+
+fn resolve_worker_symbol(path: &[String], scopes: &[WorkerScope]) -> Option<WorkerSymbol> {
+    let current = scopes.len().checked_sub(1)?;
+    let mut actual_base = scopes[current].module_path.clone();
+    let (alias_scope, offset, absolute) = match path.first()?.as_str() {
+        "crate" => {
+            actual_base.clear();
+            (None, 1, true)
         }
-        UseTree::Name(_) | UseTree::Rename(_) | UseTree::Glob(_) => {}
+        "self" => (Some(current), 1, false),
+        "super" => {
+            let mut offset = 0;
+            while path.get(offset).is_some_and(|segment| segment == "super") {
+                offset += 1;
+            }
+            if offset > actual_base.len() {
+                return None;
+            }
+            actual_base.truncate(actual_base.len() - offset);
+            (current.checked_sub(offset), offset, false)
+        }
+        _ => (Some(current), 0, false),
+    };
+    let remainder = &path[offset..];
+    if remainder.is_empty() {
+        return None;
+    }
+
+    if !absolute && let Some(scope_index) = alias_scope {
+        if let Some(symbol) = scopes[scope_index].symbols.get(&remainder[0]) {
+            return extend_worker_symbol(symbol, &remainder[1..]);
+        }
+    }
+
+    let mut relative = actual_base;
+    relative.extend(remainder.iter().cloned());
+    if let Some(symbol) = canonical_worker_symbol(&relative) {
+        return Some(symbol);
+    }
+    (!absolute)
+        .then(|| canonical_worker_symbol(remainder))
+        .flatten()
+}
+
+fn extend_worker_symbol(symbol: &WorkerSymbol, suffix: &[String]) -> Option<WorkerSymbol> {
+    match (symbol, suffix) {
+        (WorkerSymbol::Module, []) => Some(WorkerSymbol::Module),
+        (WorkerSymbol::Module, [owner]) if WORKER_SURFACE_TYPES.contains(&owner.as_str()) => {
+            Some(WorkerSymbol::Type(owner.clone()))
+        }
+        (WorkerSymbol::Type(owner), []) => Some(WorkerSymbol::Type(owner.clone())),
+        (WorkerSymbol::Module | WorkerSymbol::Type(_), _) => None,
+    }
+}
+
+fn canonical_worker_symbol(path: &[String]) -> Option<WorkerSymbol> {
+    if is_worker_module_path(path) {
+        return Some(WorkerSymbol::Module);
+    }
+    let (owner, prefix) = path.split_last()?;
+    if is_worker_module_path(prefix) && WORKER_SURFACE_TYPES.contains(&owner.as_str()) {
+        Some(WorkerSymbol::Type(owner.clone()))
+    } else {
+        None
     }
 }
 
 fn is_worker_module_path(segments: &[String]) -> bool {
     let expected = ["sci", "api", "bayes", "worker"];
-    segments.len() >= expected.len()
-        && segments[segments.len() - expected.len()..]
-            .iter()
-            .map(String::as_str)
-            .eq(expected)
+    segments.iter().map(String::as_str).eq(expected)
 }
 
-fn canonical_worker_owner_from_type(
-    ty: &Type,
-    aliases: &BTreeMap<String, String>,
-) -> Option<String> {
+fn canonical_worker_owner_from_type(ty: &Type, scopes: &[WorkerScope]) -> Option<String> {
     match ty {
-        Type::Path(path) => canonical_worker_owner_from_path(&path.path, aliases),
-        Type::Reference(reference) => canonical_worker_owner_from_type(&reference.elem, aliases),
-        Type::Group(group) => canonical_worker_owner_from_type(&group.elem, aliases),
-        Type::Paren(paren) => canonical_worker_owner_from_type(&paren.elem, aliases),
+        Type::Path(path) => match resolve_worker_symbol(
+            &path
+                .path
+                .segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect::<Vec<_>>(),
+            scopes,
+        )? {
+            WorkerSymbol::Type(owner) => Some(owner),
+            WorkerSymbol::Module => None,
+        },
+        Type::Reference(reference) => canonical_worker_owner_from_type(&reference.elem, scopes),
+        Type::Group(group) => canonical_worker_owner_from_type(&group.elem, scopes),
+        Type::Paren(paren) => canonical_worker_owner_from_type(&paren.elem, scopes),
         _ => None,
     }
-}
-
-fn canonical_worker_owner_from_path(
-    path: &syn::Path,
-    aliases: &BTreeMap<String, String>,
-) -> Option<String> {
-    let owner = path.segments.last()?.ident.to_string();
-    if let Some(canonical) = aliases.get(&owner) {
-        return Some(canonical.clone());
-    }
-    let prefix = path
-        .segments
-        .iter()
-        .take(path.segments.len().saturating_sub(1))
-        .map(|segment| segment.ident.to_string())
-        .collect::<Vec<_>>();
-    (WORKER_SURFACE_TYPES.contains(&owner.as_str()) && is_worker_module_path(&prefix))
-        .then_some(owner)
 }
 
 struct BayesWorkerAuthorityVisitor<'a> {
@@ -359,7 +495,7 @@ struct BayesWorkerAuthorityVisitor<'a> {
     layer: RustLayer,
     allow_authority: bool,
     worker_boundary: bool,
-    canonical_types: BTreeMap<String, String>,
+    scopes: Vec<WorkerScope>,
     current_impl_owner: Option<String>,
     worker_bindings: BTreeSet<String>,
     violations: &'a mut Vec<BayesWorkerAuthorityViolation>,
@@ -407,26 +543,18 @@ impl BayesWorkerAuthorityVisitor<'_> {
     }
 
     fn canonical_owner_and_method(&self, path: &syn::Path) -> Option<(String, String)> {
-        let mut segments = path.segments.iter().rev();
-        let method = segments.next()?.ident.to_string();
-        let written_owner = segments.next()?.ident.to_string();
-        let owner = if written_owner == "Self" {
+        let mut segments = path
+            .segments
+            .iter()
+            .map(|segment| segment.ident.to_string())
+            .collect::<Vec<_>>();
+        let method = segments.pop()?;
+        let owner = if matches!(segments.as_slice(), [owner] if owner == "Self") {
             self.current_impl_owner.clone()?
-        } else if let Some(owner) = self.canonical_types.get(&written_owner) {
-            owner.clone()
         } else {
-            let prefix = path
-                .segments
-                .iter()
-                .take(path.segments.len().saturating_sub(2))
-                .map(|segment| segment.ident.to_string())
-                .collect::<Vec<_>>();
-            if WORKER_SURFACE_TYPES.contains(&written_owner.as_str())
-                && is_worker_module_path(&prefix)
-            {
-                written_owner
-            } else {
-                return None;
+            match resolve_worker_symbol(&segments, &self.scopes)? {
+                WorkerSymbol::Type(owner) => owner,
+                WorkerSymbol::Module => return None,
             }
         };
         Some((owner, method))
@@ -441,22 +569,38 @@ impl BayesWorkerAuthorityVisitor<'_> {
         };
         let method = function.sig.ident.to_string();
         let target = format!("{owner}::{method}");
-        let allowed_public = PUBLIC_ASSOCIATED_FUNCTIONS
-            .iter()
-            .any(|function| function.owner == owner && function.method == method);
-        if matches!(function.vis, Visibility::Public(_))
-            && (!allowed_public || !self.worker_boundary)
-        {
-            self.record("public-associated-function", target.clone());
-        }
-        if is_crate_visibility(&function.vis) {
-            if authority_function(&owner, &method).is_some() {
-                if !self.worker_boundary {
-                    self.record("authority-declaration", target);
-                }
-            } else {
-                self.record("forbidden-associated-function", target);
-            }
+        let Some(kind) = disallowed_associated_function_kind(
+            &owner,
+            &method,
+            &function.vis,
+            self.worker_boundary,
+        ) else {
+            return;
+        };
+        self.record(kind, target);
+    }
+
+    fn current_module_path(&self) -> Vec<String> {
+        self.scopes
+            .last()
+            .map(|scope| scope.module_path.clone())
+            .unwrap_or_default()
+    }
+
+    fn push_inline_scope(&mut self, module: &syn::ItemMod) -> bool {
+        let Some((_, items)) = &module.content else {
+            return false;
+        };
+        let mut module_path = self.current_module_path();
+        module_path.push(module.ident.to_string());
+        let scope = build_worker_scope(module_path, items, &self.scopes);
+        self.scopes.push(scope);
+        true
+    }
+
+    fn pop_inline_scope(&mut self, pushed: bool) {
+        if pushed {
+            self.scopes.pop();
         }
     }
 
@@ -464,7 +608,7 @@ impl BayesWorkerAuthorityVisitor<'_> {
         let syn::Pat::Ident(binding) = pattern else {
             return;
         };
-        if canonical_worker_owner_from_type(ty, &self.canonical_types).is_some() {
+        if canonical_worker_owner_from_type(ty, &self.scopes).is_some() {
             self.worker_bindings.insert(binding.ident.to_string());
         }
     }
@@ -503,24 +647,25 @@ impl<'ast> Visit<'ast> for BayesWorkerAuthorityVisitor<'_> {
         if is_test_only(&item.attrs) {
             return;
         }
-        if use_tree_has_worker_glob(&item.tree, &mut Vec::new()) {
+        if use_tree_has_worker_glob(&item.tree, &self.scopes) {
             self.record("broad-import", "worker::*");
         }
-        collect_worker_use_aliases(&item.tree, &mut Vec::new(), &mut self.canonical_types);
         visit::visit_item_use(self, item);
     }
 
     fn visit_item_type(&mut self, item: &'ast syn::ItemType) {
-        if let Some(owner) = canonical_worker_owner_from_type(&item.ty, &self.canonical_types) {
-            self.canonical_types.insert(item.ident.to_string(), owner);
-        }
         visit::visit_item_type(self, item);
+    }
+
+    fn visit_item_mod(&mut self, item: &'ast syn::ItemMod) {
+        let pushed = self.push_inline_scope(item);
+        visit::visit_item_mod(self, item);
+        self.pop_inline_scope(pushed);
     }
 
     fn visit_item_impl(&mut self, item: &'ast syn::ItemImpl) {
         let previous = self.current_impl_owner.clone();
-        self.current_impl_owner =
-            canonical_worker_owner_from_type(&item.self_ty, &self.canonical_types);
+        self.current_impl_owner = canonical_worker_owner_from_type(&item.self_ty, &self.scopes);
         if self.current_impl_owner.is_some() {
             for impl_item in &item.items {
                 if let ImplItem::Fn(function) = impl_item {
@@ -580,7 +725,18 @@ impl<'ast> Visit<'ast> for BayesWorkerAuthorityVisitor<'_> {
                 if written == "Self" {
                     self.current_impl_owner.clone()
                 } else {
-                    canonical_worker_owner_from_path(&construction.path, &self.canonical_types)
+                    match resolve_worker_symbol(
+                        &construction
+                            .path
+                            .segments
+                            .iter()
+                            .map(|segment| segment.ident.to_string())
+                            .collect::<Vec<_>>(),
+                        &self.scopes,
+                    ) {
+                        Some(WorkerSymbol::Type(owner)) => Some(owner),
+                        Some(WorkerSymbol::Module) | None => None,
+                    }
                 }
             });
             if let Some(owner) = owner
@@ -607,21 +763,12 @@ impl<'ast> Visit<'ast> for BayesWorkerAuthorityVisitor<'_> {
     }
 }
 
-fn use_tree_has_worker_glob(tree: &UseTree, prefix: &mut Vec<String>) -> bool {
-    match tree {
-        UseTree::Path(path) => {
-            prefix.push(path.ident.to_string());
-            let found = use_tree_has_worker_glob(&path.tree, prefix);
-            prefix.pop();
-            found
-        }
-        UseTree::Group(group) => group
-            .items
-            .iter()
-            .any(|item| use_tree_has_worker_glob(item, prefix)),
-        UseTree::Glob(_) => prefix.last().is_some_and(|segment| segment == "worker"),
-        UseTree::Name(_) | UseTree::Rename(_) => false,
-    }
+fn use_tree_has_worker_glob(tree: &UseTree, scopes: &[WorkerScope]) -> bool {
+    let mut bindings = Vec::new();
+    flatten_use_tree(tree, &mut Vec::new(), &mut bindings);
+    bindings.iter().any(|binding| {
+        binding.glob && resolve_worker_symbol(&binding.path, scopes) == Some(WorkerSymbol::Module)
+    })
 }
 
 fn authority_function(owner: &str, method: &str) -> Option<WorkerFunction> {
@@ -635,6 +782,31 @@ fn allowed_worker_function(owner: &str, method: &str) -> bool {
     ALLOWED_WORKER_FUNCTIONS
         .iter()
         .any(|function| function.owner == owner && function.method == method)
+}
+
+fn disallowed_associated_function_kind(
+    owner: &str,
+    method: &str,
+    visibility: &Visibility,
+    worker_boundary: bool,
+) -> Option<&'static str> {
+    match visibility {
+        Visibility::Inherited => None,
+        Visibility::Public(_) => {
+            let allowed = worker_boundary
+                && PUBLIC_ASSOCIATED_FUNCTIONS
+                    .iter()
+                    .any(|function| function.owner == owner && function.method == method);
+            (!allowed).then_some("public-associated-function")
+        }
+        Visibility::Restricted(restricted) => {
+            let allowed = worker_boundary
+                && restricted.in_token.is_none()
+                && restricted.path.is_ident("crate")
+                && authority_function(owner, method).is_some();
+            (!allowed).then_some("restricted-associated-function")
+        }
+    }
 }
 
 fn bayes_worker_surface_violations(
@@ -687,22 +859,10 @@ fn bayes_worker_surface_violations(
                     if function.sig.receiver().is_none()
                         && WORKER_SURFACE_TYPES.contains(&owner.as_str())
                     {
-                        let allowed_public = PUBLIC_ASSOCIATED_FUNCTIONS
-                            .iter()
-                            .any(|function| function.owner == owner && function.method == name);
-                        if matches!(function.vis, Visibility::Public(_)) && !allowed_public {
-                            violations.push(surface_violation(
-                                "public-associated-function",
-                                format!("{owner}::{name}"),
-                            ));
-                        }
-                        if is_crate_visibility(&function.vis)
-                            && authority_function(&owner, &name).is_none()
+                        if let Some(kind) =
+                            disallowed_associated_function_kind(&owner, &name, &function.vis, true)
                         {
-                            violations.push(surface_violation(
-                                "forbidden-associated-function",
-                                format!("{owner}::{name}"),
-                            ));
+                            violations.push(surface_violation(kind, format!("{owner}::{name}")));
                         }
                     }
                 }
@@ -756,7 +916,11 @@ fn impl_owner(ty: &Type) -> Option<String> {
 }
 
 fn is_crate_visibility(visibility: &Visibility) -> bool {
-    matches!(visibility, Visibility::Restricted(restricted) if restricted.path.is_ident("crate"))
+    matches!(
+        visibility,
+        Visibility::Restricted(restricted)
+            if restricted.in_token.is_none() && restricted.path.is_ident("crate")
+    )
 }
 
 fn has_forgeable_derive(attributes: &[syn::Attribute]) -> bool {
@@ -1143,6 +1307,111 @@ impl BayesTaskHandle {
     }));
     assert!(findings.iter().any(|finding| {
         finding.kind == "authority-call" && finding.target == "BayesTaskHandle::issue_for_worker"
+    }));
+}
+
+#[test]
+fn bayes_module_scoped_aliases_are_canonicalized() {
+    let module_alias = bayes_worker_source_violations(
+        "src-tauri/src/application/module_alias_authority.rs",
+        RustLayer::Application,
+        r#"
+use crate::sci::api::bayes::worker as w;
+use w::BayesTaskHandle as Handle;
+
+fn forge(task_id: BayesTaskId, generation: NonZeroU64) {
+    let _ = Handle::issue_for_worker(task_id, generation);
+}
+"#,
+    )
+    .expect("module alias fixture must parse");
+    assert!(module_alias.iter().any(|finding| {
+        finding.kind == "authority-call" && finding.target == "BayesTaskHandle::issue_for_worker"
+    }));
+
+    let relative_import = bayes_worker_source_violations(
+        "src-tauri/src/sci/api/bayes/forbidden_authority.rs",
+        RustLayer::Application,
+        r#"
+use super::worker::BayesArtifactHandle as RelativeArtifact;
+
+fn forge(task: BayesTaskHandle, artifact: ArtifactId) {
+    let _ = RelativeArtifact::mint_for_worker(task, artifact);
+}
+"#,
+    )
+    .expect("relative authority fixture must parse");
+    assert!(relative_import.iter().any(|finding| {
+        finding.kind == "authority-call" && finding.target == "BayesArtifactHandle::mint_for_worker"
+    }));
+
+    let nested_forward_alias = bayes_worker_source_violations(
+        "src-tauri/src/application/nested_alias_authority.rs",
+        RustLayer::Application,
+        r#"
+use crate::sci::api::bayes::worker as w;
+
+mod nested {
+    type A = B;
+    type B = super::w::BayesTaskResult;
+
+    fn forge() {
+        let build = A::validated_worker_result;
+    }
+}
+"#,
+    )
+    .expect("nested forward alias fixture must parse");
+    assert!(nested_forward_alias.iter().any(|finding| {
+        finding.kind == "authority-reference"
+            && finding.target == "BayesTaskResult::validated_worker_result"
+    }));
+
+    let unrelated = bayes_worker_source_violations(
+        "src-tauri/src/application/unrelated_handle.rs",
+        RustLayer::Application,
+        r#"
+use other::Handle;
+
+fn allowed() {
+    Handle::issue_for_worker();
+}
+"#,
+    )
+    .expect("unrelated handle fixture must parse");
+    assert!(
+        unrelated.is_empty(),
+        "unrelated Handle must not canonicalize"
+    );
+}
+
+#[test]
+fn bayes_restricted_associated_functions_are_rejected() {
+    let findings = bayes_worker_source_violations(
+        "src-tauri/src/application/restricted_worker_impl.rs",
+        RustLayer::Application,
+        r#"
+use crate::sci::api::bayes::worker::BayesTaskHandle;
+
+impl BayesTaskHandle {
+    pub(super) fn from_parts() {}
+    pub(in crate::application) fn forge() {}
+    pub(in crate) fn issue_for_worker() {}
+}
+"#,
+    )
+    .expect("restricted authority fixture must parse");
+    assert!(findings.iter().any(|finding| {
+        finding.kind == "restricted-associated-function"
+            && finding.target == "BayesTaskHandle::from_parts"
+    }));
+    assert!(findings.iter().any(|finding| {
+        finding.kind == "restricted-associated-function"
+            && finding.target == "BayesTaskHandle::forge"
+    }));
+    assert!(findings.iter().any(|finding| {
+        finding.kind == "restricted-associated-function"
+            && finding.target == "BayesTaskHandle::issue_for_worker"
     }));
 }
 

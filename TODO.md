@@ -1450,3 +1450,7 @@ Execution 不知道具体 UI
 - [ ] 扩展 Bayes authority semantic guard，为 worker module 的显式 import rename、glob import 与多级 type alias 建立 per-source canonical owner map。
 - [ ] 在扫描每个 production `ItemImpl` 时保存 canonical impl owner，将 `Self::...` authority reference 解析回真实 worker owner，并拒绝外部 inherent builder 声明。
 - [ ] 增加独立恶意 fixtures，分别覆盖 `Handle`/type-alias function reference 与外部 `impl BayesTaskHandle` public forge/`Self::issue_for_worker` 绕过。
+- [ ] 将 Bayes authority resolver 从 file-global alias map 改为递归 module-scoped symbol tables，对每个 inline scope 独立执行 use/type alias fixed-point。
+- [ ] 规范化 `crate`、`self`、多级 `super` 与 relative/module-alias 路径，同时保持 `other::Handle` 等非 worker origin 不产生误报。
+- [ ] 将所有显式 associated-function visibility 纳入 exact allowance，仅允许 worker boundary 的 public `ValidatedBayesTask::try_new` 与 exact `pub(crate)` authority builders。
+- [ ] 增加 module alias、relative worker import、nested forward alias chain、`pub(super)`、`pub(in ...)` 与 syntactic `pub(in crate)` 恶意回归 fixtures。
