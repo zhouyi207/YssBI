@@ -1649,3 +1649,9 @@ Execution 不知道具体 UI
 - [ ] 将 Database runtime registry 拆为 session-owned lifecycle/lease/prepare/commit/recovery owner，补齐 prepared、committed 与 recovery outstanding 计数。
 - [ ] 让 Database session API 的 catalog/data snapshot、声明/运行时/schema revalidation 与 mutation resolution 使用同一 runtime snapshot，保持锁外语义。
 - [ ] 完成 Database session runtime focused recovery/compensation 回归与 Rust check/fmt/diff 验证；driver I/O 仍未引入 neutral snapshot。
+- [ ] 将纯 `ResourceKey`、resource metadata/ref 与 graph lookup/query 下沉到 Domain，Core selector 仅做薄包装。
+- [ ] 将 `CallFunctionGraphBucket` 与 `EdgeData` 迁移为 Domain contracts，解除 diagnostics/drag preview 对 Core/View 的反向类型依赖。
+- [ ] 完成 Frontend pure reverse-edge focused Vitest、typecheck 与 diff 校验；Report renderer 的跨 caller 迁移继续保留为后续独立切片。
+- [ ] 实现 Project–Graph Task 7 的单次 Application session capture、Graph consuming mutation handoff 与 Project linearized authority commit。
+- [ ] 让 graph mutation commit 返回 Project-owned before/after history 与 invalidation facts，并委托 canonical resident graph installer。
+- [ ] 完成 Project–Graph Task 7 focused authority regression、Rust check/fmt/diff 校验，保留 session replacement 与 history-owner 后续 cutover。
