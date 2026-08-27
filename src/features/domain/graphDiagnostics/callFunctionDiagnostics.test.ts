@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildGraphResourceMeta } from '@/features/core/resource';
-import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import {
+  type CallFunctionGraphBucket,
   collectCallFunctionIssuesForBucket,
   getCallFunctionIssueForNode,
   getFunctionResourceName,
@@ -31,17 +31,6 @@ describe('callFunctionDiagnostics', () => {
     const stableNodeType = call.projection.nodes[0].nodeTypeId;
     const stableTitle = call.projection.nodes[0].display.title;
     const bucket = {
-      basis: {
-        graphPath,
-        graphRevision: 1,
-        registryFingerprint: '0000000000000000000000000000000000000000000000000000000000000000',
-        resourceVersions: {},
-      },
-      sourceRevision: 1,
-      requestGeneration: 1,
-      diagnostics: [],
-      outcome: { type: 'success' },
-      hasBlockingDiagnostics: false,
       nodes: {
         'call-empty': {
           id: 'call-empty',
@@ -87,12 +76,7 @@ describe('callFunctionDiagnostics', () => {
           outputs: [],
         },
       },
-      pins: {},
-      connections: {},
-      graphNodes: ['call-empty', 'call-missing', 'noncanonical-call', 'call-ok'],
-      nodePins: {},
-      pinConnections: {},
-    } satisfies GraphEntityBucket;
+    } satisfies CallFunctionGraphBucket;
 
     expect(getCallFunctionIssueForNode('events/Main.yssbi-event', bucket.nodes['call-empty'], resources)?.kind).toBe(
       'empty_target',

@@ -5,5 +5,16 @@ export * from './functionResourceView';
 export * from './resourceSelectors';
 export * from './resourceSnapshotReconcile';
 export * from './resourceStore';
-export * from './resourceTypes';
+export {
+  buildGraphResourceMeta,
+  resourceKey,
+  resourceRefFromLayoutTab,
+} from './resourceTypes';
+export type {
+  BackendProjectResourceMeta,
+  ProjectResourceMeta,
+  ResourceKey,
+  ResourceKind,
+  ResourceRef,
+} from './resourceTypes';
 export * from './resourceIndexCoordinator';

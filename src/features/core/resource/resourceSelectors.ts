@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
-import { toGraphResourceUri } from '@/shared/types/domain/graphResourcePath';
+import {
+  lookupGraphResource as lookupDomainGraphResource,
+  lookupGraphResourceByKind,
+} from '@/features/domain/resource/resourceQueries';
 import { useResourceStore } from './resourceStore';
-import type { ProjectResourceMeta, ResourceKey } from './resourceTypes';
+import type { ProjectResourceMeta, ResourceKey } from '@/features/domain/resource/resourceTypes';
 
 export type GraphResourceRecord = Record<string, Pick<ProjectResourceMeta, 'id' | 'name'>>;
 
@@ -10,22 +13,17 @@ export function lookupGraphResource(
   graphPath: string,
   kind?: 'event' | 'function',
 ): ProjectResourceMeta | null {
-  if (kind) {
-    return resources[toGraphResourceUri(kind, graphPath)] ?? null;
-  }
-  return (
-    resources[toGraphResourceUri('event', graphPath)] ??
-    resources[toGraphResourceUri('function', graphPath)] ??
-    null
-  );
+  return (kind
+    ? lookupGraphResourceByKind(resources, graphPath, kind)
+    : lookupDomainGraphResource(resources, graphPath)) ?? null;
 }
 
 export function lookupGraphResourceKind(
-  resources: Record<ResourceKey, ProjectResourceMeta>,
+  resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
   graphPath: string,
 ): 'event' | 'function' | undefined {
-  if (resources[toGraphResourceUri('event', graphPath)]?.exists) return 'event';
-  if (resources[toGraphResourceUri('function', graphPath)]?.exists) return 'function';
+  if (lookupGraphResourceByKind(resources, graphPath, 'event')?.exists) return 'event';
+  if (lookupGraphResourceByKind(resources, graphPath, 'function')?.exists) return 'function';
   return undefined;
 }
 

@@ -9,6 +9,7 @@ import { useEdgeDragPreview } from "@/features/core/canvas/useEdgeDragPreview";
 import { getConnectPreview, subscribeConnectPreview } from '@/features/core/canvas/connectPreview';
 import { resolvePinVisualSpec } from '@/shared/types/domain/pinVisual';
 import type { ConnectionData, PinData } from "@/shared/types";
+import type { EdgeData } from '@/features/domain/canvas/edgeData';
 import { ConnectionContextMenu } from '@/views/EditorView/ContextMenu';
 
 export function replacementEdgeAttributes(
@@ -63,16 +64,6 @@ type EdgesOverlayProps = EdgesOverlayBaseProps & (
 interface EdgeContextMenuDescriptor {
   position: { x: number; y: number };
   connectionIds: string[];
-}
-
-export interface EdgeData {
-  id: string;
-  fromPinId: string;
-  toPinId: string;
-  sourceNodeId: string;
-  targetNodeId?: string;
-  colorKey: string;
-  edgeKind: 'exec' | 'data';
 }
 
 export function buildEdgeData(

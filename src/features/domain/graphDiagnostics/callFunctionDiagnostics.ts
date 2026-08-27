@@ -1,7 +1,6 @@
-import { lookupGraphResource } from '@/features/core/resource/resourceSelectors';
-import type { ProjectResourceMeta, ResourceKey } from '@/features/core/resource/resourceTypes';
+import { lookupGraphResourceByKind } from '@/features/domain/resource/resourceQueries';
+import type { ProjectResourceMeta, ResourceKey } from '@/features/domain/resource/resourceTypes';
 import { isCallFunctionNodeType } from '@/features/domain/nodeCatalog';
-import type { GraphEntityBucket } from '@/features/core/dataStore/graphEntityAccess';
 import type { NodeData } from '@/shared/types/store/graph';
 
 export type CallFunctionIssueKind = 'empty_target' | 'missing_target';
@@ -13,29 +12,33 @@ export interface CallFunctionIssue {
   subGraphPath?: string;
 }
 
+export interface CallFunctionGraphBucket {
+  readonly nodes: Readonly<Record<string, NodeData>>;
+}
+
 export function isFunctionResourceAvailable(
-  resources: Record<ResourceKey, ProjectResourceMeta>,
+  resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
   functionPath: string,
 ): boolean {
   const path = functionPath.trim();
   if (!path) return false;
-  return lookupGraphResource(resources, path, 'function')?.exists === true;
+  return lookupGraphResourceByKind(resources, path, 'function')?.exists === true;
 }
 
 export function getFunctionResourceName(
-  resources: Record<ResourceKey, ProjectResourceMeta>,
+  resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
   functionPath: string,
 ): string | undefined {
   const path = functionPath.trim();
   if (!path) return undefined;
-  const meta = lookupGraphResource(resources, path, 'function');
+  const meta = lookupGraphResourceByKind(resources, path, 'function');
   return meta?.exists ? meta.name : undefined;
 }
 
 export function getCallFunctionIssueForNode(
   graphPath: string,
   node: Pick<NodeData, 'id' | 'nodeType' | 'subGraphPath'>,
-  resources: Record<ResourceKey, ProjectResourceMeta>,
+  resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
 ): CallFunctionIssue | null {
   if (!isCallFunctionNodeType(node.nodeType)) return null;
 
@@ -53,8 +56,8 @@ export function getCallFunctionIssueForNode(
 
 export function collectCallFunctionIssuesForBucket(
   graphPath: string,
-  bucket: GraphEntityBucket,
-  resources: Record<ResourceKey, ProjectResourceMeta>,
+  bucket: CallFunctionGraphBucket,
+  resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
 ): CallFunctionIssue[] {
   const issues: CallFunctionIssue[] = [];
   for (const node of Object.values(bucket.nodes) as NodeData[]) {
@@ -65,8 +68,8 @@ export function collectCallFunctionIssuesForBucket(
 }
 
 export function countCallFunctionIssuesByGraph(
-  graphEntities: Record<string, GraphEntityBucket>,
-  resources: Record<ResourceKey, ProjectResourceMeta>,
+  graphEntities: Readonly<Record<string, CallFunctionGraphBucket>>,
+  resources: Readonly<Record<ResourceKey, ProjectResourceMeta>>,
 ): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const [graphPath, bucket] of Object.entries(graphEntities)) {

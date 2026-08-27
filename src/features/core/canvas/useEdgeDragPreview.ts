@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { EdgeData } from '@/views/EditorView/Canvas/core/EdgesOverlay';
+import type { EdgeData } from '@/features/domain/canvas/edgeData';
 import { computeEdgePath } from './edgePath';
 import { getDragPreview, subscribeDragPreview } from './dragPreview';
 

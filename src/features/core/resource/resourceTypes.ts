@@ -3,43 +3,19 @@ import {
   toGraphResourceUri,
   type GraphResourceKind,
 } from '@/shared/types/domain/graphResourcePath';
+import type {
+  ProjectResourceMeta,
+  ResourceKey,
+  ResourceRef,
+} from '@/features/domain/resource/resourceTypes';
 
-export type ResourceKind = 'event' | 'function' | 'worksheet' | 'database' | 'variable';
-
-/** Canonical store key — always equals `ProjectResourceMeta.uri`. */
-export type ResourceKey = string;
-
-export interface ResourceRef {
-  kind: ResourceKind;
-  id: string;
-}
-
-export interface ProjectResourceMeta {
-  id: string;
-  kind: ResourceKind;
-  name: string;
-  uri: string;
-  parentId?: string;
-  scope?: { type: 'global' | 'event' | 'function'; graphPath?: string };
-  revision?: number;
-  exists: boolean;
-  loaded: boolean;
-  hasDirtyDocument: boolean;
-  hasStaleDocument: boolean;
-  hasConflictDocument: boolean;
-}
-
-export interface BackendProjectResourceMeta {
-  id: string;
-  kind: ResourceKind;
-  name: string;
-  uri: string;
-  exists: boolean;
-  loaded: boolean;
-  hasDirtyDocument: boolean;
-  hasStaleDocument: boolean;
-  hasConflictDocument: boolean;
-}
+export type {
+  BackendProjectResourceMeta,
+  ProjectResourceMeta,
+  ResourceKey,
+  ResourceKind,
+  ResourceRef,
+} from '@/features/domain/resource/resourceTypes';
 
 type ResourceKeyInput = ResourceRef | Pick<ProjectResourceMeta, 'kind' | 'id' | 'uri'>;
 
