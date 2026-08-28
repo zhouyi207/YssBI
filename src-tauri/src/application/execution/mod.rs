@@ -1,4 +1,5 @@
 pub(crate) mod finalization;
+pub(crate) mod result_query;
 pub(crate) mod session_factory;
 pub mod session_slot;
 

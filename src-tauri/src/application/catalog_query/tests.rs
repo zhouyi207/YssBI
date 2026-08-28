@@ -280,8 +280,8 @@ fn stale_graph_revision_returns_typed_compatibility_error() {
         error,
         CatalogQueryApplicationError::Graph(GraphCatalogQueryError::RevisionConflict {
             expected: GraphRevision::INITIAL,
-            current: GraphRevision::new(1),
-        })
+            current,
+        }) if current == GraphRevision::new(1)
     ));
 }
 

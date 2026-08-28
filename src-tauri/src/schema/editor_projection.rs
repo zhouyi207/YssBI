@@ -7,8 +7,8 @@ use crate::application::editor_projection::{
 use crate::node_system::analysis::{
     CompilationOutcomeDto, CompilationStageDto, DiagnosticDto, DiagnosticLocationDto,
     DiagnosticSeverityDto, EditorConnectionProjectionDto, EditorGraphProjectionDto,
-    EditorInputBindingDto, EditorNodeProjectionDto, EditorParameterDto, NodeCapabilitiesDto,
-    NodeDisplayDto, NodePositionDto, ParameterDisplayDto, PortConnectionCapabilityDto,
+    EditorInputBindingDto, EditorNodeProjectionDto, NodeCapabilitiesDto, NodeDisplayDto,
+    NodePositionDto, ParameterDisplayDto, ParameterEditorDto, PortConnectionCapabilityDto,
     PortDirectionDto, PortDisplayDto, PortInstanceKindDto, PortKindDto, ResolvedPortDto,
     ResolvedPortStatusDto, TypeSummaryDto,
 };
@@ -176,14 +176,14 @@ fn map_port(port: &EditorPortModel) -> Result<ResolvedPortDto, TransportMappingE
 
 fn map_parameter(
     parameter: &EditorParameterModel,
-) -> Result<EditorParameterDto, TransportMappingError> {
+) -> Result<ParameterEditorDto, TransportMappingError> {
     if parameter.configuration.is_some() {
         return Err(TransportMappingError::ParameterConfigurationWireContractUnavailable);
     }
     if parameter.value_source.is_some() {
         return Err(TransportMappingError::ParameterValueSourceWireContractUnavailable);
     }
-    Ok(EditorParameterDto {
+    Ok(ParameterEditorDto {
         key: parameter.key.as_str().into(),
         display: ParameterDisplayDto {
             title: parameter.display.title.clone(),
@@ -330,8 +330,8 @@ mod tests {
                 graph_revision: GraphRevision::new(7),
                 registry_fingerprint: [0x6f; 32],
                 resource_versions: BTreeMap::from([(
-                    ResourceKey::new("database/source".into()),
-                    ResourceVersion::new("12".into()),
+                    ResourceKey::new("database/source"),
+                    ResourceVersion::new("12"),
                 )]),
             },
             graph_path: graph_path.clone(),

@@ -185,12 +185,24 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
             node_facts(
                 source,
                 source_type,
-                Box::new([port(output, "value", "Value", PortDirection::Output, 1)]),
+                Box::new([port(
+                    output.clone(),
+                    "value",
+                    "Value",
+                    PortDirection::Output,
+                    1,
+                )]),
             ),
             node_facts(
                 target,
                 target_type,
-                Box::new([port(input, "value", "Value", PortDirection::Input, 1)]),
+                Box::new([port(
+                    input.clone(),
+                    "value",
+                    "Value",
+                    PortDirection::Input,
+                    1,
+                )]),
             ),
         ],
         [],
@@ -211,8 +223,8 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
         model
             .basis
             .resource_versions
-            .get(&ResourceKey::new("resource/source".into())),
-        Some(&ResourceVersion::new("7".into()))
+            .get(&ResourceKey::new("resource/source")),
+        Some(&ResourceVersion::new("7"))
     );
     assert_eq!(model.nodes.len(), 2);
     assert_eq!(

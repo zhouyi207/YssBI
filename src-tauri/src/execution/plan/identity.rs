@@ -131,7 +131,7 @@ impl PlanSourceIdentity {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PlanOutputRef {
     graph: PlanGraphId,
     port: PlanPortAddress,

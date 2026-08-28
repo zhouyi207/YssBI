@@ -15,6 +15,9 @@ use crate::execution::resource_preparation::{
     PreparedRunResources, ResourcePreparationError, ResourceProviderFactory, RunResourceBindings,
     RunResourceRequest,
 };
+use crate::execution::result::{
+    ExecutionResultQueryError, PinResultHistorySnapshot, ResultId, StoredResult,
+};
 use crate::execution::result_store::ResultStore;
 use crate::execution::run_registry::RunRegistry;
 use crate::execution::run_registry::{RunRegistryError, RunState};
@@ -257,6 +260,17 @@ impl ExecutionRuntimeState {
 
     pub(crate) fn results(&self) -> &ResultStore {
         &self.results
+    }
+
+    pub(crate) fn query_result(&self, result_id: ResultId) -> Option<Arc<StoredResult>> {
+        self.results.get(result_id)
+    }
+
+    pub(crate) fn query_pin_result_history(
+        &self,
+        output: &crate::execution::plan::PlanOutputRef,
+    ) -> Result<Box<[PinResultHistorySnapshot]>, ExecutionResultQueryError> {
+        self.results.query_pin_result_history(output)
     }
 
     pub(crate) fn runs(&self) -> &RunRegistry {
