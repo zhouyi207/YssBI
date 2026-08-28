@@ -206,7 +206,7 @@ pub(crate) fn build_current_project_candidate(
         .get_data()
         .map_err(ProjectSessionCandidateError::ProjectSnapshot)?;
     let project_instance_id = ProjectInstanceId::from_existing(project.project_instance_id());
-    let (project_session_id, registry, catalog) = {
+    let (project_session_id, registry, catalog, database_instances) = {
         let store = project
             .project_store
             .read()
@@ -215,6 +215,7 @@ pub(crate) fn build_current_project_candidate(
             store.project_session_id.clone(),
             Arc::clone(&store.node_registry),
             Arc::clone(&store.catalog),
+            store.databases.values().cloned().collect::<Vec<_>>(),
         )
     };
     let (root, database_revisions) = match project.get_path() {
@@ -266,8 +267,11 @@ pub(crate) fn build_current_project_candidate(
         declarations.into(),
         observations,
     );
-    let database = super::super::database_session::prepare_database_session(&database_facts)
-        .map_err(ProjectSessionCandidateError::DatabaseSession)?;
+    let database = super::super::database_session::prepare_database_session_with_instances(
+        &database_facts,
+        database_instances,
+    )
+    .map_err(ProjectSessionCandidateError::DatabaseSession)?;
     let graph = Arc::new(GraphRuntimeState::from_components(
         crate::graph::runtime_state::GraphRuntimeEpoch::from_existing(epoch.get()),
         crate::graph::runtime_state::GraphRuntimeComponents {

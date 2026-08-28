@@ -86,6 +86,13 @@ pub(crate) enum DatabaseSessionApplicationError {
 pub(crate) fn prepare_database_session(
     facts: &ProjectDatabaseSessionFacts,
 ) -> Result<Arc<DatabaseRuntimeSession>, DatabaseSessionApplicationError> {
+    prepare_database_session_with_instances(facts, std::iter::empty())
+}
+
+pub(crate) fn prepare_database_session_with_instances(
+    facts: &ProjectDatabaseSessionFacts,
+    instances: impl IntoIterator<Item = crate::database::DatabaseInstance>,
+) -> Result<Arc<DatabaseRuntimeSession>, DatabaseSessionApplicationError> {
     if facts.project_session_id.as_str().is_empty() {
         return Err(DatabaseSessionApplicationError::EmptyProjectSession);
     }
@@ -103,7 +110,7 @@ pub(crate) fn prepare_database_session(
         .validate()
         .map_err(DatabaseSessionApplicationError::InvalidFacts)?;
     DatabaseRuntimeRegistry::new()
-        .open_session(request)
+        .open_session_with_instances(request, instances)
         .map(Arc::new)
         .map_err(DatabaseSessionApplicationError::Open)
 }
