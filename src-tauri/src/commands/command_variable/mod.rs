@@ -1,15 +1,20 @@
 use crate::data_contract::{DataType, DataValue};
 use crate::error::CommandError;
+#[cfg(test)]
+use crate::event::EventProject;
 use crate::event::ResourceMutationResultDto;
-use crate::event::{Event, EventProject, emit_project_event};
+use crate::event::{Event, emit_project_event_result};
+use crate::project::ProjectInstanceId;
+#[cfg(test)]
+use crate::project::ProjectState;
 #[cfg(test)]
 use crate::project::project_writers::ProjectSaveResultDto;
 use crate::project::{OperationId, ResourceRevision};
-use crate::project::{ProjectInstanceId, ProjectState};
 use crate::schema::VariableInstanceDTO;
 use crate::variable::{VariableId, VariableScope};
 use tauri::{AppHandle, State};
 
+#[cfg(test)]
 fn ensure_command_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -51,6 +56,7 @@ pub struct VariableCommandResult {
     pub result: Option<ResourceMutationResultDto>,
 }
 
+#[cfg(test)]
 fn emit_global_result(emit: &mut impl FnMut(Event), result: &ResourceMutationResultDto) {
     emit(Event::Project(EventProject::ResourceMutationCommitted {
         result: result.clone(),
@@ -64,6 +70,7 @@ fn variable_dto(
         .map_err(|error| CommandError::diagnosed("variable_dto_mapping_failed", error))
 }
 
+#[cfg(test)]
 fn create_variable_with_emitter(
     state: &ProjectState,
     name: &str,
@@ -120,6 +127,7 @@ fn create_variable_with_emitter(
     })
 }
 
+#[cfg(test)]
 fn update_variable_with_emitter(
     state: &ProjectState,
     variable_id: VariableId,
@@ -183,6 +191,7 @@ fn update_variable_with_emitter(
     })
 }
 
+#[cfg(test)]
 fn delete_variable_with_emitter(
     state: &ProjectState,
     variable_id: VariableId,
@@ -228,6 +237,7 @@ fn delete_variable_with_emitter(
     })
 }
 
+#[cfg(test)]
 fn ensure_variable_data_type(data_type: &DataType) -> Result<(), CommandError> {
     if matches!(data_type, DataType::Any) {
         return Err(CommandError::expected("invalid_variable_type"));
@@ -238,8 +248,8 @@ fn ensure_variable_data_type(data_type: &DataType) -> Result<(), CommandError> {
 /// 创建变量（统一接口，支持全局和局部变量）
 #[tauri::command]
 pub fn create_variable(
-    state: State<ProjectState>,
     app: AppHandle,
+    application: State<crate::application::execution::ApplicationState>,
     name: &str,
     data_type: DataType,
     data_value: DataValue,
@@ -250,34 +260,39 @@ pub fn create_variable(
     expected_collection_revision: u64,
     operation_id: OperationId,
 ) -> Result<VariableCommandResult, CommandError> {
-    create_variable_with_emitter(
-        state.inner(),
-        name,
+    let request = crate::application::variable_mutation::VariableMutationRequest::Create {
+        project_instance_id,
+        name: name.to_owned(),
         data_type,
         data_value,
-        description,
+        description: description.to_owned(),
         scope,
         tags,
-        project_instance_id,
         expected_collection_revision,
         operation_id,
-        |event| emit_project_event(&app, event),
-    )
+    };
+    let committed = application
+        .mutate_variable(request)
+        .map_err(map_variable_mutation_error)?;
+    let variable = variable_dto(committed.variable())?;
+    emit_application_event(&app, committed.event())?;
+    Ok(VariableCommandResult {
+        variable_id: committed.variable().id.to_string(),
+        variable: Some(variable),
+        result: None,
+    })
 }
 
 /// 获取变量（统一接口）
 #[tauri::command]
 pub fn get_variable(
-    _app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     variable_id: VariableId,
     project_instance_id: ProjectInstanceId,
 ) -> Result<VariableInstanceDTO, CommandError> {
-    ensure_command_project(state.inner(), &project_instance_id)?;
-    let variable = state
-        .get_variable(&variable_id)
-        .map_err(CommandError::from)?
-        .ok_or_else(|| CommandError::expected("variable_not_found"))?;
+    let variable = application
+        .query_variable(project_instance_id, variable_id)
+        .map_err(map_variable_query_error)?;
     variable_dto(&variable)
 }
 
@@ -285,7 +300,7 @@ pub fn get_variable(
 #[tauri::command]
 pub fn update_variable(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     variable_id: VariableId,
     name: Option<String>,
     data_type: Option<DataType>,
@@ -296,39 +311,122 @@ pub fn update_variable(
     expected_revision: ResourceRevision,
     operation_id: OperationId,
 ) -> Result<VariableCommandResult, CommandError> {
-    update_variable_with_emitter(
-        state.inner(),
+    let request = crate::application::variable_mutation::VariableMutationRequest::Update {
+        project_instance_id,
         variable_id,
         name,
         data_type,
         data_value,
         description,
         tags,
-        project_instance_id,
         expected_revision,
         operation_id,
-        |event| emit_project_event(&app, event),
-    )
+    };
+    let committed = application
+        .mutate_variable(request)
+        .map_err(map_variable_mutation_error)?;
+    let variable = variable_dto(committed.variable())?;
+    emit_application_event(&app, committed.event())?;
+    Ok(VariableCommandResult {
+        variable_id: committed.variable().id.to_string(),
+        variable: Some(variable),
+        result: None,
+    })
 }
 
 /// 删除变量（统一接口）
 #[tauri::command]
 pub fn delete_variable(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     variable_id: VariableId,
     project_instance_id: ProjectInstanceId,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
 ) -> Result<VariableCommandResult, CommandError> {
-    delete_variable_with_emitter(
-        state.inner(),
-        variable_id,
+    let request = crate::application::variable_mutation::VariableMutationRequest::Delete {
         project_instance_id,
+        variable_id,
         expected_revision,
         operation_id,
-        |event| emit_project_event(&app, event),
-    )
+    };
+    let committed = application
+        .mutate_variable(request)
+        .map_err(map_variable_mutation_error)?;
+    emit_application_event(&app, committed.event())?;
+    Ok(VariableCommandResult {
+        variable_id: committed.variable().id.to_string(),
+        variable: None,
+        result: None,
+    })
+}
+
+fn emit_application_event(
+    app: &AppHandle,
+    event: &crate::application::events::ApplicationEvent,
+) -> Result<(), CommandError> {
+    let event = crate::schema::application_event::application_event_to_transport(event)
+        .map_err(|error| CommandError::diagnosed("variable_event_mapping_failed", error))?;
+    emit_project_event_result(app, &Event::Project(event))
+        .map_err(|error| CommandError::diagnosed("variable_event_emit_failed", error))
+}
+
+fn map_variable_mutation_error(
+    error: crate::application::variable_mutation::VariableMutationApplicationError,
+) -> CommandError {
+    use crate::application::variable_mutation::VariableMutationApplicationError;
+    match error {
+        VariableMutationApplicationError::SessionCapture(error) => map_session_capture_error(error),
+        VariableMutationApplicationError::ProjectIdentityMismatch { .. } => {
+            CommandError::expected("stale_project_lifecycle")
+        }
+        VariableMutationApplicationError::InvalidDataType => {
+            CommandError::expected("invalid_variable_type")
+        }
+        VariableMutationApplicationError::VariableNotFound { .. } => {
+            CommandError::expected("variable_not_found")
+        }
+        VariableMutationApplicationError::Project(error) => CommandError::from(error),
+        VariableMutationApplicationError::SessionChanged(error) => {
+            CommandError::diagnosed("variable_session_changed", error)
+        }
+    }
+}
+
+fn map_variable_query_error(
+    error: crate::application::variable_mutation::VariableQueryApplicationError,
+) -> CommandError {
+    use crate::application::variable_mutation::VariableQueryApplicationError;
+    match error {
+        VariableQueryApplicationError::SessionCapture(error) => map_session_capture_error(error),
+        VariableQueryApplicationError::ProjectIdentityMismatch { .. } => {
+            CommandError::expected("stale_project_lifecycle")
+        }
+        VariableQueryApplicationError::VariableNotFound { .. } => {
+            CommandError::expected("variable_not_found")
+        }
+        VariableQueryApplicationError::Project(error) => CommandError::from(error),
+        VariableQueryApplicationError::SessionChanged(error) => {
+            CommandError::diagnosed("variable_session_changed", error)
+        }
+    }
+}
+
+fn map_session_capture_error(
+    error: crate::application::execution::SessionCaptureError,
+) -> CommandError {
+    match error {
+        crate::application::execution::SessionCaptureError::Inactive => {
+            CommandError::expected("stale_project_lifecycle")
+        }
+        crate::application::execution::SessionCaptureError::Replacing => {
+            CommandError::expected("project_lifecycle_admission_closed")
+        }
+        crate::application::execution::SessionCaptureError::Recovering => {
+            CommandError::expected("project_recovery_required")
+                .with_details(serde_json::json!({ "recoveryRequired": true }))
+        }
+    }
 }
 
 #[cfg(test)]

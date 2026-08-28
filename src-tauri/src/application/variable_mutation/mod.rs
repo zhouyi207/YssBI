@@ -101,7 +101,42 @@ pub enum VariableMutationApplicationError {
     SessionChanged(#[source] SessionRevalidationError),
 }
 
+#[derive(Debug, Error)]
+pub enum VariableQueryApplicationError {
+    #[error(transparent)]
+    SessionCapture(#[from] SessionCaptureError),
+    #[error("variable query belongs to another project instance")]
+    ProjectIdentityMismatch { requested: ProjectInstanceId },
+    #[error("variable does not exist")]
+    VariableNotFound { variable: VariableId },
+    #[error(transparent)]
+    Project(#[from] ProjectFilesystemError),
+    #[error("captured application session changed during variable query")]
+    SessionChanged(#[source] SessionRevalidationError),
+}
+
 impl ApplicationState {
+    pub fn query_variable(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        variable_id: VariableId,
+    ) -> Result<VariableInstance, VariableQueryApplicationError> {
+        let captured = self.capture_session()?;
+        if captured.project_instance_id() != &project_instance_id {
+            return Err(VariableQueryApplicationError::ProjectIdentityMismatch {
+                requested: project_instance_id,
+            });
+        }
+        let variable = captured.project().get_variable(&variable_id)?.ok_or(
+            VariableQueryApplicationError::VariableNotFound {
+                variable: variable_id,
+            },
+        )?;
+        self.revalidate_captured_session(&captured)
+            .map_err(VariableQueryApplicationError::SessionChanged)?;
+        Ok(variable)
+    }
+
     pub fn mutate_variable(
         &self,
         request: VariableMutationRequest,
