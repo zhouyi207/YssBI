@@ -1,4 +1,6 @@
 use super::common::{mutation_conflict_to_command_error, parse_graph_path};
+use crate::application::execution::{ApplicationState, SessionCaptureError};
+use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, GraphMutationResultDto, emit_project_event};
 use crate::graph_document::NodeId;
@@ -7,6 +9,7 @@ use crate::node_system::document::{ClipboardSubgraphDto, EditorGraphMutationDto,
 use crate::project::{ProjectInstanceId, ProjectState};
 use tauri::{AppHandle, State};
 
+#[cfg(test)]
 pub(super) fn hydrate_editor_graph_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -20,12 +23,59 @@ pub(super) fn hydrate_editor_graph_from_state(
 
 #[tauri::command]
 pub fn hydrate_editor_graph(
-    state: State<'_, ProjectState>,
+    state: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: String,
 ) -> Result<EditorGraphProjectionDto, CommandError> {
-    hydrate_editor_graph_from_state(state.inner(), project_instance_id, graph_path, &locale)
+    let graph_path = parse_graph_path(graph_path)?;
+    let receipt = state
+        .open_graph(OpenGraphRequest::new(
+            project_instance_id,
+            graph_path,
+            0,
+            locale,
+        ))
+        .map_err(open_graph_command_error)?;
+    EditorGraphProjectionDto::try_from(receipt.projection())
+        .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
+}
+
+fn open_graph_command_error(error: OpenGraphApplicationError) -> CommandError {
+    match error {
+        OpenGraphApplicationError::SessionCapture(error) => session_capture_command_error(error),
+        OpenGraphApplicationError::SessionChanged => {
+            CommandError::expected("stale_project_lifecycle")
+        }
+        OpenGraphApplicationError::Project(error) => {
+            CommandError::diagnosed("graph_open_failed", error)
+        }
+        OpenGraphApplicationError::Database(error) => {
+            CommandError::diagnosed("database_catalog_failed", error)
+        }
+        OpenGraphApplicationError::Contract(error) => {
+            CommandError::diagnosed("graph_contract_failed", error)
+        }
+        OpenGraphApplicationError::Materialization(error) => {
+            CommandError::diagnosed("graph_materialization_failed", error)
+        }
+        OpenGraphApplicationError::Projection(error) => {
+            CommandError::diagnosed("editor_projection_failed", error)
+        }
+    }
+}
+
+fn session_capture_command_error(error: SessionCaptureError) -> CommandError {
+    match error {
+        SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
+        SessionCaptureError::Replacing => {
+            CommandError::expected("project_lifecycle_admission_closed")
+        }
+        SessionCaptureError::Recovering => CommandError::expected("project_recovery_required")
+            .with_details(super::common::RecoveryRequiredDetails {
+                recovery_required: true,
+            }),
+    }
 }
 
 pub(crate) fn export_graph_subgraph_from_state(

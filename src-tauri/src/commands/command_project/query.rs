@@ -1,4 +1,6 @@
 use crate::application::database_schema::project_databases_variables;
+use crate::application::execution::{ApplicationState, SessionCaptureError};
+use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::error::CommandError;
 use crate::event::ProjectActivationResultDto;
 use crate::node_system::analysis::EditorGraphProjectionDto;
@@ -7,7 +9,14 @@ use crate::project::{
     normalize_existing_path, resolve_reveal_path,
 };
 use crate::schema::DatabasesVariablesDTO;
+use serde::Serialize;
 use tauri::State;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryRequiredDetails {
+    recovery_required: bool,
+}
 
 /// 分阶段加载第一步：获取 databases + variables（含 schema）
 #[tauri::command]
@@ -87,7 +96,7 @@ pub fn get_project_index(
 
 #[tauri::command]
 pub fn load_project_graph(
-    state: State<ProjectState>,
+    state: State<'_, ApplicationState>,
     project_instance_id: String,
     graph_path: String,
     locale: Option<String>,
@@ -96,14 +105,49 @@ pub fn load_project_graph(
     let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
     let graph_path = crate::graph_document::GraphResourcePath::new(graph_path)
         .map_err(|_| CommandError::expected("invalid_project_format"))?;
-    state
-        .load_graph_projection(
-            &project_instance_id,
-            &graph_path,
+    let receipt = state
+        .open_graph(OpenGraphRequest::new(
+            project_instance_id,
+            graph_path,
             lifecycle_token,
             locale.as_deref().unwrap_or("en-US"),
-        )
-        .map_err(CommandError::from)
+        ))
+        .map_err(open_graph_command_error)?;
+    EditorGraphProjectionDto::try_from(receipt.projection())
+        .map_err(|error| CommandError::diagnosed("editor_projection_mapping_failed", error))
+}
+
+fn open_graph_command_error(error: OpenGraphApplicationError) -> CommandError {
+    match error {
+        OpenGraphApplicationError::SessionCapture(error) => match error {
+            SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
+            SessionCaptureError::Replacing => {
+                CommandError::expected("project_lifecycle_admission_closed")
+            }
+            SessionCaptureError::Recovering => CommandError::expected("project_recovery_required")
+                .with_details(RecoveryRequiredDetails {
+                    recovery_required: true,
+                }),
+        },
+        OpenGraphApplicationError::SessionChanged => {
+            CommandError::expected("stale_project_lifecycle")
+        }
+        OpenGraphApplicationError::Project(error) => {
+            CommandError::diagnosed("graph_open_failed", error)
+        }
+        OpenGraphApplicationError::Database(error) => {
+            CommandError::diagnosed("database_catalog_failed", error)
+        }
+        OpenGraphApplicationError::Contract(error) => {
+            CommandError::diagnosed("graph_contract_failed", error)
+        }
+        OpenGraphApplicationError::Materialization(error) => {
+            CommandError::diagnosed("graph_materialization_failed", error)
+        }
+        OpenGraphApplicationError::Projection(error) => {
+            CommandError::diagnosed("editor_projection_failed", error)
+        }
+    }
 }
 
 /// Resolve the on-disk path for a project resource (graph / database / worksheet).

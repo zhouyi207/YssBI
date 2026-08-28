@@ -235,22 +235,27 @@ pub(crate) fn open_graph_in_session(
     }
     revalidate_application_session(application, captured)?;
 
-    // The existing Project load operation is still the sole active load route
-    // until the later atomic cutover. It performs the authoritative resident
-    // install and dynamic-interface projection. Application intentionally
-    // discards that transport projection and builds its staged neutral result
-    // from the captured session's Project document and Graph runtime below.
-    captured
+    let already_resident = captured
         .project()
-        .load_graph_projection(
-            captured.project_instance_id(),
-            request.graph_path(),
-            request.lifecycle_token(),
-            request.locale(),
-        )
+        .get_data()
         .map_err(|error| {
             map_project_open_error(request.graph_path(), request.operation_id(), error)
-        })?;
+        })?
+        .graphs
+        .contains_key(request.graph_path());
+    if !already_resident {
+        captured
+            .project()
+            .load_graph_projection(
+                captured.project_instance_id(),
+                request.graph_path(),
+                request.lifecycle_token(),
+                request.locale(),
+            )
+            .map_err(|error| {
+                map_project_open_error(request.graph_path(), request.operation_id(), error)
+            })?;
+    }
 
     let data = captured.project().get_data().map_err(|error| {
         map_project_open_error(request.graph_path(), request.operation_id(), error)

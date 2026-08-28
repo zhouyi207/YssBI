@@ -1,4 +1,5 @@
 pub mod bayes;
+#[cfg(test)]
 pub mod catalog_compatibility;
 pub mod catalog_query;
 pub mod computation_settings;
@@ -9,6 +10,7 @@ pub(crate) mod database_session;
 pub mod editor_projection;
 pub mod execution;
 pub mod graph_contracts;
+#[cfg(test)]
 pub mod graph_execution;
 pub mod graph_mutation;
 pub mod graph_open;

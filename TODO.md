@@ -1728,3 +1728,5 @@ Execution 不知道具体 UI
 - [ ] 将项目加载、清空、另存为与活动项目删除后的 session 刷新接入 ApplicationSessionSlot，旧 session 在关闭 admission/drain 后才发布新 candidate。
 - [ ] 将 Catalog 两个 production command 切换为单次 Application session capture、Database catalog snapshot 与 schema/catalog mapper。
 - [ ] 将四个 result command 切换到 Execution-owned ResultStore 查询；保留旧 Project 查询 helper 仅供待迁移测试，禁止生产 fallback。
+- [ ] 让 GraphRuntimeState 从同一 registry/document 生成完整 neutral projection facts，使 Application graph-open 可通过 Presentation mapper 返回非空图 projection。
+- [ ] 将 graph-open/load-project-graph 与 editor hydrate caller 接入 Application session，继续迁移 graph mutation 的旧 Project workflow。

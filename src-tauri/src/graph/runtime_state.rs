@@ -201,12 +201,16 @@ impl GraphRuntimeState {
         settings: &crate::graph::settings::GraphCompileSettings,
         basis: &PlanCompilationBasis,
     ) -> GraphAnalysis {
-        crate::graph::analysis::analyze(GraphAnalysisInput {
+        let analysis = crate::graph::analysis::analyze(GraphAnalysisInput {
             document,
             catalog,
             settings,
             basis,
-        })
+        });
+        analysis.with_projection_facts(crate::graph::analysis::projection_facts(
+            document,
+            self.components.registry.as_ref(),
+        ))
     }
 
     pub(crate) fn bind_open_graph(&self) {
