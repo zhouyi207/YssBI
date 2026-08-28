@@ -18,7 +18,6 @@ pub mod project_lifecycle;
 pub mod project_watcher;
 pub mod statistical_input;
 
-#[cfg(test)]
 pub mod events;
 
 #[cfg(test)]

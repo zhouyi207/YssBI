@@ -135,7 +135,7 @@ fn projection_status_to_transport(status: &ResourceProjectionStatus) -> Projecti
             expected_graph_paths: expected_graph_paths
                 .iter()
                 .map(|path| path.as_str().to_owned())
-                .collect(),
+                .collect::<Vec<_>>(),
         },
         ResourceProjectionStatus::Incomplete {
             invalidated_graph_paths,
@@ -143,7 +143,7 @@ fn projection_status_to_transport(status: &ResourceProjectionStatus) -> Projecti
             invalidated_graph_paths: invalidated_graph_paths
                 .iter()
                 .map(|path| path.as_str().to_owned())
-                .collect(),
+                .collect::<Vec<_>>(),
         },
     }
 }

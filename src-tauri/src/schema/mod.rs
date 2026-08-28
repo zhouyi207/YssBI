@@ -5,12 +5,9 @@ pub mod graph_mutation;
 pub mod project;
 pub mod variables;
 
-#[cfg(test)]
-mod application_event;
-#[cfg(test)]
-mod catalog;
-#[cfg(test)]
-mod editor_projection;
+pub mod application_event;
+pub mod catalog;
+pub mod editor_projection;
 
 pub use database::*;
 pub use graph_mutation::*;
