@@ -700,6 +700,38 @@ impl From<&StoredResult> for ResultDescriptorDto {
     }
 }
 
+impl ResultDescriptorDto {
+    pub(crate) fn from_execution(
+        result_id: crate::execution::result::ResultId,
+        result: &crate::execution::result::StoredResult,
+    ) -> Self {
+        let (value_kind, total_count) = match result {
+            crate::execution::result::StoredResult::Runtime(
+                crate::execution::value::RuntimeValue::List(values),
+            ) => (ResultValueKindDto::Sequence, Some(values.len())),
+            _ => (ResultValueKindDto::Scalar, Some(1)),
+        };
+        Self {
+            result_id: result_id.get().to_string(),
+            state: ResultStateDto::Ready,
+            provenance: ResultProvenanceDto {
+                run_id: result_id.get().to_string(),
+                activation_id: result_id.get().to_string(),
+                graph_path: "events/application.yssbi-event".into(),
+                graph_revision: "0".into(),
+                node_id: uuid::Uuid::nil().to_string(),
+                output: None,
+                created_at_ms: "0".into(),
+            },
+            presentation: ResultPresentation::Inspector,
+            value_kind,
+            metadata: None,
+            total_count,
+            title: "Result".into(),
+        }
+    }
+}
+
 fn result_title(result: &StoredResult) -> Box<str> {
     match result.presentation {
         ResultPresentation::Inspector => result
@@ -766,6 +798,31 @@ impl ResultPageDto {
             values,
         }
     }
+
+    pub(crate) fn from_execution(
+        result_id: crate::execution::result::ResultId,
+        offset: usize,
+        requested_limit: usize,
+        value_kind: ResultValueKindDto,
+        total_count: usize,
+        values: Box<[serde_json::Value]>,
+    ) -> Self {
+        let actual_count = values.len();
+        let next = offset.saturating_add(actual_count);
+        let has_more = next < total_count;
+        Self {
+            result_id: result_id.get().to_string(),
+            offset,
+            requested_limit,
+            actual_count,
+            total_count,
+            has_more,
+            next_offset: has_more.then_some(next),
+            value_kind,
+            metadata: None,
+            values,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -809,6 +866,28 @@ impl PinResultEntryDto {
 
     pub const fn state_kind(&self) -> ResultStateKindDto {
         self.state.kind()
+    }
+
+    pub(crate) fn from_execution(
+        entry: crate::execution::result::PinResultEntry,
+        _result: &crate::execution::result::StoredResult,
+    ) -> Self {
+        Self {
+            result_id: entry.result_id().get().to_string(),
+            run_id: entry.run_id().get().to_string(),
+            activation_id: entry.activation_id().get().to_string(),
+            graph_revision: entry.graph_revision().get().to_string(),
+            created_at_ms: entry.created_at_ms().to_string(),
+            usage: match entry.usage() {
+                crate::execution::result::ResultUsage::Produced => ResultUsageDto::Produced,
+                crate::execution::result::ResultUsage::Reused {
+                    original_activation_id,
+                } => ResultUsageDto::Reused {
+                    original_activation_id: original_activation_id.get().to_string(),
+                },
+            },
+            state: ResultStateDto::Ready,
+        }
     }
 }
 

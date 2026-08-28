@@ -23,6 +23,7 @@ pub use results::{
 
 #[allow(unused_imports)]
 pub(crate) use editor::{export_graph_subgraph_from_state, mutate_graph_document_with_emitter};
+#[cfg(test)]
 #[allow(unused_imports)]
 pub(crate) use results::result_value_to_json;
 

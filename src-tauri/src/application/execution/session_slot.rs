@@ -4,11 +4,18 @@ use std::time::Instant;
 
 use thiserror::Error;
 
-use super::session_factory::UnpublishedApplicationSession;
-use crate::database::runtime::DatabaseRuntimeSession;
+use super::session_factory::{
+    ProjectSessionCandidateError, SessionResourceFactoryBuilder, UnpublishedApplicationSession,
+    build_current_project_candidate,
+};
+use crate::database::runtime::{
+    DatabaseDrainDeadline, DatabaseRuntimeSession, DatabaseSessionDrainControl,
+};
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use crate::execution::resource_preparation::ResourceProviderFactory;
-use crate::execution::state::ExecutionRuntimeState;
+use crate::execution::state::{
+    ExecutionDrainControl, ExecutionDrainOutcome, ExecutionRuntimeState,
+};
 use crate::graph::runtime_state::GraphRuntimeState;
 use crate::node_system::ProjectSessionId;
 use crate::project::{ProjectInstanceId, ProjectState};
@@ -227,7 +234,7 @@ pub enum SessionRecoveryError {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
-enum SessionReplacementError {
+pub(crate) enum SessionReplacementError {
     #[error("application session is inactive")]
     Inactive,
     #[error("application session replacement is already in progress")]
@@ -242,6 +249,8 @@ enum SessionReplacementError {
     WrongPhase,
     #[error("candidate construction is not installed in the staged slot")]
     CandidateConstructionUnavailable,
+    #[error("application session recovery is required")]
+    RecoveryRequired(RecoveryRequired),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
@@ -680,6 +689,70 @@ impl ApplicationSessionSlot {
         Ok(())
     }
 
+    fn replace_candidate(
+        &self,
+        candidate: UnpublishedApplicationSession,
+    ) -> Result<(), SessionReplacementError> {
+        let mut worker = self.begin_replacement()?;
+        let old = worker
+            .old
+            .as_ref()
+            .cloned()
+            .ok_or(SessionReplacementError::StaleWorker)?;
+        let deadline = Instant::now() + std::time::Duration::from_secs(30);
+
+        old.execution()
+            .cancel_and_drain(&ExecutionDrainControl::new(deadline));
+        if !matches!(
+            old.execution().drain(&ExecutionDrainControl::new(deadline)),
+            ExecutionDrainOutcome::Drained { .. }
+        ) {
+            let required = worker
+                .retain_recovery(SessionRecoveryPhase::DrainOldExecution)
+                .map_err(|_| SessionReplacementError::StaleWorker)?;
+            return Err(SessionReplacementError::RecoveryRequired(required));
+        }
+        worker.complete_phase(ReplacementPhase::CloseAdmissions)?;
+        worker.complete_phase(ReplacementPhase::DrainExecution)?;
+
+        old.database().close_admission();
+        if !matches!(
+            old.database().drain(&DatabaseSessionDrainControl::new(
+                DatabaseDrainDeadline::at(deadline)
+            )),
+            crate::database::runtime::DatabaseDrainOutcome::Drained { .. }
+        ) {
+            let required = worker
+                .retain_recovery(SessionRecoveryPhase::DrainOldDatabase)
+                .map_err(|_| SessionReplacementError::StaleWorker)?;
+            return Err(SessionReplacementError::RecoveryRequired(required));
+        }
+        worker.complete_phase(ReplacementPhase::DrainDatabase)?;
+        worker.complete_phase(ReplacementPhase::ClearProject)?;
+        worker.complete_phase(ReplacementPhase::HydrateProject)?;
+        worker.complete_phase(ReplacementPhase::BuildCandidate)?;
+
+        let mut state = self
+            .inner
+            .state
+            .write()
+            .unwrap_or_else(|error| error.into_inner());
+        let SessionSlotState::Replacing { epoch, phase } = &*state else {
+            return Err(SessionReplacementError::StaleWorker);
+        };
+        if *epoch != worker.epoch || *phase != ReplacementPhase::PublishCandidate {
+            return Err(SessionReplacementError::WrongPhase);
+        }
+        let session = candidate.into_session();
+        if session.epoch() != *epoch {
+            return Err(SessionReplacementError::CandidateConstructionUnavailable);
+        }
+        *state = SessionSlotState::Active(Arc::new(session));
+        worker.completed = true;
+        worker.old.take();
+        Ok(())
+    }
+
     #[allow(
         dead_code,
         reason = "replacement orchestration is staged until the atomic production cutover"
@@ -930,14 +1003,40 @@ impl Default for ApplicationSessionSlot {
     }
 }
 
+#[derive(Debug, Error)]
+pub(crate) enum ApplicationSessionRefreshError {
+    #[error("application session capture failed")]
+    Capture(#[from] SessionCaptureError),
+    #[error("application session candidate build failed")]
+    Candidate(#[from] ProjectSessionCandidateError),
+    #[error("application session replacement failed")]
+    Replacement(#[from] SessionReplacementError),
+    #[error("application session composition is not configured")]
+    CompositionUnavailable,
+}
+
 #[derive(Clone)]
 pub struct ApplicationState {
     session_slot: Arc<ApplicationSessionSlot>,
+    factory_builder: Option<Arc<SessionResourceFactoryBuilder>>,
 }
 
 impl ApplicationState {
     pub fn new(session_slot: Arc<ApplicationSessionSlot>) -> Self {
-        Self { session_slot }
+        Self {
+            session_slot,
+            factory_builder: None,
+        }
+    }
+
+    pub(crate) fn from_composition(
+        session_slot: Arc<ApplicationSessionSlot>,
+        builder: SessionResourceFactoryBuilder,
+    ) -> Self {
+        Self {
+            session_slot,
+            factory_builder: Some(Arc::new(builder)),
+        }
     }
 
     pub(crate) fn install_candidate(
@@ -972,6 +1071,21 @@ impl ApplicationState {
     ) -> Result<SessionRecoveryOutcome, SessionRecoveryError> {
         self.session_slot
             .resolve_session_database_recovery(recovery)
+    }
+
+    pub(crate) fn refresh_current_project(&self) -> Result<(), ApplicationSessionRefreshError> {
+        let builder = self
+            .factory_builder
+            .as_deref()
+            .ok_or(ApplicationSessionRefreshError::CompositionUnavailable)?;
+        let current = self.capture_session()?;
+        let epoch = current
+            .epoch()
+            .next()
+            .ok_or(SessionReplacementError::EpochExhausted)?;
+        let candidate =
+            build_current_project_candidate(builder, epoch, Arc::new(current.project().clone()))?;
+        Ok(self.session_slot.replace_candidate(candidate)?)
     }
 }
 

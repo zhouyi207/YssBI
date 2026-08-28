@@ -116,6 +116,7 @@ pub async fn remove_registered_project(
 #[tauri::command]
 pub async fn delete_registered_project_files(
     app: tauri::AppHandle,
+    application: State<'_, crate::application::execution::ApplicationState>,
     state: State<'_, crate::project::ProjectState>,
     registry: State<'_, ProjectRegistry>,
     id: String,
@@ -131,6 +132,11 @@ pub async fn delete_registered_project_files(
     )
     .await
     .map_err(super::lifecycle::map_project_lifecycle_error)?;
+    if result.invalidation.project {
+        application
+            .refresh_current_project()
+            .map_err(|error| CommandError::diagnosed("project_session_refresh_failed", error))?;
+    }
     super::lifecycle::publish_lifecycle_result(&app, &result);
     Ok(result)
 }

@@ -1725,3 +1725,6 @@ Execution 不知道具体 UI
 - [ ] 由同一 ProjectState 句柄构造并注册唯一 ApplicationSession，绑定 Graph、Database、Execution 与 session-bound resource factory；后续继续接通生命周期 replacement 与生产 caller 原子切换。
 - [ ] 将 neutral Graph package 接入 Execution 的 prepared-plan coordinator，绑定 run identity、cancellation control、sealed finalization handoff 与 commit 后结果发布。
 - [ ] 将 execution command 的生产入口切换到 Application session 与 ordered run channel，保留旧 DTO 测试夹具待最终 result/event wire cutover 清理。
+- [ ] 将项目加载、清空、另存为与活动项目删除后的 session 刷新接入 ApplicationSessionSlot，旧 session 在关闭 admission/drain 后才发布新 candidate。
+- [ ] 将 Catalog 两个 production command 切换为单次 Application session capture、Database catalog snapshot 与 schema/catalog mapper。
+- [ ] 将四个 result command 切换到 Execution-owned ResultStore 查询；保留旧 Project 查询 helper 仅供待迁移测试，禁止生产 fallback。

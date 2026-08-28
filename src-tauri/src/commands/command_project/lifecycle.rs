@@ -140,6 +140,7 @@ fn next_watcher_version(version: &Mutex<u64>) -> Option<u64> {
 #[tauri::command]
 pub fn load_project(
     app: AppHandle,
+    application: State<'_, crate::application::execution::ApplicationState>,
     state: State<ProjectState>,
     watcher: State<ProjectWatcherState>,
     path: String,
@@ -154,6 +155,9 @@ pub fn load_project(
 
     let result = project_lifecycle::load_project(state.inner(), &path)
         .map_err(map_project_lifecycle_error)?;
+    application
+        .refresh_current_project()
+        .map_err(|error| CommandError::diagnosed("project_session_refresh_failed", error))?;
 
     tracing::info!(
         target: "yssbi::commands::project",
@@ -179,6 +183,7 @@ pub fn load_project(
 #[tauri::command]
 pub async fn save_project_as(
     app: AppHandle,
+    application: State<'_, crate::application::execution::ApplicationState>,
     state: State<'_, ProjectState>,
     watcher: State<'_, ProjectWatcherState>,
     registry: State<'_, ProjectRegistry>,
@@ -205,6 +210,9 @@ pub async fn save_project_as(
     .map_err(map_project_lifecycle_error)?;
     publish_lifecycle_result(&app, &result);
     if result.outcome == LifecycleMutationOutcomeDto::Committed {
+        application
+            .refresh_current_project()
+            .map_err(|error| CommandError::diagnosed("project_session_refresh_failed", error))?;
         if let (Some(metadata_path), Some(project_instance_id)) = (
             result.path.as_deref(),
             result.new_project_instance_id.as_deref(),
@@ -305,6 +313,7 @@ pub fn flush_project(
 #[tauri::command]
 pub fn new_project(
     app: AppHandle,
+    application: State<'_, crate::application::execution::ApplicationState>,
     state: State<ProjectState>,
     watcher: State<ProjectWatcherState>,
 ) -> Result<(), CommandError> {
@@ -316,6 +325,9 @@ pub fn new_project(
     );
 
     project_lifecycle::clear_project(state.inner()).map_err(map_project_lifecycle_error)?;
+    application
+        .refresh_current_project()
+        .map_err(|error| CommandError::diagnosed("project_session_refresh_failed", error))?;
     watcher.stop();
     emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     Ok(())

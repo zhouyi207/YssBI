@@ -1,16 +1,22 @@
+use std::collections::BTreeMap;
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
 use thiserror::Error;
 
 use super::session_slot::{ApplicationSession, ApplicationSessionEpoch};
 use crate::database::runtime::DatabaseRuntimeSession;
+use crate::database_contract::{
+    DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
+    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision,
+};
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use crate::execution::plan::PlanProjectSessionId;
 use crate::execution::resource_preparation::ResourceProviderFactory;
 use crate::execution::state::ExecutionRuntimeState;
 use crate::graph::runtime_state::GraphRuntimeState;
 use crate::node_system::ProjectSessionId;
-use crate::project::{ProjectInstanceId, ProjectState};
+use crate::project::{ProjectFilesystemError, ProjectInstanceId, ProjectState};
 
 /// Composition-root supplied construction for one session-bound resource factory.
 ///
@@ -134,6 +140,22 @@ pub(crate) struct UnpublishedApplicationSession {
     session: ApplicationSession,
 }
 
+#[derive(Debug, Error)]
+pub(crate) enum ProjectSessionCandidateError {
+    #[error("project snapshot could not be captured for the application session")]
+    ProjectSnapshot(#[source] ProjectFilesystemError),
+    #[error("project database declaration observations could not be captured")]
+    DatabaseObservations(
+        #[source] crate::database_contract::DatabaseDeclarationObservationSetError,
+    ),
+    #[error("database session could not be opened for the application session")]
+    DatabaseSession(#[source] super::super::database_session::DatabaseSessionApplicationError),
+    #[error("application session generation is exhausted")]
+    GenerationExhausted,
+    #[error(transparent)]
+    Candidate(#[from] SessionCandidateBuildError),
+}
+
 impl UnpublishedApplicationSession {
     pub(super) fn into_session(self) -> ApplicationSession {
         self.session
@@ -173,6 +195,119 @@ pub(crate) fn build_replacement_candidate(
             resource_provider_factory,
         ),
     })
+}
+
+pub(crate) fn build_current_project_candidate(
+    builder: &SessionResourceFactoryBuilder,
+    epoch: ApplicationSessionEpoch,
+    project: Arc<ProjectState>,
+) -> Result<UnpublishedApplicationSession, ProjectSessionCandidateError> {
+    let data = project
+        .get_data()
+        .map_err(ProjectSessionCandidateError::ProjectSnapshot)?;
+    let project_instance_id = ProjectInstanceId::from_existing(project.project_instance_id());
+    let (project_session_id, registry, catalog) = {
+        let store = project
+            .project_store
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        (
+            store.project_session_id.clone(),
+            Arc::clone(&store.node_registry),
+            Arc::clone(&store.catalog),
+        )
+    };
+    let (root, database_revisions) = match project.get_path() {
+        Some(_) => {
+            let session = project
+                .capture_project_session()
+                .map_err(ProjectSessionCandidateError::ProjectSnapshot)?;
+            let index = project
+                .read_project_index(&session.instance_id)
+                .map_err(ProjectSessionCandidateError::ProjectSnapshot)?;
+            let revisions = index
+                .databases
+                .into_iter()
+                .map(|entry| (entry.id, entry.revision.get()))
+                .collect::<BTreeMap<_, _>>();
+            (Some(session.root), revisions)
+        }
+        None => (None, BTreeMap::new()),
+    };
+    let declarations = data
+        .databases
+        .values()
+        .cloned()
+        .collect::<Vec<_>>()
+        .into_boxed_slice();
+    let observations = DatabaseDeclarationObservationSet::try_from_iter(
+        data.databases.values().map(|declaration| {
+            (
+                declaration.id.clone(),
+                DatabaseDeclarationObservation::new(
+                    DatabaseDeclarationRevision::from_existing(
+                        database_revisions
+                            .get(declaration.id.as_str())
+                            .copied()
+                            .unwrap_or(0),
+                    ),
+                    DatabaseDeclarationFingerprint::from_decl(declaration),
+                ),
+            )
+        }),
+    )
+    .map_err(ProjectSessionCandidateError::DatabaseObservations)?;
+    let database_facts = super::super::database_session::ProjectDatabaseSessionFacts::new(
+        project_instance_id.clone(),
+        project_session_id.clone(),
+        NonZeroU64::new(epoch.get().saturating_add(1))
+            .ok_or(ProjectSessionCandidateError::GenerationExhausted)?,
+        root,
+        declarations.into(),
+        observations,
+    );
+    let database = super::super::database_session::prepare_database_session(&database_facts)
+        .map_err(ProjectSessionCandidateError::DatabaseSession)?;
+    let graph = Arc::new(GraphRuntimeState::from_components(
+        crate::graph::runtime_state::GraphRuntimeEpoch::from_existing(epoch.get()),
+        crate::graph::runtime_state::GraphRuntimeComponents {
+            registry,
+            catalog,
+            compiler: Arc::new(crate::node_system::compiler::ProjectCompileCoordinator::new()),
+            resource_catalog: Arc::new(
+                crate::graph::resource_catalog::ResourceCatalogSnapshot::new(
+                    BTreeMap::new(),
+                    BTreeMap::new(),
+                    BTreeMap::new(),
+                    crate::graph::resource_catalog::ResourceCatalogFingerprint::from_bytes([0; 32]),
+                ),
+            ),
+        },
+    ));
+    let execution_session_id = ExecutionSessionId::new(uuid::Uuid::new_v4());
+    let runtime_generation = RuntimeGeneration::from_existing(epoch.get().saturating_add(1));
+    let execution = Arc::new(ExecutionRuntimeState::new(
+        execution_session_id,
+        runtime_generation,
+    ));
+    let bound_project_session =
+        PlanProjectSessionId::from_existing(project_session_id.as_str().into());
+    build_replacement_candidate(
+        builder,
+        ReplacementCandidateInput::new(
+            epoch,
+            project_instance_id,
+            project_session_id,
+            bound_project_session,
+            execution_session_id,
+            runtime_generation,
+            project,
+            graph,
+            execution,
+            database,
+        ),
+    )
+    .map_err(ProjectSessionCandidateError::Candidate)
 }
 
 #[cfg(test)]

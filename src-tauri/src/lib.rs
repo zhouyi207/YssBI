@@ -33,7 +33,6 @@ mod test_support;
 mod architecture_tests;
 
 use commands::*;
-use std::num::NonZeroU64;
 use std::sync::Arc;
 use tauri::Manager;
 
@@ -58,103 +57,29 @@ enum ApplicationInitializationError {
     SessionCandidate(#[source] application::execution::session_factory::SessionCandidateBuildError),
     #[error("initial application session candidate could not be installed")]
     SessionInstallation,
+    #[error("initial application session composition could not be prepared")]
+    SessionComposition(
+        #[source] application::execution::session_factory::ProjectSessionCandidateError,
+    ),
 }
 
 fn initialize_application_state(
     project_state: Arc<project::ProjectState>,
 ) -> Result<application::execution::ApplicationState, ApplicationInitializationError> {
-    let project_data = project_state
-        .get_data()
-        .map_err(ApplicationInitializationError::ProjectSnapshot)?;
-    let (project_session_id, registry, catalog) = {
-        let store = project_state
-            .project_store
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        (
-            store.project_session_id.clone(),
-            Arc::clone(&store.node_registry),
-            Arc::clone(&store.catalog),
-        )
-    };
-    let project_instance_id =
-        project::ProjectInstanceId::from_existing(project_state.project_instance_id());
-    let declarations = project_data
-        .databases
-        .values()
-        .cloned()
-        .collect::<Vec<_>>()
-        .into_boxed_slice();
-    let observations = crate::database_contract::DatabaseDeclarationObservationSet::try_from_iter(
-        project_data.databases.values().map(|declaration| {
-            (
-                declaration.id.clone(),
-                crate::database_contract::DatabaseDeclarationObservation::new(
-                    crate::database_contract::DatabaseDeclarationRevision::from_existing(0),
-                    crate::database_contract::DatabaseDeclarationFingerprint::from_decl(
-                        declaration,
-                    ),
-                ),
-            )
-        }),
-    )
-    .map_err(ApplicationInitializationError::DatabaseObservations)?;
-    let database_facts = application::database_session::ProjectDatabaseSessionFacts::new(
-        project_instance_id.clone(),
-        project_session_id.clone(),
-        NonZeroU64::MIN,
-        None,
-        declarations.into(),
-        observations,
-    );
-    let database = application::database_session::prepare_database_session(&database_facts)
-        .map_err(ApplicationInitializationError::DatabaseSession)?;
-    let graph = Arc::new(graph::runtime_state::GraphRuntimeState::from_components(
-        graph::runtime_state::GraphRuntimeEpoch::from_existing(0),
-        graph::runtime_state::GraphRuntimeComponents {
-            registry,
-            catalog,
-            compiler: Arc::new(node_system::compiler::ProjectCompileCoordinator::new()),
-            resource_catalog: Arc::new(graph::resource_catalog::ResourceCatalogSnapshot::new(
-                std::collections::BTreeMap::new(),
-                std::collections::BTreeMap::new(),
-                std::collections::BTreeMap::new(),
-                graph::resource_catalog::ResourceCatalogFingerprint::from_bytes([0; 32]),
-            )),
-        },
-    ));
-    let execution_session_id = execution::identity::ExecutionSessionId::new(uuid::Uuid::new_v4());
-    let runtime_generation = execution::identity::RuntimeGeneration::from_existing(0);
-    let execution = Arc::new(execution::state::ExecutionRuntimeState::new(
-        execution_session_id,
-        runtime_generation,
-    ));
-    let bound_project_session =
-        execution::plan::PlanProjectSessionId::from_existing(project_session_id.as_str().into());
-    let candidate_input = application::execution::session_factory::ReplacementCandidateInput::new(
-        application::execution::ApplicationSessionEpoch::INITIAL,
-        project_instance_id,
-        project_session_id,
-        bound_project_session,
-        execution_session_id,
-        runtime_generation,
-        project_state,
-        graph,
-        execution,
-        database,
-    );
     let builder =
         application::execution::session_factory::SessionResourceFactoryBuilder::from_composition(
             backend_adapters::execution::resources::database_resource_provider_factory,
         );
-    let candidate = application::execution::session_factory::build_replacement_candidate(
+    let candidate = application::execution::session_factory::build_current_project_candidate(
         &builder,
-        candidate_input,
+        application::execution::ApplicationSessionEpoch::INITIAL,
+        Arc::clone(&project_state),
     )
-    .map_err(ApplicationInitializationError::SessionCandidate)?;
-    let application = application::execution::ApplicationState::new(Arc::new(
-        application::execution::ApplicationSessionSlot::new(),
-    ));
+    .map_err(ApplicationInitializationError::SessionComposition)?;
+    let application = application::execution::ApplicationState::from_composition(
+        Arc::new(application::execution::ApplicationSessionSlot::new()),
+        builder,
+    );
     application
         .install_candidate(candidate)
         .map_err(|_| ApplicationInitializationError::SessionInstallation)?;
