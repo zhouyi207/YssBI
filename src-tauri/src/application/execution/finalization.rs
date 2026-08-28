@@ -40,14 +40,15 @@ impl RunPresentationContext {
 }
 
 /// One neutral inspection request mapped from an intent retained by the
-/// committed handoff. The requester remains borrowed from that handoff.
+/// committed handoff. The requester is an opaque identity value; no result,
+/// effect, or grant owner is copied into this projection.
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) struct ResultInspectionRequested<'a> {
+pub(crate) struct ResultInspectionRequested {
     result_id: ResultId,
-    requester: &'a PlanSourceIdentity,
+    requester: PlanSourceIdentity,
 }
 
-impl ResultInspectionRequested<'_> {
+impl ResultInspectionRequested {
     pub(crate) const fn result_id(&self) -> ResultId {
         self.result_id
     }
@@ -84,18 +85,22 @@ pub(crate) enum FinalizationError {
 pub(crate) struct CommittedRunOutcome {
     handoff: ExecutionFinalizationHandoff,
     presentation_context: RunPresentationContext,
+    _seal: CommittedRunOutcomeSeal,
 }
 
+struct CommittedRunOutcomeSeal;
+
 impl CommittedRunOutcome {
-    pub(crate) fn inspection_requests(&self) -> Vec<ResultInspectionRequested<'_>> {
+    pub(crate) fn inspection_requests(&self) -> Box<[ResultInspectionRequested]> {
         self.handoff
             .observation_intents()
             .iter()
             .map(|intent| ResultInspectionRequested {
                 result_id: intent.result_id,
-                requester: &intent.requester,
+                requester: intent.requester.clone(),
             })
-            .collect()
+            .collect::<Vec<_>>()
+            .into_boxed_slice()
     }
 
     pub(crate) fn project_session_id(&self) -> &PlanProjectSessionId {
@@ -124,6 +129,7 @@ pub(crate) fn finalize_successful_run(
     Ok(CommittedRunOutcome {
         handoff,
         presentation_context: RunPresentationContext::seal(project_session_id, root_graph, run_id),
+        _seal: CommittedRunOutcomeSeal,
     })
 }
 
