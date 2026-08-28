@@ -1,0 +1,16 @@
+{
+  "run": {
+    "projectSessionId": "project-session-7",
+    "graphPath": "events/Caller.yssbi-event",
+    "runId": "41"
+  },
+  "kind": {
+    "type": "resultInspectionRequested",
+    "resultId": "17",
+    "source": {
+      "graphPath": "functions/Inspect.yssbi-function",
+      "nodeId": "00000000-0000-0000-0000-000000000009",
+      "portAddress": null
+    }
+  }
+}
