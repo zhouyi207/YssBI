@@ -1713,6 +1713,7 @@ Execution 不知道具体 UI
 - [ ] 收紧 Application session candidate 的 composition 可见性：保留 fields-private identity 校验与线性 install seam，等待最终唯一 composition root 接入。
 - [ ] 将 Presentation 的 application-event、catalog、editor projection typed schema owners 提升为正常编译模块，保留旧生产 callers 未切换的单一路由约束。
 - [ ] 继续在 Execution Task 8 原子切换中接入这些 schema owners，并删除对应 Graph/旧 DTO mapper 与 exact debt。
+- [ ] 将 Application Worksheet plot policy owner 提升为正常编译模块，继续保持旧 Project/Polars command route 未切换至 Execution Task 8。
 - [ ] 建立 Execution-owned session-bound result query owner：单次 Application session capture、Execution-private result/history pairing、oldest→newest 顺序与 typed missing-source error。
 - [ ] 建立 Frontend Application 的 Bayes dataset/artifact 与 current-window callback hooks，覆盖取消导出、generation stale suppression、typed platform failure 与既有窗口/Bayes 回归。
 - [ ] 完成 Result Query/Bayes window staged slices 的 focused verification；Rust architecture gate 已验证 37 passed，staged Graph→Execution debt 仍待原子生产 cutover 清理。
