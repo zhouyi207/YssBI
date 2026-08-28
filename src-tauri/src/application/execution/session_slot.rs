@@ -45,6 +45,32 @@ pub struct ApplicationSession {
 }
 
 impl ApplicationSession {
+    pub(super) fn from_candidate(
+        epoch: ApplicationSessionEpoch,
+        project_instance_id: ProjectInstanceId,
+        project_session_id: ProjectSessionId,
+        execution_session_id: ExecutionSessionId,
+        runtime_generation: RuntimeGeneration,
+        project: Arc<ProjectState>,
+        graph: Arc<GraphRuntimeState>,
+        execution: Arc<ExecutionRuntimeState>,
+        database: Arc<DatabaseRuntimeSession>,
+        resource_provider_factory: Arc<ResourceProviderFactory>,
+    ) -> Self {
+        Self {
+            epoch,
+            project_instance_id,
+            project_session_id,
+            execution_session_id,
+            runtime_generation,
+            project,
+            graph,
+            execution,
+            database,
+            resource_provider_factory,
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn new_for_test(
         epoch: ApplicationSessionEpoch,
