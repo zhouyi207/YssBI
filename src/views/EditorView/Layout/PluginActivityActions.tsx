@@ -26,7 +26,7 @@ import {
   type JuliaWorkerStatusViewModel,
 } from '@/features/application/statusBar/useJuliaWorkerStatus';
 import { openBayesWindow } from '@/features/application/window';
-import { usePluginStore } from '@/features/core/plugins/pluginStore';
+import { usePluginStore } from '@/features/application/viewCapabilities';
 import { cn } from '@/lib/utils';
 
 function stopControlPropagation(event: { stopPropagation(): void }): void {

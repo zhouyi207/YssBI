@@ -1,5 +1,5 @@
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import {
   captureProjectLifecycleState,
   isProjectLifecycleStateCurrent,

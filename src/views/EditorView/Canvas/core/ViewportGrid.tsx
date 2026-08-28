@@ -5,7 +5,7 @@ import {
   subscribeToViewport,
   viewportGridStyle,
   type ViewportScope,
-} from '@/features/core/viewport';
+} from '@/features/application/viewCapabilities';
 import { GRID } from '@/app/appConfig/default';
 
 export const ViewportGrid = ({ viewportScope }: { viewportScope: ViewportScope | null }) => {

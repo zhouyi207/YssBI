@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDatabaseStore, useGraphDataStore, useGraphMetaStore } from '@/features/core/dataStore';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { useResourceStore } from '@/features/core/resource';
 import { DatabaseService } from '@/services/database/databaseService';

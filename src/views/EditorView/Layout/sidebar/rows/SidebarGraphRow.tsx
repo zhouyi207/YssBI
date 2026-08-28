@@ -5,7 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { openGraphInEditor } from '@/features/application/editor/openGraphInEditor';
 import { buildSidebarDragData } from '@/features/application/sidebar';
 import { revealDetails } from '@/features/application/editor/rightSidebarActions';
-import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
+import { TYPE_ICON_COLORS } from '@/features/application/viewCapabilities';
 import { SidebarListItem, SidebarRowActionButton, SIDEBAR_ROW_ICON_SIZE } from '../../sidebarUi';
 import type { GraphResourceType } from '../../sidebarContextMenu';
 

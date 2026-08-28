@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LocalizedNodeCatalogState } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
 import { SidebarDataRow } from './SidebarDataRow';

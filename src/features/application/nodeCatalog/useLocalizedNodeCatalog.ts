@@ -1,7 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DEFAULT_LANGUAGE } from '@/shared/types/settings';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import {
   getLocalizedSearchIndex,
   type LocalizedSearchIndex,

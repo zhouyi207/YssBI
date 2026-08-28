@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { InitializationState } from './appInitialization.type';
 import { LoadStatus } from '@/shared/types/ui';
-import { initProjectSync } from '@/features/core/dataStore';
+import { initializeProjectForCurrentWindow } from '@/features/application/project';
 import { logger } from '@/utils/appLogger';
 import { formatInlineUserError } from '@/features/application/userErrorSummary';
 
@@ -20,7 +20,7 @@ export function useAppInitialization(): InitializationState {
 
         const syncProject = async () => {
             try {
-                await initProjectSync();
+                await initializeProjectForCurrentWindow();
                 if (cancelled) return;
                 setState({ status: LoadStatus.Ready, error: null });
             } catch (error) {

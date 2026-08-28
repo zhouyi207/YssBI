@@ -1,10 +1,8 @@
 import { useEffect } from 'react';
 
-import { loadActivatedProject, useProjectIOStore } from '@/features/core/dataStore';
-import { projectIOApplicationPort } from '@/features/core/dataStore/projectIOApplicationPort';
+import { loadActivatedProject, useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { createNodeCatalogPublication } from '@/features/core/nodeCatalog/publication';
 import { captureProjectLifecycleState } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { syncApplicationEventPort } from '@/features/core/sync/applicationEventPort';
 import {
   createProjectEventIngress,
   type ProjectEventIngress,
@@ -18,6 +16,11 @@ import {
   createProjectEventStream,
   type ProjectEventStream,
 } from '@/services/project/projectEventStream';
+import { resetGraphProjectionCoordinator, invalidateGraphProjection } from '@/features/application/editorProjection/graphProjectionCoordinator';
+import { applyProjectLifecycleReceipt } from '@/features/application/projectLifecycleReceipt';
+import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
+import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
+import { reconcileProjectComputationSettingsEvent } from '@/features/application/projectSettings/useProjectComputationSettings';
 
 interface ProjectSyncRuntime {
   readonly stream: ProjectEventStream;
@@ -40,9 +43,7 @@ function hydrationDependencies(): ProjectEventReconcilerDependencies['hydration'
     loadGraph: async (graphPath) => (await useProjectIOStore.getState().loadGraph(graphPath))
       ? { status: 'published' as const }
       : { status: 'failed' as const },
-    replaceProject: () => {
-      projectIOApplicationPort().resetGraphProjection();
-    },
+    replaceProject: resetGraphProjectionCoordinator,
   };
 }
 
@@ -53,18 +54,27 @@ function createReconciler(): ProjectEventReconciler {
     hydration,
     activateProject: async (result) => Boolean(await loadActivatedProject(result)),
     currentProjectInstanceId: () => captureProjectLifecycleState().projectInstanceId,
-    publishProjectCleared: () => syncApplicationEventPort().clearProject(),
-    publishLifecycleCommitted: (result) => syncApplicationEventPort()
-      .applyProjectLifecycleReceipt(result),
+    publishProjectCleared: () => {
+      projectPublicationCoordinator.cancelProject();
+      const owner = captureProjectLifecycleState();
+      return createProjectLifecycleReceiptDependencies().clearProject(owner);
+    },
+    publishLifecycleCommitted: async (result) => {
+      await applyProjectLifecycleReceipt(
+        result,
+        'event',
+        createProjectLifecycleReceiptDependencies(),
+      );
+    },
     publishProjectSaved: () => undefined,
     publishComputationSettingsChanged: (result) => {
-      syncApplicationEventPort().computationSettingsChanged(result);
+      reconcileProjectComputationSettingsEvent(result);
     },
     publishGraphDelta: (payload) => {
-      syncApplicationEventPort().graphDelta(payload.delta.graphPath);
+      void invalidateGraphProjection(payload.delta.graphPath);
     },
     publishResourceMutationCommitted: async (result) => {
-      await syncApplicationEventPort().resourceMutationCommitted(result);
+      await projectPublicationCoordinator.submit({ result: result as never });
       publication.observeResourcePublication(
         result.projectInstanceId,
         result.publicationRevision,

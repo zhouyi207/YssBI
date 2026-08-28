@@ -1,4 +1,4 @@
-import { PIN_COLORS } from "@/features/domain/sidebar";
+import { PIN_COLORS } from "@/features/application/viewCapabilities";
 import type { DataType } from "@/shared/types/domain/dataType";
 import { dataTypeDisplay } from "@/shared/types/domain/dataType";
 

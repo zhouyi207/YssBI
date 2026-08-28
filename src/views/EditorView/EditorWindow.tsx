@@ -1,4 +1,4 @@
-import { useWorkbenchStore } from '@/features/core/workbench';
+import { useWorkbenchStore } from '@/features/application/viewCapabilities';
 import { useTranslation } from "react-i18next";
 
 import { BottomBar } from "./Layout/BottomBar";

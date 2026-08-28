@@ -2,7 +2,7 @@ import type {
   SidebarItemRow,
   SidebarPanelModel,
   SidebarSectionKey,
-} from '@/features/core/sidebar';
+} from '@/features/application/viewCapabilities';
 
 export type SidebarRenderRow =
   | SidebarItemRow

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectService } from '@/services/project/projectService';
 import { startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
-import { useProjectIOStore } from './projectIOStore';
-import { reconcileProjectPath, resolveActiveProjectPath } from './projectSession';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
+import { reconcileProjectPath, resolveActiveProjectPath } from '@/features/application/project/projectSession';
 
 vi.mock('@/services/project/projectService', () => ({
   ProjectService: {

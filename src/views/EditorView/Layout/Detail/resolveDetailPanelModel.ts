@@ -1,6 +1,4 @@
-import type { DetailTarget } from '@/features/core/editor/detail/types';
-import type { FunctionResourceView } from '@/features/core/resource/functionResourceView';
-import type { GraphResourceRecord } from '@/features/core/resource/resourceSelectors';
+import type { DetailTarget, FunctionResourceView, GraphResourceRecord } from '@/features/application/viewCapabilities';
 import type { FunctionPinSpec } from '@/shared/types/domain/graph';
 import type { Variable } from '@/shared/types/domain/variable';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';

@@ -1,6 +1,7 @@
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { resolveEditorTargetGroupId } from '@/features/core/layout/layoutTabQueries';
-import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore';
+import { useGraphDataStore } from '@/features/core/dataStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { markResourceLoaded } from '@/features/core/resource';
 import { ensureEditorViewport } from '@/features/core/viewport';
 import { editorViewportScope } from '@/features/core/viewport/viewportScope';

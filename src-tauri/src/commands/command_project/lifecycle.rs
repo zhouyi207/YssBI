@@ -34,7 +34,7 @@ pub(crate) fn map_project_lifecycle_error(error: ProjectLifecycleError) -> Comma
     }
 }
 
-fn map_application_project_lifecycle_error(
+pub(super) fn map_application_project_lifecycle_error(
     error: crate::application::project_lifecycle::ApplicationProjectLifecycleError,
 ) -> CommandError {
     match error {

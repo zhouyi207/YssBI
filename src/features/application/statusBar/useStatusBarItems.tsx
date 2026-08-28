@@ -8,7 +8,7 @@ import {
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import { useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
 import { useDockviewPortSnapshot } from '@/features/core/dockview/useDockviewPortSnapshot';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewRead } from '@/features/core/dockview/workbenchRead';
 import { useExecutionStore } from '@/features/core/execution/useExecutionStore';
 import {
   getViewport,
@@ -51,7 +51,7 @@ export function useStatusBarItems(): StatusBarItemsSnapshot {
   const actions = useStatusBarActions();
   const juliaWorker = useJuliaWorkerStatus();
 
-  useDockviewPortSnapshot(workbenchDockviewPort);
+  useDockviewPortSnapshot(workbenchDockviewRead);
   const capturedTarget = captureActiveEditorCommandTarget();
   const editorTarget = capturedTarget && isEditorCommandTargetCurrent(capturedTarget)
     ? capturedTarget

@@ -16,8 +16,6 @@ export * from './columnDistributionStore';
 export * from './datasetOverviewStore';
 export * from './editStateStore';
 export * from './graphMetaStore';
-export * from './projectIOStore';
-export * from './projectHelpers';
 export * from './variableStore';
 export * from './graphEntityAccess';
 export * from './graphDataStore';
@@ -35,8 +33,3 @@ export { findInternalNodeInGraph } from './graphNodeSelectors';
 export { buildGraphSnapshot, type GraphSnapshotAccess } from './projectSnapshot';
 export { buildGraphSnapshotFromStores } from './projectSnapshotBridge';
 export { resetClientProjectState } from './projectClientReset';
-export {
-  reconcileProjectPath,
-  resolveActiveProjectPath,
-  useActiveProjectPath,
-} from './projectSession';

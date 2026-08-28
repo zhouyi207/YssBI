@@ -37,6 +37,7 @@ export type {
 export {
   createProjectEventReconciler,
 } from './projectEventReconciler';
+export { initializeProjectForCurrentWindow } from './projectRuntime';
 export type {
   ComputationSettingsChangedPayload,
   GraphDeltaEventPayload,

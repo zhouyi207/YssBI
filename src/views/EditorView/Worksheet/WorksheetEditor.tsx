@@ -1,8 +1,5 @@
 import { useContext, useEffect } from 'react';
-import { GroupContext } from '@/features/core/editor';
-import { useEditorGroupWorkspace } from '@/features/core/editor';
-import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
-import { WorksheetService } from '@/services/worksheet/worksheetService';
+import { GroupContext, useEditorGroupWorkspace, useWorksheetStore, WorksheetService } from '@/features/application/viewCapabilities';
 import { captureProjectCommandContext } from '@/features/application/projectCommandContext';
 import { WorksheetChartPreview } from './WorksheetChartPreview';
 import { WorksheetEmptyState } from './WorksheetEmptyState';

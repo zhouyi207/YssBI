@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { getLocalizedSearchIndex } from '@/features/core/nodeCatalog/localizedSearchIndex';
 import {
   CATALOG_RESPONSE_CONTRACT_ERROR_CODE,

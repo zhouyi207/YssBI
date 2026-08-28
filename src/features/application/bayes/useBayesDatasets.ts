@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { databaseRead, useDatabaseRead } from '@/features/core/database/read';
 import { createDatabasePublication } from '@/features/core/database/publication';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,

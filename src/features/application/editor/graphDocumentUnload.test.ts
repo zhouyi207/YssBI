@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import {
   buildGraphResourceMeta,
   getDocumentState,

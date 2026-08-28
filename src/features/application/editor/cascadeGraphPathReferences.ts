@@ -1,5 +1,5 @@
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { remapEditorViewStateGraphPath } from '@/features/core/viewport/editorViewStateMemento';
 
 import { normalizeGraphResourcePath } from '@/shared/types/domain/graphResourcePath';

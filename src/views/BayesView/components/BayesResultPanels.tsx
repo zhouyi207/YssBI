@@ -15,7 +15,7 @@ import {
   evaluateInferenceDiagnostics,
   parameterDiagnosticStatus,
   type DiagnosticSuggestion,
-} from '@/features/domain/bayes';
+} from '@/features/application/viewCapabilities';
 import {
   useBayesArtifacts,
   type BayesArtifactsModel,

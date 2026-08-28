@@ -10,8 +10,7 @@ import {
   presentationWindowErrorMessage,
   type PresentationWindowState,
 } from '@/features/application/presentation';
-import { UnifiedResultView } from '@/features/core/resultSource';
-import { ResultViewPresentationProvider } from '@/features/core/resultSource/resultViewPresentation';
+import { UnifiedResultView, ResultViewPresentationProvider } from '@/features/application/viewCapabilities';
 import type { ResultDescriptor } from '@/shared/types/dto/result';
 import { ReportView } from '@/views/InfoView/ReportView';
 import { PlotWindowContent } from '@/views/PlotView/PlotWindowContent';

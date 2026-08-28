@@ -6,7 +6,7 @@ import {
   REROUTE_GRIP_SIZE_PX,
   REROUTE_NODE_HEIGHT_PX,
   REROUTE_NODE_WIDTH_PX,
-} from '@/features/domain/node/utils';
+} from '@/features/application/viewCapabilities';
 import { Pin } from '../Pins/Pin';
 
 export {

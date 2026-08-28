@@ -1,5 +1,5 @@
 import { useDroppable } from "@dnd-kit/core";
-import { DROP_TYPES, getCanvasDropZoneId } from "@/features/core/dnd";
+import { DROP_TYPES, getCanvasDropZoneId } from "@/features/application/viewCapabilities";
 
 /**
  * Canvas / watermark droppable target.

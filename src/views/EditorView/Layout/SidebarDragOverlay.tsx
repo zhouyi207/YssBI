@@ -1,5 +1,4 @@
-import { getSidebarDragOverlayLabel } from "@/features/core/dnd";
-import { useSidebarDragStore } from "@/features/core/sidebarDrag";
+import { getSidebarDragOverlayLabel, useSidebarDragStore } from "@/features/application/viewCapabilities";
 import { editorDragChipClass } from "@/views/EditorView/Layout/editorDropPreviewStyles";
 
 /** Floating chip while dragging from sidebar (node template or graph resource). */

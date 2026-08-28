@@ -1,10 +1,8 @@
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import {
-  loadActivatedProject,
-  resolveActiveProjectPath,
-} from '@/features/core/dataStore';
+import { loadActivatedProject } from '@/features/application/project/projectIOStore';
+import { resolveActiveProjectPath } from '@/features/application/project/projectSession';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { markResourceDirty } from '@/features/core/resource';
 import {

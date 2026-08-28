@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { EditorDataframes } from '@/features/core/editor';
+import type { EditorDataframes } from '@/features/application/viewCapabilities';
 import {
   buildDataSidebarModel,
   useSidebarSectionExpandSnapshot,
   useSidebarStore,
-} from '@/features/core/sidebar';
+} from '@/features/application/viewCapabilities';
 import { SidebarTabPanel } from '../sections/SidebarTabPanel';
 import { SidebarFlatRowPanel } from '../sections/SidebarFlatRowPanel';
 

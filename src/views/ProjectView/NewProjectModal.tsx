@@ -20,8 +20,7 @@ import {
   type ProjectPickerRecoveryPresentation,
 } from "@/features/application/project";
 import { DEFAULT_PROJECT_NAME } from "@/shared/constants/defaultResourceNames";
-import { ProjectService } from "@/services/project/projectService";
-import { openPathDialog } from "@/services/platform/pathDialog";
+import { ProjectService, openPathDialog } from "@/features/application/viewCapabilities";
 import { formatDisplayPath } from "@/shared/utils/formatDisplayPath";
 import {
   ProjectPickerErrorDetails,

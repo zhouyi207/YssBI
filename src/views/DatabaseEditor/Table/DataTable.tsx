@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/empty';
 import { buildAgGridTheme } from '@/components/data-grid/agGridTheme';
 import type { DatabaseGridSelection } from '@/features/application/databaseEditor';
-import { useSettingsStore } from '@/features/core/settings/settingsStore';
+import { useSettingsStore } from '@/features/application/viewCapabilities';
 import { resolveThemeTokens } from '@/shared/theme/themeTokens';
 import type { ColumnInfo, DatabaseRow } from '@/shared/types/dto/database';
 import {

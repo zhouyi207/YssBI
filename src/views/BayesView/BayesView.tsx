@@ -15,9 +15,9 @@ import type {
   BayesDatasetOption,
 } from '@/features/application/bayes';
 import type { BayesInferenceError } from '@/features/application/bayes';
-import { issueTargetStep } from '@/features/domain/bayes';
+import { issueTargetStep } from '@/features/application/viewCapabilities';
 import { useProjectSync } from '@/features/application/initialization';
-import { initProjectSync } from '@/features/core/dataStore';
+import { initProjectSync } from '@/features/application/viewCapabilities';
 import { useCurrentWindowActions, usePersistedWindow } from '@/features/application/window';
 import { logger } from '@/utils/appLogger';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';

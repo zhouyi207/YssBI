@@ -1,9 +1,5 @@
-import {
-  invalidateGraphLoadOwnership,
-  useGraphDataStore,
-
-  useVariableStore,
-} from '@/features/core/dataStore';
+import { useGraphDataStore, useVariableStore } from '@/features/core/dataStore';
+import { invalidateGraphLoadOwnership } from '@/features/application/project/projectIOStore';
 import { useExecutionStore } from '@/features/core/execution';
 import { clearCanvasInteractionGraph } from '@/features/core/canvas/canvasInteractionCleanup';
 import { markResourceLoaded } from '@/features/core/resource';

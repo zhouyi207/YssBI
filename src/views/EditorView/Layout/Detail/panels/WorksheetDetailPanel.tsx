@@ -2,9 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useEditorSessionResources } from '@/features/application/editor';
-import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
-import { DatabaseService } from '@/services/database/databaseService';
-import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
+import { useWorksheetStore, DatabaseService, useDatabaseStore } from '@/features/application/viewCapabilities';
 import { Select } from '@/shared/ui';
 import type { WorksheetChartType, WorksheetDocument } from '@/shared/types/domain/worksheet';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
@@ -15,7 +13,7 @@ import { DetailSectionHeader } from '../shared/DetailText';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from '@/features/application/viewCapabilities';
 
 const CHART_TYPES: WorksheetChartType[] = ['histogram', 'scatter', 'line'];
 

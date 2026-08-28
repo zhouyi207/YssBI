@@ -1,4 +1,4 @@
-import { useProjectIOStore } from '@/features/core/dataStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { editorViewportScope, ensureEditorViewport } from '@/features/core/viewport';
 import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
 

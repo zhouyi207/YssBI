@@ -2,9 +2,8 @@ import { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { IDockviewPanelProps } from 'dockview-react';
 
-import type { LogsDockviewPanelParams } from '@/features/core/dockview/logsDockviewLayout';
-import { isLogDomainId } from '@/features/core/log/logDomains';
-import { applyLogFilter } from '@/features/core/log/logStore';
+import type { LogsDockviewPanelParams } from '@/features/application/viewCapabilities';
+import { isLogDomainId, applyLogFilter } from '@/features/application/viewCapabilities';
 import type { DiagnosticRecordDto } from '@/shared/types/dto/diagnostics';
 import { LogPanelList } from './LogPanelList';
 import { LOG_DOMAIN_TITLE_KEYS } from './logPresentation';

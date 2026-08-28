@@ -24,7 +24,7 @@ import type { SidebarProjectTreeActions } from './sidebar/rows/SidebarProjectTre
 import {
   PROJECT_TREE_CATEGORY_IDS,
   type ProjectTreeCategoryId,
-} from '@/features/core/sidebar/projectTreeState';
+} from '@/features/application/viewCapabilities';
 import { ActionMenu } from '@/shared/ui/actionMenu';
 
 interface WorkbenchActivityPanelsContextValue {

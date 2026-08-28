@@ -1,10 +1,10 @@
 import { useMemo, useRef } from 'react';
-import { useDetailTarget } from '@/features/core/editor';
+import { useDetailTarget } from '@/features/application/viewCapabilities';
 import type {
   SidebarPanelModel,
   SidebarSectionActionConfig,
   SidebarSectionKey,
-} from '@/features/core/sidebar';
+} from '@/features/application/viewCapabilities';
 import { SidebarFlatRowContext, type SidebarFlatRowContextValue } from './sidebarFlatRowContext';
 import { SidebarFlatRowList } from './SidebarFlatRowList';
 import { flattenSidebarPanelModel } from './sidebarRenderRows';

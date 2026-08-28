@@ -1,10 +1,6 @@
 import React, { useState, useCallback } from "react";
 import type { UINode } from "@/shared/types/ui";
-import { uiNodeHasNoHeader, uiNodeIsReroute } from "@/features/core/dataStore";
-import { useNodeExecution } from "@/features/core/node";
-import { useExecutionStore } from "@/features/core/execution";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
-import { getNodeClassName, getNodeBackgroundStyle, getNodeMinSize } from "@/features/domain/node/utils";
+import { uiNodeHasNoHeader, uiNodeIsReroute, useNodeExecution, useExecutionStore, useGraphDataStore, getNodeClassName, getNodeBackgroundStyle, getNodeMinSize } from "@/features/application/viewCapabilities";
 import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
 import { useCallFunctionIssue } from "@/features/application/graphDiagnostics/useCallFunctionDiagnostics";
 import { NodeContextMenu } from "../ContextMenu";

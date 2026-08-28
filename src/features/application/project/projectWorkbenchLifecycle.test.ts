@@ -25,7 +25,7 @@ const lifecycleMocks = vi.hoisted(() => {
   };
 });
 
-vi.mock('@/features/core/dataStore/projectIOStore', () => ({
+vi.mock('@/features/application/project/projectIOStore', () => ({
   useProjectIOStore: {
     getState: () => ({ projectInstanceId: lifecycleMocks.state.projectInstanceId }),
   },

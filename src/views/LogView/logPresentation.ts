@@ -1,4 +1,4 @@
-import type { LogDomainId } from '@/features/core/log/logDomains';
+import type { LogDomainId } from '@/features/application/viewCapabilities';
 import type { DiagnosticLevel } from '@/shared/types/dto/diagnostics';
 
 export const LOG_DOMAIN_TITLE_KEYS = {

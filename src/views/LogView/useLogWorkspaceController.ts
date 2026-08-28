@@ -4,13 +4,11 @@ import {
   useDiagnosticSubscription,
   type DiagnosticSubscriptionStatus,
 } from '@/features/application/log';
-import { useEditorStore } from '@/features/core/editor';
-import { logBuffer } from '@/features/core/log/logBuffer';
+import { useEditorStore, logBuffer, useLiveLogs } from '@/features/application/viewCapabilities';
 import {
   useLogStore,
   type DiagnosticLogFilter,
-} from '@/features/core/log/logStore';
-import { useLiveLogs } from '@/features/core/log/useLiveLogs';
+} from '@/features/application/viewCapabilities';
 import type {
   DiagnosticLevel,
   DiagnosticRecordDto,

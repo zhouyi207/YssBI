@@ -12,7 +12,7 @@ import {
 import {
   loadActivatedProject,
   useProjectIOStore,
-} from '@/features/core/dataStore/projectIOStore';
+} from '@/features/application/project/projectIOStore';
 import { useEditorStore } from '@/features/core/editor';
 import { useResourceStore } from '@/features/core/resource';
 import { uiStore } from '@/features/core/ui/UIStore';

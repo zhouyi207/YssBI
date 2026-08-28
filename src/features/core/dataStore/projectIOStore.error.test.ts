@@ -10,7 +10,7 @@ import {
   registerProjectIOApplicationPort,
   resetProjectIOApplicationPort,
 } from './projectIOApplicationPort';
-import { useProjectIOStore } from './projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 
 const loggerMocks = vi.hoisted(() => ({
   error: vi.fn(),

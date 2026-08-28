@@ -26,17 +26,15 @@ import { useWorkbenchLayout } from '@/features/application/layout/useWorkbenchLa
 import { workbenchLayoutController } from '@/features/application/layout/workbenchLayoutController';
 import {
   layoutTabFromEditorMetadata,
-  workbenchDockviewPort,
-} from '@/features/core/dockview';
+  workbenchDockviewRead,
+} from '@/features/application/viewCapabilities';
 import {
   buildSidebarDragState,
   isSidebarSpawnDrag,
   parseCanvasDragPayload,
   snapTopLeftToCursor,
-} from '@/features/core/dnd';
-import { useModifierKeyStore } from '@/features/core/keyboard';
-import { useSettingsStore } from '@/features/core/settings/settingsStore';
-import { useSidebarDragStore } from '@/features/core/sidebarDrag';
+} from '@/features/application/viewCapabilities';
+import { useModifierKeyStore, useSettingsStore, useSidebarDragStore } from '@/features/application/viewCapabilities';
 import { resolveYssbiDockviewTheme } from '@/shared/theme/dockviewTheme';
 import { addGlobalEventListener } from '@/shared/utils/globalEvent';
 import { WatermarkView } from '../Canvas/overlays/WatermarkView';
@@ -85,10 +83,10 @@ export const Workspace = forwardRef<HTMLDivElement, { nodeId?: string }>((_, ref
     bindWorkbenchLayout(event);
     activationDisposableRef.current?.dispose();
     activationDisposableRef.current = event.api.onDidActivePanelChange(() => {
-      if (!workbenchDockviewPort.isHydrated
+      if (!workbenchDockviewRead.isHydrated
         || !workbenchLayoutController.projectResourcesReady) return;
 
-      const activePanel = workbenchDockviewPort.getActivePanel();
+      const activePanel = workbenchDockviewRead.getActivePanel();
       if (activePanel?.metadata.role !== 'editor') return;
       void synchronizeActiveEditorTab(
         activePanel.groupId,

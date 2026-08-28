@@ -2,7 +2,7 @@
 
 import { BaseEventHandler } from './BaseEventHandler';
 import { ComputationSettingsChangedPayload, ProjectLifecycleCommittedPayload, ProjectLoadedPayload, ProjectSavedPayload } from '../types';
-import { loadActivatedProject } from '@/features/core/dataStore';
+import { loadActivatedProject } from '@/features/application/project/projectIOStore';
 import { syncApplicationEventPort } from '../applicationEventPort';
 import { logger } from '@/utils/appLogger';
 import { parseComputationSettingsMutationReceipt } from '@/shared/types/dto/projectComputationSettings';

@@ -2,7 +2,7 @@ import React, { useCallback } from "react";
 import { Pin } from "../Pins/Pin";
 import { Pin as PinModel } from "@/shared/types/domain";
 import type { UINode } from "@/shared/types/ui";
-import { useNodeStyle } from "@/features/core/node";
+import { useNodeStyle } from "@/features/application/viewCapabilities";
 import { isPinCompatible } from "@/shared/utils/pinCompatibility";
 import { isExecPin } from "@/shared/types/domain/pinSemantics";
 import { Button } from "@/components/ui/button";

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import { loadActivatedProject, useProjectIOStore } from "@/features/core/dataStore";
+import { loadActivatedProject, useProjectIOStore } from '@/features/application/project/projectIOStore';
 import {
   applyCleanupProgressEvent,
   applyScanProgressEvent,

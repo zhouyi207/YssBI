@@ -4,7 +4,7 @@ import type { BayesDatasetSelectionDTO, BayesModelDraftDTO, BayesSymbolRoleDTO, 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { defaultPriorForConstraint, formatPrior } from '@/features/domain/bayes';
+import { defaultPriorForConstraint, formatPrior } from '@/features/application/viewCapabilities';
 import { PanelTitle } from './BayesFields';
 import { LatexInline, latexSymbol } from './LatexPresentation';
 import { SymbolConfigDialog } from './SymbolConfigDialog';

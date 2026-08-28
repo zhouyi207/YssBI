@@ -4,7 +4,7 @@ import {
   useExecutionPlayback,
   useExecutionStore,
   graphHasClearableArtifacts,
-} from "@/features/core/execution";
+} from "@/features/application/viewCapabilities";
 import {
   VscClearAll,
   VscDebugPause,

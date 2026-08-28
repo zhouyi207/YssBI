@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useCallFunctionIssueCountsByGraph } from '@/features/application/graphDiagnostics/useCallFunctionDiagnostics';
 import { useProjectResourceBrowser } from '@/features/application/sidebar/useProjectResourceBrowser';
-import { useDetailTarget } from '@/features/core/editor';
+import { useDetailTarget } from '@/features/application/viewCapabilities';
 import {
   SidebarTreeSearchInput,
   SidebarVirtualTree,

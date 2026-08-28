@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { ProjectLifecycleCommittedHandler } from '@/features/core/sync/handlers/ProjectEventHandler';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import type { LifecycleMutationResultDto } from '@/shared/types/dto/project';
 import { logger } from '@/utils/appLogger';
 import {

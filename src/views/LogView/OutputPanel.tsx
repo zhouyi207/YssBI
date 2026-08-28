@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { FiTrash2 } from 'react-icons/fi';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useExecutionStore } from '@/features/core/execution';
-import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
+import { useExecutionStore, useGraphSessionStore } from '@/features/application/viewCapabilities';
 import type { RunOutputProjection } from '@/shared/types/ui';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 

@@ -10,13 +10,7 @@ import {
 } from '@/features/application/sidebar/sidebarResourceActions';
 import { deleteWorksheetWithConfirm } from '@/features/application/editor/worksheetDelete';
 import { openDatabaseEditorWindow } from '@/features/application/window';
-import { uiStore } from '@/features/core/ui/UIStore';
-import { useVariableStore } from '@/features/core/dataStore/variableStore';
-import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { useFunctionCatalog } from '@/features/core/editor';
-import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { getActiveLayoutTab } from '@/features/core/layout';
-import { useGraphResourcesByKind } from '@/features/core/resource';
+import { uiStore, useVariableStore, useDatabaseStore, useFunctionCatalog, useGraphSessionStore, getActiveLayoutTab, useGraphResourcesByKind } from '@/features/application/viewCapabilities';
 import type { GraphResourceType } from '../sidebarContextMenu/sidebarContextMenuTypes';
 
 type OpenInputDialog = (

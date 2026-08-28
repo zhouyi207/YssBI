@@ -1,4 +1,4 @@
-import type { SidebarDragPayload } from "@/features/core/dnd";
+import type { SidebarDragPayload } from "@/features/application/viewCapabilities";
 import { useDraggable } from "@dnd-kit/core";
 
 /**

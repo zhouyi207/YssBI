@@ -1,5 +1,5 @@
 import React from "react";
-import { computeEdgePath } from "@/features/core/canvas/edgePath";
+import { computeEdgePath } from "@/features/application/viewCapabilities";
 
 export type EdgeKind = "exec" | "data";
 

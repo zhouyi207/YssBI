@@ -1,5 +1,5 @@
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 
 type SidebarResourceKind = 'variable' | 'database';

@@ -1,7 +1,7 @@
 import { ProjectLifecycleProtocolError } from '@/features/application/projectLifecycleReceipt';
 import { workbenchLayoutController } from '@/features/application/layout/workbenchLayoutController';
 import { resetProjectScopedRightSidebarState } from '@/features/core/dataStore/projectClientReset';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { useEditorPaneStateStore } from '@/features/core/dockview/editorPaneStateStore';
 import { workbenchDockviewInternal } from '@/features/core/dockview/workbenchDockviewInternal';
 import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';

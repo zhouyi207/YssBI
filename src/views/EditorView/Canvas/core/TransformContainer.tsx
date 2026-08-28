@@ -5,7 +5,7 @@ import {
   subscribeToViewport,
   viewportTransformStyle,
   type ViewportScope,
-} from '@/features/core/viewport';
+} from '@/features/application/viewCapabilities';
 
 export const TransformContainer = ({
   viewportScope,

@@ -3,7 +3,7 @@ import { VscClose } from "react-icons/vsc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { uiStore } from "@/features/core/ui/UIStore";
+import { uiStore } from "@/features/application/viewCapabilities";
 import type { ProgressState } from "@/shared/types/ui";
 
 export interface ProgressOverlayProps {

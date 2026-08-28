@@ -10,9 +10,9 @@ import {
 import {
   DEFAULT_LOGS_DOCKVIEW_LAYOUT,
   LOGS_DOCKVIEW_COMPONENT_ID,
-} from '@/features/core/dockview/logsDockviewLayout';
-import type { LogsDockviewLayoutController } from '@/features/core/dockview/logsDockviewLayoutController';
-import { useSettingsStore } from '@/features/core/settings/settingsStore';
+} from '@/features/application/viewCapabilities';
+import type { LogsDockviewLayoutController } from '@/features/application/viewCapabilities';
+import { useSettingsStore } from '@/features/application/viewCapabilities';
 import { resolveYssbiLogsDockviewTheme } from '@/shared/theme/dockviewTheme';
 import { LogDomainPanel } from './LogDomainPanel';
 import { LogWorkspaceActions } from './LogWorkspaceActions';

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Variable } from '@/shared/types/domain';
 import type { ResourceMutationResultDto } from '@/shared/types/dto/editorMutation';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { useVariableStore } from '@/features/core/dataStore/variableStore';
 import { useHistoryStore } from '@/features/core/history';
 import { VariableService } from '@/services/variable/variableService';

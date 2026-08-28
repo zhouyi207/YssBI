@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { activateGraphTab, deactivateGraphTab } from './activateGraphTab';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { getDocumentState, markResourceLoaded } from '@/features/core/resource';
 import { makeEditorProjectionFixture } from '@/tests/helpers/editorProjectionFixtures';
 import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';

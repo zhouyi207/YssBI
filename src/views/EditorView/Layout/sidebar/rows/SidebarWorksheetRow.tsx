@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscGraphLine } from 'react-icons/vsc';
-import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
+import { TYPE_ICON_COLORS } from '@/features/application/viewCapabilities';
 import { SidebarListItem, SidebarRowActionButton, SIDEBAR_ROW_ICON_SIZE } from '../../sidebarUi';
 
 export const SidebarWorksheetRow = memo(function SidebarWorksheetRow({

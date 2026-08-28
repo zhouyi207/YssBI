@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { useGraphDataStore } from '@/features/application/viewCapabilities';
 import { DetailPanelShell } from '../shared/DetailPanelShell';
 import { DetailForm } from '../shared/DetailForm';
 import { DetailText } from '../shared/DetailText';

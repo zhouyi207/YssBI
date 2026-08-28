@@ -2,9 +2,8 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
-import type { GraphEntitiesState } from '@/features/core/dataStore/graphEntityAccess';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { derivePinConnectionView } from '@/features/core/dataStore/pinLinks';
+import type { GraphEntitiesState } from '@/features/application/viewCapabilities';
+import { useGraphDataStore, derivePinConnectionView } from '@/features/application/viewCapabilities';
 
 import type { PinData, PinView } from '@/shared/types/store/graph';
 

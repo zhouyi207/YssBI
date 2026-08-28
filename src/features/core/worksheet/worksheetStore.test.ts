@@ -5,7 +5,7 @@ import { projectPublicationCoordinator } from '@/features/application/editorMuta
 import { ResourceMutationCommittedHandler } from '@/features/core/sync/handlers/ProjectMutationEventHandler';
 import type { WorksheetDocument } from '@/shared/types/domain/worksheet';
 import { useWorksheetStore } from './worksheetStore';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { registerCoreApplicationPorts } from '@/features/application/initialization/registerCoreApplicationPorts';
 import {
   isResourceDocumentDirty,

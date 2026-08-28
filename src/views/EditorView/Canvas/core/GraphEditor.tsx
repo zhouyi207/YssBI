@@ -2,9 +2,7 @@ import { memo } from 'react';
 import Canvas from './Canvas';
 import { useIsActiveEditorPanel } from '@/features/application/editor';
 import { CanvasDropZone } from './CanvasDropZone';
-import { useGraphDataStore, useProjectIOStore } from '@/features/core/dataStore';
-import { resourceKey, useDocumentStateStore } from '@/features/core/resource';
-import type { EditorResourceKind } from '@/features/core/dockview';
+import { useGraphDataStore, useProjectIOStore, resourceKey, useDocumentStateStore, type EditorResourceKind } from '@/features/application/viewCapabilities';
 
 export interface GraphEditorProps {
     panelInstanceId: string;

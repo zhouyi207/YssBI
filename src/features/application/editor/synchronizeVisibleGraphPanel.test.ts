@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useProjectIOStore } from '@/features/core/dataStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { ensureEditorViewport, editorViewportScope } from '@/features/core/viewport';
 import {
   synchronizeVisibleGraphPanel,

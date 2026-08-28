@@ -1,5 +1,5 @@
 import { DEFAULT_VIEWPORT } from '@/app/appConfig/default';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { readEditorViewStateViewport } from './editorViewStateMemento';
 
 /** Resolve viewport on first open: project memento → default. */

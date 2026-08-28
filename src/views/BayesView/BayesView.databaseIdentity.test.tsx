@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useBayesDatasets, type BayesDatasetsModel } from '@/features/application/bayes';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import {
   clearProjectLifecycle,
   startProjectLifecycle,

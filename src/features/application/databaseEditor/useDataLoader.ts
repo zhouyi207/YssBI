@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { DatabaseService } from '@/services/database/databaseService';
-import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
+import { useDatabaseStore } from '@/features/core/dataStore';
+import { initializeProjectForCurrentWindow as initProjectSync } from '@/features/application/project';
 import { DATABASE_EDITOR_CHUNK_SIZE } from '@/app/appConfig/default';
 import type { DatabaseRow } from '@/shared/types/dto/database';
 import { logger } from '@/utils/appLogger';

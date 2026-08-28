@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { DatabaseService } from '@/services/database/databaseService';
+import { DatabaseService } from '@/features/application/viewCapabilities';
 import { useProjectSync } from '@/features/application/initialization';
 import { useCurrentWindowActions, usePersistedWindow } from '@/features/application/window';
-import { useDatabaseStore, initProjectSync } from '@/features/core/dataStore';
+import { useDatabaseStore, initProjectSync } from '@/features/application/viewCapabilities';
 import { useDataLoader, useSelection, useDatabaseEditorKeyboard, getGridSelectionPrimaryCellText, useDatabaseExport } from '@/features/application/databaseEditor';
 import { TitleBar, Toolbar, type DataframeOption } from './Layout';
 import { DataTable } from './Table';
@@ -10,7 +10,7 @@ import { logger } from '@/utils/appLogger';
 import {
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from '@/features/application/viewCapabilities';
 
 type DatabaseMetadataUpdater = (
   id: string,

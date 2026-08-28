@@ -10,16 +10,12 @@ import {
 import type { EditorCanvasScope } from '@/features/application/editor';
 import { CanvasContextMenuProvider } from '@/features/application/editor/CanvasContextMenuContext';
 import type { CanvasContextMenuActions } from '@/features/application/editor/CanvasContextMenuContext';
-import { useNodeDragPreview } from '@/features/core/canvas/useNodeDragPreview';
-import { useSelectionBoxPreview } from '@/features/core/canvas/useSelectionBoxPreview';
-import { useGraphDataStore } from '@/features/core/dataStore';
-import { useExecutionVisualBinder } from '@/features/core/execution';
+import { useNodeDragPreview, useSelectionBoxPreview, useGraphDataStore, useExecutionVisualBinder, editorViewportScope } from '@/features/application/viewCapabilities';
 import {
   getCanvasInteraction,
   useGraphInteractionStore,
-} from '@/features/core/graphInteraction/graphInteractionStore';
-import { editorViewportScope } from '@/features/core/viewport';
-import type { NodeCreationDescriptor } from '@/features/domain/nodeCatalog/creationDescriptor';
+} from '@/features/application/viewCapabilities';
+import type { NodeCreationDescriptor } from '@/features/application/viewCapabilities';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { CanvasNode } from '../../Nodes/CanvasNode';
 import CanvasOverlays, { type CanvasOverlaysModel } from '../overlays/CanvasOverlays';

@@ -1,6 +1,4 @@
-import { DRAG_TYPES, type NodeTemplateDragData } from '@/features/core/dnd';
-import { catalogItemKey } from '@/features/domain/nodeCatalog/catalogItem';
-import type { LocalizedCatalogBrowserRow } from '@/features/domain/nodeCatalog/localizedCatalogTree';
+import { DRAG_TYPES, catalogItemKey, type NodeTemplateDragData, type LocalizedCatalogBrowserRow } from '@/features/application/viewCapabilities';
 import { LocalizedCatalogTreeRow } from '../../sidebarUi';
 
 export function SidebarCatalogTreeRow({

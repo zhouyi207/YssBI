@@ -39,6 +39,32 @@ export {
   WorkbenchLayoutError,
   workbenchDockviewPort,
 } from './workbenchDockviewPort';
+export {
+  workbenchDockviewRead,
+  type WorkbenchDockviewRead,
+} from './workbenchRead';
+export {
+  workbenchDockviewControl,
+  type WorkbenchDockviewControl,
+} from './workbenchControl';
+export {
+  workbenchDockviewRootBinding,
+  type WorkbenchDockviewBindingToken,
+  type WorkbenchDockviewRootBinding,
+} from './workbenchRootBinding';
+export {
+  logsDockviewRead,
+  type LogsDockviewRead,
+} from './logsRead';
+export {
+  logsDockviewControl,
+  type LogsDockviewControl,
+} from './logsControl';
+export {
+  logsDockviewRootBinding,
+  type LogsDockviewBindingToken,
+  type LogsDockviewRootBinding,
+} from './logsRootBinding';
 export type {
   ConfiguredWorkbenchEdgeState,
   ConfigureWorkbenchEdgeRequest,

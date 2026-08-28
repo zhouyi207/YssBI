@@ -17,7 +17,7 @@ import {
 
 const project = vi.hoisted(() => ({ id: 'project-a' as string | null, epoch: 1 }));
 
-vi.mock('@/features/core/dataStore/projectIOStore', () => ({
+vi.mock('@/features/application/project/projectIOStore', () => ({
   useProjectIOStore: <T,>(selector: (state: { projectInstanceId: string | null }) => T): T => selector({
     projectInstanceId: project.id,
   }),

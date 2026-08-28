@@ -1,4 +1,4 @@
-import { getGraphByPath } from '@/features/core/dataStore';
+import { getGraphByPath } from '@/features/application/project/projectHelpers';
 import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
 
 export function resolveExecutionGraphPath(targetGraphPath?: string): string | undefined {

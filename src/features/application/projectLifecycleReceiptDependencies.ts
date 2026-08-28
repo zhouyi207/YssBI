@@ -7,7 +7,7 @@ import {
   commitPreparedAuthoritativeProjectLoad,
   prepareAuthoritativeProjectLoad,
   useProjectIOStore,
-} from '@/features/core/dataStore/projectIOStore';
+} from '@/features/application/project/projectIOStore';
 import { ProjectService } from '@/services/project/projectService';
 import {
   captureProjectIdentity,

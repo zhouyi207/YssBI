@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { StatusBarItemViewModel } from "@/features/core/statusBar";
+import type { StatusBarItemViewModel } from "@/features/application/viewCapabilities";
 
 export function StatusBarItem({
   item,

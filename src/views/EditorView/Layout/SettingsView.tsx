@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { VscError } from 'react-icons/vsc';
 import { useTranslation } from "react-i18next";
-import { useSettingsStore } from "@/features/core/settings/settingsStore";
-import { uiStore } from "@/features/core/ui/UIStore";
+import { useSettingsStore, uiStore } from "@/features/application/viewCapabilities";
 import { Select } from "@/shared/ui";
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from "@/components/ui/scroll-area";

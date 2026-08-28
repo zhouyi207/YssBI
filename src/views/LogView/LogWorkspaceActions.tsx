@@ -3,8 +3,7 @@ import type {
   IDockviewPanel,
 } from 'dockview-react';
 
-import { isLogDomainId, type LogDomainId } from '@/features/core/log/logDomains';
-import { applyLogFilter } from '@/features/core/log/logStore';
+import { isLogDomainId, applyLogFilter, type LogDomainId } from '@/features/application/viewCapabilities';
 import { LogPanelStatus } from './LogPanelStatus';
 import { LogPanelToolbar } from './LogPanelToolbar';
 import { useLogWorkspaceContext } from './logWorkspaceContext';

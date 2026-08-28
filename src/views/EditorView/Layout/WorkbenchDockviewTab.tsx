@@ -34,13 +34,13 @@ import {
   isWorkbenchActivityViewId,
   isWorkbenchPersistentViewMetadata,
   layoutTabFromEditorMetadata,
-  workbenchDockviewPort,
+  workbenchDockviewRead,
   type WorkbenchPanelInfo,
   type WorkbenchPanelMetadata,
   type WorkbenchPanelParams,
   type WorkbenchViewId,
-} from '@/features/core/dockview';
-import { resourceKey, useDocumentStateStore } from '@/features/core/resource';
+} from '@/features/application/viewCapabilities';
+import { resourceKey, useDocumentStateStore } from '@/features/application/viewCapabilities';
 import {
   ActionMenu,
   usePositionedActionMenu,
@@ -163,7 +163,7 @@ function genericContextMenuSections(
         icon: <VscCloseAll size={12} />,
         danger: true,
         onClick: () => {
-          const panelInstanceIds = workbenchDockviewPort
+          const panelInstanceIds = workbenchDockviewRead
             .listGroupPanels(target.groupId)
             .map((panel: WorkbenchPanelInfo) => panel.panelInstanceId);
           void requestCloseWorkbenchPanels(panelInstanceIds);

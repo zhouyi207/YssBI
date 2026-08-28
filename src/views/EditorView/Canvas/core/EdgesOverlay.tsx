@@ -1,15 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { Edge } from "./Edge";
-import { useExecutionStore, connectionKey, getExecutionVisual, subscribeExecutionVisual } from "@/features/core/execution";
-import { useGraphDataStore } from "@/features/core/dataStore/graphDataStore";
-import { useTheme } from "@/features/core/theme/useTheme";
-import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
-import { useEdgeDragPreview } from "@/features/core/canvas/useEdgeDragPreview";
-import { getConnectPreview, subscribeConnectPreview } from '@/features/core/canvas/connectPreview';
+import { useExecutionStore, useGraphDataStore, connectionKey, getExecutionVisual, subscribeExecutionVisual, useTheme, getPinTypeColor, useEdgeDragPreview, getConnectPreview, subscribeConnectPreview } from "@/features/application/viewCapabilities";
 import { resolvePinVisualSpec } from '@/shared/types/domain/pinVisual';
 import type { ConnectionData, PinData } from "@/shared/types";
-import type { EdgeData } from '@/features/domain/canvas/edgeData';
+import type { EdgeData } from '@/features/application/viewCapabilities';
 import { ConnectionContextMenu } from '@/views/EditorView/ContextMenu';
 
 export function replacementEdgeAttributes(

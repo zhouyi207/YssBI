@@ -2,20 +2,17 @@ import React, { useMemo, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import type { PinMetaDataDTO } from "@/shared/types/domain";
 import { Pin as PinModel } from "@/shared/types/domain";
-import { useTheme } from "@/features/core/theme/useTheme";
-import { getPinTypeColor } from "@/features/core/theme/pinTypeTheme";
+import { useTheme, getPinTypeColor } from "@/features/application/viewCapabilities";
 import { isExecPin, scalarPinInputKey, PRIMITIVE_SCALAR_INPUT_KEYS } from "@/shared/types/domain/pinSemantics";
 import { resolvePinRenderStyle, resolvePinVisualSpec } from "@/shared/types/domain/pinVisual";
 import { PinInput } from "./PinInput";
 import { PinContextMenu } from "../ContextMenu";
 import { useCanvasContextMenuActionsOptional } from "@/features/application/editor/CanvasContextMenuContext";
-import { useRepeatablePinRemovable } from "@/features/core/pin";
+import { useRepeatablePinRemovable } from "@/features/application/viewCapabilities";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { dataValueFromBackend } from "@/shared/types/dto/dataValue";
 import { dataValueToRaw } from "@/shared/types/domain/dataValue";
-import { useGraphDataStore } from "@/features/core/dataStore";
-import { getCanvasInteraction, useGraphInteractionStore } from '@/features/core/graphInteraction/graphInteractionStore';
-import type { ConnectionFeedback } from '@/features/core/canvas/connectionInteraction';
+import { useGraphDataStore, getCanvasInteraction, useGraphInteractionStore, type ConnectionFeedback } from '@/features/application/viewCapabilities';
 
 export function pinConnectionFeedbackAttributes(feedback: ConnectionFeedback | null) {
   if (!feedback) return {};
@@ -40,7 +37,7 @@ import {
   pinHistoryCacheKey,
   pinViewDisabledTitle,
   useExecutionStore,
-} from "@/features/core/execution";
+} from "@/features/application/viewCapabilities";
 import { openPinInspectableView } from "@/features/application/execution/openInspectableResult";
 import {
   isPinPreviewActionAvailable,

@@ -8,10 +8,10 @@ import type { IDockviewPanelProps } from 'dockview-react';
 import {
   type WorkbenchComponentId,
   type WorkbenchPanelParams,
-} from '@/features/core/dockview';
-import { logsDockviewLayoutController } from '@/features/core/dockview/logsDockviewLayoutController';
+} from '@/features/application/viewCapabilities';
+import { logsDockviewLayoutController } from '@/features/application/viewCapabilities';
 import { useVisibleGraphPanel } from '@/features/application/editor/useVisibleGraphPanel';
-import { GroupContext } from '@/features/core/editor';
+import { GroupContext } from '@/features/application/viewCapabilities';
 import { LogWorkspaceDockview } from '@/views/LogView/LogWorkspaceDockview';
 import { OutputPanel } from '@/views/LogView/OutputPanel';
 import { DiagnosticsPanel } from '@/views/LogView/DiagnosticsPanel';

@@ -1,10 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useResultValue } from '@/features/core/resultSource';
-import { reportResultValuePayload } from '@/features/core/resultSource/resultValuePayload';
-import { ResultReadError } from '@/features/core/resultSource/components/ResultReadError';
-import type { ReportKind, ResultDescriptor } from '@/features/core/resultSource';
+import { useResultValue, reportResultValuePayload, ResultReadError, type ReportKind, type ResultDescriptor } from '@/features/application/viewCapabilities';
 import { validateReportPayload } from '@/shared/types/report/reportValidation';
 import { logger } from '@/utils/appLogger';
 import { resolveReportComponent } from './reportViewResolver';

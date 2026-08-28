@@ -1,8 +1,6 @@
 import { useMemo } from 'react';
 import { useEditorSessionResources } from '@/features/application/editor';
-import { useDetailTarget } from '@/features/core/editor';
-import { useLogStore } from '@/features/core/log/logStore';
-import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
+import { useDetailTarget, useLogStore, useWorksheetStore } from '@/features/application/viewCapabilities';
 import { resolveDetailPanelModel } from './resolveDetailPanelModel';
 import type { DetailPanelModel } from './resolveDetailPanelModel';
 

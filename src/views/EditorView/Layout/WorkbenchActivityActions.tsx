@@ -4,8 +4,7 @@ import type { IDockviewHeaderActionsProps } from 'dockview-react';
 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { WORKBENCH_ACTIVITY_GROUP_ID } from '@/features/core/dockview/workbenchDockviewDefaults';
-import { useWorkbenchStore } from '@/features/core/workbench';
+import { WORKBENCH_ACTIVITY_GROUP_ID, useWorkbenchStore } from '@/features/application/viewCapabilities';
 import { PluginActivityActions } from './PluginActivityActions';
 
 function stopHeaderControlPropagation(event: { stopPropagation(): void }): void {

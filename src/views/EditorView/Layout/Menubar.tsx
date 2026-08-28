@@ -13,8 +13,7 @@ import {
 } from '@/features/application/menubar/menubarViewItems';
 import { getRememberedColorTheme } from '@/features/application/settings/colorThemePresets';
 import { openExternalUrlWithDialog, useCurrentWindowActions } from '@/features/application/window';
-import { useActiveProjectPath } from '@/features/core/dataStore';
-import { useSettingsStore } from '@/features/core/settings/settingsStore';
+import { useActiveProjectPath, useSettingsStore } from '@/features/application/viewCapabilities';
 import { APP_LINKS } from '@/app/appConfig/default';
 import {
   Menubar as ShadcnMenubar,

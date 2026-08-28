@@ -23,7 +23,7 @@ import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useL
 import {
   catalogItemKey,
   type LocalizedCatalogItem,
-} from '@/features/domain/nodeCatalog/catalogItem';
+} from '@/features/application/viewCapabilities';
 import { MarkdownRenderer } from '@/shared/ui/MarkdownRenderer';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { detailProseClass } from './Detail/shared/detailStyles';

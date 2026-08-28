@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
+import { useGraphDataStore } from '@/features/application/viewCapabilities';
 import type { ConnectionData, NodeData, PinData } from '@/shared/types/store/graph';
 import type { ResolvedPinSpec } from '../resolveNodePinSpecs';
 import { detailEmptyHintClass } from '../shared/detailStyles';

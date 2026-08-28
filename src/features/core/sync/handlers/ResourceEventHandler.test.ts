@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 
 
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { ProjectIndexInvalidatedHandler } from './ResourceEventHandler';
 

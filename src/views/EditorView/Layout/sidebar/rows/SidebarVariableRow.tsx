@@ -8,7 +8,7 @@ import {
 import { useLocalizedNodeCatalog } from '@/features/application/nodeCatalog/useLocalizedNodeCatalog';
 import { findResourceNodeSpawnTemplate } from '@/features/application/editor/canvasDrop';
 import { revealDetails } from '@/features/application/editor/rightSidebarActions';
-import { TYPE_ICON_COLORS } from '@/features/domain/sidebar';
+import { TYPE_ICON_COLORS } from '@/features/application/viewCapabilities';
 import type { DataType } from '@/shared/types/domain/dataType';
 import { safeDataTypeColor, safeDataTypeDisplay } from '../../sidebarUtils';
 import {

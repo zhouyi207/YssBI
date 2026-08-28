@@ -1,4 +1,4 @@
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { patchEditorViewStateViewport } from './editorViewStateMemento';
 import { getViewport } from './viewportSession';
 import type { ViewportScope } from './viewportScope';

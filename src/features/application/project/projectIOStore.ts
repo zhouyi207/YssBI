@@ -11,11 +11,11 @@ import { logger } from '@/utils/appLogger';
 
 import type { DatabaseRecord } from '@/shared/types/dto/database';
 import { normalizeDatabases } from '@/shared/types/dto/database';
-import { useVariableStore } from './variableStore';
-import { useDatabaseStore } from './databaseStore';
-import { useGraphDataStore } from './graphDataStore';
+import { useVariableStore } from '@/features/core/dataStore/variableStore';
+import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
+import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 
-import { projectIOApplicationPort } from './projectIOApplicationPort';
+import { projectIOApplicationPort } from '@/features/core/dataStore/projectIOApplicationPort';
 import { useWorksheetStore } from '@/features/core/worksheet/worksheetStore';
 import { buildGraphResourceMeta, useResourceStore, type ProjectResourceMeta } from '@/features/core/resource';
 import {
@@ -28,23 +28,23 @@ import {
   variableCatalogToResourceMetas,
   variableRevisionsFromIndex,
 } from '@/features/core/variable/variableCatalog';
-import { resetClientProjectState } from './projectClientReset';
-import { useGraphMetaStore } from './graphMetaStore';
+import { resetClientProjectState } from '@/features/core/dataStore/projectClientReset';
+import { useGraphMetaStore } from '@/features/core/dataStore/graphMetaStore';
 import { useDocumentStateStore } from '@/features/core/resource/documentStateStore';
 import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
 import { useViewportStore } from '@/features/core/viewport';
 import { useGraphInteractionStore } from '@/features/core/graphInteraction';
 import { useEditorStore } from '@/features/core/editor/stores/useEditorStore';
-import { useEditStateStore } from './editStateStore';
-import { useColumnStatsStore } from './columnStatsStore';
-import { useColumnDistributionStore } from './columnDistributionStore';
-import { useDatasetOverviewStore } from './datasetOverviewStore';
+import { useEditStateStore } from '@/features/core/dataStore/editStateStore';
+import { useColumnStatsStore } from '@/features/core/dataStore/columnStatsStore';
+import { useColumnDistributionStore } from '@/features/core/dataStore/columnDistributionStore';
+import { useDatasetOverviewStore } from '@/features/core/dataStore/datasetOverviewStore';
 import {
   buildAuthoritativeProjectLoadPlan,
   defaultAuthoritativeProjectLoadPlanDependencies,
   type AuthoritativeProjectLoadPlanDependencies,
   type PreparedAuthoritativeProjectLoad as BasePreparedAuthoritativeProjectLoad,
-} from './authoritativeProjectLoadPlan';
+} from '@/features/core/dataStore/authoritativeProjectLoadPlan';
 import {
   ProjectLifecycleError,
   assertCurrentProjectIdentity,
@@ -55,9 +55,9 @@ import {
   type ProjectLifecycleStateSnapshot,
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import { useHistoryStore } from '@/features/core/history';
-import { isGraphCachedInMemory } from './graphDocumentLoadPolicy';
+import { isGraphCachedInMemory } from '@/features/core/dataStore/graphDocumentLoadPolicy';
 
-export type { AuthoritativeProjectLoadPlanDependencies } from './authoritativeProjectLoadPlan';
+export type { AuthoritativeProjectLoadPlanDependencies } from '@/features/core/dataStore/authoritativeProjectLoadPlan';
 export type PreparedAuthoritativeProjectLoad = BasePreparedAuthoritativeProjectLoad & {
   readonly identity: ProjectIdentitySnapshot;
 };

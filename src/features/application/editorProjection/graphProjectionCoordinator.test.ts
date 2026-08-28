@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { startProjectLifecycle } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import {
   buildGraphResourceMeta,

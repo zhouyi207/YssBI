@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { toErrorReference } from '@/services/ipc';
-import { fetchWorksheetPreview } from '@/services/worksheet/worksheetDataService';
-import { getCachedWorksheetPreview, getWorksheetPreview } from '@/services/worksheet/worksheetPreviewCache';
+import { toErrorReference, fetchWorksheetPreview, getCachedWorksheetPreview, getWorksheetPreview } from '@/features/application/viewCapabilities';
 import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
 import Scatter from '@/views/PlotView/Scatter';
 import Line from '@/views/PlotView/Line';
@@ -13,7 +11,7 @@ import {
   assertCurrentProjectIdentity,
   captureProjectIdentity,
   isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+} from '@/features/application/viewCapabilities';
 
 interface WorksheetChartPreviewProps {
   worksheetPath: string;

@@ -3,7 +3,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
-import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
+import { useProjectIOStore } from '@/features/application/project/projectIOStore';
 import { useNodeCatalogStore } from '@/features/core/nodeCatalog/nodeCatalogStore';
 import { CatalogService, type LocalizedCatalogDto } from '@/services/nodeSystem/catalogService';
 import { normalizeIpcError } from '@/services/ipc';

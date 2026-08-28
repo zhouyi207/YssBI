@@ -3,13 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { VscError, VscInfo, VscWarning } from 'react-icons/vsc';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { revealDetails } from '@/features/application/editor/rightSidebarActions';
-import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
-import { useGraphSessionStore } from '@/features/core/graphSession/graphSessionStore';
-import { updateEditorGroupSelectedNodeIds } from '@/features/core/layout';
+import { useGraphDataStore, useGraphSessionStore, updateEditorGroupSelectedNodeIds } from '@/features/application/viewCapabilities';
 import {
   collectNodeDiagnostics,
   type GraphNodeDiagnostic,
-} from '@/features/domain/graphDiagnostics/nodeDiagnostics';
+} from '@/features/application/viewCapabilities';
 
 function severityIcon(severity: GraphNodeDiagnostic['diagnostic']['severity']) {
   if (severity === 'error') return VscError;

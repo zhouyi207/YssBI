@@ -2,13 +2,13 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { initProjectSync } from '@/features/core/dataStore';
+import { initializeProjectForCurrentWindow as initProjectSync } from '@/features/application/project';
 import { LoadStatus } from '@/shared/types/ui';
 import { useAppInitialization } from './appInitialization.hook';
 import type { InitializationState } from './appInitialization.type';
 
-vi.mock('@/features/core/dataStore', () => ({
-  initProjectSync: vi.fn(),
+vi.mock('@/features/application/project', () => ({
+  initializeProjectForCurrentWindow: vi.fn(),
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

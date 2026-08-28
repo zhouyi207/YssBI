@@ -1,4 +1,4 @@
-import type { DetailTarget } from '@/features/core/editor/detail/types';
+import type { DetailTarget } from '@/features/application/viewCapabilities';
 
 /** Whether a sidebar row matches the current Detail panel focus. */
 export function isSidebarDetailSelected(

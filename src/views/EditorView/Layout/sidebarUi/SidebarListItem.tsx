@@ -1,4 +1,4 @@
-import type { SidebarDragPayload } from "@/features/core/dnd";
+import type { SidebarDragPayload } from "@/features/application/viewCapabilities";
 import { SidebarDraggableItem } from "./SidebarDraggableItem";
 import {
   sidebarItemIndent,
