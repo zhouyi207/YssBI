@@ -17,6 +17,7 @@ pub mod pin_preview_generation;
 pub mod project_lifecycle;
 pub mod project_watcher;
 pub mod statistical_input;
+pub mod variable_mutation;
 pub(crate) mod worksheet_plot;
 
 pub mod events;

@@ -1,5 +1,5 @@
 use crate::data_contract::{DataType, DataValue};
-use crate::event::ResourceMutationResultDto;
+use crate::event::{ProjectionStatusDto, ResourceMutationResultDto};
 use crate::graph_document::GraphResourcePath;
 use crate::node_system::document::{
     FunctionResourceKey, ResourceKey, VariableResourceKey, WorksheetResourceKey,
@@ -37,6 +37,140 @@ pub struct ProjectSaveResultDto {
 pub struct GlobalVariableMutationResult {
     pub variable: VariableInstance,
     pub result: ResourceMutationResultDto,
+}
+
+#[derive(Debug)]
+pub(crate) struct ProjectVariableMutationReceipt {
+    variable: VariableInstance,
+    mutation: ProjectResourceMutationFacts,
+}
+
+impl ProjectVariableMutationReceipt {
+    pub(crate) fn into_parts(self) -> (VariableInstance, ProjectResourceMutationFacts) {
+        (self.variable, self.mutation)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct ProjectResourceMutationFacts {
+    operation_id: OperationId,
+    project_instance_id: ProjectInstanceId,
+    publication_revision: u64,
+    moves: Box<[ProjectResourceMove]>,
+    deltas: Box<[crate::node_system::document::ResourceDeltaEvent]>,
+    projection_status: ProjectProjectionStatus,
+    history: ProjectHistoryStatus,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ProjectResourceMove {
+    pub(crate) from: Box<str>,
+    pub(crate) to: Box<str>,
+    pub(crate) kind: crate::node_system::document::ResourceLifecycleKind,
+    pub(crate) name: Box<str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ProjectProjectionStatus {
+    Complete {
+        expected_graph_paths: Box<[GraphResourcePath]>,
+    },
+    Incomplete {
+        invalidated_graph_paths: Box<[GraphResourcePath]>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProjectHistoryStatus {
+    pub(crate) can_undo: bool,
+    pub(crate) can_redo: bool,
+}
+
+impl ProjectResourceMutationFacts {
+    fn from_transport(result: ResourceMutationResultDto) -> Result<Self, ProjectFilesystemError> {
+        let projection_status = match result.projection_status {
+            ProjectionStatusDto::Complete {
+                expected_graph_paths,
+            } => ProjectProjectionStatus::Complete {
+                expected_graph_paths: parse_graph_paths(expected_graph_paths)?,
+            },
+            ProjectionStatusDto::Incomplete {
+                invalidated_graph_paths,
+            } => ProjectProjectionStatus::Incomplete {
+                invalidated_graph_paths: parse_graph_paths(invalidated_graph_paths)?,
+            },
+        };
+        Ok(Self {
+            operation_id: result.operation_id,
+            project_instance_id: ProjectInstanceId::from_existing(result.project_instance_id),
+            publication_revision: result.publication_revision,
+            moves: result
+                .moves
+                .into_iter()
+                .map(|resource_move| ProjectResourceMove {
+                    from: resource_move.from.into_boxed_str(),
+                    to: resource_move.to.into_boxed_str(),
+                    kind: resource_move.kind,
+                    name: resource_move.name.into_boxed_str(),
+                })
+                .collect(),
+            deltas: result.deltas.into_boxed_slice(),
+            projection_status,
+            history: ProjectHistoryStatus {
+                can_undo: result.history.can_undo,
+                can_redo: result.history.can_redo,
+            },
+        })
+    }
+
+    pub(crate) fn into_parts(
+        self,
+    ) -> (
+        OperationId,
+        ProjectInstanceId,
+        u64,
+        Box<[ProjectResourceMove]>,
+        Box<[crate::node_system::document::ResourceDeltaEvent]>,
+        ProjectProjectionStatus,
+        ProjectHistoryStatus,
+    ) {
+        (
+            self.operation_id,
+            self.project_instance_id,
+            self.publication_revision,
+            self.moves,
+            self.deltas,
+            self.projection_status,
+            self.history,
+        )
+    }
+}
+
+fn parse_graph_paths(
+    values: Vec<String>,
+) -> Result<Box<[GraphResourcePath]>, ProjectFilesystemError> {
+    values
+        .into_iter()
+        .map(|path| {
+            GraphResourcePath::new(path).map_err(|_| {
+                ProjectFilesystemError::TransactionCommitFailed {
+                    message: "project mutation receipt contains an invalid graph path".into(),
+                }
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Vec::into_boxed_slice)
+}
+
+impl GlobalVariableMutationResult {
+    pub(crate) fn into_application_receipt(
+        self,
+    ) -> Result<ProjectVariableMutationReceipt, ProjectFilesystemError> {
+        Ok(ProjectVariableMutationReceipt {
+            variable: self.variable,
+            mutation: ProjectResourceMutationFacts::from_transport(self.result)?,
+        })
+    }
 }
 
 fn worksheet_document_state(
