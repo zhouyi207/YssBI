@@ -39,6 +39,10 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({ t: mocks.t }),
 }));
 
+vi.mock('@/shared/charts/statistical', () => ({
+  DidEventStudyChart: () => null,
+}));
+
 vi.mock('./shared', async () => {
   const React = await import('react');
   const Container = ({ children }: { children?: ReactNode }) => React.createElement('div', null, children);
@@ -49,7 +53,6 @@ vi.mock('./shared', async () => {
     ModelSummaryGrid: () => null,
     CoefficientsBlock: () => null,
     HypothesisTestBlock: () => null,
-    DidEventStudyChart: () => null,
     OmittedVariablesAlert: () => null,
     formatNum: (value: number) => String(value),
     formatNullableNum: (value: number | null | undefined) => String(value),

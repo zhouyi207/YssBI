@@ -24,7 +24,7 @@ use crate::node_system::plan::{EXECUTION_DEMAND_VARIANT_COUNT, ExecutionDemand, 
 use crate::node_system::protocol::{NodeTypeId, ParameterKey, PortKey};
 use crate::node_system::registry::{NodeRegistry, canonical_semantic_protocol_snapshot};
 use crate::node_system::runtime::{
-    GraphRunIdentity, OrdinaryRunErrorCode, RUN_EVENT_KIND_VARIANT_COUNT, ResultId,
+    GraphRunIdentity, OrdinaryRunErrorCode, PlotKind, RUN_EVENT_KIND_VARIANT_COUNT, ResultId,
     RunErrorOutcome, RunEvent, RunEventKind, RunOutputEvent, RunOutputMessage, RunOutputStatus,
     RunOutputStatusEvent, RunOutputStream, RunPhase,
 };
@@ -734,6 +734,10 @@ fn contracts() -> BTreeMap<&'static str, Value> {
         ("fingerprint-wire.json", fingerprint_wire),
         ("project-events.json", project_events_contract()),
         ("execution-wire.json", execution_wire_contract(&registry)),
+        (
+            "plot-payloads.json",
+            json!({ "payloads": PlotKind::payload_contract_records() }),
+        ),
     ])
 }
 
@@ -1061,6 +1065,7 @@ fn checked_in_node_system_contracts_match_rust() {
         "catalog-search-wire.json",
         "project-events.json",
         "execution-wire.json",
+        "plot-payloads.json",
     ] {
         assert!(
             contracts.contains_key(required),

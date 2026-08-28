@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { toWorksheetChartModel } from '@/features/application/worksheet/toWorksheetChartModel';
 import { toErrorReference } from '@/services/ipc';
 import { fetchWorksheetPreview } from '@/services/worksheet/worksheetDataService';
 import { getCachedWorksheetPreview, getWorksheetPreview } from '@/services/worksheet/worksheetPreviewCache';
+import { ChartRenderer } from '@/shared/charts/ChartRenderer';
 import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
-import Scatter from '@/views/PlotView/Scatter';
-import Line from '@/views/PlotView/Line';
-import Histogram from '@/views/PlotView/Histogram';
 import { WorksheetEmptyState } from './WorksheetEmptyState';
 import {
   assertCurrentProjectIdentity,
@@ -43,6 +42,34 @@ function WorksheetPreviewError({ error }: { error: WorksheetPreviewErrorPayload 
           ) : null}
         </AlertDescription>
       </Alert>
+    </div>
+  );
+}
+
+function WorksheetPreviewContent({
+  preview,
+  loading,
+}: {
+  preview: WorksheetPreviewPayload;
+  loading: boolean;
+}) {
+  if (preview.kind === 'error') {
+    return <WorksheetPreviewError error={preview} />;
+  }
+  if (preview.kind === 'empty') {
+    return loading ? null : (
+      <div className="absolute inset-0 flex min-h-0">
+        <WorksheetEmptyState />
+      </div>
+    );
+  }
+
+  const model = toWorksheetChartModel(preview);
+  if (!model) return null;
+
+  return (
+    <div data-worksheet-chart-region className="h-full w-full select-none">
+      <ChartRenderer model={model} surface="plain" />
     </div>
   );
 }
@@ -117,37 +144,7 @@ export function WorksheetChartPreview({ worksheetPath, document }: WorksheetChar
       {loading && preview.kind !== 'empty' && (
         <div className="pointer-events-none absolute inset-0 z-10 bg-[var(--workbench-bg)]/40" />
       )}
-      {preview.kind === 'error' && <WorksheetPreviewError error={preview} />}
-      {preview.kind === 'empty' && !loading && (
-        <div className="absolute inset-0 flex min-h-0">
-          <WorksheetEmptyState />
-        </div>
-      )}
-      {(preview.kind === 'histogram' || preview.kind === 'scatter' || preview.kind === 'line') && (
-        <div data-worksheet-chart-region className="h-full w-full select-none">
-          {preview.kind === 'histogram' ? (
-            <Histogram data={preview.bins} xLabel={preview.xLabel} yLabel={preview.yLabel} embedded />
-          ) : preview.kind === 'line' ? (
-            <Line
-              data={preview.pair.data}
-              xLabel={preview.pair.xLabel}
-              yLabel={preview.pair.yLabel}
-              xFormat={preview.pair.xFormat}
-              yFormat={preview.pair.yFormat}
-              embedded
-            />
-          ) : (
-            <Scatter
-              data={preview.pair.data}
-              xLabel={preview.pair.xLabel}
-              yLabel={preview.pair.yLabel}
-              xFormat={preview.pair.xFormat}
-              yFormat={preview.pair.yFormat}
-              embedded
-            />
-          )}
-        </div>
-      )}
+      <WorksheetPreviewContent preview={preview} loading={loading} />
     </div>
   );
 }

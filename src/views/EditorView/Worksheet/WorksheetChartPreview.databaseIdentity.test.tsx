@@ -6,14 +6,15 @@ import { projectPublicationCoordinator } from '@/features/application/editorMuta
 import { clearWorksheetPreviewCache } from '@/services/worksheet/worksheetPreviewCache';
 import { fetchWorksheetPreview } from '@/services/worksheet/worksheetDataService';
 import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
+import type { ChartModel } from '@/shared/types/visualization';
 import { WorksheetChartPreview } from './WorksheetChartPreview';
 
 vi.mock('@/services/worksheet/worksheetDataService', () => ({ fetchWorksheetPreview: vi.fn() }));
-vi.mock('@/views/PlotView/Scatter', () => ({
-  default: ({ data }: { data: Array<{ x: number; y: number }> }) => <div>{`scatter:${data[0]?.x}`}</div>,
+vi.mock('@/shared/charts/ChartRenderer', () => ({
+  ChartRenderer: ({ model }: { model: ChartModel }) => (
+    <div>{model.kind === 'scatter' ? `scatter:${model.points[0]?.x}` : model.kind}</div>
+  ),
 }));
-vi.mock('@/views/PlotView/Line', () => ({ default: () => <div>line</div> }));
-vi.mock('@/views/PlotView/Histogram', () => ({ default: () => <div>histogram</div> }));
 vi.mock('./WorksheetEmptyState', () => ({ WorksheetEmptyState: () => <div>empty</div> }));
 
 const projectA = '00000000-0000-0000-0000-000000000601';
