@@ -1,14 +1,87 @@
-import type { ExecutionReadSnapshot } from '@/features/core/execution/read';
-import type { ExecutionPublicationCapability } from '@/features/core/execution/publication';
+import type { ExecutionProjectionPublication } from '@/features/core/execution/publication';
+import type { ExecutionUi } from '@/features/core/execution/ui';
+import type {
+  RunEvent,
+  RunOutputChannelEvent,
+} from '@/shared/types/dto/runEvent';
+import type { PinHistoryProjection, RecordedEvent } from '@/shared/types/ui/execution';
 
+export type { ExecutionProjectionPublication } from '@/features/core/execution/publication';
+
+export type ExecutionChannelEvent = RunEvent | RunOutputChannelEvent;
+
+export interface ExecutionProjectionCoordinatorDependencies {
+  readonly publication: ExecutionProjectionPublication;
+  readonly ui?: ExecutionUi;
+}
+
+function isRunEvent(event: ExecutionChannelEvent): event is RunEvent {
+  return 'run' in event && 'kind' in event;
+}
+
+function isTerminalRunEvent(event: RunEvent): boolean {
+  return event.kind.type === 'runCompleted'
+    || event.kind.type === 'runErrored'
+    || event.kind.type === 'runCancelled';
+}
+
+/**
+ * Application-owned ingress for the ordered run channel.
+ *
+ * The coordinator forwards already parsed events in call order. It owns no
+ * window side effect: an inspection request remains a neutral RunEvent for
+ * the Presentation handler that owns that workflow.
+ */
 export class ExecutionProjectionCoordinator {
-  constructor(private readonly publication: ExecutionPublicationCapability) {}
+  private readonly publication: ExecutionProjectionPublication;
+  private readonly ui: ExecutionUi | undefined;
 
-  publish(snapshot: ExecutionReadSnapshot): void {
-    this.publication.publishExecution(snapshot);
+  constructor(dependencies: ExecutionProjectionCoordinatorDependencies) {
+    this.publication = dependencies.publication;
+    this.ui = dependencies.ui;
   }
 
-  reset(): void {
-    this.publication.resetExecution();
+  publish(event: ExecutionChannelEvent): void {
+    if (isRunEvent(event)) {
+      this.publishRunEvent(event);
+      return;
+    }
+    this.publishRunOutput(event);
+  }
+
+  publishRunEvent(event: RunEvent): void {
+    if (event.kind.type === 'runStarted') {
+      this.publication.startRun(event.run.graphPath, event.run.runId);
+      return;
+    }
+
+    this.publication.applyRunEvent(event);
+    if (isTerminalRunEvent(event)) {
+      this.publication.finishRun(event.run.graphPath);
+    }
+  }
+
+  publishRunOutput(event: RunOutputChannelEvent): void {
+    this.publication.applyRunOutput(event);
+  }
+
+  publishPinHistory(projection: PinHistoryProjection): void {
+    this.publication.applyPinHistory(projection);
+  }
+
+  clearForProject(projectInstanceId: string | null): void {
+    this.publication.clearForProject(projectInstanceId);
+  }
+
+  setRecording(graphPath: string, recording: readonly RecordedEvent[]): void {
+    this.ui?.setRecording(graphPath, recording);
+  }
+
+  setPlaying(playing: boolean, graphPath?: string): void {
+    this.ui?.setPlaying(playing, graphPath);
+  }
+
+  resetVisuals(graphPath: string): void {
+    this.ui?.resetVisuals(graphPath);
   }
 }
