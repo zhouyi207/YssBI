@@ -8,6 +8,7 @@ pub mod session_api;
 pub mod database_instance;
 pub mod database_state;
 pub mod project_storage;
+pub(crate) mod row_mapping;
 pub mod schema_snapshot;
 
 pub mod dataset_overview;
@@ -38,6 +39,8 @@ pub use duckdb_reader::*;
 pub use duckdb_sql::*;
 pub use edit_operation::*;
 pub use export::*;
+
+pub(crate) use row_mapping::dataframe_to_row_matrix;
 
 #[cfg(test)]
 mod foundation_tests;

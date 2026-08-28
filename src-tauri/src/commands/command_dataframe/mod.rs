@@ -1,21 +1,31 @@
-use crate::application::database::{self, DatabaseApplicationError, DatabaseMutation};
+use crate::application::database::{self, ApplicationDatabaseError, DatabaseMutation};
 #[cfg(test)]
 use crate::application::database::{
-    cleanup_export_temporary_file, export_database_for_project_with_before_publish,
+    DatabaseApplicationError, cleanup_export_temporary_file,
+    export_database_for_project_with_before_publish,
 };
 use crate::error::CommandError;
-use crate::event::{Event, EventProject, ResourceMutationCommandResultDto, emit_project_event};
+#[cfg(test)]
+use crate::event::emit_project_event;
+use crate::event::{
+    Event, EventProject, ResourceMutationCommandResultDto, emit_project_event_result,
+};
+use crate::project::ProjectInstanceId;
+#[cfg(test)]
+use crate::project::ProjectState;
 use crate::project::{OperationId, ResourceRevision};
-use crate::project::{ProjectInstanceId, ProjectState};
 use crate::schema::DatabaseImportSourceDTO;
 use tauri::{AppHandle, State};
 
 mod error;
+#[cfg(test)]
 mod types;
 
 use error::database_command_error;
+#[cfg(test)]
 use types::dataframe_to_row_matrix;
 
+#[cfg(test)]
 fn emit_database_result<T>(
     result: &ResourceMutationCommandResultDto<T>,
     mut emit: impl FnMut(Event),
@@ -25,6 +35,7 @@ fn emit_database_result<T>(
     }));
 }
 
+#[cfg(test)]
 fn load_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -51,6 +62,7 @@ fn load_database_with_emitter(
     Ok(result)
 }
 
+#[cfg(test)]
 fn mutate_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -73,6 +85,7 @@ fn mutate_database_with_emitter(
     Ok(result)
 }
 
+#[cfg(test)]
 fn save_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -103,6 +116,7 @@ fn save_database_with_emitter(
     Ok(result)
 }
 
+#[cfg(test)]
 fn delete_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -138,6 +152,73 @@ where
         .map_err(CommandError::internal)?
 }
 
+fn map_application_database_error(error: ApplicationDatabaseError) -> CommandError {
+    match error {
+        ApplicationDatabaseError::SessionCapture(error) => match error {
+            crate::application::execution::SessionCaptureError::Inactive => {
+                CommandError::expected("stale_project_lifecycle")
+            }
+            crate::application::execution::SessionCaptureError::Replacing => {
+                CommandError::expected("project_lifecycle_admission_closed")
+            }
+            crate::application::execution::SessionCaptureError::Recovering => {
+                CommandError::expected("project_recovery_required")
+                    .with_details(serde_json::json!({ "recoveryRequired": true }))
+            }
+        },
+        ApplicationDatabaseError::SessionChanged(error) => {
+            CommandError::diagnosed("database_session_changed", error)
+        }
+        ApplicationDatabaseError::SessionRefresh(error) => {
+            CommandError::diagnosed("database_session_refresh_failed", error)
+        }
+        ApplicationDatabaseError::Database(error) => database_command_error(error),
+    }
+}
+
+fn emit_application_database_result<T>(
+    app: &AppHandle,
+    result: &ResourceMutationCommandResultDto<T>,
+) -> Result<(), CommandError> {
+    emit_project_event_result(
+        app,
+        &Event::Project(EventProject::ResourceMutationCommitted {
+            result: result.mutation.clone(),
+        }),
+    )
+    .map_err(|error| CommandError::diagnosed("database_event_emit_failed", error))
+}
+
+fn serialize_application_database_value<T: serde::Serialize>(
+    value: T,
+) -> Result<serde_json::Value, CommandError> {
+    serde_json::to_value(value)
+        .map_err(|error| CommandError::diagnosed("database_serialization_failed", error))
+}
+
+fn mutate_database_from_application(
+    app: &AppHandle,
+    application: &crate::application::execution::ApplicationState,
+    project_instance_id: ProjectInstanceId,
+    id: String,
+    expected_revision: ResourceRevision,
+    operation_id: OperationId,
+    mutation: DatabaseMutation,
+) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
+    let result = application
+        .mutate_database_for_application(
+            project_instance_id,
+            id,
+            expected_revision,
+            operation_id,
+            mutation,
+        )
+        .map_err(map_application_database_error)?;
+    emit_application_database_result(app, &result)?;
+    Ok(result)
+}
+
+#[cfg(test)]
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DatabaseRowsPayload {
@@ -145,6 +226,7 @@ struct DatabaseRowsPayload {
     row_ids: Vec<i64>,
 }
 
+#[cfg(test)]
 fn serialize_database_value<T: serde::Serialize>(
     value: T,
 ) -> Result<serde_json::Value, CommandError> {
@@ -152,6 +234,7 @@ fn serialize_database_value<T: serde::Serialize>(
         .map_err(|error| CommandError::diagnosed("database_serialization_failed", error))
 }
 
+#[cfg(test)]
 fn get_database_meta_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -162,6 +245,7 @@ fn get_database_meta_for_project(
     serialize_database_value(result)
 }
 
+#[cfg(test)]
 fn get_database_rows_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -177,6 +261,7 @@ fn get_database_rows_for_project(
     })
 }
 
+#[cfg(test)]
 fn get_column_stats_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -187,6 +272,7 @@ fn get_column_stats_for_project(
     serialize_database_value(stats)
 }
 
+#[cfg(test)]
 fn get_column_distribution_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -197,6 +283,7 @@ fn get_column_distribution_for_project(
     serialize_database_value(distributions)
 }
 
+#[cfg(test)]
 fn get_dataset_overview_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -207,6 +294,7 @@ fn get_dataset_overview_for_project(
     serialize_database_value(overview)
 }
 
+#[cfg(test)]
 fn get_edit_state_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -220,7 +308,7 @@ fn get_edit_state_for_project(
 #[tauri::command]
 pub async fn load_database(
     app: AppHandle,
-    state: State<'_, ProjectState>,
+    application: State<'_, crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     engine: DatabaseImportSourceDTO,
@@ -228,11 +316,13 @@ pub async fn load_database(
     ResourceMutationCommandResultDto<crate::application::database::LoadDatabaseResult>,
     CommandError,
 > {
-    let state = state.inner().clone();
+    let application = application.inner().clone();
     run_on_blocking_pool(move || {
-        load_database_with_emitter(&state, project_instance_id, operation_id, engine, |event| {
-            emit_project_event(&app, event)
-        })
+        let result = application
+            .load_database_for_application(project_instance_id, operation_id, engine.into())
+            .map_err(map_application_database_error)?;
+        emit_application_database_result(&app, &result)?;
+        Ok(result)
     })
     .await
 }
@@ -266,36 +356,42 @@ pub async fn list_excel_sheets(file_path: String) -> Result<Vec<String>, Command
 
 #[tauri::command]
 pub fn get_database_meta(
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, CommandError> {
-    get_database_meta_for_project(state.inner(), &project_instance_id, &id)
+    let result = application
+        .query_database_meta_for_application(project_instance_id, id)
+        .map_err(map_application_database_error)?;
+    serialize_application_database_value(result)
 }
 
 #[tauri::command]
 pub async fn delete_database(
     app: AppHandle,
-    state: State<'_, ProjectState>,
+    application: State<'_, crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
 ) -> Result<ResourceMutationCommandResultDto<()>, CommandError> {
-    let state = state.inner().clone();
+    let application = application.inner().clone();
     run_on_blocking_pool(move || {
-        delete_database_with_emitter(
-            &state,
-            project_instance_id,
-            &id,
-            expected_revision,
-            operation_id,
-            |event| emit_project_event(&app, event),
-        )
+        let result = application
+            .delete_database_for_application(
+                project_instance_id,
+                id,
+                expected_revision,
+                operation_id,
+            )
+            .map_err(map_application_database_error)?;
+        emit_application_database_result(&app, &result)?;
+        Ok(result)
     })
     .await
 }
 
+#[cfg(test)]
 fn rename_database_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -331,68 +427,84 @@ fn rename_database_with_emitter(
 #[tauri::command]
 pub fn rename_database(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
     name: String,
     operation_id: OperationId,
 ) -> Result<ResourceMutationCommandResultDto<()>, CommandError> {
-    rename_database_with_emitter(
-        state.inner(),
-        project_instance_id,
-        &id,
-        expected_revision,
-        &name,
-        operation_id,
-        |event| emit_project_event(&app, event),
-    )
+    let result = application
+        .rename_database_for_application(
+            project_instance_id,
+            id,
+            expected_revision,
+            name,
+            operation_id,
+        )
+        .map_err(map_application_database_error)?;
+    emit_application_database_result(&app, &result)?;
+    Ok(result)
 }
 
 #[tauri::command]
 pub fn get_database_rows(
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     offset: usize,
     limit: usize,
 ) -> Result<serde_json::Value, CommandError> {
-    get_database_rows_for_project(state.inner(), &project_instance_id, &id, offset, limit)
+    let result = application
+        .query_database_rows_for_application(project_instance_id, id, offset, limit)
+        .map_err(map_application_database_error)?;
+    serialize_application_database_value(result)
 }
 
 #[tauri::command]
 pub async fn get_column_stats(
-    state: State<'_, ProjectState>,
+    application: State<'_, crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, CommandError> {
-    let state = state.inner().clone();
-    run_on_blocking_pool(move || get_column_stats_for_project(&state, &project_instance_id, &id))
-        .await
+    let application = application.inner().clone();
+    run_on_blocking_pool(move || {
+        let result = application
+            .query_column_stats_for_application(project_instance_id, id)
+            .map_err(map_application_database_error)?;
+        serialize_application_database_value(result)
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn get_column_distribution(
-    state: State<'_, ProjectState>,
+    application: State<'_, crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, CommandError> {
-    let state = state.inner().clone();
+    let application = application.inner().clone();
     run_on_blocking_pool(move || {
-        get_column_distribution_for_project(&state, &project_instance_id, &id)
+        let result = application
+            .query_column_distributions_for_application(project_instance_id, id)
+            .map_err(map_application_database_error)?;
+        serialize_application_database_value(result)
     })
     .await
 }
 
 #[tauri::command]
 pub async fn get_dataset_overview(
-    state: State<'_, ProjectState>,
+    application: State<'_, crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, CommandError> {
-    let state = state.inner().clone();
+    let application = application.inner().clone();
     run_on_blocking_pool(move || {
-        get_dataset_overview_for_project(&state, &project_instance_id, &id)
+        let result = application
+            .query_dataset_overview_for_application(project_instance_id, id)
+            .map_err(map_application_database_error)?;
+        serialize_application_database_value(result)
     })
     .await
 }
@@ -402,7 +514,7 @@ pub async fn get_dataset_overview(
 #[tauri::command]
 pub fn edit_cell(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -412,10 +524,11 @@ pub fn edit_cell(
     value: serde_json::Value,
     row_id: Option<i64>,
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    mutate_database_with_emitter(
-        state.inner(),
+    mutate_database_from_application(
+        &app,
+        application.inner(),
         project_instance_id,
-        &id,
+        id,
         expected_revision,
         operation_id,
         DatabaseMutation::EditCell {
@@ -424,35 +537,34 @@ pub fn edit_cell(
             value,
             row_id,
         },
-        |event| emit_project_event(&app, event),
     )
 }
 
 #[tauri::command]
 pub fn add_row(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     index: Option<usize>,
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    mutate_database_with_emitter(
-        state.inner(),
+    mutate_database_from_application(
+        &app,
+        application.inner(),
         project_instance_id,
-        &id,
+        id,
         expected_revision,
         operation_id,
         DatabaseMutation::AddRow { index },
-        |event| emit_project_event(&app, event),
     )
 }
 
 #[tauri::command]
 pub fn delete_rows(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -460,21 +572,21 @@ pub fn delete_rows(
     indices: Vec<usize>,
     row_ids: Option<Vec<i64>>,
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    mutate_database_with_emitter(
-        state.inner(),
+    mutate_database_from_application(
+        &app,
+        application.inner(),
         project_instance_id,
-        &id,
+        id,
         expected_revision,
         operation_id,
         DatabaseMutation::DeleteRows { indices, row_ids },
-        |event| emit_project_event(&app, event),
     )
 }
 
 #[tauri::command]
 pub fn add_column(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -482,42 +594,42 @@ pub fn add_column(
     name: String,
     dtype: String,
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    mutate_database_with_emitter(
-        state.inner(),
+    mutate_database_from_application(
+        &app,
+        application.inner(),
         project_instance_id,
-        &id,
+        id,
         expected_revision,
         operation_id,
         DatabaseMutation::AddColumn { name, dtype },
-        |event| emit_project_event(&app, event),
     )
 }
 
 #[tauri::command]
 pub fn delete_column(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
     name: String,
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    mutate_database_with_emitter(
-        state.inner(),
+    mutate_database_from_application(
+        &app,
+        application.inner(),
         project_instance_id,
-        &id,
+        id,
         expected_revision,
         operation_id,
         DatabaseMutation::DeleteColumn { name },
-        |event| emit_project_event(&app, event),
     )
 }
 
 #[tauri::command]
 pub fn cast_column(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -526,10 +638,11 @@ pub fn cast_column(
     new_dtype: String,
     force: Option<bool>,
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    mutate_database_with_emitter(
-        state.inner(),
+    mutate_database_from_application(
+        &app,
+        application.inner(),
         project_instance_id,
-        &id,
+        id,
         expected_revision,
         operation_id,
         DatabaseMutation::CastColumn {
@@ -537,14 +650,13 @@ pub fn cast_column(
             dtype: new_dtype,
             force: force.unwrap_or(false),
         },
-        |event| emit_project_event(&app, event),
     )
 }
 
 #[tauri::command]
 pub fn rename_column(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
@@ -552,101 +664,102 @@ pub fn rename_column(
     old_name: String,
     new_name: String,
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    mutate_database_with_emitter(
-        state.inner(),
+    mutate_database_from_application(
+        &app,
+        application.inner(),
         project_instance_id,
-        &id,
+        id,
         expected_revision,
         operation_id,
         DatabaseMutation::RenameColumn { old_name, new_name },
-        |event| emit_project_event(&app, event),
     )
 }
 
 #[tauri::command]
 pub fn undo_edit(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    mutate_database_with_emitter(
-        state.inner(),
+    mutate_database_from_application(
+        &app,
+        application.inner(),
         project_instance_id,
-        &id,
+        id,
         expected_revision,
         operation_id,
         DatabaseMutation::Undo,
-        |event| emit_project_event(&app, event),
     )
 }
 
 #[tauri::command]
 pub fn redo_edit(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    mutate_database_with_emitter(
-        state.inner(),
+    mutate_database_from_application(
+        &app,
+        application.inner(),
         project_instance_id,
-        &id,
+        id,
         expected_revision,
         operation_id,
         DatabaseMutation::Redo,
-        |event| emit_project_event(&app, event),
     )
 }
 
 #[tauri::command]
 pub fn save_database_changes(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     expected_revision: ResourceRevision,
     operation_id: OperationId,
 ) -> Result<ResourceMutationCommandResultDto<crate::database::EditState>, CommandError> {
-    save_database_with_emitter(
-        state.inner(),
-        project_instance_id,
-        &id,
-        expected_revision,
-        operation_id,
-        |event| emit_project_event(&app, event),
-    )
+    let result = application
+        .save_database_for_application(project_instance_id, id, expected_revision, operation_id)
+        .map_err(map_application_database_error)?;
+    emit_application_database_result(&app, &result)?;
+    Ok(result)
 }
 
 /// Export the current dataset view (including unsaved in-memory edits) to an external file.
 /// Use `save_database_changes` to persist edits into `project.duckdb`.
 #[tauri::command]
 pub async fn export_database(
-    state: State<'_, ProjectState>,
+    application: State<'_, crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
     path: String,
     format: String,
 ) -> Result<(), CommandError> {
-    let state = state.inner().clone();
+    let application = application.inner().clone();
     run_on_blocking_pool(move || {
-        database::export_database_for_project(&state, &project_instance_id, &id, &path, &format)
-            .map_err(database_command_error)
+        application
+            .export_database_for_application(project_instance_id, id, path, format)
+            .map_err(map_application_database_error)
     })
     .await
 }
 
 #[tauri::command]
 pub fn get_edit_state(
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     id: String,
 ) -> Result<serde_json::Value, CommandError> {
-    get_edit_state_for_project(state.inner(), &project_instance_id, &id)
+    let result = application
+        .query_database_edit_state_for_application(project_instance_id, id)
+        .map_err(map_application_database_error)?;
+    serialize_application_database_value(result)
 }
 
 #[cfg(test)]

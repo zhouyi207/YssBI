@@ -1,4 +1,7 @@
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use thiserror::Error;
 
 mod error;
 
@@ -9,6 +12,10 @@ pub use crate::application::database_schema::name_from_path;
 use crate::application::database_schema::{
     DatabaseSchemaSnapshot, database_display_name, extract_database_schema,
 };
+use crate::application::execution::session_slot::{
+    ApplicationSession, ApplicationSessionRefreshError, ApplicationState, SessionCaptureError,
+    SessionRevalidationError,
+};
 use crate::database::schema_snapshot::DatabaseSchemaFact;
 use crate::database::{
     DatabaseExportFormat, DatabaseInstance, DatabaseState, ingest_csv_to_duckdb,
@@ -18,8 +25,8 @@ use crate::database::{
 use crate::database::{EditHistory, EditState};
 use crate::database_contract::{DatabaseDecl, DatabaseEngine, DatabaseEngineSql, DatabaseId};
 use crate::project::{
-    ProjectDatabaseError, ProjectFilesystemError, ProjectInstanceId, ProjectSession, ProjectState,
-    relative_project_duckdb_path, unique_name,
+    OperationId, ProjectDatabaseError, ProjectFilesystemError, ProjectInstanceId, ProjectSession,
+    ProjectState, ResourceRevision, relative_project_duckdb_path, unique_name,
 };
 use crate::schema::{ColumnInfoDTO, DatabaseEngineDTO, column_info_from_schema};
 use serde::Serialize;
@@ -67,10 +74,286 @@ pub struct DatabaseMetaResult {
     pub columns: Vec<ColumnInfoDTO>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseRowsResult {
+    pub rows: Vec<Vec<serde_json::Value>>,
+    pub row_ids: Vec<i64>,
+}
+
+#[derive(Debug, Error)]
+pub enum ApplicationDatabaseError {
+    #[error(transparent)]
+    SessionCapture(#[from] SessionCaptureError),
+    #[error("captured application session changed during database operation")]
+    SessionChanged(#[source] SessionRevalidationError),
+    #[error("application database session refresh failed")]
+    SessionRefresh(#[source] ApplicationSessionRefreshError),
+    #[error(transparent)]
+    Database(#[from] DatabaseApplicationError),
+}
+
 #[derive(Clone, Copy)]
 struct DatabaseCreateRequest<'a> {
     project_instance_id: &'a crate::project::ProjectInstanceId,
     operation_id: crate::project::OperationId,
+}
+
+impl ApplicationState {
+    pub fn load_database_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        operation_id: OperationId,
+        engine: DatabaseEngineDTO,
+    ) -> Result<
+        crate::event::ResourceMutationCommandResultDto<LoadDatabaseResult>,
+        ApplicationDatabaseError,
+    > {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = load_database(
+            captured.project(),
+            &project_instance_id,
+            operation_id,
+            engine,
+        )
+        .map_err(|error| {
+            DatabaseApplicationError::from_project_database(
+                error,
+                DatabaseApplicationOperation::Load,
+                &project_instance_id,
+                None,
+                None,
+                None,
+            )
+        })?;
+        self.refresh_database_session()?;
+        Ok(result)
+    }
+
+    pub fn rename_database_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        expected_revision: ResourceRevision,
+        name: String,
+        operation_id: OperationId,
+    ) -> Result<crate::event::ResourceMutationCommandResultDto<()>, ApplicationDatabaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = rename_database(
+            captured.project(),
+            &project_instance_id,
+            &id,
+            expected_revision,
+            &name,
+            operation_id,
+        )
+        .map_err(|error| {
+            DatabaseApplicationError::from_project_database(
+                error,
+                DatabaseApplicationOperation::Rename,
+                &project_instance_id,
+                Some(&id),
+                Some(expected_revision),
+                Some(name.trim()),
+            )
+        })?;
+        self.refresh_database_session()?;
+        Ok(result)
+    }
+
+    pub fn delete_database_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+    ) -> Result<crate::event::ResourceMutationCommandResultDto<()>, ApplicationDatabaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = captured
+            .project()
+            .delete_database(&project_instance_id, &id, expected_revision, operation_id)
+            .map_err(|error| {
+                DatabaseApplicationError::from_project_database(
+                    error,
+                    DatabaseApplicationOperation::Delete,
+                    &project_instance_id,
+                    Some(&id),
+                    Some(expected_revision),
+                    None,
+                )
+            })?;
+        self.refresh_database_session()?;
+        Ok(result)
+    }
+
+    pub fn mutate_database_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+        mutation: DatabaseMutation,
+    ) -> Result<crate::event::ResourceMutationCommandResultDto<EditState>, ApplicationDatabaseError>
+    {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = mutate_database_resource(
+            captured.project(),
+            &project_instance_id,
+            &id,
+            expected_revision,
+            operation_id,
+            mutation,
+        )?;
+        self.refresh_database_session()?;
+        Ok(result)
+    }
+
+    pub fn save_database_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        expected_revision: ResourceRevision,
+        operation_id: OperationId,
+    ) -> Result<crate::event::ResourceMutationCommandResultDto<EditState>, ApplicationDatabaseError>
+    {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = save_database_changes(
+            captured.project(),
+            &project_instance_id,
+            &id,
+            expected_revision,
+            operation_id,
+        )
+        .map_err(|error| {
+            DatabaseApplicationError::from_project_database(
+                error,
+                DatabaseApplicationOperation::Save,
+                &project_instance_id,
+                Some(&id),
+                Some(expected_revision),
+                None,
+            )
+        })?;
+        self.refresh_database_session()?;
+        Ok(result)
+    }
+
+    pub fn query_database_meta_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+    ) -> Result<DatabaseMetaResult, ApplicationDatabaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = read_database_meta(captured.project(), &project_instance_id, &id)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ApplicationDatabaseError::SessionChanged)?;
+        Ok(result)
+    }
+
+    pub fn query_database_rows_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        offset: usize,
+        limit: usize,
+    ) -> Result<DatabaseRowsResult, ApplicationDatabaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result =
+            read_database_rows(captured.project(), &project_instance_id, &id, offset, limit)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ApplicationDatabaseError::SessionChanged)?;
+        Ok(DatabaseRowsResult {
+            rows: crate::database::dataframe_to_row_matrix(&result.dataframe),
+            row_ids: result.row_ids,
+        })
+    }
+
+    pub fn query_column_stats_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+    ) -> Result<Vec<crate::database::ColumnStats>, ApplicationDatabaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = read_column_statistics(captured.project(), &project_instance_id, &id)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ApplicationDatabaseError::SessionChanged)?;
+        Ok(result)
+    }
+
+    pub fn query_column_distributions_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+    ) -> Result<Vec<crate::database::ColumnDistribution>, ApplicationDatabaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = read_column_distributions(captured.project(), &project_instance_id, &id)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ApplicationDatabaseError::SessionChanged)?;
+        Ok(result)
+    }
+
+    pub fn query_dataset_overview_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+    ) -> Result<crate::database::DatasetOverview, ApplicationDatabaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = read_dataset_overview(captured.project(), &project_instance_id, &id)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ApplicationDatabaseError::SessionChanged)?;
+        Ok(result)
+    }
+
+    pub fn query_database_edit_state_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+    ) -> Result<EditState, ApplicationDatabaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        let result = read_database_edit_state(captured.project(), &project_instance_id, &id)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ApplicationDatabaseError::SessionChanged)?;
+        Ok(result)
+    }
+
+    pub fn export_database_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        id: String,
+        path: String,
+        format: String,
+    ) -> Result<(), ApplicationDatabaseError> {
+        let captured = self.capture_database_session(&project_instance_id)?;
+        export_database_for_project(
+            captured.project(),
+            &project_instance_id,
+            &id,
+            &path,
+            &format,
+        )?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ApplicationDatabaseError::SessionChanged)
+    }
+
+    fn capture_database_session(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+    ) -> Result<Arc<ApplicationSession>, ApplicationDatabaseError> {
+        let captured = self.capture_session()?;
+        if captured.project_instance_id() != project_instance_id {
+            return Err(ApplicationDatabaseError::Database(
+                DatabaseApplicationError::StaleProject {
+                    project_instance_id: project_instance_id.clone(),
+                },
+            ));
+        }
+        Ok(captured)
+    }
+
+    fn refresh_database_session(&self) -> Result<(), ApplicationDatabaseError> {
+        self.refresh_current_project()
+            .map_err(ApplicationDatabaseError::SessionRefresh)
+    }
 }
 
 pub fn load_database(
