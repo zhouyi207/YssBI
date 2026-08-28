@@ -18,6 +18,10 @@ pub struct ReadyResult {
 }
 
 impl ReadyResult {
+    pub(in crate::execution) fn from_scheduler(result_id: ResultId, value: StoredResult) -> Self {
+        Self { result_id, value }
+    }
+
     pub fn result_id(&self) -> ResultId {
         self.result_id
     }
@@ -34,6 +38,10 @@ pub struct CandidateEffectProjection {
 }
 
 impl CandidateEffectProjection {
+    pub(in crate::execution) fn from_resource(resource: PlanResourceId) -> Self {
+        Self { resource }
+    }
+
     pub fn resource(&self) -> &PlanResourceId {
         &self.resource
     }
@@ -59,6 +67,24 @@ pub(in crate::execution) struct SealedCandidateGrant {
     access: ResourceAccess,
 }
 
+impl SealedCandidateGrant {
+    pub(in crate::execution) fn new(
+        compile_id: PlanCompileId,
+        resource: PlanResourceId,
+        version: PlanResourceVersion,
+        kind: ResourceKind,
+        access: ResourceAccess,
+    ) -> Self {
+        Self {
+            compile_id,
+            resource,
+            version,
+            kind,
+            access,
+        }
+    }
+}
+
 #[derive(Debug)]
 #[allow(
     dead_code,
@@ -66,6 +92,12 @@ pub(in crate::execution) struct SealedCandidateGrant {
 )]
 pub(in crate::execution) struct SealedCandidateGrantSet {
     grants: Box<[SealedCandidateGrant]>,
+}
+
+impl SealedCandidateGrantSet {
+    pub(in crate::execution) fn new(grants: Box<[SealedCandidateGrant]>) -> Self {
+        Self { grants }
+    }
 }
 
 /// A neutral request to inspect a committed result.

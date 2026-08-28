@@ -119,7 +119,8 @@ fn numeric_binary(
     let left = numeric(left)?;
     let right = numeric(right)?;
     let value = operation(left, right);
-    value.is_finite()
+    value
+        .is_finite()
         .then_some(RuntimeValue::Decimal(value))
         .ok_or(RuntimeValueError::NonFinite)
 }

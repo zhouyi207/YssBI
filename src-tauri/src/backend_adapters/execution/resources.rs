@@ -4,7 +4,7 @@ use crate::database::runtime::DatabaseRuntimeSession;
 use crate::execution::plan::identity::PlanProjectSessionId;
 use crate::execution::resource_preparation::ResourceProviderFactory;
 
-pub fn database_resource_provider_factory(
+pub(crate) fn database_resource_provider_factory(
     _database_session: Arc<DatabaseRuntimeSession>,
     project_session: PlanProjectSessionId,
 ) -> ResourceProviderFactory {

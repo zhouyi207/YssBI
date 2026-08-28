@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
+use crate::execution::value::RuntimeValue;
+
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ResultId(u64);
 
@@ -16,6 +18,7 @@ impl ResultId {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum StoredResult {
+    Runtime(RuntimeValue),
     Scalar(f64),
     Text(Box<str>),
     Empty,

@@ -12,3 +12,4 @@ pub mod result_store;
 pub mod run_registry;
 pub mod settings;
 pub mod state;
+pub mod value;

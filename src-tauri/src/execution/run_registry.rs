@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use thiserror::Error;
 
@@ -34,17 +35,33 @@ pub enum RunRegistryError {
     Missing,
     #[error("run state transition is invalid")]
     InvalidTransition,
+    #[error("run id space is exhausted")]
+    Exhausted,
 }
 
 pub struct RunRegistry {
     states: Mutex<BTreeMap<RunId, RunState>>,
+    next_id: AtomicU64,
 }
 
 impl RunRegistry {
     pub fn new() -> Self {
         Self {
             states: Mutex::new(BTreeMap::new()),
+            next_id: AtomicU64::new(0),
         }
+    }
+
+    pub(crate) fn admit_next(&self) -> Result<RunId, RunRegistryError> {
+        let value = self
+            .next_id
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+                value.checked_add(1)
+            })
+            .map_err(|_| RunRegistryError::Exhausted)?;
+        let run = RunId::from_existing(value);
+        self.admit(run)?;
+        Ok(run)
     }
 
     pub fn admit(&self, run: RunId) -> Result<(), RunRegistryError> {
@@ -75,6 +92,8 @@ impl RunRegistry {
         let valid = matches!(
             (*current, next),
             (RunState::Admitted, RunState::Running)
+                | (RunState::Admitted, RunState::Cancelled)
+                | (RunState::Admitted, RunState::Failed)
                 | (RunState::Running, RunState::Finalizing)
                 | (RunState::Running, RunState::Cancelled)
                 | (RunState::Running, RunState::Failed)
