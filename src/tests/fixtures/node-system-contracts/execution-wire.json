@@ -190,7 +190,12 @@
     {
       "kind": {
         "resultId": "9007199254740993",
-        "type": "openResultWindow"
+        "source": {
+          "graphPath": "functions/Inspect.yssbi-function",
+          "nodeId": "00000000-0000-0000-0000-000000000009",
+          "portAddress": null
+        },
+        "type": "resultInspectionRequested"
       },
       "run": {
         "graphPath": "events/contract.yssbi-event",

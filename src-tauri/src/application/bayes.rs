@@ -4,12 +4,20 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use polars::prelude::{DataFrame, Float64Chunked};
+use polars::prelude::{AnyValue, Column, DataFrame, Float64Chunked, PlSmallStr, Series};
 
+use crate::database::error::{DatabaseDriverError, DatabaseError, DatabaseOperation};
+use crate::database::session_api::{
+    self, DatabaseColumnSelection, DatabaseDataSnapshot, DatabaseDataSnapshotRequest,
+    revalidate_declaration_observations,
+};
 use crate::database::tabular_io::{read_ipc_dataframe, write_csv_dataframe};
+use crate::database_contract::{
+    DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
+    DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseId,
+};
 use crate::error::new_diagnostic_incident_id;
 use crate::julia::worker::JuliaWorkerTaskDirectory;
-use crate::project::{ProjectDatabaseError, ProjectState};
 use crate::sci::api::bayes::{
     AutocorrelationPlotData, AutocorrelationPoint, AutocorrelationSeries, BayesBackend,
     BayesBackendError, BayesBackendRequest, BayesInferenceTask, BayesInputValidationError,
@@ -19,6 +27,22 @@ use crate::sci::api::bayes::{
     ResultArtifactKind, TaskError, TaskProgress, TaskStatus, TracePlotData, TracePoint,
     TraceSeries, draft_to_model_spec, validate_bayes_input_table,
 };
+
+use super::execution::{
+    ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
+};
+
+#[derive(Debug, thiserror::Error)]
+pub enum BayesDatasetLoadError {
+    #[error(transparent)]
+    SessionCapture(#[from] SessionCaptureError),
+    #[error("captured application session changed")]
+    SessionChanged,
+    #[error("Bayesian dataset project authority changed")]
+    ProjectAuthorityChanged { database: DatabaseId },
+    #[error(transparent)]
+    Database(#[from] DatabaseError),
+}
 
 #[derive(Debug)]
 pub enum BayesApplicationError {
@@ -42,7 +66,7 @@ pub enum BayesApplicationError {
     },
     ServiceLockPoisoned,
     DatasetLoadFailed {
-        source: ProjectDatabaseError,
+        source: BayesDatasetLoadError,
     },
     ArtifactReadFailed {
         context: &'static str,
@@ -195,15 +219,72 @@ impl BayesInferenceService {
         self.submit_with_input_table(draft, None)
     }
 
-    pub fn submit_from_project(
+    pub fn submit_from_application(
         &self,
+        application: &ApplicationState,
         draft: BayesModelDraft,
-        project_state: &ProjectState,
     ) -> Result<BayesInferenceTask, BayesApplicationError> {
         let spec = validated_spec(draft)?;
-        let input_table = materialize_input_table(&spec, project_state)?;
+        if spec.dataset().source_type != DatasetSourceType::Table {
+            return Err(BayesApplicationError::DatasetSourceUnsupported);
+        }
+        let captured = application.capture_session().map_err(|source| {
+            BayesApplicationError::DatasetLoadFailed {
+                source: BayesDatasetLoadError::SessionCapture(source),
+            }
+        })?;
+        let database = DatabaseId::from_existing(spec.dataset().source_id.clone().into());
+        let captured_observations = project_database_observations(&captured, &database)?;
+        let required_columns = required_input_columns(&spec)
+            .into_iter()
+            .map(|name| {
+                crate::tabular::contract::TabularColumnName::try_from(name.as_str()).map_err(|_| {
+                    BayesApplicationError::DatasetLoadFailed {
+                        source: BayesDatasetLoadError::Database(DatabaseError::invalid_request(
+                            DatabaseOperation::DataSnapshot,
+                            Some(database.clone()),
+                        )),
+                    }
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_boxed_slice();
+        let snapshot = crate::database::session_api::data_snapshot(
+            captured.database(),
+            DatabaseDataSnapshotRequest {
+                database: database.clone(),
+                columns: DatabaseColumnSelection::Selected(required_columns.clone()),
+                offset: 0,
+                limit: usize::MAX,
+            },
+        )
+        .map_err(|source| BayesApplicationError::DatasetLoadFailed {
+            source: BayesDatasetLoadError::Database(source),
+        })?;
+        let input_table = dataframe_from_snapshot(&snapshot, &required_columns, &database)?;
         validate_bayes_input_table(&spec, &input_table)
             .map_err(BayesApplicationError::InputValidation)?;
+        application
+            .revalidate_captured_session(&captured)
+            .map_err(|error| BayesApplicationError::DatasetLoadFailed {
+                source: match error {
+                    SessionRevalidationError::Unavailable(source) => {
+                        BayesDatasetLoadError::SessionCapture(source)
+                    }
+                    SessionRevalidationError::Changed => BayesDatasetLoadError::SessionChanged,
+                },
+            })?;
+        let current_observations = project_database_observations(&captured, &database)?;
+        if current_observations != captured_observations {
+            return Err(BayesApplicationError::DatasetLoadFailed {
+                source: BayesDatasetLoadError::ProjectAuthorityChanged { database },
+            });
+        }
+        revalidate_declaration_observations(captured.database(), &captured_observations).map_err(
+            |source| BayesApplicationError::DatasetLoadFailed {
+                source: BayesDatasetLoadError::Database(source),
+            },
+        )?;
         self.submit_spec(spec, Some(input_table))
     }
 
@@ -933,25 +1014,6 @@ fn validated_spec(draft: BayesModelDraft) -> Result<BayesModelSpec, BayesApplica
     draft_to_model_spec(draft).map_err(|_| BayesApplicationError::ValidationFailed)
 }
 
-fn materialize_input_table(
-    spec: &BayesModelSpec,
-    project_state: &ProjectState,
-) -> Result<DataFrame, BayesApplicationError> {
-    if spec.dataset().source_type != DatasetSourceType::Table {
-        return Err(BayesApplicationError::DatasetSourceUnsupported);
-    }
-
-    let columns = required_input_columns(spec);
-    let column_refs = columns.iter().map(String::as_str).collect::<Vec<_>>();
-    project_state
-        .with_database_snapshot(&spec.dataset().source_id, |database| {
-            database
-                .load_columns(&column_refs)
-                .map_err(|error| error.to_string())
-        })
-        .map_err(|source| BayesApplicationError::DatasetLoadFailed { source })
-}
-
 fn required_input_columns(spec: &BayesModelSpec) -> Vec<String> {
     let mut columns = spec
         .response()
@@ -965,6 +1027,122 @@ fn required_input_columns(spec: &BayesModelSpec) -> Vec<String> {
         }
     }
     columns
+}
+
+fn project_database_observations(
+    session: &ApplicationSession,
+    database: &DatabaseId,
+) -> Result<DatabaseDeclarationObservationSet, BayesApplicationError> {
+    let data =
+        session
+            .project()
+            .get_data()
+            .map_err(|_| BayesApplicationError::DatasetLoadFailed {
+                source: BayesDatasetLoadError::ProjectAuthorityChanged {
+                    database: database.clone(),
+                },
+            })?;
+    let index = session
+        .project()
+        .read_project_index(session.project_instance_id())
+        .map_err(|_| BayesApplicationError::DatasetLoadFailed {
+            source: BayesDatasetLoadError::ProjectAuthorityChanged {
+                database: database.clone(),
+            },
+        })?;
+    let revisions = index
+        .databases
+        .into_iter()
+        .map(|entry| (entry.id, entry.revision.get()))
+        .collect::<BTreeMap<_, _>>();
+    if !data.databases.contains_key(database.as_str()) {
+        return Err(BayesApplicationError::DatasetLoadFailed {
+            source: BayesDatasetLoadError::ProjectAuthorityChanged {
+                database: database.clone(),
+            },
+        });
+    }
+    DatabaseDeclarationObservationSet::try_from_iter(data.databases.values().map(|declaration| {
+        let revision = revisions.get(declaration.id.as_str()).copied().unwrap_or(0);
+        (
+            declaration.id.clone(),
+            DatabaseDeclarationObservation::new(
+                DatabaseDeclarationRevision::from_existing(revision),
+                DatabaseDeclarationFingerprint::from_decl(declaration),
+            ),
+        )
+    }))
+    .map_err(|_| BayesApplicationError::DatasetLoadFailed {
+        source: BayesDatasetLoadError::ProjectAuthorityChanged {
+            database: database.clone(),
+        },
+    })
+}
+
+fn dataframe_from_snapshot(
+    snapshot: &DatabaseDataSnapshot,
+    required_columns: &[crate::tabular::contract::TabularColumnName],
+    database: &DatabaseId,
+) -> Result<DataFrame, BayesApplicationError> {
+    let columns = snapshot.rows().columns();
+    if columns.len() != required_columns.len()
+        || columns
+            .iter()
+            .zip(required_columns)
+            .any(|(column, required)| column.name() != required)
+    {
+        return Err(BayesApplicationError::DatasetLoadFailed {
+            source: BayesDatasetLoadError::Database(DatabaseError::schema(
+                DatabaseOperation::DataSnapshot,
+                Some(database.clone()),
+            )),
+        });
+    }
+    let series = columns
+        .iter()
+        .map(|column| {
+            let values = column
+                .values()
+                .iter()
+                .map(tabular_scalar_to_any_value)
+                .collect::<Vec<_>>();
+            Series::from_any_values(PlSmallStr::from(column.name().as_str()), &values, false)
+                .map(Column::from)
+                .map_err(|error| BayesApplicationError::DatasetLoadFailed {
+                    source: BayesDatasetLoadError::Database(DatabaseError::driver(
+                        DatabaseOperation::DataSnapshot,
+                        Some(database.clone()),
+                        DatabaseDriverError::Polars(error),
+                    )),
+                })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    DataFrame::new(snapshot.rows().row_count(), series).map_err(|error| {
+        BayesApplicationError::DatasetLoadFailed {
+            source: BayesDatasetLoadError::Database(DatabaseError::driver(
+                DatabaseOperation::DataSnapshot,
+                Some(database.clone()),
+                DatabaseDriverError::Polars(error),
+            )),
+        }
+    })
+}
+
+fn tabular_scalar_to_any_value(
+    value: &crate::tabular::contract::TabularScalar,
+) -> AnyValue<'static> {
+    match value {
+        crate::tabular::contract::TabularScalar::Null => AnyValue::Null,
+        crate::tabular::contract::TabularScalar::Bool(value) => AnyValue::Boolean(*value),
+        crate::tabular::contract::TabularScalar::Integer(value) => AnyValue::Int64(*value),
+        crate::tabular::contract::TabularScalar::Unsigned(value) => AnyValue::UInt64(*value),
+        crate::tabular::contract::TabularScalar::Decimal(value) => {
+            AnyValue::Float64(value.as_f64())
+        }
+        crate::tabular::contract::TabularScalar::String(value) => {
+            AnyValue::StringOwned(value.to_string().into())
+        }
+    }
 }
 
 fn new_task_id() -> String {

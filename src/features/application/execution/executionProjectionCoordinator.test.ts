@@ -13,9 +13,17 @@ const run = {
 };
 
 const start: RunEvent = { run, kind: { type: 'runStarted' } };
-const openResult: RunEvent = {
+const inspection: RunEvent = {
   run,
-  kind: { type: 'openResultWindow', resultId: '17' },
+  kind: {
+    type: 'resultInspectionRequested',
+    resultId: '17',
+    source: {
+      graphPath: 'functions/Inspect.yssbi-function',
+      nodeId: null,
+      portAddress: null,
+    },
+  },
 };
 const complete: RunEvent = { run, kind: { type: 'runCompleted' } };
 const output: RunOutputChannelEvent = {
@@ -51,7 +59,7 @@ describe('ExecutionProjectionCoordinator', () => {
 
     coordinator.publish(start);
     coordinator.publish(output);
-    coordinator.publish(openResult);
+    coordinator.publish(inspection);
     coordinator.publish(complete);
     coordinator.setRecording(run.graphPath, []);
     coordinator.setPlaying(true, run.graphPath);
@@ -60,7 +68,7 @@ describe('ExecutionProjectionCoordinator', () => {
     expect(calls).toEqual([
       `start:${run.graphPath}:run-1`,
       'output:1',
-      'event:openResultWindow',
+      'event:resultInspectionRequested',
       'event:runCompleted',
       `finish:${run.graphPath}`,
       `recording:${run.graphPath}:0`,

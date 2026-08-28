@@ -290,7 +290,7 @@ export function useProjectOperations() {
         (event) => {
           if (!isCurrentProjectIdentity(project)) return;
           observeGraphRunEvent(graphPath, event, runState);
-          if (event.kind.type === 'openResultWindow') {
+          if (event.kind.type === 'resultInspectionRequested') {
             void openInspectableResult(resultRef(event.kind.resultId), t);
           }
         },

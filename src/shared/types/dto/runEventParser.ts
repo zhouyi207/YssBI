@@ -22,6 +22,7 @@ import {
   type RunEventKind,
   type RunOutputChannelEvent,
   type RunPhase,
+  type ResultInspectionSource,
 } from './runEvent';
 
 type UnknownRecord = Record<string, unknown>;
@@ -169,6 +170,21 @@ function parseGraphRunIdentityDto(value: unknown): GraphRunIdentityDto {
   };
 }
 
+function parseResultInspectionSource(value: unknown): ResultInspectionSource {
+  if (!isRecord(value)
+    || !hasExactKeys(value, ['graphPath', 'nodeId', 'portAddress'])
+    || !isGraphResourcePath(value.graphPath)
+    || !(value.nodeId === null || isUuid(value.nodeId))
+    || !(value.portAddress === null || typeof value.portAddress === 'string')) {
+    return fail('result inspection source');
+  }
+  return {
+    graphPath: value.graphPath,
+    nodeId: value.nodeId,
+    portAddress: value.portAddress,
+  };
+}
+
 function parseRunEventKind(value: unknown): RunEventKind {
   if (!isRecord(value)) return fail('run event kind');
   const type = parseDiscriminant(value.type, RUN_EVENT_KIND_TYPES, 'run event kind variant');
@@ -197,11 +213,16 @@ function parseRunEventKind(value: unknown): RunEventKind {
         generation: value.generation,
         resultId: value.resultId,
       };
-    case 'openResultWindow':
-      if (!hasExactKeys(value, ['type', 'resultId']) || !isPositiveDecimalId(value.resultId)) {
-        return fail('openResultWindow');
+    case 'resultInspectionRequested':
+      if (!hasExactKeys(value, ['type', 'resultId', 'source'])
+        || !isPositiveDecimalId(value.resultId)) {
+        return fail('resultInspectionRequested');
       }
-      return { type: 'openResultWindow', resultId: value.resultId };
+      return {
+        type: 'resultInspectionRequested',
+        resultId: value.resultId,
+        source: parseResultInspectionSource(value.source),
+      };
     default:
       return assertNever(type);
   }

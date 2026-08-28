@@ -155,7 +155,7 @@ pub(crate) const RUN_EVENT_KIND_DTO_WIRE_TYPES: [&str; 6] = [
     "runErrored",
     "runCancelled",
     "pinPreviewResultReady",
-    "openResultWindow",
+    "resultInspectionRequested",
 ];
 
 #[derive(Debug)]
@@ -212,9 +212,6 @@ pub(crate) enum RunEventKindDto {
         generation: u64,
         result_id: String,
     },
-    OpenResultWindow {
-        result_id: String,
-    },
     ResultInspectionRequested {
         result_id: String,
         source: ResultInspectionSourceDto,
@@ -235,6 +232,7 @@ pub enum RunEventDtoError {
     InvalidOutput,
 }
 
+#[cfg(test)]
 impl TryFrom<RunEventKind> for RunEventKindDto {
     type Error = RunEventDtoError;
 
@@ -260,8 +258,13 @@ impl TryFrom<RunEventKind> for RunEventKindDto {
                     result_id: result_id.get().to_string(),
                 })
             }
-            RunEventKind::OpenResultWindow { result_id } => Ok(Self::OpenResultWindow {
+            RunEventKind::OpenResultWindow { result_id } => Ok(Self::ResultInspectionRequested {
                 result_id: result_id.get().to_string(),
+                source: ResultInspectionSourceDto {
+                    graph_path: "functions/unknown.yssbi-function".into(),
+                    node_id: None,
+                    port_address: None,
+                },
             }),
         }
     }
@@ -274,6 +277,7 @@ pub struct RunEventDto {
     kind: RunEventKindDto,
 }
 
+#[cfg(test)]
 impl TryFrom<RunEvent> for RunEventDto {
     type Error = RunEventDtoError;
 
@@ -495,6 +499,7 @@ pub enum ExecutionChannelEventDto {
     RunOutputStatus(RunOutputStatusEventDto),
 }
 
+#[cfg(test)]
 impl TryFrom<RunEvent> for ExecutionChannelEventDto {
     type Error = RunEventDtoError;
 
@@ -515,6 +520,7 @@ impl TryFrom<crate::application::execution::run_graph::RunApplicationEvent>
     }
 }
 
+#[cfg(test)]
 impl From<RunOutputMessage> for ExecutionChannelEventDto {
     fn from(message: RunOutputMessage) -> Self {
         match message {

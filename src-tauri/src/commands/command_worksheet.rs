@@ -1,3 +1,6 @@
+use crate::application::execution::{ApplicationState, SessionCaptureError};
+use crate::application::worksheet_plot::{WorksheetPlotApplicationError, WorksheetPlotQuery};
+#[cfg(test)]
 use crate::database::DatabaseInstance;
 use crate::error::CommandError;
 use crate::event::{Event, EventProject, ResourceMutationResultDto, emit_project_event};
@@ -6,11 +9,19 @@ use crate::project::{
     ProjectFilesystemError, ProjectInstanceId, ProjectState, ResourceName, WorksheetDocument,
     WorksheetResourcePath,
 };
+#[cfg(test)]
 use polars::prelude::{DataType as PDataType, Series};
 use serde::Serialize;
 use tauri::{AppHandle, State};
 
+#[cfg(test)]
 const DEFAULT_MAX_PLOT_POINTS: usize = 10_000;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryRequiredDetails {
+    recovery_required: bool,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +44,7 @@ fn database_computation_error(error: impl std::fmt::Display + std::fmt::Debug) -
     CommandError::diagnosed("database_computation_failed", error)
 }
 
+#[cfg(test)]
 fn series_to_plot_f64(s: &Series) -> Result<Series, CommandError> {
     let dt = s.dtype();
     let casted = if matches!(dt, PDataType::Date) {
@@ -57,6 +69,7 @@ fn series_to_plot_f64(s: &Series) -> Result<Series, CommandError> {
     Ok(casted)
 }
 
+#[cfg(test)]
 fn plot_format_for_series(series: &Series) -> &'static str {
     match series.dtype() {
         dt if matches!(dt, PDataType::Date) => "date",
@@ -65,6 +78,7 @@ fn plot_format_for_series(series: &Series) -> &'static str {
     }
 }
 
+#[cfg(test)]
 fn subsample_points<T>(mut data: Vec<T>, max_points: usize) -> Vec<T> {
     if data.len() <= max_points {
         return data;
@@ -81,6 +95,7 @@ fn subsample_points<T>(mut data: Vec<T>, max_points: usize) -> Vec<T> {
         .collect()
 }
 
+#[cfg(test)]
 fn compute_plot_column_pair(
     db: &mut DatabaseInstance,
     x_col: &str,
@@ -404,6 +419,7 @@ pub fn remove_worksheet(
     )
 }
 
+#[cfg(test)]
 fn get_plot_column_pair_for_project(
     state: &ProjectState,
     project_instance_id: &ProjectInstanceId,
@@ -421,21 +437,95 @@ fn get_plot_column_pair_for_project(
 
 #[tauri::command]
 pub fn get_plot_column_pair(
-    state: State<ProjectState>,
+    state: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
     database_id: String,
     x_col: String,
     y_col: String,
     max_points: Option<usize>,
 ) -> Result<PlotColumnPairPayload, CommandError> {
-    get_plot_column_pair_for_project(
-        state.inner(),
-        &project_instance_id,
-        &database_id,
-        &x_col,
-        &y_col,
-        max_points,
-    )
+    let x_column = crate::tabular::contract::TabularColumnName::try_from(x_col.as_str())
+        .map_err(|error| database_computation_error(error))?;
+    let y_column = crate::tabular::contract::TabularColumnName::try_from(y_col.as_str())
+        .map_err(|error| database_computation_error(error))?;
+    let result = state
+        .query_worksheet_plot(WorksheetPlotQuery {
+            project_instance_id,
+            database_id: crate::database_contract::DatabaseId::from_existing(database_id.into()),
+            x_column,
+            y_column,
+            max_points,
+        })
+        .map_err(worksheet_plot_command_error)?;
+    Ok(PlotColumnPairPayload {
+        data: result
+            .data
+            .into_iter()
+            .map(|point| PlotPoint {
+                x: point.x,
+                y: point.y,
+            })
+            .collect(),
+        x_label: result.x_label.map(Into::into),
+        y_label: result.y_label.map(Into::into),
+        x_format: plot_axis_format(result.x_format),
+        y_format: plot_axis_format(result.y_format),
+    })
+}
+
+fn worksheet_plot_command_error(error: WorksheetPlotApplicationError) -> CommandError {
+    match error {
+        WorksheetPlotApplicationError::SessionCapture(error) => {
+            session_capture_command_error(error)
+        }
+        WorksheetPlotApplicationError::SessionChanged
+        | WorksheetPlotApplicationError::ProjectIdentityMismatch { .. }
+        | WorksheetPlotApplicationError::ProjectAuthorityChanged { .. } => {
+            CommandError::expected("stale_project_lifecycle")
+        }
+        WorksheetPlotApplicationError::Database(error) => match error.kind() {
+            crate::database::plot_query::DatabasePlotQueryErrorKind::AdmissionClosed => {
+                CommandError::expected("project_lifecycle_admission_closed")
+            }
+            crate::database::plot_query::DatabasePlotQueryErrorKind::SessionMismatch
+            | crate::database::plot_query::DatabasePlotQueryErrorKind::GenerationMismatch
+            | crate::database::plot_query::DatabasePlotQueryErrorKind::RuntimeRevisionMismatch
+            | crate::database::plot_query::DatabasePlotQueryErrorKind::SchemaRevisionMismatch => {
+                CommandError::expected("stale_project_lifecycle")
+            }
+            crate::database::plot_query::DatabasePlotQueryErrorKind::DatabaseNotFound => {
+                CommandError::expected("database_not_found")
+            }
+            crate::database::plot_query::DatabasePlotQueryErrorKind::ColumnMaterializationFailed => {
+                CommandError::diagnosed("database_computation_failed", error)
+            }
+        },
+        WorksheetPlotApplicationError::PlotDataEmpty => {
+            CommandError::expected("plot_data_empty")
+        }
+    }
+}
+
+fn session_capture_command_error(error: SessionCaptureError) -> CommandError {
+    match error {
+        SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
+        SessionCaptureError::Replacing => {
+            CommandError::expected("project_lifecycle_admission_closed")
+        }
+        SessionCaptureError::Recovering => CommandError::expected("project_recovery_required")
+            .with_details(RecoveryRequiredDetails {
+                recovery_required: true,
+            }),
+    }
+}
+
+fn plot_axis_format(format: crate::application::worksheet_plot::PlotAxisFormat) -> String {
+    match format {
+        crate::application::worksheet_plot::PlotAxisFormat::Number => "number",
+        crate::application::worksheet_plot::PlotAxisFormat::Date => "date",
+        crate::application::worksheet_plot::PlotAxisFormat::Datetime => "datetime",
+    }
+    .to_owned()
 }
 
 #[cfg(test)]

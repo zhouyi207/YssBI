@@ -23,8 +23,16 @@ describe('createExecutionStreamDrain', () => {
     const wait = drain.waitForStreamEnd();
 
     drain.onmessage(runEvent({ type: 'runStarted' }));
-    drain.onmessage(runEvent({ type: 'openResultWindow', resultId: '1' }));
-    expect(recording).toEqual(['runStarted', 'openResultWindow']);
+    drain.onmessage(runEvent({
+      type: 'resultInspectionRequested',
+      resultId: '1',
+      source: {
+        graphPath: 'functions/Inspect.yssbi-function',
+        nodeId: null,
+        portAddress: null,
+      },
+    }));
+    expect(recording).toEqual(['runStarted', 'resultInspectionRequested']);
 
     let settled = false;
     void wait.then(() => {
@@ -36,7 +44,7 @@ describe('createExecutionStreamDrain', () => {
     drain.onmessage(runEvent({ type: 'runCompleted' }));
     await wait;
 
-    expect(recording).toEqual(['runStarted', 'openResultWindow', 'runCompleted']);
+    expect(recording).toEqual(['runStarted', 'resultInspectionRequested', 'runCompleted']);
   });
 
   it.each([

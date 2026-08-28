@@ -165,7 +165,18 @@ describe('useProjectOperations execution demand', () => {
           },
         });
         expect(openInspectableResult).not.toHaveBeenCalled();
-        onEvent?.({ ...runStartedEvent(), kind: { type: 'openResultWindow', resultId: '17' } });
+        onEvent?.({
+          ...runStartedEvent(),
+          kind: {
+            type: 'resultInspectionRequested',
+            resultId: '17',
+            source: {
+              graphPath: 'functions/Inspect.yssbi-function',
+              nodeId: null,
+              portAddress: null,
+            },
+          },
+        });
         return undefined;
       },
     );

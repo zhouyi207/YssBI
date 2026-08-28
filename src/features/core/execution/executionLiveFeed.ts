@@ -1,10 +1,6 @@
 import type { ExecutionEvent } from '@/shared/types/ui/execution';
 import { applyExecutionVisualEvent } from './executionVisualSession';
 
-type SideEffectHandler = (graphPath: string, event: ExecutionEvent) => void;
-
-const IMMEDIATE_EVENTS = new Set<ExecutionEvent['event']>(['openResultWindow']);
-
 let rafId: number | null = null;
 const pendingByGraph = new Map<string, ExecutionEvent[]>();
 
@@ -37,17 +33,11 @@ function scheduleFlush(): void {
   rafId = requestAnimationFrame(flushLiveEvents);
 }
 
-/** Batch visual events per frame; result-window requests run immediately. */
+/** Batch visual execution events per frame. */
 export function enqueueLiveExecutionEvent(
   graphPath: string,
   event: ExecutionEvent,
-  onSideEffect?: SideEffectHandler,
 ): void {
-  if (IMMEDIATE_EVENTS.has(event.event)) {
-    onSideEffect?.(graphPath, event);
-    return;
-  }
-
   const queue = pendingByGraph.get(graphPath) ?? [];
   queue.push(event);
   pendingByGraph.set(graphPath, queue);

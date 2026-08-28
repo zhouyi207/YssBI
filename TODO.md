@@ -1730,3 +1730,5 @@ Execution 不知道具体 UI
 - [ ] 将四个 result command 切换到 Execution-owned ResultStore 查询；保留旧 Project 查询 helper 仅供待迁移测试，禁止生产 fallback。
 - [ ] 让 GraphRuntimeState 从同一 registry/document 生成完整 neutral projection facts，使 Application graph-open 可通过 Presentation mapper 返回非空图 projection。
 - [ ] 将 graph-open/load-project-graph 与 editor hydrate caller 接入 Application session，继续迁移 graph mutation 的旧 Project workflow。
+- [ ] 将 Bayes submit 切换到 Application session 的单次 Database snapshot 与三阶段 coherence gate，保留 worker status/cancel/result/artifact commands 的既有接口。
+- [ ] 将 resultInspectionRequested 取代旧 openResultWindow：Rust wire、严格 TypeScript parser、Application window action 与 Core visual feed 已统一新事件名，待移除 staged fixture/旧 DTO owner。

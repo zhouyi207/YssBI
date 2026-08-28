@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::application::bayes::{BayesApplicationError, BayesInferenceService};
+use crate::application::execution::ApplicationState;
 use crate::error::CommandError;
-use crate::project::ProjectState;
 use crate::sci::api::bayes::{
     AutocorrelationPlotData, BayesInferenceTask, BayesModelDraft, ColumnMeta, DensityPlotData,
     InferenceResult, ParsedExpression, PosteriorPredictivePage, PosteriorSamplePage,
@@ -118,11 +118,11 @@ pub fn validate_bayes_model(
 #[tauri::command]
 pub fn submit_bayes_inference(
     service: State<'_, BayesInferenceService>,
-    project_state: State<'_, ProjectState>,
+    application: State<'_, ApplicationState>,
     input: BayesModelDraft,
 ) -> Result<BayesInferenceTask, CommandError> {
     service
-        .submit_from_project(input, &project_state)
+        .submit_from_application(&application, input)
         .map_err(bayes_command_error)
 }
 

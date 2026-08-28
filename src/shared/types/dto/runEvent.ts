@@ -100,7 +100,17 @@ export type RunEventKind =
       generation: number;
       resultId: string;
     }
-  | { type: 'openResultWindow'; resultId: string };
+  | {
+      type: 'resultInspectionRequested';
+      resultId: string;
+      source: ResultInspectionSource;
+    };
+
+export interface ResultInspectionSource {
+  graphPath: string;
+  nodeId: string | null;
+  portAddress: string | null;
+}
 
 export const RUN_EVENT_KIND_TYPES = {
   runStarted: true,
@@ -108,7 +118,7 @@ export const RUN_EVENT_KIND_TYPES = {
   runErrored: true,
   runCancelled: true,
   pinPreviewResultReady: true,
-  openResultWindow: true,
+  resultInspectionRequested: true,
 } as const satisfies Record<RunEventKind['type'], true>;
 
 export interface RunEvent {

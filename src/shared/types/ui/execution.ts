@@ -4,7 +4,6 @@
  * Tauri Channel 传输的执行事件 + 前端执行状态（按图独立存储）
  */
 
-import type { Presentation } from '@/features/core/resultSource';
 import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import type { PinResultEntry } from '@/shared/types/dto/result';
 import type { RunOutputChannelEvent } from '@/shared/types/dto/runEvent';
@@ -19,10 +18,6 @@ export type ExecutionEvent =
   | { event: 'nodeError'; data: { nodeId: string; error: string; durationMs?: number } }
   | { event: 'connectionActive'; data: { fromPinId: string; toPinId: string } }
   | { event: 'connectionFlow'; data: { fromPinId: string; toPinId: string } }
-  | {
-      event: 'openResultWindow';
-      data: { resultId: string; presentation: Presentation; windowTitle: string };
-    };
 
 /** 带时间戳的录制事件 */
 export interface RecordedEvent {
