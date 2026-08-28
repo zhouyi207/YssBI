@@ -1701,3 +1701,5 @@ Execution 不知道具体 UI
 - [ ] 将 `refactor/plot-module` 的六个 Plot 重构提交通过 merge commit 合并到 `shadcn`，保留完整分支历史且不推送远端。
 - [ ] 解决 `TODO.md` 双日期追加冲突，并将 Vite 测试排除项统一为同时忽略 `.worktrees/**` 与 `.superpowers/**`。
 - [ ] 在合并树复核 Plot/Chart 聚焦测试、TypeScript、Rust format/check 与 Plot kernel 回归，并记录既有 Oxfmt、Dockview、Clippy、contract fixture 及全量 Rust 并发门禁限制。
+- [ ] 核对 `.worktrees/plot-module` 的 `refactor/plot-module` tip 已由 `168cd12f` 通过 merge commit 合入 `shadcn`，且两处工作区无未提交改动。
+- [ ] 记录合并树验证结果：`pnpm run ci` 在全仓 Oxfmt 格式检查处失败，`pnpm test` 有 315/316 测试文件通过且 `workbenchDockviewDefaults.test.ts` 仍有 1 项失败。
