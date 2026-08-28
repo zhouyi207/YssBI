@@ -1,4 +1,5 @@
 use crate::project::{FileChange, project_root_from_path};
+use crate::project::{ProjectDomainEvent, ProjectInstanceId, ProjectWatchError};
 use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -6,6 +7,39 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 use thiserror::Error;
+
+use super::execution::session_slot::{ApplicationState, SessionCaptureError};
+
+#[derive(Debug, Error)]
+pub enum ApplicationProjectWatchError {
+    #[error(transparent)]
+    SessionCapture(#[from] SessionCaptureError),
+    #[error("watched project identity is stale")]
+    ProjectIdentityMismatch,
+    #[error(transparent)]
+    Project(#[from] ProjectWatchError),
+    #[error("captured application session changed during watcher reconciliation")]
+    SessionChanged,
+}
+
+impl ApplicationState {
+    pub fn reconcile_project_file_change(
+        &self,
+        project_instance_id: &ProjectInstanceId,
+        change: FileChange,
+    ) -> Result<ProjectDomainEvent, ApplicationProjectWatchError> {
+        let captured = self.capture_session()?;
+        if captured.project_instance_id() != project_instance_id {
+            return Err(ApplicationProjectWatchError::ProjectIdentityMismatch);
+        }
+        let event = captured
+            .project()
+            .reconcile_file_change(project_instance_id, change)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(|_| ApplicationProjectWatchError::SessionChanged)?;
+        Ok(event)
+    }
+}
 
 pub const PROJECT_WATCHER_QUIET_PERIOD: Duration = Duration::from_millis(250);
 const PROJECT_WATCHER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);

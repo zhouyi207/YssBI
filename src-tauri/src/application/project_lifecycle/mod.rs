@@ -3,6 +3,9 @@ use std::path::Path;
 
 use thiserror::Error;
 
+use crate::application::execution::session_slot::{
+    ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
+};
 use crate::event::{
     LifecycleInvalidationDto, LifecycleMutationKindDto, LifecycleMutationOutcomeDto,
     LifecycleMutationPhaseDto, LifecycleMutationResultDto, LifecycleRecoveryDto,
@@ -37,6 +40,125 @@ impl ProjectRegistryFailure {
         Self {
             diagnostic: diagnostic.to_string().into_boxed_str(),
         }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ApplicationProjectLifecycleError {
+    #[error(transparent)]
+    SessionCapture(#[from] SessionCaptureError),
+    #[error(transparent)]
+    Lifecycle(#[from] ProjectLifecycleError),
+    #[error("captured application session changed during project lifecycle operation")]
+    SessionChanged(#[source] SessionRevalidationError),
+    #[error("application session refresh failed")]
+    SessionRefresh(#[source] ApplicationSessionRefreshError),
+}
+
+impl ApplicationState {
+    pub fn load_project_for_application(
+        &self,
+        path: &str,
+    ) -> Result<ProjectActivationResultDto, ApplicationProjectLifecycleError> {
+        let captured = self.capture_session()?;
+        let result = load_project(captured.project(), path)?;
+        self.refresh_current_project()
+            .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
+        Ok(result)
+    }
+
+    pub fn clear_project_for_application(&self) -> Result<(), ApplicationProjectLifecycleError> {
+        let captured = self.capture_session()?;
+        clear_project(captured.project())?;
+        self.refresh_current_project()
+            .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
+        Ok(())
+    }
+
+    pub async fn save_project_as_for_application(
+        &self,
+        registry: &ProjectRegistry,
+        destination: &Path,
+        project_instance_id: ProjectInstanceId,
+        operation_id: OperationId,
+    ) -> Result<LifecycleMutationResultDto, ApplicationProjectLifecycleError> {
+        let captured = self.capture_session()?;
+        let result = save_project_as(
+            captured.project(),
+            registry,
+            destination,
+            project_instance_id,
+            operation_id,
+        )
+        .await?;
+        if result.outcome == LifecycleMutationOutcomeDto::Committed {
+            self.refresh_current_project()
+                .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
+        } else {
+            self.revalidate_captured_session(&captured)
+                .map_err(ApplicationProjectLifecycleError::SessionChanged)?;
+        }
+        Ok(result)
+    }
+
+    pub async fn create_project_for_application(
+        &self,
+        registry: &ProjectRegistry,
+        name: &str,
+        path: &Path,
+        operation_id: OperationId,
+    ) -> Result<LifecycleMutationResultDto, ApplicationProjectLifecycleError> {
+        let captured = self.capture_session()?;
+        let result = create_project(captured.project(), registry, name, path, operation_id).await?;
+        if result.invalidation.project {
+            self.refresh_current_project()
+                .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
+        }
+        Ok(result)
+    }
+
+    pub async fn delete_registered_project_for_application(
+        &self,
+        registry: &ProjectRegistry,
+        id: &str,
+        expected_active_instance_id: Option<ProjectInstanceId>,
+        operation_id: OperationId,
+    ) -> Result<LifecycleMutationResultDto, ApplicationProjectLifecycleError> {
+        let captured = self.capture_session()?;
+        let result = delete_registered_project(
+            captured.project(),
+            registry,
+            id,
+            expected_active_instance_id,
+            operation_id,
+        )
+        .await?;
+        if result.invalidation.project {
+            self.refresh_current_project()
+                .map_err(ApplicationProjectLifecycleError::SessionRefresh)?;
+        } else {
+            self.revalidate_captured_session(&captured)
+                .map_err(ApplicationProjectLifecycleError::SessionChanged)?;
+        }
+        Ok(result)
+    }
+
+    pub fn flush_project_for_application(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        operation_id: OperationId,
+    ) -> Result<
+        crate::project::project_writers::ProjectSaveResultDto,
+        ApplicationProjectLifecycleError,
+    > {
+        let captured = self.capture_session()?;
+        let result = captured
+            .project()
+            .flush_project_documents(&project_instance_id, operation_id)
+            .map_err(ProjectLifecycleError::AuthorityFailed)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ApplicationProjectLifecycleError::SessionChanged)?;
+        Ok(result)
     }
 }
 

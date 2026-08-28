@@ -3,9 +3,9 @@ use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest
 use crate::error::CommandError;
 use crate::event::ProjectActivationResultDto;
 use crate::node_system::analysis::EditorGraphProjectionDto;
-use crate::project::{ProjectIndex, normalize_existing_path};
 #[cfg(test)]
 use crate::project::ProjectState;
+use crate::project::{ProjectIndex, normalize_existing_path};
 use crate::schema::DatabasesVariablesDTO;
 use serde::Serialize;
 use tauri::State;

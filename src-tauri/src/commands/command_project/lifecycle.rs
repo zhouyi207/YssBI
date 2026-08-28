@@ -1,6 +1,8 @@
-use crate::application::project_lifecycle::{self, ProjectLifecycleError};
+use crate::application::execution::{ApplicationState, SessionCaptureError};
+use crate::application::project_lifecycle::ProjectLifecycleError;
 use crate::application::project_watcher::{
-    ObservedProjectFileChange, ProjectFileChangeSink, ProjectWatcherError, ProjectWatcherState,
+    ApplicationProjectWatchError, ObservedProjectFileChange, ProjectFileChangeSink,
+    ProjectWatcherError, ProjectWatcherState,
 };
 use crate::error::CommandError;
 use crate::event::{
@@ -8,10 +10,10 @@ use crate::event::{
     ProjectActivationResultDto, emit_project_event, emit_project_event_result,
 };
 use crate::project::OperationId;
+#[cfg(test)]
+use crate::project::ProjectState;
 use crate::project::project_writers::ProjectSaveResultDto;
-use crate::project::{
-    ProjectDomainEvent, ProjectInstanceId, ProjectRegistry, ProjectState, ProjectWatchError,
-};
+use crate::project::{ProjectDomainEvent, ProjectInstanceId, ProjectRegistry, ProjectWatchError};
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 use tauri::{AppHandle, State};
@@ -32,16 +34,42 @@ pub(crate) fn map_project_lifecycle_error(error: ProjectLifecycleError) -> Comma
     }
 }
 
+fn map_application_project_lifecycle_error(
+    error: crate::application::project_lifecycle::ApplicationProjectLifecycleError,
+) -> CommandError {
+    match error {
+        crate::application::project_lifecycle::ApplicationProjectLifecycleError::SessionCapture(
+            error,
+        ) => match error {
+            SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
+            SessionCaptureError::Replacing => {
+                CommandError::expected("project_lifecycle_admission_closed")
+            }
+            SessionCaptureError::Recovering => CommandError::expected("project_recovery_required")
+                .with_details(serde_json::json!({ "recoveryRequired": true })),
+        },
+        crate::application::project_lifecycle::ApplicationProjectLifecycleError::Lifecycle(
+            error,
+        ) => map_project_lifecycle_error(error),
+        crate::application::project_lifecycle::ApplicationProjectLifecycleError::SessionChanged(
+            error,
+        ) => CommandError::diagnosed("project_lifecycle_session_changed", error),
+        crate::application::project_lifecycle::ApplicationProjectLifecycleError::SessionRefresh(
+            error,
+        ) => CommandError::diagnosed("project_session_refresh_failed", error),
+    }
+}
+
 fn start_project_watcher(
     app: &AppHandle,
-    project: &ProjectState,
+    application: &ApplicationState,
     watcher: &ProjectWatcherState,
     path: &str,
     project_instance_id: &ProjectInstanceId,
 ) {
     let sink = Arc::new(ProjectEventWatcherSink {
         app: app.clone(),
-        project: project.clone(),
+        application: application.clone(),
         project_instance_id: project_instance_id.clone(),
         version: Mutex::new(0),
     });
@@ -58,7 +86,7 @@ fn start_project_watcher(
 
 struct ProjectEventWatcherSink {
     app: AppHandle,
-    project: ProjectState,
+    application: ApplicationState,
     project_instance_id: ProjectInstanceId,
     version: Mutex<u64>,
 }
@@ -66,18 +94,28 @@ struct ProjectEventWatcherSink {
 impl ProjectFileChangeSink for ProjectEventWatcherSink {
     fn publish(&self, change: ObservedProjectFileChange) {
         let domain_event = match self
-            .project
-            .reconcile_file_change(&self.project_instance_id, change.change)
+            .application
+            .reconcile_project_file_change(&self.project_instance_id, change.change)
         {
             Ok(event) => event,
-            Err(ProjectWatchError::Irrelevant) => return,
-            Err(error) => {
+            Err(ApplicationProjectWatchError::Project(ProjectWatchError::Irrelevant)) => return,
+            Err(ApplicationProjectWatchError::Project(error)) => {
                 tracing::warn!(
                     target: "yssbi::project::watcher",
                     diagnostic_domain = "system",
                     diagnostic_event = "projectIndexRefreshFailed",
                     error_kind = project_watch_error_kind(&error),
                     "Failed to reconcile watched project file change"
+                );
+                return;
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target: "yssbi::project::watcher",
+                    diagnostic_domain = "system",
+                    diagnostic_event = "projectIndexRefreshFailed",
+                    error_kind = application_watch_error_kind(&error),
+                    "Failed to reconcile watched project file"
                 );
                 return;
             }
@@ -129,6 +167,15 @@ fn project_watch_error_kind(error: &ProjectWatchError) -> &'static str {
     }
 }
 
+fn application_watch_error_kind(error: &ApplicationProjectWatchError) -> &'static str {
+    match error {
+        ApplicationProjectWatchError::SessionCapture(_) => "session_capture_failed",
+        ApplicationProjectWatchError::ProjectIdentityMismatch => "stale_project_lifecycle",
+        ApplicationProjectWatchError::Project(error) => project_watch_error_kind(error),
+        ApplicationProjectWatchError::SessionChanged => "session_changed",
+    }
+}
+
 fn next_watcher_version(version: &Mutex<u64>) -> Option<u64> {
     let mut version = version.lock().unwrap_or_else(PoisonError::into_inner);
     let next = version.checked_add(1)?;
@@ -140,8 +187,7 @@ fn next_watcher_version(version: &Mutex<u64>) -> Option<u64> {
 #[tauri::command]
 pub fn load_project(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
-    state: State<ProjectState>,
+    application: State<'_, ApplicationState>,
     watcher: State<ProjectWatcherState>,
     path: String,
 ) -> Result<ProjectActivationResultDto, CommandError> {
@@ -153,11 +199,9 @@ pub fn load_project(
         "Loading project"
     );
 
-    let result = project_lifecycle::load_project(state.inner(), &path)
-        .map_err(map_project_lifecycle_error)?;
-    application
-        .refresh_current_project()
-        .map_err(|error| CommandError::diagnosed("project_session_refresh_failed", error))?;
+    let result = application
+        .load_project_for_application(&path)
+        .map_err(map_application_project_lifecycle_error)?;
 
     tracing::info!(
         target: "yssbi::commands::project",
@@ -170,7 +214,7 @@ pub fn load_project(
     let project_instance_id = ProjectInstanceId::from_existing(result.project_instance_id.clone());
     start_project_watcher(
         &app,
-        state.inner(),
+        application.inner(),
         &watcher,
         &result.path,
         &project_instance_id,
@@ -183,8 +227,7 @@ pub fn load_project(
 #[tauri::command]
 pub async fn save_project_as(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
-    state: State<'_, ProjectState>,
+    application: State<'_, ApplicationState>,
     watcher: State<'_, ProjectWatcherState>,
     registry: State<'_, ProjectRegistry>,
     path: String,
@@ -199,20 +242,17 @@ pub async fn save_project_as(
         "Saving project copy"
     );
 
-    let result = project_lifecycle::save_project_as(
-        state.inner(),
-        registry.inner(),
-        Path::new(&path),
-        project_instance_id,
-        operation_id,
-    )
-    .await
-    .map_err(map_project_lifecycle_error)?;
+    let result = application
+        .save_project_as_for_application(
+            registry.inner(),
+            Path::new(&path),
+            project_instance_id,
+            operation_id,
+        )
+        .await
+        .map_err(map_application_project_lifecycle_error)?;
     publish_lifecycle_result(&app, &result);
     if result.outcome == LifecycleMutationOutcomeDto::Committed {
-        application
-            .refresh_current_project()
-            .map_err(|error| CommandError::diagnosed("project_session_refresh_failed", error))?;
         if let (Some(metadata_path), Some(project_instance_id)) = (
             result.path.as_deref(),
             result.new_project_instance_id.as_deref(),
@@ -220,7 +260,7 @@ pub async fn save_project_as(
             let project_instance_id = ProjectInstanceId::from_existing(project_instance_id.into());
             start_project_watcher(
                 &app,
-                state.inner(),
+                application.inner(),
                 &watcher,
                 metadata_path,
                 &project_instance_id,
@@ -233,21 +273,16 @@ pub async fn save_project_as(
 #[tauri::command]
 pub async fn create_project(
     app: AppHandle,
-    state: State<'_, ProjectState>,
+    application: State<'_, ApplicationState>,
     registry: State<'_, ProjectRegistry>,
     name: String,
     path: String,
     operation_id: OperationId,
 ) -> Result<LifecycleMutationResultDto, CommandError> {
-    let result = project_lifecycle::create_project(
-        state.inner(),
-        registry.inner(),
-        &name,
-        Path::new(&path),
-        operation_id,
-    )
-    .await
-    .map_err(map_project_lifecycle_error)?;
+    let result = application
+        .create_project_for_application(registry.inner(), &name, Path::new(&path), operation_id)
+        .await
+        .map_err(map_application_project_lifecycle_error)?;
     publish_lifecycle_result(&app, &result);
     Ok(result)
 }
@@ -276,6 +311,7 @@ pub(crate) fn publish_lifecycle_result(app: &AppHandle, result: &LifecycleMutati
     })
 }
 
+#[cfg(test)]
 pub(crate) fn flush_project_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -294,7 +330,7 @@ pub(crate) fn flush_project_with_emitter(
 #[tauri::command]
 pub fn flush_project(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
 ) -> Result<ProjectSaveResultDto, CommandError> {
@@ -304,17 +340,23 @@ pub fn flush_project(
         diagnostic_event = "flushProject",
         "Flushing project"
     );
-    flush_project_with_emitter(state.inner(), project_instance_id, operation_id, |event| {
-        emit_project_event(&app, event)
-    })
+    let result = application
+        .flush_project_for_application(project_instance_id, operation_id)
+        .map_err(map_application_project_lifecycle_error)?;
+    emit_project_event(
+        &app,
+        Event::Project(EventProject::ProjectSaved {
+            result: result.clone(),
+        }),
+    );
+    Ok(result)
 }
 
 /// 新建项目（清空当前状态）
 #[tauri::command]
 pub fn new_project(
     app: AppHandle,
-    application: State<'_, crate::application::execution::ApplicationState>,
-    state: State<ProjectState>,
+    application: State<'_, ApplicationState>,
     watcher: State<ProjectWatcherState>,
 ) -> Result<(), CommandError> {
     tracing::info!(
@@ -324,10 +366,9 @@ pub fn new_project(
         "Creating new project"
     );
 
-    project_lifecycle::clear_project(state.inner()).map_err(map_project_lifecycle_error)?;
     application
-        .refresh_current_project()
-        .map_err(|error| CommandError::diagnosed("project_session_refresh_failed", error))?;
+        .clear_project_for_application()
+        .map_err(map_application_project_lifecycle_error)?;
     watcher.stop();
     emit_project_event(&app, Event::Project(EventProject::ProjectCleared));
     Ok(())
