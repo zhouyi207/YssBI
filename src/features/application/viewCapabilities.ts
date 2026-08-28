@@ -72,7 +72,6 @@ import * as databaseService from '@/services/database/databaseService';
 import * as worksheetService from '@/services/worksheet/worksheetService';
 import * as worksheetDataService from '@/services/worksheet/worksheetDataService';
 import * as worksheetPreviewCache from '@/services/worksheet/worksheetPreviewCache';
-import * as ipcService from '@/services/ipc';
 import * as pathDialog from '@/services/platform/pathDialog';
 import * as coreGraphRead from '@/features/core/graph/read';
 import * as coreResultValuePayload from '@/features/core/resultSource/resultValuePayload';
@@ -229,7 +228,23 @@ export const WorksheetService = worksheetService.WorksheetService;
 export const fetchWorksheetPreview = worksheetDataService.fetchWorksheetPreview;
 export const getCachedWorksheetPreview = worksheetPreviewCache.getCachedWorksheetPreview;
 export const getWorksheetPreview = worksheetPreviewCache.getWorksheetPreview;
-export const toErrorReference = ipcService.toErrorReference;
+export interface ErrorReference {
+  readonly code: string;
+  readonly incidentId: string | null;
+}
+
+export function toErrorReference(error: unknown, fallbackCode: string): ErrorReference {
+  if (typeof error !== 'object' || error === null) {
+    return { code: fallbackCode, incidentId: null };
+  }
+  const candidate = error as { code?: unknown; incidentId?: unknown };
+  return typeof candidate.code === 'string'
+    ? {
+        code: candidate.code,
+        incidentId: typeof candidate.incidentId === 'string' ? candidate.incidentId : null,
+      }
+    : { code: fallbackCode, incidentId: null };
+}
 export const openPathDialog = pathDialog.openPathDialog;
 
 export const defaultPriorForConstraint = domainBayes.defaultPriorForConstraint;
