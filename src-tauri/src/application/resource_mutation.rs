@@ -6,9 +6,13 @@ use super::execution::session_slot::{
     ApplicationSession, ApplicationSessionRefreshError, ApplicationState, SessionCaptureError,
     SessionRevalidationError,
 };
+use crate::event::GraphMutationResultDto;
 use crate::event::ResourceMutationResultDto;
 use crate::graph_document::GraphResourcePath;
-use crate::node_system::document::{FunctionDocumentPatch, MutationRequest};
+use crate::node_system::document::{
+    ClipboardSubgraphDto, EditorGraphMutationDto, FunctionDocumentPatch, MutationRequest,
+};
+use crate::node_system::document::{HistoryMutation, HistoryStatusDto};
 use crate::project::project_writers::ProjectSaveResultDto;
 use crate::project::{
     GraphDocumentKind, OperationId, ProjectFilesystemError, ProjectInstanceId, ResourceRevision,
@@ -29,6 +33,81 @@ pub enum ResourceMutationApplicationError {
 }
 
 impl ApplicationState {
+    pub fn export_graph_subgraph(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        graph_path: GraphResourcePath,
+        node_ids: Vec<crate::graph_document::NodeId>,
+    ) -> Result<ClipboardSubgraphDto, ResourceMutationApplicationError> {
+        let captured = self.capture_resource_session(&project_instance_id)?;
+        let result = captured
+            .project()
+            .export_editor_subgraph(&project_instance_id, &graph_path, node_ids)
+            .map_err(ResourceMutationApplicationError::Mutation)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        Ok(result)
+    }
+
+    pub fn mutate_graph_document(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        graph_path: GraphResourcePath,
+        locale: String,
+        request: MutationRequest<EditorGraphMutationDto>,
+    ) -> Result<GraphMutationResultDto, ResourceMutationApplicationError> {
+        let captured = self.capture_resource_session(&project_instance_id)?;
+        let result = captured
+            .project()
+            .apply_editor_graph_mutation(&project_instance_id, &graph_path, &locale, request)
+            .map_err(ResourceMutationApplicationError::Mutation)?;
+        self.refresh_resource_session()?;
+        Ok(result)
+    }
+
+    pub fn query_history_status(
+        &self,
+        project_instance_id: ProjectInstanceId,
+    ) -> Result<HistoryStatusDto, ResourceMutationApplicationError> {
+        let captured = self.capture_resource_session(&project_instance_id)?;
+        let result = captured
+            .project()
+            .history_status_for_project(&project_instance_id)?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ResourceMutationApplicationError::SessionChanged)?;
+        Ok(result)
+    }
+
+    pub fn undo_graph_document(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        locale: String,
+        request: MutationRequest<HistoryMutation>,
+    ) -> Result<ResourceMutationResultDto, ResourceMutationApplicationError> {
+        let captured = self.capture_resource_session(&project_instance_id)?;
+        let result = captured
+            .project()
+            .undo_last_transaction_observed(&project_instance_id, &locale, request, |_| {})
+            .map_err(ResourceMutationApplicationError::Mutation)?;
+        self.refresh_resource_session()?;
+        Ok(result)
+    }
+
+    pub fn redo_graph_document(
+        &self,
+        project_instance_id: ProjectInstanceId,
+        locale: String,
+        request: MutationRequest<HistoryMutation>,
+    ) -> Result<ResourceMutationResultDto, ResourceMutationApplicationError> {
+        let captured = self.capture_resource_session(&project_instance_id)?;
+        let result = captured
+            .project()
+            .redo_last_transaction_observed(&project_instance_id, &locale, request, |_| {})
+            .map_err(ResourceMutationApplicationError::Mutation)?;
+        self.refresh_resource_session()?;
+        Ok(result)
+    }
+
     pub fn create_graph_resource(
         &self,
         project_instance_id: ProjectInstanceId,

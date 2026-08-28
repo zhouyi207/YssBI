@@ -2,11 +2,15 @@ use super::common::{mutation_conflict_to_command_error, parse_graph_path};
 use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::error::CommandError;
-use crate::event::{Event, EventProject, GraphMutationResultDto, emit_project_event};
+#[cfg(test)]
+use crate::event::emit_project_event;
+use crate::event::{Event, EventProject, GraphMutationResultDto, emit_project_event_result};
 use crate::graph_document::NodeId;
 use crate::node_system::analysis::EditorGraphProjectionDto;
 use crate::node_system::document::{ClipboardSubgraphDto, EditorGraphMutationDto, MutationRequest};
-use crate::project::{ProjectInstanceId, ProjectState};
+use crate::project::ProjectInstanceId;
+#[cfg(test)]
+use crate::project::ProjectState;
 use tauri::{AppHandle, State};
 
 #[cfg(test)]
@@ -78,6 +82,7 @@ fn session_capture_command_error(error: SessionCaptureError) -> CommandError {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn export_graph_subgraph_from_state(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -95,12 +100,14 @@ pub(crate) fn export_graph_subgraph_from_state(
 
 #[tauri::command]
 pub fn export_graph_subgraph(
-    state: State<'_, ProjectState>,
+    application: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     node_ids: Vec<NodeId>,
 ) -> Result<ClipboardSubgraphDto, CommandError> {
-    export_graph_subgraph_from_state(state.inner(), project_instance_id, graph_path, node_ids)
+    application
+        .export_graph_subgraph(project_instance_id, parse_graph_path(graph_path)?, node_ids)
+        .map_err(map_editor_resource_error)
 }
 
 pub(super) fn parse_editor_mutation_request(
@@ -143,6 +150,7 @@ fn is_create_node_descriptor_shape_error(request: &serde_json::Value) -> bool {
     })
 }
 
+#[cfg(test)]
 pub(crate) fn mutate_graph_document_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -172,18 +180,51 @@ pub(crate) fn mutate_graph_document_with_emitter(
 #[tauri::command]
 pub fn mutate_graph_document(
     app: AppHandle,
-    state: State<'_, ProjectState>,
+    application: State<'_, ApplicationState>,
     project_instance_id: ProjectInstanceId,
     graph_path: String,
     locale: String,
     request: serde_json::Value,
 ) -> Result<GraphMutationResultDto, CommandError> {
-    mutate_graph_document_with_emitter(
-        state.inner(),
-        project_instance_id,
-        graph_path,
-        &locale,
-        request,
-        |event| emit_project_event(&app, event),
-    )
+    let parsed_request = parse_editor_mutation_request(request)?;
+    let result = application
+        .mutate_graph_document(
+            project_instance_id,
+            parse_graph_path(graph_path)?,
+            locale,
+            parsed_request,
+        )
+        .map_err(map_editor_resource_error)?;
+    if !result.delta.payload.operations.is_empty() {
+        emit_project_event_result(
+            &app,
+            &Event::Project(EventProject::GraphDelta {
+                project_instance_id: result.project_instance_id.clone(),
+                delta: result.delta.clone(),
+            }),
+        )
+        .map_err(|error| CommandError::diagnosed("graph_event_emit_failed", error))?;
+    }
+    Ok(result)
+}
+
+fn map_editor_resource_error(
+    error: crate::application::resource_mutation::ResourceMutationApplicationError,
+) -> CommandError {
+    use crate::application::resource_mutation::ResourceMutationApplicationError;
+    match error {
+        ResourceMutationApplicationError::SessionCapture(error) => {
+            session_capture_command_error(error)
+        }
+        ResourceMutationApplicationError::Project(error) => CommandError::from(error),
+        ResourceMutationApplicationError::Mutation(error) => {
+            mutation_conflict_to_command_error(error, "graph_revision_conflict")
+        }
+        ResourceMutationApplicationError::SessionChanged(error) => {
+            CommandError::diagnosed("graph_session_changed", error)
+        }
+        ResourceMutationApplicationError::SessionRefresh(error) => {
+            CommandError::diagnosed("graph_session_refresh_failed", error)
+        }
+    }
 }

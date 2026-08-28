@@ -21,6 +21,7 @@ pub use results::{
     get_pin_result_history, get_result_descriptor, get_result_page, get_result_value,
 };
 
+#[cfg(test)]
 #[allow(unused_imports)]
 pub(crate) use editor::{export_graph_subgraph_from_state, mutate_graph_document_with_emitter};
 #[cfg(test)]
