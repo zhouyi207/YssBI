@@ -30,7 +30,7 @@ export function SymbolConfigDialog({
   t,
 }: {
   open: boolean;
-  datasets: BayesDatasetOption[];
+  datasets: readonly BayesDatasetOption[];
   symbol: string | null;
   selectedDatasetId: string;
   role: BayesSymbolRoleDTO;
@@ -49,7 +49,7 @@ export function SymbolConfigDialog({
   t: Translation;
 }) {
   const selectedDataset = datasets.find(dataset => dataset.sourceId === selectedDatasetId) ?? null;
-  const selectedColumns = numericColumns(selectedDataset?.columns ?? []);
+  const selectedColumns = numericColumns(Array.from(selectedDataset?.columns ?? []));
   const priorLabels = priorArgLabels(priorDistribution, t);
 
   return (
@@ -192,8 +192,11 @@ function SymbolRoleSelect({ value, onChange, t }: { value: BayesSymbolRoleDTO; o
 }
 
 
-function preferredSymbolColumn(dataset: BayesDatasetSelectionDTO, symbolName: string): string | null {
-  const columns = numericColumns(dataset.columns);
+function preferredSymbolColumn(
+  dataset: { readonly columns: readonly BayesDatasetOption['columns'][number][] },
+  symbolName: string,
+): string | null {
+  const columns = numericColumns(Array.from(dataset.columns));
   return columns.find(column => column.name === symbolName)?.name
     ?? columns[0]?.name
     ?? null;

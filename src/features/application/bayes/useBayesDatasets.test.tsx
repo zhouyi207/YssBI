@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useBayesDatasets, type BayesDatasetsModel } from '@/features/application/bayes';
 import { useDatabaseStore } from '@/features/core/dataStore/databaseStore';
 import { useProjectIOStore } from '@/features/core/dataStore/projectIOStore';
 import {
@@ -11,6 +10,7 @@ import {
 } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 import type { DatabaseRecord, LoadDatabaseResult } from '@/shared/types/dto/database';
 import { DatabaseService } from '@/services/database/databaseService';
+import { useBayesDatasets, type BayesDatasetsModel } from './useBayesDatasets';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -44,7 +44,7 @@ const metadata: LoadDatabaseResult = {
   columnCount: 1,
 };
 
-describe('Bayes database metadata lifecycle ownership', () => {
+describe('useBayesDatasets metadata ownership', () => {
   let host: HTMLDivElement;
   let root: Root;
   let model!: BayesDatasetsModel;
@@ -72,7 +72,7 @@ describe('Bayes database metadata lifecycle ownership', () => {
     clearProjectLifecycle();
   });
 
-  it('does not require a project identity when no metadata refresh is needed', async () => {
+  it('does not require a project identity when all database metadata is present', async () => {
     clearProjectLifecycle();
     useDatabaseStore.setState({ databases: { sales: readyDatabase }, revisions: {} });
 

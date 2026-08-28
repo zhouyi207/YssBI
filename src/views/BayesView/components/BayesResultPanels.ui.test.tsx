@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InferenceResultDTO } from '@/shared/types/bayes';
 import { normalizeIpcError } from '@/services/ipc';
 import {
+  clearProjectLifecycle,
+  startProjectLifecycle,
+} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import {
   BayesCsvExportButton,
   BayesResultFolderButton,
 } from './BayesResultPanels';
@@ -18,9 +22,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/services/platform/pathDialog', () => ({ savePathDialog: mocks.savePathDialog }));
-vi.mock('@/services/bayes/bayesInferenceService', () => ({
+vi.mock('@/services/platform/opener', () => ({
+  revealPath: mocks.revealFolder,
+}));
+vi.mock('@/services/bayes', () => ({
   exportBayesArtifactCsv: mocks.exportCsv,
-  revealBayesResultFolder: mocks.revealFolder,
   readBayesAutocorrelationData: vi.fn(),
   readBayesDensityPlotData: vi.fn(),
   readBayesPosteriorPredictive: vi.fn(),
@@ -79,9 +85,10 @@ describe('Bayes result action feedback', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    startProjectLifecycle('project-1');
     mocks.savePathDialog.mockResolvedValue({ ok: true, value: 'C:/exports/posterior.csv' });
     mocks.exportCsv.mockResolvedValue(undefined);
-    mocks.revealFolder.mockResolvedValue(undefined);
+    mocks.revealFolder.mockResolvedValue({ ok: true, value: undefined });
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -90,6 +97,7 @@ describe('Bayes result action feedback', () => {
   afterEach(() => {
     act(() => root.unmount());
     host.remove();
+    clearProjectLifecycle();
   });
 
   it('shows an open-folder IPC failure beside its button', async () => {

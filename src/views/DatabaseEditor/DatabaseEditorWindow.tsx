@@ -66,7 +66,7 @@ export const DatabaseEditorWindow: React.FC = () => {
   // Data loading
   const dataLoader = useDataLoader(selectedDfId);
   const exportDatabase = useDatabaseExport(selectedDfId);
-  const windowActions = useCurrentWindowActions('DatabaseEditorWindow');
+  const windowActions = useCurrentWindowActions();
 
   // Selection
   const sel = useSelection({

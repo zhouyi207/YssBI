@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import type { WindowKind } from '@/shared/types/settings';
 import { usePersistedWindow } from '@/features/application/window/usePersistedWindow';
 import { usePresentationWindowLifecycle } from '@/features/application/window/usePresentationWindowLifecycle';
-import { useWindowMaximized } from '@/features/application/window/useWindowMaximized';
-import { useCurrentWindowActions } from '@/features/application/window/useCurrentWindowActions';
+import {
+  useCurrentWindowActions,
+  type CurrentWindowActions,
+} from '@/features/application/window/useCurrentWindowActions';
 import { loadPresentationWindow, type PresentationWindowState } from './loadPresentationWindow';
 import { parsePresentationWindowQuery } from './parsePresentationWindowQuery';
 
-export function usePresentationWindow(windowKind: WindowKind, logTag: string) {
+export function usePresentationWindow(windowKind: WindowKind) {
   const query = useMemo(() => parsePresentationWindowQuery(), []);
   const resultId = query.resultId;
   const [state, setState] = useState<PresentationWindowState>(() =>
@@ -16,8 +18,7 @@ export function usePresentationWindow(windowKind: WindowKind, logTag: string) {
 
   usePresentationWindowLifecycle(resultId);
   usePersistedWindow(windowKind);
-  const isMaximized = useWindowMaximized(logTag);
-  const windowActions = useCurrentWindowActions(logTag);
+  const windowActions = useCurrentWindowActions();
 
   useEffect(() => {
     let cancelled = false;
@@ -48,5 +49,9 @@ export function usePresentationWindow(windowKind: WindowKind, logTag: string) {
     };
   }, [resultId, windowActions]);
 
-  return { resultId, state, isMaximized };
+  return {
+    resultId,
+    state,
+    windowActions: windowActions as CurrentWindowActions,
+  };
 }

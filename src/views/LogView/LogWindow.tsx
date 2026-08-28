@@ -1,14 +1,13 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { LogWorkspaceDockview } from './LogWorkspaceDockview';
-import { useCurrentWindowActions, usePersistedWindow, useWindowMaximized } from '@/features/application/window';
+import { useCurrentWindowActions, usePersistedWindow } from '@/features/application/window';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowChrome } from '@/shared/ui/WindowChrome';
 
 export const LogWindow = () => {
   const { t } = useTranslation();
-  const isMaximized = useWindowMaximized('LogWindow');
-  const windowActions = useCurrentWindowActions('LogWindow');
+  const windowActions = useCurrentWindowActions();
 
   usePersistedWindow('logs');
 
@@ -23,10 +22,10 @@ export const LogWindow = () => {
         childWindow
         actions={
           <WindowChromeControls
-            isMaximized={isMaximized}
-            onMinimize={windowActions.minimize}
-            onMaximize={windowActions.maximize}
-            onClose={windowActions.close}
+            maximized={windowActions.maximized}
+            minimize={windowActions.minimize}
+            toggleMaximize={windowActions.toggleMaximize}
+            close={windowActions.close}
           />
         }
       >

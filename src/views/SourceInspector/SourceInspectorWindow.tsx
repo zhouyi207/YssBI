@@ -7,7 +7,7 @@ import { ReportView } from '@/views/InfoView/ReportView';
 
 export const SourceInspectorWindow: React.FC = () => {
   const { t } = useTranslation();
-  const { state, isMaximized } = usePresentationWindow('sourceInspector', 'SourceInspectorWindow');
+  const { state, windowActions } = usePresentationWindow('sourceInspector');
 
   const title =
     state.status === 'ready'
@@ -16,7 +16,6 @@ export const SourceInspectorWindow: React.FC = () => {
 
   return (
     <PresentationWindowShell
-      logTag="SourceInspectorWindow"
       title={title}
       icon={
         <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-[var(--accent-color)]/10 text-[var(--accent-color)]">
@@ -24,7 +23,7 @@ export const SourceInspectorWindow: React.FC = () => {
         </span>
       }
       state={state}
-      isMaximized={isMaximized}
+      windowActions={windowActions}
       errorMessages={{
         missingResultId: t('sourceInspector.missingResultId'),
         notFound: t('sourceInspector.noSource'),

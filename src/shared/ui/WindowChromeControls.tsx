@@ -33,10 +33,10 @@ const chromeButtonBase = cn(
 );
 
 export interface WindowChromeControlsProps {
-  isMaximized?: boolean;
-  onMinimize?: () => void | Promise<void>;
-  onMaximize?: () => void | Promise<void>;
-  onClose?: () => void | Promise<void>;
+  maximized?: boolean;
+  minimize?: () => void | Promise<unknown>;
+  toggleMaximize?: () => void | Promise<unknown>;
+  close?: () => void | Promise<unknown>;
   /** 一般省略：直角贴边，由系统窗口圆角裁剪。仅当外层壳层显式设了匹配圆角时再传入 */
   closeCornerClassName?: string;
   className?: string;
@@ -48,25 +48,25 @@ export interface WindowChromeControlsProps {
  * 图标含义直观，仅保留 aria-label 供辅助技术，不显示 hover tooltip。
  */
 export function WindowChromeControls({
-  isMaximized = false,
-  onMinimize,
-  onMaximize,
-  onClose,
+  maximized = false,
+  minimize,
+  toggleMaximize,
+  close,
   closeCornerClassName,
   className,
 }: WindowChromeControlsProps) {
   const { t } = useTranslation();
 
   const handleMinimize = () => {
-    if (onMinimize) void onMinimize();
+    if (minimize) void minimize();
   };
 
   const handleMaximize = () => {
-    if (onMaximize) void onMaximize();
+    if (toggleMaximize) void toggleMaximize();
   };
 
   const handleClose = () => {
-    if (onClose) void onClose();
+    if (close) void close();
   };
 
   return (
@@ -83,7 +83,7 @@ export function WindowChromeControls({
         type="button"
         onClick={handleMaximize}
         className={cn(chromeButtonBase, 'w-10')}
-        aria-label={isMaximized ? t('common.restore') : t('common.maximize')}
+        aria-label={maximized ? t('common.restore') : t('common.maximize')}
       >
         <MaximizeIcon />
       </button>

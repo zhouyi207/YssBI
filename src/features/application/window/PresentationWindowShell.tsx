@@ -4,12 +4,11 @@ import {
   presentationWindowErrorMessage,
   type PresentationWindowState,
 } from '@/features/application/presentation';
-import { useCurrentWindowActions } from './useCurrentWindowActions';
+import type { CurrentWindowActions } from './useCurrentWindowActions';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowChrome } from '@/shared/ui/WindowChrome';
 
 interface PresentationWindowShellProps {
-  logTag: string;
   title: string;
   icon?: ReactNode;
   state: PresentationWindowState;
@@ -19,22 +18,20 @@ interface PresentationWindowShellProps {
     loadFailed: string;
   };
   contentClassName?: string;
-  isMaximized: boolean;
+  windowActions: Pick<CurrentWindowActions, 'maximized' | 'minimize' | 'toggleMaximize' | 'close'>;
   children: ReactNode;
 }
 
 export function PresentationWindowShell({
-  logTag,
   title,
   icon,
   state,
   errorMessages,
   contentClassName = 'flex min-h-0 flex-1 flex-col overflow-hidden',
-  isMaximized,
+  windowActions,
   children,
 }: PresentationWindowShellProps) {
   const { t } = useTranslation();
-  const windowActions = useCurrentWindowActions(logTag);
   const error = presentationWindowErrorMessage(state, {
     ...errorMessages,
     pending: (completed, total) => t('resultState.pending', { completed, total: total ?? '?' }),
@@ -57,10 +54,10 @@ export function PresentationWindowShell({
         childWindow
         actions={
           <WindowChromeControls
-            isMaximized={isMaximized}
-            onMinimize={windowActions.minimize}
-            onMaximize={windowActions.maximize}
-            onClose={windowActions.close}
+            maximized={windowActions.maximized}
+            minimize={windowActions.minimize}
+            toggleMaximize={windowActions.toggleMaximize}
+            close={windowActions.close}
           />
         }
       >

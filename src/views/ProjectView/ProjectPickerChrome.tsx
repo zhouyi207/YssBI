@@ -14,7 +14,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getRememberedColorTheme } from '@/features/application/settings/colorThemePresets';
-import { openExternalUrlWithDialog, useCurrentWindowActions, useWindowMaximized } from '@/features/application/window';
+import { openExternalUrlWithDialog, useCurrentWindowActions } from '@/features/application/window';
 import { useProjectIOStore } from '@/features/core/dataStore';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import { BrandLockup } from '@/shared/ui/BrandMark';
@@ -35,8 +35,7 @@ export function ProjectPickerTitleBar({
   const appearance = useSettingsStore((state) => state.appearance);
   const updateAppearance = useSettingsStore((state) => state.updateAppearance);
   const isLightTheme = themeMode === 'light';
-  const isMaximized = useWindowMaximized('ProjectPicker');
-  const windowActions = useCurrentWindowActions('ProjectPicker');
+  const windowActions = useCurrentWindowActions();
   const toggleThemeMode = () => {
     const nextMode = isLightTheme ? 'dark' : 'light';
     updateAppearance({
@@ -105,10 +104,10 @@ export function ProjectPickerTitleBar({
       }
       windowActions={(
         <WindowChromeControls
-          isMaximized={isMaximized}
-          onMinimize={windowActions.minimize}
-          onMaximize={windowActions.maximize}
-          onClose={windowActions.close}
+          maximized={windowActions.maximized}
+          minimize={windowActions.minimize}
+          toggleMaximize={windowActions.toggleMaximize}
+          close={windowActions.close}
         />
       )}
     >

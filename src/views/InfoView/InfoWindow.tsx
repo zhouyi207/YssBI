@@ -17,7 +17,7 @@ const INFO_ICON = (
 
 export const InfoWindow: FC = () => {
   const { t } = useTranslation();
-  const { state, isMaximized } = usePresentationWindow('info', 'InfoWindow');
+  const { state, windowActions } = usePresentationWindow('info');
 
   const title =
     state.status === 'ready'
@@ -26,11 +26,10 @@ export const InfoWindow: FC = () => {
 
   return (
     <PresentationWindowShell
-      logTag="InfoWindow"
       title={title}
       icon={INFO_ICON}
       state={state}
-      isMaximized={isMaximized}
+      windowActions={windowActions}
       errorMessages={{
         missingResultId: t('info.missingDataKey'),
         notFound: t('info.noData'),

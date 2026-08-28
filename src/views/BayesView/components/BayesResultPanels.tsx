@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscCloudDownload, VscFolderOpened } from 'react-icons/vsc';
-import type { DensitySeriesDTO, InferenceResultDTO, PosteriorPredictiveRowDTO, TraceSeriesDTO } from '@/shared/types/bayes';
+import type { InferenceResultDTO, PosteriorPredictiveRowDTO } from '@/shared/types/bayes';
 import { MultiLineChart, PredictiveIntervalChart } from '@/shared/charts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -16,12 +16,21 @@ import {
   parameterDiagnosticStatus,
   type DiagnosticSuggestion,
 } from '@/features/domain/bayes';
-import { exportBayesArtifactCsv, readBayesAutocorrelationData, readBayesDensityPlotData, readBayesPosteriorPredictive, readBayesTracePlotData, revealBayesResultFolder } from '@/services/bayes/bayesInferenceService';
-import { savePathDialog } from '@/services/platform/pathDialog';
+import {
+  useBayesArtifacts,
+  type BayesArtifactsModel,
+} from '@/features/application/bayes';
 import { PanelTitle, formatNumber } from './model/BayesFields';
 import { LatexInline, latexSymbol } from './model/LatexPresentation';
-import { bayesActionErrorMessage, bayesDiagnosticWarningText } from '../bayesIssuePresentation';
-import { useBayesPlotData } from './useBayesPlotData';
+import {
+  bayesDiagnosticWarningText,
+  bayesErrorReferenceMessage,
+} from '../bayesIssuePresentation';
+import {
+  useBayesAutocorrelationData,
+  useBayesDensityPlotData,
+  useBayesTracePlotData,
+} from './useBayesPlotData';
 
 type RatingCode = 'unavailable' | 'excellent' | 'recommended' | 'concerning' | 'untrustworthy' | 'notConverged'
   | 'veryGood' | 'good' | 'acceptable' | 'low' | 'unreliable';
@@ -318,7 +327,7 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
   return (
     <section className="space-y-4">
       <div className="flex justify-end">
-        <BayesResultFolderButton artifactPath={artifactPath} />
+        <BayesResultFolderButton result={result} artifactPath={artifactPath} />
       </div>
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3">
@@ -387,26 +396,35 @@ export function ResultOverview({ result }: { result: InferenceResultDTO | null }
   );
 }
 
-export function BayesResultFolderButton({ artifactPath }: { artifactPath?: string }) {
+export function BayesResultFolderButton({
+  result = null,
+  artifactPath,
+}: {
+  result?: InferenceResultDTO | null;
+  artifactPath?: string;
+}) {
   const { t } = useTranslation();
   const feedbackId = useId();
   const [feedback, setFeedback] = useState<ActionFeedback>(null);
+  const artifacts = useBayesArtifacts({ result, artifactPath });
 
-  useEffect(() => setFeedback(null), [artifactPath]);
+  useEffect(() => setFeedback(null), [artifactPath, result?.artifactManifest.taskId]);
+  useEffect(() => {
+    if (!artifacts.issue) return;
+    const message = t('bayes.results.errors.openFolder', {
+      error: bayesErrorReferenceMessage(artifacts.issue, t),
+    });
+    setFeedback((current) => (
+      current?.kind === 'error' && current.message === message
+        ? current
+        : { kind: 'error', message }
+    ));
+  }, [artifacts.issue, t]);
 
   const openResultFolder = async () => {
     if (!artifactPath) return;
     setFeedback(null);
-    try {
-      await revealBayesResultFolder(artifactPath);
-    } catch (error) {
-      setFeedback({
-        kind: 'error',
-        message: t('bayes.results.errors.openFolder', {
-          error: bayesActionErrorMessage(error, t),
-        }),
-      });
-    }
+    await artifacts.revealResultFolder();
   };
 
   return (
@@ -442,30 +460,32 @@ export function BayesCsvExportButton({
   const [feedback, setFeedback] = useState<ActionFeedback>(null);
   const available = Boolean(result && findArtifact(result, kind));
   const taskId = result?.artifactManifest.taskId;
+  const artifacts = useBayesArtifacts({
+    result,
+    exportKind: kind,
+    exportFileName: fileName,
+    exportDialogTitle: t('bayes.results.actions.exportCsv'),
+  });
 
   useEffect(() => setFeedback(null), [kind, taskId]);
+  useEffect(() => {
+    if (!artifacts.issue) return;
+    const message = t('bayes.results.errors.exportCsv', {
+      error: bayesErrorReferenceMessage(artifacts.issue, t),
+    });
+    setFeedback((current) => (
+      current?.kind === 'error' && current.message === message
+        ? current
+        : { kind: 'error', message }
+    ));
+  }, [artifacts.issue, t]);
 
   const exportCsv = async () => {
     if (!result || !available) return;
     setFeedback(null);
-    try {
-      const selection = await savePathDialog({
-        title: t('bayes.results.actions.exportCsv'),
-        defaultPath: fileName,
-        filters: [{ name: 'CSV', extensions: ['csv'] }],
-      });
-      if (!selection.ok) throw new Error(selection.failure.code);
-      const destination = selection.value;
-      if (!destination) return;
-      await exportBayesArtifactCsv(result.artifactManifest.taskId, kind, destination);
+    const outcome = await artifacts.exportCsv();
+    if (outcome.status === 'completed') {
       setFeedback({ kind: 'success', message: t('bayes.results.messages.exportSuccess') });
-    } catch (error) {
-      setFeedback({
-        kind: 'error',
-        message: t('bayes.results.errors.exportCsv', {
-          error: bayesActionErrorMessage(error, t),
-        }),
-      });
     }
   };
 
@@ -490,21 +510,23 @@ function findArtifact(result: InferenceResultDTO, kind: InferenceResultDTO['arti
   return result.artifactManifest.artifacts.find(artifact => artifact.kind === kind);
 }
 
-function artifactTaskId(result: InferenceResultDTO | null, kind: InferenceResultDTO['artifactManifest']['artifacts'][number]['kind']): string | undefined {
-  return result && findArtifact(result, kind) ? result.artifactManifest.taskId : undefined;
+interface TraceSeriesView {
+  readonly parameter: string;
+  readonly chain: number;
+  readonly points: readonly { readonly draw: number; readonly value: number }[];
 }
 
+interface DensitySeriesView {
+  readonly parameter: string;
+  readonly chain: number | null;
+  readonly points: readonly { readonly x: number; readonly density: number }[];
+}
 
-
-const loadTracePlot = (taskId: string, parameter: string) => readBayesTracePlotData(taskId, parameter, 500);
-const loadDensityPlot = (taskId: string, parameter: string) => readBayesDensityPlotData(taskId, parameter, 256);
-const loadAutocorrelationPlot = (taskId: string, parameter: string) => readBayesAutocorrelationData(taskId, parameter, 50);
-
-export function traceChains(series: readonly TraceSeriesDTO[]): number[] {
+export function traceChains(series: readonly TraceSeriesView[]): number[] {
   return Array.from(new Set(series.map(item => item.chain))).sort((left, right) => left - right);
 }
 
-export function filterTraceSeries(series: readonly TraceSeriesDTO[], selectedChain: string): TraceSeriesDTO[] {
+export function filterTraceSeries<T extends TraceSeriesView>(series: readonly T[], selectedChain: string): T[] {
   if (selectedChain === '__all__') return [...series];
   const chain = Number(selectedChain);
   return series.filter(item => item.chain === chain);
@@ -512,7 +534,7 @@ export function filterTraceSeries(series: readonly TraceSeriesDTO[], selectedCha
 
 function PosteriorTracePreview({ result }: { result: InferenceResultDTO | null }) {
   const { t } = useTranslation();
-  const { data, loading, error, parameters, parameter, setSelectedParameter } = useBayesPlotData(result, loadTracePlot);
+  const { data, loading, error, parameters, parameter, setSelectedParameter } = useBayesTracePlotData(result);
   const [selectedChain, setSelectedChain] = useState('__all__');
   const chains = useMemo(() => traceChains(data?.series ?? []), [data]);
   const visibleSeries = filterTraceSeries(data?.series ?? [], selectedChain);
@@ -571,7 +593,7 @@ function PosteriorTracePreview({ result }: { result: InferenceResultDTO | null }
 
 function PosteriorDensityPreview({ result }: { result: InferenceResultDTO | null }) {
   const { t } = useTranslation();
-  const { data, loading, error, parameters, parameter, setSelectedParameter } = useBayesPlotData(result, loadDensityPlot);
+  const { data, loading, error, parameters, parameter, setSelectedParameter } = useBayesDensityPlotData(result);
   const [selectedChain, setSelectedChain] = useState('__all__');
   const chains = useMemo(() => seriesChains(data?.series ?? []), [data]);
   const visibleSeries = filterDensitySeries(data?.series ?? [], selectedChain);
@@ -612,7 +634,7 @@ function PosteriorDensityPreview({ result }: { result: InferenceResultDTO | null
 
 function AutocorrelationPreview({ result }: { result: InferenceResultDTO | null }) {
   const { t } = useTranslation();
-  const { data, loading, error, parameters, parameter, setSelectedParameter } = useBayesPlotData(result, loadAutocorrelationPlot);
+  const { data, loading, error, parameters, parameter, setSelectedParameter } = useBayesAutocorrelationData(result);
   const [selectedChain, setSelectedChain] = useState('__all__');
   const chains = useMemo(() => seriesChains(data?.series ?? []), [data]);
   const visibleSeries = filterChainSeries(data?.series ?? [], selectedChain);
@@ -657,9 +679,9 @@ function seriesChains(series: readonly { chain: number | null }[]): number[] {
 }
 
 export function filterDensitySeries(
-  series: readonly DensitySeriesDTO[],
+  series: readonly DensitySeriesView[],
   selectedChain: string,
-): DensitySeriesDTO[] {
+): DensitySeriesView[] {
   if (selectedChain === '__pooled__') return series.filter(item => item.chain == null);
   if (selectedChain === '__all__') return series.filter(item => item.chain != null);
   const chain = Number(selectedChain);
@@ -731,10 +753,10 @@ function PosteriorPlotFrame({
   children,
 }: {
   result: InferenceResultDTO | null;
-  parameters: string[];
+  parameters: readonly string[];
   selectedParameter?: string;
   loading: boolean;
-  error: unknown | null;
+  error: BayesArtifactsModel['issue'];
   onParameterChange: (parameter: string) => void;
   secondaryControl?: ReactNode;
   children: ReactNode;
@@ -764,7 +786,7 @@ function PosteriorPlotFrame({
       </div>
       {loading ? <p className="text-sm text-muted-foreground">{t('bayes.results.loading.plot')}</p> : null}
       {error ? <p className="text-sm text-destructive">{t('bayes.results.errors.plot', {
-        error: bayesActionErrorMessage(error, t),
+        error: error ? bayesErrorReferenceMessage(error, t) : '',
       })}</p> : null}
       {!loading && !error ? children : null}
     </div>
@@ -802,27 +824,21 @@ function PosteriorPredictivePreview({
 }) {
   const { t } = useTranslation();
   const [plotRows, setPlotRows] = useState<PosteriorPredictiveRowDTO[]>([]);
-  const [plotError, setPlotError] = useState<unknown | null>(null);
-  const taskId = artifactTaskId(result, 'posterior_predictive');
-  const artifactRows = result ? findArtifact(result, 'posterior_predictive')?.rows : undefined;
+  const artifacts = useBayesArtifacts({ result });
 
   useEffect(() => {
     setPlotRows([]);
-    setPlotError(null);
-    if (!taskId) return;
+    if (!result || !findArtifact(result, 'posterior_predictive')) return;
 
     let cancelled = false;
-    readBayesPosteriorPredictive(taskId, 0, Math.max(artifactRows ?? 10_000, 1))
-      .then(data => {
+    void artifacts.readPosteriorPredictive().then((outcome) => {
         if (cancelled) return;
-        setPlotRows(data.rows);
-        onResponseTransform(data.responseTransform);
-      })
-      .catch((caught: unknown) => {
-        if (!cancelled) setPlotError(caught);
+        if (outcome.status !== 'ready') return;
+        setPlotRows(Array.from(outcome.value.rows));
+        onResponseTransform(outcome.value.responseTransform);
       });
     return () => { cancelled = true; };
-  }, [artifactRows, onResponseTransform, taskId]);
+  }, [artifacts.readPosteriorPredictive, onResponseTransform, result]);
 
   if (!result) return <p className="text-sm text-muted-foreground">{t('bayes.results.empty.posteriorPredictive')}</p>;
     if (!findArtifact(result, 'posterior_predictive')) return <p className="text-sm text-muted-foreground">{t('bayes.results.empty.posteriorPredictiveData')}</p>;
@@ -836,8 +852,8 @@ function PosteriorPredictivePreview({
                     yLabel={scale === 'original' ? t('bayes.results.chart.response') : t('bayes.results.chart.responseModelScale')}
                   />
       ) : null}
-      {plotError ? <p className="text-sm text-destructive">{t('bayes.results.errors.predictivePlot', {
-        error: bayesActionErrorMessage(plotError, t),
+      {artifacts.issue ? <p className="text-sm text-destructive">{t('bayes.results.errors.predictivePlot', {
+        error: bayesErrorReferenceMessage(artifacts.issue, t),
       })}</p> : null}
     </div>
   );

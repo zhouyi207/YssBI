@@ -1,11 +1,13 @@
 import type { TFunction } from 'i18next';
 import {
-  normalizeBayesApplicationError,
+  normalizeBayesActionError,
+  type BayesArtifactsModel,
   type BayesApplicationError,
   type BayesInferenceError,
 } from '@/features/application/bayes';
 import type { DiagnosticWarningDTO, ValidationIssueDTO } from '@/shared/types/bayes';
-import { IpcError } from '@/services/ipc';
+
+type BayesErrorReference = NonNullable<BayesArtifactsModel['issue']>;
 
 export function bayesErrorMessage(error: BayesApplicationError, t: TFunction): string {
   return t(`bayes.errors.${error.code}`, {
@@ -19,9 +21,20 @@ export function bayesInferenceErrorMessage(error: BayesInferenceError, t: TFunct
   return bayesErrorMessage(error, t);
 }
 
+export function bayesErrorReferenceMessage(error: BayesErrorReference, t: TFunction): string {
+  const message = bayesErrorMessage({
+    code: error.code,
+    details: null,
+    incidentId: error.incidentId,
+  }, t);
+  return error.incidentId
+    ? `${message} · ${t('common.incidentId')}: ${error.incidentId}`
+    : message;
+}
+
 export function bayesActionErrorMessage(error: unknown, t: TFunction): string {
-  if (!(error instanceof IpcError)) return t('bayes.errors.unexpected');
-  const normalized = normalizeBayesApplicationError(error, 'bayes_request_failed');
+  const normalized = normalizeBayesActionError(error, 'bayes_request_failed');
+  if (!normalized) return t('bayes.errors.unexpected');
   const message = bayesErrorMessage(normalized, t);
   return normalized.incidentId
     ? `${message} · ${t('common.incidentId')}: ${normalized.incidentId}`

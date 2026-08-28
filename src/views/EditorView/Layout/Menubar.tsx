@@ -12,7 +12,7 @@ import {
   type MenubarMenuItem,
 } from '@/features/application/menubar/menubarViewItems';
 import { getRememberedColorTheme } from '@/features/application/settings/colorThemePresets';
-import { openExternalUrlWithDialog, useCurrentWindowActions, useWindowMaximized } from '@/features/application/window';
+import { openExternalUrlWithDialog, useCurrentWindowActions } from '@/features/application/window';
 import { useActiveProjectPath } from '@/features/core/dataStore';
 import { useSettingsStore } from '@/features/core/settings/settingsStore';
 import { APP_LINKS } from '@/app/appConfig/default';
@@ -284,8 +284,7 @@ export function Menubar() {
   const appearance = useSettingsStore((state) => state.appearance);
   const updateAppearance = useSettingsStore((state) => state.updateAppearance);
   const isLightTheme = themeMode === 'light';
-  const isMaximized = useWindowMaximized('Menubar');
-  const windowActions = useCurrentWindowActions('Menubar');
+  const windowActions = useCurrentWindowActions();
 
   const toggleThemeMode = () => {
     const nextMode = isLightTheme ? 'dark' : 'light';
@@ -406,10 +405,10 @@ export function Menubar() {
         }
         windowActions={(
           <WindowChromeControls
-            isMaximized={isMaximized}
-            onMinimize={windowActions.minimize}
-            onMaximize={windowActions.maximize}
-            onClose={windowActions.close}
+            maximized={windowActions.maximized}
+            minimize={windowActions.minimize}
+            toggleMaximize={windowActions.toggleMaximize}
+            close={windowActions.close}
           />
         )}
       >

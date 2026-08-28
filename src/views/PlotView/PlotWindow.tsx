@@ -17,7 +17,7 @@ const PLOT_ICON = (
 
 export const PlotWindow: React.FC = () => {
   const { t } = useTranslation();
-  const { state, isMaximized } = usePresentationWindow('plot', 'PlotWindow');
+  const { state, windowActions } = usePresentationWindow('plot');
 
   const plotPayload = useMemo(() => {
     if (state.status !== 'ready' || state.payload.mode !== 'plot') return null;
@@ -30,11 +30,10 @@ export const PlotWindow: React.FC = () => {
 
   return (
     <PresentationWindowShell
-      logTag="PlotWindow"
       title={title}
       icon={PLOT_ICON}
       state={state}
-      isMaximized={isMaximized}
+      windowActions={windowActions}
       errorMessages={{
         missingResultId: t('info.missingDataKey'),
         notFound: t('plot.noData'),

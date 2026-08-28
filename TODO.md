@@ -1678,6 +1678,9 @@ Execution 不知道具体 UI
 - [ ] 从 Execution resource preparation 移除具体 Database runtime 持有，保留 Database 句柄只在 Backend adapter factory boundary。
 - [ ] 完成跨 Database/Graph/Project watcher 边界的 architecture debt re-audit 前置 check、fmt 与 diff 校验，随后进入下一轮 owner cutover。
 - [ ] 完成 Execution Task 5 的 generation-pinned package preparation seam，统一 RootPlan、FunctionBundle 与 ParameterBundle 的 typed 校验入口。
+- [ ] 完成 Frontend Task 8 的 bounded Bayes Application slice：`useBayesDatasets` 负责只读数据库元数据与 project/database generation stale suppression，`useBayesArtifacts` 聚合 artifact reads/export/reveal 并保持 deep-readonly、安全 issue 与 typed platform outcome。
+- [ ] 完成 current-window Application action slice：窗口最大化状态与 resize 刷新绑定当前 mounted generation，minimize/toggle/close 使用闭合 `completed|stale|failed` outcome，shared chrome 只接收回调 props。
+- [ ] 通过 Bayes artifact、Bayes dataset metadata、current-window 三组 focused Vitest（6 tests）与 `pnpm typecheck`；完整 Project/event/domain atomic cutover 仍留待后续 Task 8 checkpoint。
 - [ ] 为 prepared execution handle 增加 root provenance/source、bundle basis、函数 resource/version 唯一性及参数 identity 的非变更性校验。
 - [ ] 保持 PreparedExecutionPlan 的私有不可伪造构造、只读内部 package 与旧 node_system production route 不变；未执行生产 cutover。
 - [ ] 在 cfg(test) 隔离的 schema editor mapper 中复用 Application projection model，保持旧 EditorGraphProjectionDto wire owner 未路由。

@@ -18,7 +18,7 @@ export function SymbolRoleStep({
   issues,
 }: {
   draft: BayesModelDraftDTO;
-  datasets: BayesDatasetOption[];
+  datasets: readonly BayesDatasetOption[];
   issues: ValidationIssueDTO[];
   onSymbolConfigurationChange: (configuration: {
     name: string;
@@ -227,6 +227,10 @@ function datasetSelectionFromOption(option: BayesDatasetOption): BayesDatasetSel
   return {
     sourceType: option.sourceType,
     sourceId: option.sourceId,
-    columns: option.columns,
+    columns: option.columns.map(column => ({
+      name: column.name,
+      dtype: column.dtype,
+      nullable: column.nullable,
+    })),
   };
 }

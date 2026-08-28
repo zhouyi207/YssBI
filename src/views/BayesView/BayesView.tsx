@@ -1,23 +1,27 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 import type { BayesDatasetSelectionDTO, BayesInferenceTaskDTO, ValidationReportDTO } from '@/shared/types/bayes';
-import { useBayesInferenceTask, useBayesModelDraft, useBayesValidation } from '@/features/application/bayes';
+import {
+  useBayesDatasets,
+  useBayesInferenceTask,
+  useBayesModelDraft,
+  useBayesValidation,
+} from '@/features/application/bayes';
+import type {
+  BayesArtifactsModel,
+  BayesDatasetOption,
+} from '@/features/application/bayes';
 import type { BayesInferenceError } from '@/features/application/bayes';
 import { issueTargetStep } from '@/features/domain/bayes';
 import { useProjectSync } from '@/features/application/initialization';
-import { initProjectSync, useDatabaseStore } from '@/features/core/dataStore';
-import { DatabaseService } from '@/services/database/databaseService';
-import { useCurrentWindowActions, usePersistedWindow, useWindowMaximized } from '@/features/application/window';
+import { initProjectSync } from '@/features/core/dataStore';
+import { useCurrentWindowActions, usePersistedWindow } from '@/features/application/window';
 import { logger } from '@/utils/appLogger';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
 import { WindowMenuBar } from '@/shared/ui/WindowChrome';
-import {
-  captureProjectIdentity,
-  isCurrentProjectIdentity,
-} from '@/features/core/projectLifecycle/projectLifecycleAuthority';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -25,47 +29,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FormulaStep } from './components/model/FormulaStep';
 import { SamplerStep } from './components/model/SamplerStep';
 import { SymbolRoleStep } from './components/model/SymbolRoleStep';
-import type { BayesDatasetOption } from './components/model/types';
 import { ResultOverview } from './components/BayesResultPanels';
 import { BayesProgressStatus } from './components/BayesProgressStatus';
 import { bayesInferenceErrorMessage, bayesValidationIssueMessage } from './bayesIssuePresentation';
-
-type DatabaseMetadataUpdater = (
-  id: string,
-  changes: { name: string; columns: Array<{ name: string; type: string }>; rowCount: number; columnCount: number },
-) => void;
-
-export async function hydrateBayesDatabaseMetadata(
-  databases: Record<string, { id: string; name?: string; columns?: unknown[] }>,
-  updateDatabase: DatabaseMetadataUpdater,
-  isCancelled: () => boolean = () => false,
-): Promise<void> {
-  const databasesMissingMetadata = Object.values(databases)
-    .filter((database) => (database.columns?.length ?? 0) === 0);
-  if (databasesMissingMetadata.length === 0) return;
-  const identity = captureProjectIdentity();
-  await Promise.all(databasesMissingMetadata.map(async (database) => {
-    try {
-      const meta = await DatabaseService.getDatabaseMeta(identity.projectInstanceId, database.id);
-      if (isCancelled() || !isCurrentProjectIdentity(identity)) return;
-      updateDatabase(database.id, {
-        name: meta.name,
-        columns: meta.columns,
-        rowCount: meta.rowCount,
-        columnCount: meta.columnCount,
-      });
-    } catch (error) {
-      if (!isCancelled() && isCurrentProjectIdentity(identity)) {
-        logger.data.warn('getDatabaseMeta failed: ' + String(error), 'BayesView');
-      }
-    }
-  }));
-}
+import { bayesErrorReferenceMessage } from './bayesIssuePresentation';
 
 export function BayesView() {
   const { t } = useTranslation();
-  const isMaximized = useWindowMaximized('BayesView');
-  const windowActions = useCurrentWindowActions('BayesView');
+  const windowActions = useCurrentWindowActions();
 
   usePersistedWindow('bayes');
   useProjectSync();
@@ -84,28 +55,9 @@ export function BayesView() {
     return () => { cancelled = true; };
   }, [windowActions]);
 
-  const databases = useDatabaseStore(state => state.databases);
-  const updateDatabase = useDatabaseStore(state => state.updateDatabase);
-  const datasets = useMemo<BayesDatasetOption[]>(
-    () => Object.values(databases).map(database => ({
-      sourceType: 'table' as const,
-      sourceId: database.id,
-      displayName: database.name,
-      columns: (database.columns ?? []).map(column => ({
-        name: column.name,
-        dtype: bayesColumnDType(column.type),
-        nullable: true,
-      })),
-    })),
-    [databases],
-  );
+  const datasetsModel = useBayesDatasets();
+  const datasets = datasetsModel.datasets;
   const modelDraft = useBayesModelDraft();
-
-  useEffect(() => {
-    let cancelled = false;
-    void hydrateBayesDatabaseMetadata(databases, updateDatabase, () => cancelled);
-    return () => { cancelled = true; };
-  }, [databases, updateDatabase]);
 
   useEffect(() => {
     const currentDatasetId = modelDraft.draft.dataset?.sourceId;
@@ -116,12 +68,17 @@ export function BayesView() {
       modelDraft.updateDataset({
         sourceType: nextDataset.sourceType,
         sourceId: nextDataset.sourceId,
-        columns: nextDataset.columns,
+        columns: nextDataset.columns.map(column => ({
+          name: column.name,
+          dtype: column.dtype,
+          nullable: column.nullable,
+        })),
       });
     }
   }, [datasets, modelDraft.draft.dataset, modelDraft.updateDataset]);
   const validation = useBayesValidation(modelDraft.draft, modelDraft.draftHash);
   const inference = useBayesInferenceTask();
+  const applicationIssue = datasetsModel.issue ?? inference.error ?? validation.error;
   const symbolIssues = validation.stale || !validation.report
     ? []
     : [...validation.report.errors, ...validation.report.warnings]
@@ -137,10 +94,10 @@ export function BayesView() {
       <WindowMenuBar
         windowActions={(
           <WindowChromeControls
-            isMaximized={isMaximized}
-            onMinimize={windowActions.minimize}
-            onMaximize={windowActions.maximize}
-            onClose={windowActions.close}
+            maximized={windowActions.maximized}
+            minimize={windowActions.minimize}
+            toggleMaximize={windowActions.toggleMaximize}
+            close={windowActions.close}
           />
         )}
       >
@@ -172,7 +129,7 @@ export function BayesView() {
           <main className="p-6">
             <TabsContent value="model">
               <section className="space-y-4">
-                <BayesIssueBanner error={inference.error ?? validation.error} validation={null} />
+                <BayesIssueBanner error={applicationIssue} validation={null} />
                 <FormulaStep
                   draft={modelDraft.draft}
                   error={modelDraft.formulaError}
@@ -189,7 +146,7 @@ export function BayesView() {
               </section>
             </TabsContent>
             <TabsContent value="results">
-              <BayesIssueBanner error={inference.error ?? validation.error} validation={validation.report} />
+              <BayesIssueBanner error={applicationIssue} validation={validation.report} />
               <ResultOverview result={inference.result} />
             </TabsContent>
           </main>
@@ -199,17 +156,7 @@ export function BayesView() {
   );
 }
 
-function bayesColumnDType(type: string): 'number' | 'integer' | 'boolean' | 'string' | 'date' | 'unknown' {
-  const normalized = type.toLowerCase();
-  if (normalized.includes('int')) return 'integer';
-  if (normalized.includes('float') || normalized.includes('double') || normalized.includes('real') || normalized.includes('decimal') || normalized.includes('numeric')) return 'number';
-  if (normalized.includes('bool')) return 'boolean';
-  if (normalized.includes('date') || normalized.includes('time')) return 'date';
-  if (normalized.includes('char') || normalized.includes('text') || normalized.includes('string')) return 'string';
-  return 'unknown';
-}
-
-function sameBayesDataset(left: BayesDatasetSelectionDTO, right: BayesDatasetSelectionDTO | null): boolean {
+function sameBayesDataset(left: BayesDatasetOption, right: BayesDatasetSelectionDTO | null): boolean {
   if (!right) return false;
   if (left.sourceId !== right.sourceId || left.sourceType !== right.sourceType) return false;
   if (left.columns.length !== right.columns.length) return false;
@@ -223,7 +170,7 @@ function BayesIssueBanner({
   error,
   validation,
 }: {
-  error: BayesInferenceError | null;
+  error: BayesInferenceError | BayesArtifactsModel['issue'];
   validation: ValidationReportDTO | null;
 }) {
   const { t } = useTranslation();
@@ -238,12 +185,13 @@ function BayesIssueBanner({
         {error ? (
           <div className="space-y-1">
             <p>
-              <span className="font-mono">[{error.code}]</span> {bayesInferenceErrorMessage(error, t)}
+              <span className="font-mono">[{error.code}]</span>{' '}
+              {'details' in error ? bayesInferenceErrorMessage(error, t) : bayesErrorReferenceMessage(error, t)}
             </p>
-            {error.details?.column ? <p>{t('bayes.issue.column', { column: error.details.column })}</p> : null}
-            {typeof error.details?.row === 'number' ? <p>{t('bayes.issue.row', { row: error.details.row + 1 })}</p> : null}
-            {error.details?.parameter ? <p>{t('bayes.issue.parameter', { parameter: error.details.parameter })}</p> : null}
-            {error.details?.path ? <p>{t('bayes.issue.path', { path: error.details.path })}</p> : null}
+            {'details' in error && error.details?.column ? <p>{t('bayes.issue.column', { column: error.details.column })}</p> : null}
+            {'details' in error && typeof error.details?.row === 'number' ? <p>{t('bayes.issue.row', { row: error.details.row + 1 })}</p> : null}
+            {'details' in error && error.details?.parameter ? <p>{t('bayes.issue.parameter', { parameter: error.details.parameter })}</p> : null}
+            {'details' in error && error.details?.path ? <p>{t('bayes.issue.path', { path: error.details.path })}</p> : null}
             {error.incidentId ? (
               <p>{t('common.incidentId')}: <span className="font-mono">{error.incidentId}</span></p>
             ) : null}
