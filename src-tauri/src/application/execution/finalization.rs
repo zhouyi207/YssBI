@@ -54,7 +54,7 @@ impl ResultInspectionRequested {
     }
 
     pub(crate) fn requester(&self) -> &PlanSourceIdentity {
-        self.requester
+        &self.requester
     }
 }
 
@@ -88,6 +88,7 @@ pub(crate) struct CommittedRunOutcome {
     _seal: CommittedRunOutcomeSeal,
 }
 
+#[derive(Debug)]
 struct CommittedRunOutcomeSeal;
 
 impl CommittedRunOutcome {

@@ -283,7 +283,7 @@ pub(crate) fn open_graph_in_session(
     let registry_fingerprint = captured.graph().registry_fingerprint();
     let basis = PlanCompilationBasis::new(
         PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
-        PlanGraphRevision::from_existing(document.revision.get()),
+        PlanGraphRevision::from_existing(candidate_document.revision.get()),
         PlanRegistryFingerprint::from_bytes(registry_fingerprint),
         Default::default(),
         Default::default(),
