@@ -1710,6 +1710,7 @@ Execution 不知道具体 UI
 - [ ] 建立 test-only resultInspectionRequested wire/parser contract，严格拒绝旧 policy/target/prose 字段并验证其先于 runCompleted。
 - [ ] 建立 Frontend Application Result/Execution query/publication capability，覆盖 project/result epoch、精确 query supersession 与 stale 零发布。
 - [ ] 建立 Services-owned Project event parser/stream，承接严格 typed envelope 和稳定错误码，旧 Core ProjectListener 仍待原子删除。
+- [ ] 收紧 Application session candidate 的 composition 可见性：保留 fields-private identity 校验与线性 install seam，等待最终唯一 composition root 接入。
 - [ ] 建立 Execution-owned session-bound result query owner：单次 Application session capture、Execution-private result/history pairing、oldest→newest 顺序与 typed missing-source error。
 - [ ] 建立 Frontend Application 的 Bayes dataset/artifact 与 current-window callback hooks，覆盖取消导出、generation stale suppression、typed platform failure 与既有窗口/Bayes 回归。
 - [ ] 完成 Result Query/Bayes window staged slices 的 focused verification；Rust architecture gate 已验证 37 passed，staged Graph→Execution debt 仍待原子生产 cutover 清理。

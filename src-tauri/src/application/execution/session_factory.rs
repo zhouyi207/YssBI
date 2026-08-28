@@ -39,7 +39,7 @@ impl SessionResourceFactoryBuilder {
 }
 
 #[derive(Debug, Eq, PartialEq, Error)]
-pub(super) enum ReplacementCandidateInputError {
+pub(crate) enum ReplacementCandidateInputError {
     #[error("candidate Project and Plan session identities differ")]
     ProjectSessionIdentityMismatch,
     #[error("candidate Database session identity differs from the Plan session")]
@@ -53,7 +53,7 @@ pub(super) enum ReplacementCandidateInputError {
 }
 
 #[derive(Debug, Eq, PartialEq, Error)]
-pub(super) enum SessionCandidateBuildError {
+pub(crate) enum SessionCandidateBuildError {
     #[error(transparent)]
     InvalidInput(#[from] ReplacementCandidateInputError),
 }
@@ -64,7 +64,7 @@ pub(super) enum SessionCandidateBuildError {
 /// session by assembling partially validated components. The only transition
 /// out is `build_replacement_candidate`, which validates the complete identity
 /// tuple before it invokes the composition-injected builder.
-pub(super) struct ReplacementCandidateInput {
+pub(crate) struct ReplacementCandidateInput {
     epoch: ApplicationSessionEpoch,
     project_instance_id: ProjectInstanceId,
     project_session_id: ProjectSessionId,
@@ -79,7 +79,7 @@ pub(super) struct ReplacementCandidateInput {
 
 impl ReplacementCandidateInput {
     #[allow(clippy::too_many_arguments)]
-    pub(super) fn new(
+    pub(crate) fn new(
         epoch: ApplicationSessionEpoch,
         project_instance_id: ProjectInstanceId,
         project_session_id: ProjectSessionId,
@@ -140,7 +140,7 @@ impl UnpublishedApplicationSession {
     }
 }
 
-pub(super) fn build_replacement_candidate(
+pub(crate) fn build_replacement_candidate(
     builder: &SessionResourceFactoryBuilder,
     input: ReplacementCandidateInput,
 ) -> Result<UnpublishedApplicationSession, SessionCandidateBuildError> {
