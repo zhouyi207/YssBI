@@ -1,13 +1,11 @@
-use crate::application::database_schema::project_databases_variables;
 use crate::application::execution::{ApplicationState, SessionCaptureError};
 use crate::application::graph_open::{OpenGraphApplicationError, OpenGraphRequest};
 use crate::error::CommandError;
 use crate::event::ProjectActivationResultDto;
 use crate::node_system::analysis::EditorGraphProjectionDto;
-use crate::project::{
-    ProjectIndex, ProjectState, RevealProjectResourceRequest, format_path_for_user_path,
-    normalize_existing_path, resolve_reveal_path,
-};
+use crate::project::{ProjectIndex, normalize_existing_path};
+#[cfg(test)]
+use crate::project::ProjectState;
 use crate::schema::DatabasesVariablesDTO;
 use serde::Serialize;
 use tauri::State;
@@ -21,7 +19,7 @@ struct RecoveryRequiredDetails {
 /// 分阶段加载第一步：获取 databases + variables（含 schema）
 #[tauri::command]
 pub fn get_project_databases_variables(
-    state: State<ProjectState>,
+    application: State<ApplicationState>,
 ) -> Result<DatabasesVariablesDTO, CommandError> {
     tracing::info!(
         target: "yssbi::commands::project",
@@ -30,9 +28,12 @@ pub fn get_project_databases_variables(
         "Loading project databases and variables"
     );
 
-    project_databases_variables(state.inner()).map_err(CommandError::from)
+    application
+        .query_project_databases_variables()
+        .map_err(map_project_query_error)
 }
 
+#[cfg(test)]
 fn current_project_activation(
     state: &ProjectState,
 ) -> Result<ProjectActivationResultDto, CommandError> {
@@ -59,18 +60,21 @@ fn current_project_activation(
 /// 获取当前项目 activation，供项目加载后创建的独立 WebView 建立 lifecycle identity。
 #[tauri::command]
 pub fn get_current_project_activation(
-    state: State<ProjectState>,
+    application: State<ApplicationState>,
 ) -> Result<ProjectActivationResultDto, CommandError> {
-    current_project_activation(state.inner())
+    application
+        .query_current_project_activation()
+        .map_err(map_project_query_error)
 }
 
 /// 获取当前项目路径
 #[tauri::command]
-pub fn get_project_path(state: State<ProjectState>) -> Result<Option<String>, CommandError> {
-    state
-        .ensure_project_operational()
-        .map_err(CommandError::from)?;
-    let path = state.get_path();
+pub fn get_project_path(
+    application: State<ApplicationState>,
+) -> Result<Option<String>, CommandError> {
+    let path = application
+        .query_project_path()
+        .map_err(map_project_query_error)?;
 
     tracing::info!(
         target: "yssbi::commands::project",
@@ -85,13 +89,13 @@ pub fn get_project_path(state: State<ProjectState>) -> Result<Option<String>, Co
 
 #[tauri::command]
 pub fn get_project_index(
-    state: State<ProjectState>,
+    application: State<ApplicationState>,
     project_instance_id: String,
 ) -> Result<ProjectIndex, CommandError> {
     let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
-    state
-        .read_project_index(&project_instance_id)
-        .map_err(CommandError::from)
+    application
+        .query_project_index(project_instance_id)
+        .map_err(map_project_query_error)
 }
 
 #[tauri::command]
@@ -153,17 +157,47 @@ fn open_graph_command_error(error: OpenGraphApplicationError) -> CommandError {
 /// Resolve the on-disk path for a project resource (graph / database / worksheet).
 #[tauri::command]
 pub fn get_project_resource_path(
-    state: State<ProjectState>,
+    application: State<ApplicationState>,
     kind: String,
     resource_id: String,
 ) -> Result<String, CommandError> {
-    let request = RevealProjectResourceRequest::from_parts(&kind, resource_id)
-        .map_err(|_| CommandError::expected("invalid_resource_reference"))?;
-    let path = resolve_reveal_path(&state, request).map_err(CommandError::from)?;
-    if !path.exists() {
-        return Err(CommandError::expected("resource_not_found"));
+    application
+        .reveal_project_resource(kind, resource_id)
+        .map_err(map_project_query_error)
+}
+
+fn map_project_query_error(
+    error: crate::application::project_query::ProjectQueryApplicationError,
+) -> CommandError {
+    use crate::application::project_query::ProjectQueryApplicationError;
+    match error {
+        ProjectQueryApplicationError::SessionCapture(error) => match error {
+            SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
+            SessionCaptureError::Replacing => {
+                CommandError::expected("project_lifecycle_admission_closed")
+            }
+            SessionCaptureError::Recovering => CommandError::expected("project_recovery_required")
+                .with_details(RecoveryRequiredDetails {
+                    recovery_required: true,
+                }),
+        },
+        ProjectQueryApplicationError::ProjectIdentityMismatch { .. } => {
+            CommandError::expected("stale_project_lifecycle")
+        }
+        ProjectQueryApplicationError::Project(error) => CommandError::from(error),
+        ProjectQueryApplicationError::ProjectRead(error) => {
+            CommandError::diagnosed("project_query_failed", error)
+        }
+        ProjectQueryApplicationError::InvalidResourceReference => {
+            CommandError::expected("invalid_resource_reference")
+        }
+        ProjectQueryApplicationError::ResourceNotFound => {
+            CommandError::expected("resource_not_found")
+        }
+        ProjectQueryApplicationError::SessionChanged(error) => {
+            CommandError::diagnosed("project_query_session_changed", error)
+        }
     }
-    Ok(format_path_for_user_path(&path))
 }
 
 #[cfg(test)]

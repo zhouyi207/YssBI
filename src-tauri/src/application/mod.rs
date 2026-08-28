@@ -17,6 +17,7 @@ pub mod graph_open;
 pub mod hypothesis;
 pub mod pin_preview_generation;
 pub mod project_lifecycle;
+pub mod project_query;
 pub mod project_watcher;
 pub mod resource_mutation;
 pub mod statistical_input;

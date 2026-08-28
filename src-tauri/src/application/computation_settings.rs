@@ -1,5 +1,12 @@
+use super::execution::session_slot::{
+    ApplicationSessionRefreshError, ApplicationState, SessionCaptureError, SessionRevalidationError,
+};
 use crate::execution::settings::{
     ExecutionMissingValuePolicy, ExecutionNumericTolerance, ExecutionSettings,
+};
+use crate::project::{
+    ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
+    ComputationSettingsSnapshot, ProjectFilesystemError, ProjectInstanceId,
 };
 use crate::project::{
     ComputationSettingsValidationError, ProjectComputationSettings, StatisticalMissingValuePolicy,
@@ -12,6 +19,63 @@ pub enum ComputationSettingsMappingError {
     InvalidTolerance,
     #[error("numeric tolerance cannot be zero in both dimensions")]
     ZeroTolerance,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ComputationSettingsApplicationError {
+    #[error(transparent)]
+    SessionCapture(#[from] SessionCaptureError),
+    #[error("computation-settings request belongs to another project instance")]
+    ProjectIdentityMismatch { requested: ProjectInstanceId },
+    #[error(transparent)]
+    Project(#[from] ProjectFilesystemError),
+    #[error(transparent)]
+    Mapping(#[from] ComputationSettingsMappingError),
+    #[error("captured application session changed during computation-settings operation")]
+    SessionChanged(#[source] SessionRevalidationError),
+    #[error("application session refresh failed")]
+    SessionRefresh(#[source] ApplicationSessionRefreshError),
+}
+
+impl ApplicationState {
+    pub fn query_computation_settings(
+        &self,
+        project_instance_id: ProjectInstanceId,
+    ) -> Result<ComputationSettingsSnapshot, ComputationSettingsApplicationError> {
+        let captured = self.capture_session()?;
+        if captured.project_instance_id() != &project_instance_id {
+            return Err(
+                ComputationSettingsApplicationError::ProjectIdentityMismatch {
+                    requested: project_instance_id,
+                },
+            );
+        }
+        let result = captured.project().get_computation_settings()?;
+        self.revalidate_captured_session(&captured)
+            .map_err(ComputationSettingsApplicationError::SessionChanged)?;
+        Ok(result)
+    }
+
+    pub fn update_computation_settings(
+        &self,
+        request: ComputationSettingsMutationRequest,
+    ) -> Result<ComputationSettingsMutationReceipt, ComputationSettingsApplicationError> {
+        let captured = self.capture_session()?;
+        if captured.project_instance_id() != &request.project_instance_id {
+            return Err(
+                ComputationSettingsApplicationError::ProjectIdentityMismatch {
+                    requested: request.project_instance_id,
+                },
+            );
+        }
+        let _ = execution_settings(&request.settings)?;
+        let result = captured
+            .project()
+            .update_computation_settings_transaction(request)?;
+        self.refresh_current_project()
+            .map_err(ComputationSettingsApplicationError::SessionRefresh)?;
+        Ok(result)
+    }
 }
 
 pub fn sci_computation_settings(

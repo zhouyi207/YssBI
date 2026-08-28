@@ -1,26 +1,28 @@
+use crate::application::execution::SessionCaptureError;
 use crate::error::CommandError;
-use crate::event::{Event, EventProject, emit_project_event};
+#[cfg(test)]
+use crate::event::emit_project_event;
+use crate::event::{Event, EventProject, emit_project_event_result};
+#[cfg(test)]
+use crate::project::ProjectState;
 use crate::project::{
     ComputationSettingsMutationReceipt, ComputationSettingsMutationRequest,
-    ComputationSettingsSnapshot, ProjectInstanceId, ProjectState,
+    ComputationSettingsSnapshot, ProjectInstanceId,
 };
 use tauri::{AppHandle, State};
 
 #[tauri::command]
 pub fn get_project_computation_settings(
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: String,
 ) -> Result<ComputationSettingsSnapshot, CommandError> {
     let expected = ProjectInstanceId::from_existing(project_instance_id);
-    let result = state
-        .get_computation_settings()
-        .map_err(CommandError::from)?;
-    if result.project_instance_id != expected {
-        return Err(CommandError::expected("stale_project_lifecycle"));
-    }
-    Ok(result)
+    application
+        .query_computation_settings(expected)
+        .map_err(map_computation_settings_error)
 }
 
+#[cfg(test)]
 pub(crate) fn update_project_computation_settings_with_emitter(
     state: &ProjectState,
     request: ComputationSettingsMutationRequest,
@@ -38,10 +40,47 @@ pub(crate) fn update_project_computation_settings_with_emitter(
 #[tauri::command]
 pub fn update_project_computation_settings(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     request: ComputationSettingsMutationRequest,
 ) -> Result<ComputationSettingsMutationReceipt, CommandError> {
-    update_project_computation_settings_with_emitter(state.inner(), request, |event| {
-        emit_project_event(&app, event)
-    })
+    let result = application
+        .update_computation_settings(request)
+        .map_err(map_computation_settings_error)?;
+    emit_project_event_result(
+        &app,
+        &Event::Project(EventProject::ComputationSettingsChanged {
+            result: result.clone(),
+        }),
+    )
+    .map_err(|error| CommandError::diagnosed("project_event_emit_failed", error))?;
+    Ok(result)
+}
+
+fn map_computation_settings_error(
+    error: crate::application::computation_settings::ComputationSettingsApplicationError,
+) -> CommandError {
+    use crate::application::computation_settings::ComputationSettingsApplicationError;
+    match error {
+        ComputationSettingsApplicationError::SessionCapture(error) => match error {
+            SessionCaptureError::Inactive => CommandError::expected("stale_project_lifecycle"),
+            SessionCaptureError::Replacing => {
+                CommandError::expected("project_lifecycle_admission_closed")
+            }
+            SessionCaptureError::Recovering => CommandError::expected("project_recovery_required")
+                .with_details(serde_json::json!({ "recoveryRequired": true })),
+        },
+        ComputationSettingsApplicationError::ProjectIdentityMismatch { .. } => {
+            CommandError::expected("stale_project_lifecycle")
+        }
+        ComputationSettingsApplicationError::Project(error) => CommandError::from(error),
+        ComputationSettingsApplicationError::Mapping(error) => {
+            CommandError::diagnosed("invalid_computation_settings", error)
+        }
+        ComputationSettingsApplicationError::SessionChanged(error) => {
+            CommandError::diagnosed("computation_settings_session_changed", error)
+        }
+        ComputationSettingsApplicationError::SessionRefresh(error) => {
+            CommandError::diagnosed("computation_settings_session_refresh_failed", error)
+        }
+    }
 }
