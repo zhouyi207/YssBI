@@ -4,7 +4,7 @@ import {
   openPresentationWindow,
   presentationWindowPayloadFromDescriptor,
 } from '@/features/application/window';
-import { workbenchDockviewPort } from '@/features/core/dockview/workbenchDockviewPort';
+import { workbenchDockviewControl } from '@/features/core/dockview/workbenchControl';
 import {
   evaluatePinViewState,
   type ResolvePinViewTargetParams,
@@ -18,8 +18,10 @@ import {
   resolveInspectableResult,
   resolveInspectableResultRef,
   type InspectableResultRef,
-  type ResultDescriptor,
-} from '@/features/core/resultSource';
+} from '@/features/application/results';
+import type { ResultDescriptor } from '@/shared/types/dto/result';
+import type { PinHistoryProjection } from '@/shared/types/ui/execution';
+import { resultQueryCoordinator, resultQueryRead } from '@/features/application/results';
 import { resultPanelKey } from '@/features/domain/result';
 
 export async function launchInspectablePresentation(
@@ -40,17 +42,35 @@ export async function openInspectableResult(
   let descriptor: ResultDescriptor | null;
   try {
     const project = captureProjectIdentity();
-    const resolved = await resolveInspectableResultRef(ref, options?.selectedResultId);
+    const dependencies = {
+      coordinator: resultQueryCoordinator,
+      read: resultQueryRead,
+    };
+    const resolved = await resolveInspectableResultRef(
+      ref,
+      dependencies,
+      options?.selectedResultId,
+    );
     if (!isCurrentProjectIdentity(project)) return false;
-    if (resolved.history) useExecutionStore.getState().recordPinHistory(resolved.history);
-    descriptor = resolved.ref ? await resolveInspectableResult(resolved.ref) : null;
+    if (resolved.history) {
+      useExecutionStore.getState().recordPinHistory(
+        structuredClone(resolved.history) as PinHistoryProjection,
+      );
+    }
+    descriptor = resolved.ref
+      ? structuredClone(await resolveInspectableResult(
+        resolved.ref,
+        dependencies,
+        options?.selectedResultId,
+      )) as ResultDescriptor | null
+      : null;
     if (!isCurrentProjectIdentity(project) || !descriptor) return false;
   } catch {
     return false;
   }
 
   try {
-    await workbenchDockviewPort.upsertResult({
+    await workbenchDockviewControl.upsertResult({
       resultKey: resultPanelKey(descriptor),
       resultId: descriptor.resultId,
       title: descriptor.title,

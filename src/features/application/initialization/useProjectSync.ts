@@ -21,6 +21,7 @@ import { applyProjectLifecycleReceipt } from '@/features/application/projectLife
 import { createProjectLifecycleReceiptDependencies } from '@/features/application/projectLifecycleReceiptDependencies';
 import { projectPublicationCoordinator } from '@/features/application/editorMutation/projectPublicationCoordinator';
 import { reconcileProjectComputationSettingsEvent } from '@/features/application/projectSettings/useProjectComputationSettings';
+import { resetResultQueryProject } from '@/features/application/results';
 
 interface ProjectSyncRuntime {
   readonly stream: ProjectEventStream;
@@ -56,6 +57,7 @@ function createReconciler(): ProjectEventReconciler {
     currentProjectInstanceId: () => captureProjectLifecycleState().projectInstanceId,
     publishProjectCleared: () => {
       projectPublicationCoordinator.cancelProject();
+      resetResultQueryProject();
       const owner = captureProjectLifecycleState();
       return createProjectLifecycleReceiptDependencies().clearProject(owner);
     },
@@ -65,6 +67,7 @@ function createReconciler(): ProjectEventReconciler {
         'event',
         createProjectLifecycleReceiptDependencies(),
       );
+      if (result.invalidation.project) resetResultQueryProject();
     },
     publishProjectSaved: () => undefined,
     publishComputationSettingsChanged: (result) => {

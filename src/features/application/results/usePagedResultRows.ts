@@ -9,6 +9,7 @@ import type {
   ResultQueryOutcome,
   ResultQueryReadCapability,
 } from './resultQueryCoordinator';
+import { resultQueryCoordinator, resultQueryRead } from './runtime';
 
 const DEFAULT_PAGE_SIZE = 200;
 const EMPTY_ROWS: readonly unknown[][] = [];
@@ -45,7 +46,10 @@ export function usePagedResultRows(
   resultId: string | null,
   totalCount: number,
   pageSize = DEFAULT_PAGE_SIZE,
-  dependencies: PagedResultRowsHookDependencies,
+  dependencies: PagedResultRowsHookDependencies = {
+    coordinator: resultQueryCoordinator,
+    read: resultQueryRead,
+  },
 ): PagedResultRowsState {
   const safePageSize = Math.max(1, Math.floor(pageSize));
   const [pageIndex, setPageIndex] = useState(0);

@@ -8,6 +8,7 @@ import type {
   ResultQueryReadCapability,
   ResultQueryOutcome,
 } from './resultQueryCoordinator';
+import { resultQueryCoordinator, resultQueryRead } from './runtime';
 
 export interface ResultValueHookDependencies {
   readonly coordinator: ResultQueryCoordinator;
@@ -23,7 +24,10 @@ export interface ResultValueQueryState {
 
 export function useResultValue(
   resultId: string | null,
-  dependencies: ResultValueHookDependencies,
+  dependencies: ResultValueHookDependencies = {
+    coordinator: resultQueryCoordinator,
+    read: resultQueryRead,
+  },
 ): ResultValueQueryState {
   const [loading, setLoading] = useState(false);
   const value = useSyncExternalStore(

@@ -83,6 +83,8 @@ import { addGlobalEventListener as addGlobalEventListenerImpl } from '@/shared/u
 import { useTheme as useThemeImpl } from '@/features/core/theme/useTheme';
 import { initializeProjectForCurrentWindow } from '@/features/application/project';
 import { getGraphByPath as getGraphByPathImpl } from '@/features/application/project/projectHelpers';
+import { useResultValue as useApplicationResultValue } from '@/features/application/results';
+import type { ResultValue } from '@/shared/types/dto/result';
 import * as coreViewportTransform from '@/features/core/viewport/viewportTransform';
 import * as coreExecutionPlayback from '@/features/core/execution/useExecutionPlayback';
 import * as coreExecutionArtifacts from '@/features/core/execution/graphRunArtifacts';
@@ -163,7 +165,13 @@ export const viewportTransformStyle = coreViewportTransform.viewportTransformSty
 export const applyViewportGrid = coreViewportTransform.applyViewportGrid;
 export const viewportGridStyle = coreViewportTransform.viewportGridStyle;
 export const useModifierKeyStore = coreKeyboard.useModifierKeyStore;
-export const useResultValue = coreResultSource.useResultValue;
+export function useResultValue(resultId: string | null) {
+  const state = useApplicationResultValue(resultId);
+  return {
+    ...state,
+    value: state.value as ResultValue | null,
+  };
+}
 export const reportResultValuePayload = coreResultValuePayload.reportResultValuePayload;
 export const ResultReadError = coreResultReadError.ResultReadError;
 export const UnifiedResultView = coreResultSource.UnifiedResultView;
