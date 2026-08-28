@@ -9,6 +9,12 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct VariableId(Uuid);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum VariableIdParseError {
+    #[error("variable id is invalid")]
+    Invalid,
+}
+
 impl VariableId {
     /// 统一 id 生成入口
     pub fn new() -> Self {
@@ -18,6 +24,16 @@ impl VariableId {
     /// 占位 ID
     pub fn nil() -> Self {
         Self(Uuid::nil())
+    }
+}
+
+impl TryFrom<&str> for VariableId {
+    type Error = VariableIdParseError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        Uuid::parse_str(value)
+            .map(Self)
+            .map_err(|_| VariableIdParseError::Invalid)
     }
 }
 

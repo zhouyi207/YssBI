@@ -2087,6 +2087,102 @@ pub(super) fn extend(entries: &mut Vec<RustDebtEntry>) {
                 1,
                 "yssbi_lib::execution::plan::package::CompiledExecutionPackage"
             ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::identity::PlanCompileId"
+            ),
+            (Use, 1, "yssbi_lib::execution::plan::identity::PlanGraphId"),
+            (Use, 1, "yssbi_lib::execution::plan::identity::PlanNodeId"),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::identity::PlanOperationKind"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::identity::PlanProvenance"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::identity::PlanResourceId"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::identity::PlanSourceIdentity"
+            ),
+            (Use, 1, "yssbi_lib::execution::plan::model::ExecutionPlan"),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::model::PlanInputBinding"
+            ),
+            (Use, 1, "yssbi_lib::execution::plan::model::PlanInputSource"),
+            (Use, 1, "yssbi_lib::execution::plan::model::PlanOperation"),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::observation::PlanObservationIntent"
+            ),
+            (Use, 1, "yssbi_lib::execution::plan::observation::ValueRef"),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::package::CompiledFunctionBundle"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::parameter::CanonicalDecimal"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::parameter::CompiledParameterBundleBuilder"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::parameter::CompiledParameterHandle"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::parameter::PlanParameterFieldId"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::parameter::PlanParameterPayload"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::parameter::PlanParameterScalar"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::parameter::PlanParameterSchemaId"
+            ),
+            (
+                Use,
+                1,
+                "yssbi_lib::execution::plan::parameter::PlanParameterValue"
+            ),
+            (
+                Path,
+                2,
+                "yssbi_lib::execution::plan::identity::PlanPortAddress::new"
+            ),
+            (
+                Path,
+                1,
+                "yssbi_lib::execution::plan::parameter::CompiledParameterBundle"
+            ),
         ],
     );
     debt_group!(

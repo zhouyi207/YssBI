@@ -364,11 +364,11 @@ fn variable_id_from_resource(
         .ok_or_else(|| VariableBindingError::InvalidResource {
             resource: resource.clone(),
         })?;
-    uuid::Uuid::parse_str(value)
-        .map(crate::variable::VariableId::from)
-        .map_err(|_| VariableBindingError::InvalidResource {
+    crate::variable::VariableId::try_from(value).map_err(|_| {
+        VariableBindingError::InvalidResource {
             resource: resource.clone(),
-        })
+        }
+    })
 }
 
 #[cfg(test)]
