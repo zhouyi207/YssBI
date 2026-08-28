@@ -43,20 +43,12 @@ describe('NodeContextMenu', () => {
     expect(item('copy')).toBeDefined();
     expect(item('cut')).toBeDefined();
     expect(item('duplicate')).toBeDefined();
-    expect(item('selectNode')).toBeDefined();
+    expect(item('selectNode')).toBeUndefined();
     expect(item('breakAllLinks')).toBeDefined();
     expect(item('selectLinkedNodes')).toBeDefined();
     expect(item('delete')).toBeDefined();
   });
 
-  it('opens the node selector from the context menu', () => {
-    const onOpenNodePicker = vi.fn();
-    renderMenu({ managed: false, canCopy: false, canDelete: false }, { onOpenNodePicker });
-
-    act(() => item('selectNode')?.click());
-
-    expect(onOpenNodePicker).toHaveBeenCalledTimes(1);
-  });
 
   it.each([
     { name: 'unmanaged copyable node', capabilities: { managed: false, canCopy: true, canDelete: false }, enabled: true },
@@ -107,7 +99,6 @@ function renderMenu(
         onDelete={vi.fn()}
         onBreakAllLinks={vi.fn()}
         onSelectLinked={vi.fn()}
-        onOpenNodePicker={vi.fn()}
         onClose={vi.fn()}
         {...overrides}
       />,

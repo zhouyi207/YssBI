@@ -16,6 +16,7 @@ export interface LocalizedCatalogTreeRowProps {
   row: LocalizedCatalogBrowserRow;
   expanded: boolean;
   interactionDisabled?: boolean;
+  active?: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onItemSelect?: (descriptor: NodeCreationDescriptor) => void;
   dragData?: SidebarDragPayload | null;
@@ -58,6 +59,7 @@ export function LocalizedCatalogTreeRow({
   row,
   expanded,
   interactionDisabled = false,
+  active = false,
   onExpandedChange,
   onItemSelect,
   dragData = null,
@@ -104,7 +106,11 @@ export function LocalizedCatalogTreeRow({
       variant="ghost"
       size="sm"
       data-catalog-item-key={row.rowKey}
-      className={catalogItemRowClass}
+      data-catalog-item-active={active || undefined}
+      className={cn(
+        catalogItemRowClass,
+        active && 'bg-sidebar-accent text-sidebar-foreground',
+      )}
       style={{ paddingLeft: 16 + row.depth * 16, paddingRight: 8 }}
       onClick={handleSelect}
     >

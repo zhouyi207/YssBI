@@ -5,7 +5,6 @@ import type { PortAddressDto } from '@/shared/types/dto/editorProjection';
 import { getOverlayPortalRoot } from '@/shared/ui/overlayPortalRoot';
 import { ActionMenu } from '@/shared/ui/actionMenu';
 import { NodePalette } from '../../Layout/NodePalette';
-import { NodeSelectionPalette, type NodeSelectionOption } from '../../ContextMenu/NodeSelectionPalette';
 import { PinResultSearch } from './PinResultSearchPalette';
 import { CanvasExecutionToolbar } from './CanvasExecutionToolbar';
 
@@ -39,17 +38,6 @@ export type CanvasVariableOverlayModel =
       onClose: () => void;
   };
 
-export type CanvasNodeSelectionOverlayModel =
-  | { kind: 'hidden' }
-  | {
-      kind: 'visible';
-      x: number;
-      y: number;
-      nodes: readonly NodeSelectionOption[];
-      currentNodeId: string;
-      onSelect: (nodeId: string) => void;
-      onClose: () => void;
-    };
 
 export type CanvasExecutionOverlayModel =
   | { kind: 'hidden' }
@@ -64,14 +52,13 @@ export type CanvasExecutionOverlayModel =
 export interface CanvasOverlaysModel {
   graph: CanvasOverlayGraphModel;
   palette: CanvasPaletteOverlayModel;
-  nodeSelection: CanvasNodeSelectionOverlayModel;
   variable: CanvasVariableOverlayModel;
   execution: CanvasExecutionOverlayModel;
 }
 
 export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }) {
   const { t } = useTranslation();
-  const { graph, palette, nodeSelection, variable, execution } = model;
+  const { graph, palette, variable, execution } = model;
 
   return (
     <>
@@ -105,18 +92,6 @@ export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }
           )
         : null}
 
-      {nodeSelection.kind === 'visible'
-        ? createPortal(
-            <NodeSelectionPalette
-              position={{ x: nodeSelection.x, y: nodeSelection.y }}
-              nodes={nodeSelection.nodes}
-              currentNodeId={nodeSelection.currentNodeId}
-              onSelectNode={nodeSelection.onSelect}
-              onClose={nodeSelection.onClose}
-            />,
-            getOverlayPortalRoot(),
-          )
-        : null}
 
       {variable.kind === 'visible' ? (
         <ActionMenu

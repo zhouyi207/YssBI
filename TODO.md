@@ -1581,3 +1581,11 @@ Execution 不知道具体 UI
 - [ ] 通过测试发现 RED/GREEN 验证 worktree 测试从大量命中降为 0；完整前端套件仅保留主工作区既有的 Dockview 默认值失败。
 - [ ] 按最终决策移除 Vite 的 `**/target/**` watch 忽略项，仅保留 `**/src-tauri/**` 以覆盖标准 Cargo 产物目录。
 - [ ] 将任务脚本、Vitest 排除、Vite watch、Database integration 与开发文档拆分为独立 Git 提交，并在推送前逐层复核 staged diff。
+- [ ] 分析 graph canvas 节点右键“选择节点…”链路，确认它只在既有画布节点之间切换选择，而右键目标节点已在菜单打开前被选中。
+- [ ] 核对空白画布 `NodePalette` 的键盘行为，确认搜索框会自动聚焦，但当前未处理上下方向键与 Enter，创建仍只由节点项点击触发。
+- [ ] 明确后续修正方向：移除临时节点选择器，将可见叶节点的键盘高亮与 Enter 创建接入空白处节点树，并复用现有 descriptor 创建链路。
+- [ ] 为 blank canvas `NodePalette` 增加首个可见叶节点初始化、上下方向键切换、Enter descriptor 创建、活动项高亮滚动及屏幕阅读器状态播报。
+- [ ] 在搜索、分类展开状态和 catalog 投影变化时重置活动节点，并在 IME 文本组合期间忽略 palette 快捷键，避免旧选择复活或误创建。
+- [ ] 删除节点右键菜单的临时“选择节点…”入口、Canvas picker 状态、overlay model、projection 缓存、专用组件测试及中英文废弃文案。
+- [ ] 增加 NodePalette 键盘创建、IME 防误触和筛选重置回归覆盖，完成 34 个相关测试、TypeScript 检查、Oxlint 与独立代码审查。
+- [ ] 记录仓库级 Oxfmt 当前因缺少配置并命中 1311 个既有文件而失败，本任务不批量格式化或改写无关基线文件。

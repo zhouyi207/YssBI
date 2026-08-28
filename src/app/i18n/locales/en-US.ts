@@ -163,8 +163,6 @@ export const enUS = {
       delete: "Delete",
     },
     node: {
-      selectNode: "Select node…",
-      noNodes: "No nodes available",
       copy: "Copy",
       cut: "Cut",
       duplicate: "Duplicate",

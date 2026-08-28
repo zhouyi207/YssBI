@@ -163,8 +163,6 @@ export const zhCN = {
       delete: "删除",
     },
     node: {
-      selectNode: "选择节点…",
-      noNodes: "暂无可选节点",
       copy: "复制",
       cut: "剪切",
       duplicate: "创建副本",
