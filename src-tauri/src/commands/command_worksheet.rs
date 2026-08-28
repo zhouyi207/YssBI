@@ -1,14 +1,18 @@
 use crate::application::execution::{ApplicationState, SessionCaptureError};
+use crate::application::worksheet::WorksheetApplicationError;
 use crate::application::worksheet_plot::{WorksheetPlotApplicationError, WorksheetPlotQuery};
 #[cfg(test)]
 use crate::database::DatabaseInstance;
 use crate::error::CommandError;
-use crate::event::{Event, EventProject, ResourceMutationResultDto, emit_project_event};
+#[cfg(test)]
+use crate::event::emit_project_event;
+use crate::event::{Event, EventProject, ResourceMutationResultDto, emit_project_event_result};
 use crate::project::{OperationId, ResourceRevision};
 use crate::project::{
-    ProjectFilesystemError, ProjectInstanceId, ProjectState, ResourceName, WorksheetDocument,
-    WorksheetResourcePath,
+    ProjectFilesystemError, ProjectInstanceId, WorksheetDocument, WorksheetResourcePath,
 };
+#[cfg(test)]
+use crate::project::{ProjectState, ResourceName};
 #[cfg(test)]
 use polars::prelude::{DataType as PDataType, Series};
 use serde::Serialize;
@@ -151,6 +155,7 @@ fn compute_plot_column_pair(
     })
 }
 
+#[cfg(test)]
 fn emit_worksheet_result(
     mut emit: impl FnMut(Event),
     result: ResourceMutationResultDto,
@@ -198,6 +203,33 @@ fn worksheet_command_error(
     command_error.with_details(details)
 }
 
+fn worksheet_application_command_error(error: &WorksheetApplicationError) -> CommandError {
+    match error {
+        WorksheetApplicationError::SessionCapture(error) => session_capture_command_error(*error),
+        WorksheetApplicationError::Project(error) => CommandError::from(error.clone()),
+        WorksheetApplicationError::SessionChanged(error) => {
+            CommandError::diagnosed("worksheet_session_changed", error)
+        }
+        WorksheetApplicationError::SessionRefresh(error) => {
+            CommandError::diagnosed("worksheet_session_refresh_failed", error)
+        }
+    }
+}
+
+fn emit_worksheet_application_result(
+    app: &AppHandle,
+    result: &ResourceMutationResultDto,
+) -> Result<(), CommandError> {
+    emit_project_event_result(
+        app,
+        &Event::Project(EventProject::ResourceMutationCommitted {
+            result: result.clone(),
+        }),
+    )
+    .map_err(|error| CommandError::diagnosed("worksheet_event_emit_failed", error))
+}
+
+#[cfg(test)]
 fn create_worksheet_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -224,22 +256,20 @@ fn create_worksheet_with_emitter(
 #[tauri::command]
 pub fn create_worksheet(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     name: String,
     database_id: Option<String>,
 ) -> Result<ResourceMutationResultDto, CommandError> {
-    create_worksheet_with_emitter(
-        state.inner(),
-        project_instance_id,
-        operation_id,
-        name,
-        database_id,
-        |event| emit_project_event(&app, event),
-    )
+    let result = application
+        .create_worksheet_resource(project_instance_id, operation_id, name, database_id)
+        .map_err(|error| worksheet_application_command_error(&error))?;
+    emit_worksheet_application_result(&app, &result)?;
+    Ok(result)
 }
 
+#[cfg(test)]
 fn duplicate_worksheet_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -262,34 +292,37 @@ fn duplicate_worksheet_with_emitter(
 #[tauri::command]
 pub fn duplicate_worksheet(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     worksheet_path: WorksheetResourcePath,
     expected_revision: ResourceRevision,
 ) -> Result<ResourceMutationResultDto, CommandError> {
-    duplicate_worksheet_with_emitter(
-        state.inner(),
-        project_instance_id,
-        operation_id,
-        worksheet_path,
-        expected_revision,
-        |event| emit_project_event(&app, event),
-    )
+    let result = application
+        .duplicate_worksheet_resource(
+            project_instance_id,
+            operation_id,
+            worksheet_path,
+            expected_revision,
+        )
+        .map_err(|error| worksheet_application_command_error(&error))?;
+    emit_worksheet_application_result(&app, &result)?;
+    Ok(result)
 }
 
 #[tauri::command]
 pub fn load_worksheet(
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: String,
     worksheet_path: WorksheetResourcePath,
 ) -> Result<WorksheetDocument, CommandError> {
     let project_instance_id = crate::project::ProjectInstanceId::from_existing(project_instance_id);
-    state
-        .load_worksheet_document(&project_instance_id, &worksheet_path)
-        .map_err(|error| worksheet_command_error(&worksheet_path, error))
+    application
+        .load_worksheet_resource(project_instance_id, worksheet_path)
+        .map_err(|error| worksheet_application_command_error(&error))
 }
 
+#[cfg(test)]
 fn save_worksheet_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -314,24 +347,27 @@ fn save_worksheet_with_emitter(
 #[tauri::command]
 pub fn save_worksheet(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     worksheet_path: WorksheetResourcePath,
     expected_revision: ResourceRevision,
     document: WorksheetDocument,
 ) -> Result<ResourceMutationResultDto, CommandError> {
-    save_worksheet_with_emitter(
-        state.inner(),
-        project_instance_id,
-        operation_id,
-        worksheet_path,
-        expected_revision,
-        document,
-        |event| emit_project_event(&app, event),
-    )
+    let result = application
+        .save_worksheet_resource(
+            project_instance_id,
+            operation_id,
+            worksheet_path,
+            expected_revision,
+            document,
+        )
+        .map_err(|error| worksheet_application_command_error(&error))?;
+    emit_worksheet_application_result(&app, &result)?;
+    Ok(result)
 }
 
+#[cfg(test)]
 fn rename_worksheet_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -361,7 +397,7 @@ fn rename_worksheet_with_emitter(
 #[tauri::command]
 pub fn rename_worksheet_resource(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     worksheet_path: WorksheetResourcePath,
@@ -369,18 +405,21 @@ pub fn rename_worksheet_resource(
     new_name: String,
     lifecycle_token: u64,
 ) -> Result<ResourceMutationResultDto, CommandError> {
-    rename_worksheet_with_emitter(
-        state.inner(),
-        project_instance_id,
-        operation_id,
-        worksheet_path,
-        expected_revision,
-        new_name,
-        lifecycle_token,
-        |event| emit_project_event(&app, event),
-    )
+    let result = application
+        .rename_worksheet_resource(
+            project_instance_id,
+            operation_id,
+            worksheet_path,
+            expected_revision,
+            new_name,
+            lifecycle_token,
+        )
+        .map_err(|error| worksheet_application_command_error(&error))?;
+    emit_worksheet_application_result(&app, &result)?;
+    Ok(result)
 }
 
+#[cfg(test)]
 fn remove_worksheet_with_emitter(
     state: &ProjectState,
     project_instance_id: ProjectInstanceId,
@@ -403,20 +442,22 @@ fn remove_worksheet_with_emitter(
 #[tauri::command]
 pub fn remove_worksheet(
     app: AppHandle,
-    state: State<ProjectState>,
+    application: State<crate::application::execution::ApplicationState>,
     project_instance_id: ProjectInstanceId,
     operation_id: OperationId,
     worksheet_path: WorksheetResourcePath,
     expected_revision: ResourceRevision,
 ) -> Result<ResourceMutationResultDto, CommandError> {
-    remove_worksheet_with_emitter(
-        state.inner(),
-        project_instance_id,
-        operation_id,
-        worksheet_path,
-        expected_revision,
-        |event| emit_project_event(&app, event),
-    )
+    let result = application
+        .remove_worksheet_resource(
+            project_instance_id,
+            operation_id,
+            worksheet_path,
+            expected_revision,
+        )
+        .map_err(|error| worksheet_application_command_error(&error))?;
+    emit_worksheet_application_result(&app, &result)?;
+    Ok(result)
 }
 
 #[cfg(test)]

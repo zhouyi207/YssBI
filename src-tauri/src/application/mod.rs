@@ -22,6 +22,7 @@ pub mod project_watcher;
 pub mod resource_mutation;
 pub mod statistical_input;
 pub mod variable_mutation;
+pub mod worksheet;
 pub(crate) mod worksheet_plot;
 
 pub mod events;
