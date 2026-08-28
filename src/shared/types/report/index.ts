@@ -30,6 +30,4 @@ export {
   parsePlotCorrelogramBar,
   acfSeriesToBars,
   pacfSeriesToBars,
-  formatPValueDisplay,
-  correlogramLjungBoxTooltipHtml,
 } from './correlogram';

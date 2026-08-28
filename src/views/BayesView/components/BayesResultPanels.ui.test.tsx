@@ -26,8 +26,10 @@ vi.mock('@/services/bayes/bayesInferenceService', () => ({
   readBayesPosteriorPredictive: vi.fn(),
   readBayesTracePlotData: vi.fn(),
 }));
-vi.mock('@/shared/charts', () => ({
+vi.mock('@/shared/charts/cartesian/MultiLineChart', () => ({
   MultiLineChart: () => null,
+}));
+vi.mock('@/shared/charts/statistical/PredictiveIntervalChart', () => ({
   PredictiveIntervalChart: () => null,
 }));
 vi.mock('./BayesPanels', () => ({

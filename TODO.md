@@ -1540,6 +1540,26 @@ Execution 不知道具体 UI
 - [ ] 接入禁用发送的 Assistant UI Workbench Shell，注册 root Dockview、布局持久化、View 菜单及中英文文案。
 - [ ] 新增仓库级 `.gitattributes`，统一文本文件使用 LF 换行。
 - [ ] 通过 Git 属性与 `git diff --check` 验证换行策略。
+- [ ] 将 scatter、line、ECDF、KDE、histogram、correlation 与 correlogram 的 Rust Plot payload 统一为 canonical camelCase wire。
+- [ ] 将未定义的相关系数和 p 值保留为 nullable correlation matrix cells，不再静默转换为 `0.0`。
+- [ ] 新增 Rust production serializer 生成的 `plot-payloads.json` 契约 fixture，并由 node-system contract generator 持续校验七种 Plot kind。
+- [ ] 将 TypeScript Plot 边界收敛为 camelCase-only 读取和单次 correlogram normalization，并让现有 correlation renderer 跳过 null cell。
+- [ ] 增加 Rust fixture 驱动的 Plot parser 回归覆盖，验证 pMatrix、ciHalfWidth、qStat 与 pValue 跨语言保真。
+- [ ] 增加 production Plot kernel 路径回归测试，验证 constant series 产生的未定义 correlation 与 p-value cells 序列化为 null 而不是 `0.0`。
+- [ ] 锁定 Rust Plot fixture 的七种 chart inventory，防止删除 payload record 后 TypeScript parser 契约测试静默通过。
+- [ ] 通过 zero-fallback 与缺失 scatter record 的定向 mutation 完成两项 review finding 的 RED/GREEN 验证。
+- [ ] 新增 source-independent `ChartModel` 与唯一 `AxisValueType`，仅表达七种图表的数据空间语义。
+- [ ] 新增 Result Plot adapter，将 canonical payload 转换为 `ChartModel` 并统一归一化 `plot` 为 `scatter`。
+- [ ] 新增 Worksheet preview adapter，仅转换 histogram、scatter 与 line，并将 empty/error 状态留给 Worksheet view。
+- [ ] 由唯一 `RESULT_PLOT_KINDS` 常量派生 `ResultPlotKind` 与 `isResultPlotKind`，移除三个生产 allowlist 副本。
+- [ ] 保持 correlation nullable cells 与 correlogram camelCase scientific fields 原样穿过 source adapter，不增加兼容读取。
+- [ ] 以 focused RED/GREEN adapter、guard 与 Result service 测试及 TypeScript typecheck 验证 Task 2 契约。
+- [ ] 新增 chart core 的 `ChartMargin`、`ChartSize`、`ChartSurfaceVariant` 与唯一共享 Cartesian margin 契约。
+- [ ] 将图表容器测量统一为单 ResizeObserver、单 animation frame 合并、等尺寸跳过及完整清理的响应式 hook。
+- [ ] 将 chart theme settings 读取收敛到 App provider，并让 AppRouter 与 UIHost 下的 renderer 统一消费 chart context。
+- [ ] 将 D3 mark tooltip 迁入 chart core，补充 pointer/focus/blur 对等交互、语义 aria-label 与既有 HTML escaping。
+- [ ] 删除旧 theme hooks、plot size hook、hover/overlay tooltip API，并将 specialized margins 保持在各自 renderer 内。
+- [ ] 通过 Task 3 focused RED/GREEN tests、TypeScript typecheck、production build 与 architecture search audits。
 - [ ] 更新 `AGENTS.md`，明确 Rust 后端测试的编译与运行成本较高，避免迭代期间频繁运行。
 - [ ] 保持 Rust 聚焦测试与完整测试套件之间的执行边界，仅在必要场景运行 broader/full suite。
 - [ ] 更新 `AGENTS.md`，统一后端 Rust 错误使用 `thiserror` 定义类型化错误。
@@ -1589,3 +1609,97 @@ Execution 不知道具体 UI
 - [ ] 删除节点右键菜单的临时“选择节点…”入口、Canvas picker 状态、overlay model、projection 缓存、专用组件测试及中英文废弃文案。
 - [ ] 增加 NodePalette 键盘创建、IME 防误触和筛选重置回归覆盖，完成 34 个相关测试、TypeScript 检查、Oxlint 与独立代码审查。
 - [ ] 记录仓库级 Oxfmt 当前因缺少配置并命中 1311 个既有文件而失败，本任务不批量格式化或改写无关基线文件。
+- [ ] 修复共享 D3 mark tooltip 的 pointer-hover 与 keyboard-focus 混合状态，确保激活回调仅在整体进入和退出时触发一次。
+- [ ] 为 `attachMarkTooltip` 增加 namespaced handler detach 契约，在清理时重置活跃 mark 状态并隐藏 tooltip。
+- [ ] 将 Histogram、Correlation、Correlogram 与 VAR Stability renderer 的 tooltip detach 接入 React effect cleanup，并补充混合输入及可见态清理回归。
+- [ ] 将共享同一 `PlotTooltipController` 的 mark active registry、可见项与 fallback 收敛到 controller identity 对应的模块私有协调状态。
+- [ ] 让 `attachMarkTooltip` detach 仅移除本绑定的 active marks 且保持幂等，跨绑定恢复仍 active 的 tooltip，并保证每个 active mark 的 `onLeave` 恰好执行一次。
+- [ ] 通过跨绑定 tooltip RED/GREEN 回归、Task 3 指定三套测试与 TypeScript typecheck 验证 reviewer fix round 2。
+- [ ] 新增窄 `ChartBox` geometry 与 finite-only numeric domain padding helpers，拒绝非正 plot area 并保留 empty/constant domain 契约。
+- [ ] 新增可重复 join 的 root、grid、x-axis、y-axis、marks 与 labels D3 layers，以及水平网格、轴样式和 Cartesian 标签更新 helpers。
+- [ ] 将 `plotTime` 实现与测试原子迁移到 `charts/cartesian/axisFormat`，改用唯一 `AxisValueType` 并更新 Line、Scatter consumers，不保留兼容入口。
+- [ ] 更新 chart core 与 cartesian 的窄 exports，不从 root barrel 建立反向依赖或引入 universal chart abstraction。
+- [ ] 通过 Task 4 focused RED/GREEN tests、TypeScript typecheck 与 diff whitespace validation 验证新 geometry、layers 和 axis formatter 契约。
+- [ ] 修复 Task 4 review 中 Line、Scatter 与 axis formatter test 的 Zed buffer 错误 imports，使 editor buffer、磁盘与 review package 一致。
+- [ ] 仅将 Task 4 新增的 cartesian index、domain 与 layers source/tests 从 CRLF 规范为仓库要求的 LF。
+- [ ] 通过 module-resolution diagnostics、focused tests、TypeScript typecheck、diff check 与 no-index CRLF audit 验证 reviewer fix round 1。
+- [ ] 将 KDE、MultiLine 与 PredictiveInterval renderer 原子迁移到最终 cartesian/statistical category paths，并删除旧 source paths 与 PlotView KDE wrapper。
+- [ ] 让 KdeChart 与 MultiLineChart 直接消费 neutral `XYPoint`，移除 KDE 对 `PlotPointDTO` 和公共 point type 的所有权，同时保留 root barrel 静态公共别名。
+- [ ] 将三个既有 renderer 改为单次 `joinCartesianLayers`、named layer 更新与 keyed mark joins，移除 whole-SVG clearing 并保持增量 DOM identity。
+- [ ] 将 Bayes、Info lazy module 与 PlotWindow consumers 原子切换到 final leaf modules，保留 KDE 消费处的既有 chart shell 样式。
+- [ ] 新增一个 happy-dom representative smoke test 文件，并通过 Task 5 RED/GREEN tests、TypeScript typecheck、production build 与依赖/换行/差异审计。
+
+## 2026.08.28
+
+- [ ] 修复 KdeChart 对 padded y-domain 施加全局 `0.01` 上界下限的问题，恢复小型非恒定正密度使用自身最大值加比例 padding 的纵向尺度。
+- [ ] 强化既有 KDE happy-dom smoke case，以小密度数据验证纵向利用率，并明确断言 exactly one area path 与 exactly one line path。
+- [ ] 完成 Task 5 reviewer fix round 1 的 RED/GREEN、Bayes 回归、TypeScript、production build、路径依赖、LF 与差异验证。
+- [ ] 将 Scatter 与 ECDF 迁移为消费 neutral `XYPoint`、`AxisModel` 和 `ChartSurfaceVariant` 的纯 Cartesian named leaf renderers。
+- [ ] 为 residual scatter 暴露稳定数据空间 domain、zero reference、mark 与 highlight attributes，并以 indexed circle join 保持增量更新。
+- [ ] 让 ECDF 信任 Rust canonical 顺序，仅添加 leading zero point，并以单一 step-after path datum join 更新而不执行 React sort 或 whole-SVG clear。
+- [ ] 原子切换 PlotWindow、Worksheet、Info report lazy consumers 与 Worksheet mocks 到最终 shared leaf paths，并删除旧 PlotView Scatter/ECDF 文件且不保留 wrapper。
+- [ ] 通过 Task 6 两个 distinct renderer RED/GREEN tests、Worksheet/Report focused 回归、TypeScript 与静态依赖审计验证迁移。
+- [ ] 将 Histogram 与 Correlation renderer 原子迁移到最终 cartesian/statistical leaf paths，删除旧 PlotView 文件且不保留 wrapper。
+- [ ] 为 Histogram 保留 compact renderer variant，改用 source-neutral surface/className/height API，并以正 fallback domain 保证 all-zero bars 高度为零。
+- [ ] 将 Correlation matrix 限制在 available square chart box 内，跳过 nullable cells，并以 React useId 提供实例唯一的有效 gradient 引用。
+- [ ] 为 Correlation cells 接入共享键盘可访问 tooltip，呈现 row、column、coefficient 与 p-value，同时为两个 renderer 使用 stable named layers 与 keyed joins。
+- [ ] 在 renderer effect 更新前隐藏 tooltip、cleanup 时正确 detach，并原子切换 PlotWindow、Worksheet、两个 Worksheet mocks 与 category exports。
+- [ ] 完成 Task 7 missing-module RED、旧缺陷 RED、focused GREEN、Worksheet 回归、TypeScript、静态路径/依赖/LF 与差异验证。
+- [ ] 为 Correlation matrix 在 chart box 内保留固定 legend gutter，并用剩余宽度与 plotHeight 求 available square，消除 legend 与 cells 的视觉及 hit-testing 重叠。
+- [ ] 强化既有 Correlation 单一 regression case，以 `a by b` 非对角 cell 同时验证 nullable marks、row/column keyboard tooltip、SVG bounds 与 legend/cell 几何分离。
+- [ ] 完成 Task 7 reviewer fix round 1 的几何 RED、focused/broader GREEN、TypeScript、LF、静态 minimum-size 与差异验证。
+- [ ] 将 Correlogram pure data types、parsers 与 guards 从 tooltip HTML presentation 中分离，删除 report boundary 的 HTML builder 与 UI-only p-value formatter。
+- [ ] 将 Correlogram renderer 迁移到 statistical final leaf，以 stable named layers 和 keyed joins 更新 CI region、reference lines 与可访问 bars。
+- [ ] 原子切换 PlotWindow 与 Info ACF/PACF consumers 到 final leaf，并保留 Info command、lag、loading/error 与既有科学 CI 计算职责。
+- [ ] 通过 Task 8 type-boundary/renderer RED、focused GREEN、ReportView 回归、TypeScript、LF 与静态依赖审计验证迁移。
+- [ ] 将 Correlogram 根 SVG 从 `role="img"` 调整为保留 chart-level label 且允许 focusable bars 暴露的 `role="group"` 语义。
+- [ ] 扩展既有 report-bars case，覆盖根 group/整体 label 与每个 bar 的 tabindex/aria 可访问契约，不新增 renderer case。
+- [ ] 完成 Task 8 reviewer fix round 1 的精准 RED、单文件与 broader GREEN、TypeScript 及 diff 检查，并将 Minor draw-order finding 延后 final review。
+- [ ] 将 Line renderer 拆为仅消费 neutral point、axis 与 visual props 的纯 `LineChart`，复用 stable Cartesian layers、singleton line path join 与 point circle join。
+- [ ] 新增 Plot Result-owned `LinePlotControls`，保留 toolbar open/close 与 points visibility 交互，并以 React `useId()` 保证多实例 Switch/Label 关联唯一。
+- [ ] 由 PlotWindowContent 负责 line source-to-model 与外层 shell 组合，Worksheet 直接消费 pure chart，并同步两个 Worksheet mocks 后删除旧 mixed `PlotView/Line.tsx`。
+- [ ] 完成 Task 9 missing-module RED、renderer/controller GREEN、Worksheet focused 回归、TypeScript、production build、依赖边界与 LF 审计。
+- [ ] 新增以 `ChartModel['kind']` 为键并通过 `satisfies ChartRendererMap` 强制穷尽的 typed chart registry，统一七类 model 到 final leaf renderer 的 dispatch。
+- [ ] 由 shared registry 组合 Correlogram 的 ACF/PACF 双实例、语义标签与 secondary series color，并完整转发 Line points、axis formats 与 point visibility。
+- [ ] 新增 Result-owned `PlotResultView`，统一 standalone PlotWindow 与 embedded Result 的 invalid content、source adapter、line controls 和通用 chart rendering seam。
+- [ ] 将 Worksheet 在 loading/error/empty 状态处理后经 `toWorksheetChartModel` 接入 `ChartRenderer surface="plain"`，并同步两个既有 focused preview tests。
+- [ ] 删除 obsolete `PlotWindowContent` duplicate dispatcher，消除 EditorView 对 PlotView chart path 的依赖且不保留 compatibility wrapper。
+- [ ] 排除 `.superpowers/**` agent-local snapshots 的 Vitest discovery，同时保留 Vitest default exclusions，避免受保护的 task-before artifacts 被 focused path filter 误执行。
+- [ ] 完成 Task 10 strict RED/GREEN、Result/Worksheet focused regressions、TypeScript、production build、dependency/generic-dispatch audits 与 diff validation。
+- [ ] 将 DID event-study 与 VAR eigenvalue stability renderer 迁移到 statistical final leaf，复用 shared chart core sizing、theme、geometry/layers 与 tooltip，并删除两个 InfoView 旧文件且不保留 re-export shim。
+- [ ] 为 DID renderer 提供 source-independent computed-point contract，并由 consumer 显式传入本地化 axis 与 chart aria labels，保留 coefficient、confidence interval、zero 与 policy-time references。
+- [ ] 为 VAR renderer 提供 `{ re, im, modulus, status }` contract、显式 presentation labels 与 focused formatter，使用 status 驱动 marks 且通过共享 escaped keyboard tooltip 暴露每个 eigenvalue。
+- [ ] 新增 `toVarStabilityPoints` application adapter，在 renderer 外唯一保留当前 `modulus >= 1` status 决策，并让 panel message 与 chart 共享该 adapter projection。
+- [ ] 原子切换 DID/VAR consumers、DID mock seam 与 statistical/InfoView barrels，完成 Task 11 missing-module RED、focused GREEN、ReportView 回归、TypeScript 与路径/依赖/ResizeObserver/accessibility audits。
+- [ ] 在 Task 11 fix round 1 中移除 VAR application adapter 对 renderer implementation types 的反向依赖，改由函数暴露最小 local inferred structural projection。
+- [ ] 将交互式 VAR SVG 根语义调整为带 label 的 `role="group"`，保留 eigenvalue marks 的 tabindex、ARIA 与 keyboard tooltip，并补强既有 focused assertion。
+- [ ] 在既有 DID renderer case 中补充 exactly one coefficient trend 断言，并完成 fix round covering tests、TypeScript、依赖方向与差异验证。
+- [ ] 删除最终废弃的 PlotView shell styles、shared plot axisScale 实现及其测试，不保留 wrapper、alias 或迁移入口。
+- [ ] 将 OLS report 唯一仍需的固定高度 chart shell class 收归其消费处，并从公共 chart barrel 移除未使用的旧 KDE/point aliases。
+- [ ] 新增递归 production TypeScript/TSX chart architecture fitness test，执行五条 package import 规则、SVG 增量更新与唯一 ResizeObserver ownership 契约。
+- [ ] 通过显式 dead-path guard 固定 PlotView 仅保留 PlotWindow shell/router，并阻止 shared/plot compatibility path 回归。
+- [ ] 更新 maintained architecture 文档，记录 Rust scientific authority、ChartModel adapters/registry、renderer categories、incremental SVG policy 与未实现的 Canvas/ECharts 选项。
+- [ ] 执行 Task 12 focused architecture/source/dependency audits、focused Rust contract、pnpm verify 与独立 diff whitespace verification，并记录既有/环境 gate failures。
+- [ ] 在 Task 12 fix round 1 中以 dependency-free lexical scanner 替换 regex-over-source 扫描，区分 code、comments、quoted strings、template text/expressions 与 regex literals。
+- [ ] 在既有 dependency/lifecycle cases 内补充最小 false-positive/false-negative fixtures，覆盖 typed import-equals、dynamic import options、template expression code 与真实 lifecycle calls。
+- [ ] 通过 focused RED/GREEN、TypeScript、source audits 与独立 diff check 验证 scanner 修复，同时保持 exactly five rules 与 three top-level tests。
+- [ ] 在 Task 12 fix round 2 中为 dependency-free scanner 增加显式 JSX tag/text 与 `{...}` expression 状态，忽略 JSX 文本和 quoted attributes，同时保留 comparison 与 `<T,>` generic code 扫描。
+- [ ] 记录 control-condition parenthesis context，仅在 `if`、`for`、`while` 等 header 关闭后允许 statement-position regex，避免将 ordinary call 后的 division 误判为 regex。
+- [ ] 通过两项 finding 的 focused RED/GREEN、TypeScript typecheck、Task 12 grep audits、diagnostics、rule/test counts 与独立 diff check 验证 fix round 2。
+- [ ] 在 Task 12 fix round 3 中将 architecture scanner 的 source kind 显式区分为 `.ts` 与 `.tsx`，禁止 `.ts` angle-bracket assertions 进入 JSX 状态。
+- [ ] 在既有 dependency/lifecycle cases 内补充最小 TS assertion 与 TSX generic-signature/extends fixtures，并让 JSX 判定避开对应合法 generic type syntax。
+- [ ] 通过 focused RED/GREEN、TypeScript typecheck、Task 12 source audits、diagnostics、rule/test counts、protected snapshot 与独立 diff check 验证 fix round 3。
+- [ ] 在 Task 12 fix round 4 中补充 constrained TSX generic arrow 显式 return annotation 的 dependency/lifecycle regression fixtures，确保后续 forbidden operations 不被 JSX 状态吞没。
+- [ ] 扩展 bounded generic-signature lookahead，在参数后接受可选 return type，并平衡 function、object、generic 与 tuple delimiters 直至 top-level arrow，不放宽真实 JSX 与 source-kind 判定。
+- [ ] 通过 focused RED/GREEN、TypeScript typecheck、Task 12 source audits、diagnostics、rule/test counts、protected snapshot 与独立 diff check 验证 fix round 4。
+- [ ] 将 compact Histogram 与 Correlation matrix 的交互式 SVG 根语义改为带 chart-level label 的 `role="group"`，同时保留 noncompact Histogram 的非交互 `role="img"` 契约与 marks 的键盘/ARIA 行为。
+- [ ] 让 MultiLine 与 DID event-study 的 measured wrapper/ref 在初始空数据期间保持挂载并隐藏，修复 empty-to-valid rerender 后尺寸停留为零的问题且不改变有效态布局与 legend 语义。
+- [ ] 将 plot payload parser 的 chart kind 参数切回 adjacent canonical `ResultPlotKind`，并在既有 architecture dependency case 中阻止 shared DTO production imports 指向 features。
+- [ ] 在保持五条 forbidden rules、三个顶层 tests 与既有 lexer 不变的前提下，将 relative literal imports 按 importer repository path 规范化后再执行 package-boundary 检查。
+- [ ] 在 Correlogram 每次有效更新后显式提升 zero reference，恢复 empty-to-valid recovery 的稳定 confidence/zero paint order，并增加语义 DOM 顺序回归断言。
+- [ ] 仅将指定的六个 Task 11/12 source/test 文件规范为 LF，并保留其余文件换行格式不变。
+- [ ] 将 `refactor/plot-module` 的六个 Plot 重构提交通过 merge commit 合并到 `shadcn`，保留完整分支历史且不推送远端。
+- [ ] 解决 `TODO.md` 双日期追加冲突，并将 Vite 测试排除项统一为同时忽略 `.worktrees/**` 与 `.superpowers/**`。
+- [ ] 在合并树复核 Plot/Chart 聚焦测试、TypeScript、Rust format/check 与 Plot kernel 回归，并记录既有 Oxfmt、Dockview、Clippy、contract fixture 及全量 Rust 并发门禁限制。
+- [ ] 核对 `.worktrees/plot-module` 的 `refactor/plot-module` tip 已由 `168cd12f` 通过 merge commit 合入 `shadcn`，且两处工作区无未提交改动。
+- [ ] 记录合并树验证结果：`pnpm run ci` 在全仓 Oxfmt 格式检查处失败，`pnpm test` 有 315/316 测试文件通过且 `workbenchDockviewDefaults.test.ts` 仍有 1 项失败。

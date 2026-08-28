@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useChartSeriesColors } from '@/shared/theme/chartTheme';
-import Scatter from '@/views/PlotView/Scatter';
+import { useChartTheme } from '@/shared/charts/core';
+import { ScatterChart } from '@/shared/charts/cartesian/ScatterChart';
 
 interface ResidualPlotProps {
   fitted: number[];
@@ -21,7 +21,7 @@ const ResidualPlot: React.FC<ResidualPlotProps> = ({
   yLabel = 'Residuals',
 }) => {
   const [outlierPct, setOutlierPct] = useState(5);
-  const seriesColors = useChartSeriesColors();
+  const { series: seriesColors } = useChartTheme();
 
   const data = useMemo(
     () => fitted.map((f, i) => ({ x: f, y: residuals[i] })),
@@ -62,10 +62,10 @@ const ResidualPlot: React.FC<ResidualPlotProps> = ({
           <span className="text-[11px] text-muted-foreground">% (按 leverage 最高)</span>
         </div>
       )}
-      <Scatter
+      <ScatterChart
         data={data}
-        xLabel={xLabel}
-        yLabel={yLabel}
+        xAxis={{ label: xLabel, valueType: 'number' }}
+        yAxis={{ label: yLabel, valueType: 'number' }}
         height={280}
         symmetricY
         zeroLine

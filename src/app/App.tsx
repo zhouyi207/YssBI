@@ -4,6 +4,7 @@ import "./i18n";
 import React, { Suspense } from "react";
 import { HashRouter, Route, Routes } from "react-router";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { ChartThemeProvider } from "./providers/ChartThemeProvider";
 import { SettingsEffectsProvider } from "./providers/SettingsEffectsProvider";
 import { UIHost } from "./ui/UIHost";
 
@@ -39,10 +40,12 @@ export default function App() {
   return (
     <TooltipProvider>
       <SettingsEffectsProvider>
-        <HashRouter>
-          <AppRouter />
-        </HashRouter>
-        <UIHost />
+        <ChartThemeProvider>
+          <HashRouter>
+            <AppRouter />
+          </HashRouter>
+          <UIHost />
+        </ChartThemeProvider>
       </SettingsEffectsProvider>
     </TooltipProvider>
   );

@@ -1,4 +1,5 @@
 import { isGraphResourcePath, isPortAddressDto, isUuid } from './editorProjectionGuards';
+import { isResultPlotKind } from './result';
 import type {
   GraphOutputRefDto,
   PinResultEntry,
@@ -6,7 +7,6 @@ import type {
   ResultDescriptor,
   ResultFailure,
   ResultPage,
-  ResultPlotKind,
   ResultPresentation,
   ResultProvenance,
   ResultReportKind,
@@ -19,9 +19,6 @@ import type {
 type UnknownRecord = Record<string, unknown>;
 
 const DECIMAL_ID_PATTERN = /^(0|[1-9]\d*)$/;
-const PLOT_KINDS = new Set([
-  'scatter', 'line', 'plot', 'ecdf', 'kde', 'histogram', 'correlation', 'correlogram',
-]);
 const REPORT_KINDS = new Set([
   'olsSummary', 'binarySummary', 'iv2slsSummary', 'ivLimlSummary', 'praisSummary',
   'varSummary', 'varSoc', 'panelSummary', 'panelDid', 'dfAdfSummary', 'dfAdfSummaryList',
@@ -69,9 +66,8 @@ export function parseResultPresentation(value: unknown): ResultPresentation {
       return { kind: 'inspector' };
     case 'plot':
       if (!hasExactKeys(value, ['kind', 'chart'])
-        || typeof value.chart !== 'string'
-        || !PLOT_KINDS.has(value.chart)) return fail('plot presentation');
-      return { kind: 'plot', chart: value.chart as ResultPlotKind };
+        || !isResultPlotKind(value.chart)) return fail('plot presentation');
+      return { kind: 'plot', chart: value.chart };
     case 'report':
       if (!hasExactKeys(value, ['kind', 'report'])
         || typeof value.report !== 'string'

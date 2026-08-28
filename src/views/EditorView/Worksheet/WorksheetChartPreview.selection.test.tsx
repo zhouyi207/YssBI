@@ -6,6 +6,7 @@ import { projectPublicationCoordinator } from '@/features/application/editorMuta
 import { clearWorksheetPreviewCache } from '@/services/worksheet/worksheetPreviewCache';
 import { fetchWorksheetPreview } from '@/services/worksheet/worksheetDataService';
 import type { WorksheetDocument, WorksheetPreviewPayload } from '@/shared/types/domain';
+import type { ChartModel } from '@/shared/types/visualization';
 import { WorksheetChartPreview } from './WorksheetChartPreview';
 
 vi.mock('@/services/worksheet/worksheetDataService', () => ({ fetchWorksheetPreview: vi.fn() }));
@@ -16,9 +17,11 @@ vi.mock('react-i18next', () => ({
       : `localized:${key}:${String(options.column)}`,
   }),
 }));
-vi.mock('@/views/PlotView/Scatter', () => ({ default: () => <div>scatter plot</div> }));
-vi.mock('@/views/PlotView/Line', () => ({ default: () => <div>line plot</div> }));
-vi.mock('@/views/PlotView/Histogram', () => ({ default: () => <div>histogram plot</div> }));
+vi.mock('@/shared/charts/ChartRenderer', () => ({
+  ChartRenderer: ({ model, surface }: { model: ChartModel; surface: string }) => (
+    <div data-chart-surface={surface}>{`${model.kind} plot`}</div>
+  ),
+}));
 vi.mock('./WorksheetEmptyState', () => ({ WorksheetEmptyState: () => <div>empty</div> }));
 
 const projectId = '00000000-0000-0000-0000-000000000701';
@@ -109,6 +112,7 @@ describe('WorksheetChartPreview', () => {
       const chartRegion = host.querySelector('[data-worksheet-chart-region]');
       expect(chartRegion).not.toBeNull();
       expect(chartRegion?.textContent).toContain(marker);
+      expect(chartRegion?.querySelector('[data-chart-surface="plain"]')).not.toBeNull();
     },
   );
 

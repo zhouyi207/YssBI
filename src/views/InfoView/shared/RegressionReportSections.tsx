@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import type { KDEPoint } from '@/shared/charts';
+import type { XYPoint } from '@/shared/types/visualization/chartModel';
+
 import {
   StatCard,
   Chi2TestCards,
@@ -230,7 +231,7 @@ export function ResidualDiagnosticsSection({
   labels = {},
 }: {
   diag: DiagnosticInfo;
-  leverageKdeData: KDEPoint[];
+  leverageKdeData: XYPoint[];
   labels?: ResidualDiagnosticsLabels;
 }) {
   const {
@@ -260,7 +261,14 @@ export function ResidualDiagnosticsSection({
         <div className="mb-4">
           <ReportSubheading title={leverageTitle} />
           <ReportLazyBoundary variant="chart">
-            <LazyKDE data={leverageKdeData} xLabel="Leverage" yLabel="Density" height={280} xMin={0} />
+            <LazyKDE
+              data={leverageKdeData}
+              xLabel="Leverage"
+              yLabel="Density"
+              height={280}
+              xMin={0}
+              className="relative overflow-hidden rounded-lg border border-border bg-card"
+            />
           </ReportLazyBoundary>
         </div>
       ) : null}
@@ -284,8 +292,8 @@ export function ResidualDiagnosticsSection({
           <ReportLazyBoundary variant="chart">
             <LazyScatter
               data={scatterPoints}
-              xLabel={scatterXLabel}
-              yLabel={scatterYLabel}
+              xAxis={{ label: scatterXLabel, valueType: 'number' }}
+              yAxis={{ label: scatterYLabel, valueType: 'number' }}
               height={280}
               symmetricY
               zeroLine
@@ -326,7 +334,7 @@ export function OlsStyleDiagnosticsSection({
   residualLabels,
 }: {
   diag: DiagnosticInfo;
-  leverageKdeData: KDEPoint[];
+  leverageKdeData: XYPoint[];
   residualLabels?: ResidualDiagnosticsLabels;
 }) {
   return (

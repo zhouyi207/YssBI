@@ -214,6 +214,7 @@ fn pair_payload(inputs: &[RuntimeValue], name: &str) -> Result<String, KernelErr
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct XYPlotData {
     data: Vec<XYPoint>,
     x_label: Option<String>,
@@ -280,6 +281,7 @@ fn kde_payload(inputs: &[RuntimeValue]) -> Result<String, KernelError> {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct HistogramPlotData {
     data: Vec<HistogramBin>,
     x_label: Option<String>,
@@ -350,8 +352,8 @@ fn sturges_bins(count: usize) -> usize {
 #[serde(rename_all = "camelCase")]
 struct CorrelationPlotData {
     labels: Vec<String>,
-    matrix: Vec<Vec<f64>>,
-    p_matrix: Vec<Vec<f64>>,
+    matrix: Vec<Vec<Option<f64>>>,
+    p_matrix: Vec<Vec<Option<f64>>>,
 }
 
 fn correlation_payload(inputs: &[RuntimeValue]) -> Result<String, KernelError> {
@@ -376,8 +378,8 @@ fn correlation_payload(inputs: &[RuntimeValue]) -> Result<String, KernelError> {
         })
         .collect::<Vec<_>>();
     let size = series.len();
-    let mut matrix = vec![vec![0.0; size]; size];
-    let mut p_matrix = vec![vec![f64::NAN; size]; size];
+    let mut matrix = vec![vec![None; size]; size];
+    let mut p_matrix = vec![vec![None; size]; size];
     for row in 0..size {
         for column in 0..size {
             let pairs = series[row]
@@ -388,12 +390,9 @@ fn correlation_payload(inputs: &[RuntimeValue]) -> Result<String, KernelError> {
                 .collect::<Vec<_>>();
             let (left, right): (Vec<_>, Vec<_>) = pairs.into_iter().unzip();
             let correlation = pearson_correlation(&left, &right);
-            matrix[row][column] = if correlation.is_finite() {
-                correlation
-            } else {
-                0.0
-            };
-            p_matrix[row][column] = pearson_p_value(correlation, left.len());
+            matrix[row][column] = correlation.is_finite().then_some(correlation);
+            let p_value = pearson_p_value(correlation, left.len());
+            p_matrix[row][column] = p_value.is_finite().then_some(p_value);
         }
     }
     serialize(
@@ -460,6 +459,96 @@ struct CorrelogramDatum {
     value: f64,
     q_stat: f64,
     p_value: f64,
+}
+
+#[cfg(test)]
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PlotPayloadContractRecord {
+    pub chart: &'static str,
+    pub data: serde_json::Value,
+}
+
+#[cfg(test)]
+pub(crate) fn plot_payload_contract_records() -> Vec<PlotPayloadContractRecord> {
+    let pair = PairPlotData {
+        data: vec![PairPoint { x: 1.0, y: 2.0 }],
+        x_label: Some("x".to_owned()),
+        y_label: Some("y".to_owned()),
+        x_format: "number".to_owned(),
+        y_format: "number".to_owned(),
+    };
+    let xy = XYPlotData {
+        data: vec![XYPoint { x: 1.0, y: 0.5 }],
+        x_label: Some("value".to_owned()),
+        y_label: Some("density".to_owned()),
+    };
+    vec![
+        PlotPayloadContractRecord {
+            chart: "scatter",
+            data: serde_json::to_value(&pair).unwrap(),
+        },
+        PlotPayloadContractRecord {
+            chart: "line",
+            data: serde_json::to_value(&pair).unwrap(),
+        },
+        PlotPayloadContractRecord {
+            chart: "ecdf",
+            data: serde_json::to_value(&xy).unwrap(),
+        },
+        PlotPayloadContractRecord {
+            chart: "kde",
+            data: serde_json::to_value(&xy).unwrap(),
+        },
+        PlotPayloadContractRecord {
+            chart: "histogram",
+            data: serde_json::to_value(HistogramPlotData {
+                data: vec![HistogramBin {
+                    label: "[0, 1)".to_owned(),
+                    count: 1,
+                }],
+                x_label: Some("value".to_owned()),
+                y_label: Some("Frequency".to_owned()),
+            })
+            .unwrap(),
+        },
+        PlotPayloadContractRecord {
+            chart: "correlation",
+            data: serde_json::to_value(CorrelationPlotData {
+                labels: vec!["a".to_owned(), "b".to_owned()],
+                matrix: vec![vec![Some(1.0), Some(0.5)], vec![Some(0.5), Some(1.0)]],
+                p_matrix: vec![vec![Some(0.0), Some(0.25)], vec![Some(0.25), Some(0.0)]],
+            })
+            .unwrap(),
+        },
+        PlotPayloadContractRecord {
+            chart: "correlogram",
+            data: serde_json::to_value(CorrelogramPlotData {
+                acf: vec![CorrelogramDatum {
+                    lag: 1,
+                    value: 0.5,
+                    q_stat: 1.5,
+                    p_value: 0.2,
+                }],
+                pacf: vec![CorrelogramDatum {
+                    lag: 1,
+                    value: 0.4,
+                    q_stat: 1.5,
+                    p_value: 0.2,
+                }],
+                ci_half_width: 0.196,
+                n: 100,
+            })
+            .unwrap(),
+        },
+    ]
+}
+
+#[cfg(test)]
+impl PlotKind {
+    pub(crate) fn payload_contract_records() -> impl Serialize {
+        plot_payload_contract_records()
+    }
 }
 
 fn correlogram_payload(inputs: &[RuntimeValue]) -> Result<String, KernelError> {

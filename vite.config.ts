@@ -19,6 +19,10 @@ export default defineConfig({
     },
   },
 
+  test: {
+    exclude: [...configDefaults.exclude, "**/.superpowers/**"],
+  },
+
   clearScreen: false,
   server: {
     port: 1420,

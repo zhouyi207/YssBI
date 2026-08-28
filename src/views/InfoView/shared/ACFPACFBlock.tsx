@@ -7,11 +7,11 @@ import { computeAcfPacf } from '@/features/application/stats/statsActions';
 import { formatInlineUserError } from '@/features/application/userErrorSummary';
 import type { AcfPacfResponse } from '@/features/application/stats/statsActions';
 import { acfSeriesToBars, pacfSeriesToBars } from '@/shared/types/report';
-import { useChartSeriesColors } from '@/shared/theme/chartTheme';
+import { useChartTheme } from '@/shared/charts/core';
 import { SectionHeader } from './RegressionShared';
 import { InfoAccentButton } from './InfoViewControls';
 
-const CorrelogramChart = React.lazy(() => import('@/views/PlotView/CorrelogramChart'));
+const CorrelogramChart = React.lazy(() => import('@/shared/charts/statistical/CorrelogramChart'));
 
 export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[]; residualLabel?: string }) {
   const { t } = useTranslation();
@@ -19,7 +19,7 @@ export function ACFPACFBlock({ residuals, residualLabel }: { residuals?: number[
   const [result, setResult] = useState<AcfPacfResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const seriesColors = useChartSeriesColors();
+  const { series: seriesColors } = useChartTheme();
 
   const canRun = residuals != null && residuals.length >= 4 && lag >= 1 && lag <= 40;
 
