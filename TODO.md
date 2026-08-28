@@ -1714,6 +1714,9 @@ Execution 不知道具体 UI
 - [ ] 将 Presentation 的 application-event、catalog、editor projection typed schema owners 提升为正常编译模块，保留旧生产 callers 未切换的单一路由约束。
 - [ ] 继续在 Execution Task 8 原子切换中接入这些 schema owners，并删除对应 Graph/旧 DTO mapper 与 exact debt。
 - [ ] 将 Application Worksheet plot policy owner 提升为正常编译模块，继续保持旧 Project/Polars command route 未切换至 Execution Task 8。
+- [ ] 将 Application ProjectSync 切换到 Services-owned typed project event stream、bounded ingress 与 reconciler，保持旧 Core listener tree 待验证后删除。
+- [ ] 保证 ProjectLoaded/cleared、resource mutation、GraphDelta、index invalidation 的 session/identity 过滤与 recovery 请求仍由 Application 协调。
+- [ ] 记录 ProjectSync Services stream/Ingress/Reconciler 的 4-file、12-test 精确 focused 验证；旧 Core listener/handler/parser/registry 仍待 frontend atomic cutover 删除。
 - [ ] 建立 Execution-owned session-bound result query owner：单次 Application session capture、Execution-private result/history pairing、oldest→newest 顺序与 typed missing-source error。
 - [ ] 建立 Frontend Application 的 Bayes dataset/artifact 与 current-window callback hooks，覆盖取消导出、generation stale suppression、typed platform failure 与既有窗口/Bayes 回归。
 - [ ] 完成 Result Query/Bayes window staged slices 的 focused verification；Rust architecture gate 已验证 37 passed，staged Graph→Execution debt 仍待原子生产 cutover 清理。

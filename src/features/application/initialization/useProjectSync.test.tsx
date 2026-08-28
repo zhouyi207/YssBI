@@ -3,8 +3,6 @@ import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { listen } from '@tauri-apps/api/event';
-import { initProjectSync } from '@/features/core/dataStore';
-import { logger } from '@/utils/appLogger';
 import { useProjectSync } from './useProjectSync';
 
 vi.mock('@tauri-apps/api/event', () => ({
@@ -12,7 +10,15 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 vi.mock('@/features/core/dataStore', () => ({
-  initProjectSync: vi.fn(),
+  loadActivatedProject: vi.fn(async () => null),
+  useProjectIOStore: {
+    getState: () => ({
+      loadProject: async () => null,
+      refreshResourceIndex: async () => false,
+      loadGraph: async () => false,
+    }),
+    setState: vi.fn(),
+  },
 }));
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -38,7 +44,6 @@ describe('useProjectSync', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(initProjectSync).mockResolvedValue(undefined);
     host = document.createElement('div');
     document.body.appendChild(host);
     root = createRoot(host);
@@ -49,7 +54,7 @@ describe('useProjectSync', () => {
     host.remove();
   });
 
-  it('starts the project listener without hydrating project state', async () => {
+  it('starts the service-owned project event stream without hydrating project state', async () => {
     const unlisten = vi.fn();
     vi.mocked(listen).mockResolvedValue(unlisten);
 
@@ -59,7 +64,6 @@ describe('useProjectSync', () => {
     });
 
     expect(listen).toHaveBeenCalledOnce();
-    expect(initProjectSync).not.toHaveBeenCalled();
   });
 
   it('keeps one project listener when StrictMode cleanup races async startup', async () => {
@@ -140,10 +144,9 @@ describe('useProjectSync', () => {
     expect(unlisten).toHaveBeenCalledOnce();
   });
 
-  it('handles listener startup failure and permits a later retry', async () => {
+  it('handles stream startup failure and permits a later retry', async () => {
     const startup = deferred<() => void>();
-    const startupError = new Error('listener unavailable');
-    const logError = vi.spyOn(logger.sys, 'error').mockImplementation(() => undefined);
+    const startupError = new Error('stream unavailable');
     vi.mocked(listen).mockReturnValueOnce(startup.promise);
 
     await act(async () => {
@@ -153,11 +156,6 @@ describe('useProjectSync', () => {
       await startup.promise.catch(() => undefined);
       await Promise.resolve();
     });
-
-    expect(logError).toHaveBeenCalledWith(
-      'Failed to start project listener: Error: listener unavailable',
-      'useProjectSync',
-    );
 
     const unlisten = vi.fn();
     vi.mocked(listen).mockResolvedValueOnce(unlisten);

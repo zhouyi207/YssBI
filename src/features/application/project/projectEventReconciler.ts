@@ -98,6 +98,9 @@ export interface ProjectEventReconcilerDependencies {
     ProjectHydrationCoordinator,
     'loadCurrentProject' | 'refreshResourceIndex' | 'loadGraph' | 'replaceProject'
   >;
+  readonly activateProject?: (
+    result: ProjectLoadedPayload['result'],
+  ) => Awaitable<boolean>;
   readonly currentProjectInstanceId: () => string | null;
   readonly publishProjectCleared?: () => Awaitable<void>;
   readonly publishLifecycleCommitted?: (
@@ -302,6 +305,12 @@ export function createProjectEventReconciler(
   ): Promise<ProjectReconciliationOutcome> => {
     switch (event.type) {
       case 'ProjectLoaded': {
+        if (dependencies.activateProject) {
+          const activated = await dependencies.activateProject(event.payload.result);
+          if (!activated) return { status: 'ignored' };
+          resetForProject(event.payload.result.projectInstanceId);
+          return { status: 'applied' };
+        }
         dependencies.hydration.replaceProject();
         resetForProject(event.payload.result.projectInstanceId);
         return hydrationOutcomeToReconciliation(

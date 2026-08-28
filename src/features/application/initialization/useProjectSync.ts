@@ -1,71 +1,143 @@
-// src/features/application/initialization/useProjectSync.ts
-// Application 层：协调 useEditor 与 Core 的 ProjectListener
+import { useEffect } from 'react';
 
-import { useEffect, useRef } from 'react';
-import { ProjectListener } from '@/features/core/sync/listeners/ProjectListener';
-import { SingletonManager } from '@/features/core/sync/utils/singletonManager';
-import { logger } from '@/utils/appLogger';
+import { loadActivatedProject, useProjectIOStore } from '@/features/core/dataStore';
+import { projectIOApplicationPort } from '@/features/core/dataStore/projectIOApplicationPort';
+import { createNodeCatalogPublication } from '@/features/core/nodeCatalog/publication';
+import { captureProjectLifecycleState } from '@/features/core/projectLifecycle/projectLifecycleAuthority';
+import { syncApplicationEventPort } from '@/features/core/sync/applicationEventPort';
+import {
+  createProjectEventIngress,
+  type ProjectEventIngress,
+} from '@/features/application/project/projectEventIngress';
+import {
+  createProjectEventReconciler,
+  type ProjectEventReconciler,
+  type ProjectEventReconcilerDependencies,
+} from '@/features/application/project/projectEventReconciler';
+import {
+  createProjectEventStream,
+  type ProjectEventStream,
+} from '@/services/project/projectEventStream';
 
-const LISTENER_KEY = 'project-listener';
-
-/**
- * 项目同步核心逻辑
- */
-function useProjectSyncCore() {
-  const isSetupRef = useRef(false);
-
-  useEffect(() => {
-    if (isSetupRef.current) return;
-    isSetupRef.current = true;
-    let cancelled = false;
-    let acquired = false;
-
-    const release = () => {
-      SingletonManager.decrementRef(LISTENER_KEY, (instance: ProjectListener) => {
-        instance.stop();
-      });
-    };
-
-    const setup = async () => {
-      await SingletonManager.getInstance(
-        LISTENER_KEY,
-        async () => {
-          logger.sys.debug('Creating new listener instance', 'useProjectSync');
-          const newListener = new ProjectListener();
-          await newListener.start();
-          return newListener;
-        },
-      );
-
-      if (cancelled) {
-        release();
-        return;
-      }
-
-      acquired = true;
-    };
-
-    void setup().catch((error) => {
-      logger.sys.error(
-        `Failed to start project listener: ${String(error)}`,
-        'useProjectSync',
-      );
-    });
-
-    return () => {
-      cancelled = true;
-      isSetupRef.current = false;
-      if (acquired) {
-        release();
-      }
-    };
-  }, []);
+interface ProjectSyncRuntime {
+  readonly stream: ProjectEventStream;
+  readonly ingress: ProjectEventIngress;
+  readonly unsubscribe: () => void;
+  references: number;
+  start: Promise<void> | null;
 }
 
-/**
- * 启动项目事件监听（EditorWindow / DatabaseEditorWindow 等共用）。
- * 项目投影 hydration 由各入口显式编排。
- */
-export function useProjectSync() {
-  useProjectSyncCore();
+let runtime: ProjectSyncRuntime | null = null;
+
+function hydrationDependencies(): ProjectEventReconcilerDependencies['hydration'] {
+  return {
+    loadCurrentProject: async () => (await useProjectIOStore.getState().loadProject())
+      ? { status: 'published' as const }
+      : { status: 'failed' as const },
+    refreshResourceIndex: async () => (await useProjectIOStore.getState().refreshResourceIndex())
+      ? { status: 'published' as const }
+      : { status: 'failed' as const },
+    loadGraph: async (graphPath) => (await useProjectIOStore.getState().loadGraph(graphPath))
+      ? { status: 'published' as const }
+      : { status: 'failed' as const },
+    replaceProject: () => {
+      projectIOApplicationPort().resetGraphProjection();
+    },
+  };
+}
+
+function createReconciler(): ProjectEventReconciler {
+  const hydration = hydrationDependencies();
+  const publication = createNodeCatalogPublication();
+  return createProjectEventReconciler({
+    hydration,
+    activateProject: async (result) => Boolean(await loadActivatedProject(result)),
+    currentProjectInstanceId: () => captureProjectLifecycleState().projectInstanceId,
+    publishProjectCleared: () => syncApplicationEventPort().clearProject(),
+    publishLifecycleCommitted: (result) => syncApplicationEventPort()
+      .applyProjectLifecycleReceipt(result),
+    publishProjectSaved: () => undefined,
+    publishComputationSettingsChanged: (result) => {
+      syncApplicationEventPort().computationSettingsChanged(result);
+    },
+    publishGraphDelta: (payload) => {
+      syncApplicationEventPort().graphDelta(payload.delta.graphPath);
+    },
+    publishResourceMutationCommitted: async (result) => {
+      await syncApplicationEventPort().resourceMutationCommitted(result);
+      publication.observeResourcePublication(
+        result.projectInstanceId,
+        result.publicationRevision,
+      );
+    },
+    requestAuthoritativeSnapshot: async () => {
+      await useProjectIOStore.getState().loadProject();
+    },
+  });
+}
+
+function createRuntime(): ProjectSyncRuntime {
+  const stream = createProjectEventStream();
+  const ingress = createProjectEventIngress(createReconciler(), {
+    requestAuthoritativeSnapshot: async () => {
+      await useProjectIOStore.getState().loadProject();
+    },
+    publishIssue: (issue) => {
+      if (issue.reason === 'recoveryRequested') return;
+      useProjectIOStore.setState({
+        error: { code: issue.code, incidentId: issue.incidentId },
+      });
+    },
+  });
+  const unsubscribe = stream.subscribe((item) => {
+    ingress.enqueue(item);
+  });
+  return {
+    stream,
+    ingress,
+    unsubscribe,
+    references: 0,
+    start: null,
+  };
+}
+
+async function acquireRuntime(): Promise<ProjectSyncRuntime> {
+  const current = runtime ?? createRuntime();
+  runtime = current;
+  current.references += 1;
+  if (!current.start) {
+    current.start = current.stream.start().then((outcome) => {
+      if (!outcome.ok) current.ingress.enqueue({ kind: 'failure', issue: outcome.issue });
+    });
+  }
+  await current.start;
+  return current;
+}
+
+function releaseRuntime(current: ProjectSyncRuntime): void {
+  if (runtime !== current) return;
+  current.references = Math.max(current.references - 1, 0);
+  if (current.references !== 0) return;
+  runtime = null;
+  current.unsubscribe();
+  void current.ingress.closeAndDrain().then(() => current.stream.close());
+}
+
+/** Starts the one Application-owned Project event entrance for mounted windows. */
+export function useProjectSync(): void {
+  useEffect(() => {
+    let current: ProjectSyncRuntime | null = null;
+    let cancelled = false;
+    void acquireRuntime().then((acquired) => {
+      if (cancelled) {
+        releaseRuntime(acquired);
+        return;
+      }
+      current = acquired;
+    });
+    return () => {
+      cancelled = true;
+      if (current) releaseRuntime(current);
+    };
+  }, []);
 }
