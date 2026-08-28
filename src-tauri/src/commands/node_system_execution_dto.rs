@@ -215,11 +215,24 @@ pub(crate) enum RunEventKindDto {
     OpenResultWindow {
         result_id: String,
     },
+    ResultInspectionRequested {
+        result_id: String,
+        source: ResultInspectionSourceDto,
+    },
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ResultInspectionSourceDto {
+    graph_path: String,
+    node_id: Option<String>,
+    port_address: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunEventDtoError {
     UnsafePreviewGeneration,
+    InvalidOutput,
 }
 
 impl TryFrom<RunEventKind> for RunEventKindDto {
@@ -270,6 +283,128 @@ impl TryFrom<RunEvent> for RunEventDto {
             kind: event.kind.try_into()?,
         })
     }
+}
+
+pub(crate) fn execution_demand_to_application(
+    demand: ExecutionDemandDto,
+) -> Result<crate::application::execution::run_graph::RunDemand, ()> {
+    use crate::application::execution::run_graph::RunDemand;
+    use crate::execution::plan::{PlanGraphId, PlanOutputRef, PlanPortAddress};
+
+    fn output(value: GraphOutputRefDto) -> Result<PlanOutputRef, ()> {
+        let port: crate::graph_document::PortAddress = value.port.try_into().map_err(|_| ())?;
+        let graph =
+            crate::graph_document::GraphResourcePath::new(value.graph_path).map_err(|_| ())?;
+        let graph_id =
+            PlanGraphId::new(graph.as_str().to_owned().into_boxed_str()).map_err(|_| ())?;
+        let port = PlanPortAddress::new(port.to_string().into_boxed_str()).map_err(|_| ())?;
+        Ok(PlanOutputRef::new(graph_id, port))
+    }
+
+    match demand {
+        ExecutionDemandDto::Default {} => Ok(RunDemand::Default),
+        ExecutionDemandDto::Outputs {
+            outputs,
+            include_default_results,
+        } => outputs
+            .into_vec()
+            .into_iter()
+            .map(output)
+            .collect::<Result<Vec<_>, _>>()
+            .map(|outputs| RunDemand::Outputs {
+                outputs: outputs.into_boxed_slice(),
+                include_default_results,
+            }),
+        ExecutionDemandDto::PinPreview {
+            output: value,
+            generation,
+        } => {
+            if generation > MAX_SAFE_PREVIEW_GENERATION {
+                return Err(());
+            }
+            Ok(RunDemand::PinPreview {
+                output: output(value)?,
+                generation,
+            })
+        }
+    }
+}
+
+impl TryFrom<crate::application::execution::run_graph::RunApplicationEvent> for RunEventDto {
+    type Error = RunEventDtoError;
+
+    fn try_from(
+        event: crate::application::execution::run_graph::RunApplicationEvent,
+    ) -> Result<Self, Self::Error> {
+        use crate::application::execution::run_graph::RunApplicationEventKind;
+
+        let identity = event.identity();
+        let run = GraphRunIdentityDto {
+            project_session_id: identity.project_session_id().as_str().to_owned(),
+            graph_path: identity.graph_path().as_str().to_owned(),
+            run_id: identity.run_id().get().to_string(),
+        };
+        let kind = match event.kind() {
+            RunApplicationEventKind::RunStarted => RunEventKindDto::RunStarted,
+            RunApplicationEventKind::RunCompleted => RunEventKindDto::RunCompleted,
+            RunApplicationEventKind::RunCancelled => RunEventKindDto::RunCancelled,
+            RunApplicationEventKind::RunErrored { .. } => RunEventKindDto::RunErrored {
+                outcome: RunErrorOutcomeDto::Ordinary(OrdinaryRunErrorCode::KernelFailed),
+            },
+            RunApplicationEventKind::PinPreviewResultReady {
+                output,
+                generation,
+                result_id,
+            } => {
+                if *generation > MAX_SAFE_PREVIEW_GENERATION {
+                    return Err(RunEventDtoError::UnsafePreviewGeneration);
+                }
+                RunEventKindDto::PinPreviewResultReady {
+                    output: plan_output_ref_dto(output)?,
+                    generation: *generation,
+                    result_id: result_id.get().to_string(),
+                }
+            }
+            RunApplicationEventKind::ResultInspectionRequested { result_id, source } => {
+                RunEventKindDto::ResultInspectionRequested {
+                    result_id: result_id.get().to_string(),
+                    source: ResultInspectionSourceDto {
+                        graph_path: source.graph().as_str().to_owned(),
+                        node_id: source.node().map(|node| node.as_str().to_owned()),
+                        port_address: source.port().map(|port| port.as_str().to_owned()),
+                    },
+                }
+            }
+        };
+        Ok(Self { run, kind })
+    }
+}
+
+fn plan_output_ref_dto(
+    output: &crate::execution::plan::PlanOutputRef,
+) -> Result<GraphOutputRefDto, RunEventDtoError> {
+    let port = output.port().as_str().split(':').collect::<Vec<_>>();
+    let port = match port.as_slice() {
+        [node_id, port_key] if uuid::Uuid::parse_str(node_id).is_ok() => PortAddressDto::Declared {
+            node_id: (*node_id).into(),
+            port_key: (*port_key).into(),
+        },
+        [node_id, template_key, instance_id]
+            if uuid::Uuid::parse_str(node_id).is_ok()
+                && uuid::Uuid::parse_str(instance_id).is_ok() =>
+        {
+            PortAddressDto::Instance {
+                node_id: (*node_id).into(),
+                template_key: (*template_key).into(),
+                instance_id: (*instance_id).into(),
+            }
+        }
+        _ => return Err(RunEventDtoError::InvalidOutput),
+    };
+    Ok(GraphOutputRefDto {
+        graph_path: output.graph().as_str().to_owned(),
+        port,
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -364,6 +499,18 @@ impl TryFrom<RunEvent> for ExecutionChannelEventDto {
     type Error = RunEventDtoError;
 
     fn try_from(event: RunEvent) -> Result<Self, Self::Error> {
+        Ok(Self::RunEvent(event.try_into()?))
+    }
+}
+
+impl TryFrom<crate::application::execution::run_graph::RunApplicationEvent>
+    for ExecutionChannelEventDto
+{
+    type Error = RunEventDtoError;
+
+    fn try_from(
+        event: crate::application::execution::run_graph::RunApplicationEvent,
+    ) -> Result<Self, Self::Error> {
         Ok(Self::RunEvent(event.try_into()?))
     }
 }

@@ -92,6 +92,14 @@ pub(crate) struct CommittedRunOutcome {
 struct CommittedRunOutcomeSeal;
 
 impl CommittedRunOutcome {
+    pub(crate) fn handoff(&self) -> &ExecutionFinalizationHandoff {
+        &self.handoff
+    }
+
+    pub(crate) fn results(&self) -> &[crate::execution::finalization::ReadyResult] {
+        self.handoff.results()
+    }
+
     pub(crate) fn inspection_requests(&self) -> Box<[ResultInspectionRequested]> {
         self.handoff
             .observation_intents()

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::Instant;
@@ -21,6 +22,7 @@ use crate::execution::result::{
 use crate::execution::result_store::ResultStore;
 use crate::execution::run_registry::RunRegistry;
 use crate::execution::run_registry::{RunRegistryError, RunState};
+use crate::execution::value::RuntimeValue;
 
 #[derive(Clone)]
 pub(crate) struct RunExecutionControl {
@@ -108,20 +110,338 @@ impl SchedulerOutput {
     }
 }
 
-trait PreparedPlanExecutor {
+trait PreparedPlanExecutor: Send + Sync {
     fn execute(
         &self,
         package: &crate::execution::plan::CompiledExecutionPackage,
         bindings: &[crate::execution::resource_preparation::RunResourceBinding],
         resources: &PreparedRunResources,
         control: &RunExecutionControl,
+        run_id: crate::execution::run_registry::RunId,
     ) -> Result<SchedulerOutput, KernelExecutionError>;
+}
+
+#[derive(Default)]
+struct NeutralPlanExecutor;
+
+impl PreparedPlanExecutor for NeutralPlanExecutor {
+    fn execute(
+        &self,
+        package: &crate::execution::plan::CompiledExecutionPackage,
+        _bindings: &[crate::execution::resource_preparation::RunResourceBinding],
+        resources: &PreparedRunResources,
+        control: &RunExecutionControl,
+        run_id: crate::execution::run_registry::RunId,
+    ) -> Result<SchedulerOutput, KernelExecutionError> {
+        let mut values = Vec::new();
+        let mut inspected = None;
+        let mut last_output = None;
+
+        for operation in package.plan().operations() {
+            check_kernel_control(control)?;
+            let inputs = operation
+                .inputs()
+                .iter()
+                .map(|binding| match binding.source() {
+                    crate::execution::plan::PlanInputSource::Value(reference) => values
+                        .get(reference.index() as usize)
+                        .cloned()
+                        .ok_or(KernelExecutionError::Failed),
+                    crate::execution::plan::PlanInputSource::Parameter(handle) => {
+                        let Some(payload) = package.parameters().entries().get(handle) else {
+                            return Err(KernelExecutionError::Failed);
+                        };
+                        parameter_value(payload.value(), resources)
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+            let value = execute_operation(
+                operation.kind().as_str(),
+                &inputs,
+                operation
+                    .parameter_handles()
+                    .iter()
+                    .find_map(|handle| package.parameters().entries().get(handle))
+                    .map(|payload| payload.value()),
+                resources,
+            )?;
+            if operation.kind().as_str() == "yssbi.debug.view" {
+                inspected = Some(value.clone());
+            }
+            if operation.output().is_some() {
+                last_output = Some(value.clone());
+            }
+            values.push(value);
+        }
+
+        let Some(value) = inspected.or(last_output) else {
+            return Ok(SchedulerOutput::new(
+                Box::new([]),
+                Box::new([]),
+                Box::new([]),
+            ));
+        };
+        let result_id = ResultId::from_existing(
+            run_id
+                .get()
+                .checked_add(1)
+                .ok_or(KernelExecutionError::Failed)?,
+        );
+        let result = ReadyResult::from_scheduler(result_id, StoredResult::Runtime(value));
+        let observation_intents = if package
+            .plan()
+            .operations()
+            .iter()
+            .any(|operation| operation.kind().as_str() == "yssbi.debug.view")
+        {
+            package
+                .plan()
+                .operations()
+                .iter()
+                .find(|operation| operation.kind().as_str() == "yssbi.debug.view")
+                .map(|operation| {
+                    vec![ResultObservationIntent {
+                        result_id,
+                        requester: operation.source().clone(),
+                    }]
+                    .into_boxed_slice()
+                })
+                .unwrap_or_default()
+        } else {
+            Box::new([])
+        };
+        Ok(SchedulerOutput::new(
+            vec![result].into_boxed_slice(),
+            Box::new([]),
+            observation_intents,
+        ))
+    }
+}
+
+fn check_kernel_control(control: &RunExecutionControl) -> Result<(), KernelExecutionError> {
+    if control.cancellation.load(Ordering::Acquire) {
+        return Err(KernelExecutionError::Cancelled);
+    }
+    if Instant::now() >= control.deadline {
+        return Err(KernelExecutionError::DeadlineExceeded);
+    }
+    Ok(())
+}
+
+fn parameter_value(
+    value: &crate::execution::plan::PlanParameterValue,
+    resources: &PreparedRunResources,
+) -> Result<RuntimeValue, KernelExecutionError> {
+    match value {
+        crate::execution::plan::PlanParameterValue::Scalar(scalar) => Ok(match scalar {
+            crate::execution::plan::PlanParameterScalar::Null => RuntimeValue::Null,
+            crate::execution::plan::PlanParameterScalar::Bool(value) => RuntimeValue::Bool(*value),
+            crate::execution::plan::PlanParameterScalar::Integer(value) => {
+                RuntimeValue::Integer(*value)
+            }
+            crate::execution::plan::PlanParameterScalar::Unsigned(value) => {
+                RuntimeValue::Unsigned(*value)
+            }
+            crate::execution::plan::PlanParameterScalar::Decimal(value) => {
+                RuntimeValue::Decimal(value.value())
+            }
+            crate::execution::plan::PlanParameterScalar::String(value) => {
+                RuntimeValue::String(value.clone())
+            }
+        }),
+        crate::execution::plan::PlanParameterValue::Resource(resource) => resources
+            .value(resource)
+            .cloned()
+            .ok_or(KernelExecutionError::Failed),
+        crate::execution::plan::PlanParameterValue::List(values) => values
+            .iter()
+            .map(|value| parameter_value(value, resources))
+            .collect::<Result<Vec<_>, _>>()
+            .map(|values| RuntimeValue::List(values.into_boxed_slice())),
+        crate::execution::plan::PlanParameterValue::Record(fields) => fields
+            .iter()
+            .map(|(field, value)| {
+                Ok((
+                    field.as_str().to_owned().into_boxed_str(),
+                    parameter_value(value, resources)?,
+                ))
+            })
+            .collect::<Result<std::collections::BTreeMap<_, _>, KernelExecutionError>>()
+            .map(RuntimeValue::Record),
+    }
+}
+
+fn execute_operation(
+    kind: &str,
+    inputs: &[RuntimeValue],
+    parameter: Option<&crate::execution::plan::PlanParameterValue>,
+    resources: &PreparedRunResources,
+) -> Result<RuntimeValue, KernelExecutionError> {
+    match kind {
+        "yssbi.constant.bool"
+        | "yssbi.constant.int64"
+        | "yssbi.constant.float64"
+        | "yssbi.constant.string" => parameter
+            .map(|value| parameter_value(value, resources))
+            .transpose()?
+            .ok_or(KernelExecutionError::Failed),
+        "yssbi.project.variable.get" => {
+            let Some(crate::execution::plan::PlanParameterValue::Resource(resource)) = parameter
+            else {
+                return Err(KernelExecutionError::Failed);
+            };
+            resources
+                .value(resource)
+                .cloned()
+                .ok_or(KernelExecutionError::Failed)
+        }
+        "yssbi.numeric.add.int64" | "yssbi.numeric.add.float64" => {
+            binary_numeric(inputs, |left, right| left + right)
+        }
+        "yssbi.numeric.subtract.int64" | "yssbi.numeric.subtract.float64" => {
+            binary_numeric(inputs, |left, right| left - right)
+        }
+        "yssbi.numeric.multiply.int64" | "yssbi.numeric.multiply.float64" => {
+            binary_numeric(inputs, |left, right| left * right)
+        }
+        "yssbi.numeric.divide.int64" | "yssbi.numeric.divide.float64" => {
+            binary_numeric(inputs, |left, right| left / right)
+        }
+        "yssbi.logic.and" => binary_bool(inputs, |left, right| left && right),
+        "yssbi.logic.or" => binary_bool(inputs, |left, right| left || right),
+        "yssbi.logic.not" => unary_bool(inputs, |value| !value),
+        "yssbi.compare.equal" => Ok(RuntimeValue::Bool(inputs.first() == inputs.get(1))),
+        "yssbi.compare.not_equal" => Ok(RuntimeValue::Bool(inputs.first() != inputs.get(1))),
+        "yssbi.compare.less"
+        | "yssbi.compare.less_equal"
+        | "yssbi.compare.greater"
+        | "yssbi.compare.greater_equal" => compare_numeric(kind, inputs),
+        "yssbi.value.convert" | "yssbi.debug.print" => {
+            inputs.first().cloned().ok_or(KernelExecutionError::Failed)
+        }
+        "yssbi.debug.view"
+        | "yssbi.project.event.begin"
+        | "yssbi.project.function.entry"
+        | "yssbi.project.function.return"
+        | "yssbi.project.function.call"
+        | "yssbi.project.variable.set"
+        | "yssbi.control.branch"
+        | "yssbi.control.sequence"
+        | "yssbi.control.loop"
+        | "yssbi.control.do"
+        | "yssbi.control.merge"
+        | "yssbi.control.sleep"
+        | "yssbi.reroute.data"
+        | "yssbi.reroute.control"
+        | "yssbi.reroute.effect" => Ok(inputs.first().cloned().unwrap_or(RuntimeValue::Null)),
+        _ => Err(KernelExecutionError::Failed),
+    }
+}
+
+fn numeric_input(value: Option<&RuntimeValue>) -> Result<f64, KernelExecutionError> {
+    match value {
+        Some(RuntimeValue::Integer(value)) => Ok(*value as f64),
+        Some(RuntimeValue::Unsigned(value)) => Ok(*value as f64),
+        Some(RuntimeValue::Decimal(value)) if value.is_finite() => Ok(*value),
+        _ => Err(KernelExecutionError::Failed),
+    }
+}
+
+fn binary_numeric(
+    inputs: &[RuntimeValue],
+    operation: impl FnOnce(f64, f64) -> f64,
+) -> Result<RuntimeValue, KernelExecutionError> {
+    let value = operation(
+        numeric_input(inputs.first())?,
+        numeric_input(inputs.get(1))?,
+    );
+    value
+        .is_finite()
+        .then_some(RuntimeValue::Decimal(value))
+        .ok_or(KernelExecutionError::Failed)
+}
+
+fn binary_bool(
+    inputs: &[RuntimeValue],
+    operation: impl FnOnce(bool, bool) -> bool,
+) -> Result<RuntimeValue, KernelExecutionError> {
+    let Some(RuntimeValue::Bool(left)) = inputs.first() else {
+        return Err(KernelExecutionError::Failed);
+    };
+    let Some(RuntimeValue::Bool(right)) = inputs.get(1) else {
+        return Err(KernelExecutionError::Failed);
+    };
+    Ok(RuntimeValue::Bool(operation(*left, *right)))
+}
+
+fn unary_bool(
+    inputs: &[RuntimeValue],
+    operation: impl FnOnce(bool) -> bool,
+) -> Result<RuntimeValue, KernelExecutionError> {
+    let Some(RuntimeValue::Bool(value)) = inputs.first() else {
+        return Err(KernelExecutionError::Failed);
+    };
+    Ok(RuntimeValue::Bool(operation(*value)))
+}
+
+fn compare_numeric(
+    kind: &str,
+    inputs: &[RuntimeValue],
+) -> Result<RuntimeValue, KernelExecutionError> {
+    let left = numeric_input(inputs.first())?;
+    let right = numeric_input(inputs.get(1))?;
+    let value = match kind {
+        "yssbi.compare.less" => left < right,
+        "yssbi.compare.less_equal" => left <= right,
+        "yssbi.compare.greater" => left > right,
+        "yssbi.compare.greater_equal" => left >= right,
+        _ => return Err(KernelExecutionError::Failed),
+    };
+    Ok(RuntimeValue::Bool(value))
 }
 
 struct RunLifecycleGuard<'a> {
     registry: &'a RunRegistry,
     run_id: crate::execution::run_registry::RunId,
     terminal: bool,
+}
+
+struct ExecutedPreparedCandidate {
+    run_id: crate::execution::run_registry::RunId,
+    candidate: SuccessfulExecutionCandidate,
+}
+
+impl ExecutedPreparedCandidate {
+    fn candidate(self) -> SuccessfulExecutionCandidate {
+        self.candidate
+    }
+
+    fn into_executed_run(self) -> ExecutedPreparedRun {
+        ExecutedPreparedRun {
+            run_id: self.run_id,
+            handoff: self.candidate.into_finalization_handoff(),
+        }
+    }
+}
+
+pub(crate) struct ExecutedPreparedRun {
+    run_id: crate::execution::run_registry::RunId,
+    handoff: ExecutionFinalizationHandoff,
+}
+
+impl ExecutedPreparedRun {
+    pub(crate) const fn run_id(&self) -> crate::execution::run_registry::RunId {
+        self.run_id
+    }
+
+    pub(crate) fn handoff(&self) -> &ExecutionFinalizationHandoff {
+        &self.handoff
+    }
+
+    pub(crate) fn into_handoff(self) -> ExecutionFinalizationHandoff {
+        self.handoff
+    }
 }
 
 impl<'a> RunLifecycleGuard<'a> {
@@ -214,6 +534,14 @@ pub(crate) enum ExecutionDrainOutcome {
     },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ExecutionCancelOutcome {
+    NotFound,
+    AlreadyCancelled,
+    AlreadyTerminal,
+    Requested,
+}
+
 #[must_use = "an execution work lease releases session admission when dropped"]
 pub(crate) struct ExecutionWorkLease {
     admission: Arc<(Mutex<RuntimeAdmission>, Condvar)>,
@@ -227,6 +555,8 @@ pub struct ExecutionRuntimeState {
     admission: Arc<(Mutex<RuntimeAdmission>, Condvar)>,
     results: ResultStore,
     runs: RunRegistry,
+    executor: Arc<dyn PreparedPlanExecutor>,
+    active_controls: Mutex<BTreeMap<crate::execution::run_registry::RunId, Arc<AtomicBool>>>,
 }
 
 impl ExecutionRuntimeState {
@@ -237,6 +567,8 @@ impl ExecutionRuntimeState {
             admission: Arc::new((Mutex::new(RuntimeAdmission::default()), Condvar::new())),
             results: ResultStore::new(),
             runs: RunRegistry::new(),
+            executor: Arc::new(NeutralPlanExecutor),
+            active_controls: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -284,7 +616,14 @@ impl ExecutionRuntimeState {
         resources: &ResourceProviderFactory,
         control: &RunExecutionControl,
     ) -> Result<SuccessfulExecutionCandidate, ExecutePreparedError> {
-        self.execute_prepared_inner(plan, bindings, resources, control, None)
+        self.execute_prepared_inner(
+            plan,
+            bindings,
+            resources,
+            control,
+            Some(self.executor.as_ref()),
+        )
+        .map(ExecutedPreparedCandidate::candidate)
     }
 
     pub(crate) fn execute_prepared_handoff(
@@ -293,9 +632,15 @@ impl ExecutionRuntimeState {
         bindings: RunResourceBindings,
         resources: &ResourceProviderFactory,
         control: &RunExecutionControl,
-    ) -> Result<ExecutionFinalizationHandoff, ExecutePreparedError> {
-        self.execute_prepared(plan, bindings, resources, control)
-            .map(SuccessfulExecutionCandidate::into_finalization_handoff)
+    ) -> Result<ExecutedPreparedRun, ExecutePreparedError> {
+        self.execute_prepared_inner(
+            plan,
+            bindings,
+            resources,
+            control,
+            Some(self.executor.as_ref()),
+        )
+        .map(ExecutedPreparedCandidate::into_executed_run)
     }
 
     fn execute_prepared_inner(
@@ -305,7 +650,7 @@ impl ExecutionRuntimeState {
         resources: &ResourceProviderFactory,
         control: &RunExecutionControl,
         executor: Option<&dyn PreparedPlanExecutor>,
-    ) -> Result<SuccessfulExecutionCandidate, ExecutePreparedError> {
+    ) -> Result<ExecutedPreparedCandidate, ExecutePreparedError> {
         let actual_generation = self.generation();
         let plan_generation = plan.generation();
         if actual_generation != plan_generation {
@@ -330,42 +675,66 @@ impl ExecutionRuntimeState {
             .map_err(ExecutePreparedError::RunRegistry)?;
         let mut lifecycle = RunLifecycleGuard::start(&self.runs, run_id)
             .map_err(ExecutePreparedError::RunRegistry)?;
+        self.active_controls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(run_id, Arc::clone(&control.cancellation));
         if let Err(error) = control.check(RunPhase::Execution) {
-            return terminate_run(&mut lifecycle, error);
+            let result = terminate_run(&mut lifecycle, run_id, error);
+            self.remove_active_control(run_id);
+            return result;
         }
 
         let Some(executor) = executor else {
-            return terminate_run(&mut lifecycle, ExecutePreparedError::KernelUnavailable);
+            let result = terminate_run(
+                &mut lifecycle,
+                run_id,
+                ExecutePreparedError::KernelUnavailable,
+            );
+            self.remove_active_control(run_id);
+            return result;
         };
         let output = match executor.execute(
             plan.package(),
             bindings.bindings(),
             &prepared_resources,
             control,
+            run_id,
         ) {
             Ok(output) => output,
             Err(KernelExecutionError::Cancelled) => {
-                return terminate_run(
+                let result = terminate_run(
                     &mut lifecycle,
+                    run_id,
                     ExecutePreparedError::Cancelled {
                         phase: RunPhase::Execution,
                     },
                 );
+                self.remove_active_control(run_id);
+                return result;
             }
             Err(KernelExecutionError::DeadlineExceeded) => {
-                return terminate_run(
+                let result = terminate_run(
                     &mut lifecycle,
+                    run_id,
                     ExecutePreparedError::DeadlineExceeded {
                         phase: RunPhase::Execution,
                     },
                 );
+                self.remove_active_control(run_id);
+                return result;
             }
             Err(error) => {
-                return terminate_run(&mut lifecycle, ExecutePreparedError::Kernel(error));
+                let result =
+                    terminate_run(&mut lifecycle, run_id, ExecutePreparedError::Kernel(error));
+                self.remove_active_control(run_id);
+                return result;
             }
         };
         if let Err(error) = control.check(RunPhase::Finalization) {
-            return terminate_run(&mut lifecycle, error);
+            let result = terminate_run(&mut lifecycle, run_id, error);
+            self.remove_active_control(run_id);
+            return result;
         }
 
         let (effects, grants) = prepared_resources.finish();
@@ -378,7 +747,8 @@ impl ExecutionRuntimeState {
         lifecycle
             .succeed()
             .map_err(ExecutePreparedError::RunRegistry)?;
-        Ok(candidate)
+        self.remove_active_control(run_id);
+        Ok(ExecutedPreparedCandidate { run_id, candidate })
     }
 
     #[cfg(test)]
@@ -391,6 +761,44 @@ impl ExecutionRuntimeState {
         executor: &dyn PreparedPlanExecutor,
     ) -> Result<SuccessfulExecutionCandidate, ExecutePreparedError> {
         self.execute_prepared_inner(plan, bindings, resources, control, Some(executor))
+            .map(ExecutedPreparedCandidate::candidate)
+    }
+
+    fn remove_active_control(&self, run_id: crate::execution::run_registry::RunId) {
+        self.active_controls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(&run_id);
+    }
+
+    pub(crate) fn cancel_run(
+        &self,
+        run_id: crate::execution::run_registry::RunId,
+    ) -> ExecutionCancelOutcome {
+        match self.runs.state(run_id) {
+            None => ExecutionCancelOutcome::NotFound,
+            Some(RunState::Cancelled) => ExecutionCancelOutcome::AlreadyCancelled,
+            Some(RunState::Succeeded | RunState::Failed) => ExecutionCancelOutcome::AlreadyTerminal,
+            Some(RunState::Admitted | RunState::Running | RunState::Finalizing) => {
+                if let Some(control) = self
+                    .active_controls
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner)
+                    .get(&run_id)
+                    .cloned()
+                {
+                    control.store(true, Ordering::Release);
+                }
+                ExecutionCancelOutcome::Requested
+            }
+        }
+    }
+
+    pub(crate) fn publish_committed_results(&self, handoff: &ExecutionFinalizationHandoff) {
+        for result in handoff.results() {
+            self.results
+                .publish(result.result_id(), result.value().clone());
+        }
     }
 
     pub(crate) fn admit(&self) -> Result<ExecutionWorkLease, ExecutionAdmissionError> {
@@ -445,14 +853,16 @@ impl ExecutionRuntimeState {
 
 fn terminate_run(
     lifecycle: &mut RunLifecycleGuard<'_>,
+    run_id: crate::execution::run_registry::RunId,
     error: ExecutePreparedError,
-) -> Result<SuccessfulExecutionCandidate, ExecutePreparedError> {
+) -> Result<ExecutedPreparedCandidate, ExecutePreparedError> {
     let transition = if matches!(&error, ExecutePreparedError::Cancelled { .. }) {
         lifecycle.cancel()
     } else {
         lifecycle.fail()
     };
     transition.map_err(ExecutePreparedError::RunRegistry)?;
+    let _ = run_id;
     Err(error)
 }
 
@@ -543,6 +953,7 @@ mod tests {
             bindings: &[RunResourceBinding],
             resources: &PreparedRunResources,
             _control: &RunExecutionControl,
+            _run_id: RunId,
         ) -> Result<SchedulerOutput, KernelExecutionError> {
             assert_eq!(bindings.len(), 1);
             assert_eq!(

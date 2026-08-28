@@ -10,23 +10,50 @@ use std::time::Instant;
 
 use thiserror::Error;
 
+use super::finalization::{FinalizationError, finalize_successful_run};
 use super::session_slot::{
     ApplicationSession, ApplicationState, SessionCaptureError, SessionRevalidationError,
 };
-use crate::data_contract::DataValue;
+use crate::application::catalog_query::capture_localized_project_facts;
+use crate::application::graph_contracts::{build_resource_catalog, graph_compile_settings};
+use crate::database::error::DatabaseError;
+use crate::database::session_api::catalog_snapshot;
+use crate::execution::error::RunPhase;
+use crate::execution::package_preparation::PackagePreparationError;
 use crate::execution::plan::{
-    CanonicalDecimal, CanonicalDecimalError, InvalidPlanIdentity, InvalidPlanParameterId,
-    PlanParameterFieldId, PlanParameterScalar, PlanParameterValue, PlanResourceId,
+    CanonicalDecimalError, InvalidPlanIdentity, InvalidPlanParameterId, PlanGraphId, PlanOutputRef,
+    PlanProjectSessionId, PlanRegistryFingerprint, PlanResourceId, PlanResourceObservedState,
+    PlanResourceVersion,
 };
 use crate::execution::run_registry::{RunId, RunState};
-use crate::execution::state::ExecutionAdmissionError;
+use crate::execution::state::{
+    ExecutePreparedError, ExecutionAdmissionError, ExecutionCancelOutcome, RunExecutionControl,
+};
+use crate::graph::compiler::{GraphCompilationInput, compile};
 use crate::graph_document::GraphResourcePath;
 use crate::project::execution_authority::{
-    ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceGrant,
-    ProjectResourceId, ProjectResourceKind, ProjectResourcePresence, ProjectResourceRequirement,
-    ProjectResourceVersion,
+    CandidateProjectEffects, ProjectEffectCommitControl, ProjectEffectCommitError,
+    ProjectExecutionPreparationError, ProjectExecutionRequest, ProjectResourceAccess,
+    ProjectResourceGrant, ProjectResourceId, ProjectResourceKind, ProjectResourcePresence,
+    ProjectResourceRequirement,
 };
 use crate::project::{ProjectData, ProjectFilesystemError, ProjectInstanceId};
+
+/// A run demand is an Application-owned interpretation of the graph execution
+/// request. It contains only Pure Leaf graph/plan identities, never transport
+/// DTOs or a delivery target.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RunDemand {
+    Default,
+    Outputs {
+        outputs: Box<[PlanOutputRef]>,
+        include_default_results: bool,
+    },
+    PinPreview {
+        output: PlanOutputRef,
+        generation: u64,
+    },
+}
 
 /// A run request is intentionally owned by the Application seam. It carries
 /// no transport data and no public RunId before execution has been admitted.
@@ -34,6 +61,7 @@ use crate::project::{ProjectData, ProjectFilesystemError, ProjectInstanceId};
 pub(crate) struct RunGraphRequest {
     project_instance_id: ProjectInstanceId,
     graph_path: GraphResourcePath,
+    demand: RunDemand,
     required_resources: Box<[ProjectResourceRequirement]>,
     cancellation: Arc<AtomicBool>,
     deadline: Instant,
@@ -47,10 +75,16 @@ impl RunGraphRequest {
         Self {
             project_instance_id,
             graph_path,
+            demand: RunDemand::Default,
             required_resources: Box::new([]),
             cancellation: Arc::new(AtomicBool::new(false)),
             deadline: Instant::now() + std::time::Duration::from_secs(60),
         }
+    }
+
+    pub(crate) fn with_demand(mut self, demand: RunDemand) -> Self {
+        self.demand = demand;
+        self
     }
 
     pub(crate) fn with_required_resources(
@@ -80,49 +114,76 @@ impl RunGraphRequest {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct RunResourceBinding {
-    resource: ProjectResourceId,
-    version: ProjectResourceVersion,
-    value: PlanParameterValue,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RunIdentity {
+    project_session_id: PlanProjectSessionId,
+    graph_path: GraphResourcePath,
+    run_id: RunId,
 }
 
-impl RunResourceBinding {
-    pub(crate) fn resource(&self) -> &ProjectResourceId {
-        &self.resource
+impl RunIdentity {
+    fn new(
+        project_session_id: PlanProjectSessionId,
+        graph_path: GraphResourcePath,
+        run_id: RunId,
+    ) -> Self {
+        Self {
+            project_session_id,
+            graph_path,
+            run_id,
+        }
     }
 
-    pub(crate) const fn version(&self) -> ProjectResourceVersion {
-        self.version
-    }
-
-    pub(crate) fn value(&self) -> &PlanParameterValue {
-        &self.value
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub(crate) struct RunResourceBindings {
-    project_session_id: Box<str>,
-    bindings: Box<[RunResourceBinding]>,
-}
-
-impl RunResourceBindings {
-    pub(crate) fn project_session_id(&self) -> &str {
+    pub(crate) fn project_session_id(&self) -> &PlanProjectSessionId {
         &self.project_session_id
     }
 
-    pub(crate) fn as_slice(&self) -> &[RunResourceBinding] {
-        &self.bindings
+    pub(crate) fn graph_path(&self) -> &GraphResourcePath {
+        &self.graph_path
+    }
+
+    pub(crate) const fn run_id(&self) -> RunId {
+        self.run_id
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
-pub(crate) enum ExecutionStagedError {
-    #[error("the execution prepared-plan consumer is not installed")]
-    PreparedPlanConsumerUnavailable,
-    #[error("the public run cancellation consumer is not installed")]
-    RunCancellationConsumerUnavailable,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum RunApplicationEventKind {
+    RunStarted,
+    RunCompleted,
+    RunCancelled,
+    RunErrored {
+        phase: RunPhase,
+    },
+    PinPreviewResultReady {
+        output: PlanOutputRef,
+        generation: u64,
+        result_id: crate::execution::result::ResultId,
+    },
+    ResultInspectionRequested {
+        result_id: crate::execution::result::ResultId,
+        source: crate::execution::plan::PlanSourceIdentity,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct RunApplicationEvent {
+    identity: RunIdentity,
+    kind: RunApplicationEventKind,
+}
+
+impl RunApplicationEvent {
+    fn new(identity: RunIdentity, kind: RunApplicationEventKind) -> Self {
+        Self { identity, kind }
+    }
+
+    pub(crate) fn identity(&self) -> &RunIdentity {
+        &self.identity
+    }
+
+    pub(crate) fn kind(&self) -> &RunApplicationEventKind {
+        &self.kind
+    }
 }
 
 #[derive(Debug, Error)]
@@ -141,10 +202,28 @@ pub(crate) enum ExecutionApplicationError {
     ProjectSnapshot(#[source] ProjectFilesystemError),
     #[error("project variable binding failed")]
     VariableBindings(#[source] VariableBindingError),
+    #[error("project facts could not be captured for execution")]
+    ProjectFacts(#[source] crate::application::catalog_query::ProjectCatalogReadError),
+    #[error("database catalog snapshot failed")]
+    DatabaseCatalog(#[source] DatabaseError),
+    #[error("graph compilation failed")]
+    GraphCompilation(#[source] crate::graph::error::GraphCompileError),
+    #[error("graph contract mapping failed")]
+    GraphContract(#[source] crate::application::graph_contracts::GraphContractMappingError),
+    #[error("execution package preparation failed")]
+    PackagePreparation(#[source] PackagePreparationError),
+    #[error("compiled graph did not produce an execution package")]
+    PackageUnavailable,
+    #[error("prepared execution failed")]
+    PreparedExecution(#[source] ExecutePreparedError),
+    #[error("project effect preparation failed")]
+    ProjectEffectPreparation(#[source] ProjectEffectCommitError),
+    #[error("project effect finalization failed")]
+    ProjectEffectFinalization(#[source] ProjectEffectCommitError),
+    #[error("execution finalization failed")]
+    Finalization(#[source] FinalizationError),
     #[error("captured application session is stale")]
     StaleSession(#[source] SessionRevalidationError),
-    #[error("execution remains staged")]
-    Staged(#[source] ExecutionStagedError),
 }
 
 #[derive(Debug, Error)]
@@ -159,6 +238,8 @@ pub(crate) enum VariableBindingError {
     IdentityMismatch { resource: ProjectResourceId },
     #[error("project value cannot be represented by Execution")]
     Value(#[source] CanonicalDecimalError),
+    #[error("project value cannot be represented by the runtime")]
+    RuntimeValue(#[source] crate::execution::value::RuntimeValueError),
     #[error("project value contains an invalid Execution identity")]
     Identity(#[source] InvalidPlanIdentity),
     #[error("project value contains an invalid record field")]
@@ -170,18 +251,27 @@ pub(crate) enum CancelRunOutcome {
     NotFound,
     AlreadyCancelled,
     AlreadyTerminal,
+    Requested,
 }
 
-/// Staged coordinator entry point.
-///
-/// The current Graph/Execution seam does not expose a consumer for the
-/// immutable prepared execution handle. The coordinator therefore performs
-/// every safe pre-plan step and returns a typed staged result. It never
-/// registers a public RunId on this path.
+/// Execute one graph through the session-bound Application/Graph/Execution
+/// owners. The no-sink overload is kept for non-transport callers; commands
+/// use `run_graph_with_sink` to attach the ordered run channel.
 pub(crate) fn run_graph(
     state: &ApplicationState,
     request: RunGraphRequest,
-) -> Result<(), ExecutionApplicationError> {
+) -> Result<RunId, ExecutionApplicationError> {
+    run_graph_with_sink(state, request, |_| true)
+}
+
+pub(crate) fn run_graph_with_sink<D>(
+    state: &ApplicationState,
+    request: RunGraphRequest,
+    mut deliver: D,
+) -> Result<RunId, ExecutionApplicationError>
+where
+    D: FnMut(RunApplicationEvent) -> bool + Send,
+{
     let captured = state
         .capture_session()
         .map_err(ExecutionApplicationError::SessionCapture)?;
@@ -192,11 +282,20 @@ pub(crate) fn run_graph(
 
     check_control(&request)?;
 
+    let initial_data = captured
+        .project()
+        .get_data()
+        .map_err(ExecutionApplicationError::ProjectSnapshot)?;
+    let required_resources = merge_resource_requirements(
+        request.required_resources.iter().cloned(),
+        graph_resource_requirements(&initial_data, &request.graph_path)?,
+    );
+
     let project_request = ProjectExecutionRequest::new(
         request.project_instance_id.clone(),
         request.graph_path.clone(),
     )
-    .with_required_resources(request.required_resources.iter().cloned());
+    .with_required_resources(required_resources.iter().cloned());
     let prepared_project = captured
         .project()
         .prepare_execution(project_request)
@@ -204,13 +303,42 @@ pub(crate) fn run_graph(
 
     check_control(&request)?;
 
-    // This is a short authoritative snapshot. The lock held by ProjectState is
-    // released when get_data returns, before any later runtime/backend work.
     let project_data = captured
         .project()
         .get_data()
         .map_err(ExecutionApplicationError::ProjectSnapshot)?;
-    let _bindings = map_project_variable_facts(
+    let project_facts = capture_localized_project_facts(&captured)
+        .map_err(ExecutionApplicationError::ProjectFacts)?;
+    let database_facts = catalog_snapshot(captured.database())
+        .map_err(ExecutionApplicationError::DatabaseCatalog)?;
+    let graph_catalog = build_resource_catalog(project_facts.resources().graph(), &database_facts)
+        .map_err(|error| ExecutionApplicationError::GraphContract(error))?;
+    let graph_document = prepared_project.graph();
+    let settings = graph_compile_settings(prepared_project.settings());
+    let basis = plan_basis(
+        &captured,
+        prepared_project.authority().graph_revision(),
+        prepared_project.resources().grants(),
+    )?;
+    let compilation = compile(GraphCompilationInput::new(
+        graph_document,
+        &graph_catalog,
+        &settings,
+        basis,
+        request.graph_path.clone(),
+        crate::execution::plan::PlanCompileId::from_existing(
+            prepared_project.authority().graph_revision().get(),
+        ),
+    ))
+    .map_err(ExecutionApplicationError::GraphCompilation)?;
+    let package = compilation
+        .executable
+        .ok_or(ExecutionApplicationError::PackageUnavailable)?;
+    let prepared_plan = captured
+        .execution()
+        .prepare_compiled_package(package, captured.runtime_generation())
+        .map_err(ExecutionApplicationError::PackagePreparation)?;
+    let bindings = map_project_resource_facts(
         captured.project_session_id().as_str(),
         &project_data,
         prepared_project.resources().grants(),
@@ -221,13 +349,80 @@ pub(crate) fn run_graph(
     check_control(&request)?;
     revalidate_final_session(state, &captured)?;
 
-    // The plan is deliberately not fabricated or reconstructed here. A later
-    // slice must provide the Graph-produced PreparedExecutionPlan consumer and
-    // the Execution execute_prepared seam before RunId publication is allowed.
-    drop(prepared_project);
-    Err(ExecutionApplicationError::Staged(
-        ExecutionStagedError::PreparedPlanConsumerUnavailable,
-    ))
+    let control =
+        RunExecutionControl::with_cancellation(Arc::clone(&request.cancellation), request.deadline);
+    let executed = captured
+        .execution()
+        .execute_prepared_handoff(
+            &prepared_plan,
+            bindings,
+            captured.resource_provider_factory(),
+            &control,
+        )
+        .map_err(ExecutionApplicationError::PreparedExecution)?;
+    let run_id = executed.run_id();
+    let identity = RunIdentity::new(
+        PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
+        request.graph_path.clone(),
+        run_id,
+    );
+    let _ = deliver(RunApplicationEvent::new(
+        identity.clone(),
+        RunApplicationEventKind::RunStarted,
+    ));
+
+    let prepared_effects = captured
+        .project()
+        .prepare_execution_effects(
+            prepared_project.authority(),
+            CandidateProjectEffects::empty(),
+        )
+        .map_err(ExecutionApplicationError::ProjectEffectPreparation)?;
+    let committed_effects = captured
+        .project()
+        .finalize_execution_effects(
+            prepared_effects,
+            &ProjectEffectCommitControl::new(Arc::clone(&request.cancellation), request.deadline),
+        )
+        .map_err(ExecutionApplicationError::ProjectEffectFinalization)?;
+    let outcome = finalize_successful_run(
+        executed.into_handoff(),
+        PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
+        PlanGraphId::from_existing(request.graph_path.as_str().into()),
+        run_id,
+    )
+    .map_err(ExecutionApplicationError::Finalization)?;
+    captured
+        .execution()
+        .publish_committed_results(outcome.handoff());
+
+    for inspection in outcome.inspection_requests() {
+        let _ = deliver(RunApplicationEvent::new(
+            identity.clone(),
+            RunApplicationEventKind::ResultInspectionRequested {
+                result_id: inspection.result_id(),
+                source: inspection.requester().clone(),
+            },
+        ));
+    }
+    if let RunDemand::PinPreview { output, generation } = &request.demand
+        && let Some(result) = outcome.results().first()
+    {
+        let _ = deliver(RunApplicationEvent::new(
+            identity.clone(),
+            RunApplicationEventKind::PinPreviewResultReady {
+                output: output.clone(),
+                generation: *generation,
+                result_id: result.result_id(),
+            },
+        ));
+    }
+    let _ = deliver(RunApplicationEvent::new(
+        identity,
+        RunApplicationEventKind::RunCompleted,
+    ));
+    drop(committed_effects);
+    Ok(run_id)
 }
 
 pub(crate) fn cancel_run(
@@ -242,9 +437,12 @@ pub(crate) fn cancel_run(
         Some(RunState::Cancelled) => Ok(CancelRunOutcome::AlreadyCancelled),
         Some(RunState::Succeeded | RunState::Failed) => Ok(CancelRunOutcome::AlreadyTerminal),
         Some(RunState::Admitted | RunState::Running | RunState::Finalizing) => {
-            Err(ExecutionApplicationError::Staged(
-                ExecutionStagedError::RunCancellationConsumerUnavailable,
-            ))
+            Ok(match captured.execution().cancel_run(run_id) {
+                ExecutionCancelOutcome::NotFound => CancelRunOutcome::NotFound,
+                ExecutionCancelOutcome::AlreadyCancelled => CancelRunOutcome::AlreadyCancelled,
+                ExecutionCancelOutcome::AlreadyTerminal => CancelRunOutcome::AlreadyTerminal,
+                ExecutionCancelOutcome::Requested => CancelRunOutcome::Requested,
+            })
         }
     }
 }
@@ -268,90 +466,194 @@ fn revalidate_final_session(
         .map_err(ExecutionApplicationError::StaleSession)
 }
 
-fn map_project_variable_facts(
+fn merge_resource_requirements(
+    first: impl IntoIterator<Item = ProjectResourceRequirement>,
+    second: impl IntoIterator<Item = ProjectResourceRequirement>,
+) -> Vec<ProjectResourceRequirement> {
+    let mut resources = BTreeMap::new();
+    for requirement in first.into_iter().chain(second) {
+        resources.insert(requirement.resource().as_str().to_owned(), requirement);
+    }
+    resources.into_values().collect()
+}
+
+fn graph_resource_requirements(
+    data: &ProjectData,
+    graph_path: &GraphResourcePath,
+) -> Result<Vec<ProjectResourceRequirement>, ExecutionApplicationError> {
+    let Some(graph) = data.graphs.get(graph_path) else {
+        return Ok(Vec::new());
+    };
+    let mut requirements = Vec::new();
+    for value in graph
+        .document
+        .nodes
+        .values()
+        .flat_map(|node| node.parameters.values())
+    {
+        collect_resource_requirements(value, &mut requirements)?;
+    }
+    Ok(requirements)
+}
+
+fn collect_resource_requirements(
+    value: &serde_json::Value,
+    requirements: &mut Vec<ProjectResourceRequirement>,
+) -> Result<(), ExecutionApplicationError> {
+    match value {
+        serde_json::Value::String(value) => {
+            let kind = if value.starts_with("variables/") {
+                ProjectResourceKind::Variable
+            } else if value.starts_with("databases/") {
+                ProjectResourceKind::DataFrame
+            } else if value.starts_with("events/") || value.starts_with("functions/") {
+                ProjectResourceKind::File
+            } else {
+                return Ok(());
+            };
+            let resource =
+                ProjectResourceId::new(value.clone().into_boxed_str()).map_err(|_| {
+                    ExecutionApplicationError::VariableBindings(VariableBindingError::Identity(
+                        InvalidPlanIdentity::Empty,
+                    ))
+                })?;
+            requirements.push(ProjectResourceRequirement::new(
+                resource,
+                kind,
+                ProjectResourceAccess::Shared,
+                false,
+            ));
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                collect_resource_requirements(value, requirements)?;
+            }
+        }
+        serde_json::Value::Object(values) => {
+            for value in values.values() {
+                collect_resource_requirements(value, requirements)?;
+            }
+        }
+        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
+    }
+    Ok(())
+}
+
+fn plan_basis(
+    captured: &ApplicationSession,
+    graph_revision: crate::graph_document::GraphRevision,
+    grants: &[ProjectResourceGrant],
+) -> Result<crate::execution::plan::PlanCompilationBasis, ExecutionApplicationError> {
+    let mut versions = BTreeMap::new();
+    let mut observations = BTreeMap::new();
+    for grant in grants {
+        let resource = PlanResourceId::new(grant.resource().as_str().to_owned().into_boxed_str())
+            .map_err(|_| {
+            ExecutionApplicationError::VariableBindings(VariableBindingError::Identity(
+                InvalidPlanIdentity::Empty,
+            ))
+        })?;
+        let version = grant
+            .version()
+            .map(|version| PlanResourceVersion::from_existing(version.get().to_string().into()));
+        if let Some(version) = version.clone() {
+            versions.insert(resource.clone(), version.clone());
+        }
+        observations.insert(
+            resource,
+            match grant.presence() {
+                ProjectResourcePresence::Present => {
+                    PlanResourceObservedState::Present(version.ok_or_else(|| {
+                        ExecutionApplicationError::VariableBindings(
+                            VariableBindingError::MissingVersion {
+                                resource: grant.resource().clone(),
+                            },
+                        )
+                    })?)
+                }
+                ProjectResourcePresence::Absent => PlanResourceObservedState::Absent(version),
+            },
+        );
+    }
+    Ok(crate::execution::plan::PlanCompilationBasis::new(
+        PlanProjectSessionId::from_existing(captured.project_session_id().as_str().into()),
+        crate::execution::plan::PlanGraphRevision::from_existing(graph_revision.get()),
+        PlanRegistryFingerprint::from_bytes(captured.graph().registry_fingerprint()),
+        versions,
+        observations,
+    ))
+}
+
+fn map_project_resource_facts(
     project_session_id: &str,
     project_data: &ProjectData,
     grants: &[ProjectResourceGrant],
-) -> Result<RunResourceBindings, VariableBindingError> {
+) -> Result<crate::execution::resource_preparation::RunResourceBindings, VariableBindingError> {
+    let mut requirements = Vec::new();
     let mut bindings = Vec::new();
     for grant in grants {
-        if grant.kind() != ProjectResourceKind::Variable
-            || grant.presence() != ProjectResourcePresence::Present
-        {
+        let resource = PlanResourceId::new(grant.resource().as_str().to_owned().into_boxed_str())
+            .map_err(|_| VariableBindingError::Identity(InvalidPlanIdentity::Empty))?;
+        let kind = match grant.kind() {
+            ProjectResourceKind::DatabaseConnection => {
+                crate::execution::plan::ResourceKind::DatabaseConnection
+            }
+            ProjectResourceKind::DataFrame => crate::execution::plan::ResourceKind::DataFrame,
+            ProjectResourceKind::File => crate::execution::plan::ResourceKind::File,
+            ProjectResourceKind::Variable => crate::execution::plan::ResourceKind::Variable,
+            ProjectResourceKind::Plot => crate::execution::plan::ResourceKind::Plot,
+        };
+        let access = match grant.access() {
+            ProjectResourceAccess::Shared => crate::execution::plan::ResourceAccess::Shared,
+            ProjectResourceAccess::Exclusive => crate::execution::plan::ResourceAccess::Exclusive,
+        };
+        let requirement = crate::execution::plan::PlanResourceRequirement::new(
+            resource.clone(),
+            kind,
+            access,
+            grant.optional(),
+        );
+        requirements.push(requirement.clone());
+        if grant.presence() != ProjectResourcePresence::Present {
             continue;
         }
-        let resource = grant.resource().clone();
-        let variable_id = variable_id_from_resource(&resource)?;
         let version = grant
             .version()
             .ok_or_else(|| VariableBindingError::MissingVersion {
-                resource: resource.clone(),
+                resource: grant.resource().clone(),
             })?;
-        let variable = project_data.variables.get(&variable_id).ok_or_else(|| {
-            VariableBindingError::MissingValue {
-                resource: resource.clone(),
+        let value = if grant.kind() == ProjectResourceKind::Variable {
+            let variable_id = variable_id_from_resource(grant.resource())?;
+            let variable = project_data.variables.get(&variable_id).ok_or_else(|| {
+                VariableBindingError::MissingValue {
+                    resource: grant.resource().clone(),
+                }
+            })?;
+            if variable.id != variable_id {
+                return Err(VariableBindingError::IdentityMismatch {
+                    resource: grant.resource().clone(),
+                });
             }
-        })?;
-        if variable.id != variable_id {
-            return Err(VariableBindingError::IdentityMismatch { resource });
-        }
-        let value = data_value_to_binding(&variable.data_value)?;
-        bindings.push(RunResourceBinding {
-            resource,
-            version,
-            value,
-        });
+            crate::execution::value::RuntimeValue::try_from(&variable.data_value)
+                .map_err(VariableBindingError::RuntimeValue)?
+        } else {
+            crate::execution::value::RuntimeValue::Resource(resource.as_str().into())
+        };
+        bindings.push(
+            crate::execution::resource_preparation::RunResourceBinding::new(
+                requirement,
+                PlanResourceVersion::from_existing(version.get().to_string().into()),
+                value,
+            ),
+        );
     }
-    Ok(RunResourceBindings {
-        project_session_id: project_session_id.into(),
-        bindings: bindings.into_boxed_slice(),
-    })
-}
-
-fn data_value_to_binding(value: &DataValue) -> Result<PlanParameterValue, VariableBindingError> {
-    match value {
-        DataValue::Null => Ok(PlanParameterValue::Scalar(PlanParameterScalar::Null)),
-        DataValue::Boolean(value) => Ok(PlanParameterValue::Scalar(PlanParameterScalar::Bool(
-            *value,
-        ))),
-        DataValue::Int64(value) => Ok(PlanParameterValue::Scalar(PlanParameterScalar::Integer(
-            *value,
-        ))),
-        DataValue::Float64(value) => CanonicalDecimal::try_new(*value)
-            .map(PlanParameterScalar::Decimal)
-            .map(PlanParameterValue::Scalar)
-            .map_err(VariableBindingError::Value),
-        DataValue::String(value) => Ok(PlanParameterValue::Scalar(PlanParameterScalar::String(
-            value.clone().into_boxed_str(),
-        ))),
-        DataValue::Array(values) => values
-            .iter()
-            .map(data_value_to_binding)
-            .collect::<Result<Vec<_>, _>>()
-            .map(|values| PlanParameterValue::List(values.into_boxed_slice())),
-        DataValue::Object(values) => values
-            .iter()
-            .map(|(field, value)| {
-                Ok((
-                    PlanParameterFieldId::new(field.clone().into_boxed_str())
-                        .map_err(VariableBindingError::Field)?,
-                    data_value_to_binding(value)?,
-                ))
-            })
-            .collect::<Result<BTreeMap<_, _>, VariableBindingError>>()
-            .map(PlanParameterValue::Record),
-        DataValue::DataFrame(resource) => PlanResourceId::new(resource.clone().into_boxed_str())
-            .map(PlanParameterValue::Resource)
-            .map_err(VariableBindingError::Identity),
-        DataValue::DataSeries(series) => PlanResourceId::new(series.id.clone().into_boxed_str())
-            .map(PlanParameterValue::Resource)
-            .map_err(VariableBindingError::Identity),
-        DataValue::Struct { handle_id, .. } => {
-            PlanResourceId::new(handle_id.clone().into_boxed_str())
-                .map(PlanParameterValue::Resource)
-                .map_err(VariableBindingError::Identity)
-        }
-    }
+    Ok(
+        crate::execution::resource_preparation::RunResourceBindings::new(
+            PlanProjectSessionId::from_existing(project_session_id.into()),
+            requirements,
+            bindings,
+        ),
+    )
 }
 
 fn variable_id_from_resource(
