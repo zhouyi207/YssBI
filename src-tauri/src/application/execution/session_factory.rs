@@ -128,14 +128,14 @@ impl ReplacementCandidateInput {
 /// A fully validated but not-yet-published Application session.
 ///
 /// Dropping this value releases only dormant component owners. It has no public
-/// admission or publication operation other than the parent-module `publish`
-/// transition, so an unpublished candidate cannot become reachable accidentally.
-pub(super) struct UnpublishedApplicationSession {
+/// admission or publication operation; the composition root must consume it
+/// through the Application session-slot installation seam.
+pub(crate) struct UnpublishedApplicationSession {
     session: ApplicationSession,
 }
 
 impl UnpublishedApplicationSession {
-    pub(super) fn publish(self) -> ApplicationSession {
+    pub(super) fn into_session(self) -> ApplicationSession {
         self.session
     }
 }
@@ -260,7 +260,7 @@ mod tests {
         let builder = SessionResourceFactoryBuilder::from_composition(test_factory);
         let unpublished = build_replacement_candidate(&builder, candidate_input())
             .expect("matching candidate is buildable");
-        let session = unpublished.publish();
+        let session = unpublished.into_session();
         assert_eq!(session.project_session_id().as_str(), "candidate-session");
         assert_eq!(
             session.database().identity().as_str(),

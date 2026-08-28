@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use thiserror::Error;
 
+use super::session_factory::UnpublishedApplicationSession;
 use crate::database::runtime::DatabaseRuntimeSession;
 use crate::execution::identity::{ExecutionSessionId, RuntimeGeneration};
 use crate::execution::resource_preparation::ResourceProviderFactory;
@@ -259,6 +260,14 @@ pub enum SessionRevalidationError {
     Unavailable(SessionCaptureError),
     #[error("captured application session changed")]
     Changed,
+}
+
+#[derive(Debug, Eq, PartialEq, Error)]
+pub(crate) enum SessionInstallationError {
+    #[error("application session slot is not inactive")]
+    SlotNotInactive,
+    #[error("application session candidate epoch does not match the slot")]
+    CandidateEpochMismatch,
 }
 
 struct SessionSlotInner {
@@ -644,6 +653,33 @@ impl ApplicationSessionSlot {
         }
     }
 
+    fn install_candidate(
+        &self,
+        candidate: UnpublishedApplicationSession,
+    ) -> Result<(), SessionInstallationError> {
+        let mut state = self
+            .inner
+            .state
+            .write()
+            .unwrap_or_else(|error| error.into_inner());
+        let next_epoch = match &*state {
+            SessionSlotState::Inactive { next_epoch } => *next_epoch,
+            SessionSlotState::Replacing { .. }
+            | SessionSlotState::Recovering { .. }
+            | SessionSlotState::Active(_) => {
+                return Err(SessionInstallationError::SlotNotInactive);
+            }
+        };
+
+        let session = candidate.into_session();
+        if session.epoch() != next_epoch {
+            return Err(SessionInstallationError::CandidateEpochMismatch);
+        }
+
+        *state = SessionSlotState::Active(Arc::new(session));
+        Ok(())
+    }
+
     #[allow(
         dead_code,
         reason = "replacement orchestration is staged until the atomic production cutover"
@@ -902,6 +938,13 @@ pub struct ApplicationState {
 impl ApplicationState {
     pub fn new(session_slot: Arc<ApplicationSessionSlot>) -> Self {
         Self { session_slot }
+    }
+
+    pub(crate) fn install_candidate(
+        &self,
+        candidate: UnpublishedApplicationSession,
+    ) -> Result<(), SessionInstallationError> {
+        self.session_slot.install_candidate(candidate)
     }
 
     pub fn capture_session(&self) -> Result<Arc<ApplicationSession>, SessionCaptureError> {
