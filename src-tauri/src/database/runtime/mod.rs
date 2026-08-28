@@ -1,10 +1,13 @@
+mod physical;
 mod registry;
 
 use crate::database::error::{DatabaseError, DatabaseOperation};
+use crate::database::schema_snapshot::DatabaseSchemaFact;
 use crate::database_contract::{
     DatabaseDecl, DatabaseDeclarationObservationSet, DatabaseId, DatabaseSessionIdentity,
     DatabaseSessionOpenRequest,
 };
+use physical::{DatabaseRuntimeDataSnapshot, DatabaseRuntimePhysicalState};
 use registry::DatabaseSessionRuntime;
 use std::fmt;
 use std::num::NonZeroU64;
@@ -25,6 +28,7 @@ pub struct DatabaseRuntimeRegistry;
 pub struct DatabaseRuntimeSession {
     basis: DatabaseSessionBasis,
     runtime: Arc<DatabaseSessionRuntime>,
+    physical: Arc<DatabaseRuntimePhysicalState>,
 }
 
 struct DatabaseSessionBasis {
@@ -177,12 +181,43 @@ impl DatabaseRuntimeRegistry {
         &self,
         request: DatabaseSessionOpenRequest,
     ) -> Result<DatabaseRuntimeSession, DatabaseError> {
+        self.open_session_with_physical(request, DatabaseRuntimePhysicalState::empty())
+    }
+
+    pub(crate) fn open_session_with_instances(
+        &self,
+        request: DatabaseSessionOpenRequest,
+        instances: impl IntoIterator<Item = crate::database::database_instance::DatabaseInstance>,
+    ) -> Result<DatabaseRuntimeSession, DatabaseError> {
+        request
+            .validate()
+            .map_err(|_| DatabaseError::invalid_request(DatabaseOperation::OpenSession, None))?;
+        let (identity, generation, root, declarations, observations) = request.into_parts();
+        let physical = DatabaseRuntimePhysicalState::from_instances(&declarations, instances)?;
+        Ok(DatabaseRuntimeSession {
+            runtime: DatabaseSessionRuntime::new(&declarations, observations),
+            physical,
+            basis: DatabaseSessionBasis {
+                identity,
+                generation,
+                _root: root,
+                declarations,
+            },
+        })
+    }
+
+    fn open_session_with_physical(
+        &self,
+        request: DatabaseSessionOpenRequest,
+        physical: Arc<DatabaseRuntimePhysicalState>,
+    ) -> Result<DatabaseRuntimeSession, DatabaseError> {
         request
             .validate()
             .map_err(|_| DatabaseError::invalid_request(DatabaseOperation::OpenSession, None))?;
         let (identity, generation, root, declarations, observations) = request.into_parts();
         Ok(DatabaseRuntimeSession {
             runtime: DatabaseSessionRuntime::new(&declarations, observations),
+            physical,
             basis: DatabaseSessionBasis {
                 identity,
                 generation,
@@ -256,6 +291,24 @@ impl DatabaseRuntimeSession {
 
     pub(crate) fn runtime_snapshot(&self) -> DatabaseRuntimeSnapshot {
         self.runtime.snapshot()
+    }
+
+    pub(crate) fn read_physical_snapshot(
+        &self,
+        database: &DatabaseId,
+        requested: Option<&[crate::tabular::contract::TabularColumnName]>,
+        offset: usize,
+        limit: usize,
+    ) -> Result<DatabaseRuntimeDataSnapshot, DatabaseError> {
+        self.physical
+            .read_columns(database, requested, offset, limit)
+    }
+
+    pub(crate) fn read_physical_schema(
+        &self,
+        database: &DatabaseId,
+    ) -> Result<Option<DatabaseSchemaFact>, DatabaseError> {
+        self.physical.read_schema(database)
     }
 
     #[cfg(test)]

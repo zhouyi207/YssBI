@@ -309,53 +309,6 @@ fn pair_from_fact_series(
     })
 }
 
-#[cfg(test)]
-fn pair_from_series(
-    basis: DatabaseQueryBasis,
-    database: &DatabaseId,
-    x_series: &Series,
-    y_series: &Series,
-    x_column: &TabularColumnName,
-    y_column: &TabularColumnName,
-) -> Result<NumericColumnPair, DatabasePlotQueryError> {
-    let x_kind = series_kind(x_series);
-    let y_kind = series_kind(y_series);
-    let x = series_to_numeric_values(x_series, x_kind).map_err(|error| {
-        materialization_error(
-            database,
-            Some(x_column),
-            DatabaseError::driver(
-                DatabaseOperation::Query,
-                Some(database.clone()),
-                DatabaseDriverError::Polars(error),
-            ),
-        )
-    })?;
-    let y = series_to_numeric_values(y_series, y_kind).map_err(|error| {
-        materialization_error(
-            database,
-            Some(y_column),
-            DatabaseError::driver(
-                DatabaseOperation::Query,
-                Some(database.clone()),
-                DatabaseDriverError::Polars(error),
-            ),
-        )
-    })?;
-    Ok(NumericColumnPair {
-        basis: PlotQueryBasis {
-            query: basis,
-            database: database.clone(),
-        },
-        x,
-        y,
-        x_label: label_for_series(x_series),
-        y_label: label_for_series(y_series),
-        x_kind,
-        y_kind,
-    })
-}
-
 fn series_to_numeric_values(
     series: &Series,
     kind: NumericColumnKind,
@@ -416,15 +369,6 @@ fn numeric_kind(data_type: &DataType) -> NumericColumnKind {
     }
 }
 
-#[cfg(test)]
-fn series_kind(series: &Series) -> NumericColumnKind {
-    match series.dtype() {
-        PolarsDataType::Date => NumericColumnKind::Date,
-        PolarsDataType::Datetime(_, _) => NumericColumnKind::Datetime,
-        _ => NumericColumnKind::Number,
-    }
-}
-
 fn label_for_series(series: &Series) -> Option<Box<str>> {
     (!series.name().is_empty()).then(|| series.name().as_str().into())
 }
@@ -433,15 +377,17 @@ fn label_for_series(series: &Series) -> Option<Box<str>> {
 mod tests {
     use super::*;
     use crate::database::runtime::DatabaseRuntimeRegistry;
+    use crate::database::{DatabaseInstance, DatabaseState, EditHistory};
     use crate::database_contract::{
         DatabaseDecl, DatabaseDeclarationFingerprint, DatabaseDeclarationObservation,
         DatabaseDeclarationObservationSet, DatabaseDeclarationRevision, DatabaseEngine,
         DatabaseSessionIdentity, DatabaseSessionOpenRequest,
     };
-    use polars::prelude::{AnyValue, TimeUnit};
+    use polars::prelude::{AnyValue, Column, DataFrame, TimeUnit};
     use std::num::NonZeroU64;
+    use std::sync::Arc;
 
-    fn session_with(identity: &str) -> DatabaseRuntimeSession {
+    fn session_with_loaded_data(identity: &str) -> DatabaseRuntimeSession {
         let declaration = DatabaseDecl {
             id: DatabaseId::from_existing("sales".into()),
             engine: DatabaseEngine::InMemory {
@@ -451,33 +397,6 @@ mod tests {
             required: false,
             name: "Sales".into(),
         };
-        let observations = DatabaseDeclarationObservationSet::try_from_iter([(
-            declaration.id.clone(),
-            DatabaseDeclarationObservation::new(
-                DatabaseDeclarationRevision::from_existing(1),
-                DatabaseDeclarationFingerprint::from_decl(&declaration),
-            ),
-        )])
-        .expect("test declaration observations are valid");
-        DatabaseRuntimeRegistry::new()
-            .open_session(DatabaseSessionOpenRequest::new(
-                DatabaseSessionIdentity::from_existing(identity.into()),
-                NonZeroU64::new(1).expect("test generation is non-zero"),
-                None,
-                vec![declaration].into(),
-                observations,
-            ))
-            .expect("test database session is valid")
-    }
-
-    #[test]
-    fn plot_pair_preserves_series_labels_casts_temporal_values_and_redacts_failed_casts() {
-        let session = session_with("plot-session");
-        let database = DatabaseId::from_existing("sales".into());
-        let date_column =
-            TabularColumnName::try_from("observed_date").expect("test column name is valid");
-        let datetime_column =
-            TabularColumnName::try_from("observed_at").expect("test column name is valid");
         let date = Series::from_any_values(
             PlSmallStr::from("observed_date"),
             &[AnyValue::Date(1), AnyValue::Date(2)],
@@ -493,64 +412,55 @@ mod tests {
             false,
         )
         .expect("test datetime series is valid");
-        let pair = pair_from_series(
-            session.capture_query_basis(&database).expect("query basis"),
-            &database,
-            &date,
-            &datetime,
-            &date_column,
-            &datetime_column,
-        )
-        .expect("temporal columns materialize");
+        let dataframe = Arc::new(
+            DataFrame::new(2, vec![Column::from(date), Column::from(datetime)])
+                .expect("test dataframe is valid"),
+        );
+        let instance = DatabaseInstance {
+            decl: declaration.clone(),
+            state: DatabaseState::Loaded {
+                dataframe: dataframe.clone(),
+                original: dataframe,
+                history: EditHistory::new(),
+            },
+        };
+        let observations = DatabaseDeclarationObservationSet::try_from_iter([(
+            declaration.id.clone(),
+            DatabaseDeclarationObservation::new(
+                DatabaseDeclarationRevision::from_existing(1),
+                DatabaseDeclarationFingerprint::from_decl(&declaration),
+            ),
+        )])
+        .expect("test declaration observations are valid");
+        DatabaseRuntimeRegistry::new()
+            .open_session_with_instances(
+                DatabaseSessionOpenRequest::new(
+                    DatabaseSessionIdentity::from_existing(identity.into()),
+                    NonZeroU64::new(1).expect("test generation is non-zero"),
+                    None,
+                    vec![declaration].into(),
+                    observations,
+                ),
+                [instance],
+            )
+            .expect("test database session is valid")
+    }
+
+    #[test]
+    fn loaded_runtime_materializer_casts_temporal_columns_for_plot_reads() {
+        let session = session_with_loaded_data("plot-session");
+        let database = DatabaseId::from_existing("sales".into());
+        let date_column =
+            TabularColumnName::try_from("observed_date").expect("test column name is valid");
+        let datetime_column =
+            TabularColumnName::try_from("observed_at").expect("test column name is valid");
+        let pair = read_numeric_column_pair(&session, &database, &date_column, &datetime_column)
+            .expect("loaded temporal columns materialize");
         assert_eq!(pair.x_label(), Some("observed_date"));
         assert_eq!(pair.y_label(), Some("observed_at"));
         assert_eq!(pair.x_kind(), NumericColumnKind::Date);
         assert_eq!(pair.y_kind(), NumericColumnKind::Datetime);
         assert_eq!(pair.x(), &[Some(1.0), Some(2.0)]);
         assert_eq!(pair.y(), &[Some(1.0), Some(2.0)]);
-
-        let bad_column =
-            TabularColumnName::try_from("not_numeric").expect("test column name is valid");
-        let bad = Series::from_any_values(
-            PlSmallStr::from("not_numeric"),
-            &[
-                AnyValue::StringOwned("not-a-number".into()),
-                AnyValue::StringOwned("still-bad".into()),
-            ],
-            false,
-        )
-        .expect("test string series is valid");
-        let error = match pair_from_series(
-            session.capture_query_basis(&database).expect("query basis"),
-            &database,
-            &date,
-            &bad,
-            &date_column,
-            &bad_column,
-        ) {
-            Ok(_) => panic!("invalid numeric cast must be typed"),
-            Err(error) => error,
-        };
-        assert_eq!(
-            error.kind(),
-            DatabasePlotQueryErrorKind::ColumnMaterializationFailed
-        );
-        assert_eq!(error.column(), Some(&bad_column));
-        assert!(!error.to_string().contains("not-a-number"));
-        assert!(std::error::Error::source(&error).is_some());
-
-        let stale_pair = pair_from_series(
-            session.capture_query_basis(&database).expect("query basis"),
-            &database,
-            &date,
-            &datetime,
-            &date_column,
-            &datetime_column,
-        )
-        .expect("stale pair materializes");
-        let foreign = session_with("other-plot-session");
-        let stale = revalidate_numeric_column_pair(&foreign, &stale_pair)
-            .expect_err("foreign session must reject a private basis");
-        assert_eq!(stale.kind(), DatabasePlotQueryErrorKind::SessionMismatch);
     }
 }

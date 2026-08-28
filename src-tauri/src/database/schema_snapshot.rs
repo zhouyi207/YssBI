@@ -83,6 +83,14 @@ pub(crate) enum DatabaseSchemaFactError {
 }
 
 impl DatabaseSchemaFact {
+    pub(crate) fn with_revisions(self, runtime_revision: u64, schema_revision: u64) -> Self {
+        Self {
+            runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision),
+            schema_revision: DatabaseSchemaRevision::from_existing(schema_revision),
+            ..self
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn from_columns(
         database: DatabaseId,

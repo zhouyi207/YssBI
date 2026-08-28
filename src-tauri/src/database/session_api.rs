@@ -16,7 +16,7 @@ use crate::database_contract::{
     DatabaseDeclarationObservation, DatabaseDeclarationObservationSet, DatabaseId,
     DatabaseSessionIdentity,
 };
-use crate::tabular::contract::{TabularColumn, TabularColumnName, TabularScalar, TabularSnapshot};
+use crate::tabular::contract::{TabularColumnName, TabularScalar, TabularSnapshot};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DatabaseColumnSelection {
@@ -386,23 +386,6 @@ fn basis_for(
     }
 }
 
-fn schema_for(
-    snapshot: &DatabaseRuntimeSnapshot,
-    database: &DatabaseId,
-    operation: DatabaseOperation,
-) -> Result<DatabaseSchemaFact, DatabaseError> {
-    let revisions = snapshot
-        .revisions
-        .get(database)
-        .copied()
-        .ok_or_else(|| DatabaseError::not_found(operation, Some(database.clone())))?;
-    Ok(DatabaseSchemaFact::empty(
-        database.clone(),
-        revisions.runtime,
-        revisions.schema,
-    ))
-}
-
 fn schema_effect(operation: &DatabaseMutationOperation) -> DatabaseMutationSchemaEffect {
     match operation {
         DatabaseMutationOperation::AddColumn { .. }
@@ -426,13 +409,28 @@ pub fn catalog_snapshot(
         .declarations()
         .iter()
         .map(|declaration| {
-            schema_for(
-                &runtime_snapshot,
-                &declaration.id,
-                DatabaseOperation::CatalogSnapshot,
-            )
+            let revisions = runtime_snapshot
+                .revisions
+                .get(&declaration.id)
+                .copied()
+                .ok_or_else(|| {
+                    DatabaseError::not_found(
+                        DatabaseOperation::CatalogSnapshot,
+                        Some(declaration.id.clone()),
+                    )
+                })?;
+            let schema = session.read_physical_schema(&declaration.id)?;
+            Ok(schema
+                .map(|schema| schema.with_revisions(revisions.runtime, revisions.schema))
+                .unwrap_or_else(|| {
+                    DatabaseSchemaFact::empty(
+                        declaration.id.clone(),
+                        revisions.runtime,
+                        revisions.schema,
+                    )
+                }))
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, DatabaseError>>()?;
     Ok(DatabaseCatalogSnapshot {
         basis: basis_for(session, &runtime_snapshot),
         schemas: schemas.into_boxed_slice(),
@@ -519,55 +517,31 @@ pub fn data_snapshot(
     request: DatabaseDataSnapshotRequest,
 ) -> Result<DatabaseDataSnapshot, DatabaseError> {
     let (_lease, runtime_snapshot) = session.capture_operation(DatabaseOperation::DataSnapshot)?;
-    let schema = schema_for(
-        &runtime_snapshot,
-        &request.database,
-        DatabaseOperation::DataSnapshot,
-    )?;
-    let selected = match request.columns {
-        DatabaseColumnSelection::All => schema.columns().to_vec(),
-        DatabaseColumnSelection::Selected(columns) => {
-            if columns.is_empty() {
-                return Err(DatabaseError::invalid_request(
-                    DatabaseOperation::DataSnapshot,
-                    Some(request.database),
-                ));
-            }
-            let mut seen = BTreeSet::new();
-            let mut selected = Vec::with_capacity(columns.len());
-            for column in columns {
-                if !seen.insert(column.clone()) {
-                    return Err(DatabaseError::invalid_request(
-                        DatabaseOperation::DataSnapshot,
-                        Some(request.database),
-                    ));
-                }
-                let Some(fact) = schema.columns().iter().find(|fact| fact.name() == &column) else {
-                    return Err(DatabaseError::not_found(
-                        DatabaseOperation::DataSnapshot,
-                        Some(request.database),
-                    ));
-                };
-                selected.push(fact.clone());
-            }
-            selected
-        }
+    let runtime_revision = runtime_snapshot
+        .revisions
+        .get(&request.database)
+        .copied()
+        .ok_or_else(|| {
+            DatabaseError::not_found(
+                DatabaseOperation::DataSnapshot,
+                Some(request.database.clone()),
+            )
+        })?;
+    let requested = match &request.columns {
+        DatabaseColumnSelection::All => None,
+        DatabaseColumnSelection::Selected(columns) => Some(columns.as_ref()),
     };
-    let rows = selected
-        .iter()
-        .map(|column| TabularColumn::new(column.name().clone(), Box::new([])))
-        .collect::<Vec<_>>();
-    let rows = TabularSnapshot::try_from_columns(rows.into_boxed_slice()).map_err(|_| {
-        DatabaseError::invalid_request(
-            DatabaseOperation::DataSnapshot,
-            Some(request.database.clone()),
-        )
-    })?;
+    let physical = session.read_physical_snapshot(
+        &request.database,
+        requested,
+        request.offset,
+        request.limit,
+    )?;
     Ok(DatabaseDataSnapshot {
         database: request.database,
-        runtime_revision: schema.runtime_revision(),
-        columns: selected.into_boxed_slice(),
-        rows,
+        runtime_revision: DatabaseRuntimeRevision::from_existing(runtime_revision.runtime),
+        columns: physical.columns,
+        rows: physical.rows,
     })
 }
 
