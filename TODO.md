@@ -1698,3 +1698,6 @@ Execution 不知道具体 UI
 - [ ] 在保持五条 forbidden rules、三个顶层 tests 与既有 lexer 不变的前提下，将 relative literal imports 按 importer repository path 规范化后再执行 package-boundary 检查。
 - [ ] 在 Correlogram 每次有效更新后显式提升 zero reference，恢复 empty-to-valid recovery 的稳定 confidence/zero paint order，并增加语义 DOM 顺序回归断言。
 - [ ] 仅将指定的六个 Task 11/12 source/test 文件规范为 LF，并保留其余文件换行格式不变。
+- [ ] 将 `refactor/plot-module` 的六个 Plot 重构提交通过 merge commit 合并到 `shadcn`，保留完整分支历史且不推送远端。
+- [ ] 解决 `TODO.md` 双日期追加冲突，并将 Vite 测试排除项统一为同时忽略 `.worktrees/**` 与 `.superpowers/**`。
+- [ ] 在合并树复核 Plot/Chart 聚焦测试、TypeScript、Rust format/check 与 Plot kernel 回归，并记录既有 Oxfmt、Dockview、Clippy、contract fixture 及全量 Rust 并发门禁限制。
