@@ -1,66 +1,415 @@
-use crate::application::editor_projection::{EditorCompilationOutcome, EditorProjectionModel};
-use crate::node_system::analysis::EditorGraphProjectionDto;
+use crate::application::editor_projection::{
+    EditorCompilationOutcome, EditorCompilationStage, EditorDiagnosticModel,
+    EditorDiagnosticSeverity, EditorEffectiveInputBinding, EditorParameterModel,
+    EditorPortInstanceKind, EditorPortModel, EditorPortStatus, EditorProjectionModel,
+    ParameterEditorKind,
+};
+use crate::node_system::analysis::{
+    CompilationOutcomeDto, CompilationStageDto, DiagnosticDto, DiagnosticLocationDto,
+    DiagnosticSeverityDto, EditorConnectionProjectionDto, EditorGraphProjectionDto,
+    EditorInputBindingDto, EditorNodeProjectionDto, EditorParameterDto,
+    NodeCapabilitiesDto, NodeDisplayDto, NodePositionDto, ParameterDisplayDto,
+    PortConnectionCapabilityDto, PortDisplayDto, PortDirectionDto,
+    PortInstanceKindDto, PortKindDto, ResolvedPortDto, ResolvedPortStatusDto, TypeSummaryDto,
+};
+use crate::node_system::registry::RegistryFingerprint;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum TransportMappingError {
-    #[error("editor projection transport basis is incomplete")]
-    MissingResourceVersions,
-    #[error("editor node transport facts are incomplete")]
-    MissingNodeFacts,
-    #[error("editor connection transport facts are incomplete")]
-    MissingConnectionFacts,
-    #[error("editor diagnostic transport facts are incomplete")]
-    MissingDiagnosticFacts,
+    #[error("editor projection parameter configuration has no accessible typed wire contract")]
+    ParameterConfigurationWireContractUnavailable,
+    #[error("editor projection parameter value source has no accessible typed wire contract")]
+    ParameterValueSourceWireContractUnavailable,
+    #[error("editor projection schema summary has no accessible typed wire contract")]
+    ResolvedSchemaWireContractUnavailable,
 }
 
 impl TryFrom<&EditorProjectionModel> for EditorGraphProjectionDto {
     type Error = TransportMappingError;
 
     fn try_from(model: &EditorProjectionModel) -> Result<Self, Self::Error> {
-        if !model.nodes.is_empty() {
-            return Err(TransportMappingError::MissingNodeFacts);
-        }
-        if !model.connections.is_empty() {
-            return Err(TransportMappingError::MissingConnectionFacts);
-        }
-        if !model.diagnostics.is_empty() {
-            return Err(TransportMappingError::MissingDiagnosticFacts);
-        }
+        Ok(Self {
+            basis: crate::node_system::analysis::ProjectionBasis {
+                graph_path: model.basis.graph_path.as_str().into(),
+                graph_revision: model.basis.graph_revision.get(),
+                registry_fingerprint: RegistryFingerprint::from_bytes(
+                    model.basis.registry_fingerprint,
+                ),
+                resource_versions: model.basis.resource_versions.clone(),
+            },
+            graph_path: model.graph_path.as_str().into(),
+            source_revision: model.source_revision.get(),
+            nodes: model
+                .nodes
+                .iter()
+                .map(|node| map_node(model, node))
+                .collect::<Result<Vec<_>, _>>()?,
+            connections: model
+                .connections
+                .iter()
+                .map(|connection| EditorConnectionProjectionDto {
+                    connection_id: connection.connection_id.to_string().into(),
+                    output: (&connection.output).into(),
+                    input: (&connection.input).into(),
+                    order: connection.order.clone(),
+                })
+                .collect(),
+            diagnostics: model.diagnostics.iter().map(map_diagnostic).collect(),
+            outcome: map_outcome(&model.outcome),
+            has_blocking_diagnostics: model
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == EditorDiagnosticSeverity::Error)
+                || !matches!(model.outcome, EditorCompilationOutcome::Complete),
+        })
+    }
+}
 
-        match model.outcome {
-            EditorCompilationOutcome::Complete | EditorCompilationOutcome::Incomplete => {}
-        }
+fn map_node(
+    model: &EditorProjectionModel,
+    node: &crate::application::editor_projection::EditorNodeModel,
+) -> Result<EditorNodeProjectionDto, TransportMappingError> {
+    Ok(EditorNodeProjectionDto {
+        graph_path: model.graph_path.as_str().into(),
+        source_revision: model.source_revision.get(),
+        node_id: node.node_id.to_string().into(),
+        node_type_id: node.node_type.as_str().into(),
+        position: NodePositionDto {
+            x: node.position.x,
+            y: node.position.y,
+        },
+        display: NodeDisplayDto {
+            title: node.display.title.clone(),
+            user_label: node.display.user_label.clone(),
+            icon_id: node.display.icon_id.clone(),
+            style_id: node.display.style_id.clone(),
+        },
+        ports: node
+            .ports
+            .iter()
+            .map(map_port)
+            .collect::<Result<Vec<_>, _>>()?,
+        parameter_editors: node
+            .parameters
+            .iter()
+            .map(map_parameter)
+            .collect::<Result<Vec<_>, _>>()?,
+        capabilities: NodeCapabilitiesDto {
+            managed: node.capabilities.managed,
+            can_copy: node.capabilities.can_copy,
+            can_delete: node.capabilities.can_delete,
+            can_edit_label: node.capabilities.can_edit_label,
+            can_edit_parameters: node.capabilities.can_edit_parameters,
+            has_dynamic_ports: node.capabilities.has_dynamic_ports,
+            supports_inline_literals: node.capabilities.supports_inline_literals,
+        },
+        diagnostics: node.diagnostics.iter().map(map_diagnostic).collect(),
+    })
+}
 
-        Err(TransportMappingError::MissingResourceVersions)
+fn map_port(port: &EditorPortModel) -> Result<ResolvedPortDto, TransportMappingError> {
+    if port.resolved_schema.is_some() {
+        return Err(TransportMappingError::ResolvedSchemaWireContractUnavailable);
+    }
+    Ok(ResolvedPortDto {
+        address: (&port.address).into(),
+        template_key: port.template_key.as_str().into(),
+        display: PortDisplayDto {
+            label: port.display.label.clone(),
+            instance_label: port.display.instance_label.clone(),
+        },
+        direction: match port.direction {
+            crate::node_system::protocol::PortDirection::Input => PortDirectionDto::Input,
+            crate::node_system::protocol::PortDirection::Output => PortDirectionDto::Output,
+        },
+        kind: match port.kind {
+            crate::node_system::protocol::PortKind::Data => PortKindDto::Data,
+            crate::node_system::protocol::PortKind::Control => PortKindDto::Control,
+            crate::node_system::protocol::PortKind::Effect => PortKindDto::Effect,
+        },
+        instance_kind: match port.instance_kind {
+            EditorPortInstanceKind::Declared => PortInstanceKindDto::Declared,
+            EditorPortInstanceKind::UserCreated => PortInstanceKindDto::UserCreated,
+            EditorPortInstanceKind::Derived => PortInstanceKindDto::Derived,
+        },
+        orphan: port.orphan,
+        can_remove: port.can_remove,
+        connections: PortConnectionCapabilityDto {
+            current: port.connections.current,
+            maximum: port.connections.maximum,
+            ordered: port.connections.ordered,
+            can_append: port.connections.can_append,
+            can_replace: port.connections.can_replace,
+            can_move: port.connections.can_move,
+        },
+        input: port.input.as_ref().map(|input| EditorInputBindingDto {
+            literal_override: input.literal_override.clone(),
+            protocol_default: input.protocol_default.clone(),
+            effective: match input.effective {
+                EditorEffectiveInputBinding::Connections => {
+                    crate::node_system::analysis::EffectiveInputBindingKindDto::Connections
+                }
+                EditorEffectiveInputBinding::Literal => {
+                    crate::node_system::analysis::EffectiveInputBindingKindDto::Literal
+                }
+                EditorEffectiveInputBinding::ProtocolDefault => {
+                    crate::node_system::analysis::EffectiveInputBindingKindDto::ProtocolDefault
+                }
+                EditorEffectiveInputBinding::Unbound => {
+                    crate::node_system::analysis::EffectiveInputBindingKindDto::Unbound
+                }
+            },
+        }),
+        resolved_type: port.resolved_type.as_ref().map(|value| TypeSummaryDto {
+            display: value.display.clone(),
+            resolved: value.resolved,
+            data_type: value.data_type.clone(),
+            internal_type_expr: Some(value.internal_type_expr.clone()),
+        }),
+        resolved_schema: None,
+        status: match port.status {
+            EditorPortStatus::Resolved => ResolvedPortStatusDto::Resolved,
+            EditorPortStatus::Orphan => ResolvedPortStatusDto::Orphan,
+        },
+    })
+}
+
+fn map_parameter(
+    parameter: &EditorParameterModel,
+) -> Result<EditorParameterDto, TransportMappingError> {
+    if parameter.configuration.is_some() {
+        return Err(TransportMappingError::ParameterConfigurationWireContractUnavailable);
+    }
+    if parameter.value_source.is_some() {
+        return Err(TransportMappingError::ParameterValueSourceWireContractUnavailable);
+    }
+    Ok(EditorParameterDto {
+        key: parameter.key.as_str().into(),
+        display: ParameterDisplayDto {
+            title: parameter.display.title.clone(),
+            description: parameter.display.description.clone(),
+        },
+        editor: match parameter.editor {
+            ParameterEditorKind::Auto => crate::node_system::analysis::ParameterEditorKindDto::Auto,
+            ParameterEditorKind::Text => crate::node_system::analysis::ParameterEditorKindDto::Text,
+            ParameterEditorKind::Number => crate::node_system::analysis::ParameterEditorKindDto::Number,
+            ParameterEditorKind::Toggle => crate::node_system::analysis::ParameterEditorKindDto::Toggle,
+            ParameterEditorKind::Select => crate::node_system::analysis::ParameterEditorKindDto::Select,
+            ParameterEditorKind::Resource => crate::node_system::analysis::ParameterEditorKindDto::Resource,
+        },
+        presentation: parameter.presentation.into(),
+        value_type: parameter.value_type.clone(),
+        multiline: parameter.multiline,
+        value: parameter.value.clone(),
+        configuration: None,
+        inherited_value: parameter.inherited_value.clone(),
+        value_source: None,
+        options: parameter
+            .options
+            .as_ref()
+            .map(|options| options.to_vec()),
+    })
+}
+
+fn map_diagnostic(diagnostic: &EditorDiagnosticModel) -> DiagnosticDto {
+    DiagnosticDto {
+        code: diagnostic.code.clone(),
+        // The legacy wire has no structured argument field. Keep this field a
+        // stable localization token rather than copying internal backend text.
+        message: diagnostic.code.clone(),
+        severity: match diagnostic.severity {
+            EditorDiagnosticSeverity::Error => DiagnosticSeverityDto::Error,
+            EditorDiagnosticSeverity::Warning => DiagnosticSeverityDto::Warning,
+            EditorDiagnosticSeverity::Information => DiagnosticSeverityDto::Information,
+        },
+        blocking: diagnostic.severity == EditorDiagnosticSeverity::Error,
+        location: map_location(&diagnostic.location),
+        related: diagnostic.related.iter().map(map_location).collect(),
+    }
+}
+
+fn map_location(
+    location: &crate::graph::analysis::GraphDiagnosticLocation,
+) -> DiagnosticLocationDto {
+    match location {
+        crate::node_system::analysis::DiagnosticLocation::Graph => DiagnosticLocationDto::Graph,
+        crate::node_system::analysis::DiagnosticLocation::Node(node_id) => {
+            DiagnosticLocationDto::Node {
+                node_id: node_id.to_string().into(),
+            }
+        }
+        crate::node_system::analysis::DiagnosticLocation::Port(address) => {
+            DiagnosticLocationDto::Port {
+                address: address.into(),
+            }
+        }
+        crate::node_system::analysis::DiagnosticLocation::Connection(connection_id) => {
+            DiagnosticLocationDto::Connection {
+                connection_id: connection_id.to_string().into(),
+            }
+        }
+        crate::node_system::analysis::DiagnosticLocation::Parameter { node_id, key } => {
+            DiagnosticLocationDto::Parameter {
+                node_id: node_id.to_string().into(),
+                key: key.as_str().into(),
+            }
+        }
+        crate::node_system::analysis::DiagnosticLocation::Resource(identity) => {
+            DiagnosticLocationDto::Resource {
+                identity: identity.clone(),
+            }
+        }
+    }
+}
+
+fn map_outcome(outcome: &EditorCompilationOutcome) -> CompilationOutcomeDto {
+    match outcome {
+        EditorCompilationOutcome::Complete => CompilationOutcomeDto::Success,
+        EditorCompilationOutcome::Incomplete => CompilationOutcomeDto::AnalysisBlocked,
+        EditorCompilationOutcome::InternalFailure {
+            stage,
+            code,
+            node_id,
+        } => CompilationOutcomeDto::InternalFailure {
+            stage: match stage {
+                EditorCompilationStage::Analysis => CompilationStageDto::Analysis,
+                EditorCompilationStage::Lowering => CompilationStageDto::Lowering,
+            },
+            code: code.clone(),
+            node_id: node_id.map(|node_id| node_id.to_string().into()),
+        },
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::editor_projection::{EditorProjectionBasis, EditorProjectionModel};
-    use crate::graph_document::{GraphResourcePath, GraphRevision};
+    use crate::application::editor_projection::{
+        EditorConnectionModel, EditorDiagnosticModel, EditorNodeCapabilities, EditorNodeDisplay,
+        EditorNodeModel, EditorPortConnectionCapabilities, EditorPortDisplay,
+        EditorPortInstanceKind, EditorPortModel, EditorPortStatus, EditorProjectionBasis,
+        EditorTypeSummary,
+    };
+    use crate::graph_document::{
+        ConnectionId, GraphResourcePath, GraphRevision, NodeId, NodePosition, PortAddress,
+    };
+    use crate::node_system::analysis::{
+        DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
+    };
+    use crate::node_system::protocol::{NodeTypeId, PortDirection, PortKey, PortKind, TypeExpr, TypeId};
+    use serde_json::json;
+    use std::collections::BTreeMap;
 
     #[test]
-    fn editor_mapper_fails_closed_when_application_model_lacks_wire_facts() {
-        let graph_path = GraphResourcePath::new("events/staged.yssbi-event").unwrap();
+    fn application_model_preserves_existing_camel_case_wire_and_safe_diagnostics() {
+        let node_id = NodeId::from_uuid(uuid::Uuid::from_u128(2));
+        let graph_path = GraphResourcePath::new("events/contract.yssbi-event")
+            .expect("test graph path is valid");
+        let port_address = PortAddress::declared(
+            node_id,
+            PortKey::new("value").expect("test port key is valid"),
+        );
+        let node_type = NodeTypeId::new("yssbi.constant.bool").expect("test node type is valid");
+        let diagnostic = EditorDiagnosticModel {
+            code: "graph.invalid".into(),
+            severity: EditorDiagnosticSeverity::Warning,
+            arguments: DiagnosticArguments::from([("field".into(), "value".into())]),
+            location: DiagnosticLocation::Node(node_id),
+            related: Box::new([]),
+        };
         let model = EditorProjectionModel {
             basis: EditorProjectionBasis {
                 graph_path: graph_path.clone(),
-                graph_revision: GraphRevision::new(4),
-                registry_fingerprint: [5; 32],
+                graph_revision: GraphRevision::new(7),
+                registry_fingerprint: [0x6f; 32],
+                resource_versions: BTreeMap::from([(
+                    ResourceKey::new("database/source".into()),
+                    ResourceVersion::new("12".into()),
+                )]),
             },
-            graph_path,
-            source_revision: GraphRevision::new(4),
-            nodes: Box::new([]),
-            connections: Box::new([]),
-            diagnostics: Box::new([]),
+            graph_path: graph_path.clone(),
+            source_revision: GraphRevision::new(7),
+            nodes: Box::new([EditorNodeModel {
+                node_id,
+                node_type,
+                position: NodePosition { x: 120.5, y: -32.0 },
+                display: EditorNodeDisplay {
+                    title: "Boolean Constant".into(),
+                    user_label: Some("Contract Boolean".into()),
+                    icon_id: Some("builtin.constants".into()),
+                    style_id: Some("builtin.default".into()),
+                },
+                ports: Box::new([EditorPortModel {
+                    address: port_address.clone(),
+                    template_key: PortKey::new("value").expect("test port key is valid"),
+                    display: EditorPortDisplay {
+                        label: "Value".into(),
+                        instance_label: None,
+                    },
+                    direction: PortDirection::Output,
+                    kind: PortKind::Data,
+                    instance_kind: EditorPortInstanceKind::Declared,
+                    orphan: false,
+                    can_remove: false,
+                    connections: EditorPortConnectionCapabilities {
+                        current: 0,
+                        maximum: Some(1),
+                        ordered: false,
+                        can_append: true,
+                        can_replace: false,
+                        can_move: false,
+                    },
+                    input: None,
+                    resolved_type: Some(EditorTypeSummary {
+                        display: "core.bool".into(),
+                        resolved: true,
+                        data_type: Some(crate::data_contract::DataType::Boolean),
+                        internal_type_expr: TypeExpr::Concrete(
+                            TypeId::new("core.bool").expect("test type id is valid"),
+                        ),
+                    }),
+                    resolved_schema: None,
+                    status: EditorPortStatus::Resolved,
+                }]),
+                parameters: Box::new([]),
+                capabilities: EditorNodeCapabilities {
+                    managed: false,
+                    can_copy: true,
+                    can_delete: true,
+                    can_edit_label: true,
+                    can_edit_parameters: true,
+                    has_dynamic_ports: false,
+                    supports_inline_literals: false,
+                },
+                diagnostics: Box::new([diagnostic.clone()]),
+            }]),
+            connections: Box::new([EditorConnectionModel {
+                connection_id: ConnectionId::from_uuid(uuid::Uuid::from_u128(4)),
+                output: port_address.clone(),
+                input: port_address.clone(),
+                order: Some("0".into()),
+            }]),
+            diagnostics: Box::new([diagnostic]),
             outcome: EditorCompilationOutcome::Complete,
         };
 
+        let wire = serde_json::to_value(
+            EditorGraphProjectionDto::try_from(&model).expect("typed model is mappable"),
+        )
+        .expect("editor wire should serialize");
+        assert_eq!(wire["basis"]["graphPath"], "events/contract.yssbi-event");
+        assert_eq!(wire["basis"]["graphRevision"], 7);
         assert_eq!(
-            EditorGraphProjectionDto::try_from(&model),
-            Err(TransportMappingError::MissingResourceVersions)
+            wire["basis"]["resourceVersions"],
+            json!({"database/source": "12"})
         );
+        assert_eq!(wire["nodes"][0]["nodeId"], node_id.to_string());
+        assert_eq!(wire["nodes"][0]["display"]["iconId"], "builtin.constants");
+        assert_eq!(wire["nodes"][0]["ports"][0]["templateKey"], "value");
+        assert_eq!(wire["connections"][0]["output"]["portKey"], "value");
+        assert_eq!(wire["diagnostics"][0]["code"], "graph.invalid");
+        assert_eq!(wire["diagnostics"][0]["message"], "graph.invalid");
+        assert_ne!(wire["diagnostics"][0]["message"], "raw backend failure");
+        assert!(wire["nodes"][0].get("node_id").is_none());
     }
 }
