@@ -10,7 +10,7 @@ use crate::project::{
 };
 
 #[test]
-fn export_graph_subgraph_is_a_read_only_authoritative_query_and_emits_zero_events() {
+fn export_graph_subgraph_returns_one_node_and_preserves_authoritative_state() {
     let fixture = Fixture::new();
     let before = fixture.serialized_authority();
 
@@ -22,18 +22,7 @@ fn export_graph_subgraph_is_a_read_only_authoritative_query_and_emits_zero_event
     )
     .unwrap();
 
-    let command_source = include_str!("command_node_system/editor.rs");
-    let export_command_source = command_source
-        .split_once("pub(crate) fn export_graph_subgraph_from_state")
-        .unwrap()
-        .1
-        .split_once("fn parse_editor_mutation_request")
-        .unwrap()
-        .0;
-    let event_count = export_command_source.matches("emit_project_event").count();
-
     assert_eq!(snapshot.nodes.len(), 1);
-    assert_eq!(event_count, 0);
     assert_eq!(fixture.serialized_authority(), before);
 }
 

@@ -769,6 +769,15 @@ mod tests {
             status.environment_state,
             super::JuliaWorkerEnvironmentState::Missing
         );
+        assert_eq!(
+            serde_json::to_value(status).unwrap(),
+            json!({
+                "runtimeState": "invalid",
+                "environmentState": "missing",
+                "processState": "starting",
+                "projectDir": app_root.path().join(WORKER_DIR).to_string_lossy(),
+            })
+        );
     }
 
     #[test]

@@ -435,6 +435,14 @@ mod tests {
             )
         );
         assert_eq!(status.version.as_deref(), Some("1.11.3"));
+        assert_eq!(
+            serde_json::to_value(status).unwrap(),
+            serde_json::json!({
+                "state": "ready",
+                "version": "1.11.3",
+                "installDir": PathBuf::from("system").join("bin").to_string_lossy(),
+            })
+        );
     }
 
     #[test]

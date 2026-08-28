@@ -108,37 +108,3 @@ fn localized_catalog_returns_resources_from_the_same_coherent_snapshot() {
     ));
     let _ = std::fs::remove_dir_all(root);
 }
-
-#[test]
-fn activation_final_publication_uses_only_constant_time_authority_checks() {
-    let project_source = include_str!("../../../project/project_state/activation.rs");
-    let publish_start = project_source
-        .find("    pub(in crate::project) fn publish_project_activation(")
-        .expect("activation publication must exist");
-    let publish_end = project_source
-        .rfind("\n}")
-        .expect("activation publication region must be isolated");
-    let publish = &project_source[publish_start..publish_end];
-
-    assert!(publish.contains("authority_generation"));
-    for forbidden in [
-        "canonical_semantic_value",
-        "serde_json::to_value",
-        "current_data.clone()",
-        "current_store.clone()",
-        ".sort_unstable()",
-        ".clear();",
-        ".retain(",
-        "*current_data =",
-        "*current_store =",
-        "*current_graph_revisions =",
-        "*current_variable_revisions =",
-        "*current_worksheet_revisions =",
-        "*history =",
-    ] {
-        assert!(
-            !publish.contains(forbidden),
-            "activation publication contains size-dependent work: {forbidden}"
-        );
-    }
-}

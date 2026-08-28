@@ -339,6 +339,42 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn database_declaration_wire_exposes_only_machine_load_state() {
+        let wire = serde_json::to_value(DatabaseDeclDTO {
+            id: "sales".into(),
+            engine: DatabaseEngineDTO::DuckDb {
+                path: "database/project.duckdb".into(),
+                table: "sales".into(),
+            },
+            schema_version: 1,
+            required: false,
+            name: Some("Sales".into()),
+            columns: None,
+            row_count: None,
+            column_count: None,
+            load_failed: true,
+        })
+        .unwrap();
+
+        assert_eq!(
+            wire,
+            json!({
+                "id": "sales",
+                "engine": {
+                    "duckDb": {
+                        "path": "database/project.duckdb",
+                        "table": "sales",
+                    },
+                },
+                "schemaVersion": 1,
+                "required": false,
+                "name": "Sales",
+                "loadFailed": true,
+            })
+        );
+    }
+
+    #[test]
     fn database_import_source_wire_contains_only_effective_inputs() {
         let source = serde_json::from_value::<DatabaseImportSourceDTO>(json!({
             "sql": {
