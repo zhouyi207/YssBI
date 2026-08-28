@@ -25,10 +25,7 @@ pub fn build_editor_projection(
     }
 
     let empty_facts = GraphProjectionFacts::new([], [], GraphCompilationOutcome::Complete);
-    let facts = input
-        .analysis
-        .projection_facts()
-        .unwrap_or(&empty_facts);
+    let facts = input.analysis.projection_facts().unwrap_or(&empty_facts);
     validate_facts(input.document, input.analysis, facts)?;
 
     let nodes = input
@@ -86,15 +83,12 @@ fn validate_facts(
     facts: &GraphProjectionFacts,
 ) -> Result<(), EditorProjectionError> {
     if analysis.nodes().len() != document.nodes.len()
-        || analysis
-            .nodes()
-            .iter()
-            .any(|analysis_node| {
-                document
-                    .nodes
-                    .get(&analysis_node.node_id)
-                    .is_none_or(|node| node.node_type != analysis_node.node_type)
-            })
+        || analysis.nodes().iter().any(|analysis_node| {
+            document
+                .nodes
+                .get(&analysis_node.node_id)
+                .is_none_or(|node| node.node_type != analysis_node.node_type)
+        })
     {
         return Err(EditorProjectionError::ProjectionFactsMismatch);
     }
@@ -104,8 +98,7 @@ fn validate_facts(
         let Some(document_node) = document.nodes.get(&node.node_id) else {
             return Err(EditorProjectionError::ProjectionFactsMismatch);
         };
-        if document_node.node_type != node.node_type
-            || node_ids.insert(node.node_id, ()).is_some()
+        if document_node.node_type != node.node_type || node_ids.insert(node.node_id, ()).is_some()
         {
             return Err(EditorProjectionError::ProjectionFactsMismatch);
         }
@@ -159,10 +152,12 @@ fn project_node(
                 GraphPortInstanceKind::UserCreated | GraphPortInstanceKind::Derived
             )
         }),
-        supports_inline_literals: facts
-            .ports
-            .iter()
-            .any(|port| matches!(port.editor, crate::graph::analysis::GraphPortEditorFact::InlineLiteral)),
+        supports_inline_literals: facts.ports.iter().any(|port| {
+            matches!(
+                port.editor,
+                crate::graph::analysis::GraphPortEditorFact::InlineLiteral
+            )
+        }),
     };
     Ok(EditorNodeModel {
         node_id: node.id,
@@ -213,10 +208,10 @@ fn project_port(
             effective,
         }
     });
-    let can_remove = port.orphan
-        && port.address.is_instance()
+    let can_remove = port.orphan && port.address.is_instance()
         || matches!(port.instance_kind, GraphPortInstanceKind::UserCreated)
-            && (!port.member_complete || port.member_instance_count > usize::from(port.member_minimum));
+            && (!port.member_complete
+                || port.member_instance_count > usize::from(port.member_minimum));
     let current = port.connections.current;
     let connections = EditorPortConnectionCapabilities {
         current,
@@ -378,11 +373,15 @@ fn project_schema_summary(
 ) -> EditorSchemaSummary {
     let kind = match expression {
         crate::node_system::protocol::SchemaExpr::Input(_) => EditorSchemaSummaryKind::Input,
-        crate::node_system::protocol::SchemaExpr::Project { .. } => EditorSchemaSummaryKind::Project,
+        crate::node_system::protocol::SchemaExpr::Project { .. } => {
+            EditorSchemaSummaryKind::Project
+        }
         crate::node_system::protocol::SchemaExpr::Append { .. } => EditorSchemaSummaryKind::Append,
         crate::node_system::protocol::SchemaExpr::Rename { .. } => EditorSchemaSummaryKind::Rename,
         crate::node_system::protocol::SchemaExpr::Filter { .. } => EditorSchemaSummaryKind::Filter,
-        crate::node_system::protocol::SchemaExpr::Derived { .. } => EditorSchemaSummaryKind::Derived,
+        crate::node_system::protocol::SchemaExpr::Derived { .. } => {
+            EditorSchemaSummaryKind::Derived
+        }
     };
     let fields = resolved
         .into_iter()

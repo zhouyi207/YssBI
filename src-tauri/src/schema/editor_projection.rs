@@ -7,10 +7,10 @@ use crate::application::editor_projection::{
 use crate::node_system::analysis::{
     CompilationOutcomeDto, CompilationStageDto, DiagnosticDto, DiagnosticLocationDto,
     DiagnosticSeverityDto, EditorConnectionProjectionDto, EditorGraphProjectionDto,
-    EditorInputBindingDto, EditorNodeProjectionDto, EditorParameterDto,
-    NodeCapabilitiesDto, NodeDisplayDto, NodePositionDto, ParameterDisplayDto,
-    PortConnectionCapabilityDto, PortDisplayDto, PortDirectionDto,
-    PortInstanceKindDto, PortKindDto, ResolvedPortDto, ResolvedPortStatusDto, TypeSummaryDto,
+    EditorInputBindingDto, EditorNodeProjectionDto, EditorParameterDto, NodeCapabilitiesDto,
+    NodeDisplayDto, NodePositionDto, ParameterDisplayDto, PortConnectionCapabilityDto,
+    PortDirectionDto, PortDisplayDto, PortInstanceKindDto, PortKindDto, ResolvedPortDto,
+    ResolvedPortStatusDto, TypeSummaryDto,
 };
 use crate::node_system::registry::RegistryFingerprint;
 
@@ -192,10 +192,18 @@ fn map_parameter(
         editor: match parameter.editor {
             ParameterEditorKind::Auto => crate::node_system::analysis::ParameterEditorKindDto::Auto,
             ParameterEditorKind::Text => crate::node_system::analysis::ParameterEditorKindDto::Text,
-            ParameterEditorKind::Number => crate::node_system::analysis::ParameterEditorKindDto::Number,
-            ParameterEditorKind::Toggle => crate::node_system::analysis::ParameterEditorKindDto::Toggle,
-            ParameterEditorKind::Select => crate::node_system::analysis::ParameterEditorKindDto::Select,
-            ParameterEditorKind::Resource => crate::node_system::analysis::ParameterEditorKindDto::Resource,
+            ParameterEditorKind::Number => {
+                crate::node_system::analysis::ParameterEditorKindDto::Number
+            }
+            ParameterEditorKind::Toggle => {
+                crate::node_system::analysis::ParameterEditorKindDto::Toggle
+            }
+            ParameterEditorKind::Select => {
+                crate::node_system::analysis::ParameterEditorKindDto::Select
+            }
+            ParameterEditorKind::Resource => {
+                crate::node_system::analysis::ParameterEditorKindDto::Resource
+            }
         },
         presentation: parameter.presentation.into(),
         value_type: parameter.value_type.clone(),
@@ -204,10 +212,7 @@ fn map_parameter(
         configuration: None,
         inherited_value: parameter.inherited_value.clone(),
         value_source: None,
-        options: parameter
-            .options
-            .as_ref()
-            .map(|options| options.to_vec()),
+        options: parameter.options.as_ref().map(|options| options.to_vec()),
     })
 }
 
@@ -296,7 +301,9 @@ mod tests {
     use crate::node_system::analysis::{
         DiagnosticArguments, DiagnosticLocation, ResourceKey, ResourceVersion,
     };
-    use crate::node_system::protocol::{NodeTypeId, PortDirection, PortKey, PortKind, TypeExpr, TypeId};
+    use crate::node_system::protocol::{
+        NodeTypeId, PortDirection, PortKey, PortKind, TypeExpr, TypeId,
+    };
     use serde_json::json;
     use std::collections::BTreeMap;
 

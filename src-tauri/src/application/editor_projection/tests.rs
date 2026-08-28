@@ -3,8 +3,8 @@ use crate::execution::plan::{
     PlanCompilationBasis, PlanGraphRevision, PlanProjectSessionId, PlanRegistryFingerprint,
 };
 use crate::graph::analysis::{
-    GraphNodeProjectionFacts, GraphPortConnectionFacts, GraphPortEditorFact,
-    GraphPortInstanceKind, GraphProjectionFacts,
+    GraphNodeProjectionFacts, GraphPortConnectionFacts, GraphPortEditorFact, GraphPortInstanceKind,
+    GraphProjectionFacts,
 };
 use crate::graph::resource_catalog::{ResourceCatalogFingerprint, ResourceCatalogSnapshot};
 use crate::graph::settings::GraphCompileSettings;
@@ -178,12 +178,20 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
             order: None,
         },
     );
-    let path = GraphResourcePath::new("events/contract.yssbi-event")
-        .expect("test graph path is valid");
+    let path =
+        GraphResourcePath::new("events/contract.yssbi-event").expect("test graph path is valid");
     let facts = GraphProjectionFacts::new(
         [
-            node_facts(source, source_type, Box::new([port(output, "value", "Value", PortDirection::Output, 1)])),
-            node_facts(target, target_type, Box::new([port(input, "value", "Value", PortDirection::Input, 1)])),
+            node_facts(
+                source,
+                source_type,
+                Box::new([port(output, "value", "Value", PortDirection::Output, 1)]),
+            ),
+            node_facts(
+                target,
+                target_type,
+                Box::new([port(input, "value", "Value", PortDirection::Input, 1)]),
+            ),
         ],
         [],
         crate::graph::analysis::GraphCompilationOutcome::Complete,
@@ -200,7 +208,10 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
 
     assert_eq!(model.basis.graph_revision, GraphRevision::new(7));
     assert_eq!(
-        model.basis.resource_versions.get(&ResourceKey::new("resource/source".into())),
+        model
+            .basis
+            .resource_versions
+            .get(&ResourceKey::new("resource/source".into())),
         Some(&ResourceVersion::new("7".into()))
     );
     assert_eq!(model.nodes.len(), 2);
@@ -208,8 +219,17 @@ fn application_projection_closes_resource_node_port_and_connection_facts() {
         model.nodes[0].parameters[0].value,
         Some(crate::graph_document::TypedValue::Bool(true))
     );
-    assert_eq!(model.nodes[0].display.user_label.as_deref(), Some("Contract Boolean"));
-    assert_eq!(model.nodes[1].ports[0].input.as_ref().map(|input| input.effective), Some(EditorEffectiveInputBinding::Connections));
+    assert_eq!(
+        model.nodes[0].display.user_label.as_deref(),
+        Some("Contract Boolean")
+    );
+    assert_eq!(
+        model.nodes[1].ports[0]
+            .input
+            .as_ref()
+            .map(|input| input.effective),
+        Some(EditorEffectiveInputBinding::Connections)
+    );
     assert_eq!(model.connections[0].output, output);
     assert_eq!(model.connections[0].input, input);
 }
