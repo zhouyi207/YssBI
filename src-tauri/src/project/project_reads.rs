@@ -523,6 +523,7 @@ fn read_project_index_with(
     )?;
     index.project_instance_id = capture.project_instance_id.clone();
     index.publication_revision = capture.publication_revision;
+    index.authority_generation = capture.authority_generation;
     index.history = capture.history;
     validate_project_index_authority(state, &session, &capture)?;
     Ok(index)

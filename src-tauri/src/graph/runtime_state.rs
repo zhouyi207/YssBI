@@ -1,8 +1,12 @@
 use std::sync::Arc;
 
+#[cfg(test)]
+use std::sync::{Barrier, Mutex};
+
 use crate::data_contract::DataType;
 use crate::execution::plan::PlanCompilationBasis;
 use crate::graph::analysis::{GraphAnalysis, GraphAnalysisInput};
+use crate::graph::error::GraphMutationError;
 use crate::graph::resource_catalog::{GraphResourceId, ResourceCatalogSnapshot};
 use crate::graph_document::{
     DynamicPortBinding, GraphDocument, GraphResourcePath, PortAddress, PortRef,
@@ -37,14 +41,140 @@ pub struct GraphRuntimeComponents {
     pub resource_catalog: Arc<ResourceCatalogSnapshot>,
 }
 
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum GraphRuntimeTestEvent {
+    Bound,
+    Materialized,
+    CatalogComputed,
+}
+
+#[cfg(test)]
+#[derive(Clone, Default)]
+pub(crate) struct GraphRuntimeTestControl {
+    state: Arc<Mutex<GraphRuntimeTestControlState>>,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct GraphRuntimeTestControlState {
+    events: Vec<GraphRuntimeTestEvent>,
+    fail_next_materialization: bool,
+    materialization_pause: Option<GraphRuntimeTestRendezvous>,
+    catalog_pause: Option<GraphRuntimeTestRendezvous>,
+}
+
+#[cfg(test)]
+#[derive(Clone)]
+struct GraphRuntimeTestRendezvous {
+    entered: Arc<Barrier>,
+    release: Arc<Barrier>,
+}
+
+#[cfg(test)]
+impl GraphRuntimeTestControl {
+    pub(crate) fn fail_next_materialization(&self) {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .fail_next_materialization = true;
+    }
+
+    pub(crate) fn pause_after_materialization(&self, entered: Arc<Barrier>, release: Arc<Barrier>) {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .materialization_pause = Some(GraphRuntimeTestRendezvous { entered, release });
+    }
+
+    pub(crate) fn pause_after_catalog_compute(&self, entered: Arc<Barrier>, release: Arc<Barrier>) {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .catalog_pause = Some(GraphRuntimeTestRendezvous { entered, release });
+    }
+
+    pub(crate) fn events(&self) -> Vec<GraphRuntimeTestEvent> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .events
+            .clone()
+    }
+
+    fn record_bound(&self) {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .events
+            .push(GraphRuntimeTestEvent::Bound);
+    }
+
+    fn before_materialization_return(&self) -> bool {
+        let (failure, pause) = {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.events.push(GraphRuntimeTestEvent::Materialized);
+            (
+                std::mem::replace(&mut state.fail_next_materialization, false),
+                state.materialization_pause.clone(),
+            )
+        };
+        wait_for_test_rendezvous(pause);
+        failure
+    }
+
+    fn after_catalog_compute(&self) {
+        let pause = {
+            let mut state = self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            state.events.push(GraphRuntimeTestEvent::CatalogComputed);
+            state.catalog_pause.clone()
+        };
+        wait_for_test_rendezvous(pause);
+    }
+}
+
+#[cfg(test)]
+fn wait_for_test_rendezvous(rendezvous: Option<GraphRuntimeTestRendezvous>) {
+    if let Some(rendezvous) = rendezvous {
+        rendezvous.entered.wait();
+        rendezvous.release.wait();
+    }
+}
+
 pub struct GraphRuntimeState {
     epoch: GraphRuntimeEpoch,
     components: GraphRuntimeComponents,
+    #[cfg(test)]
+    test_control: Option<Arc<GraphRuntimeTestControl>>,
 }
 
 impl GraphRuntimeState {
     pub fn from_components(epoch: GraphRuntimeEpoch, components: GraphRuntimeComponents) -> Self {
-        Self { epoch, components }
+        Self {
+            epoch,
+            components,
+            #[cfg(test)]
+            test_control: None,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_for_test(
+        epoch: GraphRuntimeEpoch,
+        components: GraphRuntimeComponents,
+        control: GraphRuntimeTestControl,
+    ) -> Self {
+        Self {
+            epoch,
+            components,
+            test_control: Some(Arc::new(control)),
+        }
     }
 
     pub const fn epoch(&self) -> GraphRuntimeEpoch {
@@ -79,16 +209,44 @@ impl GraphRuntimeState {
         })
     }
 
+    pub(crate) fn bind_open_graph(&self) {
+        #[cfg(test)]
+        if let Some(control) = &self.test_control {
+            control.record_bound();
+        }
+    }
+
+    pub(crate) fn materialize_open_candidate(
+        &self,
+        document: &GraphDocument,
+    ) -> Result<Arc<GraphDocument>, GraphMutationError> {
+        let candidate = Arc::new(document.clone());
+        #[cfg(test)]
+        if let Some(control) = &self.test_control {
+            if control.before_materialization_return() {
+                return Err(GraphMutationError::Internal(
+                    crate::graph::error::GraphMutationSource::invariant(),
+                ));
+            }
+        }
+        Ok(candidate)
+    }
+
     pub(crate) fn localized_catalog_with_resources(
         &self,
         resources: &[CatalogResourceEntry],
         locale: &str,
     ) -> LocalizedCatalog {
-        self.components.catalog.localize_with_resources(
+        let localized = self.components.catalog.localize_with_resources(
             self.components.registry.as_ref(),
             locale,
             resources,
-        )
+        );
+        #[cfg(test)]
+        if let Some(control) = &self.test_control {
+            control.after_catalog_compute();
+        }
+        localized
     }
 
     pub(crate) fn compatible_catalog_with_resources(
@@ -129,6 +287,10 @@ impl GraphRuntimeState {
         localized
             .categories
             .retain(|category| categories.contains(category.category_id.as_ref()));
+        #[cfg(test)]
+        if let Some(control) = &self.test_control {
+            control.after_catalog_compute();
+        }
         Ok(localized)
     }
 

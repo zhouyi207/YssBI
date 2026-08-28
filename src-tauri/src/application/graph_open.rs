@@ -260,7 +260,16 @@ pub(crate) fn open_graph_in_session(
             OpenGraphProjectSource::invariant(),
         ))
     })?;
-    let document = Arc::new(resource.document.clone());
+    let loaded_document = Arc::new(resource.document.clone());
+
+    // Staged Graph boundary: the old Project load above remains the only
+    // active lower-level load/commit operation. Graph owns the lock-free
+    // binding and candidate materialization stage; the candidate is never
+    // sent through the mutation-only graph commit primitive.
+    captured.graph().bind_open_graph();
+    let candidate_document = captured
+        .graph()
+        .materialize_open_candidate(&loaded_document)?;
 
     let project = capture_localized_project_facts(captured)
         .map_err(|error| map_project_facts_open_error(request.graph_path(), error))?;
@@ -281,14 +290,12 @@ pub(crate) fn open_graph_in_session(
     );
     let analysis = captured
         .graph()
-        .analyze(&document, &graph_catalog, &settings, &basis);
-    let projection = build_editor_projection(EditorProjectionInput {
-        graph_path: request.graph_path(),
-        document: &document,
-        analysis: &analysis,
-        registry_fingerprint,
-    })?;
+        .analyze(&candidate_document, &graph_catalog, &settings, &basis);
 
+    // This is the final staged commit gate. A replacement that wins before
+    // it suppresses the candidate; once it passes, the old Project load has
+    // already linearized and the derived projection must not be relabeled by
+    // a later session replacement.
     revalidate_project_catalog_facts(captured, &project)
         .map_err(|error| map_project_facts_open_error(request.graph_path(), error))?;
     revalidate_declaration_observations(
@@ -297,10 +304,17 @@ pub(crate) fn open_graph_in_session(
     )?;
     revalidate_catalog_snapshot(captured.database(), &database)?;
     revalidate_application_session(application, captured)?;
+
+    let projection = build_editor_projection(EditorProjectionInput {
+        graph_path: request.graph_path(),
+        document: &candidate_document,
+        analysis: &analysis,
+        registry_fingerprint,
+    })?;
     Ok(OpenGraphApplicationReceipt::new(
         captured.project_instance_id().clone(),
         request.graph_path().clone(),
-        document,
+        candidate_document,
         analysis,
         projection,
     ))

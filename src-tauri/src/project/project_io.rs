@@ -159,6 +159,8 @@ pub struct ProjectIndex {
     pub project_instance_id: String,
     #[serde(default)]
     pub publication_revision: u64,
+    #[serde(skip)]
+    pub(crate) authority_generation: u64,
     #[serde(default)]
     pub history: crate::node_system::document::HistoryStatusDto,
     pub project_name: String,
@@ -389,6 +391,7 @@ pub(crate) fn read_project_index_from_root(root: &Path) -> Result<ProjectIndex, 
     Ok(ProjectIndex {
         project_instance_id: String::new(),
         publication_revision: 0,
+        authority_generation: 0,
         history: Default::default(),
         project_name: manifest.project_name,
         export_time: manifest.export_time,
