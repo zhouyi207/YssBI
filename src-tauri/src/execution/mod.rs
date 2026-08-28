@@ -2,6 +2,7 @@
 
 pub mod canonical;
 pub mod error;
+pub mod finalization;
 pub mod identity;
 pub mod package_preparation;
 pub mod plan;

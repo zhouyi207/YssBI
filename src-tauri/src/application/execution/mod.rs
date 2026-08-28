@@ -1,4 +1,4 @@
-pub mod finalization;
+pub(crate) mod finalization;
 pub mod session_slot;
 
 pub(crate) mod run_graph;
