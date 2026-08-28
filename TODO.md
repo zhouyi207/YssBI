@@ -1722,3 +1722,4 @@ Execution 不知道具体 UI
 - [ ] 建立 Execution-owned session-bound result query owner：单次 Application session capture、Execution-private result/history pairing、oldest→newest 顺序与 typed missing-source error。
 - [ ] 建立 Frontend Application 的 Bayes dataset/artifact 与 current-window callback hooks，覆盖取消导出、generation stale suppression、typed platform failure 与既有窗口/Bayes 回归。
 - [ ] 完成 Result Query/Bayes window staged slices 的 focused verification；Rust architecture gate 已验证 37 passed，staged Graph→Execution debt 仍待原子生产 cutover 清理。
+- [ ] 由同一 ProjectState 句柄构造并注册唯一 ApplicationSession，绑定 Graph、Database、Execution 与 session-bound resource factory；后续继续接通生命周期 replacement 与生产 caller 原子切换。
