@@ -1700,3 +1700,10 @@ Execution 不知道具体 UI
 - [ ] 验证 Graph compiler 的两个 focused cases 与 staged catalog mapper，Rust fmt/check/diff 均通过；完整 Rust architecture gate 延后至原子 cutover 稳定后执行。
 - [ ] 建立 Worksheet committed/draft/dirty/pending-save 分离、四字段 optimistic key、项目替换 stale suppression 与 matching committed echo rebase 的 staged Application capabilities。
 - [ ] 完成 Worksheet Task 6 focused Vitest 4/4 与 typecheck，保留 production caller、worksheetApplicationPort 和旧 preview route 待 Task 8 原子切换。
+- [ ] 将 SuccessfulExecutionCandidate 与 ExecutionFinalizationHandoff 收归 Execution owner，Application 只消费 sealed handoff 并生成私有 CommittedRunOutcome。
+- [ ] 为 committed inspection intent 保留 opaque requester 与 outer run identity，加入 typed invariant/私有 seal，旧 OpenResultWindow production route 未切换。
+- [ ] 为 DatabaseRuntimeSession 增加 session-owned physical state 与锁外 typed tabular materializer，plot query 复用同一 query basis/revalidation。
+- [ ] 完成 Graph-open materialization/residency、session replacement 边界及 localized/compatible catalog coherent snapshot staged 回归，production commands 未路由。
+- [ ] 建立 test-only resultInspectionRequested wire/parser contract，严格拒绝旧 policy/target/prose 字段并验证其先于 runCompleted。
+- [ ] 建立 Frontend Application Result/Execution query/publication capability，覆盖 project/result epoch、精确 query supersession 与 stale 零发布。
+- [ ] 建立 Services-owned Project event parser/stream，承接严格 typed envelope 和稳定错误码，旧 Core ProjectListener 仍待原子删除。
