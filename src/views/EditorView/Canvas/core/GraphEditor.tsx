@@ -2,7 +2,7 @@ import { memo } from 'react';
 import Canvas from './Canvas';
 import { useIsActiveEditorPanel } from '@/features/application/editor';
 import { CanvasDropZone } from './CanvasDropZone';
-import { useGraphDataStore, useProjectIOStore, resourceKey, useDocumentStateStore, type EditorResourceKind } from '@/features/application/viewCapabilities';
+import { useGraphDataStore, useProjectProjection, resourceKey, useDocumentStateStore, type EditorResourceKind } from '@/features/application/viewCapabilities';
 
 export interface GraphEditorProps {
     panelInstanceId: string;
@@ -22,9 +22,8 @@ export const GraphEditor = memo(function GraphEditor({
     graphKind,
 }: GraphEditorProps) {
     const mode = useIsActiveEditorPanel(panelInstanceId) ? 'interactive' : 'preview';
-    const graphLoadStatus = useProjectIOStore((state) => (
-        state.graphLoadStatus[graphPath]
-    ));
+    const { graphLoadStatus: graphLoads } = useProjectProjection();
+    const graphLoadStatus = graphLoads[graphPath];
     const graphProjectionReady = useGraphDataStore((state) => (
         state.hasGraph(graphPath)
     ));

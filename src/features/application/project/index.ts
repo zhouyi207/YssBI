@@ -38,6 +38,8 @@ export {
   createProjectEventReconciler,
 } from './projectEventReconciler';
 export { initializeProjectForCurrentWindow } from './projectRuntime';
+export { getProjectProjection, useProjectProjection } from './projectProjection';
+export type { ProjectProjection } from './projectProjection';
 export type {
   ComputationSettingsChangedPayload,
   GraphDeltaEventPayload,

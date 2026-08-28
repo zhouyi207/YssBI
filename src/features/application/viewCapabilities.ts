@@ -35,7 +35,6 @@ import * as coreWorkbench from '@/features/core/workbench';
 import * as coreDataDatabase from '@/features/core/dataStore/databaseStore';
 import * as coreDataGraph from '@/features/core/dataStore/graphDataStore';
 import * as coreDataDocument from '@/features/core/resource/documentStateStore';
-import * as applicationProjectStore from '@/features/application/project/projectIOStore';
 import * as applicationProjectSession from '@/features/application/project/projectSession';
 import * as coreDataVariable from '@/features/core/dataStore/variableStore';
 import * as coreSettingsStore from '@/features/core/settings/settingsStore';
@@ -83,6 +82,7 @@ import { addGlobalEventListener as addGlobalEventListenerImpl } from '@/shared/u
 import { useTheme as useThemeImpl } from '@/features/core/theme/useTheme';
 import { initializeProjectForCurrentWindow } from '@/features/application/project';
 import { getGraphByPath as getGraphByPathImpl } from '@/features/application/project/projectHelpers';
+import { useProjectProjection as useProjectProjectionImpl } from '@/features/application/project/projectProjection';
 import { useResultValue as useApplicationResultValue } from '@/features/application/results';
 import type { ResultValue } from '@/shared/types/dto/result';
 import * as coreViewportTransform from '@/features/core/viewport/viewportTransform';
@@ -102,7 +102,7 @@ import * as coreDomainDiagnostics from '@/features/domain/graphDiagnostics/nodeD
 
 export const useGraphDataStore = coreDataGraph.useGraphDataStore;
 export const useGraphMetaStore = coreDataStore.useGraphMetaStore;
-export const useProjectIOStore = applicationProjectStore.useProjectIOStore;
+export const useProjectProjection = useProjectProjectionImpl;
 export const useDatabaseStore = coreDataDatabase.useDatabaseStore;
 export const useVariableStore = coreDataVariable.useVariableStore;
 export const useDocumentStateStore = coreDataDocument.useDocumentStateStore;

@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getRememberedColorTheme } from '@/features/application/settings/colorThemePresets';
 import { openExternalUrlWithDialog, useCurrentWindowActions } from '@/features/application/window';
-import { useProjectIOStore, useSettingsStore } from '@/features/application/viewCapabilities';
+import { useProjectProjection, useSettingsStore } from '@/features/application/viewCapabilities';
 import { BrandLockup } from '@/shared/ui/BrandMark';
 import { ToolbarIconButton } from '@/shared/ui/ToolbarIconButton';
 import { WindowChromeControls } from '@/shared/ui/WindowChromeControls';
@@ -29,7 +29,7 @@ export function ProjectPickerTitleBar({
   onOpenSettings: () => void;
 }) {
   const { t } = useTranslation();
-  const currentPath = useProjectIOStore((state) => state.currentPath);
+  const currentPath = useProjectProjection().currentPath;
   const themeMode = useSettingsStore((state) => state.theme.mode ?? 'dark');
   const appearance = useSettingsStore((state) => state.appearance);
   const updateAppearance = useSettingsStore((state) => state.updateAppearance);
