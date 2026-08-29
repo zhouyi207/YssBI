@@ -109,7 +109,7 @@ fn format_debt_mismatch(mismatch: &DebtMismatch, findings: &[ArchitectureFinding
 
 fn metadata_fixture_with_all_target_kinds() -> Value {
     let yssbi_id = "path+file:///fixture/src-tauri#yssbi@0.3.0";
-    let sci_id = "path+file:///fixture/src-tauri/sci#yss-sci@0.1.0";
+    let sci_id = "path+file:///fixture/src-tauri/crates/yss-sci#yss-sci@0.1.0";
     json!({
         "workspace_members": [yssbi_id, sci_id],
         "packages": [
@@ -136,8 +136,8 @@ fn metadata_fixture_with_all_target_kinds() -> Value {
                 "id": sci_id,
                 "name": "yss-sci",
                 "targets": [
-                    {"kind": ["lib"], "name": "yss_sci", "src_path": source_path("src-tauri/sci/src/lib.rs")},
-                    {"kind": ["test"], "name": "ignored_sci_test", "src_path": source_path("src-tauri/sci/src/lib.rs")}
+                    {"kind": ["lib"], "name": "yss_sci", "src_path": source_path("src-tauri/crates/yss-sci/src/lib.rs")},
+                    {"kind": ["test"], "name": "ignored_sci_test", "src_path": source_path("src-tauri/crates/yss-sci/src/lib.rs")}
                 ],
                 "dependencies": [
                     {"name": "serde", "package": "serde", "kind": null, "target": null},
@@ -208,7 +208,7 @@ fn production_roots_cover_every_workspace_target() {
     assert_eq!(science_alias.root_owner, "yss_sci");
     assert_eq!(
         science_alias.library_root,
-        std::fs::canonicalize(repository_root().join("src-tauri/sci/src/lib.rs"))
+        std::fs::canonicalize(repository_root().join("src-tauri/crates/yss-sci/src/lib.rs"))
             .expect("SCI library root must exist")
     );
 
@@ -224,7 +224,8 @@ fn production_roots_cover_every_workspace_target() {
     assert_eq!(
         science_dependency.authority,
         CargoDependencyAuthority::WorkspaceMember {
-            member_package_id: "path+file:///fixture/src-tauri/sci#yss-sci@0.1.0".to_owned()
+            member_package_id: "path+file:///fixture/src-tauri/crates/yss-sci#yss-sci@0.1.0"
+                .to_owned()
         }
     );
 
@@ -1329,7 +1330,7 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
             RustLayer::Application,
         ),
         (
-            "src-tauri/sci/src/api/computation.rs".to_owned(),
+            "src-tauri/crates/yss-sci/src/api/computation.rs".to_owned(),
             RustLayer::SciCore,
         ),
     ]);
@@ -1439,7 +1440,8 @@ fn rust_build_script_and_external_dependency_policy_is_fail_closed() {
         mode: RustDependencyMode::Runtime,
         origin: CanonicalOrigin::Repository {
             package_name: "yss-sci".to_owned(),
-            repository_relative_declaration_file: "src-tauri/sci/src/api/computation.rs".to_owned(),
+            repository_relative_declaration_file: "src-tauri/crates/yss-sci/src/api/computation.rs"
+                .to_owned(),
             fully_qualified_target: "yss_sci::api::computation::StatisticalInput".to_owned(),
             symbol: "StatisticalInput".to_owned(),
         },
