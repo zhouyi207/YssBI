@@ -118,7 +118,7 @@ View-to-Core exact read capabilities、projection write ownership与 root/nested
 | `src-tauri/src/database/` | DatabaseInstance runtime semantics、DuckDB binding/storage、schema metadata、query/edit/history/overview/export primitives |
 | `src-tauri/src/schema/` | 可序列化 command/event wire DTO 与转换；不拥有 project 或 database authority |
 | `src-tauri/src/sci/` | 主应用的 SCI-facing typed interface 与 models；不反向依赖 Graph、Project 或 Execution |
-| `src-tauri/sci/` | 独立 `yss-sci` Rust 数值算法 crate |
+| `src-tauri/crates/yss-sci/` | 独立 `yss-sci` Rust 数值算法 crate |
 | `src-tauri/src/julia/` | Julia runtime/worker host、typed worker errors 和 task ownership |
 | `src-tauri/julia/` | Julia worker assets 与 Bayes operation |
 | `src-tauri/src/tabular/` | 变量 tabular snapshot、canonical handle 与 DataFrame I/O |
@@ -422,7 +422,7 @@ Dataset overview 对 unavailable metric 使用 `null`，不伪造为 0。DuckDB-
 
 科学计算分为两层：
 
-1. `src-tauri/sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
+1. `src-tauri/crates/yss-sci/` 的 `yss-sci` crate：Rust 数值、回归、面板、时间序列和统计算法。
 2. `src-tauri/src/sci/`：主应用 SCI-facing interface 与 models；跨层调用通过
    `execution::ports::scientific`，不由 SCI 反向编排 Project 或 Execution。
 

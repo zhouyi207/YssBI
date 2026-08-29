@@ -8,10 +8,8 @@
 
 - Node.js `22.22.0` 或更高版本
 - pnpm `11.24.0`
-- Rust `1.94.0`（由根目录 `rust-toolchain.toml` 固定，Rust 2024 edition）
+- Rust `stable`（由根目录 `rust-toolchain.toml` 固定）
 - Julia `1.10` 或更高版本（仅 Julia-backed operations/tests 需要）
-
-Node.js 最低版本与 React Router 8 的运行时要求保持一致。
 
 应用类型检查和架构审计都使用 TypeScript 7。架构审计通过
 `typescript/unstable/sync` 启动 tsgo 项目快照，并使用
