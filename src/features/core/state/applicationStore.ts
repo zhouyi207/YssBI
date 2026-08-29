@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useStoreWithEqualityFn } from 'zustand/traditional';
 import { createStore, type StoreApi } from 'zustand/vanilla';
 
 type StoreUpdate<T> = Partial<T> | T | ((state: T) => Partial<T> | T);
@@ -28,11 +28,7 @@ export function createBoundApplicationStore<T>(
 
   const useBoundStore = (<U = T>(selector?: (state: T) => U): U => {
     const select = selector ?? ((state: T) => state as unknown as U);
-    return useSyncExternalStore(
-      store.subscribe,
-      () => select(store.getState()),
-      () => select(store.getState()),
-    );
+    return useStoreWithEqualityFn(store, select);
   }) as BoundApplicationStore<T>;
 
   return Object.assign(useBoundStore, store);
