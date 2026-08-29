@@ -184,33 +184,55 @@ fn print_output_preserves_exact_first_second_third_order() {
                 event.stream,
                 event.text.as_ref(),
                 event.source_node_id,
+                event.source_port.clone(),
             )),
             RunOutputMessage::Status(_) => None,
         })
         .collect::<Vec<_>>();
 
     assert_eq!(
-        text.iter().map(|(_, _, text, _)| *text).collect::<Vec<_>>(),
+        text.iter()
+            .map(|(_, _, text, _, _)| *text)
+            .collect::<Vec<_>>(),
         ["First", "Second", "Third"],
     );
     assert_eq!(
         text.iter()
-            .map(|(sequence, _, _, _)| *sequence)
+            .map(|(sequence, _, _, _, _)| *sequence)
             .collect::<Vec<_>>(),
         [1, 2, 3],
     );
     assert!(
         text.iter()
-            .all(|(_, stream, _, _)| *stream == RunOutputStream::Stdout)
+            .all(|(_, stream, _, _, _)| *stream == RunOutputStream::Stdout)
     );
     assert_eq!(
         text.iter()
-            .map(|(_, _, _, source_node_id)| *source_node_id)
+            .map(|(_, _, _, source_node_id, _)| *source_node_id)
             .collect::<Vec<_>>(),
         [
             NodeId::from_uuid(uuid::Uuid::from_u128(101)),
             NodeId::from_uuid(uuid::Uuid::from_u128(102)),
             NodeId::from_uuid(uuid::Uuid::from_u128(103)),
+        ],
+    );
+    assert_eq!(
+        text.iter()
+            .map(|(_, _, _, _, source_port)| source_port.clone())
+            .collect::<Vec<_>>(),
+        [
+            PortAddress::declared(
+                NodeId::from_uuid(uuid::Uuid::from_u128(101)),
+                PortKey::new("message").unwrap(),
+            ),
+            PortAddress::declared(
+                NodeId::from_uuid(uuid::Uuid::from_u128(102)),
+                PortKey::new("message").unwrap(),
+            ),
+            PortAddress::declared(
+                NodeId::from_uuid(uuid::Uuid::from_u128(103)),
+                PortKey::new("message").unwrap(),
+            ),
         ],
     );
 }

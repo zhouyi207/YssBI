@@ -145,6 +145,11 @@ const DETAILS_VIEW_REQUEST = {
   title: 'Details',
 } as const;
 
+const ASSISTANT_VIEW_REQUEST = {
+  viewId: 'assistant',
+  title: 'Assistant',
+} as const;
+
 function persistedRightSidebarSize(transaction: WorkbenchLayoutTransaction): number {
   const right = transaction.serialize().edgeGroups?.right;
   return typeof right?.size === 'number' ? right.size : WORKBENCH_EDGE_SIZES.right;
@@ -154,7 +159,7 @@ function configurePermanentDetailsSidebar(
   transaction: WorkbenchLayoutTransaction,
   details: WorkbenchPanelInfo,
   size = persistedRightSidebarSize(transaction),
-): void {
+): string {
   const right = transaction.configureEdge({
     position: 'right',
     size,
@@ -167,6 +172,7 @@ function configurePermanentDetailsSidebar(
     index: 0,
     activate: false,
   });
+  return right.groupId;
 }
 
 function ensurePermanentDetailsSidebar(transaction: WorkbenchLayoutTransaction): void {
@@ -213,6 +219,7 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
   const activityPanels = WORKBENCH_ACTIVITY_DEFAULT_ORDER.map((viewId) =>
     transaction.ensureView({ viewId, title: viewId[0].toUpperCase() + viewId.slice(1) }));
   const details = transaction.ensureView(DETAILS_VIEW_REQUEST);
+  const assistant = transaction.ensureView(ASSISTANT_VIEW_REQUEST);
   const logs = transaction.ensureView({ viewId: 'logs', title: 'Logs' });
   const output = transaction.ensureView({ viewId: 'output', title: 'Output' });
   const diagnostics = transaction.ensureView(viewRequest('diagnostics'));
@@ -222,7 +229,7 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
     collapsed: false,
     headerPosition: 'left',
   });
-  configurePermanentDetailsSidebar(transaction, details);
+  const rightGroupId = configurePermanentDetailsSidebar(transaction, details);
   const bottom = transaction.configureEdge({
     position: 'bottom',
     size: WORKBENCH_EDGE_SIZES.bottom,
@@ -236,10 +243,12 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
       index,
     });
   });
-  const project = activityPanels.find((panel) => (
-    panel.metadata.role === 'view' && panel.metadata.viewId === 'project'
-  ));
-  if (project) transaction.activate(project.panelInstanceId);
+  transaction.move({
+    panelInstanceId: assistant.panelInstanceId,
+    groupId: rightGroupId,
+    index: 1,
+    activate: false,
+  });
   transaction.move({
     panelInstanceId: logs.panelInstanceId,
     groupId: bottom.groupId,
@@ -255,6 +264,10 @@ function installDefaultRootLayout(transaction: WorkbenchLayoutTransaction): void
     groupId: bottom.groupId,
     index: 2,
   });
+  const project = activityPanels.find((panel) => (
+    panel.metadata.role === 'view' && panel.metadata.viewId === 'project'
+  ));
+  if (project) transaction.activate(project.panelInstanceId);
 }
 
 function parseStoredLayout(raw: string | null) {

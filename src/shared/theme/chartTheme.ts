@@ -1,54 +1,4 @@
-import { useMemo, useSyncExternalStore } from 'react';
 import type { ResolvedThemeTokens } from './themeTokens';
-
-export const THEME_TOKENS_CHANGED_EVENT = 'yssbi-theme-tokens-changed';
-
-function cssVariable(name: string): string {
-  return `var(${name})`;
-}
-
-function subscribeThemeTokens(listener: () => void): () => void {
-  if (typeof window === 'undefined') return () => undefined;
-  window.addEventListener(THEME_TOKENS_CHANGED_EVENT, listener);
-  return () => window.removeEventListener(THEME_TOKENS_CHANGED_EVENT, listener);
-}
-
-function themeTokensSnapshot(): string {
-  if (typeof document === 'undefined') return '';
-  return document.documentElement.getAttribute('style') ?? '';
-}
-
-function cssChartThemeColors(): ChartThemeColors {
-  return {
-    canvas: cssVariable('--panel-bg'),
-    grid: cssVariable('--grid-lines'),
-    axis: cssVariable('--strong-border'),
-    tick: cssVariable('--text-secondary'),
-    label: cssVariable('--text-secondary'),
-    zeroLine: cssVariable('--connection-lines'),
-    tooltipBg: cssVariable('--surface-raised'),
-    tooltipFg: cssVariable('--text-primary'),
-    tooltipMuted: cssVariable('--text-secondary'),
-  };
-}
-
-function cssChartSeriesColors(): ChartSeriesColors {
-  return {
-    primary: cssVariable('--accent-color'),
-    negative: cssVariable('--status-danger'),
-    secondary: cssVariable('--status-warning'),
-    highlight: cssVariable('--status-danger'),
-    palette: [
-      cssVariable('--accent-color'),
-      cssVariable('--status-danger'),
-      cssVariable('--status-success'),
-      cssVariable('--status-warning'),
-      cssVariable('--status-info'),
-      cssVariable('--pin-temporal'),
-      cssVariable('--pin-table'),
-    ],
-  };
-}
 
 /** D3 / SVG 图表在 dark / light 下的配色（Summary、Plot 窗口共用） */
 export interface ChartThemeColors {
@@ -77,15 +27,6 @@ export function getChartThemeColors(tokens: ResolvedThemeTokens): ChartThemeColo
   };
 }
 
-export function useChartThemeColors(): ChartThemeColors {
-  const style = useSyncExternalStore(
-    subscribeThemeTokens,
-    themeTokensSnapshot,
-    themeTokensSnapshot,
-  );
-  return useMemo(() => cssChartThemeColors(), [style]);
-}
-
 /** D3 序列色：主色跟随主题 accent，其余为固定语义色 */
 export interface ChartSeriesColors {
   primary: string;
@@ -111,13 +52,4 @@ export function getChartSeriesColors(tokens: ResolvedThemeTokens): ChartSeriesCo
       tokens.pins.table,
     ],
   };
-}
-
-export function useChartSeriesColors(): ChartSeriesColors {
-  const style = useSyncExternalStore(
-    subscribeThemeTokens,
-    themeTokensSnapshot,
-    themeTokensSnapshot,
-  );
-  return useMemo(() => cssChartSeriesColors(), [style]);
 }

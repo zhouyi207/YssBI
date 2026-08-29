@@ -1,13 +1,14 @@
 # 本地开发工作流
 
-本项目不依赖 CI 作为开发期验证入口。所有命令都从仓库根目录运行，并通过
-`package.json` 脚本统一调用。
+本项目使用同一组 `package.json` scripts 作为本地和自动化任务入口；托管 CI
+不能替代本地验证。所有命令都从仓库根目录运行。新增功能或改变现有行为前，先使用
+[功能开发检查清单](FEATURE_PROCESS.md)确认边界、生命周期和验证范围。
 
 ## 开发环境
 
 - Node.js `22.22.0` 或更高版本
-- pnpm `11.20.0`
-- Rust `1.94.0` 或更高版本（Rust 2024 edition）
+- pnpm `11.24.0`
+- Rust `1.94.0`（由根目录 `rust-toolchain.toml` 固定，Rust 2024 edition）
 - Julia `1.10` 或更高版本（仅 Julia-backed operations/tests 需要）
 
 Node.js 最低版本与 React Router 8 的运行时要求保持一致。
@@ -16,102 +17,88 @@ Node.js 最低版本与 React Router 8 的运行时要求保持一致。
 `typescript/unstable/sync` 启动 tsgo 项目快照，并使用
 `typescript/unstable/ast` 遍历 AST；相关生命周期集中在测试 helper 中管理。
 
+
 ## Cargo 产物目录
 
-根目录 `.cargo/config.toml` 将 Rust workspace 的产物统一放在仓库根目录的
-`target/`。
+仓库不提供 `.cargo/` 覆盖。Cargo 和 Tauri 使用 workspace 默认的
+`src-tauri/target/`，所有 Rust scripts 都从仓库根目录运行并显式指向
+`src-tauri/Cargo.toml`。
 
-不要为日常开发切换到 `src-tauri` 后直接运行 Cargo。请使用下列脚本，
-它们都会显式指向 `src-tauri/Cargo.toml`。这避免在仓库根目录和
-`src-tauri` 下产生重复的 `target` 目录。
+旧的根目录 `target/` 是此前配置产生的构建缓存；确认没有 Cargo 进程使用后可
+手动删除。不要同时从不同工作目录运行未带 manifest 的 Cargo 命令，以免再次产生
+多套构建产物。
 
-已有的 `src-tauri/target` 是旧构建产物，可以在没有 Cargo 进程运行时
-手动删除一次；后续使用本规范不会重新创建它。
+## 命令分组
 
-## 日常命令
+| 目的 | 聚合命令 | 单栈命令 |
+| --- | --- | --- |
+| 安装或同步依赖 | `pnpm install` | — |
+| 启动 Tauri 桌面应用 | `pnpm dev` | — |
+| 构建桌面安装包 | `pnpm build` | — |
+| 类型与编译检查 | `pnpm check` | `pnpm check:ts`、`pnpm check:rs` |
+| 静态检查 | `pnpm lint` | `pnpm lint:ts`、`pnpm lint:rs` |
+| 测试 | `pnpm test` | `pnpm test:ts`、`pnpm test:rs` |
+| 写入格式化 | `pnpm format` | `pnpm format:ts`、`pnpm format:rs` |
+| 只读格式检查 | `pnpm format:check` | `pnpm format:check:ts`、`pnpm format:check:rs` |
+| 完整交付门禁 | `pnpm run ci` | — |
+
+架构与发布收口还提供以下稳定入口：
 
 | 目的 | 命令 |
 | --- | --- |
-| 安装或同步依赖 | `pnpm install` |
-| 启动前端开发服务器 | `pnpm dev` |
-| 启动 Tauri 桌面应用 | `pnpm tauri:dev` |
-| 构建前端 | `pnpm build` |
-| 构建桌面安装包 | `pnpm tauri:build` |
-| TypeScript 类型检查 | `pnpm typecheck` |
-| 前端 Vitest 测试 | `pnpm test` |
-| 测试 Frontend production architecture | `pnpm test:architecture` |
-| 格式检查 Rust | `pnpm rust:fmt:check` |
-| 检查 Rust 编译 | `pnpm rust:check` |
-| 测试 Tauri/Rust library | `pnpm rust:test:lib`（仅最终批量门禁） |
-| 测试 Rust production architecture | `pnpm rust:test:architecture`（仅最终批量门禁） |
-| 测试 Tauri/Rust 主 crate（完整） | `pnpm rust:test` |
-| 测试科学计算 crate | `pnpm rust:test:sci` |
-| 运行宽表统计基准 | `pnpm rust:bench:column-analytics` |
-| 运行前端完整验证 | `pnpm verify:frontend` |
-| 运行 Rust 日常静态验证 | `pnpm verify:rust` |
-| 运行日常跨栈验证 | `pnpm verify` |
-| 运行完整仓库回归 | `pnpm verify:full` |
-| 清除标准 Rust 构建产物 | `pnpm rust:clean` |
+| Frontend production architecture | `pnpm test:architecture` |
+| Rust production architecture | `pnpm rust:test:architecture` |
+| Frontend 类型检查与完整 Vitest | `pnpm verify:frontend` |
+| Rust format/check 与 architecture tests | `pnpm verify:rust` |
+| 跨栈 architecture gate | `pnpm verify` |
+| Frontend、主 Rust crate 与 yss-sci 完整回归 | `pnpm verify:full` |
 
-仓库当前没有 ESLint 或 Prettier script；规范的静态检查入口是
-`pnpm typecheck`、`pnpm rust:fmt:check` 和 `pnpm rust:check`。
+`dev` 和 `build` 只表示完整 Tauri 应用入口。`src-tauri/tauri.conf.json` 的
+`beforeDevCommand` 和 `beforeBuildCommand` 直接调用 Vite，不能回调这两个
+scripts，否则会形成递归。
 
-`pnpm rust:test`、`pnpm rust:test:lib` 和 `pnpm rust:test:sci` 通过 Cargo
-`--jobs 1` 序列化 Rust 测试链接，以避免 Windows 链接器内存峰值。
-`pnpm rust:check` 和开发构建仍保留 Cargo 的正常并行度。
+TypeScript 类型检查由 `tsc` 负责；JavaScript/TypeScript lint 使用 Oxlint，
+格式化使用 Oxfmt。Vitest 在继承默认排除规则的基础上忽略 `.worktrees/**`，
+主工作区测试和 CI 不扫描隔离 worktree。Rust scripts 使用 `--workspace`/`--all`
+覆盖 `yssbi` 和 `yss-sci`，并保持 Cargo 默认构建和链接并行度，不固定 build jobs。
 
-Rust 测试链接和 architecture audit 在 Windows 上成本很高。架构解耦的增量循环只运行
-`pnpm rust:fmt:check` 与 `pnpm rust:check`；不要为每个小改动重复运行 Rust tests。
-所有 owner/cutover 修改完成后，再以一次最终批次运行 architecture、主 crate、SCI 和
-跨栈 release gates，并记录任何失败后集中修复。
+Rust 测试使用 Cargo 内置 test runner。仓库不固定 build jobs 或 test threads，
+`pnpm test:rs` 继承 Cargo 与 libtest 的默认并发。
 
-`pnpm verify:frontend` 精确执行 `pnpm typecheck && pnpm test`。完整 Vitest 已收集
-Frontend architecture tests；`pnpm test:architecture` 只作为快速 focused 入口，不在
-`verify:frontend` 中重复运行。
+Windows 上 Rust linking 与 production architecture audit 成本较高。增量循环优先运行
+`pnpm format:check:rs` 与 `pnpm check:rs`，在一个 coherent Rust change 完成后再运行
+受影响的 focused tests；不要为每个小改动重复执行完整 Rust suite。跨 Execution/Database/
+SCI 的 release cutover 使用一次 `pnpm verify:full` 批量验证。
 
-`pnpm verify:rust` 精确执行 Rust format check、compile check 与
-`pnpm rust:test:architecture`，因此它属于最终批量门禁而非日常增量命令。日常 Rust
-静态验证使用 `pnpm rust:fmt:check && pnpm rust:check`。`pnpm verify` 依次组合 `verify:frontend`、
-`verify:rust` 与 `git diff --check`，因此日常跨栈交付会执行两端 architecture gates，
-但不会隐式运行完整 Rust runtime、integration 或 SCI suite。Rust 行为改动仍必须先
-完成静态检查；Rust focused/full tests 统一留到最终批次。
+`pnpm run ci` 按顺序执行格式检查、TypeScript/Rust 检查、Oxlint/Clippy 和完整
+TypeScript/Rust 测试。必须保留 `run`：裸 `pnpm ci` 是 pnpm 的冻结安装命令，
+不会执行同名 package script。该门禁不会启动应用或构建安装包；交付前仍需单独
+运行 `git diff --check`。Oxfmt 和严格 Clippy 首次接入时会暴露既有基线问题，
+不要为了让门禁表面通过而降低规则；应在独立任务中建立格式和 lint 基线。
 
-`pnpm verify:full` 组合 `verify:frontend`、Rust format/compile checks、完整主 Rust crate、
-SCI tests 与 `git diff --check`；它不另行重复调用 focused Rust architecture script，
-因为完整主 crate tests 已包含 library architecture tests。仅在发布前、执行引擎/Runtime
-跨切面改动、或明确要求完整仓库回归时运行。两种验证命令都不会启动应用、打包安装包
-或修改项目状态。
+`pnpm format` 会写入整个仓库，不要把它作为无关改动的顺手操作。验证时优先使用
+`pnpm format:check`。
 
 ## 聚焦测试
 
-优先通过 `package.json` scripts 运行聚焦测试，使 Cargo 参数和产物目录保持
-一致：
+聚焦测试通过单栈 script 向 `cargo test` 透传参数，Cargo 从根目录使用统一
+workspace 和 `src-tauri/target/`：
 
 ```sh
+pnpm test:ts src/path/to/example.test.ts
+pnpm test:ts src/path/to/example.test.ts -t "test name"
+pnpm test:rs --lib completed_task_has_terminal_status
+pnpm test:rs --test database_test test_duckdb_query_page_and_schema_without_full_load
+pnpm test:rs -p yss-sci test_name
 pnpm test:architecture
-pnpm test src/path/to/example.test.ts
-pnpm test src/path/to/example.test.ts -t "test name"
 pnpm rust:test:architecture
-pnpm rust:test:lib test_name -- --exact --nocapture
-pnpm rust:test --test database_test test_name -- --exact --nocapture
-pnpm rust:test:sci test_name -- --exact --nocapture
 julia --project=src-tauri/julia src-tauri/julia/tests/bayes_fit_tests.jl
 ```
 
-### Rust production architecture audit
-
-修改 Rust module、Cargo dependency、re-export、layer classification、command/application seam
-或边界债务时，先运行对应的快速 fixture test，再运行真实 production audit：
-
-```sh
-pnpm rust:test:architecture
-```
-
-真实审计会遍历所有 production targets 并解析 canonical origins，通常比普通 unit test 慢；
-不要在增量编辑期间重复触发它。
-它要求实际违规与 `src-tauri/src/architecture_tests/debt/` 的 literal 清单双向完全一致。
-新增依赖不能通过增加 broad allow rule 处理；只有目标架构确实允许的 exact capability 才进入
-policy，其余项必须绑定维护在 `docs/architecture/` 的边界文档并保留准确 occurrence count。
+`pnpm verify:frontend` 精确执行 TypeScript check 与完整 Vitest；完整 Vitest 已包含
+Frontend architecture tests。`pnpm verify:rust` 运行 Rust format/check 与 architecture
+tests。`pnpm verify:full` 运行 Frontend、主 Rust crate、yss-sci 与最终 `git diff --check`，
+不会启动应用或构建安装包。
 
 首次运行 Julia-backed operations/tests 前安装项目环境：
 
@@ -122,25 +109,26 @@ julia --project=src-tauri/julia -e 'using Pkg; Pkg.instantiate()'
 ## 按改动范围验证
 
 - **React、TypeScript、样式或前端状态改动：**
-  `pnpm typecheck`，再运行受影响的 Vitest 测试；提交前运行
-  `pnpm verify:frontend`。
+  运行 `pnpm format:check:ts`、`pnpm check:ts`、`pnpm lint:ts` 和受影响的
+  `pnpm test:ts` 测试。
 - **Rust、Tauri command、项目状态或执行引擎改动：**
-  先运行 `pnpm rust:check` 与 `pnpm rust:fmt:check`；按本仓库约定不在增量阶段运行
-  Rust 测试。全部 owner/cutover 修改完成后，再运行一次 `pnpm verify:rust`；执行引擎
-  跨切面改动或发布前再运行 `pnpm verify:full`。
-- **`yss-sci` 数值计算改动：**
-  运行 `pnpm rust:test:sci`；性能敏感的列统计或分布改动还应运行
-  `pnpm rust:bench:column-analytics`，并记录与基线相比的结果。
-- **Tauri 打包、权限、插件或构建配置改动：**
-  运行 `pnpm tauri:build`，并手动启动应用验证关键路径。
+  先添加或更新聚焦回归测试，运行 `pnpm format:check:rs`、`pnpm check:rs`、
+  `pnpm lint:rs` 和受影响的 `pnpm test:rs` 测试。
+- **跨前后端、发布或执行引擎跨切面改动：**
+  运行 `pnpm run ci`；Tauri 打包、权限、插件或构建配置改动还需运行 `pnpm build`
+  并手动验证关键路径。
+- **`yss-sci` 性能敏感改动：**
+  从仓库根目录运行
+  `cargo bench --manifest-path src-tauri/Cargo.toml -p yss-sci --bench column_analytics_wide`
+  并记录与基线相比的结果。一次性专用命令不再占用 `package.json` scripts。
 
-## 清理构建产物
+## 一次性 Cargo 维护命令
 
-仅在构建缓存损坏、依赖切换或需要释放磁盘空间时运行：
+只在构建缓存损坏、依赖切换或需要释放磁盘空间时，从仓库根目录运行：
 
 ```sh
-pnpm rust:clean
+cargo clean --manifest-path src-tauri/Cargo.toml
 ```
 
-清理后，下一次 Rust 构建会重新编译依赖，耗时会显著增加。不要在正常
-开发流程中把 clean 作为每次验证的一部分。
+所有一次性 Cargo 命令都必须显式使用 `src-tauri/Cargo.toml`。清理后下一次
+Rust 构建会重新编译依赖，不要把 clean 纳入日常验证。

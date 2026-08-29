@@ -12,15 +12,15 @@ export interface CorrelogramBarDTO {
   value: number;
 }
 
-/** Plot 窗口 correlogram 柱条（Rust 必填 q_stat / p_value） */
+/** Plot 窗口 correlogram 柱条（Rust 必填 qStat / pValue） */
 export interface PlotCorrelogramBarDTO extends CorrelogramBarDTO {
-  q_stat: number;
-  p_value: number;
+  qStat: number;
+  pValue: number;
 }
 
 export function hasLjungBoxStats(bar: CorrelogramBarDTO): bar is PlotCorrelogramBarDTO {
   const candidate = bar as PlotCorrelogramBarDTO;
-  return isFiniteNumber(candidate.q_stat) && isFiniteNumber(candidate.p_value);
+  return isFiniteNumber(candidate.qStat) && isFiniteNumber(candidate.pValue);
 }
 
 export function parseCorrelogramBar(raw: unknown): CorrelogramBarDTO | null {
@@ -35,17 +35,17 @@ export function parsePlotCorrelogramBar(raw: unknown): PlotCorrelogramBarDTO | n
   if (!isRecord(raw)) return null;
   const lag = raw.lag;
   const value = raw.value;
-  const q_stat = raw.q_stat;
-  const p_value = raw.p_value;
+  const qStat = raw.qStat;
+  const pValue = raw.pValue;
   if (
     !isNonNegativeInteger(lag)
     || !isFiniteNumber(value)
-    || !isFiniteNumber(q_stat)
-    || !isFiniteNumber(p_value)
+    || !isFiniteNumber(qStat)
+    || !isFiniteNumber(pValue)
   ) {
     return null;
   }
-  return { lag, value, q_stat, p_value };
+  return { lag, value, qStat, pValue };
 }
 
 export function acfSeriesToBars(acf: number[]): CorrelogramBarDTO[] {
@@ -54,17 +54,4 @@ export function acfSeriesToBars(acf: number[]): CorrelogramBarDTO[] {
 
 export function pacfSeriesToBars(pacf: number[]): CorrelogramBarDTO[] {
   return pacf.map((value, i) => ({ lag: i + 1, value }));
-}
-
-export function formatPValueDisplay(p: number): string {
-  return p < 0.0001 ? p.toExponential(2) : p.toFixed(4);
-}
-
-/** Correlogram tooltip 中 Q / p-value 行（仅 Plot 柱条有内容） */
-export function correlogramLjungBoxTooltipHtml(bar: CorrelogramBarDTO): string {
-  if (!hasLjungBoxStats(bar)) return '';
-  return (
-    `Q(${bar.lag}): <b>${bar.q_stat.toFixed(4)}</b><br/>` +
-    `p-value: <b>${formatPValueDisplay(bar.p_value)}</b>`
-  );
 }

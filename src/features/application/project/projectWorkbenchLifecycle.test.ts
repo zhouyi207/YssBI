@@ -86,11 +86,12 @@ function panel(
           data: 'Data',
           commands: 'Commands',
           details: 'Details',
-            inspect: 'Inspect',
-            logs: 'Logs',
-            output: 'Output',
-            diagnostics: 'Diagnostics',
-          } as const)[metadata.viewId];
+          assistant: 'Assistant',
+          inspect: 'Inspect',
+          logs: 'Logs',
+          output: 'Output',
+          diagnostics: 'Diagnostics',
+        } as const)[metadata.viewId];
   return {
     panelInstanceId,
     groupId: 'group-main',

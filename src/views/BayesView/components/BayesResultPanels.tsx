@@ -3,7 +3,8 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { VscCloudDownload, VscFolderOpened } from 'react-icons/vsc';
 import type { InferenceResultDTO, PosteriorPredictiveRowDTO } from '@/shared/types/bayes';
-import { MultiLineChart, PredictiveIntervalChart } from '@/shared/charts';
+import { MultiLineChart } from '@/shared/charts/cartesian/MultiLineChart';
+import { PredictiveIntervalChart } from '@/shared/charts/statistical/PredictiveIntervalChart';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -897,4 +898,3 @@ function parameterStatusClass(status: ReturnType<typeof parameterDiagnosticStatu
       return 'text-muted-foreground';
   }
 }
-

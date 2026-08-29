@@ -27,15 +27,23 @@ export type ResultState =
   | { kind: 'failed'; failure: ResultFailure }
   | { kind: 'cancelled' };
 
-export type ResultPlotKind =
-  | 'scatter'
-  | 'line'
-  | 'plot'
-  | 'ecdf'
-  | 'kde'
-  | 'histogram'
-  | 'correlation'
-  | 'correlogram';
+export const RESULT_PLOT_KINDS = [
+  'scatter',
+  'line',
+  'plot',
+  'ecdf',
+  'kde',
+  'histogram',
+  'correlation',
+  'correlogram',
+] as const;
+
+export type ResultPlotKind = (typeof RESULT_PLOT_KINDS)[number];
+
+export function isResultPlotKind(value: unknown): value is ResultPlotKind {
+  return typeof value === 'string'
+    && (RESULT_PLOT_KINDS as readonly string[]).includes(value);
+}
 
 export type ResultReportKind =
   | 'olsSummary'

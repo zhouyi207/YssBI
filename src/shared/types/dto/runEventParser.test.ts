@@ -130,6 +130,11 @@ describe('execution wire parsers', () => {
       text: 'user-visible value',
       sourceGraphPath: 'functions/output.yssbi-function',
       sourceNodeId: '00000000-0000-0000-0000-000000000002',
+      sourcePort: {
+        kind: 'declared',
+        nodeId: '00000000-0000-0000-0000-000000000002',
+        portKey: 'message',
+      },
     } as const;
     const truncated = {
       runId: '41',
@@ -138,6 +143,11 @@ describe('execution wire parsers', () => {
       status: 'truncated',
       sourceGraphPath: 'functions/output.yssbi-function',
       sourceNodeId: '00000000-0000-0000-0000-000000000002',
+      sourcePort: {
+        kind: 'declared',
+        nodeId: '00000000-0000-0000-0000-000000000002',
+        portKey: 'message',
+      },
     } as const;
 
     expect(parseExecutionChannelEvent(output)).toEqual(output);

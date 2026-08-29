@@ -36,7 +36,8 @@ export type CanvasVariableOverlayModel =
       onGet: () => void;
       onSet: () => void;
       onClose: () => void;
-    };
+  };
+
 
 export type CanvasExecutionOverlayModel =
   | { kind: 'hidden' }
@@ -90,6 +91,7 @@ export default function CanvasOverlays({ model }: { model: CanvasOverlaysModel }
             getOverlayPortalRoot(),
           )
         : null}
+
 
       {variable.kind === 'visible' ? (
         <ActionMenu

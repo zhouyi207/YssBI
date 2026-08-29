@@ -67,7 +67,6 @@ function item(title: string, descriptor: NodeCreationDescriptor) {
   return {
     nodeTypeId: descriptor.nodeTypeId,
     title,
-    description: null,
     documentation: null,
     categoryId: 'resources',
     iconId: 'resource',

@@ -28,10 +28,222 @@ src/app/appConfig/appLinks.ts
 提交并 push，或手动再跑 publish.yml
 ```
 
+codex resume 01a03e97-3969-7c82-85e9-8d2071050906 --yolo
+
+
+已完成汇总文档：
+
+  docs/superpowers/plans/2026-08-27-architecture-decoupling-progress-and-next-steps.md
+
+  文档包含：
+
+  - 已完成、已集成、进行中、待实现的完整状态矩阵。
+  - Strict Frontend/Rust、Backend Tasks 1–5a、Project–Graph Task 1 的实现与提交记录。
+  - 当前 architecture-final、各 worktree 和验证状态。
+  - 当前进行中的 Backend Task 5b Tabular/Polars 拆分。
+  - Backend、Project–Graph、Execution、Presentation、Frontend Application 的后续依赖顺序。
+  - 最终原子切换、债务清零和验证门槛。
+  - 明确禁止兼容层、双路线、动态 debt baseline。
+
+  同时已向 TODO.md 的 2026.08.27 标题追加两条摘要，未改写既有内容。
+
+  最新集成分支 d042b4f9 已重新确认：
+
+  - pnpm rust:fmt:check：通过
+  - pnpm rust:check：通过
+  - git diff --check：通过
+
+  docs/superpowers 按仓库规则保持 git-ignored、未提交；主工作区中的用户代码改动未被触碰
+
 # DOLIST
+
+
+## 2026.08.28
+
+- [ ] 将 `package.json` 收敛为 14 个稳定任务入口，删除 preview、原始 Tauri、library test 及分层 verify convenience scripts。
+- [ ] 移除 Rust 测试命令硬编码的 `--jobs 1`，恢复 Cargo 默认构建/链接并行度，并保留低内存机器的按需降并行说明。
+- [ ] 保留 `RUST_TEST_THREADS=1` 作为测试运行期数据库与全局状态隔离，不再与 Cargo 构建并行度混为一谈。
+- [ ] 使用 `rust-toolchain.toml` 固定 Rust 1.94.0，并让 GitHub Release workflow 安装同一版本。
+- [ ] 新增 YssBI 功能开发检查清单，覆盖 authority、IPC、生命周期、输出、Dockview、性能、测试及分发决策。
+- [ ] 同步本地工作流、仓库规则、README 与图标生成命令，确保文档只引用保留的任务入口。
+- [ ] 将任务入口重组为 dev/build 与 check、lint、test、format、format:check 五组，并新增统一 `pnpm ci` 聚合门禁。
+- [ ] 将前端 lint/format 工具收敛为 Oxlint 与 Oxfmt，避免 TypeScript 7 与 typescript-eslint peer 范围不兼容。
+- [ ] 将 Rust 检查、Clippy、测试和格式命令统一覆盖 workspace，同时继续使用 Cargo 默认构建并行度。
+- [ ] 调整 Tauri 的 Vite 前置命令为直接执行，避免 `pnpm dev`/`pnpm build` 改为 Tauri 入口后递归调用。
+- [ ] 移除 benchmark/clean convenience scripts，并在本地工作流中保留显式 manifest 的一次性 Cargo 命令。
+- [ ] 明确同名聚合脚本必须通过 `pnpm run ci` 调用，避免裸 `pnpm ci` 误执行 pnpm 的冻结安装命令。
+- [ ] 将 Rust workspace 测试入口从 `cargo test` 切换为 cargo-nextest 0.9.143，并保留现有参数透传能力。
+- [ ] 使用 Nextest 默认 CPU 并发运行测试，不增加仓库级 `test-threads` 限制。
+- [ ] 删除根目录 `.cargo/` 及其 target/env 覆盖，让 Cargo 与 Tauri 恢复标准 `src-tauri/target/`。
+- [ ] 更新开发工作流和仓库规则，记录 Nextest 安装方式及单次低并行调试参数。
+- [ ] 将 Rust 聚焦测试示例改用 Nextest 原生 filterset，避免 libtest 参数分隔符和 `--nocapture` 强制串行。
+- [ ] 以最终确认的 18 个 scripts 为准：保留 dev/build、五组聚合/TS/Rust 任务和 ci；早期“14 个入口”记录不再代表最终矩阵。
+- [ ] 以 Nextest 默认 CPU 并发为最终方案，删除 `RUST_TEST_THREADS=1` 环境覆盖；早期保留串行限制的记录已被后续确认取代。
+- [ ] 修正 `database_test` 对已迁移 `bind_duckdb_instance` 的旧 Application 导入，改用 Database 模块现有公开 seam。
+- [ ] 使用 cargo-nextest 验证 DuckDB 绑定聚焦用例及完整 `database_test` integration binary，确认 19 个测试全部通过。
+- [ ] 以最终确认方案取消 cargo-nextest，恢复 `cargo test --workspace`，并继续使用 Cargo/libtest 默认并发而不设置仓库级限制。
+- [ ] 删除维护文档中的 Nextest 安装、filterset 和降并发说明，并卸载本次通过 WinGet 安装的全局 cargo-nextest。
+- [ ] 使用原生 Cargo 重新验证 DuckDB 绑定聚焦用例及完整 `database_test`，确认 19 个 integration tests 全部通过。
+- [ ] 在 Vitest 配置中继承默认 exclude 并统一排除 `.worktrees/**`，避免主工作区测试重复扫描隔离 worktree。
+- [ ] 通过测试发现 RED/GREEN 验证 worktree 测试从大量命中降为 0；完整前端套件仅保留主工作区既有的 Dockview 默认值失败。
+- [ ] 按最终决策移除 Vite 的 `**/target/**` watch 忽略项，仅保留 `**/src-tauri/**` 以覆盖标准 Cargo 产物目录。
+- [ ] 将任务脚本、Vitest 排除、Vite watch、Database integration 与开发文档拆分为独立 Git 提交，并在推送前逐层复核 staged diff。
+- [ ] 完成 Backend Task 5b 的 Pure Tabular ordered contract、manual serde 与 duplicate/ragged shape 校验，保持既有 wire shape。
+- [ ] 将变量 JSON/handle normalization、Polars materialization、DataFrame I/O 分别归入 Project、Backend adapter、Database owner，并删除旧 mixed tabular owners。
+- [ ] 补充 typed tabular/materialization/I/O/DTO mapping errors、atomic normalization 与 architecture/debt guard，避免 raw backend prose 和 lossy unsigned conversion。
+- [ ] 通过 tabular 聚焦回归、数据库编辑 integration 回归、Rust 编译/格式/debt 验证及独立 review；隔离 worktree 已 review-clean，等待集成授权。
+- [ ] 将本地 `shadcn` 提交变基到最新 `origin/shadcn`，吸收远端 10 个提交并保留本地测试提交。
+- [ ] 合并自动 stash 的 `TODO.md` 日期段冲突，保留远端记录与本地 Backend Task 5b 摘要。
+- [ ] 分析 graph canvas 节点右键“选择节点…”链路，确认它只在既有画布节点之间切换选择，而右键目标节点已在菜单打开前被选中。
+- [ ] 核对空白画布 `NodePalette` 的键盘行为，确认搜索框会自动聚焦，但当前未处理上下方向键与 Enter，创建仍只由节点项点击触发。
+- [ ] 明确后续修正方向：移除临时节点选择器，将可见叶节点的键盘高亮与 Enter 创建接入空白处节点树，并复用现有 descriptor 创建链路。
+- [ ] 为 blank canvas `NodePalette` 增加首个可见叶节点初始化、上下方向键切换、Enter descriptor 创建、活动项高亮滚动及屏幕阅读器状态播报。
+- [ ] 在搜索、分类展开状态和 catalog 投影变化时重置活动节点，并在 IME 文本组合期间忽略 palette 快捷键，避免旧选择复活或误创建。
+- [ ] 删除节点右键菜单的临时“选择节点…”入口、Canvas picker 状态、overlay model、projection 缓存、专用组件测试及中英文废弃文案。
+- [ ] 增加 NodePalette 键盘创建、IME 防误触和筛选重置回归覆盖，完成 34 个相关测试、TypeScript 检查、Oxlint 与独立代码审查。
+- [ ] 记录仓库级 Oxfmt 当前因缺少配置并命中 1311 个既有文件而失败，本任务不批量格式化或改写无关基线文件。
+- [ ] 审计前端 5 个 architecture-contract 测试，确认其仅占前端测试约 2.69%，但约 1654 行源码审计设施和约 22.89 秒聚焦运行成本明显失衡。
+- [ ] 将 `nodeIdentityArchitectureContract.test.ts` 与 observability omnibus source scan 列为优先清理对象，改由行为测试、类型系统、resolved dependency lint 和配置审计分别承担契约。
+- [ ] 审计 Rust commands 目录 45 个测试，确认 43 个属于 wire、错误、事件或命令行为覆盖，不能因 `command_*_tests` 命名整体删除。
+- [ ] 标记两个读取 Rust 实现源码并匹配函数名或字符串的结构测试，后续应改为可观测事件断言、seam instrumentation、benchmark 或直接删除。
+- [ ] 确认现有 OLS/WLS golden 覆盖数值面较广但缺少外部工具版本、命令、数据哈希、生成脚本和原始参考输出，当前更接近内部行为快照。
+- [ ] 将测试治理从硬性数量比例改为价值准入，优先建设可复现的 Stata/R/statsmodels 参考 fixture，并按每个独立高风险统计 seam 保留一个代表案例。
+- [ ] 完成 P0 测试清理：删除两个 Rust 源码文本 oracle，移除 901 行 node identity AST analyzer，将 observability omnibus scan 收敛为两条仓库级政策并把 DTO/status 断言迁移到 owner wire tests。
+
+
+## 2026.08.27
+
+- [ ] 完成 Rig、rmcp、assistant-ui 与 YssBI 当前/目标模块边界的架构审计，确认内部 Agent 与外部 MCP 复用 Application 能力而不共享协议实现。
+- [ ] 将长期能力入口收敛为 Application-owned capability gateway，区分领域请求、model-facing capability schema、Tauri DTO 与 MCP/Rig adapter mapping。
+- [ ] 规划 typed `thiserror` owner errors、稳定安全 failure code/details、incident correlation 与 Rig/MCP/Tauri 各自的穷举错误映射。
+- [ ] 规划 actor/session-bound policy、一次性 approval grant、invocation idempotency、deadline/cancellation 和非诊断型 invocation ledger。
+- [ ] 规划 revision-aware `apply_graph_edit` 批处理与可验证 undo receipts，明确现有 `OperationId` 只作 correlation、不得充当 AI transaction 或幂等键。
+- [ ] 规划 Rust-authoritative assistant session/event stream、assistant-ui ExternalStore projection，以及 loopback MCP transport、认证和 project-session binding。
+- [ ] 明确 Assistant Host 只依赖其自有 `AgentDriverPort`，Rig adapter 实现该 port 并由 composition root 注入，禁止 Application 反向 import Rig/rmcp。
+- [ ] 明确 Rig 与 MCP adapter 只能依赖 Capability Gateway public interface，禁止直接访问 Project、Graph、Execution authority 或互相调用。
+- [ ] 为 Automation contracts、Application、Rig、MCP、Tauri schema/event 建立单向依赖与 exact import architecture guards，防止 service locator、barrel re-export 和双向回调形成隐式环。
+- [ ] 新增 Automation Capability Foundation 书面规范，固定 Foundation 与 Internal Assistant、Assistant Frontend、MCP Server、MCP Client 四阶段拆分及前置迁移顺序。
+- [ ] 将 `automation_contract` 固定为 Pure Leaf、将 Rig/MCP 固定为第十六层 Automation Adapter，并定义 composition root 唯一 concrete constructor ownership。
+- [ ] 固定 `inspect_graph`、`search_node_catalog`、`inspect_dataset_schema`、`apply_graph_edit` 四个 closed typed capability contract 与有界数据暴露规则。
+- [ ] 将 `apply_graph_edit` 设计为 clientKey-aware 单 graph 批处理，要求一次 staged validation、一次 Project commit、一次 revision/history/publication。
+- [ ] 固定 principal/session-bound approval、binding nonce invocation ID、无淘汰 session ledger、typed failure/incident 和 commit point-of-no-return 语义。
+- [ ] 定义 Capability Gateway 五类 public interface、architecture fitness functions、代表性回归测试与 production-unrouted Foundation 验收条件。
+- [ ] 批准 Automation Capability Foundation 规范并将状态更新为已批准，保持 Foundation 与后续 Internal Assistant/Frontend/MCP 设计分离。
+- [ ] 新增 Capability Foundation 十一任务实施计划，设置最终 ApplicationSessionSlot、Project–Graph、Database 与 strict policy 的硬前置 gate。
+- [ ] 规划第十六层 Automation Adapter、Pure Leaf capability contracts、schemars 1.2.2 exact allowlist 与 contract/schema golden 的 RED–GREEN 任务。
+- [ ] 规划 loaded graph inspection、single-route catalog search、no-row dataset schema inspection 三个独立 Application 深 module 及 currentness 回归。
+- [ ] 规划 clientKey graph edit batch 通过原 mutation owner 构造 sealed candidate，保留唯一 `mutate_graph_in_session`/Project commit caller。
+- [ ] 规划 Gateway binding、policy、approval、no-eviction ledger、OperationId admission、deadline/cancellation 与 commit point-of-no-return 的完整状态测试。
+- [ ] 在实施计划中加入每任务 TODO、focused tests、architecture tests、baseline hash 对比、untracked whitespace 与 production-unrouted 验证门禁。
+- [ ] 复核所谓 2026.08.26 plans 实为 `2026-08-25-*` 文件并于 8 月 26 日完成最后修改，确认其 exact cross-plan 顺序仍是 Foundation 的权威前置。
+- [ ] 重新审计 Foundation 的 15 个硬前置最终 seam，当前工作树存在 0 个、缺失 15 个，因此禁止立即执行 Foundation Task 1。
+- [ ] 确认 Foundation 与 Strict、Backend、Project–Graph、Execution、Presentation 在 architecture policy、ApplicationState、Graph mutation、Database session、Project history 等文件有预期后置重叠，并行执行会形成真实冲突。
+- [ ] 固定安全插入点为 Presentation Tasks 4–8 完成之后；Foundation 可在 Frontend Application Boundaries 前后执行，但推荐同一工作树顺序执行以避免 TODO/文档协调冲突。
+- [ ] 明确当前可执行起点是 Strict Architecture Policy，而不是为当前 ProjectState/node_system 增加 Capability compatibility bridge。
+- [ ] 新增 Assistant UI Workbench Shell 书面规范，将本切片限定为 frontend-only、无模型、无 IPC、发送禁用的可见 Workbench 壳层。
+- [ ] 固定 Details 为 canonical right edge 的唯一 permanent view，禁止 panel、tab 及包含 Details 的整个 group 绕过 move/split/remove policy。
+- [ ] 将 Assistant 定义为默认与 Details 同组但可独立移动、split、关闭并由 View 菜单重建的 layout-persisted singleton。
+- [ ] 规划 assistant-ui ExternalStoreRuntime 空投影与 Application-owned adapter，禁止 LocalRuntime、Zustand message authority、AI SDK、MCP 和临时 backend 路径。
+- [ ] 明确 Assistant reveal/restore/reset/project replacement 语义，并同步 Strict、Frontend plans 与维护架构文档的后续修改范围。
+- [ ] 记录本切片不新增或运行测试，仅以 typecheck、build、diff 和只读 source audit 作为实施验证门禁。
+- [ ] 批准 Assistant UI Workbench Shell 书面规范，并将规范状态锁定为 2026.08.27 已批准。
+- [ ] 新增 Assistant UI Workbench Shell 七任务实施计划，覆盖依赖、runtime adapter、View、Dockview policy、layout、菜单、文档同步与无测试交付门禁。
+- [ ] 以 assistant-ui 0.15.16 官方 ExternalStoreRuntime、Composer 与 Thread primitives 契约复核计划中的 runtime/provider/send gate 接口。
+- [ ] 自审实施计划的规范覆盖、类型命名、代码围栏、占位符和测试命令，保持当前切片不运行测试且不执行 Git staging/commit。
+- [ ] 安装唯一直接依赖 `@assistant-ui/react`，不引入 AI SDK、Cloud、MCP、Lucide 或 assistant-ui CLI 生成源码。
+- [ ] 新增 Application-owned Assistant ExternalStoreRuntime 壳层，使用不可变空消息、固定非运行态与严格发送禁用。
+- [ ] 新增窄 AssistantRuntimeProvider，不建立 Zustand、React message store、Service、Tauri 或后端执行路径。
+- [ ] 新增 AssistantPanel 与紧凑 AssistantThread，使用 assistant-ui headless primitives 组合项目现有 shadcn 组件。
+- [ ] 使用项目 ScrollArea、Empty、Button 与 react-icons/vsc 构建空态和可编辑但不可发送的 composer。
+- [ ] 增加 Assistant 壳层中英文文案与可访问标签，不引入 backend prose、toast、浏览器对话框或第二 UI 库。
+- [ ] 将 `view:assistant` 与 `Assistant` component 纳入 Workbench closed metadata，并保持 Details 为唯一 persistent view。
+- [ ] 为 Assistant 设置 right-edge deterministic home，但不建立固定 placement、Activity membership 或布局镜像。
+- [ ] 增加包含 Details 的整个 Dockview group 拖动保护，同时保留 Assistant 独立 tab 的普通移动与 split 能力。
+- [ ] 在新默认布局中固定 Details index 0、Assistant index 1，并保持 Project 为启动 active panel。
+- [ ] 实现 Assistant existing reveal 保留实际位置、missing recreate 原子回到 Details 后，以及显式 Reset 回归默认 home。
+- [ ] 保持 restore 缺失即关闭、project replacement 保留 Assistant、固定 Details group 拒绝批量 Close Group 的既有语义。
+- [ ] 将 Assistant tab 图标统一为既有 `react-icons/vsc` 的 `VscSparkle`，并保持普通 tab 的关闭/中键/右键行为。
+- [ ] 在 View 菜单增加由 root Dockview live projection 驱动的 Assistant checkbox 与 toggle action，不新增 visibility store。
+- [ ] 完成 Task 5 的 Dockview panel/tab/menu 注册并通过允许的 TypeScript 检查，未新增或运行测试。
+- [ ] 更新维护架构文档，纠正 Details lazy/session-only 旧描述并记录 Assistant、Diagnostics、restore/reset/project replacement 当前契约。
+- [ ] 将 `@assistant-ui/react` 纳入待执行 Strict Architecture 的 33 项 exact declaration 与 Application/View 精确 consumer policy。
+- [ ] 将 Assistant Application adapter、View composition、无前端 message authority 与 Dockview cutover 纳入 Frontend Application Boundaries 规范和计划。
+- [ ] 完成 Assistant UI Workbench Shell 无测试交付门禁，以新鲜 typecheck、production build、source audit 与 diff check 验证本切片。
+- [ ] 确认 assistant-ui 仅由批准的 Application/View 文件直接引用，未产生 LocalRuntime、Zustand conversation authority、Tauri 或临时 backend 路径。
+- [ ] 确认 root Dockview/Logs nested constructor 数量不变，Details 仍是唯一 fixed view，Assistant 保持普通可移动持久化 panel。
+- [ ] 在 `docs/superpowers/plans` 新增架构解耦进度总览，按 review-clean、已集成、进行中和待实现区分 strict policy、Backend、Project–Graph、Execution、Presentation 与 Frontend Application 工作。
+- [ ] 记录 `architecture-final`、各隔离 worktree、最新验证证据、当前 Backend Task 5b 阻塞及剩余跨计划依赖顺序，明确不把未提交草稿或兼容路径纳入集成。
+- [ ] 按内容分层提交本次 Assistant、执行输出、编辑器交互、架构文档与 TODO 改动，并推送到 `origin/shadcn`。
+- [ ] 为运行时输出补充结构化 `sourcePort`，同步 Rust/TypeScript execution wire、投影与契约测试。
+- [ ] 统一 Output、Diagnostics、Pin result search 与 Node detail 的节点/Pin 语义化显示，并新增画布节点选择器交互。
+- [ ] 接入禁用发送的 Assistant UI Workbench Shell，注册 root Dockview、布局持久化、View 菜单及中英文文案。
+- [ ] 新增仓库级 `.gitattributes`，统一文本文件使用 LF 换行。
+- [ ] 通过 Git 属性与 `git diff --check` 验证换行策略。
+- [ ] 更新 `AGENTS.md`，明确 Rust 后端测试的编译与运行成本较高，避免迭代期间频繁运行。
+- [ ] 保持 Rust 聚焦测试与完整测试套件之间的执行边界，仅在必要场景运行 broader/full suite。
+- [ ] 更新 `AGENTS.md`，统一后端 Rust 错误使用 `thiserror` 定义类型化错误。
+- [ ] 明确禁止以裸 `String` 传播后端错误，并在 IPC 边界统一映射为 `CommandError`。
+- [ ] 完成现有 Plot、Worksheet、Info 与 Bayes 绘图链路审计，确认 D3 继续作为唯一绘图库，重构重点收敛到模块边界、数据契约、公共绘图能力和增量渲染。
+- [ ] 新增 Plot 模块十二任务实施计划，固定 Rust DTO、source adapter、数据空间 `ChartModel`、typed registry 与 shared renderer 的单向数据流。
+- [ ] 规划 Rust 生成的 Plot golden contract、单一 Result plot-kind guard、nullable correlation 语义和 canonical camelCase wire，防止 Rust 与 TypeScript 字段漂移。
+- [ ] 规划 `shared/charts/core`、`cartesian`、`statistical` 三层目录及 theme、margin、ResizeObserver、tooltip、domain 和稳定 D3 layer 的公共契约。
+- [ ] 规划 Scatter、Line、Histogram、ECDF、KDE、MultiLine、Correlation、Correlogram、DID、VAR stability 与 PredictiveInterval 的渐进迁移和旧路径原子删除。
+- [ ] 明确本轮不引入 ECharts、Vega-Lite、Canvas 或万能 Chart grammar，并将 Binary margins、Bayes 诊断 authority、Worksheet backend preview DTO 与 datetime 规范化保留为独立后续计划。
+
 
 ## 2026.08.26
 
+- [ ] 移除 `compiler.input.unbound` 诊断文案中的内部端口地址，仅保留结构化端口位置供界面显示。
+- [ ] 为未绑定输入诊断补充回归覆盖，验证消息不携带 UUID 且 `Node · Pin` 定位仍然保留。
+- [ ] 为程序输出事件补充结构化 `sourcePort`，并在 Output 中显示节点标题与端口标题。
+- [ ] 让 Diagnostics、Detail 诊断位置和 Pin result 搜索统一使用 `node title · pin title`，保留 opaque ID 仅用于内部定位。
+- [ ] 更新执行 wire、前端回归测试与中英文未知来源文案，并完成 TypeScript、Rust 聚焦验证。
+- [ ] 收口 Project–Graph 与 Presentation Task 2A/2B 的跨计划编译顺序，保证 editor projection 先有唯一 Application owner、catalog schema mapper 后置且不产生第二条生产路径。
+- [ ] 将 graph mutation/open 的 session currentness 固定为提交前 gate 与 Project authority 线性化，补齐 revision/lifecycle/operation closed errors 及 Commands-owned wire mappers。
+- [ ] 强制 RecoveryRequired 的 `{ recoveryRequired: true }` 安全 detail、六项 EditorProjectionError 穷举映射与本地架构计划文档的结构/链接校验。
+- [ ] 修复 graph Dockview tab 失活后重新激活时 wheel scale listener 不恢复的问题，让监听生命周期跟随 canvas 的 interactive 状态。
+- [ ] 增加 graph wheel 缩放 active → inactive → active 回归测试，验证失活不响应且重新激活后恢复缩放。
+- [ ] 定位 ProjectPicker「移动到回收站」前端调用链，确认确认操作进入 `delete_registered_project_files`，未误调用普通重命名路径。
+- [ ] 定位 Rust 删除事务仅将项目根目录改名为 `.yssbi-deleting-<operationId>`，当前未调用系统回收站 API。
+- [ ] 记录 `CleanupPending` 回执没有后续 tombstone 清理实现，导致项目列表移除但项目文件仍留在原父目录。
+- [ ] 分析 editor 顶部菜单栏：当前由自定义 `WindowMenuBar` 标题栏容器承载菜单布局。
+- [ ] 确认 editor 顶部各菜单项使用 shadcn/Radix `DropdownMenu` 与 `Button` 组合，而非 shadcn `Menubar` 组件。
+- [ ] 确认仓库没有 `src/components/ui/menubar.*` 封装，也没有 `MenubarTrigger`、`MenubarContent` 等 shadcn Menubar API 的源码引用。
+- [ ] 使用 shadcn CLI 安装官方 Menubar，并将 editor 顶部七个独立 DropdownMenu 替换为统一的语义化 Menubar。
+- [ ] 保留 shadcn Menubar 默认样式与视觉尺寸，将生成的图标映射到项目既有 `react-icons/vsc`，避免引入第二套图标依赖。
+- [ ] 在 `AGENTS.md` 中补充优先组合 shadcn/ui 组件及复用既有图标库的规则，并增加 editor Menubar 语义回归测试。
+- [ ] 移除 editor 顶部 shadcn Menubar 根容器的外部边框，保留默认触发器、菜单项和键盘交互。
+- [ ] 保留窗口标题栏自身的底部分隔线，不将 Menubar 边框调整扩散到 WindowChrome。
+- [ ] 分析 root Dockview edge 收缩时仍保留 tab 激活样式的问题，确认 `collapsed` 与 `activePanel` 是独立语义。
+- [ ] 确认 left/right/bottom edge 收缩时应清空 tab 的展示激活态，同时保留 Dockview 内部 active panel 作为展开后的恢复目标。
+- [ ] 规划基于 root Dockview 实时 edge state 派生 visual active，避免在 Zustand 建立布局镜像，并区分 Logs nested Dockview 的内部激活态。
+- [ ] 实现 root Dockview edge 收缩态 tab 的无激活视觉投影，保留 Dockview 内部 active panel 与布局持久化契约。
+- [ ] 让自定义 Workbench tab 订阅 Dockview edge 收缩事件，收缩时标记 tab 为未选择，点击 tab 后由 Dockview 激活并展开 edge。
+- [ ] 增加 bottom edge Output/Diagnostics 的收缩、选择和展开回归测试，并保持中心 editor 与 Logs nested Dockview 不受影响。
+- [ ] 将项目删除事务改为调用系统回收站，成功后清理活动项目状态并提交注册表删除，不再在原目录旁创建 tombstone。
+- [ ] 收窄删除生命周期回执：正常删除返回 `committed`，注册表失败仅返回 `registryPending`，恢复信息不再携带本地 tombstone 路径。
+- [ ] 删除 tombstone/`CleanupPending` 相关死代码、UI 文案与测试，保留路径身份校验、生命周期排他及注册表失败恢复覆盖。
+- [ ] 新增系统回收站成功与失败回归测试，验证成功无本地残留、失败时项目目录和注册表记录保持可重试。
+- [ ] 复查六组架构设计与实施计划，统一加入 0.x replace-and-delete 约束，禁止迁移 adapter、bridge、forwarder、双路由、回退和旧新 contract 转换。
+- [ ] 删除 Project 临时 tabular snapshot、Legacy Execution port、旧 Graph facade 迁移及 Frontend 新 coordinator 调用旧 writer 等设计，改为最终 owner 离线构建与单点原子切换。
+- [ ] 将 Julia、ScientificBackend、Execution value/plan/resource ports 直接放入最终路径，旧 `node_system`/Project production route 在切换前不消费最终接口。
+- [ ] 对齐 Project–Graph、Execution、Presentation 与 Frontend 的 Task 8 切换时序，要求同一 compiling checkpoint 切换全部 caller 并删除旧 source、tests 与 debt。
+- [ ] 明确独立 canonical owner relocation 也必须一次切换全部 consumers 并删除旧声明，禁止借独立迁移建立旧 workflow 到 staged replacement 的转接层。
+- [ ] 删除节点目录与编辑器投影中的节点级短 description 字段，保留 documentation 与参数级 description。
+- [ ] 同步 Rust NodeCatalogProtocol、LocalizedCatalog DTO、EditorProjection DTO 及 React 目录/画布投影，避免节点详情再次读取短描述。
+- [ ] 更新 Rust 生成的 node-system golden fixtures 与前端契约测试，验证节点目录和投影 wire 不再携带节点级 description。
+- [ ] 复现左侧 Activity tab 二次点击无法收缩的问题，确认自定义 click handler 在展开态阻止了 Dockview 原生事件。
+- [ ] 让 Activity tab 仅在 edge 已收缩时拦截点击并手动激活/展开，展开态交还 Dockview 原生收缩切换逻辑。
+- [ ] 增加左侧 Activity edge 二次点击收缩回归测试，并通过 Dockview 相关测试、TypeScript 检查与前端构建。
+- [ ] 分析 root bottom tab 激活态额外 margin 导致 tab 几何尺寸变化和相邻位置移动的问题。
+- [ ] 将 bottom edge tab 的 margin/radius 固定到所有 tab，限制激活态只改变背景、文字颜色和语义边框。
+- [ ] 增加 bottom tab 激活切换前后 computed margin 稳定性测试，并完成相关测试、构建和差异校验。
+- [ ] 使用标准库脚本批量清理节点文档中的 Inputs/Outputs/Pin/Parameters 等接口说明章节。
+- [ ] 为 catalog 文档清理脚本增加中英文标题识别、只读检查和显式写入模式。
+- [ ] 保留节点文档的公式、模型、用法等正文，并验证批量清理不会产生额外尾部空行。
+- [ ] 将共享 ContextMenu 的 item、label 与 separator 间距恢复为默认值，修复 sidebar 右键菜单分割线后的紧凑间距。
+- [ ] 检查 ActionMenu、sidebar 与 ContextMenu 测试，确认仅保留行为测试，不新增或保留样式断言。
+- [ ] 通过 ActionMenu 聚焦行为测试、TypeScript 检查和差异校验。
 - [ ] 将根 Dockview 的固定 view tab 标题接入现有 activityBar/panel 翻译 key，覆盖底部、右侧和 Activity tab。
 - [ ] 保持编辑器资源名、结果标题和 Logs workspace 内部 domain tab 的既有动态标题逻辑，不把本地化文本写入布局持久化数据。
 - [ ] 增加固定 workbench view 标题的统一回归测试，并通过相关测试、TypeScript 检查和 i18n key 校验。
@@ -45,10 +257,32 @@ src/app/appConfig/appLinks.ts
 - [ ] 增加 edge tab 从收缩 group 移回中央 group 后清除视觉收缩标记的回归测试。
 - [ ] 修复 Logs nested Dockview 自定义 tab 未订阅 `onDidTitleChange` 导致 i18n 标题不刷新的问题，并覆盖 title event 回归测试。
 - [ ] 复查 Dockview 的 title、group、visibility、collapse 和 DOM 监听生命周期，未发现其它同类生产 bug。
-
+- [ ] 定位 Node detail 的 Pin Interface 在已连接 pin 上触发 `getSnapshot` 未缓存和最大更新深度错误的原因。
+- [ ] 让 NodePinSpecRow 的 Zustand selector 只返回稳定的连接实体引用，再在组件内派生 pin view 参数。
+- [ ] 增加已连接 pin 的 React 外部 store snapshot 回归测试，并完成类型检查与相关前端测试。
+- [ ] 将 Detail 中原有的 Pin Interface 外层 collapsible 与 Inputs/Outputs tabs 替换为两个独立的 Inputs、Outputs collapsible。
+- [ ] 保留输入输出数量和空状态提示，默认让两个类别分别收起，移除不再使用的 Tabs 状态与旧翻译键。
+- [ ] 增加 Inputs/Outputs 独立展开回归测试，并完成 Detail 相关测试、类型检查和差异校验。
 - [ ] 分析 Output/Diagnostics 顶部当前图路径仅为展示信息，确认可移除而不改变图级数据语义。
 - [ ] 将 Output/Diagnostics 顶部栏统一为 Logs 风格的紧凑横向 header，保留标题、清理操作和诊断数量。
 - [ ] 增加 Output/Diagnostics header 回归测试，验证隐藏图路径且保留 focused graph 的输出与诊断行为。
+- [ ] 将 Node detail 的 Inputs/Outputs pin 内容改为统一的 name/content 两列布局，并移除旧 Pin 行的状态徽标、历史菜单和 Tooltip 逻辑。
+- [ ] 为 Inputs 提供兼容上游输出选择，为 Outputs 提供可增删的输入目标下拉槽，并将选择/删除接入现有 graph mutation 命令。
+- [ ] 增加 Detail pin 连接选项、输出多连接槽和精确断开连接的回归测试，完成类型检查与相关前端验证。
+- [ ] 移除 Node detail Inputs/Outputs collapsible 标题右侧的数量展示及其派生逻辑，保持折叠与 pin 连接交互不变。
+- [ ] 增加标题不显示数量的回归断言，并完成相关前端验证与差异检查。
+- [ ] 检查 Node detail 的 Capabilities 与 Diagnostics collapsible 标题，确认存在硬编码英文文案。
+- [ ] 为 Capabilities 与 Diagnostics collapsible 标题接入中英文 i18n 翻译键，不改变 capability 数据和交互逻辑。
+- [ ] 增加 NodeDetailPanel 标题翻译回归测试，并完成 Detail focused tests、类型检查和差异校验。
+- [ ] 清理 Node detail 测试中的旧 Tabs/标题实现细节断言及重复的输出槽操作覆盖。
+- [ ] 保留 Inputs/Outputs 兼容选择、输出槽增删、精确断开和输入清空的最小回归覆盖。
+- [ ] 在 graph canvas 节点右键菜单中增加临时“选择节点…”入口，保留原生右键菜单的键盘导航行为。
+- [ ] 为节点选择器实现当前节点/首节点初始化、上下箭头切换和 Enter 确认选择，并完成编辑器回归验证。
+- [ ] 修复 graph canvas 节点选择列表 selector 创建新对象数组导致 React 外部 store snapshot 不稳定的问题。
+- [ ] 为节点选择选项 projection 增加稳定引用回归测试，并完成 React 19 更新深度错误验证。
+- [ ] 复核 `compiler.input.unbound` 的结构化端口位置与文案参数，保留 `Node · Pin` 定位能力并恢复 `{port}` 上下文。
+- [ ] 恢复未绑定输入分析阶段传入精确端口地址，同步编译器诊断定义与 lowering 回归断言。
+- [ ] 完成 compiler diagnostics 与 lowering 聚焦 Rust 测试验证。
 
 ## 2026.08.25
 
@@ -142,9 +376,6 @@ node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_r
 - [ ] 优点：window_* 是「当时那一刻」的不可变快照，重跑不会误改已打开窗口里的内容。代价：不关窗时会累积（For 循环多次 View 会留下多个 window_*），直到关窗或 clear_all。文档里提过 Window LRU/TTL，尚未实现。
 - [ ] **On Error / 错误传播（待设计）**：MaxIterations + loop_counters + 执行前清空已落地。错误模型仍停在「节点失败 → 记日志 + 发事件 + 整图 has_error」，没有可连线的错误传播；要做 On Error 需先定：错误是否中断下游、是否进专用 exec pin、与 Loop/Sequence 如何交互等，再扩 `ExecutionEffect` 和 executor。
 - [ ] 节点样式问题
-- [ ] **CI 扩展：`cargo clippy` + integration tests 矩阵**：在 `cargo test` 之外增加 `cargo clippy --all-targets`（先 `yss-sci` 修 error 再全 workspace）；与前端 `typecheck` 并列，形成全栈静态门禁。
-- [ ] **CI 门禁 `tsc --noEmit`**：`package.json` 增加 `typecheck` script，CI 与 pre-push 跑 `pnpm typecheck`（`noUnusedLocals` 已开，需防止类型债再次累积）。
-- [ ] **CI 门禁：`typecheck` + vitest + `cargo test` 并列**：`tsc` 无法捕获仅运行时才暴露的 API 形参错误（如 `batchCreateNodes` 三参数旧调用）；`package.json` scripts 与 CI workflow 至少跑 `tsc --noEmit`、核心 vitest 套件、Rust integration tests。
 - [ ] **OLS 取数「逐边」vs「批量」语义文档化**：当前执行器按边 `emit_data_pull` → 求值 → `emit_data_flow`；确认是否故意取代旧 NodeStart 批量高亮，并在 `TODO`/执行器注释中写清 UX 预期，避免后续误改回批量形式。
 - [ ] uistyle 可能需要根据节点类型来进行重构
 - [ ] 在 editor group 多个的情况下，刷新后回到了单个 watermake 界面，但是同时会出现警告：当前编辑器图未能加载，请重新点击标签页或画布
@@ -153,7 +384,6 @@ node_modules/.pnpm/@glideapps+glide-data-grid@6.0.3_lodash@4.18.1_marked@4.3.0_r
 - [ ] 剩余唯一标记是 Rust 执行上下文中的 get_bound_type TODO。它依赖尚未提供类型绑定状态的 GraphRuntime，当前直接返回 None 是明确的未实现能力，不适合通过猜测补丁，否则可能引入错误类型推断。
 - [ ] **ACF/PACF 命令与 Plot 节点 DTO 对齐**：`plot/correlogram.rs` 输出 `CorrelogramDatum { lag, value, q_stat, p_value }`；`command_sci::compute_acf_pacf` + InfoView `ACFPACFBlock` 仅 `Vec<f64>` + `n`——复用 `cumulative_ljung_box`，扩展 `AcfPacfResponse` 或共用 `CorrelogramPlotData`，避免 Summary 图 tooltip 缺 Q/p-value（前端 `CorrelogramChart` 已按可选字段防御）。
 - [ ] **Julia 第二个迁移目标选择**：ACF/PACF 已经有 `src/sci` API、Julia worker 和 Rust/Julia golden fixture 测试；下一步不要直接上 VEC/RE MLE/DID。优先在「serial tests / Ljung-Box / DW」和「描述性统计」里选一个做第二个 PoC：输入输出简单、能复用 Arrow IPC、容易与 golden result 对齐。简化 OLS 可以排第三步，先只做 `y: Float64` + `x: Float64 matrix` + `hasIntercept`，暂不碰公式、分类变量、robust/cluster/HAC。
-
 - [ ] bayes 中的有很多的 errors.push(error("PREDICTOR_REQUIRED", "预测表达式尚未解析或绑定。", "boundPredictor")); 后期都是要修复的
 - [ ] bayes 中的 ast 感觉可以和 src 下的 ast 放置在一起，在这里好像有 latex -> json ast，json -> julia ast，normal formula -> json ast 等等 ast
 - [ ] bayes 长任务的通知最好是作为复用模块
@@ -171,6 +401,19 @@ Menubar / Watermark 仍分「新建 Event / 新建 Function」两项（入口文
 
 # TODOLIST
 
+zed 的 .rules 文件需要学习，同时还有根目录中的内容，有必要学习一下
+
+"lint:rs": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings", 这里的 -D warnings 后续肯定需要处理掉
+
+当前 `pnpm run ci` 尚未全绿，原因均为既有基线：
+
+1. Oxfmt 检测到 1592 个文件尚未建立格式化基线。本次没有运行 `pnpm format`，避免产生全仓批量格式化改动。
+2. 严格 Clippy 在 `yss-sci` 中报告 84 个 library、86 个 library-test 既有 `-D warnings` 问题。
+3. 主工作区前端测试为 1830 通过、1 失败；失败测试
+   `src/features/core/dockview/workbenchDockviewDefaults.test.ts:115` 的期望值缺少现有的 `assistant: "right"`。
+4. 默认 Vitest 仍会扫描嵌套的 `.worktrees/`；本次完整主工作区验证通过 CLI 临时排除了该目录。
+
+
 绘图组件库需要重构
 
 xt align 进行对齐，在这里是不是可以于 ts align 可以共用呢
@@ -186,7 +429,6 @@ polars 的 csv 有意思，with_try_parse_dates 可以检索日期，没有检�
 gls 的 data input pin 中我认为可以设置为 matrix，这就意味着需要在值系统中添加并定义 matrix 类型，目前是 dataframe
 
 wls 和 gls 的 predict 节点有问题，目前 wls 报错：Node 6b7c0693-8d92-4c76-a253-6d49333221ab failed: Predict: Model input is not connected or invalid
-
 
 HAC 已实现（Bartlett、Parzen、Quadratic Spectral kernel，lag 参数）；hac-panel、hac-groupsum 尚未实现。
 
@@ -240,8 +482,6 @@ ols_summary 打开 ols_result_viewer 并返回 ols_result, 这里面存储了一
 
 ols model 可以引申出一个新的节点 predict，这个节点可以使用 endog, exog 两个玩意获得拟合值，然后真实值 - 拟合值可以得到残差。这是基本操作不应该删除
 
-deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感觉好卡
-
 下面这玩意在软件退出时保存了两次
 
 [12:43:12.734][BE][INFO] [APP] Settings loaded successfully via backend
@@ -278,1495 +518,6 @@ deserializeGraph 这个玩意是干嘛的，好多地方都没必要用他，感
 - 灵活，但第一阶段复杂度更高。
 
 请选择 **A、B 或 C**。我推荐 **A**。
-
-
-## 项目分析
-
-我看了你这个仓库当前的 `shadcn` 分支，包括 README、前后端目录、Cargo 依赖、services、features、commands、execution、TODO 和 CI。整体上我认为 **方向是对的，而且已经明显超过普通 Tauri CRUD 项目**：你实际上在做一个「节点式统计分析 IDE / 桌面 BI 工作台」。README 里已经覆盖数据管理、节点工作流、计量经济学、时间序列、因果推断和可视化。([GitHub][1])
-
-但现在确实到了一个很关键的阶段：**接下来最应该做的是收敛架构，而不是继续堆功能。**
-
-我会把优化优先级排成下面这样。
-
-### P0：先把后端真正拆成“宿主层”和“计算层”
-
-你现在已经有：
-
-```text
-src-tauri/
-├── src/
-│   ├── application
-│   ├── commands
-│   ├── database
-│   ├── execution
-│   ├── graph
-│   ├── node_system
-│   ├── project
-│   ├── sci
-│   └── ...
-│
-└── sci/
-    └── 独立 yss-sci crate
-```
-
-这说明你已经开始做正确的拆分。([GitHub][2])
-
-但是主 `yssbi` crate 依然直接依赖：
-
-```text
-ndarray
-polars
-polars-arrow
-polars-dtype
-statrs
-sqlx
-duckdb
-calamine
-rand
-...
-```
-
-而 `yss-sci` 又已经存在。([GitHub][3])
-
-我建议继续收敛成：
-
-```text
-Tauri / Host
-        │
-        ▼
-Application
-        │
-        ▼
-Execution Engine
-        │
-        ├───────────────┐
-        ▼               ▼
-Data Engine         Compute Engine
-Polars/DuckDB       Rust / Julia
-                        │
-                        ▼
-                     yss-sci
-```
-
-也就是说：
-
-```text
-yssbi
-负责：
-Tauri
-窗口
-IPC
-项目
-Graph
-Executor
-数据生命周期
-任务调度
-
-yss-sci
-负责：
-OLS
-GLS
-WLS
-IV
-Panel
-VAR
-VECM
-DID
-Hypothesis Test
-统计量
-线性代数
-```
-
-尤其应该避免：
-
-```rust
-commands -> 统计实现
-```
-
-而变成：
-
-```text
-command
-   ↓
-application/use-case
-   ↓
-execution
-   ↓
-compute backend
-   ↓
-yss-sci / Julia
-```
-
-你自己的 TODO 已经提到“Rust 保留宿主、数据层和必要 fallback；科学计算逐步迁移 Julia”，这个总体思想是合理的。([GitHub][4])
-
----
-
-## P0：把 Execution Engine 做成整个 YssBI 的核心
-
-我认为 **YssBI 最值钱的代码将来可能不是 OLS，也不是 UI，而是 execution engine。**
-
-README 已经显示你的核心交互是：
-
-```text
-Node
- ↓
-Pin
- ↓
-Connection
- ↓
-Graph
- ↓
-Execution
-```
-
-并且你已经有独立：
-
-```text
-execution/
-graph/
-node_system/
-```
-
-目录。([GitHub][2])
-
-建议进一步明确一个非常重要的边界：
-
-```text
-Graph ≠ Execution
-```
-
-Graph 只描述：
-
-```text
-节点是什么
-连接是什么
-参数是什么
-依赖是什么
-```
-
-Execution 才负责：
-
-```text
-拓扑排序
-dependency resolution
-dirty propagation
-cache
-task scheduling
-cancellation
-progress
-error propagation
-parallel execution
-```
-
-最终可以形成：
-
-```rust
-ExecutionPlan
-    ↓
-TaskGraph
-    ↓
-Scheduler
-    ↓
-Executor
-    ↓
-Backend
-```
-
-类似：
-
-```rust
-trait ExecutionBackend {
-    async fn execute(
-        &self,
-        task: &ExecutionTask,
-        ctx: &ExecutionContext,
-    ) -> Result<TaskOutput, ExecutionError>;
-}
-```
-
-backend 可以有：
-
-```text
-PolarsBackend
-DuckDbBackend
-RustSciBackend
-JuliaBackend
-AIBackend
-```
-
-这样以后加 Python、R、GPU 都不会重新设计节点系统。
-
----
-
-# P0：解决“计算导致 UI 卡死”
-
-你 TODO 里自己已经发现了：
-
-> 按下按钮涉及大量计算的时候，页面会卡死。([GitHub][5])
-
-这个千万不要简单理解成：
-
-> `spawn 一个 thread`
-
-真正应该做的是 **Task System**。
-
-例如：
-
-```text
-ExecutionTask
-├── id
-├── node_id
-├── state
-│   ├── queued
-│   ├── running
-│   ├── completed
-│   ├── failed
-│   └── cancelled
-├── progress
-├── cancellation_token
-└── result
-```
-
-前端：
-
-```text
-Run Node
-   ↓
-invoke start_execution
-   ↓
-立即返回 task_id
-   ↓
-Rust 后台执行
-   ↓
-event:
-execution:started
-execution:progress
-execution:completed
-execution:failed
-```
-
-而不是：
-
-```text
-React
- ↓
-invoke()
- ↓
-等 20 秒
- ↓
-Result
-```
-
-这对：
-
-```text
-VAR
-VECM
-Bayes
-大数据聚合
-数据库 import
-未来 AI
-```
-
-全部有用。
-
-以后还可以自然支持：
-
-```text
-Cancel
-Retry
-Pause
-Parallel
-Queue
-Execution history
-```
-
----
-
-# P1：你现在的前端目录有一点“重复架构”
-
-目前前端同时存在：
-
-```text
-src/
-├── app
-├── components
-├── features
-├── lib
-├── services
-├── shared
-├── utils
-├── views
-```
-
-而 `features` 内部又已经定义：
-
-```text
-core
-domain
-application
-```
-
-并且明确规定依赖关系。([GitHub][4])
-
-这个思想本身很好。
-
-问题是：
-
-```text
-services/
-features/
-views/
-components/
-shared/
-lib/
-utils/
-```
-
-长期非常容易产生归属不明确：
-
-> “这个函数到底放 services、shared、utils 还是 feature？”
-
-你现在 `services` 已经包含：
-
-```text
-bayes
-clipboard
-database
-graph
-ipc
-julia
-log
-nodeSystem
-project
-result
-stats
-variable
-window
-worksheet
-```
-
-([GitHub][6])
-
-这里已经有一点明显的“横向 service 大目录”趋势。
-
-我更推荐：
-
-```text
-src/
-├── app/
-│
-├── features/
-│   ├── graph/
-│   ├── project/
-│   ├── dataframe/
-│   ├── statistics/
-│   ├── worksheet/
-│   ├── visualization/
-│   └── workbench/
-│
-├── platform/
-│   ├── tauri/
-│   ├── ipc/
-│   └── window/
-│
-└── shared/
-    ├── ui/
-    ├── hooks/
-    ├── types/
-    └── utils/
-```
-
-然后例如：
-
-```text
-features/project
-├── api
-├── model
-├── store
-├── ui
-└── lib
-```
-
-这样：
-
-```text
-ProjectService
-ProjectStore
-ProjectView
-ProjectDTO
-```
-
-全部围绕 `project` 放置。
-
-这比现在：
-
-```text
-services/project
-features/...
-views/...
-```
-
-更适合一个越来越大的应用。
-
----
-
-# P1：你现在正在做的 AppError 非常值得完成
-
-TODO 里这一条，我非常赞同：
-
-> 绝大多数 `#[tauri::command]` 仍然是 `Result<_, String>`，准备统一成结构化 `AppError`。([GitHub][5])
-
-应该尽快做完。
-
-不要：
-
-```rust
-Result<T, String>
-```
-
-而应该：
-
-```rust
-struct AppError {
-    code: ErrorCode,
-    message: String,
-    details: Option<Value>,
-}
-```
-
-例如：
-
-```json
-{
-  "code": "DATAFRAME_COLUMN_NOT_FOUND",
-  "message": "Column `age` does not exist",
-  "details": {
-    "column": "age"
-  }
-}
-```
-
-前端：
-
-```ts
-switch (error.code) {
-  case "PROJECT_NOT_FOUND":
-  case "NODE_EXECUTION_FAILED":
-  case "DATABASE_CONNECTION_FAILED":
-}
-```
-
-这件事情收益非常高。
-
-因为以后 AI Agent 调用 YssBI 工具时，也可以直接理解：
-
-```text
-code
-message
-details
-```
-
-而不是解析字符串。
-
----
-
-# P1：DTO 自动生成，我建议直接做
-
-TODO 里你也已经意识到了：
-
-> Rust DTO 和 TypeScript 手写 types.ts 容易漂移，考虑 typeshare / ts-rs。([GitHub][5])
-
-我的答案是：
-
-**做。**
-
-你这个项目非常适合。
-
-因为数据类型本身已经很多：
-
-```text
-GraphInstanceDTO
-DatabaseDecl
-DatabaseEngine
-DataType
-Pin
-Node
-Variable
-ExecutionResult
-RegressionResult
-```
-
-手动：
-
-```text
-Rust struct
-+
-TypeScript interface
-```
-
-迟早出错。
-
-可以变成：
-
-```rust
-#[derive(Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct RegressionResult {
-    ...
-}
-```
-
-然后：
-
-```text
-cargo xtask bindings
-```
-
-自动产生：
-
-```text
-src/generated/api/
-```
-
-甚至再进一步：
-
-```text
-Rust Command
-       ↓
-generated TS binding
-       ↓
-typed invoke()
-```
-
-最终让：
-
-```ts
-invoke<any>()
-```
-
-基本消失。
-
----
-
-# P1：数据库层需要选一个明确主战略
-
-你现在同时有：
-
-```text
-Polars
-DuckDB
-SQLx
-Arrow
-Excel
-```
-
-Cargo 已经明确体现出来。([GitHub][3])
-
-这不是坏事。
-
-但必须定义谁干什么。
-
-我推荐非常明确地规定：
-
-```text
-DuckDB
-= 项目内持久化 + SQL analytics
-
-Polars
-= DataFrame / LazyFrame transformation
-
-Arrow
-= 数据交换格式
-
-SQLx
-= 外部数据库连接
-
-yss-sci / Julia
-= Statistics
-```
-
-不要让：
-
-```text
-DuckDB
-Polars
-Julia DataFrame
-Rust Vec
-JSON
-```
-
-互相随意转换。
-
-理想数据通道应该是：
-
-```text
-External DB
-    ↓
-Arrow
-    ↓
-Polars / DuckDB
-    ↓
-Arrow
-    ↓
-Statistics
-```
-
-也就是把 **Arrow 当成 YssBI 的数据 ABI**。
-
-这会让你以后接：
-
-```text
-Julia
-Python
-GPU
-Remote Executor
-```
-
-都简单很多。
-
----
-
-# P1：不要把 DataFrame 本体放 Zustand
-
-你已经使用 Zustand。package.json 里目前是 Zustand 5。([GitHub][7])
-
-Zustand 很适合：
-
-```text
-activeProjectId
-selectedNodeId
-openedTabs
-layout
-theme
-selection
-panel state
-```
-
-但是不应该存：
-
-```text
-1,000,000 rows DataFrame
-```
-
-或者：
-
-```text
-大型 RegressionResult 原始数据
-```
-
-应该遵循：
-
-```text
-Frontend = references
-Backend = actual data
-```
-
-例如：
-
-```ts
-{
-  dataframeId: "df_123",
-  rowCount: 12_000_000,
-  schema: [...]
-}
-```
-
-真正的数据：
-
-```text
-Rust / DuckDB / Polars
-```
-
-前端 DataGrid 请求：
-
-```text
-rows 1000..1100
-```
-
-你 README 已经明确说 DataView 面向大数据量优化并用了虚拟化，这个方向是正确的。([GitHub][1])
-
----
-
-# P1：测试现在有点过度“Architecture Contract 化”
-
-我注意到已经存在：
-
-```text
-architecture.test.ts
-observabilityArchitectureContract.test.ts
-userFeedbackArchitectureContract.test.ts
-```
-
-同时 Rust commands 目录里面还有：
-
-```text
-command_*_tests.rs
-command_blueprint_graph_phase1_tests.rs
-command_node_system_reroute_tests.rs
-...
-```
-
-([GitHub][8])
-
-这里我建议稍微控制。
-
-特别是 AI 辅助开发很容易生成：
-
-```text
-ArchitectureContractTest
-RegressionContractTest
-ModuleBoundaryTest
-...
-```
-
-最后导致：
-
-> 改文件路径 → 一堆测试挂了
-
-而不是：
-
-> 行为错了 → 测试挂了
-
-我建议测试比例更接近：
-
-```text
-60% domain / calculation tests
-25% integration tests
-10% regression tests
-5% architecture tests
-```
-
-对于统计软件尤其应该重视：
-
-```text
-Golden Tests
-```
-
-例如：
-
-```text
-OLS:
-YssBI
-vs
-Stata
-vs
-R
-```
-
-验证：
-
-```text
-coef
-std error
-t
-p
-R²
-F
-CI
-```
-
-而不是大量测试：
-
-```text
-某文件必须 import 某路径
-```
-
-你已经计划 Rust/Julia golden fixture，这其实是非常好的方向。([GitHub][4])
-
----
-
-# P1：CI 需要比现在再强一点
-
-当前 `.github/workflows` 里只有：
-
-```text
-publish.yml
-```
-
-([GitHub][9])
-
-而 package.json 已经有很完整的：
-
-```text
-verify
-verify:frontend
-verify:rust
-verify:full
-```
-
-([GitHub][7])
-
-所以非常适合增加：
-
-```text
-ci.yml
-```
-
-PR 至少跑：
-
-```text
-pnpm install --frozen-lockfile
-pnpm typecheck
-pnpm test
-
-cargo fmt --check
-cargo check
-cargo clippy
-cargo test -p yss-sci
-```
-
-其中建议加上的关键一项是：
-
-```text
-cargo clippy
-```
-
-目前你的 `verify:rust` 只有：
-
-```text
-fmt
-check
-```
-
-没有 clippy。([GitHub][7])
-
----
-
-# P2：Cargo 编译时间可以进一步优化
-
-你后端现在依赖很重：
-
-```text
-Polars
-DuckDB bundled
-SQLx
-ndarray
-faer
-statrs
-Tauri
-```
-
-([GitHub][3])
-
-这个组合在 Windows 上编译会非常重。
-
-而你现在：
-
-```text
-cargo test --jobs 1
-```
-
-已经说明你可能是在主动控制内存。([GitHub][7])
-
-建议逐渐拆 workspace：
-
-```text
-crates/
-├── yss-core
-├── yss-graph
-├── yss-execution
-├── yss-data
-├── yss-sci
-└── yss-app
-```
-
-不一定现在一次性拆完。
-
-第一步我只建议：
-
-```text
-yss-sci
-yss-data
-yss-execution
-```
-
-三个真正稳定的边界。
-
-好处是：
-
-```text
-改 React/Tauri
-不会重新编整个 science stack
-
-改 OLS
-不用影响 graph
-
-改数据库
-不用重新编统计模型
-```
-
----
-
-# P2：README 对外展示还有非常大的提升空间
-
-这个项目技术内容其实比 README 表现出来的成熟很多。
-
-目前 README 相对短，而且还有：
-
-```text
-数据采集？
-报告输出？
-```
-
-这样的问号。([GitHub][1])
-
-如果准备开放给别人用，我建议 README 首页直接变成：
-
-```text
-YssBI
-Visual Statistical Computing Environment
-
-[Screenshot]
-
-Why YssBI
-• Visual workflow
-• Econometrics
-• Large datasets
-• Native desktop
-• Reproducible analysis
-
-Architecture
-
-Node → Graph → Execution Engine → Data/Compute Backend
-
-Features
-
-Screenshots
-
-Roadmap
-
-Contributing
-```
-
-尤其是你已经有非常多：
-
-```text
-OLS
-WLS
-GLS
-2SLS
-LIML
-FE
-RE
-VAR
-VEC
-DID
-Diagnostics
-```
-
-([GitHub][1])
-
-对一个 2-star 项目来说，**代码能力明显比项目包装强。**
-
----
-
-# 我认为目前架构最大的潜在风险
-
-不是性能。
-
-也不是 React。
-
-也不是 Rust。
-
-而是：
-
-```text
-Node System
-Graph
-Execution
-Data
-Statistics
-Project
-UI State
-```
-
-逐渐互相知道太多东西。
-
-你需要强制变成：
-
-```text
-                  ┌──────────────┐
-                  │      UI      │
-                  └──────┬───────┘
-                         │
-                  Application
-                         │
-           ┌─────────────┴────────────┐
-           │                          │
-        Graph                     Project
-           │
-           ▼
-    Execution Engine
-           │
-      ┌────┼────┬─────────┐
-      ▼    ▼    ▼         ▼
-   Polars DuckDB RustSci Julia
-```
-
-其中非常关键：
-
-```text
-Graph 不知道 UI
-Graph 不知道 Tauri
-Sci 不知道 Graph
-Sci 不知道 Tauri
-DuckDB 不知道 React
-Execution 不知道具体 UI
-```
-
-这就是我认为 YssBI 接下来最值得守住的东西。
-
----
-
-## 如果让我给当前项目打一个“下一阶段优先级”
-
-| 优先级    | 工作                            | 收益    |
-| ------ | ----------------------------- | ----- |
-| **P0** | Execution Task System         | ★★★★★ |
-| **P0** | 锁定 Graph / Execution / Sci 边界 | ★★★★★ |
-| **P0** | 长计算后台化 + cancel/progress      | ★★★★★ |
-| **P1** | 统一 AppError                   | ★★★★★ |
-| **P1** | Rust → TS DTO 自动生成            | ★★★★★ |
-| **P1** | Arrow 作为数据交换 ABI              | ★★★★★ |
-| **P1** | 收敛前端 features/services 结构     | ★★★★☆ |
-| **P1** | Golden statistical tests      | ★★★★★ |
-| **P1** | CI + clippy                   | ★★★★☆ |
-| **P2** | workspace 进一步拆 crate          | ★★★☆☆ |
-| **P2** | README / docs 重构              | ★★★★☆ |
-| **P3** | 再增加新的统计模型                     | ★★☆☆☆ |
-
-所以我反而建议你 **暂时少加几个统计节点**。
-
-你现在已经有足够多功能证明项目方向了。([GitHub][1])
-
-接下来应该花一轮开发周期，把：
-
-**Graph → ExecutionPlan → Task → Backend → Result**
-
-这一条链做成整个 YssBI 的“脊柱”。
-
-如果这一层设计得好，之后无论你加 **LLM Agent、Julia、Python、GPU、远程计算、多核并行**，都只是增加新的 Backend，而不用重新推翻 YssBI。
-
-[1]: https://github.com/zhouyi207/YssBI "GitHub - zhouyi207/YssBI: YssBI 是一个基于 Blueprint 的桌面数据分析与可视化应用 · GitHub"
-[2]: https://github.com/zhouyi207/YssBI/tree/shadcn/src-tauri/src "YssBI/src-tauri/src at shadcn · zhouyi207/YssBI · GitHub"
-[3]: https://github.com/zhouyi207/YssBI/blob/shadcn/src-tauri/Cargo.toml "YssBI/src-tauri/Cargo.toml at shadcn · zhouyi207/YssBI · GitHub"
-[4]: https://github.com/zhouyi207/YssBI/tree/shadcn/src "YssBI/src at shadcn · zhouyi207/YssBI · GitHub"
-[5]: https://github.com/zhouyi207/YssBI/blob/shadcn/TODO.md "YssBI/TODO.md at shadcn · zhouyi207/YssBI · GitHub"
-[6]: https://github.com/zhouyi207/YssBI/tree/shadcn/src/services "YssBI/src/services at shadcn · zhouyi207/YssBI · GitHub"
-[7]: https://github.com/zhouyi207/YssBI/blob/shadcn/package.json "YssBI/package.json at shadcn · zhouyi207/YssBI · GitHub"
-[8]: https://github.com/zhouyi207/YssBI/tree/shadcn/src/features "YssBI/src/features at shadcn · zhouyi207/YssBI · GitHub"
-[9]: https://github.com/zhouyi207/YssBI/tree/shadcn/.github/workflows "YssBI/.github/workflows at shadcn · zhouyi207/YssBI · GitHub"
-
-
-这种代码是不是没有什么必要
-
-
-+pub fn canonical_port_title(key: &str) -> Box<str> {
-    132 +    let title = match key {
-    133 +        "value" => "Value",
-    134 +        "left" => "Left",
-    135 +        "right" => "Right",
-    136 +        "result" => "Result",
-    137 +        "input" => "Input",
-    138 +        "output" => "Output",
-    139 +        "enter" => "Enter",
-    140 +        "then" => "Then",
-    141 +        "true" => "True",
-    142 +        "false" => "False",
-    143 +        "condition" => "Condition",
-    144 +        "operands" => "Operands",
-    145 +        "source" => "Source",
-    146 +        "dataframe" => "DataFrame",
-    147 +        "series" => "Data Series",
-    148 +        "values" => "Values",
-    149 +        "samples" => "Samples",
-    150 +        "sample_count" => "Sample Count",
-    151 +        "maximum_lag" => "Maximum Lag",
-    152 +        "standard_deviation" => "Standard Deviation",
-    153 +        "lower_bound" => "Lower Bound",
-    154 +        "upper_bound" => "Upper Bound",
-    155 +        "then_source" => "Then Source",
-    156 +        "else_source" => "Else Source",
-    157 +        "initial_source" => "Initial Source",
-    158 +        "next_source" => "Next Source",
-    169 +    };
-    170 +    title.into()
-    171 +}
-
-## 2026.08.26
-
-- [ ] 在隔离 worktree 中为 Rust architecture audit 增加 Cargo production root discovery，覆盖 library、binary、example 与 custom-build。
-- [ ] 保留 workspace member crate alias、runtime/build/development dependency scope 与 target condition，禁止 workspace 依赖降级为 external fallback。
-- [ ] 为 metadata fixture 与真实 workspace discovery 增加 focused Rust regression tests，并保持现有 Project/Application 依赖审计通过。
-- [ ] 将 Rust production source traversal 拆出 raw dependency facts，覆盖 use、pub use、路径、宏、include、#[path]、inline 与 cfg 可达性。
-- [ ] 为 raw facts 记录 owning package、repository-relative source file、fully-qualified owner、Runtime/Build mode 与稳定 source location，并对动态 include fail-closed。
-- [ ] 增加 workspace-first canonical origin resolver，保留 language builtin、external declaration、workspace member re-export chain 与 development-only/unknown alias 的 typed failures。
-- [ ] 运行 architecture_tests 全组回归，确认新的 discovery/resolver 不改变既有 Project→Application 依赖审计。
-- [ ] 将 repository dependency resolver 补齐 lexical/private import 与 exported facade 的可见性区分，并忽略 lint-level attribute token 中的伪依赖。
-- [ ] 为 15 个 Rust production layers 建立 total/exclusive classifier、单向 layer matrix 与 exact file/owner/symbol capability 校验。
-- [ ] 建立 Cargo external declaration/use policy，逐 scope、target condition、source layer 与 package fail-closed 审计 production 依赖。
-- [ ] 用 rule、file、owner、dependency kind、canonical target 和 occurrence count 冻结双向 exact architecture debt，新增与过期条目均使门禁失败。
-- [ ] 按 Backend Adapter、Project–Graph、Execution Runtime、Presentation–Command 四个迁移 owner 拆分 debt manifests，避免单一巨型清单混合职责。
-- [ ] 将四份边界目标迁入 docs/architecture 长期文档，移除 architecture audit 对 docs/superpowers 草稿的引用，并验证 owning spec 文件真实存在。
-- [ ] 增加并运行 production root、raw fact、canonical resolver、layer/capability、external policy、exact debt 与真实仓库 focused Rust regressions。
-- [ ] 运行 rustfmt、architecture_tests、rust:check、verify:rust 与 git diff --check，记录隔离 worktree 的最终验证结果。
-- [ ] 将 strict Rust architecture gate rebase 到最新 `shadcn` 已提交基线，同时保留主工作区全部未提交改动。
-- [ ] 将新增 `trash` runtime dependency 纳入 external declaration 审计，并把 Project 直接调用 `trash::delete` 记录为 Backend Adapter exact debt，而不扩大允许层。
-- [ ] 在同步基线上重新运行 15 项 architecture focused tests、rustfmt 与 `cargo check`，确认 exact debt 双向清单和 production policy 一致。
-- [ ] 建立完整 frontend production TypeScript inventory，统一排除测试、fixture、声明与 generated source，并覆盖所有生产目录。
-- [ ] 增加 canonical module dependency resolver，区分 runtime/type-only、repository/external/stylesheet origin，并保留 declaration symbol identity。
-- [ ] 增加递归 stylesheet dependency lexer 与 typed failure，覆盖 package、repository asset、url、parse failure、missing target 和 cycle。
-- [ ] 抽取 raw Tauri invoke semantic audit helper，并让 project filesystem contract 复用 canonical production inventory。
-- [ ] 运行 frontend architecture focused tests、project filesystem contract、typecheck 与 diff check，记录参数转发导致伪 focused 执行的诊断结论。
-- [ ] 修复外部 stylesheet package 未解析时的 fail-closed typed error，并为 runtime/type-only 空 named import/export 保留 declaration-level dependency facts。
-- [ ] 让 quoted CSS 反斜杠目标保留原始 payload 并产出 unsupported typed error，逐个坏样式输入断言 exact error 且零 dependency。
-- [ ] 导出限制在真实 repository `src` 根内的只读 filesystem reader，拒绝 absolute、non-src、parent traversal 与 realpath escape。
-- [ ] 通过真实 `App.css` 与 `workbench-dockview.css` 构建 stylesheet graph，并回归验证 Task 4 architecture、project filesystem contract 与 TypeScript typecheck。
-- [ ] 将 `../parent.css` 纳入坏 stylesheet 逐输入 exact-payload 表，冻结 unsupported error 且零 dependency 的既有行为。
-- [ ] 将 encoded package separator `react/%2fsecret` 纳入同一 table-driven contract，并记录本轮为 reviewer-requested assertion completeness、无伪造 RED。
-- [ ] 将 TypeScript declaration 路径解析绑定到实际 tsconfig 项目根，仅显式映射隔离 `run-N/src/**`，拒绝仓库外非 node_modules 声明伪装成内部层。
-- [ ] 在 canonical module resolver 回归中覆盖含 `/src/` 的 sibling declaration，冻结 `unresolved-module-dependency` typed failure。
-- [ ] 在逐输入 stylesheet 表中加入真实存在目标的 `./../parent.css`，规范化前拒绝任意相对父段并保持 exact error 与零 dependency。
-- [ ] 为 TypeScript audit context 记录当前精确 source root，使 production 与每次 isolated run 只从各自根目录 canonicalize `src/**`。
-- [ ] 删除 declaration 与 production inventory 对任意 `run-N/src/**` 的名称猜测，并回归拒绝伪造 source root 外的 sibling 与顶层 run 目录。
-- [ ] 让 collector 无条件保留已识别的 type-only/runtime dependency，统一由 resolver 对非字面量 import type 与缺参动态 import 返回 typed failure。
-- [ ] 复验 Task 4 全部 architecture contracts、project filesystem contract、TypeScript typecheck 与 diff check，并继续隔离 Task 5 classifier RED 草稿。
-- [ ] 为嵌套 ImportTypeNode 与 dynamic import options 增加 focused regression，逐项冻结 outer/inner dependency 的 syntax kind 与 canonical origin。
-- [ ] 已识别 import type 与 module call 在记录当前 edge 后继续遍历子节点，同时保留 import/export/import-equals 的声明级去重语义。
-- [ ] 使用临时未跟踪 Task 5 stub 复验 focused、Task 4 architecture、project filesystem contract 与 TypeScript typecheck，并在 staging 前删除 stub。
-- [ ] 扩展 nested dependency regression，冻结 `export default import()` 外层 export-assignment 与 options 内层 dynamic-import 的逐项 canonical origin。
-- [ ] 让 ExportAssignment 记录外层 module edge 后遍历 call children，同时避免重访 call 自身导致外层 dependency 重复。
-- [ ] 复验 round 6 focused、Task 4 全组、project filesystem contract、带临时 Task 5 stub 的 typecheck 与 diff check，并继续隔离 classifier RED 草稿。
-- [ ] 为十层 frontend production classifier 建立闭合集合审计，返回分类结果与结构化 zero/multiple membership 错误。
-- [ ] 将 shared stateful、platform 与 presentation exceptions 作为 literal membership 从 base owner 集合移除后再校验 union/intersection。
-- [ ] 冻结 frontend 单向 layer matrix、canonical Core capability 与现有 `WorkbenchDockviewPort` 的 read-member manifest，不新增 production alias。
-
-## 2026.08.27
-
-- [ ] 建立 frontend external declaration policy，双向固定 32 个 runtime dependencies 与唯一 build-only `tailwindcss` scope。
-- [ ] 按 source layer、runtime/type-only/build-style mode、resource kind、canonical subpath 与 stylesheet consumer 审计 exact package rows。
-- [ ] 让 repository asset audit 直接消费 Task 4 `ResolvedStylesheetGraph`，保留 resolver errors 且仅从 exact authorized parent edge 继承 stylesheet layer。
-- [ ] 固定两个 production repository stylesheet consumer/path rows，并将 dev-only、unknown、invalid policy 与 asset resolution failures 排除在 debt 之外。
-- [ ] 以 rule、source、owner、dependency kind、canonical origin 五字段建立 frontend debt identity，明确排除 line/column。
-- [ ] 双向比较 actual 与 declared exact occurrences，让新增/增加和过期/减少均使 ratchet 失败。
-- [ ] 对 duplicate debt key、零或非法 count、未批准 maintained migration spec 返回 typed declaration errors，并保持 import-type 与 dynamic-import 独立。
-- [ ] 用单一 production audit pipeline 复用 Task 4 inventory、canonical module resolver 与完整 stylesheet graph，并分别报告 fatal error families。
-- [ ] 为 Application→Wire validated result/type declarations、View→DnD exact symbols 与现有 WorkbenchDockviewPort read capability 建立 literal manifests。
-- [ ] 审核 934 个 production sources 与 7110 个 dependency facts，将 610 个唯一 frontend debt keys、624 次 occurrences 固化为静态 exact manifest。
-- [ ] 新增 maintained `FRONTEND_APPLICATION_BOUNDARIES.md` 记录最终 owner、单向依赖与原子 debt removal 判据，不引用 docs/superpowers。
-- [ ] 收紧 external policy row validation，拒绝 duplicate subpath、unsupported mode/resource、prototype-inherited package names 与不存在的 build-style consumer。
-- [ ] 分离 TypeScript runtime asset consumer 与 stylesheet build consumer，并回归 stylesheet layer conflict 不产生确定 layer。
-- [ ] 将本地 named re-export 到 exact bare package 的 AST 可证明链纳入现有 canonical resolver，其他 node_modules origin 继续 typed fail-closed。
-- [ ] 补齐 repository dependency target classifier closure，并将 WorkbenchDockviewRead 作为 App/View 指向现有 WorkbenchDockviewPort 的 policy-only manifest。
-- [ ] 将 frontend classifier 改为十个独立 base membership sets，以 base-overlap regression 冻结 zero/multiple 检测不依赖 rule ordering。
-- [ ] 在合并 literal policy membership 前从每个 base set 移除 overrides，显式排除 pure-shared 的其他 shared owners，并保持现有 exact capability/debt contracts。
-- [ ] 先对 stylesheet 与 source layer provenance 求稳定 fixed point，再使冲突 parent 的 descendants 失效，最后仅用 singleton layers 生成 asset findings。
-- [ ] 将 base-overlap fixture 改为注入两条同时命中的 FrontendBaseRule predicates，确保回退 first-match 会产生 focused failure。
-- [ ] 让 production 与 classifier fixture 共用同一十层 rule-list builder，对每条命中独立 add 后再统一检查 zero/multiple membership。
-- [ ] 删除预制 base membership sets 与 injectedBaseSets bypass，继续先从全部 base sets 移除 literal overrides 并保留 pure-shared 显式排除。
-- [ ] 新增 compiler-backed frontend semantic audit，以 resolved import symbols、call/property access 与 canonical origins 守卫 raw invoke/dialog、View/Core capability、projection write、Application raw wire 和 Dockview constructor。
-- [ ] 用唯一 table-driven fixture 冻结九个 stable semantic rule IDs，并覆盖 canonical IPC adapter、path-dialog service、approved read member 与 root/Logs Dockview exact paths。
-- [ ] 将 236 个 reviewed semantic exact keys 合并进既有五字段 frontend debt manifest，与原有 610 个 dependency keys 通过同一 comparator 双向匹配。
-- [ ] 在 unified production architecture assertion 通过后退役重复 regex/architecture blocks，同时保留 project command identity、stale-result、editor projection behavior 与 node/observability/user-feedback contracts。
-- [ ] 补齐 policy-approved read interface 的 typed receiver 追踪，通过 checker type 与 canonical declaration symbol 拒绝局部参数调用未批准 authority member。
-- [ ] 让 raw invoke call audit 识别经 repository barrel 解析到 `@tauri-apps/api/core::invoke` 的 canonical symbol，并与直接 binding helper 按完整 occurrence identity 去重。
-- [ ] 支持 namespace `DockviewReact` JSX constructor，移除 semantic audit 的生产层过滤，并使 zero/multiple frontend classification errors 在扫描前 fail-closed。
-- [ ] 将 persisted `DataType`、`DataValue`、`DataSeriesValue` 与分类/时间序列 metadata 原子迁入顶层 Pure Leaf `data_contract`，保持现有 serde tags、camelCase 字段和 DataSeries string/full wire。
-- [ ] 将类型兼容、继承、默认值、转换、查询与运行时值算术保留在 Graph `value::type_system`，以原生数值逻辑替换旧 `num_traits` One/Zero 使用。
-- [ ] 全量切换 Variable、Project、Schema、Commands、Graph、Node System、Runtime、Database、Tabular、SCI 与对应测试到 canonical `data_contract` 路径，并删除 Graph 旧声明与 re-export。
-- [ ] 为 typed `DataTypeParseError`、persisted value wire、单一 Pure Leaf owner 与 Graph 无 compatibility re-export 增加 focused regression。
-- [ ] 将 `data_contract` 三个 exact files 设为 literal Pure Leaf、将 Graph type-system behavior 设为 exact Graph classification，移除 contract namespace fallback，并精确删除已消失的三条 `num_traits` architecture debt occurrence。
-
-## 2026.08.27
-
-- [ ] 将 persisted value canonical-owner architecture guard 改为 typed required/allowed exact-origin 策略，保持五个 contract symbol 的单一 data-contract owner。
-- [ ] 允许独立 SCI `CategoricalRole` 仅来自 `src-tauri/src/sci/api/computation.rs`，同时拒绝任意 SCI owner 与 SCI 对 persisted role 的 re-export/alias。
-- [ ] 增加 focused regression，覆盖批准的双 owner 集合与未批准来源拒绝路径，并运行 Rust architecture、格式、编译及 diff 校验。
-- [ ] 为 canonical-owner production guard 增加基于 `syn::Item::Type` 的窄扫描，拒绝 Graph 对六类 persisted data-contract symbol 的 type alias。
-- [ ] 拒绝 SCI 对 persisted `CategoricalRole` 的 type alias，同时保留 `sci/api/computation.rs` 独立声明作为唯一批准 SCI owner。
-- [ ] 增加真实 Rust source fixture 回归，覆盖 Graph 六类 alias、SCI alias、独立 SCI enum 与 test-only alias 排除，并执行 focused RED/GREEN 验证。
-- [ ] 将 SCI 统计设置、分类角色、统计标量输入与九字段 observation metadata 原子迁入 `sci/api/computation.rs`，保持既有 metadata 字段名及 `project`/`node` 序列化值。
-- [ ] 新增 Application-owned Project→SCI/Execution settings 与 persisted value/role→SCI input 穷尽映射，使用 closed typed errors 拒绝非有限数值和不支持的持久化值。
-- [ ] 建立 production-unreachable 的独立 `execution/settings.rs` contract，并保持现有 Project run-parameter 与 node runtime settings 路径不变，留待 Execution Task 8 切换。
-- [ ] 将 public SCI statistics、ACF/PACF、serial tests 与 hypothesis adapter 的字符串错误迁为 operation/violation typed `SciError`，禁止 raw algorithm text 决定稳定错误码。
-- [ ] 为 Execution owner 增加 fail-closed layer classification，精确删除 SCI→Project missing-value debt并迁移其余 canonical debt keys，新增 SCI 隔离与 canonical-owner production guard。
-- [ ] 按 TDD 运行 settings、statistical input、metadata wire 与 typed SCI error 的 RED/GREEN focused tests，并执行 Rust 编译、架构 policy、格式及 diff 验证。
-- [ ] 为 T/Wald SCI adapter 增加显式的约束数量、自由度、矩阵维度与有限数值前置验证，分别映射 closed parameter、shape 与 non-finite violations。
-- [ ] 将通过结构验证后的下游 T/Wald 数值失败统一映射为 operation-specific `ComputationFailed`，禁止解析 `yss_sci` 原始字符串选择公开错误语义。
-- [ ] 增加窄 focused regressions，分别覆盖 typed input validation 与合法形状下零/奇异协方差的 computation-failure 映射。
-- [ ] 新增 Frontend 与 Rust focused architecture scripts，并将 Rust architecture suite 纳入日常 `verify:rust`，保持 frontend/full Rust 验证无重复执行。
-- [ ] 更新工程规范与本地工作流，明确 focused architecture 命令、daily/full 验证边界及 `package.json` 的 exact command composition。
-- [ ] 在当前架构文档记录 Cargo/Frontend production-root discovery、15/10 层 total-exclusive classification 与 canonical dependency origins。
-- [ ] 记录 exact Cargo/package declaration-use policy、双向 occurrence debt ratchet 与两端 semantic fitness checks，不复制具体 debt entries。
-- [ ] 完成 focused scripts 的缺入口 RED 与 GREEN 验证，Frontend 66 项、Rust architecture 20 项测试通过。
-- [ ] 补全当前架构文档中的 Rust canonical origin 列表，明确 repository asset 是独立于 repository declaration、language builtin 与 external dependency 的分支。
-- [ ] 对照 `CanonicalOrigin::RepositoryAsset` 与 Include/Attribute resolver，记录 exact `repository-asset:<repository-relative-path>` target 规范。
-- [ ] 将 serialized GraphDocument、GraphResourcePath、GraphRevision 与 document identities 原子迁入 Pure Leaf graph_document，删除 node_system/project 旧声明及 re-export。
-- [ ] 将 OperationId、HistoryEntryId、ResourceRevision、ProjectRevision 与 ProjectTransactionRevision 拆为 Project-owned 独立 newtype，移除 ResourceRevision 到 GraphRevision 的 ownership alias。
-- [ ] 建立 Graph-owned schema、compile settings、immutable resource catalog 与 21 项 closed mutation/compile typed error contract，并保留 TypedValue untagged JSON wire。
-- [ ] 增加 resource catalog、graph-document wire、Pure Leaf JSON purpose 与 Project→Graph production edge focused guards，按 canonical origins 精确更新 architecture debt。
-- [ ] 修正 GraphResourcePath 测试 fixture 的 canonical `.yssbi-event`/`.yssbi-function` 扩展名及关联 lookup/JSON 断言，不放宽 opaque path validator。
-- [ ] 将 NFC、Unicode L/N、保留名、空格与长度规则下沉到 Pure Leaf graph-document name contract，并由 Project ResourceName 穷尽映射既有错误语义。
-- [ ] 删除 GraphRevision 与 Project ResourceRevision 的 From/跨类型 PartialEq 隐式桥，将 mutation constructor 和全部 caller 改为显式 named conversion。
-- [ ] 将 Pure Leaf serde_json guard 改为基于真实 production module/dependency facts 的 typed structured 审计，并覆盖 test module 后的 production source negative fixture。
-- [ ] 将 legacy tabular snapshot 的三项既有 serde_json finding 静态归入 Backend Task 5 双向 exact debt，不提前重分类或实现 mixed-owner 拆分。
-- [ ] 新增 SCI-owned cancellation source/token、显式 monotonic absolute deadline、run control 与独立 cancel-delivery control，禁止 wall clock、sentinel、global token 和 hidden default。
-- [ ] 定义 validated opaque Bayes task/artifact IDs、非零 generation task handle 与 task-bound artifact handle，并用 closed typed errors 拒绝空值、超长、分隔符、NUL 和保留序列。
-- [ ] 建立 `ValidatedBayesTask::try_new` 唯一构造路径，在 neutral `StatisticalInput` 上重验 model、binding、sampler、响应表达式和 indexed input invariants。
-- [ ] 定义 production-unreachable `BayesWorkerPort`、typed terminal/phase/cancel errors、full-handle validated task result 与 immutable artifact bytes，保持旧 BayesBackend/Application/Julia production route 原样唯一。
-- [ ] 增加 barrier/channel-free-sleep bounded worker fake 与 semantic authority guard，覆盖 cancel/completion linearization、retry、generation ownership、artifact deadline、private constructors/fields 及 broad import 拒绝。
-- [ ] 将 Bayes summaries、diagnostics 与 warning DTO 迁入单一 neutral contract owner，并以 full-handle `BayesInferenceSnapshot` 替换 worker result 对旧 `InferenceResult` 的依赖。
-- [ ] 收紧旧 `InferenceResult`、artifact manifest 与 artifact path fields 为 private getters，保持现有 serde wire、Julia owner 生命周期和唯一 production route 行为不变。
-- [ ] 将 `BayesModelSpec` 八个 fields 全部私有化，仅公开 predictor、likelihood、parameters、data variables 与 sampler 五项 final-adapter capability。
-- [ ] 将旧 dataset/response/display 访问限制为 crate-private canonical getters，并将测试 fixture 改走现有 serde wire，禁止 setter、compatibility view 与 old/new converter。
-- [ ] 将 Bayes authority guard 改为 exact owner+method allowlist，覆盖 function-item alias、wrong-owner 同名函数、伪造 associated constructor 与 neutral result path/source 泄漏。
-- [ ] 扩展 Bayes authority semantic guard，为 worker module 的显式 import rename、glob import 与多级 type alias 建立 per-source canonical owner map。
-- [ ] 在扫描每个 production `ItemImpl` 时保存 canonical impl owner，将 `Self::...` authority reference 解析回真实 worker owner，并拒绝外部 inherent builder 声明。
-- [ ] 增加独立恶意 fixtures，分别覆盖 `Handle`/type-alias function reference 与外部 `impl BayesTaskHandle` public forge/`Self::issue_for_worker` 绕过。
-- [ ] 将 Bayes authority resolver 从 file-global alias map 改为递归 module-scoped symbol tables，对每个 inline scope 独立执行 use/type alias fixed-point。
-- [ ] 规范化 `crate`、`self`、多级 `super` 与 relative/module-alias 路径，同时保持 `other::Handle` 等非 worker origin 不产生误报。
-- [ ] 将所有显式 associated-function visibility 纳入 exact allowance，仅允许 worker boundary 的 public `ValidatedBayesTask::try_new` 与 exact `pub(crate)` authority builders。
-- [ ] 增加 module alias、relative worker import、nested forward alias chain、`pub(super)`、`pub(in ...)` 与 syntactic `pub(in crate)` 恶意回归 fixtures。
-- [ ] 修正 grouped use tree 的 terminal `self` 语义，使 `{self}` 与 `{self as alias}` 保留当前 module prefix 而不生成伪 `worker::self` origin。
-- [ ] 增加 `worker::{self as w}` → `w::BayesTaskHandle as Handle` → authority call 的 focused semantic regression，锁住 module self-alias canonicalization。
-- [ ] 新增 production-unreachable `JuliaBayesWorkerAdapter`，仅实现 final SCI `BayesWorkerPort`，constructor 只接收 app-data directory 与 `JuliaWorkerManager`，保持旧 Bayes route 唯一。
-- [ ] 直接从 `ValidatedBayesTask`、五项 model projection 与 neutral inference DTO 生成 Julia task/source/result，使用 full task handle 封存 task directory 与 artifact ownership，不引入旧新转换。
-- [ ] 为 accepted/cancel/deadline/stale/ownership/unknown-extension 与 JSON/CSV/PNG/Binary artifact mapping 增加 barrier/fake-runtime focused regressions，并保留原 Julia cancellation characterization owner。
-- [ ] 将三个 final Julia adapter files 精确分类为 Backend Adapter，登记 literal SCI capability manifest，并将零 production caller activation debt 明确归属 Execution Task 8。
-- [ ] 缩短 Julia worker cancel/restart 的 active-task mutex scope，以 barrier regression 证明 send/terminate 边界不持有该状态锁，同时保留原 non-active-task characterization。
-- [ ] 新增 Execution-owned scientific request/result/error/control contracts 与单一 dynamic `ScientificBackend`，以三个 typed methods 固定 statistics、KDE、ACF/PACF 结果族。
-- [ ] 新增 production-unreachable `SciApiScientificBackend`，穷尽映射 Execution settings、control、operations、results 与 closed SCI errors，不引入旧新 converter 或第二条 production route。
-- [ ] 将 context-free KDE canonical owner 迁入 `sci/api/density.rs`，删除旧 `sci/kde.rs` 并原子更新 Application Bayes 与 Plot callers，保持数值算法和输出形状。
-- [ ] 从 public ACF/PACF API 移除未使用的 `SciContext`，同步 command 与 Plot direct-SCI callers，保留当前唯一 production 行为。
-- [ ] 为 final scientific port/adapter 增加 RED/GREEN fake fixtures、exact capability/debt 与 zero-production-caller semantic guard，并将 staged activation debt 保留给 Execution Task 8。
-- [ ] 修复 ACF/PACF golden integration target 对已移除 `SciContext` 参数的遗留引用，改为调用唯一的单参数 SCI API。
-- [ ] 将 scientific port fake 收紧为 recording fixture，逐方法验证 typed request/result 与 cancellation/deadline control 透传。
-- [ ] 明确 synchronous scientific adapter 的 control 仅为 admission preflight，保留 Task 8 的真实 cooperative checkpoint activation debt。
-- [ ] 将 DatabaseDecl、DatabaseEngine 与 DatabaseEngineSql 原子迁入顶层 database_contract Pure Leaf owner，保持既有 serde wire、InMemory 与 DuckDB table 语义。
-- [ ] 全量切换 Application、Project、Schema、Commands、Database runtime 与测试 caller 到 crate::database_contract，删除 database 旧 declaration module/re-export。
-- [ ] 移除已消失 database declaration origins 对应的 exact capability/debt 条目，保留 DatabaseInstance、DuckDB storage 与 schema conversion 的现有职责和债务。
-- [ ] 增加 database contract 单一 owner 与 wire focused regressions，并完成 Rust architecture、数据库测试编译、fmt、check 与 diff 校验。
-- [ ] 将 `TabularSnapshot` 的持久化 JSON 与 shape 事实迁入 `tabular/contract.rs` Pure Leaf，删除混合 snapshot owner。
-- [ ] 将 snapshot→Polars materialization、dtype inference 与严格 JSON→AnyValue 转换集中到唯一 tabular Polars adapter，并切换 Database edit callers。
-- [ ] 删除旧 tabular snapshot 的 Polars/Database imports 与 exact debt，补齐 contract wire/shape、adapter conversion/edit regression 及 Rust architecture 验证。
-- [ ] 完成 Backend Task 5b 的 Pure Tabular ordered contract、manual serde 与 duplicate/ragged shape 校验，保持既有 wire shape。
-- [ ] 将变量 JSON/handle normalization、Polars materialization、DataFrame I/O 分别归入 Project、Backend adapter、Database owner，并删除旧 mixed tabular owners。
-- [ ] 补充 typed tabular/materialization/I/O/DTO mapping errors、atomic normalization 与 architecture/debt guard，避免 raw backend prose 和 lossy unsigned conversion。
-- [ ] 通过 tabular 聚焦回归、数据库编辑 integration 回归、Rust 编译/格式/debt 验证及独立 review；保留当前 worktree 未提交状态等待集成授权。
-- [ ] 将 DatabaseRuntimeSession 的 admission 状态与幂等 close_admission 收敛为 session-owned 生命周期，禁止 registry-wide close 影响其它 session。
-- [ ] 分离 DatabaseOutstandingWork 的 Copy 计数投影与私有 DatabaseOperationLease RAII 所有权，保持未来 prepare/recovery 计数为私有字段。
-- [ ] 让 DatabaseSessionDrainControl 携带显式单调 deadline，使用带 outstanding 计数的 closed drain/timeout outcome，并保持 timeout 后 lease 不脱离、Drop 不阻塞等待。
-- [ ] 完成 Database foundation 的 Pure Leaf contract、typed error、显式 declaration caller migration 与 focused RED/GREEN、fmt/check/diff 交付记录。
-- [ ] 修正 DatabaseError 公共 Debug/source 边界，保留私有 driver source 供 Database 内部使用且不向公共错误视图泄漏。
-- [ ] 增加 database error module 的 focused regression，覆盖 Display、Debug 与 Error::source() 的 driver secret redaction。
-- [ ] 完成 Database foundation fix round 的 RED/GREEN、Rust fmt/check 与 diff 校验，并提交仅含代码/测试的修复 commit。
-
-## 2026.08.28
-
-- [ ] 完成 Backend Task 5 的 Database neutral schema-facts owner：私有 revision/column/schema facts、Polars/DuckDB 类型归一化与 canonical column-name typed failure。
-- [ ] 将现有 Loaded/DuckDB schema projection 与 Project runtime caller 切换到 neutral facts，再由 Transport 保持 `ColumnInfoDTO` 的 `name`/`type` wire shape 映射。
-- [ ] 精确移除 Transport→Polars/dtype helper architecture debt，登记 neutral Database fact capability 与当前 Project runtime 的新增 exact occurrences。
-- [ ] 完成 schema-facts RED/GREEN、Rust fmt/check、focused architecture audit 与 diff 校验；session API、catalog/data snapshot、mutations、Execution、Presentation 和 frontend 继续留待后续任务。
-- [ ] 将项目文件变更收敛为 neutral Project contract，并保持 watcher 相关路径过滤与 burst coalescing 语义。
-- [ ] 让 Application watcher session 以 epoch 和可重试 drain/join owner 管理替换与关闭生命周期，禁止 stale/closed worker 回写。
-- [ ] 将 notify/filesystem 具体实现限制在 Platform adapter，保留 typed source/sink errors 与 watcher architecture guard。
-- [ ] 建立 production-unreachable Execution identity、runtime generation 与 canonical commit receipt 合约，保持其与 Project/Graph/SCI 独立。
-- [ ] 建立最终 `execution::plan` 的 opaque provenance/basis、resource requirement、parameter tree、observation intent 与 immutable package owner。
-- [ ] 增加 duplicate parameter handle、空/空白 identity 拒绝的 focused regression，并完成 Rust check、focused plan tests、fmt 与 diff 校验。
-- [ ] 建立 Database-owned session API 的 neutral catalog/data snapshot、ordered column selection 与 private query-basis seams，保持旧 Project database route 不变。
-- [ ] 增加 whole-catalog session/generation/declaration/runtime/schema revalidation 与 typed mutation prepare/commit evidence，所有基础验证保持锁外。
-- [ ] 完成 session API focused tests、Rust check、fmt 与 diff 校验；plot query、relational/resource adapters 与生产 session cutover继续由后续任务负责。
-- [ ] 建立 Project-owned typed `ProjectRegistryStore` 与 bounded `ProjectProgress` contracts，隔离 registry persistence/progress 的消费者接口。
-- [ ] 建立 Commands-owned FIFO progress publisher/worker、shared close state 与 retryable shutdown outcome，保留 Tauri Channel 仅在 delivery adapter。
-- [ ] 完成 registry/progress staged contracts 的 Rust check、fmt 与 diff 校验；旧 Project SQLx/Channel route 保留至后续原子 caller cutover。
-- [ ] 建立 production-unreachable Execution relational/resource ports 与 canonical plan-version preparation，使用 fields-private sealed grants 和 typed failures。
-- [ ] 补齐 Graph value semantics、Project variable defaults 与 Execution RuntimeValue final owners，保持当前 node-system runtime caller 尚未切换。
-- [ ] 完成 relational/resource/value owner 的 Rust check、fmt 与 diff 校验，保留旧 Project resource/provider route 至 Execution Task 8 原子切换。
-- [ ] 建立 Application-owned pure Project/Database snapshot mapper，将完整函数、变量、数据库声明与 neutral schema facts 映射为 Graph ResourceCatalogSnapshot。
-- [ ] 增加数据库 schema ID 完整性校验与独立 GraphCompileSettings 映射，保持 Database basis/revalidation 与旧 Project compiler route 隔离。
-- [ ] 完成 Project–Graph Task 2 mapper focused test、Rust check、fmt 与 diff 校验；graph-open/catalog production routing继续留待后续任务。
-- [ ] 建立 Project-free Graph analysis/compiler staged entry，只消费 GraphDocument、ResourceCatalog、GraphCompileSettings 与完整 Execution plan basis。
-- [ ] 建立 GraphRuntimeState 的 epoch-bound component contract，保留旧 Project-owned registry/catalog/compiler production route 不变。
-- [ ] 建立 Project-owned graph history before/after residency snapshots与可逆 change contract，避免将 Graph patch 穿透到 Project history。
-- [ ] 完成 Project–Graph Tasks 3–6 的 focused owner checks、Rust check、fmt 与 diff 校验，graph mutation/open/catalog activation继续留待后续原子切换。
-- [ ] 建立 production-unreachable `ExecutionRuntimeState` 的 session/generation/admission owner，保持旧 Project/node-system runtime path 唯一活跃。
-- [ ] 建立 `ApplicationSessionSlot` 的 Inactive/Replacing/Recovering/Active capture/revalidation contract，禁止暴露混合 session tuple 或第二 production owner。
-- [ ] 完成 Execution Tasks 2–3 的 staged state focused compile/test gate，session replacement recovery workflow与生产安装继续留待后续 cutover。
-- [ ] 建立 Graph-owned linear `PlannedGraphMutation` candidate handoff 与 Project-owned graph operation capture/receipt capability。
-- [ ] 建立 Application-only captured graph mutation planner，保持 Commands 旧 mutation route 不变，避免第二条 production mutation path。
-- [ ] 将 Project registry scan/cleanup 的 progress 入参切换为借用 `ProjectProgressSink`，移除 Project 对 Tauri Channel 的直接依赖。
-- [ ] 让 Commands registry 创建 bounded progress publisher/worker，在每个返回路径关闭 admission 并保留 timeout drain owner。
-- [ ] 完成 Backend Task 7 progress seam 的 Rust check、focused publisher test、fmt 与 diff 校验；SQLx persistence owner 仍待同一任务的后续切换。
-- [ ] 将 ProjectRegistry 的 SQLx pool/row/query ownership 移出 Project，改由 `Arc<dyn ProjectRegistryStore>` 驱动域验证、排序与 registry authority。
-- [ ] 让 `backend_adapters/project_registry_sqlite.rs` 成为唯一 SQLite schema/query/row mapping owner，并在组合根一次性构造/擦除 concrete store。
-- [ ] 完成 registry persistence 与 lifecycle focused 回归、Rust check、fmt 与 diff 校验，保留错误与项目生命周期语义。
-- [ ] 建立正常编译但不路由的 Application editor projection model/mapper，消费 Graph analysis/document/catalog 的 neutral facts。
-- [ ] 保持现有 Graph-owned editor projection 与 wire DTO 生产路径唯一，新增 Application projection 仅作为后续 Project–Graph/Presentation cutover handoff。
-- [ ] 完成 Presentation Task 2A editor projection focused regression、Rust check、fmt 与 diff 校验。
-- [ ] 建立 Project-owned execution authority prepare/effect-commit contracts，暴露只读快照与 typed cancellation/deadline control，不构造 runtime/adapters。
-- [ ] 建立 Execution package preparation 与 immutable generation-pinned handle，验证 package basis/provenance 后再 mint prepared plan。
-- [ ] 完成 Execution Tasks 4–5 focused package/authority checks、Rust check、fmt 与 diff 校验，旧执行 workflow 保留至 Task 8。
-- [ ] 建立 Transport-owned `schema::graph_mutation` PortAddressDto typed mapper，保持现有 graph mutation command wire shape 与旧 production route。
-- [ ] 建立 staged Application catalog query result/transport-parts seam，统一 localized/compatible query 的 session capture/revalidation 入口。
-- [ ] 保持 catalog commands 与旧 Graph/Project snapshot route 不变，待 Project–Graph Task 8 / Execution Task 8 一次性切换并删除旧 owner。
-- [ ] 建立 Frontend state-authority manifest 与 fail-closed audit，区分 backend base、optimistic overlay、local draft 与 frontend UI ownership。
-- [ ] 增加缺失成员、View writer、delegated dirty writer、action cycle/unresolved delegate 的 focused TypeScript fixtures。
-- [ ] 完成 Frontend Task 1 的 typecheck 与 diff 校验；Vitest focused runner 在当前 Windows 环境启动异常，未扩大到全量 suite。
-- [ ] 建立 Frontend Application 的 project hydration/event ingress/reconciliation、database metadata、worksheet、result query、execution projection 与 window-close coordinator seams。
-- [ ] 建立 Core 只读 read/publication/UI capability 类型，保持 Zustand stores、Views 与旧生产 publication route 尚未切换。
-- [ ] 完成 Frontend Application staged capability 的 typecheck 与 diff 校验；Vitest runner 的环境阻塞继续记录，不引入重复测试路径。
-- [ ] 建立 Services-owned platform outcome/failure contracts 与 path/window/webview/opener/clipboard/settings event seams，隔离原始平台 API。
-- [ ] 建立 Application-owned settings synchronization coordinator 与 Core settings UI capability，保持跨窗口 echo suppression 与 UI state ownership边界。
-- [ ] 完成 Frontend platform capability staged typecheck 与 diff 校验，未改动现有 production listener/invoke routes。
-- [ ] 让 ExecutionRuntimeState session-local 持有 run registry 与 result store typed owners，支持后续 finalization/result query cutover。
-- [ ] 完成 run/result owner 的 Rust check、fmt 与 diff 校验，继续保留旧 node-system runtime production route。
-- [ ] 将 Database Editor 子窗口收敛为后端只读投影，移除单元格编辑、粘贴、行列 mutation、undo/redo 与 dirty 标记入口。
-- [ ] 删除已无 production caller 的 `useEditActions`、数据库表 mutation context menu 及其生命周期测试，避免保留第二条编辑路径。
-- [ ] 将数据库导出路径选择隔离到 Services platform adapter，由 Application hook 负责 project identity revalidation 与 typed export 调用。
-- [ ] 扩展 Rust architecture resolver 对 execution plan 的 `plan_id!` 生成 identity，修复 canonical target 解析门禁。
-- [ ] 同步登记 `parameter_id!` 生成的 compiled parameter identity，确保 plan re-export 的 canonical target 可解析。
-- [ ] 将 ExecutionRuntimeState 的 admission、work lease 与显式 deadline drain 收敛为 session-local typed owner。
-- [ ] 让 close/cancel-and-drain 在新工作拒绝、活动 lease 超时与 lease 释放后的重试之间保持可观测且不持锁等待。
-- [ ] 完成 Execution state focused lease/drain regression 与 Rust compile/test/diff 校验，继续保留旧 Project runtime route。
-- [ ] 新增 `cfg(test)` 隔离的 ApplicationEvent 低频 ProjectLifecycle/ResourceCommitted typed facts，明确不包含 ordered result-inspection 语义。
-- [ ] 新增 schema application-event staged mapper，穷尽映射到现有 EventProject wire shape，不启用新的 production emitter 或 route。
-- [ ] 为生命周期/资源提交各保留一个独特 wire mapping regression，并覆盖资源结果缺失 project identity 的 serde failure。
-- [ ] 完成 Presentation/Command Boundaries Task 1 staged event contract slice 的 focused Rust test、check、fmt 与 diff 验证，旧 event_project route 保持唯一活跃。
-- [ ] 重做 Frontend Task 5 的 Database/Variable 深只读 read、Application-only publication 与非变更 UI capability，保持旧 production caller 未切换。
-- [ ] 增加按 project identity/epoch 与 per-database generation 防 stale completion 的 metadata coordinator，并保留 status-only outcome 与安全 failure reference。
-- [ ] 增加 Database Editor 只读组合回归，完成 7 个 focused 前端文件共 22 个测试、typecheck 与 diff 校验；Task 8 原子 caller cutover 和旧 editStateStore 删除仍待后续。
-- [ ] 将路径对话框、窗口、webview、剪贴板、外部 opener 与设置事件收敛到 Services platform typed outcome contracts。
-- [ ] 移除 shared URL、Bayes reveal 与 graph clipboard 的直接 Tauri runtime imports，统一通过 platform adapter 处理失败。
-- [ ] 保留 platform adapter 的 invalid argument/result 与 operation failure closed variants，避免暴露原始 native error prose。
-- [ ] 完成 Frontend Task 2 platform contract slice 的 typecheck 与 diff 校验；Vitest runner 的既有 Windows 阻塞继续记录。
-- [ ] 让 Application window actions 通过 Services platform handle 统一提供 show/minimize/maximize/close/title，Views 与 shared chrome 不再直接持有 Tauri Window。
-- [ ] 迁移 ProjectPicker、Menubar、Database/Bayes/Log/Presentation 窗口 chrome 与 workbench label 到 Application/platform seam，保持现有窗口行为。
-- [ ] 删除对应 raw window architecture debt，完成窗口 caller typecheck 与 diff 校验，保留 geometry/close coordinator 的后续 owner migration。
-- [ ] 将 Presentation/Database/Bayes/Log 窗口与主编辑 chrome 的原始 Window 调用迁移到 Application-owned current-window actions。
-- [ ] 让 useWindowMaximized、decoration、presentation reveal 与 workbench binding 只消费 Services platform outcome，不传播 native event/error。
-- [ ] 删除已迁移 window caller 的 exact raw-Tauri debt，保持 shared WindowChromeControls 只接收显式回调。
-- [ ] 将窗口几何读取与 close-listener 订阅改为 AppWindowHandle/PlatformOutcome，阻止 native Window 类型和事件对象向 Application 扩散。
-- [ ] 保持主窗口后端几何与次窗口 localStorage 几何的既有持久化策略，并让关闭回调只返回 allow/prevent 决策。
-- [ ] 更新 geometry persistence focused fixture 到 platform adapter fake，完成 typecheck 与 diff 校验。
-- [ ] 将编辑器 dirty/flush close guard 改为 Platform adapter 的同步 allow/prevent 决策，native event 只在 adapter 内调用 preventDefault。
-- [ ] 保留 confirmed recursive close、deferred flush、typed failure 与重复请求合并行为，并将 focused fixture 改为无 native event 对象的 fake。
-- [ ] 完成 editor close guard typecheck/diff 校验，close coordinator 的全量 Application wiring继续由后续 cutover 负责。
-- [ ] 删除 Core `ReportResultView` 并将报告校验、ScrollArea 与 renderer 选择归入 Info View，切换 Info/SourceInspector/editor result callers。
-- [ ] 为 UnifiedResultView 保留 View-provided report renderer callback，确保 inspector-mode 的 report 不因 Core→View 解耦而静默丢失。
-- [ ] 完成 Report renderer focused ResultContent/ReportView typecheck 与 diff 校验，修正后的 ReportView Vitest 尚待统一前端 runner 验证。
-- [ ] 将 New Project、Database import、Bayes export 与 persisted webview 创建迁移到 Services platform adapters，保持 geometry/selection 行为。
-- [ ] 将 settings store 的跨窗口发布/订阅移入 Application SettingsSyncCoordinator，保留 own-echo suppression 与 malformed payload 安全忽略。
-- [ ] 完成 Frontend Task 2 platform caller typecheck 与 diff 校验；projectService、ProjectListener 等范围外 raw callers留待下一切片。
-- [ ] 建立 Application-owned project hydration coordinator，以 project identity/epoch/generation 拒绝 stale completion。
-- [ ] 建立 bounded FIFO project event ingress/reconciler，串行处理、精确 optimistic key settlement，并在 overflow/rejection/stream failure 时请求一次 authoritative recovery。
-- [ ] 完成 Frontend Task 3 staged hydration/event ingress typecheck 与 focused evidence；旧 Core ProjectListener/handler route 保持未切换。
-- [ ] 将 ProjectService 的目录选择、save-as 路径与 resource reveal 职责拆出到 Application actions 和 platform adapters，保留 IPC/ordered progress route。
-- [ ] 删除 ProjectService 的 raw dialog/opener imports，并完成 save-as/application-selected-path focused regression 与 typecheck/diff 校验。
-- [ ] 将 Frontend state-authority AST/snapshot bridge 接入 semantic architecture audit，对 manifest-listed store members 缺失时 fail closed。
-- [ ] 保留 authority writer/dirty/delegate cycle 规则与最小 fixture，完成 state-authority typecheck/diff 校验；真实 production audit 待稳定 runner 复核。
-- [ ] 将 Database runtime registry 拆为 session-owned lifecycle/lease/prepare/commit/recovery owner，补齐 prepared、committed 与 recovery outstanding 计数。
-- [ ] 让 Database session API 的 catalog/data snapshot、声明/运行时/schema revalidation 与 mutation resolution 使用同一 runtime snapshot，保持锁外语义。
-- [ ] 完成 Database session runtime focused recovery/compensation 回归与 Rust check/fmt/diff 验证；driver I/O 仍未引入 neutral snapshot。
-- [ ] 将纯 `ResourceKey`、resource metadata/ref 与 graph lookup/query 下沉到 Domain，Core selector 仅做薄包装。
-- [ ] 将 `CallFunctionGraphBucket` 与 `EdgeData` 迁移为 Domain contracts，解除 diagnostics/drag preview 对 Core/View 的反向类型依赖。
-- [ ] 完成 Frontend pure reverse-edge focused Vitest、typecheck 与 diff 校验；Report renderer 的跨 caller 迁移继续保留为后续独立切片。
-- [ ] 实现 Project–Graph Task 7 的单次 Application session capture、Graph consuming mutation handoff 与 Project linearized authority commit。
-- [ ] 让 graph mutation commit 返回 Project-owned before/after history 与 invalidation facts，并委托 canonical resident graph installer。
-- [ ] 完成 Project–Graph Task 7 focused authority regression、Rust check/fmt/diff 校验，保留 session replacement 与 history-owner 后续 cutover。
-- [ ] 按真实 production dependency facts 更新 Rust exact debt，登记 staged Graph/Execution/Backend/Application seams 并移除已删除的 Project SQLx/旧 progress edges。
-- [ ] 从 Execution resource preparation 移除具体 Database runtime 持有，保留 Database 句柄只在 Backend adapter factory boundary。
-- [ ] 完成跨 Database/Graph/Project watcher 边界的 architecture debt re-audit 前置 check、fmt 与 diff 校验，随后进入下一轮 owner cutover。
-- [ ] 完成 Execution Task 5 的 generation-pinned package preparation seam，统一 RootPlan、FunctionBundle 与 ParameterBundle 的 typed 校验入口。
-- [ ] 完成 Frontend Task 8 的 bounded Bayes Application slice：`useBayesDatasets` 负责只读数据库元数据与 project/database generation stale suppression，`useBayesArtifacts` 聚合 artifact reads/export/reveal 并保持 deep-readonly、安全 issue 与 typed platform outcome。
-- [ ] 完成 current-window Application action slice：窗口最大化状态与 resize 刷新绑定当前 mounted generation，minimize/toggle/close 使用闭合 `completed|stale|failed` outcome，shared chrome 只接收回调 props。
-- [ ] 通过 Bayes artifact、Bayes dataset metadata、current-window 三组 focused Vitest（6 tests）与 `pnpm typecheck`；完整 Project/event/domain atomic cutover 仍留待后续 Task 8 checkpoint。
-- [ ] 为 prepared execution handle 增加 root provenance/source、bundle basis、函数 resource/version 唯一性及参数 identity 的非变更性校验。
-- [ ] 保持 PreparedExecutionPlan 的私有不可伪造构造、只读内部 package 与旧 node_system production route 不变；未执行生产 cutover。
-- [ ] 在 cfg(test) 隔离的 schema editor mapper 中复用 Application projection model，保持旧 EditorGraphProjectionDto wire owner 未路由。
-- [ ] 对当前不完整的 Application editor model 返回 closed typed TransportMappingError，不伪造 resource versions、节点 presentation、连接端点或诊断字段。
-- [ ] 通过 CatalogQueryResult transport parts 映射并回归验证 localized catalog 的 camelCase metadata、资源路径/版本与 creation descriptor wire shape。
-- [ ] 保持 Presentation Task 2B 两个 schema mapper test-only/unrouted，不新增 production command/event、兼容 re-export 或第二 mapper。
-- [ ] 当前 Application editor model 尚未提供 FunctionEditorProjectionDto 所需事实，继续保持既有 function wire owner 未路由，待后续 cutover 提供完整输入。
-- [ ] 建立 staged Graph、Resource、History 深只读 snapshot/read capability，使用缓存发布快照隔离 store-owned nested references。
-- [ ] 建立 Graph/Resource/History 精确 publication 与 UI capability，optimistic overlay key 固定包含 projectInstanceId、resourceKey、operationId、fromRevision。
-- [ ] 补齐 GraphSession、Editor、Viewport、GraphInteraction、Gesture、Keyboard、Sidebar、SidebarDrag 与 Node Catalog 的窄 UI/read/publication seams，保持生产 caller 未接线。
-- [ ] 增加最小 optimistic registry/publication focused regression；完成 typecheck 与 diff 校验，Vitest 仅运行一次并记录修正后的未复跑状态。
-- [ ] 建立 session-bound Application run_graph coordinator：先捕获 ApplicationSession、执行匿名 admission 与 Project preparation，再等待可消费的 prepared plan seam。
-- [ ] 将 Project variable grants 的 DataValue 快照映射为带 session identity/version 的 Execution-neutral bindings，并在最终 gate 重验 captured session。
-- [ ] 建立 owned ProjectDatabaseSessionFacts 到 DatabaseRuntimeSession 的 typed Application open seam，保持 Database 工作在 Project snapshot/lock 之外。
-- [ ] 建立 Project prepare、Database prepare/commit、Project finalize 的 non-Clone linear handoff contract，失败显式进入 typed compensation/recovery。
-- [ ] 为 staged run/database coordinator 增加 stale session、无公共 RunId 的 admission/cancellation 与 database handoff failure focused 回归，保留旧 production route。
-- [ ] 完成 Presentation Task 3 的 test-gated neutral result category、Graph output matrix 与 Worksheet plot policy seam，旧 OpenResultWindow/worksheet route 仍保持唯一生产路径。
-- [ ] 为 Worksheet plot 复用 Database-owned NumericColumnPair，执行有限点过滤、cap/stride、axis format 与 Project/Database/session basis revalidation，不向 Application 泄漏 Polars 或 DatabaseInstance。
-- [ ] 完成 Graph Task 9 的 production-unreachable neutral package compiler，补齐 PlanOperation kind/input bindings，并仅为精确 debug view lower observation intent。
-- [ ] 验证 Graph compiler 的两个 focused cases 与 staged catalog mapper，Rust fmt/check/diff 均通过；完整 Rust architecture gate 延后至原子 cutover 稳定后执行。
-- [ ] 建立 Worksheet committed/draft/dirty/pending-save 分离、四字段 optimistic key、项目替换 stale suppression 与 matching committed echo rebase 的 staged Application capabilities。
-- [ ] 完成 Worksheet Task 6 focused Vitest 4/4 与 typecheck，保留 production caller、worksheetApplicationPort 和旧 preview route 待 Task 8 原子切换。
-- [ ] 将 SuccessfulExecutionCandidate 与 ExecutionFinalizationHandoff 收归 Execution owner，Application 只消费 sealed handoff 并生成私有 CommittedRunOutcome。
-- [ ] 为 committed inspection intent 保留 opaque requester 与 outer run identity，加入 typed invariant/私有 seal，旧 OpenResultWindow production route 未切换。
-- [ ] 为 DatabaseRuntimeSession 增加 session-owned physical state 与锁外 typed tabular materializer，plot query 复用同一 query basis/revalidation。
-- [ ] 完成 Graph-open materialization/residency、session replacement 边界及 localized/compatible catalog coherent snapshot staged 回归，production commands 未路由。
-- [ ] 建立 test-only resultInspectionRequested wire/parser contract，严格拒绝旧 policy/target/prose 字段并验证其先于 runCompleted。
-- [ ] 建立 Frontend Application Result/Execution query/publication capability，覆盖 project/result epoch、精确 query supersession 与 stale 零发布。
-- [ ] 建立 Services-owned Project event parser/stream，承接严格 typed envelope 和稳定错误码，旧 Core ProjectListener 仍待原子删除。
-- [ ] 收紧 Application session candidate 的 composition 可见性：保留 fields-private identity 校验与线性 install seam，等待最终唯一 composition root 接入。
-- [ ] 将 Presentation 的 application-event、catalog、editor projection typed schema owners 提升为正常编译模块，保留旧生产 callers 未切换的单一路由约束。
-- [ ] 继续在 Execution Task 8 原子切换中接入这些 schema owners，并删除对应 Graph/旧 DTO mapper 与 exact debt。
-- [ ] 让 graph-open 与 project graph-load command 显式调用唯一 `schema::editor_projection` wire mapper，Application 只返回 transport-neutral projection model。
-- [ ] 将 Application Worksheet plot policy owner 提升为正常编译模块，继续保持旧 Project/Polars command route 未切换至 Execution Task 8。
-- [ ] 将 Application ProjectSync 切换到 Services-owned typed project event stream、bounded ingress 与 reconciler，保持旧 Core listener tree 待验证后删除。
-- [ ] 保证 ProjectLoaded/cleared、resource mutation、GraphDelta、index invalidation 的 session/identity 过滤与 recovery 请求仍由 Application 协调。
-- [ ] 记录 ProjectSync Services stream/Ingress/Reconciler 的 4-file、12-test 精确 focused 验证；旧 Core listener/handler/parser/registry 仍待 frontend atomic cutover 删除。
-- [ ] 建立 Application variable mutation typed request/receipt/error 与 Project neutral mutation facts，保留旧 command caller 至 session/runtime 原子 cutover。
-- [ ] 删除已无生产 caller 的 Core `ProjectListener` 与对应 raw-event/logger debt；其余旧 handler/parser/registry 保留至同一 frontend cutover 的后续清理。
-- [ ] 建立 Execution-owned session-bound result query owner：单次 Application session capture、Execution-private result/history pairing、oldest→newest 顺序与 typed missing-source error。
-- [ ] 建立 Frontend Application 的 Bayes dataset/artifact 与 current-window callback hooks，覆盖取消导出、generation stale suppression、typed platform failure 与既有窗口/Bayes 回归。
-- [ ] 完成 Result Query/Bayes window staged slices 的 focused verification；Rust architecture gate 已验证 37 passed，staged Graph→Execution debt 仍待原子生产 cutover 清理。
-- [ ] 由同一 ProjectState 句柄构造并注册唯一 ApplicationSession，绑定 Graph、Database、Execution 与 session-bound resource factory；后续继续接通生命周期 replacement 与生产 caller 原子切换。
-- [ ] 将 neutral Graph package 接入 Execution 的 prepared-plan coordinator，绑定 run identity、cancellation control、sealed finalization handoff 与 commit 后结果发布。
-- [ ] 将 execution command 的生产入口切换到 Application session 与 ordered run channel，保留旧 DTO 测试夹具待最终 result/event wire cutover 清理。
-- [ ] 将 `ProjectState::execute_graph`/`cancel_graph_run` 工作流降为 test-only，production execution 仅从 ApplicationSession 的 final coordinator 进入。
-- [ ] 将 Project 的旧 result/catalog DTO helper 限定为 test-only，production 查询继续使用 Application/Execution owner。
-- [ ] 将 `get_project_databases_variables` 的 production 读取改为同一 Application session 的 Project durable facts + Database catalog snapshot，移除对 Project runtime database snapshot 的依赖。
-- [ ] 将项目加载、清空、另存为与活动项目删除后的 session 刷新接入 ApplicationSessionSlot，旧 session 在关闭 admission/drain 后才发布新 candidate。
-- [ ] 将 Catalog 两个 production command 切换为单次 Application session capture、Database catalog snapshot 与 schema/catalog mapper。
-- [ ] 将四个 result command 切换到 Execution-owned ResultStore 查询；保留旧 Project 查询 helper 仅供待迁移测试，禁止生产 fallback。
-- [ ] 让 GraphRuntimeState 从同一 registry/document 生成完整 neutral projection facts，使 Application graph-open 可通过 Presentation mapper 返回非空图 projection。
-- [ ] 将 Graph `ResultCategory` 通过 neutral PlanOperation/ReadyResult/StoredResult 传递，并由唯一 execution DTO mapper 映射 Plot/Report/Inspector presentation。
-- [ ] 将 graph-open/load-project-graph 与 editor hydrate caller 接入 Application session，继续迁移 graph mutation 的旧 Project workflow。
-- [ ] 将 Bayes submit 切换到 Application session 的单次 Database snapshot 与三阶段 coherence gate，保留 worker status/cancel/result/artifact commands 的既有接口。
-- [ ] 将 lib.rs 的 Bayes production composition 切换到 `JuliaBayesWorkerAdapter`/SCI `BayesWorkerPort`，Application 从 Database snapshot 生成 `StatisticalInput` 并物化受控 artifact 结果。
-- [ ] 暂保留旧 BayesBackend 仅供现有 test-only service harness，下一批迁移旧测试后删除旧 trait/request/Julia backend route。
-- [ ] 将 resultInspectionRequested 取代旧 openResultWindow：Rust wire、严格 TypeScript parser、Application window action 与 Core visual feed 已统一新事件名，待移除 staged fixture/旧 DTO owner。
-- [ ] 将 Workbench Dockview 的混合 port 拆为独立 read/control/root-binding contracts，主根与嵌套 Logs 根分别管理绑定生命周期。
-- [ ] 删除旧 `workbenchDockviewPort`、`logsDockviewLayoutController` 与 Core sync listener/handler/registry/parser 生产 owner，迁移对应测试到 Application reconciler/coordinator。
-- [ ] 完成 Dockview/Core sync 删除后的 TypeScript typecheck 与 diff 校验；前端完整 architecture debt 基线和旧 DTO/fixture 清理仍待最终 cutover。
-- [ ] 删除 Frontend Core→Application 的 ProjectIO/Worksheet/PendingMutation reverse ports，改由 Application project reset、presentation reconcile 与 worksheet save use case 直接编排。
-- [ ] 迁移 graph unload/project IO/worksheet lifecycle focused fixtures 到直接 Application seams，验证无初始化注册式兼容入口。
-- [ ] 将 ProgressOverlay 改为只接收进度与取消回调，移除 shared UI 对 Application capability facade 的反向依赖。
-- [ ] 将数据库只读快照与执行投影发布契约分别归入 Application owner，删除 Core 的对应 reverse-boundary 文件。
-- [ ] 将 CatalogQueryResult 通过唯一 `schema::catalog` mapper 转换为独立 Transport DTO，并让 production catalog commands 使用该 mapper。
-- [ ] 保持本轮 Rust 仅执行 fmt/check，不运行昂贵 Rust 测试；待 Execution/Presentation 原子 cutover 后统一执行一次 Rust 测试门禁。
-- [ ] 将前端项目加载与数据库元数据规范化的生产调用迁入 Application-owned `databaseRecords` 与 `authoritativeProjectLoadPlan`。
-- [ ] 保留 wire DTO 解析职责在 shared schema，后续继续收口剩余 Application→wire 的直接 normalization/origin debt。
-- [ ] 将 Database session 的 metadata/page/analytics/edit-state 只读 API 接入 Application 查询，移除 production 查询对 Project runtime database snapshot 的依赖。
-- [ ] 保持数据库只读查询使用单一 session query basis 的前后复核，并保留行 ID、列信息与既有错误码语义。
-- [ ] 将 Database 编辑 mutation 通过 session-owned physical candidate 与 Project declaration finalization handoff，成功确认或失败显式补偿，移除 production `with_database_writer` 调用。
-- [ ] 迁移剩余 load/rename/delete/save/export 的 Database session writer，并在同一切换中移除 ProjectStore 的 `DatabaseInstance` production owner。
-- [ ] 将 built-in catalog/localization/documentation 的生产 domain owner 迁入 `graph/catalog`，使 Graph/Schema 不再从 `node_system::catalog::localization` 取 catalog 类型。
-- [ ] 清理 catalog domain 中残留的旧 `*Dto`/Project revision 表达，保持 Graph contract 与 Transport mapper 分离后再删除旧 test-only 夹具。
-- [ ] 将 built-in catalog assembly 从 `node_system/catalog` 迁入 `graph/catalog`，同步 registry 归属并删除旧 catalog module declaration。
-- [ ] 将 catalog resource revision 改为 Graph-owned opaque numeric fact，由 Schema/Application 负责 Project revision 与 wire 映射。
-- [ ] 将 Graph protocol、registry、catalog assembly 与 document behavior 迁入最终 `graph/*` owner，删除 `node_system` 对应 module declarations 与生产路径。
-- [ ] 后续继续拆除 Graph owner 对旧 NodeSystem analysis/compiler/runtime 的残留依赖，完成最终 compiler package 与 presentation cutover 后再更新 exact debt。
-- [ ] 将 Execution run admission 后的 `RunStarted` 与后续取消/失败终态事件保持单一有序发布，并覆盖 finalization 阶段失败。
-- [ ] 将 Database load/delete/save/export 的生产调用切换到 Application session 与 Database physical/session owner，移除 ProjectStore 的生产 `DatabaseInstance`。
-- [ ] 将旧 node-system analysis、plan、compiler 与 compatibility source 迁入最终 Graph/Execution owner，更新其生产引用与 source membership。
-- [ ] 保持本轮 Rust 只执行 `fmt`/`check`；Rust architecture/test gate 继续等全部 cutover 后一次性执行。
-- [ ] 将编辑兼容性快照归入 Graph owner，并由 Application 从单一 session 的 Project index 构造，移除 ProjectStore registry/catalog 生产字段。
-- [ ] 将 Graph editor mutation/subgraph 生产入口切换为 Application capture/plan/commit，保持 GraphDelta、revision、projection 与历史回执语义。
-- [ ] 保持 Rust 本轮只执行 `fmt`/`check`，不运行昂贵 Rust 测试；最终所有 cutover 完成后再批量执行测试门禁。
 
 ## 2026.08.29
 

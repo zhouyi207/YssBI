@@ -8,6 +8,7 @@ import type { IDockviewPanelProps } from 'dockview-react';
 import type { WorkbenchComponentId, WorkbenchPanelParams } from '@/features/core/dockview';
 import { useVisibleGraphPanel } from '@/features/application/editor/useVisibleGraphPanel';
 import { GroupContext } from '@/features/application/editor/editorGroupContext';
+import { AssistantPanel } from '@/views/AssistantView/AssistantPanel';
 import { LogWorkspaceDockview } from '@/views/LogView/LogWorkspaceDockview';
 import { OutputPanel } from '@/views/LogView/OutputPanel';
 import { DiagnosticsPanel } from '@/views/LogView/DiagnosticsPanel';
@@ -119,6 +120,7 @@ export const workbenchDockviewComponents = {
   Data: WorkbenchDataPanel,
   Commands: WorkbenchCommandsPanel,
   Details: DetailsPane,
+  Assistant: AssistantPanel,
   Inspect: InspectPane,
   Result: ResultPanel,
   Logs: MainLogsPanel,

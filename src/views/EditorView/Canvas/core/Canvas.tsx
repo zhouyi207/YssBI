@@ -208,7 +208,7 @@ export default function Canvas({
           sourcePort,
           onSelect: handlePaletteSelect,
           onClose: closePalette,
-        }
+      }
       : { kind: 'hidden' },
     variable: variableDropMenu
       ? {

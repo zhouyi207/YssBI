@@ -118,6 +118,7 @@ describe('workbench Dockview defaults', () => {
       data: 'left',
       commands: 'left',
       details: 'right',
+      assistant: 'right',
       inspect: 'right',
       logs: 'bottom',
       output: 'bottom',

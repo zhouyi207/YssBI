@@ -33,6 +33,11 @@ const output: RunOutputChannelEvent = {
   text: 'done',
   sourceGraphPath: run.graphPath,
   sourceNodeId: 'node-1',
+  sourcePort: {
+    kind: 'declared',
+    nodeId: 'node-1',
+    portKey: 'message',
+  },
 };
 
 describe('ExecutionProjectionCoordinator', () => {

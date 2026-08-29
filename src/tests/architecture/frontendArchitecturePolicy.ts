@@ -301,7 +301,14 @@ const VIEW_DOMAIN_CAPABILITIES = [
   viewCoreCapability('src/features/domain/canvas/edgeData.ts', ['EdgeData']),
   viewCoreCapability('src/features/domain/graphDiagnostics/nodeDiagnostics.ts', [
     'collectNodeDiagnostics',
+    'formatDiagnosticLocationLabel',
     'GraphNodeDiagnostic',
+  ]),
+  viewCoreCapability('src/features/domain/editorProjection/displayLabels.ts', [
+    'formatNodePinDisplayLabel',
+    'nodeDisplayTitle',
+    'pinDisplayTitle',
+    'resolveNodePinDisplayLabel',
   ]),
   viewCoreCapability('src/features/domain/log/logDomains.ts', ['isLogDomainId', 'LogDomainId']),
   viewCoreCapability('src/features/domain/node/utils/nodeClassNames.ts', [

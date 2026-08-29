@@ -1,6 +1,5 @@
 export {
   parsePlotPayload,
-  type AxisFormat,
   type CorrelogramPlotDTO,
   type CorrelationPlotDTO,
   type HistogramPlotDTO,

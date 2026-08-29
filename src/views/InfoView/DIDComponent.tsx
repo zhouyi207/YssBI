@@ -13,11 +13,11 @@ import {
   ModelSummaryGrid,
   CoefficientsBlock,
   HypothesisTestBlock,
-  DidEventStudyChart,
   OmittedVariablesAlert,
   formatNum,
   formatNullableNum,
 } from './shared';
+import { DidEventStudyChart } from '@/shared/charts/statistical';
 import type {
   DidPlaceboFakeGroupUnavailableBlock,
   PanelDidResultData,
@@ -187,7 +187,12 @@ export const DIDComponent: FC<{ data: PanelDidResultData }> = ({ data }) => {
           {(parallel_trends.event_study?.length ?? 0) > 0 ? (
             <>
               <div className="mb-1 mt-3 text-xs text-muted-foreground">事件研究系数（相对政策时点 × 处理组）</div>
-              <DidEventStudyChart points={parallel_trends.event_study!} treatLabel={treat_name} />
+              <DidEventStudyChart
+                points={parallel_trends.event_study!}
+                xLabel="Relative time (rel_time)"
+                yLabel={`Coefficient (× ${treat_name})`}
+                ariaLabel="Event study coefficients"
+              />
             </>
           ) : null}
         </div>

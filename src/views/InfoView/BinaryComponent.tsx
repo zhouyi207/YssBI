@@ -70,8 +70,8 @@ export const BinaryComponent: FC<{ data: OLSResultData }> = ({ data }) => {
           <ReportLazyBoundary variant="chart">
             <LazyScatter
               data={diag.fitted_values.map((x, i) => ({ x, y: (diag.residuals ?? [])[i] ?? 0 }))}
-              xLabel="Fitted (P)"
-              yLabel="Residual (y - P)"
+              xAxis={{ label: 'Fitted (P)', valueType: 'number' }}
+              yAxis={{ label: 'Residual (y - P)', valueType: 'number' }}
               height={280}
               symmetricY
               zeroLine

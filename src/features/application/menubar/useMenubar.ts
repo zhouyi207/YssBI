@@ -46,6 +46,7 @@ export function useMenubar() {
         return edge.exists && edge.visible && !edge.collapsed
           && edge.groupId === 'workbench-edge-left';
       })(),
+      assistantOpen: views.has('assistant'),
       inspectOpen: views.has('inspect'),
       inspectContextValid,
       logsOpen: views.has('logs'),
@@ -82,6 +83,10 @@ export function useMenubar() {
     void toggleActivityWorkbenchGroup();
   }, []);
 
+  const toggleAssistant = useCallback(() => {
+    void toggleWorkbenchView('assistant');
+  }, []);
+
   const toggleInspect = useCallback(() => {
     void toggleWorkbenchView('inspect');
   }, []);
@@ -109,6 +114,7 @@ export function useMenubar() {
     handleOpenLogs,
     viewActions: {
       toggleActivityGroup,
+      toggleAssistant,
       toggleInspect,
       toggleLogs,
       toggleOutput,

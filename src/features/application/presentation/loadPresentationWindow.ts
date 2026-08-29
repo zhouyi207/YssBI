@@ -1,11 +1,12 @@
 import { ResultService } from '@/services/result/resultService';
-import type {
-  ResultDescriptor,
-  ResultFailure,
-  ResultPage,
-  ResultPlotKind,
-  ResultProgress,
-  ResultReportKind,
+import {
+  isResultPlotKind,
+  type ResultDescriptor,
+  type ResultFailure,
+  type ResultPage,
+  type ResultPlotKind,
+  type ResultProgress,
+  type ResultReportKind,
 } from '@/shared/types/domain/result';
 import { logger } from '@/features/application/observability/appLogger';
 import { parsePlotChartFromLocation } from './parsePresentationWindowQuery';
@@ -30,10 +31,7 @@ const PAGE_SIZE = 200;
 function resolvePlotChart(descriptor: ResultDescriptor): ResultPlotKind {
   if (descriptor.presentation.kind === 'plot') return descriptor.presentation.chart;
   const fallback = parsePlotChartFromLocation();
-  const allowed: ResultPlotKind[] = [
-    'scatter', 'line', 'plot', 'ecdf', 'kde', 'histogram', 'correlation', 'correlogram',
-  ];
-  return allowed.includes(fallback as ResultPlotKind) ? fallback as ResultPlotKind : 'scatter';
+  return isResultPlotKind(fallback) ? fallback : 'scatter';
 }
 
 async function loadReadyPayload(descriptor: ResultDescriptor): Promise<PresentationPayload> {

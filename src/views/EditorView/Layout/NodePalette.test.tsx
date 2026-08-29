@@ -174,6 +174,69 @@ describe('NodePalette', () => {
     ));
   }
 
+  it('creates the next visible node with ArrowDown and Enter from the search input', () => {
+    renderPalette();
+    const input = host.querySelector<HTMLInputElement>('input');
+    const activeItem = () => host.querySelector<HTMLElement>('[data-catalog-item-active="true"]');
+    const activeStatus = () => host.querySelector<HTMLElement>('[data-node-palette-active-status]');
+    expect(document.activeElement).toBe(input);
+    expect(activeItem()?.textContent).toContain('逻辑回归');
+    expect(activeStatus()?.textContent).toBe('逻辑回归');
+
+    act(() => input?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true,
+    })));
+    expect(document.activeElement).toBe(input);
+    expect(activeItem()?.textContent).toContain('加法');
+    expect(activeStatus()?.textContent).toBe('加法');
+
+    act(() => input?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    })));
+
+    expect(onSelect).toHaveBeenCalledWith(
+      { kind: 'static', nodeTypeId: 'math.add' },
+      'zh-CN',
+    );
+  });
+
+  it('does not create a node while the search input is composing text', () => {
+    renderPalette();
+    const input = host.querySelector<HTMLInputElement>('input');
+
+    act(() => input?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      isComposing: true,
+      bubbles: true,
+      cancelable: true,
+    })));
+
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('resets the active node when the search projection changes', () => {
+    renderPalette();
+    const input = host.querySelector<HTMLInputElement>('input');
+    const activeItem = () => host.querySelector<HTMLElement>('[data-catalog-item-active="true"]');
+
+    act(() => input?.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'ArrowDown',
+      bubbles: true,
+      cancelable: true,
+    })));
+    expect(activeItem()?.textContent).toContain('加法');
+
+    act(() => setInputValue(input!, 'print'));
+    expect(activeItem()?.textContent).toContain('打印');
+
+    act(() => setInputValue(input!, ''));
+    expect(activeItem()?.textContent).toContain('逻辑回归');
+  });
+
   it('dismisses when pointerdown happens outside the palette', () => {
     const outside = document.createElement('button');
     document.body.appendChild(outside);

@@ -13,6 +13,7 @@ import type {
 import { FRONTEND_LAYERS } from './frontendArchitecturePolicy';
 
 const DECLARED_RUNTIME_PACKAGES = [
+  '@assistant-ui/react',
   '@dnd-kit/core',
   '@fontsource-variable/inter',
   '@tanstack/react-virtual',
@@ -105,6 +106,7 @@ const APP_USES = [
 
 const VIEW_USES = [
   ...pairedModuleAllowances('views', [
+    ['@assistant-ui/react', [null]],
     ['react', [null]],
     ['react-dom', [null]],
     ['react-router', [null]],
@@ -125,6 +127,7 @@ const VIEW_USES = [
 
 const APPLICATION_USES = [
   ...pairedModuleAllowances('application', [
+    ['@assistant-ui/react', [null]],
     ['react', [null]],
     ['react-router', [null]],
     ['i18next', [null]],

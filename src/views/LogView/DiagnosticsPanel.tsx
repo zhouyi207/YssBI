@@ -95,9 +95,11 @@ export function DiagnosticsPanel() {
                     <span className="block break-words text-xs text-foreground">
                       {row.diagnostic.message}
                     </span>
-                    <span className="block truncate font-mono text-[10px] text-muted-foreground/70">
-                      {row.nodeId}
-                    </span>
+                    {row.locationLabel !== row.nodeTitle ? (
+                      <span className="block truncate text-[10px] text-muted-foreground/70">
+                        {row.locationLabel}
+                      </span>
+                    ) : null}
                   </span>
                 </button>
               );

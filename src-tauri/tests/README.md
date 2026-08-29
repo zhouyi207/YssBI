@@ -6,40 +6,27 @@
 
 ### 运行所有测试
 
-```cmd
-cd src-tauri
-cargo test
+```sh
+pnpm test:rs
 ```
 
 ### 运行特定测试
 
-```cmd
-cd src-tauri
-cargo test test_complex_node_graph
-cargo test test_nested_sequence_tree
-cargo test --test database_test
+```sh
+pnpm test:rs test_complex_node_graph
+pnpm test:rs test_nested_sequence_tree
+pnpm test:rs --test database_test
 ```
 
 ### 显示测试输出（推荐）
 
 默认情况下，Rust 会隐藏测试中的 `println!` 输出。使用 `--nocapture` 参数可以查看完整的执行日志：
 
-```cmd
-cd src-tauri
-cargo test test_complex_node_graph -- --nocapture
-cargo test test_nested_sequence_tree -- --nocapture
+```sh
+pnpm test:rs test_complex_node_graph -- --nocapture
+pnpm test:rs test_nested_sequence_tree -- --nocapture
 ```
 
-### 运行测试并显示详细信息
-
-```cmd
-cd src-tauri
-cargo test -- --nocapture --test-threads=1
-```
-
-参数说明：
-- `--nocapture`: 显示所有 println! 输出
-- `--test-threads=1`: 单线程运行测试，避免输出混乱
 
 ## 目录约定
 

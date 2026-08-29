@@ -177,6 +177,36 @@ fn scatter_consumes_two_numeric_data_series_artifacts() {
 }
 
 #[test]
+fn correlation_serializes_undefined_statistics_as_null() {
+    let left = named_data_series(
+        DataSeriesElementType::Int64,
+        "constant left",
+        [Value::Integer(1), Value::Integer(1), Value::Integer(1)],
+    );
+    let right = named_data_series(
+        DataSeriesElementType::Int64,
+        "constant right",
+        [Value::Integer(2), Value::Integer(2), Value::Integer(2)],
+    );
+
+    let (result, sink) = execute_plot_kernel("yssbi.plot.correlation.view", &[left, right]);
+
+    result.unwrap();
+    let publications = sink.publications.lock().unwrap();
+    let payload = serde_json::from_str::<serde_json::Value>(&publications[0].1).unwrap();
+    assert_eq!(
+        payload["matrix"],
+        serde_json::json!([[null, null], [null, null]])
+    );
+    assert_eq!(
+        payload["pMatrix"],
+        serde_json::json!([[null, null], [null, null]])
+    );
+    assert_ne!(payload["matrix"][0][0], serde_json::json!(0.0));
+    assert_ne!(payload["pMatrix"][0][0], serde_json::json!(0.0));
+}
+
+#[test]
 fn plot_rejects_scalar_list_series_input() {
     let input = RuntimeValue::Scalar(Value::List(vec![Value::Integer(1)]));
 

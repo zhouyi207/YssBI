@@ -71,4 +71,13 @@ describe('pinResultSearch', () => {
     expect(filterPinResultSearchEntries(entries, 'cancelled')).toHaveLength(1);
     expect(filterPinResultSearchEntries(entries, 'alpha')).toHaveLength(1);
   });
+
+  it('does not fall back to opaque identities when semantic labels are unavailable', () => {
+    const projection = history('result', '17');
+
+    expect(buildPinResultSearchEntry(projection, { nodeTitle: '', pinName: '' })).toMatchObject({
+      nodeTitle: '',
+      pinName: '',
+    });
+  });
 });

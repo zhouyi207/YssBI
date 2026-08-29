@@ -1,5 +1,6 @@
 use super::support::{KernelFragment, expect_arity};
-use crate::graph::protocol::Value;
+use crate::graph::protocol::{PortKey, Value};
+use crate::graph_document::PortAddress;
 use crate::node_system::runtime::{Kernel, KernelContext, KernelError, RuntimeValue};
 
 pub(super) fn register(fragment: &mut KernelFragment) {
@@ -18,7 +19,10 @@ impl Kernel for PrintKernel {
         let RuntimeValue::Scalar(Value::String(message)) = &inputs[0] else {
             return Err(KernelError::new("Print message must be a String scalar"));
         };
-        context.emit_stdout(message);
+        let source_port = PortKey::new("message")
+            .map(|key| PortAddress::declared(context.source_node_id(), key))
+            .map_err(|_| KernelError::new("Print message port key is invalid"))?;
+        context.emit_stdout(message, source_port);
         Ok(Vec::new())
     }
 }

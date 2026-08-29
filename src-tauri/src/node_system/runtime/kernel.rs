@@ -3,7 +3,7 @@ use super::{
     RunOutputSink, RunOutputStream, RunPhase, RunResourceOwner, RunResourceSet, RuntimeValue,
 };
 use crate::execution::plan::legacy::{CompiledParameterHandle, KernelHandle};
-use crate::graph_document::{GraphResourcePath, NodeId};
+use crate::graph_document::{GraphResourcePath, NodeId, PortAddress};
 use crate::project::{NumericTolerance, ProjectComputationSettings, StatisticalMissingValuePolicy};
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -110,13 +110,18 @@ pub struct KernelContext<'a> {
 }
 
 impl KernelContext<'_> {
-    pub fn emit_stdout(&self, text: &str) {
+    pub fn emit_stdout(&self, text: &str, source_port: PortAddress) {
         self.run_output.emit(
             RunOutputStream::Stdout,
             text,
             self.source_graph_path,
             self.source_node_id,
+            &source_port,
         );
+    }
+
+    pub(crate) fn source_node_id(&self) -> NodeId {
+        self.source_node_id
     }
 
     pub fn computation_settings(&self) -> EffectiveComputationSettings {

@@ -1,6 +1,6 @@
 use super::RunId;
 use super::execution_event::RunEventSink;
-use crate::graph_document::{GraphResourcePath, NodeId};
+use crate::graph_document::{GraphResourcePath, NodeId, PortAddress};
 use std::sync::Mutex;
 
 pub const RUN_OUTPUT_TEXT_MAX_BYTES: usize = 8 * 1024;
@@ -20,6 +20,7 @@ pub struct RunOutputEvent {
     pub text: Box<str>,
     pub source_graph_path: GraphResourcePath,
     pub source_node_id: NodeId,
+    pub source_port: PortAddress,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +37,7 @@ pub struct RunOutputStatusEvent {
     pub status: RunOutputStatus,
     pub source_graph_path: GraphResourcePath,
     pub source_node_id: NodeId,
+    pub source_port: PortAddress,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -79,6 +81,7 @@ pub(crate) trait RunOutputSink: Sync {
         text: &str,
         source_graph_path: &GraphResourcePath,
         source_node_id: NodeId,
+        source_port: &PortAddress,
     );
 }
 
@@ -88,7 +91,8 @@ pub(crate) struct NoopRunOutputSink;
 
 #[cfg(test)]
 impl RunOutputSink for NoopRunOutputSink {
-    fn emit(&self, _: RunOutputStream, _: &str, _: &GraphResourcePath, _: NodeId) {}
+    fn emit(&self, _: RunOutputStream, _: &str, _: &GraphResourcePath, _: NodeId, _: &PortAddress) {
+    }
 }
 
 #[cfg(test)]
@@ -115,6 +119,7 @@ impl<'a> RunOutputEmitter<'a> {
         text: &str,
         source_graph_path: &GraphResourcePath,
         source_node_id: NodeId,
+        source_port: &PortAddress,
     ) {
         let mut state = self
             .state
@@ -132,6 +137,7 @@ impl<'a> RunOutputEmitter<'a> {
                         status: RunOutputStatus::Dropped,
                         source_graph_path: source_graph_path.clone(),
                         source_node_id,
+                        source_port: source_port.clone(),
                     }));
             }
             return;
@@ -148,6 +154,7 @@ impl<'a> RunOutputEmitter<'a> {
                 text,
                 source_graph_path: source_graph_path.clone(),
                 source_node_id,
+                source_port: source_port.clone(),
             }));
         if truncated && !state.truncated_reported {
             state.truncated_reported = true;
@@ -160,6 +167,7 @@ impl<'a> RunOutputEmitter<'a> {
                     status: RunOutputStatus::Truncated,
                     source_graph_path: source_graph_path.clone(),
                     source_node_id,
+                    source_port: source_port.clone(),
                 }));
         }
     }
@@ -172,8 +180,16 @@ impl RunOutputSink for RunOutputEmitter<'_> {
         text: &str,
         source_graph_path: &GraphResourcePath,
         source_node_id: NodeId,
+        source_port: &PortAddress,
     ) {
-        RunOutputEmitter::emit(self, stream, text, source_graph_path, source_node_id);
+        RunOutputEmitter::emit(
+            self,
+            stream,
+            text,
+            source_graph_path,
+            source_node_id,
+            source_port,
+        );
     }
 }
 
@@ -197,6 +213,7 @@ fn bounded_text(text: &str) -> (Box<str>, bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::graph::protocol::PortKey;
     use crate::node_system::runtime::RunEvent;
 
     #[derive(Default)]
@@ -216,6 +233,10 @@ mod tests {
         let output = RunOutputEmitter::new(RunId::new(99), &events);
         let source_graph_path = GraphResourcePath::new("events/output.yssbi-event").unwrap();
         let source_node_id = NodeId::from_uuid(uuid::Uuid::nil());
+        let source_port = PortAddress::declared(
+            source_node_id,
+            PortKey::new("message").expect("static Print port key is valid"),
+        );
         let oversized = "界".repeat(RUN_OUTPUT_TEXT_MAX_BYTES / 3 + 2);
 
         output.emit(
@@ -223,6 +244,7 @@ mod tests {
             &oversized,
             &source_graph_path,
             source_node_id,
+            &source_port,
         );
         for index in 1..=RUN_OUTPUT_EVENT_MAX_COUNT + 2 {
             output.emit(
@@ -230,6 +252,7 @@ mod tests {
                 &format!("event-{index}"),
                 &source_graph_path,
                 source_node_id,
+                &source_port,
             );
         }
 
@@ -251,6 +274,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(output_events.len(), RUN_OUTPUT_EVENT_MAX_COUNT);
         assert_eq!(output_events[0].source_graph_path, source_graph_path);
+        assert_eq!(output_events[0].source_port, source_port);
         assert!(output_events[0].text.len() <= RUN_OUTPUT_TEXT_MAX_BYTES);
         assert_ne!(output_events[0].text.as_ref(), oversized);
         let statuses = messages

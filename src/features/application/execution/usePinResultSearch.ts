@@ -1,5 +1,9 @@
 import { useMemo } from 'react';
-import { portAddressKey } from '@/features/domain/editorProjection';
+import {
+  nodeDisplayTitle,
+  pinDisplayTitle,
+  portAddressKey,
+} from '@/features/domain/editorProjection';
 import { useGraphDataStore } from '@/features/core/dataStore/graphDataStore';
 import {
   collectPinResultSearchEntries,
@@ -23,8 +27,8 @@ export function usePinResultSearch(graphPath: string, query: string) {
       const node = graphStore.getGraphNode(history.graphPath, history.output.nodeId);
       const pin = graphStore.getGraphPin(history.graphPath, portAddressKey(history.output));
       return {
-        nodeTitle: node?.title ?? history.output.nodeId,
-        pinName: pin?.name ?? portAddressKey(history.output),
+        nodeTitle: nodeDisplayTitle(node) ?? '',
+        pinName: pinDisplayTitle(pin) ?? '',
       };
     });
   }, [graphPath, graphBucket, historyCount]);

@@ -10,7 +10,7 @@ import { ResultContent } from './ResultContent';
 const mocks = vi.hoisted(() => ({
   loadPresentationWindow: vi.fn(),
   parsePlotPayload: vi.fn(),
-  plotWindowContent: vi.fn(),
+  plotResultView: vi.fn(),
   launchInspectablePresentation: vi.fn(),
   reportView: vi.fn(),
 }));
@@ -54,9 +54,9 @@ vi.mock('@/features/application/execution/openInspectableResult', () => ({
   launchInspectablePresentation: mocks.launchInspectablePresentation,
 }));
 
-vi.mock('@/views/PlotView/PlotWindowContent', () => ({
-  PlotWindowContent: (props: unknown) => {
-    mocks.plotWindowContent(props);
+vi.mock('@/features/application/presentation/PlotResultView', () => ({
+  PlotResultView: (props: unknown) => {
+    mocks.plotResultView(props);
     return <div data-testid="plot-preview">plot preview</div>;
   },
 }));
@@ -210,9 +210,9 @@ describe('ResultContent', () => {
     expect(mocks.parsePlotPayload).toHaveBeenCalledOnce();
     expect(mocks.parsePlotPayload.mock.calls[0][0]).toBe('scatter');
     expect(mocks.parsePlotPayload.mock.calls[0][1]).toBe(plotData);
-    expect(mocks.plotWindowContent).toHaveBeenCalled();
-    const renderedPlotProps = mocks.plotWindowContent.mock.calls[
-      mocks.plotWindowContent.mock.calls.length - 1
+    expect(mocks.plotResultView).toHaveBeenCalled();
+    const renderedPlotProps = mocks.plotResultView.mock.calls[
+      mocks.plotResultView.mock.calls.length - 1
     ][0];
     expect(renderedPlotProps.payload).toBe(parsedPlotPayload);
     expect(mocks.launchInspectablePresentation).not.toHaveBeenCalled();

@@ -13,7 +13,7 @@ import {
 import { UnifiedResultView, ResultViewPresentationProvider } from '@/features/application/results';
 import type { ResultDescriptor } from '@/shared/types/domain/result';
 import { ReportView } from '@/views/InfoView/ReportView';
-import { PlotWindowContent } from '@/views/PlotView/PlotWindowContent';
+import { PlotResultView } from '@/features/application/presentation/PlotResultView';
 
 function ResultStatus({ message }: { message: string }) {
   return (
@@ -142,9 +142,9 @@ export function ResultContent({ resultId }: { resultId: string }) {
           </Alert>
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col p-3">
-          <PlotWindowContent
+          <PlotResultView
             payload={plotPayload}
-            invalidFormatMessage={t('detail.result.invalidPlot')}
+            invalidContent={t('detail.result.invalidPlot')}
           />
         </div>
       </div>

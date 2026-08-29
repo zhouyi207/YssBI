@@ -1,0 +1,315 @@
+# YssBI Agent Rules
+
+This file is the repository-level source of truth for coding-agent behavior.
+
+Tool-specific instruction files must reference this source instead of
+duplicating repository rules.
+
+Keep this file high-signal. It documents recurring traps, architectural
+invariants, and delivery policy. Current implementation maps, command matrices,
+and detailed subsystem documentation belong in maintained project docs.
+
+YssBI is a Tauri 2 desktop data-analysis IDE. Rust owns authoritative project
+state and business logic. React owns interaction, presentation, and frontend
+projections.
+
+## Sources of truth
+
+* `.rules` owns repository-level agent rules and delivery policy.
+* `docs/architecture/ARCHITECTURE.md` owns the current implementation map.
+* `docs/development/LOCAL_WORKFLOW.md` owns toolchain setup, command details,
+  and the validation matrix.
+* `docs/development/FEATURE_PROCESS.md` owns the feature design and delivery
+  process.
+* `docs/architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md` owns the detailed
+  diagnostics, IPC error, result, and program-output contracts.
+* `docs/superpowers/` contains temporary agent-local planning and design output.
+  Do not add or commit its files unless explicitly requested. Long-lived
+  documentation belongs under `docs/architecture/`, `docs/development/`, or
+  `docs/version/`.
+* Treat `docs/version/` as historical documentation, not current implementation
+  authority.
+* When maintained documentation and code disagree, verify actual behavior before
+  editing and update stale maintained documentation as part of the same change.
+
+## Change discipline
+
+* Prioritize correctness and clarity over premature optimization.
+* Keep changes scoped to the requested task.
+* Do not introduce unrelated refactors, abstractions, dependencies, features,
+  compatibility layers, or architectural changes.
+* Preserve existing behavior during refactors unless the task explicitly changes
+  behavior.
+* This is a 0.x project. Remove obsolete internal paths directly instead of
+  adding migration layers or compatibility shims unless compatibility is an
+  explicit requirement.
+* Prefer modifying an existing module when the responsibility already belongs
+  there.
+* Create a new module only when it introduces a distinct responsibility or
+  materially improves a real architectural boundary.
+* Do not split code merely to satisfy line-count targets. Treat large functions
+  or files as review signals, not automatic reasons to fragment cohesive code.
+* Comments should explain non-obvious reasoning, invariants, constraints, or
+  trade-offs. Do not add comments that merely restate the code.
+* Avoid creative additions that were not requested.
+
+## Architecture invariants
+
+* Rust owns authoritative project state, persistence, graph
+  compilation/execution, databases, results, and scientific orchestration.
+* React stores are projections or UI/runtime state. Do not create a second
+  frontend authority for backend-owned state.
+* Keep dependencies flowing toward domain/application logic rather than toward
+  UI or framework layers.
+* Avoid duplicate sources of truth, compatibility paths, mirrored state models,
+  god modules, and circular dependencies.
+* Preserve the frontend dependency direction documented in
+  `docs/architecture/ARCHITECTURE.md`.
+* Domain code must not depend on UI, services, or framework state.
+* Services must not depend on views or presentation-layer feature code.
+
+## Rust
+
+* Use typed errors at domain, application, and infrastructure seams.
+* Prefer `thiserror` error enums for project-owned error contracts.
+* Do not use bare `String` or formatted prose as an error contract.
+* Avoid `unwrap()`, `expect()`, and `panic!()` in production paths unless a
+  clear invariant makes failure impossible.
+* Never silently discard a fallible operation with `let _ =`. Propagate, log,
+  or handle the failure intentionally.
+* Avoid unchecked indexing when bounds depend on runtime or external input.
+* Do not hold synchronous or asynchronous locks across `.await`, filesystem I/O,
+  sleeps, model loading, inference, database work, or other long-running
+  operations unless the locking semantics explicitly require it.
+* Snapshot the minimum state needed under a lock, release the lock, then perform
+  expensive work.
+* Prefer descriptive names over ambiguous abbreviations. Established ecosystem
+  and domain abbreviations are acceptable when their meaning is clear.
+* Prefer `foo.rs` with `foo/...` submodules over introducing new `foo/mod.rs`
+  module roots.
+* Prefer `?` when the caller can meaningfully handle or map an error.
+* Do not convert meaningful failures into `None`, `false`, empty collections,
+  or generic success-like values merely to simplify call sites.
+* Move CPU-bound or blocking work off the async runtime, using
+  `spawn_blocking` or the project's established equivalent when appropriate.
+
+## Tauri and IPC
+
+* `ProjectState.project_data` is the authoritative project, graph, and pin state.
+* `ProjectState::install_validated_resident_graph` is the only primitive for
+  installing a live resident graph document. Any load or patch operation that
+  makes a graph resident must delegate to it.
+* Graph creation and duplication write disk resources and publish exactly one
+  unloaded `DeclareGraph`. They must not transiently load the newly created
+  graph.
+* Tauri commands under `src-tauri/src/commands/` stay thin. Commands parse and
+  validate input, call domain/application code, map results to DTOs, and emit
+  application events.
+* Do not put long workflows, filesystem operations, duplicated business
+  validation, or domain orchestration in Tauri command handlers.
+* Use explicit serializable DTOs at IPC boundaries. Do not expose internal
+  implementation types merely because they are serializable.
+* Frontend IPC calls belong behind `src/services/`. Views must not call Tauri
+  `invoke` directly.
+* Ordinary frontend command invocation goes through
+  `src/services/ipc/invokeCommand.ts`.
+* Use commands for request/response work, events for low-rate state changes,
+  and channels/workers for ordered or high-frequency streams.
+* Do not transfer large datasets through IPC when the same computation or state
+  can remain authoritative on the Rust side.
+
+## IPC errors
+
+* Command failures use the exact Rust-owned `{ code, details, incidentId }`
+  `CommandError` wire.
+* Do not add backend-owned user-facing `message` fields.
+* Do not encode error identity into formatted strings or parse string prefixes.
+* Backend typed errors are mapped once, at the command/IPC seam, into
+  `CommandError`.
+* Successful responses and asynchronous status DTOs must not smuggle backend
+  prose through nested `message`, `detail`, `hint`, or equivalent fields.
+* Use stable codes, safe structured data, and incident IDs for machine-readable
+  cross-boundary communication.
+* React owns application error localization and presentation.
+
+## Diagnostics and program output
+
+* Rust `tracing` is the single diagnostic pipeline.
+* Diagnostic storage and delivery are bounded, lossy, sanitized, and
+  non-authoritative.
+* Logs must never drive domain state, application workflows, or user feedback.
+* Never log secrets or user payload content, including DataFrame rows or cells,
+  document contents, clipboard contents, SQL text, connection strings, tokens,
+  or comparable sensitive payloads.
+* User-controlled Print/stdout/stderr belongs to the ordered bounded Run Output
+  channel and Output panel, never diagnostic logs.
+* Preserve opaque source graph and node identities on output events.
+* React owns user-facing application-error presentation.
+* Use stable error codes and safe structured details for UI feedback.
+* Do not add toaster/Sonner, `logger.notify`, browser `alert`, `prompt`,
+  `confirm`, native message dialogs, disk-log pagination commands, or
+  compatibility logging paths.
+* Use persistent `Alert` surfaces for page/section errors, inline feedback for
+  field errors, and the application `MessageDialog` for blocking
+  acknowledgement.
+* Reserve `AlertDialog` for destructive confirmation.
+* Detailed capacities and diagnostic contracts live in
+  `docs/architecture/DIAGNOSTICS_ERRORS_AND_OUTPUT.md`.
+
+## React
+
+* Keep backend-owned domain state backend-authoritative.
+* Keep frontend stores domain-scoped and subscribe to Zustand stores with narrow
+  selectors.
+* Put multi-step application workflows in application hooks/services rather than
+  presentation components or generic stores.
+* Persist cross-session preferences in `localStorage`.
+* Keep temporary UI/runtime state in Zustand.
+* Use React Router for navigable pages and route state instead of introducing
+  parallel active-page flags.
+* Route global `window` and `document` listeners through
+  `src/shared/utils/globalEvent.ts`.
+* Use shadcn/ui primitives for ordinary interactive controls.
+* Prefer composing existing shadcn/ui components over implementing equivalent
+  interaction primitives locally.
+* Do not introduce another general-purpose component library.
+* Prefer the existing `react-icons` dependency, primarily `react-icons/vsc`,
+  rather than adding a second icon package solely for generated glyphs.
+* User-facing scrolling uses `src/components/ui/scroll-area.tsx`. Preserve its
+  surrounding `flex`, `min-h-0`, and `flex-1` layout contract.
+* Centralize drag/drop constants, payload types, and guards under
+  `src/features/core/dnd/`. Drop targets and visual zones should remain thin.
+* Do not use `any` to bypass type errors. Prefer explicit types, `unknown` with
+  narrowing, or project-owned boundary types.
+
+## Workbench invariants
+
+* The root `DockviewReact` is the sole authority for root workbench/editor
+  topology.
+* Do not mirror panel placement, ordering, active group/panel, edge sizing,
+  collapse state, or serialized Dockview layout into Zustand or another layout
+  model.
+* Do not introduce a second root layout authority, compatibility layout facade,
+  or mirrored layout representation.
+* The Logs workspace is the only permitted nested Dockview and owns only
+  log-domain topology.
+* Application stores may keep non-placement panel metadata and pane-local state
+  keyed by `panelInstanceId`.
+* Panel, group, resource, graph, and node identities are distinct. Do not infer
+  one identity from another.
+* Route panel closes through application dirty/save confirmation before removing
+  the Dockview panel.
+* Browser popouts and floating Dockview groups remain disabled. Tauri owns
+  application windows.
+* Detailed current workbench composition belongs in architecture documentation,
+  not this file.
+
+## Graph invariants
+
+* Graph resources use opaque `graphPath` values across IPC and frontend
+  application state.
+* Resource paths such as `events/...`, `functions/...`, `variables/...`, and
+  `databases/...` are opaque identifiers. Frontend code must not derive domain
+  meaning from their string structure.
+* UUIDs identify nodes, pins, connections, and UUID-backed variable resources;
+  do not conflate them with resource paths.
+* `panelInstanceId` identifies a Dockview panel instance, not a graph resource.
+  One resource may be open in multiple panel instances.
+* Do not infer backend graph-loaded state from `graphEntities` alone. Use the
+  graph session and resource loaded state.
+* On project load, clear backend state before hydrating the new project.
+* On graph open, load the graph, bind runtime services, materialize dynamic pins,
+  then hydrate the frontend projection.
+* Writes go through backend commands and authoritative project events.
+* Optimistic UI operations may suppress only the matching event echo. Do not
+  broadly suppress subsequent backend events.
+* Save and close flows use application confirmation.
+* Secondary windows remain read-only with respect to authoritative project
+  state.
+
+## Test discipline
+
+* Add the smallest focused regression test that proves the requested behavior or
+  reproduces the reported bug.
+* Prefer one representative test per distinct project-owned contract or failure
+  mode.
+* Test through stable public seams rather than private implementation details.
+* Do not add tests at unrelated or unconfirmed seams.
+* Do not add speculative edge-case tests, exhaustive matrices, duplicate
+  coverage, or tests for unchanged behavior unless acceptance criteria or a
+  demonstrated regression risk require them.
+* Before adding more than two new tests, identify the distinct regression each
+  additional test catches. Omit cases without a unique failure mode.
+* For behavior-preserving refactors, rely on existing coverage unless current
+  coverage cannot establish the preserved contract.
+* Do not test behavior owned by the language, framework, type system, or
+  third-party dependencies. Test contracts owned by YssBI.
+* When changing behavior, add or update a focused regression test before the
+  implementation change when practical.
+
+## Validation
+
+* Use repository-root `pnpm` scripts as stable task entry points.
+* The exact command matrix and canonical local workflow live in
+  `docs/development/LOCAL_WORKFLOW.md`.
+* Use `docs/development/FEATURE_PROCESS.md` before adding features or changing
+  externally observable behavior.
+* During iteration, run the smallest focused validation that can establish the
+  current change.
+* Backend Rust tests are expensive. Do not repeatedly run the full Rust test
+  suite during incremental work.
+* After a coherent Rust change, run the relevant formatting/check tasks and
+  focused Rust test coverage.
+* After a coherent frontend change, run the relevant formatting, typecheck,
+  lint, and focused frontend test coverage.
+* Run the repository CI task before cross-stack delivery or when the change is
+  broad enough to require full validation.
+* Run `git diff --check` before reporting completion.
+* Do not introduce CI as a substitute for local validation unless explicitly
+  requested.
+* Do not claim checks or tests succeeded without fresh command output.
+* Preserve unrelated user changes in the working tree.
+* Do not hardcode repository-wide Cargo build-job or test-thread limits.
+* Do not perform unrelated repository-wide formatting.
+
+## Change log
+
+* For substantive feature, fix, refactor, architecture, or behavior changes,
+  append concise `- [ ] ...` change-summary entries under the current
+  `## YYYY.MM.DD` heading in `TODO.md`.
+* Create the current-date heading when it does not exist.
+* Never delete or rewrite existing `TODO.md` entries.
+* Formatting-only, typo-only, and similarly mechanical changes do not require a
+  `TODO.md` entry unless explicitly requested.
+
+## Rules hygiene
+
+These rules are read by coding agents repeatedly. Keep them high-signal.
+
+Rules should document traps to avoid, not maps to follow.
+
+Do not add architecture descriptions, directory inventories, current UI
+composition, command matrices, or other information that can be reliably found
+in maintained documentation or by inspecting the codebase.
+
+A new repository rule should normally satisfy all three criteria:
+
+1. **Non-obvious** — a competent contributor could reasonably get it wrong
+   without an explicit rule.
+2. **Repeated or proven** — the issue has occurred more than once, or represents
+   a validated recurring failure mode with meaningful consequences.
+3. **Actionable** — the rule gives a concrete instruction, invariant, or
+   prohibited pattern.
+
+Do not add rules merely because something was observed once.
+
+When an agent discovers a candidate recurring rule during unrelated work, report
+it separately instead of editing `.rules` opportunistically.
+
+Rules that apply only to a narrow subsystem should live near that subsystem when
+local rules become necessary, rather than continually expanding the repository
+root rules.
+
+If a rule becomes ordinary architecture documentation, implementation detail, or
+historical context, move it to the appropriate maintained document instead of
+leaving stale information here.

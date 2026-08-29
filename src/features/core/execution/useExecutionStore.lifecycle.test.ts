@@ -134,6 +134,11 @@ describe('useExecutionStore pin result lifecycle', () => {
       text: 'stale',
       sourceGraphPath: 'events/Main.yssbi-event',
       sourceNodeId: '00000000-0000-0000-0000-000000000002',
+      sourcePort: {
+        kind: 'declared',
+        nodeId: '00000000-0000-0000-0000-000000000002',
+        portKey: 'message',
+      },
     });
     store.recordRunOutput(graphPath, {
       runId: '41',
@@ -142,6 +147,11 @@ describe('useExecutionStore pin result lifecycle', () => {
       text: 'value',
       sourceGraphPath: 'functions/Nested.yssbi-function',
       sourceNodeId: '00000000-0000-0000-0000-000000000002',
+      sourcePort: {
+        kind: 'declared',
+        nodeId: '00000000-0000-0000-0000-000000000002',
+        portKey: 'message',
+      },
     });
     store.completeExecution(graphPath);
 

@@ -10,7 +10,6 @@ import {
     resolveThemeTokens,
     type ResolvedThemeTokens,
 } from "@/shared/theme/themeTokens";
-import { THEME_TOKENS_CHANGED_EVENT } from "@/shared/theme/chartTheme";
 
 import { useWindowDecorationEffect } from "@/features/application/window/useWindowDecorations";
 import { SettingsSyncCoordinator } from "@/features/application/settings/settingsSyncCoordinator";
@@ -106,9 +105,6 @@ export function applyThemeTokens(root: HTMLElement, tokens: ResolvedThemeTokens)
     set("--pin-table", tokens.pins.table);
     set("--pin-object", tokens.pins.object);
 
-    if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event(THEME_TOKENS_CHANGED_EVENT));
-    }
 }
 
 export const SettingsEffectsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
